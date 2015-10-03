@@ -1,0 +1,23 @@
+Compiled Object files, Static and Dynamic libs (Shared Objects)
+*.o
+*.a
+*.so
+*.dylib
+
+# Folders
+build/
+install/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Eclipse
+.cproject
+.project
+.settings/
+
+# Mac
+.DS_Store
+

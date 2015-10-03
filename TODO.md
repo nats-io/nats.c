@@ -1,0 +1,11 @@
+
+- [ ] Pooling/garbage collection of structures
+- [ ] Revisit connect logic to match GO Client
+- [ ] Revisit FlushTimeout to match GO Client
+- [ ] Revisit Flusher for the aggregation of more data before socket write
+- [ ] Decide if we go full non-blocking sockets, so we can apply deadline to all read/writes
+- [ ] Improve Request/Reply performance
+- [ ] Make sure Inboxes are really unique (use of srand + seq for now)
+- [ ] Port for Linux (may work as-is, need to check)
+- [ ] Port for Windows + Makefile
+- [ ] Some tests are not ported because they require a mockup server

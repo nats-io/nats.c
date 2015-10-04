@@ -6,6 +6,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// TODO: Probably needs to be adapted for Windows port
+#include <inttypes.h>
+#define NATS_PRINTF_U64     PRIu64
+#define NATS_PRINTF_D64     PRId64
+
 #include "status.h"
 
 static const char *NATS_DEFAULT_URL = "nats://localhost:4222";

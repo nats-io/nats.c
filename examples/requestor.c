@@ -20,7 +20,9 @@ printStats(natsConnection *conn, natsStatistics *stats)
                                      &reconnected);
     if (s == NATS_OK)
     {
-        printf("Out Msgs: %12llu - Out Bytes: %12llu - Reconnected: %3llu\n",
+        printf("Out Msgs: %12" NATS_PRINTF_U64 " - "\
+               "Out Bytes: %12" NATS_PRINTF_U64 " - "\
+               "Reconnected: %3" NATS_PRINTF_U64 "\n",
                 outMsgs, outBytes, reconnected);
     }
 
@@ -51,7 +53,7 @@ int main(int argc, char **argv)
     txt   = argv[2];
     total = atol(argv[3]);
 
-    printf("Sending %lld requests to subject '%s'\n", total, subj);
+    printf("Sending %" NATS_PRINTF_D64 " requests to subject '%s'\n", total, subj);
 
     s = natsConnection_ConnectTo(&conn, NATS_DEFAULT_URL);
 
@@ -91,7 +93,8 @@ int main(int argc, char **argv)
     {
         elapsed = nats_Now() - start;
 
-        printf("\nSent %lld messages in %lld milliseconds (%d msgs/sec)\n",
+        printf("\nSent %" NATS_PRINTF_D64 " messages in "\
+               "%" NATS_PRINTF_D64 " milliseconds (%d msgs/sec)\n",
                total, elapsed, (int)((total*1000)/elapsed));
     }
     else
@@ -101,4 +104,6 @@ int main(int argc, char **argv)
 
     natsStatistics_Destroy(stats);
     natsConnection_Destroy(conn);
+
+    return 0;
 }

@@ -1,10 +1,10 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <stdlib.h>
+#include "natsp.h"
+
 #include <stdio.h>
 #include <string.h>
 
-#include "natsp.h"
 #include "mem.h"
 #include "timer.h"
 #include "util.h"
@@ -537,7 +537,7 @@ natsInbox_Create(natsInbox **newInbox)
 
     natsMutex_Lock(gLib.inboxesLock);
 
-    res = asprintf(&inbox, "%s%x.%llu", inboxPrefix, rand(), ++(gLib.inboxesSeq));
+    res = asprintf(&inbox, "%s%x.%" NATS_PRINTF_U64, inboxPrefix, rand(), ++(gLib.inboxesSeq));
     if (res < 0)
         s = NATS_NO_MEMORY;
     else

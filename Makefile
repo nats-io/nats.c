@@ -21,21 +21,23 @@ INSTALL_LIBRARY_PATH= $(DESTDIR)$(PREFIX)/$(LIBRARY_PATH)
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 CXX:=$(shell sh -c 'type $(CXX) >/dev/null 2>/dev/null && echo $(CXX) || echo g++')
 OPTIMIZATION?=-O3
-WARNINGS=-Wall -W -Wno-unused-parameter -Wno-unused-function -Wstrict-prototypes -Wwrite-strings
+WARNINGS=-Wall -W -Wno-unused-variable -Wno-unused-parameter -Wno-unused-function -Wstrict-prototypes -Wwrite-strings
 DEBUG?=-g -ggdb
-REAL_CFLAGS=$(OPTIMIZATION) -fPIC $(CFLAGS) $(WARNINGS) $(ARCH)
+REAL_CFLAGS=$(OPTIMIZATION) -fPIC -D_REENTRANT -pthread $(CFLAGS) $(WARNINGS) $(ARCH)
 REAL_LDFLAGS=$(LDFLAGS) $(ARCH)
 
+NATS_OS=LINUX
 DYLIBSUFFIX=so
 STLIBSUFFIX=a
 DYLIBNAME=$(LIBNAME).$(DYLIBSUFFIX)
-DYLIB_MAKE_CMD=$(CC) -shared -Wl,-soname -o $(DYLIBNAME) $(LDFLAGS)
+DYLIB_MAKE_CMD=$(CC) -shared -Wl,-soname,$(DYLIBNAME) -o $(DYLIBNAME) $(LDFLAGS)
 STLIBNAME=$(LIBNAME).$(STLIBSUFFIX)
 STLIB_MAKE_CMD=ar rcs $(STLIBNAME)
 
 # Platform-specific overrides
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 ifeq ($(uname_S),Darwin)
+  NATS_OS=DARWIN
   DYLIBSUFFIX=dylib
   DYLIB_MAKE_CMD=$(CC) -shared -Wl,-install_name,$(DYLIBNAME) -o $(DYLIBNAME) $(LDFLAGS) 
 endif
@@ -121,14 +123,15 @@ replier: examples/replier.c $(DYLIBNAME)
 examples: $(EXAMPLES)
 
 build/testsuite: build/test.o $(STLIBNAME)
-	$(CC) -o $@ $(REAL_CFLAGS) $(REAL_LDFLAGS) $< -lpthread $(STLIBNAME)
+	$(CC) -o $@ $(OPTIMIZATION) -fPIC -D_REENTRANT $(CFLAGS) $(WARNINGS) $(ARCH) $(REAL_LDFLAGS) $< -lpthread $(STLIBNAME)
+
 
 test: build/testsuite
 	build/testsuite
 
 build/%.o: src/%.c
 	mkdir -p build/unix build/win
-	$(CC) -std=c99 -pedantic -c $(REAL_CFLAGS) -o $@ $<
+	$(CC) -std=c99 -pedantic -D$(NATS_OS) -c $(REAL_CFLAGS) -o $@ $<
 
 clean:
 	rm -rf $(STLIBNAME) $(DYLIBNAME) $(INSTALL_LIBRARY_PATH)/$(DYLIBNAME) \

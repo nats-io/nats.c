@@ -40,5 +40,8 @@ natsSock_Flush(natsSock fd);
 void
 natsSock_Close(natsSock fd);
 
+void
+natsSock_Shutdown(natsSock fd);
+
 
 #endif /* SOCK_H_ */

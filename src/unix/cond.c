@@ -1,8 +1,9 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
+#include "../natsp.h"
+
 #include <errno.h>
 
-#include "../natsp.h"
 #include "../util.h"
 #include "../mem.h"
 

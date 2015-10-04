@@ -1,6 +1,5 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-
 #include <stdlib.h>
 #include <strings.h>
 

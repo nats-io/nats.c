@@ -1,6 +1,7 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <stdlib.h>
+#include "natsp.h"
+
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
@@ -19,29 +20,38 @@ _closeFd(natsSock fd)
         NATS_SOCK_CLOSE(fd);
 }
 
-void natsSock_Close(natsSock fd)
+void
+natsSock_Close(natsSock fd)
 {
     _closeFd(fd);
 }
 
-static natsStatus
-_setTcpNoDelay(natsSock fd)
+void
+natsSock_Shutdown(natsSock fd)
 {
-    int yes = 1;
+    if (fd != NATS_SOCK_INVALID)
+        NATS_SOCK_SHUTDOWN(fd);
+}
+
+static natsStatus
+_setTcpOptions(natsSock fd)
+{
+    struct linger   l;
+    int             yes = 1;
 
     if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes)) == -1)
         return NATS_SYS_ERROR;
 
-    return NATS_OK;
-}
-
-static natsStatus
-_setTcpReuseAddr(natsSock fd)
-{
-    int yes = 1;
+    yes = 1;
 
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
-        return NATS_ERR;
+        return NATS_SYS_ERROR;
+
+    l.l_onoff  = 1;
+    l.l_linger = 0;
+
+    if (setsockopt(fd, SOL_SOCKET, SO_LINGER, (void*)&l, sizeof(l)) == -1)
+        return NATS_SYS_ERROR;
 
     return NATS_OK;
 }
@@ -176,9 +186,7 @@ natsSock_ConnectTcp(natsSock *fd, fd_set *fdSet, natsDeadline *deadline,
             continue;
         }
 
-        s = _setTcpNoDelay(sock);
-        if (s == NATS_OK)
-            s = _setTcpReuseAddr(sock);
+        s = _setTcpOptions(sock);
     }
 
     if (s == NATS_OK)

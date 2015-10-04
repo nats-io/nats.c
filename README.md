@@ -7,7 +7,7 @@ This is an Alpha work, heavily based on the [NATS GO Client](https://github.com/
 
 ## Installation
 
-```bash
+```
 # Download 
 git clone git@github.com:kozlovic/cnats.git .
 
@@ -33,7 +33,7 @@ make test
 
 ## Usage
 
-After `make install` is executed, the header files will be located in `install/include` directory, and the libraries (static and dynamic) will be located in `install/lib'. Note that during a `make clean`, some of the directories get removed, so don't put personal files that you don't want to lose in those directories. The list as of now is:
+After `make install` is executed, the header files will be located in `install/include` directory, and the libraries (static and dynamic) will be located in `install/lib`. Note that during a `make clean`, some of the directories get removed, so don't put personal files that you don't want to lose in those directories. The list as of now is:
 
 ```
 install/lib
@@ -44,7 +44,7 @@ build/unix
 build/win
 ```
 
-Check the `Makefile` `clean` tag to see what gets removed.
+Check the `Makefile`'s `clean` tag to see what gets removed.
 
 You cab also run the examples `make install examples` which will be located in the `examples` directory and check them for API usage.
  
@@ -53,7 +53,7 @@ You cab also run the examples `make install examples` which will be located in t
 
 (The MIT License)
 
-Copyright (c) 2012-2015 Apcera Inc.
+Copyright (c) 2015 Apcera Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to

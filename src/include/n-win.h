@@ -23,7 +23,8 @@ typedef SOCKET              natsSock;
 #define NATS_ONCE_STATIC_INIT   INIT_ONCE_STATIC_INIT
 
 #define NATS_SOCK_INVALID               (INVALID_SOCKET)
-#define NATS_SOCK_CLOSE(s)              { shutdown((s)); closesocket((s)); }
+#define NATS_SOCK_SHUTDOWN              shutdown((s))
+#define NATS_SOCK_CLOSE(s)              closesocket((s))
 #define NATS_SOCK_CONNECT_IN_PROGRESS   (WSAEWOULDBLOCK)
 #define NATS_SOCK_WOULD_BLOCK           (WSAEWOULDBLOCK)
 #define NATS_SOCK_ERROR                 (SOCKET_ERROR)

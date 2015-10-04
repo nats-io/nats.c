@@ -1,14 +1,14 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <assert.h>
+#include "natsp.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 
 #include "statusp.h"
-#include "natsp.h"
 #include "conn.h"
 #include "mem.h"
 #include "buf.h"
@@ -1022,7 +1022,7 @@ _processOpError(natsConnection *nc, natsStatus s)
         {
             natsConn_bufferFlush(nc);
 
-            natsSock_Close(nc->fd);
+            natsSock_Shutdown(nc->fd);
             nc->fd = NATS_SOCK_INVALID;
         }
 
@@ -1057,13 +1057,14 @@ _readLoop(void  *arg)
 
     natsConn_Lock(nc);
 
+    fd = nc->fd;
+
     if (nc->ps == NULL)
         s = natsParser_Create(&(nc->ps));
 
-    while ( (s == NATS_OK)
-            && !natsConn_isClosed(nc)
-            && !_isReconnecting(nc)
-            && ((fd = nc->fd) != NATS_SOCK_INVALID))
+    while ((s == NATS_OK)
+           && !natsConn_isClosed(nc)
+           && !_isReconnecting(nc))
     {
         natsConn_Unlock(nc);
 
@@ -1078,6 +1079,8 @@ _readLoop(void  *arg)
 
         natsConn_Lock(nc);
     }
+
+    natsSock_Close(fd);
 
     natsParser_Destroy(nc->ps);
     nc->ps = NULL;
@@ -1290,7 +1293,7 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
     if (nc->fd != NATS_SOCK_INVALID)
     {
         natsConn_bufferFlush(nc);
-        natsSock_Close(nc->fd);
+        natsSock_Shutdown(nc->fd);
         nc->fd = NATS_SOCK_INVALID;
     }
 

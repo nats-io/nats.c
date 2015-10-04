@@ -1,13 +1,15 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <stdlib.h>
+#include "natsp.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
 #include <unistd.h>
 #include <errno.h>
 
-#include "natsp.h"
+#include <sys/wait.h>
+
 #include "buf.h"
 #include "timer.h"
 #include "url.h"
@@ -1913,8 +1915,6 @@ test_natsOptions(void)
 }
 
 #define NATS_SERVER_EXE "gnatsd"
-
-#include <signal.h>    /* for SIGTERM, SIGKILL */
 
 typedef pid_t               natsPid;
 #define NATS_INVALID_PID    (-1)

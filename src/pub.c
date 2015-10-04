@@ -1,8 +1,9 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
+#include "natsp.h"
+
 #include <string.h>
 
-#include "natsp.h"
 #include "conn.h"
 #include "sub.h"
 #include "msg.h"
@@ -20,13 +21,13 @@ _publishEx(natsConnection *nc, const char *subj,
          bool directFlush)
 {
     natsStatus  s = NATS_OK;
-    int         msgHdSize;
+    int         msgHdSize = 0;
     char        b[12];
     int         bSize = sizeof(b);
     int         i = bSize;
-    int         subjLen;
-    int         replyLen;
-    int         sizeSize;
+    int         subjLen = 0;
+    int         replyLen = 0;
+    int         sizeSize = 0;
 
     if (nc == NULL)
         return NATS_INVALID_ARG;
@@ -205,7 +206,6 @@ natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
     return _publish(nc, subj, reply, (const void*) str, (int) strlen(str));
 }
 
-#include <stdlib.h>
 /*
  * Creates an inbox and performs a natsPublishRequest() call with the reply
  * set to that inbox. Returns the first reply received.

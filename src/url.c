@@ -1,10 +1,9 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
-
 #include "natsp.h"
+
+#include <string.h>
+
 #include "mem.h"
 
 void

@@ -1,8 +1,8 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <strings.h>
+#include "natsp.h"
+
+#include <string.h>
 
 #include "status.h"
 #include "mem.h"

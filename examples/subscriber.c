@@ -35,7 +35,7 @@ onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 }
 
 static void
-_asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
+asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
     if (print)
         printf("Async error: %d - %s\n", err, natsStatus_GetText(err));
@@ -68,8 +68,12 @@ printStats(natsConnection *conn, natsSubscription *sub, natsStatistics *stats)
 
     if (s == NATS_OK)
     {
-        printf("In Msgs: %9llu - In Bytes: %9llu - Delivered: %9lld - "\
-               "Queued: %5llu - Errors: %9llu - Reconnected: %3llu\n",
+        printf("In Msgs: %9" NATS_PRINTF_U64 " - "\
+               "In Bytes: %9" NATS_PRINTF_U64 " - "\
+               "Delivered: %9" NATS_PRINTF_U64 " - "\
+               "Queued: %5" NATS_PRINTF_U64 " - "\
+               "Errors: %9" NATS_PRINTF_U64 " - "\
+               "Reconnected: %3" NATS_PRINTF_U64 "\n",
                 inMsgs, inBytes, count, queued, errors, reconnected);
     }
 
@@ -103,7 +107,7 @@ int main(int argc, char **argv)
     if (s == NATS_OK)
         s = natsOptions_SetURL(opts, NATS_DEFAULT_URL);
     if ((s == NATS_OK) && async)
-        s = natsOptions_SetErrorHandler(opts, _asyncCb, NULL);
+        s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);
 
     // Comment out these two lines if you want to see the effect of
     // messages being dropped by the client library.
@@ -167,7 +171,8 @@ int main(int argc, char **argv)
         if (elapsed == 0)
             elapsed = nats_Now() - start;
 
-        printf("\nReceived %lld messages in %lld milliseconds (%d msgs/sec)\n",
+        printf("\nReceived %" NATS_PRINTF_D64 " messages in "\
+               "%" NATS_PRINTF_D64 " milliseconds (%d msgs/sec)\n",
                count, elapsed, (int)((count * 1000) / elapsed));
     }
     else
@@ -177,4 +182,6 @@ int main(int argc, char **argv)
 
     natsStatistics_Destroy(stats);
     natsConnection_Destroy(conn);
+
+    return 0;
 }

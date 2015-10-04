@@ -1,8 +1,8 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <stdint.h>
+#include "natsp.h"
+
 #include <assert.h>
-#include <stdbool.h>
 
 #include "time.h"
 
@@ -11,7 +11,7 @@ nats_Now(void)
 {
 #if defined CLOCK_MONOTONIC
     struct timespec ts;
-    int rc = clock_gettime(CLOCK_MONOTONIC, &ts);
+    int rc = clock_gettime(CLOCK_REALTIME, &ts);
     assert(rc == 0);
     return ((int64_t)ts.tv_sec) * 1000 + (((int64_t)ts.tv_nsec) / 1000000);
 #else
@@ -27,7 +27,7 @@ nats_NowInNanoSeconds(void)
 {
 #if defined CLOCK_MONOTONIC
     struct timespec ts;
-    int rc = clock_gettime(CLOCK_MONOTONIC, &ts);
+    int rc = clock_gettime(CLOCK_REALTIME, &ts);
     assert (rc == 0);
     return ((int64_t)ts.tv_sec) * 1000000000L + ((int64_t)ts.tv_nsec);
 #else

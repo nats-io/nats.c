@@ -3,18 +3,15 @@
 #ifndef NATSP_H_
 #define NATSP_H_
 
-// Do this as early as possible
-#undef FD_SETSIZE
-#define FD_SETSIZE  (32768)
-
-#include <stdbool.h>
-#include <stdint.h>
-
 #if defined(_WIN32)
 # include "include/n-win.h"
 #else
 # include "include/n-unix.h"
 #endif
+
+#include <stdlib.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #include "status.h"
 #include "buf.h"

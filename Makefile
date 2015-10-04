@@ -49,16 +49,17 @@ asynccb.o: src/asynccb.c src/natsp.h src/include/n-unix.h src/status.h \
   src/buf.h src/parser.h src/timer.h src/url.h src/srvpool.h src/msg.h \
   src/asynccb.h src/hash.h src/stats.h src/time.h src/mem.h src/conn.h
 buf.o: src/buf.c src/mem.h src/buf.h src/status.h
-comsock.o: src/comsock.c src/status.h src/comsock.h src/natsp.h \
-  src/include/n-unix.h src/buf.h src/parser.h src/timer.h src/url.h \
-  src/srvpool.h src/msg.h src/asynccb.h src/hash.h src/stats.h \
-  src/time.h src/mem.h
-conn.o: src/conn.c src/statusp.h src/status.h src/natsp.h \
-  src/include/n-unix.h src/buf.h src/parser.h src/timer.h src/url.h \
-  src/srvpool.h src/msg.h src/asynccb.h src/hash.h src/stats.h \
-  src/time.h src/conn.h src/mem.h src/opts.h src/util.h src/sub.h \
-  src/comsock.h
-hash.o: src/hash.c src/status.h src/mem.h src/hash.h
+comsock.o: src/comsock.c src/natsp.h src/include/n-unix.h src/status.h \
+  src/buf.h src/parser.h src/timer.h src/url.h src/srvpool.h src/msg.h \
+  src/asynccb.h src/hash.h src/stats.h src/time.h src/comsock.h \
+  src/mem.h
+conn.o: src/conn.c src/natsp.h src/include/n-unix.h src/status.h \
+  src/buf.h src/parser.h src/timer.h src/url.h src/srvpool.h src/msg.h \
+  src/asynccb.h src/hash.h src/stats.h src/time.h src/statusp.h \
+  src/conn.h src/mem.h src/opts.h src/util.h src/sub.h src/comsock.h
+hash.o: src/hash.c src/natsp.h src/include/n-unix.h src/status.h \
+  src/buf.h src/parser.h src/timer.h src/url.h src/srvpool.h src/msg.h \
+  src/asynccb.h src/hash.h src/stats.h src/time.h src/mem.h
 msg.o: src/msg.c src/natsp.h src/include/n-unix.h src/status.h src/buf.h \
   src/parser.h src/timer.h src/url.h src/srvpool.h src/msg.h \
   src/asynccb.h src/hash.h src/stats.h src/time.h src/mem.h
@@ -67,7 +68,7 @@ nats.o: src/nats.c src/natsp.h src/include/n-unix.h src/status.h \
   src/asynccb.h src/hash.h src/stats.h src/time.h src/mem.h src/util.h
 opts.o: src/opts.c src/natsp.h src/include/n-unix.h src/status.h \
   src/buf.h src/parser.h src/timer.h src/url.h src/srvpool.h src/msg.h \
-  src/asynccb.h src/hash.h src/stats.h src/time.h src/mem.h
+  src/asynccb.h src/hash.h src/stats.h src/time.h src/mem.h src/opts.h
 parser.o: src/parser.c src/natsp.h src/include/n-unix.h src/status.h \
   src/buf.h src/parser.h src/timer.h src/url.h src/srvpool.h src/msg.h \
   src/asynccb.h src/hash.h src/stats.h src/time.h src/conn.h src/util.h \
@@ -86,8 +87,11 @@ sub.o: src/sub.c src/natsp.h src/include/n-unix.h src/status.h src/buf.h \
   src/sub.h src/util.h
 test.o: src/test.c src/natsp.h src/include/n-unix.h src/status.h \
   src/buf.h src/parser.h src/timer.h src/url.h src/srvpool.h src/msg.h \
-  src/asynccb.h src/hash.h src/stats.h src/time.h src/opts.h src/util.h
-time.o: src/time.c src/time.h
+  src/asynccb.h src/hash.h src/stats.h src/time.h src/opts.h src/util.h \
+  src/conn.h src/sub.h
+time.o: src/time.c src/natsp.h src/include/n-unix.h src/status.h \
+  src/buf.h src/parser.h src/timer.h src/url.h src/srvpool.h src/msg.h \
+  src/asynccb.h src/hash.h src/stats.h src/time.h
 timer.o: src/timer.c src/natsp.h src/include/n-unix.h src/status.h \
   src/buf.h src/parser.h src/timer.h src/url.h src/srvpool.h src/msg.h \
   src/asynccb.h src/hash.h src/stats.h src/time.h src/mem.h src/util.h
@@ -162,4 +166,4 @@ install: $(DYLIBNAME) $(STLIBNAME)
 debug:
 	$(MAKE) OPTIMIZATION="$(DEBUG)"
 
-.PHONY: all test check clean dep install 32bit 32bit-vars gprof gcov noopt
+.PHONY: all test clean dep install 32bit debug

@@ -299,6 +299,9 @@ void
 natsThread_Join(natsThread *t);
 
 void
+natsThread_Detach(natsThread *t);
+
+void
 natsThread_Destroy(natsThread *t);
 
 bool

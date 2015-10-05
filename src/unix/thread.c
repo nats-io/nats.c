@@ -88,6 +88,13 @@ natsThread_Join(natsThread *t)
     }
 }
 
+void
+natsThread_Detach(natsThread *t)
+{
+    if (pthread_detach(*t) !=0)
+        abort();
+}
+
 bool
 natsThread_IsCurrent(natsThread *t)
 {

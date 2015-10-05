@@ -121,6 +121,8 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
         }
     }
 
+    NATS_FREE(copy);
+
     if (s == NATS_OK)
         *newUrl = url;
     else

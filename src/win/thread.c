@@ -95,6 +95,12 @@ natsThread_Join(natsThread *t)
     }
 }
 
+void
+natsThread_Detach(natsThread *)
+{
+    // nothing for now.
+}
+
 bool
 natsThread_IsCurrent(natsThread *t)
 {

@@ -305,6 +305,7 @@ _freeOptions(natsOptions *opts)
     NATS_FREE(opts->url);
     NATS_FREE(opts->name);
     _freeServers(opts);
+    natsMutex_Destroy(opts->mu);
     NATS_FREE(opts);
 }
 

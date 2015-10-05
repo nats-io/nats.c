@@ -41,7 +41,11 @@ _freeSubscription(natsSubscription *sub)
     NATS_FREE(sub->subject);
     NATS_FREE(sub->queue);
 
-    natsThread_Destroy(sub->deliverMsgsThread);
+    if (sub->deliverMsgsThread != NULL)
+    {
+        natsThread_Detach(sub->deliverMsgsThread);
+        natsThread_Destroy(sub->deliverMsgsThread);
+    }
     natsCondition_Destroy(sub->cond);
     natsMutex_Destroy(sub->mu);
 

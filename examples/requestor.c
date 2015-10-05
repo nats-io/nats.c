@@ -102,8 +102,12 @@ int main(int argc, char **argv)
         printf("Error: %d - %s\n", s, natsStatus_GetText(s));
     }
 
+    // Destroy all our objects to avoid report of memory leak
     natsStatistics_Destroy(stats);
     natsConnection_Destroy(conn);
+
+    // To silence reports of memory still in used with valgrind
+    nats_Close();
 
     return 0;
 }

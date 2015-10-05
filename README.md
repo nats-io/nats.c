@@ -1,7 +1,7 @@
 # NATS - C Client 
 A C client for the [NATS messaging system](https://nats.io).
 
-This is an Alpha work, heavily based on the [NATS GO Client](https://github.com/nats-io/nats).
+This is an alpha release, heavily based on the [NATS GO Client](https://github.com/nats-io/nats).
 
 [![License MIT](https://img.shields.io/npm/l/express.svg)](http://opensource.org/licenses/MIT)
 

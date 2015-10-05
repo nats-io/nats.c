@@ -114,15 +114,15 @@ static: $(STLIBNAME)
 
 # Binaries:
 publisher: examples/publisher.c $(DYLIBNAME)
-	$(CC) -o examples/nats-$@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I$(INSTALL_INCLUDE_PATH) $< -lpthread $(DYLIBNAME) 
+	$(CC) -o build/nats-$@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I$(INSTALL_INCLUDE_PATH) $< -lpthread $(DYLIBNAME) 
 subscriber: examples/subscriber.c $(DYLIBNAME)
-	$(CC) -o examples/nats-$@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I$(INSTALL_INCLUDE_PATH) $< -lpthread $(DYLIBNAME)
+	$(CC) -o build/nats-$@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I$(INSTALL_INCLUDE_PATH) $< -lpthread $(DYLIBNAME)
 queuegroup: examples/queuegroup.c $(DYLIBNAME)
-	$(CC) -o examples/nats-$@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I$(INSTALL_INCLUDE_PATH) $< -lpthread $(DYLIBNAME)
+	$(CC) -o build/nats-$@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I$(INSTALL_INCLUDE_PATH) $< -lpthread $(DYLIBNAME)
 requestor: examples/requestor.c $(DYLIBNAME)
-	$(CC) -o examples/nats-$@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I$(INSTALL_INCLUDE_PATH) $< -lpthread $(DYLIBNAME)
+	$(CC) -o build/nats-$@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I$(INSTALL_INCLUDE_PATH) $< -lpthread $(DYLIBNAME)
 replier: examples/replier.c $(DYLIBNAME)
-	$(CC) -o examples/nats-$@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I$(INSTALL_INCLUDE_PATH) $< -lpthread $(DYLIBNAME)
+	$(CC) -o build/nats-$@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I$(INSTALL_INCLUDE_PATH) $< -lpthread $(DYLIBNAME)
 
 examples: $(EXAMPLES)
 
@@ -140,7 +140,7 @@ build/%.o: src/%.c
 clean:
 	rm -rf $(STLIBNAME) $(DYLIBNAME) $(INSTALL_LIBRARY_PATH)/$(DYLIBNAME) \
 $(INSTALL_LIBRARY_PATH)/$(STLIBNAME) $(INSTALL_INCLUDE_PATH)/*.h \
-examples/*.o examples/nats-* build/* build/unix/*.o win/*.o
+build/* build/unix/*.o win/*.o
 
 dep:
 	$(CC) -MM src/*.c
@@ -152,6 +152,7 @@ install: $(DYLIBNAME) $(STLIBNAME)
 	$(INSTALL) src/nats.h src/status.h $(INSTALL_INCLUDE_PATH)
 	$(INSTALL) $(DYLIBNAME) $(INSTALL_LIBRARY_PATH)
 	$(INSTALL) $(STLIBNAME) $(INSTALL_LIBRARY_PATH)
+	rm $(DYLIBNAME) $(STLIBNAME)
 
 32bit:
 	@echo ""

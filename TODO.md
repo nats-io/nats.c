@@ -4,7 +4,7 @@
 - [ ] Revisit FlushTimeout to match GO Client
 - [ ] Revisit Flusher for the aggregation of more data before socket write
 - [ ] Decide if we go full non-blocking sockets, so we can apply deadline to all read/writes
-- [ ] Improve Request/Reply performance
+- [x] Improve Request/Reply performance (*Solved by doing explicit flushing after sending the reply. The original performance issue is due to the way the flusher is implemented, whereby we sleep a millisecond to accumulate more work. So that limited the rate to 1000 messages/sec*).  
 - [ ] Make sure Inboxes are really unique (use of srand + seq for now)
 - [x] Port for Linux (~~may work as-is~~, need to check)
 - [ ] Port for Windows + Makefile

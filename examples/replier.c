@@ -16,6 +16,8 @@ static bool             print   = false;
 static void
 onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
+    natsStatus s;
+
     if (print)
         printf("Received msg: %s - %.*s\n",
                natsMsg_GetSubject(msg),
@@ -25,22 +27,24 @@ onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
     if (start == 0)
         start = nats_Now();
 
-    if (natsConnection_PublishString(nc, natsMsg_GetReply(msg),
-                                     "here's some help") != NATS_OK)
-    {
-        errors++;
-    }
+    s = natsConnection_PublishString(nc, natsMsg_GetReply(msg),
+                                     "here's some help");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
 
     // We should be using a mutex to protect those variables since
     // they are used from the subscription's delivery and the main
     // threads. For demo purposes, this is fine.
     if (count + 1 == total)
     {
-        if (natsConnection_FlushTimeout(nc, 1000) != NATS_OK)
-            errors++;
+        if (s == NATS_OK)
+            s = natsConnection_FlushTimeout(nc, 1000);
 
         elapsed = nats_Now() - start;
     }
+
+    if (s != NATS_OK)
+        errors++;
 
     count++;
 
@@ -162,6 +166,8 @@ int main(int argc, char **argv)
                 s = natsConnection_PublishString(conn,
                                                  natsMsg_GetReply(msg),
                                                  "here's some help");
+            if (s == NATS_OK)
+                s = natsConnection_Flush(conn);
             if (s == NATS_OK)
             {
                 if (start == 0)

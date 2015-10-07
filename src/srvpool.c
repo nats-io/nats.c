@@ -130,8 +130,9 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
     poolSize  = (opts->url != NULL ? 1 : 0);
     poolSize += opts->serversCount;
 
+    // If the pool is going to be empty, we will add the default URL.
     if (poolSize == 0)
-        return NATS_NO_SERVER;
+        poolSize = 1;
 
     pool = (natsSrvPool*) NATS_CALLOC(1, sizeof(natsSrvPool));
     if (pool == NULL)
@@ -180,6 +181,14 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
             if (s == NATS_OK)
                 pool->srvrs[pool->size++] = srv;
         }
+    }
+
+    if ((s == NATS_OK) && (pool->size == 0))
+    {
+        // Place default URL if pool is empty.
+        s = _createSrv(&srv, (char*) NATS_DEFAULT_URL);
+        if (s == NATS_OK)
+            pool->srvrs[pool->size++] = srv;
     }
 
     if (s == NATS_OK)

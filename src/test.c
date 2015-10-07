@@ -2524,6 +2524,34 @@ test_DefaultConnection(void)
 }
 
 static void
+test_UseDefaultURLIfNoServerSpecified(void)
+{
+    natsStatus          s;
+    natsOptions         *opts     = NULL;
+    natsConnection      *nc       = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    PRINT_TEST_NAME();
+
+    s = natsOptions_Create(&opts);
+    if (s != NATS_OK)
+        FAIL("Unable to create options!");
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    if (serverPid == NATS_INVALID_PID)
+        FAIL("Unable to start or verify that the server was started!");
+
+    test("Check we can connect even if no server is specified: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_ConnectionStatus(void)
 {
     natsStatus          s;
@@ -4342,6 +4370,34 @@ test_Stats(void)
 }
 
 static void
+test_BadSubject(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    PRINT_TEST_NAME();
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    if (serverPid == NATS_INVALID_PID)
+        FAIL("Unable to start or verify that the server was started!");
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+
+    test("Should get an error with empty subject: ");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "", "hello");
+    testCond(s != NATS_OK);
+
+    test("Error should be NATS_INVALID_SUBJECT: ");
+    testCond(s == NATS_INVALID_SUBJECT);
+
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_ClientAsyncAutoUnsub(void)
 {
     natsStatus          s;
@@ -5653,6 +5709,7 @@ nats_tests:
     printf("\n== Public API Tests ==\n");
 
     test_DefaultConnection();
+    test_UseDefaultURLIfNoServerSpecified();
     test_ConnectionStatus();
     test_ConnClosedCB();
     test_CloseDisconnectedCB();
@@ -5694,6 +5751,7 @@ nats_tests:
     test_ReleaseFlush();
     test_Inbox();
     test_Stats();
+    test_BadSubject();
     test_ClientAsyncAutoUnsub();
     test_ClientSyncAutoUnsub();
     test_CloseSubRelease();

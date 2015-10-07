@@ -312,10 +312,10 @@ _createConn(natsConnection *nc)
     // the PONG to our initial PING. See _sendConnect().
     natsDeadline_Init(&(nc->deadline), nc->opts->timeout);
 
-    nc->err = natsSock_ConnectTcp(&(nc->fd), nc->fdSet, &(nc->deadline),
+    s = natsSock_ConnectTcp(&(nc->fd), nc->fdSet, &(nc->deadline),
                                   nc->url->host, nc->url->port);
-    if (nc->err != NATS_OK)
-        return nc->err;
+    if (s != NATS_OK)
+        return s;
 
     nc->fdActive = true;
 

@@ -5,13 +5,18 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
 // TODO: Probably needs to be adapted for Windows port
 #include <inttypes.h>
-#define NATS_PRINTF_U64     PRIu64
-#define NATS_PRINTF_D64     PRId64
 
 #include "status.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// TODO: Probably needs to be adapted for Windows port
+#define NATS_PRINTF_U64     PRIu64
+#define NATS_PRINTF_D64     PRId64
 
 static const char *NATS_DEFAULT_URL = "nats://localhost:4222";
 
@@ -625,5 +630,8 @@ natsSubscription_IsValid(natsSubscription *sub);
 void
 natsSubscription_Destroy(natsSubscription *sub);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* NATS_H_ */

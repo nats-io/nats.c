@@ -3,6 +3,10 @@
 #ifndef STATUS_H_
 #define STATUS_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum
 {
     DISCONNECTED = 0,
@@ -62,5 +66,9 @@ typedef enum
 
 const char*
 natsStatus_GetText(natsStatus s);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* STATUS_H_ */

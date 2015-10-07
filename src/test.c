@@ -830,6 +830,8 @@ test_natsRandomize(void)
             sameTotal++;
     }
     testCond(sameTotal <= (RANDOM_ITER * 0.1));
+
+    free(array);
 }
 
 static void
@@ -1912,7 +1914,9 @@ test_natsOptions(void)
 
     test("Destroy original does not affect clone: ");
     natsOptions_Destroy(opts);
-    testCond(1);
+    testCond(strcmp(cloned->url, "url") == 0);
+
+    natsOptions_Destroy(cloned);
 }
 
 #define NATS_SERVER_EXE "gnatsd"
@@ -2341,6 +2345,7 @@ test_ParseStateReconnectFunctionality(void)
 
     testCond((s == NATS_OK) && (nc->stats.reconnects == 1));
 
+    natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
 
@@ -2599,6 +2604,7 @@ test_ConnClosedCB(void)
 
     testCond((s == NATS_OK) && arg.closed);
 
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     _destroyDefaultThreadArgs(&arg);
@@ -2647,6 +2653,7 @@ test_CloseDisconnectedCB(void)
 
     testCond((s == NATS_OK) && arg.closed);
 
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     _destroyDefaultThreadArgs(&arg);
@@ -2695,9 +2702,10 @@ test_ServerStopDisconnectedCB(void)
 
     testCond((s == NATS_OK) && arg.closed);
 
-    _destroyDefaultThreadArgs(&arg);
-
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
 }
 
 static void
@@ -2979,6 +2987,7 @@ test_BasicReconnectFunctionality(void)
     }
     testCond((s == NATS_OK) && (nc->stats.reconnects == 1));
 
+    natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
 
@@ -3443,7 +3452,7 @@ test_AuthFailNoDisconnectCB(void)
     test("Connect should fail: ");
     s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg);
     if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, natsOptions_clone(opts));
+        s = natsConnection_Connect(&nc, opts);
     testCond(s != NATS_OK);
 
     test("DisconnectCb should not be invoked on auth failure: ");
@@ -3454,6 +3463,7 @@ test_AuthFailNoDisconnectCB(void)
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_TIMEOUT) && !arg.disconnected);
 
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     _destroyDefaultThreadArgs(&arg);
@@ -4629,11 +4639,17 @@ test_SlowAsyncSubscriber(void)
 
     // Release the sub
     natsMutex_Lock(arg.m);
+
+    // Unblock the wait
     arg.closed = true;
+
+    // And destroy the subscription here so that the next msg callback
+    // is not invoked.
+    natsSubscription_Destroy(sub);
+
     natsCondition_Signal(arg.c);
     natsMutex_Unlock(arg.m);
 
-    natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
 
     _destroyDefaultThreadArgs(&arg);
@@ -4731,6 +4747,7 @@ test_AsyncErrHandler(void)
              && arg.closed
              && (arg.status == NATS_OK));
 
+    natsOptions_Destroy(opts);
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
 
@@ -4772,6 +4789,10 @@ _startCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 
     if (s != NATS_OK)
         arg->status = s;
+
+    // We need to destroy the inbox. It has been copied by the
+    // natsConnection_Subscribe() call.
+    natsInbox_Destroy(response);
 
     natsMutex_Unlock(arg->m);
 
@@ -4825,6 +4846,7 @@ test_AsyncSubscriberStarvation(void)
              && arg.done
              && (arg.status == NATS_OK));
 
+    natsSubscription_Destroy(arg.sub);
     natsSubscription_Destroy(sub);
     natsSubscription_Destroy(sub2);
     natsConnection_Destroy(nc);
@@ -4994,6 +5016,7 @@ test_ServersOption(void)
              && (buffer[0] != '\0')
              && (strcmp(buffer, testServers[1]) == 0));
 
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     _stopServer(serverPid);
@@ -5052,6 +5075,7 @@ test_AuthServers(void)
              && (natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer)) == NATS_OK)
              && (strcmp(buffer, authServers[1]) == 0));
 
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     _stopServer(serverPid1);
@@ -5134,6 +5158,7 @@ test_BasicClusterReconnect(void)
     test("Check reconnect time did not take too long: ");
     testCond(reconnectTime <= 100);
 
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     _destroyDefaultThreadArgs(&arg);
@@ -5284,6 +5309,7 @@ test_HotSpotReconnect(void)
         natsConnection_Destroy(nc[i]);
 
     natsStrHash_Destroy(cs);
+    natsOptions_Destroy(opts);
 
     _destroyDefaultThreadArgs(&arg);
 
@@ -5350,6 +5376,7 @@ test_ProperReconnectDelay(void)
     test("Should still be reconnecting: ");
     testCond(natsConnection_Status(nc) == RECONNECTING);
 
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     // Now that the connection is destroyed, the callback will be invoked.
@@ -5426,6 +5453,7 @@ test_ProperFalloutAfterMaxAttempts(void)
     testCond((s == NATS_OK)
              && natsConnection_IsClosed(nc));
 
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     _destroyDefaultThreadArgs(&arg);
@@ -5500,6 +5528,7 @@ test_TimeoutOnNoServer(void)
     test("Check wait time for closed cb: ");
     testCond(timedWait <= ((opts->maxReconnect * opts->reconnectWait) + 500));
 
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     _destroyDefaultThreadArgs(&arg);
@@ -5575,6 +5604,8 @@ test_PingReconnect(void)
 
     test("Reconnect due to ping cycle correct: ");
     testCond(s == NATS_OK);
+
+    natsOptions_Destroy(opts);
 
     _destroyDefaultThreadArgs(&arg);
 
@@ -5684,6 +5715,9 @@ nats_tests:
     test_ProperFalloutAfterMaxAttempts();
     test_TimeoutOnNoServer();
     test_PingReconnect();
+
+    // Makes valgrind happy
+    nats_Close();
 
     if (fails) {
         printf("*** %d TESTS FAILED ***\n", fails);

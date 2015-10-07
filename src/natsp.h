@@ -198,6 +198,7 @@ typedef struct __natsConnection
 
     int                 refs;
     natsSock            fd;
+    bool                fdActive;
 
     // We switch to blocking socket after receiving the PONG to the first PING
     // during the connect process. Should we make all read/writes non blocking,

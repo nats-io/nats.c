@@ -317,6 +317,8 @@ _createConn(natsConnection *nc)
     if (nc->err != NATS_OK)
         return nc->err;
 
+    nc->fdActive = true;
+
     if ((nc->pending != NULL) && (nc->bw != NULL)
         && (natsBuf_Len(nc->bw) > 0))
     {
@@ -1018,12 +1020,12 @@ _processOpError(natsConnection *nc, natsStatus s)
         if (nc->ptmr != NULL)
             natsTimer_Stop(nc->ptmr);
 
-        if (nc->fd != NATS_SOCK_INVALID)
+        if (nc->fdActive)
         {
             natsConn_bufferFlush(nc);
 
             natsSock_Shutdown(nc->fd);
-            nc->fd = NATS_SOCK_INVALID;
+            nc->fdActive = false;
         }
 
         if (natsThread_Create(&(nc->reconnectThread),
@@ -1081,6 +1083,8 @@ _readLoop(void  *arg)
     }
 
     natsSock_Close(fd);
+    nc->fd       = NATS_SOCK_INVALID;
+    nc->fdActive = false;
 
     natsParser_Destroy(nc->ps);
     nc->ps = NULL;
@@ -1125,7 +1129,7 @@ _flusher(void *arg)
             break;
         }
 
-        if ((natsBuf_Len(nc->bw) > 0) && (nc->fd != NATS_SOCK_INVALID))
+        if (nc->fdActive && (natsBuf_Len(nc->bw) > 0))
             nc->err = natsConn_bufferFlush(nc);
 
         natsConn_Unlock(nc);
@@ -1290,11 +1294,24 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
 
     // Go ahead and make sure we have flushed the outbound buffer.
     nc->status = CLOSED;
-    if (nc->fd != NATS_SOCK_INVALID)
+    if (nc->fdActive)
     {
         natsConn_bufferFlush(nc);
-        natsSock_Shutdown(nc->fd);
-        nc->fd = NATS_SOCK_INVALID;
+
+        // If there is no readLoop, then it is our responsibility to close
+        // the socket. Otherwise, _readLoop is the one doing it.
+        if (ttj.readLoop == NULL)
+        {
+            natsSock_Close(nc->fd);
+            nc->fd = NATS_SOCK_INVALID;
+        }
+        else
+        {
+            // Shutdown the socket to stop any read/write operations.
+            // The socket will be closed by the _readLoop thread.
+            natsSock_Shutdown(nc->fd);
+        }
+        nc->fdActive = false;
     }
 
     // Perform appropriate callback if needed for a disconnect.

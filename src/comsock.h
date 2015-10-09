@@ -32,7 +32,7 @@ natsSock_Read(natsSock fd, char *buffer, size_t maxBufferSize, int *n);
 // have been written, unless the socket is closed or an error occurs.
 natsStatus
 natsSock_WriteFully(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
-                    const char *data, int len, int *n);
+                    const char *data, int len);
 
 natsStatus
 natsSock_Flush(natsSock fd);

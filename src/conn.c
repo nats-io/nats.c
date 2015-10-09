@@ -212,7 +212,6 @@ natsStatus
 natsConn_bufferFlush(natsConnection *nc)
 {
     natsStatus  s;
-    int         n = 0;
     int         bufLen = natsBuf_Len(nc->bw);
 
     if (bufLen == 0)
@@ -221,26 +220,15 @@ natsConn_bufferFlush(natsConnection *nc)
     if (nc->usePending)
     {
         s = natsBuf_Append(nc->pending, natsBuf_Data(nc->bw), bufLen);
-        n = bufLen;
     }
     else
     {
         s = natsSock_WriteFully(nc->fdSet, nc->fd, &(nc->deadline),
-                                natsBuf_Data(nc->bw), bufLen, &n);
+                                natsBuf_Data(nc->bw), bufLen);
     }
 
-    if (n == bufLen)
-    {
+    if (s == NATS_OK)
         natsBuf_Reset(nc->bw);
-    }
-    else
-    {
-        memcpy(natsBuf_Data(nc->bw),
-               natsBuf_Data(nc->bw) + n,
-               bufLen - n);
-
-        natsBuf_RewindTo(nc->bw, n);
-    }
 
     return s;
 }
@@ -250,6 +238,7 @@ natsConn_bufferWrite(natsConnection *nc, const char *buffer, int len)
 {
     natsStatus  s = NATS_OK;
     int         offset = 0;
+    int         avail  = 0;
 
     if (len <= 0)
         return NATS_OK;
@@ -257,31 +246,42 @@ natsConn_bufferWrite(natsConnection *nc, const char *buffer, int len)
     if (nc->usePending)
         return natsBuf_Append(nc->pending, buffer, len);
 
+    // If we have more data that can fit..
     while ((s == NATS_OK) && (len > natsBuf_Available(nc->bw)))
     {
+        // If there is nothing in the buffer...
         if (natsBuf_Len(nc->bw) == 0)
         {
-            int n = 0;
+            // Do a single socket write to avoid a copy
             s = natsSock_WriteFully(nc->fdSet, nc->fd, &(nc->deadline),
-                                    buffer + offset, len, &n);
-            offset += n;
-            len -= n;
-        }
-        else
-        {
-            int remaining = len - natsBuf_Available(nc->bw);
+                                    buffer + offset, len);
 
-            s = natsBuf_Append(nc->bw, buffer + offset, remaining);
-            if (s == NATS_OK)
-                s = natsConn_bufferFlush(nc);
-            if (s == NATS_OK)
-            {
-                len -= remaining;
-                offset += remaining;
-            }
+            // We are done
+            return s;
+        }
+
+        // We already have data in the buffer, check how many more bytes
+        // can we fit
+        avail = natsBuf_Available(nc->bw);
+
+        // Append that much bytes
+        s = natsBuf_Append(nc->bw, buffer + offset, avail);
+
+        // Flush the buffer
+        if (s == NATS_OK)
+            s = natsConn_bufferFlush(nc);
+
+        // If success, then decrement what's left to send and update the
+        // offset.
+        if (s == NATS_OK)
+        {
+            len    -= avail;
+            offset += avail;
         }
     }
-    if (s == NATS_OK)
+
+    // If there is data left, the buffer can now hold this data.
+    if ((s == NATS_OK) && (len > 0))
         s = natsBuf_Append(nc->bw, buffer + offset, len);
 
     return s;
@@ -329,8 +329,6 @@ _createConn(natsConnection *nc)
 
     if (s == NATS_OK)
     {
-        nc->usePending = false;
-
         if (nc->bw == NULL)
             s = natsBuf_Create(&(nc->bw), DEFAULT_BUF_SIZE);
         else
@@ -649,9 +647,6 @@ _flushReconnectPendingItems(natsConnection *nc)
                            natsBuf_Len(nc->pending));
     }
 
-    natsBuf_Destroy(nc->pending);
-    nc->pending = NULL;
-
     return s;
 }
 
@@ -747,6 +742,12 @@ _doReconnect(void *arg)
             continue;
         }
 
+        // We have a valid FD and the writer buffer was moved to pending.
+        // We are now going to send data directly to the newly connected
+        // server, so we need to disable the use of 'pending' for the
+        // moment
+        nc->usePending = false;
+
         // We are reconnected
         nc->stats.reconnects += 1;
 
@@ -768,6 +769,11 @@ _doReconnect(void *arg)
             {
                 // Reset status
                 s = NATS_OK;
+
+                // We need to re-activate the use of pending since we
+                // may go back to sleep and release the lock
+                nc->usePending = true;
+                natsBuf_Reset(nc->bw);
 
                 continue;
             }
@@ -805,12 +811,23 @@ _doReconnect(void *arg)
             // Reset status
             s = NATS_OK;
 
+            // We need to re-activate the use of pending since we
+            // may go back to sleep and release the lock
+            nc->usePending = true;
+            natsBuf_Reset(nc->bw);
+
             nc->status = RECONNECTING;
             continue;
         }
 
         tReconnect = nc->reconnectThread;
         nc->reconnectThread = NULL;
+
+        // At this point we know that we don't need the pending buffer
+        // anymore. Destroy now.
+        natsBuf_Destroy(nc->pending);
+        nc->pending     = NULL;
+        nc->usePending  = false;
 
         // Call reconnectedCB if appropriate. Since we are in a separate
         // thread, we could invoke the callback directly, however, we

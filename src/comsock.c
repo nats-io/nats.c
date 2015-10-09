@@ -285,7 +285,7 @@ natsSock_Read(natsSock fd, char *buffer, size_t maxBufferSize, int *n)
 
 natsStatus
 natsSock_WriteFully(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
-                    const char *data, int len, int *n)
+                    const char *data, int len)
 {
     natsStatus  s     = NATS_OK;
     int         bytes = 0;
@@ -308,9 +308,6 @@ natsSock_WriteFully(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
 
             continue;
         }
-
-        if (n != NULL)
-            *n += bytes;
 
         data += bytes;
         len -= bytes;

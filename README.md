@@ -9,7 +9,7 @@ This is an alpha release, heavily based on the [NATS GO Client](https://github.c
 
 First, download the source code:
 ```
-git clone git@github.com:kozlovic/cnats.git .
+git clone git@github.com:nats-io/cnats.git .
 ```
 
 Then, build the library:

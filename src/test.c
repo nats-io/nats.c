@@ -5224,6 +5224,12 @@ test_BasicClusterReconnect(void)
 
 #define NUM_CLIENTS (100)
 
+struct hashCount
+{
+    int count;
+
+};
+
 static void
 test_HotSpotReconnect(void)
 {
@@ -5237,6 +5243,7 @@ test_HotSpotReconnect(void)
     int                 serversCount;
     natsStrHash         *cs = NULL;
     struct threadArg    arg;
+    struct hashCount    *count = NULL;
 
     PRINT_TEST_NAME();
 
@@ -5311,15 +5318,19 @@ test_HotSpotReconnect(void)
         s = natsConnection_GetConnectedUrl(nc[i], buffer, sizeof(buffer));
         if (s == NATS_OK)
         {
-            int64_t count = 0;
-            void    *res  = natsStrHash_Get(cs, buffer);
+            count = (struct hashCount*) natsStrHash_Get(cs, buffer);
+            if (count == NULL)
+            {
+                count = (struct hashCount*) calloc(1, sizeof(struct hashCount));
+                if (count == NULL)
+                    s = NATS_NO_MEMORY;
+            }
 
-            if (res != NULL)
-                count = (int64_t) res;
-
-            count++;
-
-            s = natsStrHash_Set(cs, buffer, true, (void*) count, NULL);
+            if (s == NATS_OK)
+            {
+                count->count++;
+                s = natsStrHash_Set(cs, buffer, true, (void*) count, NULL);
+            }
         }
 
         natsConnection_Close(nc[i]);
@@ -5335,26 +5346,25 @@ test_HotSpotReconnect(void)
         // expected    = numClients / numServers
         // v           = expected * 0.3
 
-        natsStrHashIter iter;
-        void            *val;
-        int64_t         total;
-        int             delta;
-        int             v = (int) (((float)NUM_CLIENTS / 2) * 0.30);
+        natsStrHashIter     iter;
+        struct hashCount    *val;
+        int                 total;
+        int                 delta;
+        int                 v = (int) (((float)NUM_CLIENTS / 2) * 0.30);
 
         natsStrHashIter_Init(&iter, cs);
-        while (natsStrHashIter_Next(&iter, NULL, &val))
+        while (natsStrHashIter_Next(&iter, NULL, (void**)&val))
         {
-            total = (int64_t) val;
+            total = val->count;
 
             delta = ((NUM_CLIENTS / 2) - total);
             if (delta < 0)
                 delta *= -1;
 
             if (delta > v)
-            {
                 s = NATS_ERR;
-                break;
-            }
+
+            free(val);
         }
 
         test("Check variance: ");

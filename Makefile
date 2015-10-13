@@ -131,7 +131,7 @@ build/testsuite: build/test.o $(STLIBNAME)
 
 
 test: build/testsuite
-	build/testsuite
+	$(VALGRIND) build/testsuite
 
 build/%.o: src/%.c
 	mkdir -p build/unix build/win

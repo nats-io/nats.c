@@ -18,7 +18,6 @@ static const char *statusText[] = {
     "Line too long",
 
     "Connection Closed",
-    "Secure connection required",
     "No server available for connection",
     "State Connection",
     "Secure Connection Required",
@@ -49,8 +48,7 @@ static const char *statusText[] = {
     "Timeout",
 
     "Initialization Failed",
-    "Not Initialized",
-    "Options can't be changed at the moment"
+    "Not Initialized"
 };
 
 const char* natsStatus_GetText(natsStatus s) {

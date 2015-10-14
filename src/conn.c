@@ -534,7 +534,7 @@ _processExpectedInfo(natsConnection *nc)
     if (s == NATS_OK)
         s = _processInfo(nc, control.args);
     if ((s == NATS_OK) && nc->info.sslRequired)
-        s = NATS_SECURE_CONN_REQUIRED;
+        s = NATS_SECURE_CONNECTION_REQUIRED;
 
     _clearControlContent(&control);
 
@@ -1185,7 +1185,7 @@ _processPingTimer(natsTimer *timer, void *arg)
     if (++(nc->pout) > nc->opts->maxPingsOut)
     {
         natsConn_Unlock(nc);
-        _processOpError(nc, NATS_STATE_CONNECTION);
+        _processOpError(nc, NATS_STALE_CONNECTION);
         return;
     }
 
@@ -1477,7 +1477,7 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
 {
     if (strncmp(buf, STALE_CONNECTION, STATE_CONNECTION_LEN) == 0)
     {
-        _processOpError(nc, NATS_STATE_CONNECTION);
+        _processOpError(nc, NATS_STALE_CONNECTION);
     }
     else
     {

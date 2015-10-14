@@ -1,7 +1,7 @@
 
 - [ ] Pooling/garbage collection of structures
 - [ ] Revisit connect logic to match GO Client
-- [ ] Revisit FlushTimeout to match GO Client
+- [x] Revisit FlushTimeout to match GO Client
 - [ ] Revisit Flusher for the aggregation of more data before socket write
 - [ ] Decide if we go full non-blocking sockets, so we can apply deadline to all read/writes
 - [x] Improve Request/Reply performance (*Solved by doing explicit flushing after sending the reply. The original performance issue is due to the way the flusher is implemented, whereby we sleep a millisecond to accumulate more work. So that limited the rate to 1000 messages/sec*).  

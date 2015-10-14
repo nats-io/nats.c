@@ -21,6 +21,7 @@ static const char *statusText[] = {
     "No server available for connection",
     "State Connection",
     "Secure Connection Required",
+    "Connection Disconnected",
 
     "Not Permitted",
     "Not Found",

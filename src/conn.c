@@ -143,7 +143,7 @@ _freeConn(natsConnection *nc)
     natsSrvPool_Destroy(nc->srvPool);
     _clearServerInfo(&(nc->info));
     natsCondition_Destroy(nc->flusherCond);
-    natsCondition_Destroy(nc->flushTimeoutCond);
+    natsCondition_Destroy(nc->pongs.cond);
     natsParser_Destroy(nc->ps);
     natsThread_Destroy(nc->readLoopThread);
     natsThread_Destroy(nc->flusherThread);
@@ -650,6 +650,52 @@ _flushReconnectPendingItems(natsConnection *nc)
     return s;
 }
 
+static void
+_removePongFromList(natsConnection *nc, natsPong *pong)
+{
+    if (pong->prev != NULL)
+        pong->prev->next = pong->next;
+
+    if (pong->next != NULL)
+        pong->next->prev = pong->prev;
+
+    if (nc->pongs.head == pong)
+        nc->pongs.head = pong->next;
+
+    if (nc->pongs.tail == pong)
+        nc->pongs.tail = pong->prev;
+
+    pong->prev = pong->next = NULL;
+}
+
+// When the connection is closed, or is disconnected and we are about
+// to reconnect, we need to unblock all pending natsConnection_Flush[Timeout]()
+// calls: there is no chance that a PING sent to a server is going to be
+// echoed by the new server.
+static void
+_clearPendingFlushRequests(natsConnection *nc)
+{
+    natsPong *pong = NULL;
+
+    while ((pong = nc->pongs.head) != NULL)
+    {
+        // Pop from the queue
+        _removePongFromList(nc, pong);
+
+        // natsConnection_Flush[Timeout]() is waiting on a condition
+        // variable and exit when this value is set to 0. "Flush" will
+        // return an error to the caller if the connection status
+        // is not CONNECTED at that time.
+        pong->id = 0;
+
+        // There may be more than one user-thread making
+        // natsConnection_Flush() calls.
+        natsCondition_Broadcast(nc->pongs.cond);
+    }
+
+    nc->pongs.incoming      = 0;
+    nc->pongs.outgoingPings = 0;
+}
 
 // Try to reconnect using the option parameters.
 // This function assumes we are allowed to reconnect.
@@ -668,18 +714,17 @@ _doReconnect(void *arg)
 
     _initThreadsToJoin(&ttj, nc, false);
 
-    if (nc->inFlushTimeout)
-    {
-        nc->flushTimeoutComplete = true;
-        natsCondition_Signal(nc->flusherCond);
-    }
-
     natsConn_Unlock(nc);
 
     _joinThreads(&ttj);
 
     natsConn_Lock(nc);
 
+    // Kick out all calls to natsConnection_Flush[Timeout]().
+    _clearPendingFlushRequests(nc);
+
+    // Create the pending buffer to hold all write requests while we try
+    // to reconnect.
     s = natsBuf_Create(&(nc->pending), DEFAULT_PENDING_SIZE);
     if (s == NATS_OK)
     {
@@ -1158,15 +1203,39 @@ _flusher(void *arg)
 }
 
 static void
-_sendPing(natsConnection *nc)
+_sendPing(natsConnection *nc, natsPong *pong)
 {
-    natsStatus  s;
-
-    nc->pingId++;
+    natsStatus  s     = NATS_OK;
 
     s = natsConn_bufferWrite(nc, _PING_PROTO_, _PING_PROTO_LEN_);
     if (s == NATS_OK)
+    {
+        // Flush the buffer in place.
         s = natsConn_bufferFlush(nc);
+    }
+    if (s == NATS_OK)
+    {
+        // Now that we know the PING was sent properly, update
+        // the number of PING sent.
+        nc->pongs.outgoingPings++;
+
+        if (pong != NULL)
+        {
+            pong->id = nc->pongs.outgoingPings;
+
+            // Add this pong to the list.
+            pong->next = NULL;
+            pong->prev = nc->pongs.tail;
+
+            if (nc->pongs.tail != NULL)
+                nc->pongs.tail->next = pong;
+
+            nc->pongs.tail = pong;
+
+            if (nc->pongs.head == NULL)
+                nc->pongs.head = pong;
+        }
+    }
 }
 
 static void
@@ -1182,6 +1251,8 @@ _processPingTimer(natsTimer *timer, void *arg)
         return;
     }
 
+    // If we have more PINGs out than PONGs in, consider
+    // the connection stale.
     if (++(nc->pout) > nc->opts->maxPingsOut)
     {
         natsConn_Unlock(nc);
@@ -1189,7 +1260,7 @@ _processPingTimer(natsTimer *timer, void *arg)
         return;
     }
 
-    _sendPing(nc);
+    _sendPing(nc, NULL);
 
     natsConn_Unlock(nc);
 }
@@ -1207,12 +1278,8 @@ _spinUpSocketWatchers(natsConnection *nc)
 {
     natsStatus  s;
 
-    nc->pout                 = 0;
-    nc->flusherStop          = false;
-    nc->flushTimeoutComplete = false;
-    nc->pingId               = 0;
-    nc->pongMark             = 0;
-    nc->pongId               = 0;
+    nc->pout        = 0;
+    nc->flusherStop = false;
 
     s = natsThread_Create(&(nc->readLoopThread), _readLoop, (void*) nc);
     if (s == NATS_OK)
@@ -1294,13 +1361,10 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
 
     nc->status = CLOSED;
 
-    if (nc->inFlushTimeout)
-    {
-        nc->flushTimeoutComplete = true;
-        natsCondition_Signal(nc->flushTimeoutCond);
-    }
-
     _initThreadsToJoin(&ttj, nc, true);
+
+    // Kick out all calls to natsConnection_Flush[Timeout]().
+    _clearPendingFlushRequests(nc);
 
     if (nc->ptmr != NULL)
         natsTimer_Stop(nc->ptmr);
@@ -1497,15 +1561,29 @@ natsConn_processPing(natsConnection *nc)
 void
 natsConn_processPong(natsConnection *nc)
 {
+    natsPong *pong = NULL;
+
     natsConn_Lock(nc);
 
-    nc->pout = 0;
+    nc->pongs.incoming++;
 
-    if (++(nc->pongId) == nc->pongMark)
+    // Check if the first pong's id in the list matches the incoming Id.
+    if (((pong = nc->pongs.head) != NULL)
+        && (pong->id == nc->pongs.incoming))
     {
-        nc->flushTimeoutComplete = true;
-        natsCondition_Signal(nc->flushTimeoutCond);
+        // Remove the pong from the list
+        _removePongFromList(nc, pong);
+
+        // Release the Flush[Timeout] call
+        pong->id = 0;
+
+        // There may be more than one thread waiting on this
+        // condition variable, so we use broadcast instead of
+        // signal.
+        natsCondition_Broadcast(nc->pongs.cond);
     }
+
+    nc->pout = 0;
 
     natsConn_Unlock(nc);
 }
@@ -1743,7 +1821,7 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     if (s == NATS_OK)
         s = natsCondition_Create(&(nc->flusherCond));
     if (s == NATS_OK)
-        s = natsCondition_Create(&(nc->flushTimeoutCond));
+        s = natsCondition_Create(&(nc->pongs.cond));
 
     if (s == NATS_OK)
         *newConn = nc;
@@ -1853,11 +1931,22 @@ natsConnection_Status(natsConnection *nc)
     return cs;
 }
 
+static void
+_destroyPong(natsConnection *nc, natsPong *pong)
+{
+    // If this pong is the cached one, do not free
+    if (pong == &(nc->pongs.cached))
+        memset(pong, 0, sizeof(natsPong));
+    else
+        NATS_FREE(pong);
+}
+
 natsStatus
 natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
 {
-    natsStatus  s = NATS_OK;
-    int64_t     target = 0;
+    natsStatus  s       = NATS_OK;
+    int64_t     target  = 0;
+    natsPong    *pong   = NULL;
 
     if (nc == NULL)
         return NATS_INVALID_ARG;
@@ -1870,34 +1959,64 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
     if (natsConn_isClosed(nc))
         s = NATS_CONNECTION_CLOSED;
 
-    if ((s == NATS_OK) && (nc->inFlushTimeout))
-        s = NATS_NOT_PERMITTED;
+    if (s == NATS_OK)
+    {
+        // Use the cached PONG instead of creating one if the list
+        // is empty
+        if (nc->pongs.head == NULL)
+            pong = &(nc->pongs.cached);
+        else
+            pong = (natsPong*) NATS_CALLOC(1, sizeof(natsPong));
+
+        if (pong == NULL)
+            s = NATS_NO_MEMORY;
+    }
 
     if (s == NATS_OK)
     {
-        nc->inFlushTimeout = true;
-
-        nc->pongMark = (nc->pingId + 1);
-        _sendPing(nc);
+        // Send the ping (and add the pong to the list)
+        _sendPing(nc, pong);
 
         target = nats_Now() + timeout;
 
+        // When the corresponding PONG is received, the PONG processing code
+        // will set pong->id to 0 and do a broadcast. This will allow this
+        // code to break out of the 'while' loop.
         while ((s != NATS_TIMEOUT)
                && !natsConn_isClosed(nc)
-               && !(nc->flushTimeoutComplete))
+               && (pong->id != 0))
         {
-            s = natsCondition_AbsoluteTimedWait(nc->flushTimeoutCond, nc->mu, target);
+            s = natsCondition_AbsoluteTimedWait(nc->pongs.cond, nc->mu, target);
         }
 
-        // Reset those
-        nc->flushTimeoutComplete = false;
-        nc->pongMark             = 0;
-        nc->inFlushTimeout       = false;
-
-        if ((s == NATS_OK) && (nc->status != CONNECTED))
+        // Even if pong->id has been set to 0 (to break out of the loop above),
+        // we still report an error if we are not connected at this point.
+        if ((s == NATS_OK) && (nc->status == CLOSED))
+        {
+            // The connection has been closed while we were waiting
             s = NATS_CONNECTION_CLOSED;
+        }
+        else if ((s == NATS_OK) && (nc->status != CONNECTED))
+        {
+            // The connection was disconnected and the library is in the
+            // process of trying to reconnect
+            s = NATS_CONNECTION_DISCONNECTED;
+        }
         else if (nc->err != NATS_OK)
+        {
+            // Report any error that occurred while we were waiting.
             s = nc->err;
+        }
+
+        if (s != NATS_OK)
+        {
+            // If we are here, it is possible that we timed-out, or some other
+            // error occurred. Make sure the request is no longer in the list.
+            _removePongFromList(nc, pong);
+        }
+
+        // We are done with the pong
+        _destroyPong(nc, pong);
     }
 
     natsConn_unlockAndRelease(nc);

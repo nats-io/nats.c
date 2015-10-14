@@ -68,6 +68,7 @@ extern int64_t gLockSpinCount;
 // Forward declarations
 struct __natsConnection;
 struct __natsSubscription;
+struct __natsPong;
 
 // natsMsgHandler is a callback function that processes messages delivered to
 // asynchronous subscribers.
@@ -190,6 +191,30 @@ typedef struct __natsSubscription
 
 } natsSubscription;
 
+
+typedef struct __natsPong
+{
+    int64_t             id;
+
+    struct __natsPong   *prev;
+    struct __natsPong   *next;
+
+} natsPong;
+
+typedef struct __natsPongList
+{
+    natsPong            *head;
+    natsPong            *tail;
+
+    int64_t             incoming;
+    int64_t             outgoingPings;
+
+    natsPong            cached;
+
+    natsCondition       *cond;
+
+} natsPongList;
+
 typedef struct __natsConnection
 {
     natsMutex           *mu;
@@ -228,12 +253,7 @@ typedef struct __natsConnection
     natsTimer           *ptmr;
     int                 pout;
 
-    natsCondition       *flushTimeoutCond;
-    bool                inFlushTimeout;
-    bool                flushTimeoutComplete;
-    int64_t             pingId;
-    int64_t             pongMark;
-    int64_t             pongId;
+    natsPongList        pongs;
 
     natsThread          *readLoopThread;
 

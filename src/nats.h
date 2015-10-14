@@ -400,13 +400,6 @@ natsConnStatus
 natsConnection_Status(natsConnection *nc);
 
 /*
- * Performs a round trip to the server and return when it receives the
- * internal reply.
- */
-natsStatus
-natsConnection_Flush(natsConnection *nc);
-
-/*
  * Returns the number of bytes to be sent to the server, or -1 if the
  * connection is closed.
  */
@@ -415,8 +408,25 @@ natsConnection_Buffered(natsConnection *nc);
 
 /*
  * Performs a round trip to the server and return when it receives the
+ * internal reply.
+ *
+ * Note that if this call occurs when the connection to the server is
+ * lost, the PING will not be echoed even if the library can connect
+ * to a new (or the same) server. Therefore, in such situation, this
+ * call will fail with the status NATS_CONNECTION_DISCONNECTED.
+ *
+ * If the connection is closed while this call is in progress, then the
+ * status NATS_CONNECTION_CLOSED would be returned instead.
+ */
+natsStatus
+natsConnection_Flush(natsConnection *nc);
+
+/*
+ * Performs a round trip to the server and return when it receives the
  * internal reply, or if the call times-out (timeout is expressed in
  * milliseconds).
+ *
+ * See possible failure case described in natsConnection_Flush().
  */
 natsStatus
 natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout);

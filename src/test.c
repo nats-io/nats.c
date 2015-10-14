@@ -3767,22 +3767,63 @@ test_PubSubWithReply(void)
     _stopServer(serverPid);
 }
 
+struct flushArg
+{
+    natsConnection      *nc;
+    natsStatus          s;
+    int                 count;
+    int64_t             timeout;
+    int64_t             initialSleep;
+    int64_t             loopSleep;
+};
+
+static void
+_doFlush(void *arg)
+{
+    struct flushArg     *p = (struct flushArg*) arg;
+    int                 i;
+
+    nats_Sleep(p->initialSleep);
+
+    for (i = 0; (p->s == NATS_OK) && (i < p->count); i++)
+    {
+        p->s = natsConnection_FlushTimeout(p->nc, p->timeout);
+        if ((p->s == NATS_OK) && (p->loopSleep > 0))
+            nats_Sleep(p->loopSleep);
+    }
+}
+
 static void
 test_Flush(void)
 {
     natsStatus          s;
+    natsOptions         *opts     = NULL;
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     const char          *string   = "Hello World";
+    natsThread          *threads[3] = { NULL, NULL, NULL };
+    struct flushArg     args[3];
+    int64_t             start = 0;
+    int64_t             elapsed = 0;
+    int                 i;
 
     PRINT_TEST_NAME();
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectWait(opts, 100);
+    if (s == NATS_OK)
+        s = natsOptions_SetPingInterval(opts, 100);
+
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
 
     test("Test Flush empties buffer: ")
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    s = natsConnection_Connect(&nc, opts);
     for (int i=0; (s == NATS_OK) && (i < 1000); i++)
         s = natsConnection_PublishString(nc, "flush", string);
     if (s == NATS_OK)
@@ -3790,6 +3831,119 @@ test_Flush(void)
     testCond((s == NATS_OK)
              && natsConnection_Buffered(nc) == 0);
 
+    test("Check parallel Flush: ")
+    for (int i=0; (s == NATS_OK) && (i < 3); i++)
+    {
+        args[i].nc           = nc;
+        args[i].s            = NATS_OK;
+        args[i].timeout      = 5000;
+        args[i].count        = 1000;
+        args[i].initialSleep = 500;
+        args[i].loopSleep    = 1;
+        s = natsThread_Create(&(threads[i]), _doFlush, (void*) &(args[i]));
+    }
+
+    for (int i=0; (s == NATS_OK) && (i < 10000); i++)
+        s = natsConnection_PublishString(nc, "flush", "Hello world");
+
+    for (int i=0; (i < 3); i++)
+    {
+        if (threads[i] == NULL)
+            continue;
+
+        natsThread_Join(threads[i]);
+        natsThread_Destroy(threads[i]);
+
+        if (args[i].s != NATS_OK)
+            s = args[i].s;
+    }
+    testCond(s == NATS_OK);
+
+    test("Check Flush while disconnect occurs: ");
+    for (int i=0; (s == NATS_OK) && (i < 3); i++)
+    {
+        args[i].nc = nc;
+        args[i].s  = NATS_OK;
+        s = natsThread_Create(&(threads[i]), _doFlush, (void*) &(args[i]));
+    }
+
+    nats_Sleep(600);
+
+    _stopServer(serverPid);
+    serverPid = NATS_INVALID_PID;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    if (serverPid == NATS_INVALID_PID)
+        FAIL("Unable to start or verify that the server was started!");
+
+    for (int i=0; (i < 3); i++)
+    {
+        if (threads[i] == NULL)
+            continue;
+
+        natsThread_Join(threads[i]);
+        natsThread_Destroy(threads[i]);
+
+        if (args[i].s != NATS_OK)
+            s = args[i].s;
+    }
+    // We expect flush calls to actually fail (reporting that the connection
+    // is closed)
+    testCond(s != NATS_OK);
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    test("Check Flush while in doReconnect: ")
+    s = natsOptions_SetReconnectWait(opts, 3000);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+    {
+        // Capture the moment we connected
+        start = nats_Now();
+
+        // Stop the server
+        _stopServer(serverPid);
+        serverPid = NATS_INVALID_PID;
+
+        // We can restart right away, since the client library will wait 3 sec
+        // before reconnecting.
+        serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+        if (serverPid == NATS_INVALID_PID)
+            FAIL("Unable to start or verify that the server was started!");
+
+        // Attempt to Flush. This should wait for the reconnect to occur, then
+        // proceed.
+        for (int i=0; (s == NATS_OK) && (i < 3); i++)
+        {
+            args[i].nc           = nc;
+            args[i].s            = NATS_OK;
+            args[i].timeout      = 5000;
+            args[i].count        = 1;
+            args[i].initialSleep = 1000;
+            args[i].loopSleep    = 0;
+            s = natsThread_Create(&(threads[i]), _doFlush, (void*) &(args[i]));
+        }
+    }
+    for (int i=0; (i < 3); i++)
+    {
+        if (threads[i] == NULL)
+            continue;
+
+        natsThread_Join(threads[i]);
+        natsThread_Destroy(threads[i]);
+
+        if (args[i].s != NATS_OK)
+            s = args[i].s;
+    }
+    if (s == NATS_OK)
+        elapsed = (nats_Now() - start);
+
+    testCond((s == NATS_OK) && (elapsed >= 2900) && (elapsed <= 3100));
+
+
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     _stopServer(serverPid);

@@ -20,13 +20,23 @@ make install examples
 
 This will build both the static and dynamic libraries and the examples binaries. After this step, the directory `install` contains two folders: `include` and `lib`, where the header files necessary for your application to use the C NATS library are located, and where the compiled libraries are located.
 
-You have several options to pass to the make command. Here is a list:
+You have several targets to pass to the make command. Here is a list:
 
 * clean
-* debug
 * install
 * examples
 * test
+
+You can compile in debug mode and/or in 32 bits using the command line parameters:
+
+* debug
+* m
+
+Here is an example:
+
+```
+make debug=on m=32
+```
 
 We recommand that your run the test suite to ensure that everything works fine in your environment
 

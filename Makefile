@@ -42,7 +42,15 @@ ifeq ($(uname_S),Darwin)
   DYLIB_MAKE_CMD=$(CC) -shared -Wl,-install_name,$(DYLIBNAME) -o $(DYLIBNAME) $(LDFLAGS) 
 endif
 
-all: $(DYLIBNAME) $(STLIBNAME) $(TESTS)
+ifeq ($(debug), on)
+	OPTIMIZATION=$(DEBUG)
+endif
+ifeq ($(m), 32)
+	CFLAGS=-m32
+	LDFLAGS=-m32
+endif
+
+all: $(DYLIBNAME) $(STLIBNAME) $(TESTS) install
 
 # Deps (use make dep to generate this)
 asynccb.o: src/asynccb.c src/natsp.h src/include/n-unix.h src/status.h \
@@ -127,7 +135,7 @@ replier: examples/replier.c $(DYLIBNAME)
 examples: $(EXAMPLES)
 
 build/testsuite: build/test.o $(STLIBNAME)
-	$(CC) -o $@ $(OPTIMIZATION) -fPIC -D_REENTRANT $(CFLAGS) $(WARNINGS) $(ARCH) $(REAL_LDFLAGS) $< -lpthread $(STLIBNAME)
+	$(CC) -o $@ $(REAL_CFLAGS) $(REAL_LDFLAGS) $< -lpthread $(STLIBNAME)
 
 
 test: build/testsuite
@@ -152,19 +160,5 @@ install: $(DYLIBNAME) $(STLIBNAME)
 	$(INSTALL) src/nats.h src/status.h $(INSTALL_INCLUDE_PATH)
 	$(INSTALL) $(DYLIBNAME) $(INSTALL_LIBRARY_PATH)
 	$(INSTALL) $(STLIBNAME) $(INSTALL_LIBRARY_PATH)
-	rm $(DYLIBNAME) $(STLIBNAME)
 
-32bit:
-	@echo ""
-	@echo "WARNING: if this fails under Linux you probably need to install libc6-dev-i386"
-	@echo ""
-	$(MAKE) CFLAGS="-m32" LDFLAGS="-m32"
-
-32bit-vars:
-	$(eval CFLAGS=-m32)
-	$(eval LDFLAGS=-m32)
-
-debug:
-	$(MAKE) OPTIMIZATION="$(DEBUG)"
-
-.PHONY: all test clean dep install 32bit debug
+.PHONY: all test clean dep install examples

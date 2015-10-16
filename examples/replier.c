@@ -192,9 +192,12 @@ int main(int argc, char **argv)
         if (elapsed == 0)
             elapsed = nats_Now() - start;
 
-        printf("\nReceived %" NATS_PRINTF_D64 " requests in "\
-               "%" NATS_PRINTF_D64 " milliseconds (%d msgs/sec)\n",
-               count, elapsed, (int)((count * 1000) / elapsed));
+        if (elapsed <= 0)
+            printf("\nNot enough messages or too fast to report performance!\n");
+        else
+            printf("\nReceived %" NATS_PRINTF_D64 " requests in "\
+                   "%" NATS_PRINTF_D64 " milliseconds (%d msgs/sec)\n",
+                   count, elapsed, (int)((count * 1000) / elapsed));
     }
     else
     {

@@ -1684,9 +1684,19 @@ natsConn_subscribe(natsSubscription **newSub,
                 s = NATS_NO_MEMORY;
 
             if (s == NATS_OK)
+            {
                 s = natsConn_bufferWriteString(nc, proto);
-            if (s == NATS_OK)
-                natsConn_kickFlusher(nc);
+                if (s == NATS_OK)
+                    natsConn_kickFlusher(nc);
+
+                // We should not return a failure if we get an issue
+                // with the buffer write (except if it is no memory).
+                // For IO errors (if we just got disconnected), the
+                // reconnect logic will resend the sub protocol.
+
+                if (s != NATS_NO_MEMORY)
+                    s = NATS_OK;
+            }
 
             NATS_FREE(proto);
         }
@@ -1753,6 +1763,13 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
         s = _sendUnsubProto(nc, sub);
         if (s == NATS_OK)
             natsConn_kickFlusher(nc);
+
+        // We should not return a failure if we get an issue
+        // with the buffer write (except if it is no memory).
+        // For IO errors (if we just got disconnected), the
+        // reconnect logic will resend the unsub protocol.
+        if (s != NATS_NO_MEMORY)
+            s = NATS_OK;
     }
 
     natsConn_Unlock(nc);

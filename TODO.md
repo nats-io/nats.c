@@ -1,6 +1,6 @@
 
 - [ ] Pooling/garbage collection of structures
-- [ ] Revisit connect logic to match GO Client
+- [x] ~~Revisit connect logic to match GO Client~~ *Will actually do the opposite, that is change the GO Client connect/reconnect logic. The async reconnect logic is flawed and could cause issues when getting authentication errors during the process.*
 - [x] Revisit FlushTimeout to match GO Client
 - [ ] Revisit Flusher for the aggregation of more data before socket write
 - [ ] Decide if we go full non-blocking sockets, so we can apply deadline to all read/writes

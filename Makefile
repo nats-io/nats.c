@@ -45,6 +45,8 @@ endif
 ifeq ($(debug), on)
 	OPTIMIZATION=$(DEBUG)
 endif
+
+# WARNING: if this fails under Linux you probably need to install libc6-dev-i386
 ifeq ($(m), 32)
 	CFLAGS=-m32
 	LDFLAGS=-m32

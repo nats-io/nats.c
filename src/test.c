@@ -3940,8 +3940,7 @@ test_Flush(void)
     if (s == NATS_OK)
         elapsed = (nats_Now() - start);
 
-    testCond((s == NATS_OK) && (elapsed >= 2900) && (elapsed <= 3100));
-
+    testCond((s == NATS_OK) && (elapsed >= 2800) && (elapsed <= 3200));
 
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
@@ -5051,7 +5050,7 @@ test_AsyncSubscriberStarvation(void)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
 
-    test("Test not stalled in cb waiting for other cb");
+    test("Test not stalled in cb waiting for other cb: ");
     testCond((s == NATS_OK)
              && arg.done
              && (arg.status == NATS_OK));
@@ -5290,6 +5289,105 @@ test_AuthServers(void)
 
     _stopServer(serverPid1);
     _stopServer(serverPid2);
+}
+
+static void
+test_AuthFailToReconnect(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid1= NATS_INVALID_PID;
+    natsPid             serverPid2= NATS_INVALID_PID;
+    natsPid             serverPid3= NATS_INVALID_PID;
+    char                buffer[64];
+    const char          *servers[] = {"nats://localhost:22222",
+                                      "nats://localhost:22223",
+                                      "nats://localhost:22224"};
+    struct threadArg    args;
+
+    int serversCount = 3;
+
+    PRINT_TEST_NAME();
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetNoRandomize(opts, true);
+    if (s == NATS_OK)
+        s = natsOptions_SetServers(opts, servers, serversCount);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &args);
+    if (s == NATS_OK)
+        s = natsOptions_SetMaxReconnect(opts, 10);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectWait(opts, 100);
+
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    serverPid1 = _startServer("nats://localhost:22222", "-p 22222", false);
+    if (serverPid1 == NATS_INVALID_PID)
+        FAIL("Unable to start or verify that the server was started!");
+
+    serverPid2 = _startServer("nats://localhost:22223", "-p 22223 --user ivan --pass foo", false);
+    if (serverPid2 == NATS_INVALID_PID)
+    {
+        _stopServer(serverPid1);
+        FAIL("Unable to start or verify that the server was started!");
+    }
+
+    serverPid3 = _startServer("nats://localhost:22224", "-p 22224", false);
+    if (serverPid3 == NATS_INVALID_PID)
+    {
+        _stopServer(serverPid1);
+        _stopServer(serverPid2);
+        FAIL("Unable to start or verify that the server was started!");
+    }
+
+    nats_Sleep(1000);
+
+    test("Connect should succeed: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    // Stop the server which will trigger the reconnect
+    _stopServer(serverPid1);
+    serverPid1 = NATS_INVALID_PID;
+
+
+    // The client will try to connect to the second server, and that
+    // should fail. It should then try to connect to the third and succeed.
+
+    // Wait for the reconnect CB.
+    test("Reconnect callback should be triggered: ")
+    natsMutex_Lock(args.m);
+    while ((s == NATS_OK)
+           && !(args.reconnected))
+    {
+        s = natsCondition_TimedWait(args.c, args.m, 5000);
+    }
+    natsMutex_Unlock(args.m);
+    testCond((s == NATS_OK) && args.reconnected);
+
+    test("Connection should not be closed: ");
+    testCond(natsConnection_IsClosed(nc) == false);
+
+    buffer[0] = '\0';
+    s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
+
+    test("Should have connected to third server: ");
+    testCond((s == NATS_OK) && (buffer[0] != '\0')
+             && (strcmp(buffer, servers[2]) == 0));
+
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid2);
+    _stopServer(serverPid3);
 }
 
 static void
@@ -5931,6 +6029,7 @@ nats_tests:
 
     test_ServersOption();
     test_AuthServers();
+    test_AuthFailToReconnect();
     test_BasicClusterReconnect();
     test_HotSpotReconnect();
     test_ProperReconnectDelay();

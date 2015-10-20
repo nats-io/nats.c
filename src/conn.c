@@ -50,11 +50,11 @@ void natsConn_Unlock(natsConnection *nc) { natsMutex_Unlock(nc->mu); }
 static natsStatus
 _spinUpSocketWatchers(natsConnection *nc);
 
+static natsStatus
+_processConnInit(natsConnection *nc);
+
 static void
 _close(natsConnection *nc, natsConnStatus status, bool doCBs);
-
-natsStatus
-natsConnection_Flush(natsConnection *nc);
 
 /*
  * ----------------------------------------
@@ -370,7 +370,7 @@ natsConn_isClosed(natsConnection *nc)
 bool
 _isReconnecting(natsConnection *nc)
 {
-    return ((nc->status == RECONNECTING) || (nc->status == CONNECTING));
+    return (nc->status == RECONNECTING);
 }
 
 static natsStatus
@@ -683,10 +683,10 @@ _clearPendingFlushRequests(natsConnection *nc)
         _removePongFromList(nc, pong);
 
         // natsConnection_Flush[Timeout]() is waiting on a condition
-        // variable and exit when this value is set to 0. "Flush" will
+        // variable and exit when this value is != 0. "Flush" will
         // return an error to the caller if the connection status
         // is not CONNECTED at that time.
-        pong->id = 0;
+        pong->id = -1;
 
         // There may be more than one user-thread making
         // natsConnection_Flush() calls.
@@ -800,61 +800,30 @@ _doReconnect(void *arg)
         cur->didConnect = true;
         cur->reconnects = 0;
 
-        // Set our status to connecting
-        nc->status = CONNECTING;
-
         // Process Connect logic
-        if ((nc->err = _processExpectedInfo(nc)) == NATS_OK)
-        {
-            char *cProto = NULL;
+        s = _processConnInit(nc);
 
-            // Create the connect protocol message
-            s = _connectProto(nc, &cProto);
-            if (s != NATS_OK)
-            {
-                // Reset status
-                s = NATS_OK;
+        // Send existing subscription state
+        if (s == NATS_OK)
+            s = _resendSubscriptions(nc);
 
-                // We need to re-activate the use of pending since we
-                // may go back to sleep and release the lock
-                nc->usePending = true;
-                natsBuf_Reset(nc->bw);
+        // Now send off and clear pending buffer
+        if (s == NATS_OK)
+            s = _flushReconnectPendingItems(nc);
 
-                continue;
-            }
+        // This is where we are truly connected.
+        if (s == NATS_OK)
+            nc->status = CONNECTED;
 
-            // Send the CONNECT protocol
-            s = natsConn_bufferWriteString(nc, cProto);
-
-            // Send existing subscription state
-            if (s == NATS_OK)
-                s = _resendSubscriptions(nc);
-
-            // Now send off and clear pending buffer
-            if (s == NATS_OK)
-                s = _flushReconnectPendingItems(nc);
-
-            if (s == NATS_OK)
-            {
-                // This is where we are truly connected.
-                nc->status = CONNECTED;
-
-                // Clear our deadline now before starting the readLoop.
-                natsDeadline_Clear(&(nc->deadline));
-                s = natsSock_SetBlocking(nc->fd, true);
-            }
-
-            // Spin up socket watchers again
-            if (s == NATS_OK)
-                s = _spinUpSocketWatchers(nc);
-
-            NATS_FREE(cProto);
-        }
-
-        if ((nc->err != NATS_OK) || (s != NATS_OK))
+        if (s != NATS_OK)
         {
             // Reset status
             s = NATS_OK;
+
+            // Close the socket since we were connected, but a problem occurred.
+            // (not doing this would cause an FD leak)
+            natsSock_Close(nc->fd);
+            nc->fd = -1;
 
             // We need to re-activate the use of pending since we
             // may go back to sleep and release the lock
@@ -864,6 +833,8 @@ _doReconnect(void *arg)
             nc->status = RECONNECTING;
             continue;
         }
+
+        // No more failure allowed past this point.
 
         tReconnect = nc->reconnectThread;
         nc->reconnectThread = NULL;
@@ -882,9 +853,6 @@ _doReconnect(void *arg)
 
         // Release lock here, we will return below.
         natsConn_Unlock(nc);
-
-        // Make sure to flush everything
-        (void) natsConnection_Flush(nc);
 
         natsThread_Join(tReconnect);
         natsThread_Destroy(tReconnect);
@@ -1866,7 +1834,7 @@ natsConnection_Connect(natsConnection **newConn, natsOptions *options)
     if (s == NATS_OK)
         *newConn = nc;
     else
-        _freeConn(nc);
+        natsConn_release(nc);
 
     return s;
 }
@@ -1889,7 +1857,7 @@ natsConnection_ConnectTo(natsConnection **newConn, const char *url)
     if (s == NATS_OK)
         *newConn = nc;
     else
-        _freeConn(nc);
+        natsConn_release(nc);
 
     return s;
 }
@@ -2001,28 +1969,26 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
         // code to break out of the 'while' loop.
         while ((s != NATS_TIMEOUT)
                && !natsConn_isClosed(nc)
-               && (pong->id != 0))
+               && (pong->id > 0))
         {
             s = natsCondition_AbsoluteTimedWait(nc->pongs.cond, nc->mu, target);
         }
 
-        // Even if pong->id has been set to 0 (to break out of the loop above),
-        // we still report an error if we are not connected at this point.
-        if ((s == NATS_OK) && (nc->status == CLOSED))
+        // Report any error that occurred while we were waiting.
+        if (nc->err != NATS_OK)
+        {
+            s = nc->err;
+        }
+        else if ((s == NATS_OK) && (nc->status == CLOSED))
         {
             // The connection has been closed while we were waiting
             s = NATS_CONNECTION_CLOSED;
         }
-        else if ((s == NATS_OK) && (nc->status != CONNECTED))
+        else if ((s == NATS_OK) && (pong->id == -1))
         {
             // The connection was disconnected and the library is in the
             // process of trying to reconnect
             s = NATS_CONNECTION_DISCONNECTED;
-        }
-        else if (nc->err != NATS_OK)
-        {
-            // Report any error that occurred while we were waiting.
-            s = nc->err;
         }
 
         if (s != NATS_OK)

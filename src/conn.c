@@ -309,22 +309,22 @@ _createConn(natsConnection *nc)
 
     // Sets a deadline for the connect process (not just the low level
     // tcp connect. The deadline will be removed when we have received
-    // the PONG to our initial PING. See _sendConnect().
+    // the PONG to our initial PING. See _processConnInit().
     natsDeadline_Init(&(nc->deadline), nc->opts->timeout);
 
     s = natsSock_ConnectTcp(&(nc->fd), nc->fdSet, &(nc->deadline),
-                                  nc->url->host, nc->url->port);
-    if (s != NATS_OK)
-        return s;
-
-    nc->fdActive = true;
-
-    if ((nc->pending != NULL) && (nc->bw != NULL)
-        && (natsBuf_Len(nc->bw) > 0))
+                            nc->url->host, nc->url->port);
+    if (s == NATS_OK)
     {
-        // Move to pending buffer
-        s = natsConn_bufferWrite(nc, natsBuf_Data(nc->bw),
-                                 natsBuf_Len(nc->bw));
+        nc->fdActive = true;
+
+        if ((nc->pending != NULL) && (nc->bw != NULL)
+            && (natsBuf_Len(nc->bw) > 0))
+        {
+            // Move to pending buffer
+            s = natsConn_bufferWrite(nc, natsBuf_Data(nc->bw),
+                                     natsBuf_Len(nc->bw));
+        }
     }
 
     if (s == NATS_OK)
@@ -336,7 +336,11 @@ _createConn(natsConnection *nc)
     }
 
     if (s != NATS_OK)
+    {
+        // reset the deadline
+        natsDeadline_Clear(&(nc->deadline));
         nc->err = s;
+    }
 
     return s;
 }
@@ -378,9 +382,6 @@ _readOp(natsConnection *nc, natsControl *control)
 {
     natsStatus  s = NATS_OK;
     char        buffer[DEFAULT_BUF_SIZE];
-
-    if (natsConn_isClosed(nc))
-        return NATS_CONNECTION_CLOSED;
 
     s = natsSock_ReadLine(nc->fdSet, nc->fd, &(nc->deadline),
                           buffer, sizeof(buffer), NULL);
@@ -854,6 +855,9 @@ _doReconnect(void *arg)
         // Release lock here, we will return below.
         natsConn_Unlock(nc);
 
+        // Make sure we flush everything
+        (void) natsConnection_Flush(nc);
+
         natsThread_Join(tReconnect);
         natsThread_Destroy(tReconnect);
 
@@ -903,15 +907,24 @@ _sendConnect(natsConnection *nc)
     natsStatus  s       = NATS_OK;
     char        *cProto = NULL;
 
+    // Create the CONNECT protocol
     s = _connectProto(nc, &cProto);
+
+    // Add it to the buffer
     if (s == NATS_OK)
         s = natsConn_bufferWriteString(nc, cProto);
+
+    // Add the PING protocol to the buffer
     if (s == NATS_OK)
         s = natsConn_bufferWrite(nc, _PING_OP_, _PING_OP_LEN_);
     if (s == NATS_OK)
         s = natsConn_bufferWrite(nc, _CRLF_, _CRLF_LEN_);
+
+    // Flush the buffer
     if (s == NATS_OK)
         s = natsConn_bufferFlush(nc);
+
+    // Now read the response from the server.
     if (s == NATS_OK)
     {
         char buffer[DEFAULT_BUF_SIZE];
@@ -922,9 +935,13 @@ _sendConnect(natsConnection *nc)
                               buffer, sizeof(buffer), NULL);
         if (s == NATS_OK)
         {
+            // We except the PONG protocol
             if (strncmp(buffer, _PONG_OP_, _PONG_OP_LEN_) != 0)
             {
-                // The server may have returned an error.
+                // But it could be something else, like -ERR
+                // Search if the error message says something about
+                // authentication failure.
+
                 if (strstr(buffer, "Authorization") != NULL)
                     s = NATS_NOT_PERMITTED;
                 else
@@ -938,9 +955,6 @@ _sendConnect(natsConnection *nc)
 
     free(cProto);
 
-    // Clear our deadline.
-    natsDeadline_Clear(&(nc->deadline));
-
     return s;
 }
 
@@ -950,11 +964,22 @@ _processConnInit(natsConnection *nc)
     natsStatus s = NATS_OK;
 
     nc->status = CONNECTING;
+
+    // Process the INFO protocol that we should be receiving
     s = _processExpectedInfo(nc);
+
+    // Send the CONNECT and PING protocol, and wait for the PONG.
     if (s == NATS_OK)
         s = _sendConnect(nc);
+
+    // Clear our deadline, regardless of error
+    natsDeadline_Clear(&(nc->deadline));
+
+    // Switch to blocking socket here...
     if (s == NATS_OK)
         s = natsSock_SetBlocking(nc->fd, true);
+
+    // Start the readLoop and flusher threads
     if (s == NATS_OK)
         s = _spinUpSocketWatchers(nc);
 
@@ -1036,15 +1061,10 @@ _processOpError(natsConnection *nc, natsStatus s)
         return;
     }
 
-    if (nc->opts->allowReconnect)
+    // Do reconnect only if allowed and we were actually connected
+    if (nc->opts->allowReconnect && (nc->status == CONNECTED))
     {
-        if (_isReconnecting(nc))
-        {
-            natsConn_Unlock(nc);
-
-            return;
-        }
-
+        // Set our new status
         nc->status = RECONNECTING;
 
         if (nc->ptmr != NULL)
@@ -1058,6 +1078,7 @@ _processOpError(natsConnection *nc, natsStatus s)
             nc->fdActive = false;
         }
 
+        // Start the reconnect thread
         if (natsThread_Create(&(nc->reconnectThread),
                               _doReconnect, (void*) nc) == NATS_OK)
         {

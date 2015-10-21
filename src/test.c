@@ -427,7 +427,7 @@ sumThread(void *arg)
     natsMutex_Unlock(tArg->m);
 }
 
-#define NUM_THREADS (1000)
+static int NUM_THREADS = 1000;
 
 static void
 test_natsThread(void)
@@ -437,8 +437,13 @@ test_natsThread(void)
     natsThread          *t = NULL;
     bool                current = false;
     struct threadArg    tArgs;
-    natsThread          *threads[NUM_THREADS];
+    natsThread          **threads = NULL;
     int                 i,j;
+
+    if (getenv("VALGRIND") != NULL)
+        NUM_THREADS = 100;
+
+    threads = (natsThread**) calloc(NUM_THREADS, sizeof(natsThread*));
 
     s = natsMutex_Create(&m);
     if (s != NATS_OK)
@@ -504,6 +509,8 @@ test_natsThread(void)
     testCond((s == NATS_OK) && (tArgs.sum == NUM_THREADS));
 
     natsMutex_Destroy(m);
+
+    free(threads);
 }
 
 static void

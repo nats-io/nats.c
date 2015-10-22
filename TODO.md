@@ -1,4 +1,5 @@
 
+- [ ] Plug with async/IO event libraries (such as libevent/libuv)
 - [ ] Pooling/garbage collection of structures
 - [x] ~~Revisit connect logic to match GO Client~~ *Will actually do the opposite, that is change the GO Client connect/reconnect logic. The async reconnect logic is flawed and could cause issues when getting authentication errors during the process.*
 - [x] Revisit FlushTimeout to match GO Client

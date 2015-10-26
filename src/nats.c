@@ -412,22 +412,31 @@ _timerThread(void *arg)
         natsMutex_Lock(timers->lock);
     }
 
+    // Process the timers that were left in the list (not stopped) when the
+    // library is shutdown.
     while ((t = timers->timers) != NULL)
     {
-        timers->timers = t->next;
-
         natsMutex_Lock(t->mu);
-        t->stopped = true;
-        t->inCallback = false;
-        doStopCb = (t->stopCb != NULL);
-        natsMutex_Unlock(t->mu);
 
+        // Check if we should invoke the callback. Note that although we are
+        // releasing the locks below, a timer present in the list here is
+        // guaranteed not to have been stopped (because it would not be in
+        // the list otherwise, since there is no chance that it is in the
+        // timer's callback). So just check if there is a stopCb to invoke.
+        doStopCb = (t->stopCb != NULL);
+
+        // Remove the timer from the list.
+        _removeTimer(timers, t);
+
+        natsMutex_Unlock(t->mu);
         natsMutex_Unlock(timers->lock);
 
+        // Invoke the callback now.
         if (doStopCb)
             (*(t->stopCb))(t, t->closure);
 
-        natsTimer_Release(t);
+        // No release of the timer here. The user is still responsible to call
+        // natsTimer_Destroy().
 
         natsMutex_Lock(timers->lock);
     }

@@ -38,6 +38,57 @@ static const char *testServers[] = {"nats://localhost:1222",
                                     "nats://localhost:1227",
                                     "nats://localhost:1228"};
 
+struct threadArg
+{
+    natsMutex       *m;
+    natsThread      *t;
+    natsCondition   *c;
+    natsCondition   *b;
+    int             control;
+    bool            current;
+    int             sum;
+    int             timerFired;
+    int             timerStopped;
+    natsStrHash     *inboxes;
+    natsStatus      status;
+    const char*     string;
+    bool            disconnected;
+    int64_t         disconnectedAt[4];
+    int64_t         disconnects;
+    bool            closed;
+    bool            reconnected;
+    int64_t         reconnectedAt[4];
+    int             reconnects;
+    bool            msgReceived;
+    bool            done;
+    int             results[10];
+
+    natsSubscription *sub;
+
+};
+
+static natsStatus
+_createDefaultThreadArgsForCbTests(
+    struct threadArg    *arg)
+{
+    natsStatus s;
+
+    memset(arg, 0, sizeof(struct threadArg));
+
+    s = natsMutex_Create(&(arg->m));
+    if (s == NATS_OK)
+        s = natsCondition_Create(&(arg->c));
+
+    return s;
+}
+
+void
+_destroyDefaultThreadArgs(struct threadArg *args)
+{
+    natsMutex_Destroy(args->m);
+    natsCondition_Destroy(args->c);
+}
+
 static void test_natsBuffer(void)
 {
     natsStatus  s;
@@ -373,35 +424,6 @@ test_natsMutex(void)
     testCond(1);
 }
 
-struct threadArg
-{
-    natsMutex       *m;
-    natsThread      *t;
-    natsCondition   *c;
-    natsCondition   *b;
-    int             control;
-    bool            current;
-    int             sum;
-    int             timerFired;
-    int             timerStopped;
-    natsStrHash     *inboxes;
-    natsStatus      status;
-    const char*     string;
-    bool            disconnected;
-    int64_t         disconnectedAt[4];
-    int64_t         disconnects;
-    bool            closed;
-    bool            reconnected;
-    int64_t         reconnectedAt[4];
-    int             reconnects;
-    bool            msgReceived;
-    bool            done;
-    int             results[10];
-
-    natsSubscription *sub;
-
-};
-
 static void
 testThread(void *arg)
 {
@@ -704,7 +726,12 @@ testTimerCb(natsTimer *timer, void *arg)
 {
     struct threadArg *tArg = (struct threadArg*) arg;
 
+    natsMutex_Lock(tArg->m);
+
     tArg->timerFired++;
+    natsCondition_Signal(tArg->c);
+
+    natsMutex_Unlock(tArg->m);
 
     if (tArg->control == 1)
         natsTimer_Reset(timer, 500);
@@ -712,6 +739,12 @@ testTimerCb(natsTimer *timer, void *arg)
         natsTimer_Stop(timer);
     else if (tArg->control == 3)
         nats_Sleep(500);
+
+    natsMutex_Lock(tArg->m);
+
+    natsCondition_Signal(tArg->c);
+
+    natsMutex_Unlock(tArg->m);
 }
 
 static void
@@ -719,8 +752,20 @@ stopTimerCb(natsTimer *timer, void *arg)
 {
     struct threadArg *tArg = (struct threadArg*) arg;
 
+    natsMutex_Lock(tArg->m);
+
     tArg->timerStopped++;
+    natsCondition_Signal(tArg->c);
+
+    natsMutex_Unlock(tArg->m);
 }
+
+#define STOP_TIMER_AND_WAIT_STOPPED \
+        natsTimer_Stop(t); \
+        natsMutex_Lock(tArg.m); \
+        while (tArg.timerStopped == 0) \
+            natsCondition_Wait(tArg.c, tArg.m); \
+        natsMutex_Unlock(tArg.m)
 
 static void
 test_natsTimer(void)
@@ -731,30 +776,60 @@ test_natsTimer(void)
 
     printf("\n== Timers ==\n");
 
+    s = _createDefaultThreadArgsForCbTests(&tArg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup natsTimer test!");
+
     tArg.control      = 0;
     tArg.timerFired   = 0;
     tArg.timerStopped = 0;
 
     test("Create timer: ");
-    s = natsTimer_Create(&t, testTimerCb, stopTimerCb, 1000, &tArg);
+    s = natsTimer_Create(&t, testTimerCb, stopTimerCb, 400, &tArg);
     testCond(s == NATS_OK);
 
     test("Stop timer: ");
+    tArg.control = 0;
     natsTimer_Stop(t);
-    nats_Sleep(1200);
+    nats_Sleep(600);
+    natsMutex_Lock(tArg.m);
     testCond((tArg.timerFired == 0)
              && (tArg.timerStopped == 1)
-             && (t->refs == 1));
+             && (t->refs == 1)
+             && (nats_getTimersCount() == 0));
+    natsMutex_Unlock(tArg.m);
 
-    tArg.timerStopped = 0;
     test("Firing of timer: ")
+    tArg.control      = 0;
+    tArg.timerStopped = 0;
     natsTimer_Reset(t, 200);
     nats_Sleep(1100);
     natsTimer_Stop(t);
     nats_Sleep(600);
-    testCond((tArg.timerFired > 0) && (tArg.timerFired <= 5)
+    natsMutex_Lock(tArg.m);
+    testCond((tArg.timerFired > 0)
+             && (tArg.timerFired <= 5)
              && (tArg.timerStopped == 1)
-             && (t->refs == 1));
+             && (t->refs == 1)
+             && (nats_getTimersCount() == 0));
+    natsMutex_Unlock(tArg.m);
+
+    test("Stop stopped timer: ");
+    tArg.control      = 0;
+    tArg.timerFired   = 0;
+    tArg.timerStopped = 0;
+    natsTimer_Reset(t, 100);
+    nats_Sleep(300);
+    natsTimer_Stop(t);
+    nats_Sleep(100);
+    natsTimer_Stop(t);
+    nats_Sleep(100);
+    natsMutex_Lock(tArg.m);
+    testCond((tArg.timerFired > 0)
+             && (tArg.timerStopped == 1)
+             && (t->refs == 1)
+             && (nats_getTimersCount() == 0));
+    natsMutex_Unlock(tArg.m);
 
     tArg.control      = 1;
     tArg.timerFired   = 0;
@@ -764,8 +839,48 @@ test_natsTimer(void)
     nats_Sleep(900);
     natsTimer_Stop(t);
     nats_Sleep(600);
-    testCond((tArg.timerFired == 2) && (tArg.timerStopped == 1)
-             && (t->refs == 1));
+    natsMutex_Lock(tArg.m);
+    testCond((tArg.timerFired == 2)
+             && (tArg.timerStopped == 1)
+             && (t->refs == 1)
+             && nats_getTimersCount() == 0);
+    natsMutex_Unlock(tArg.m);
+
+    tArg.control      = 0;
+    tArg.timerFired   = 0;
+    tArg.timerStopped = 0;
+    test("Multiple Reset: ");
+    natsTimer_Reset(t, 1000);
+    natsTimer_Reset(t, 800);
+    natsTimer_Reset(t, 200);
+    natsTimer_Reset(t, 500);
+    nats_Sleep(600);
+    natsMutex_Lock(tArg.m);
+    testCond((tArg.timerFired == 1)
+             && (tArg.timerStopped == 0)
+             && (t->refs == 1)
+             && nats_getTimersCount() == 1);
+    natsMutex_Unlock(tArg.m);
+
+    STOP_TIMER_AND_WAIT_STOPPED;
+
+    tArg.control      = 3;
+    tArg.timerFired   = 0;
+    tArg.timerStopped = 0;
+    test("Check refs while in callback: ");
+    natsTimer_Reset(t, 1);
+
+    // Wait that it is in callback
+    natsMutex_Lock(tArg.m);
+    while (tArg.timerFired != 1)
+        natsCondition_Wait(tArg.c, tArg.m);
+    natsMutex_Unlock(tArg.m);
+
+    testCond((t->refs == 2)
+             && nats_getTimersCountInList() == 0
+             && nats_getTimersCount() == 1);
+
+    STOP_TIMER_AND_WAIT_STOPPED;
 
     tArg.control        = 2;
     tArg.timerFired     = 0;
@@ -773,8 +888,12 @@ test_natsTimer(void)
     test("Stop from callback: ");
     natsTimer_Reset(t, 250);
     nats_Sleep(500);
-    testCond((tArg.timerFired == 1) && (tArg.timerStopped == 1)
-             && (t->refs == 1));
+    natsMutex_Lock(tArg.m);
+    testCond((tArg.timerFired == 1)
+             && (tArg.timerStopped == 1)
+             && (t->refs == 1)
+             && (nats_getTimersCount() == 0));
+    natsMutex_Unlock(tArg.m);
 
     tArg.control        = 3;
     tArg.timerFired     = 0;
@@ -784,8 +903,12 @@ test_natsTimer(void)
     nats_Sleep(800);
     natsTimer_Stop(t);
     nats_Sleep(500);
-    testCond((tArg.timerFired <= 3) && (tArg.timerStopped == 1)
-             && (t->refs == 1));
+    natsMutex_Lock(tArg.m);
+    testCond((tArg.timerFired <= 3)
+             && (tArg.timerStopped == 1)
+             && (t->refs == 1)
+             && (nats_getTimersCount() == 0));
+    natsMutex_Unlock(tArg.m);
 
     tArg.control        = 3;
     tArg.timerFired     = 0;
@@ -795,14 +918,20 @@ test_natsTimer(void)
     nats_Sleep(200);
     natsTimer_Stop(t);
     nats_Sleep(700);
-    testCond((tArg.timerFired == 1) && (tArg.timerStopped == 1)
-             && (t->refs == 1));
+    natsMutex_Lock(tArg.m);
+    testCond((tArg.timerFired == 1)
+             && (tArg.timerStopped == 1)
+             && (t->refs == 1)
+             && (nats_getTimersCount() == 0));
+    natsMutex_Unlock(tArg.m);
 
     test("Destroy timer: ");
     t->refs++;
     natsTimer_Destroy(t);
     testCond(t->refs == 1);
     natsTimer_Release(t);
+
+    _destroyDefaultThreadArgs(&tArg);
 }
 
 
@@ -1154,7 +1283,7 @@ test_natsInbox(void)
     natsStrHash_Destroy(inboxes);
 }
 
-#define HASH_ITER (10000000)
+static int HASH_ITER = 10000000;
 
 static void
 test_natsHashing(void)
@@ -1170,6 +1299,9 @@ test_natsHashing(void)
     natsStatus s = NATS_OK;
     int64_t start, end;
     int sizeLongKey = strlen(longKey);
+
+    if (getenv("VALGRIND") != NULL)
+        HASH_ITER = 10000;
 
     printf("\n== Hashing ==\n");
     test("Test hashing algo: ");
@@ -2244,28 +2376,6 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
     natsMutex_Unlock(arg->m);
 
     natsMsg_Destroy(msg);
-}
-
-static natsStatus
-_createDefaultThreadArgsForCbTests(
-    struct threadArg    *arg)
-{
-    natsStatus s;
-
-    memset(arg, 0, sizeof(struct threadArg));
-
-    s = natsMutex_Create(&(arg->m));
-    if (s == NATS_OK)
-        s = natsCondition_Create(&(arg->c));
-
-    return s;
-}
-
-void
-_destroyDefaultThreadArgs(struct threadArg *args)
-{
-    natsMutex_Destroy(args->m);
-    natsCondition_Destroy(args->c);
 }
 
 static void

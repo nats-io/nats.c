@@ -16,6 +16,7 @@ typedef struct __natsLibTimers
     natsCondition   *cond;
     natsThread      *thread;
     natsTimer       *timers;
+    int             count;
     bool            changed;
     bool            shutdown;
 
@@ -167,40 +168,65 @@ _insertTimer(natsTimer *t)
         gLib.timers.timers = t;
 }
 
-void
-nats_AddTimer(natsTimer *t)
+// Locks must be held before entering this function
+static void
+_removeTimer(natsLibTimers *timers, natsTimer *t)
 {
-    natsLibTimers *timers = &(gLib.timers);
+    // Switch flag
+    t->stopped = true;
 
-    natsMutex_Lock(timers->lock);
-
-    _insertTimer(t);
-
-    if (!(timers->changed))
-        natsCondition_Signal(timers->cond);
-
-    timers->changed = true;
-
-    natsMutex_Unlock(timers->lock);
-}
-
-void
-nats_RemoveTimer(natsTimer *t)
-{
-    natsLibTimers *timers = &(gLib.timers);
-
-    natsMutex_Lock(timers->lock);
-
-    if (t->prev != NULL)
+    // It the timer was in the callback, it has already been removed from the
+    // list, so skip that.
+    if (!(t->inCallback))
+    {
+        if (t->prev != NULL)
             t->prev->next = t->next;
-    if (t->next != NULL)
-        t->next->prev = t->prev;
+        if (t->next != NULL)
+            t->next->prev = t->prev;
 
-    if (t == gLib.timers.timers)
-        gLib.timers.timers = t->next;
+        if (t == gLib.timers.timers)
+            gLib.timers.timers = t->next;
 
-    t->prev = NULL;
-    t->next = NULL;
+        t->prev = NULL;
+        t->next = NULL;
+    }
+
+    // Decrease the global count of timers
+    timers->count--;
+}
+
+void
+nats_resetTimer(natsTimer *t, int64_t newInterval)
+{
+    natsLibTimers *timers = &(gLib.timers);
+
+    natsMutex_Lock(timers->lock);
+    natsMutex_Lock(t->mu);
+
+    // If timer is active, we need first to remove it. This call does the
+    // right thing if the timer is in the callback.
+    if (!(t->stopped))
+        _removeTimer(timers, t);
+
+    // Bump the timer's global count (it as decreased in the _removeTimers call
+    timers->count++;
+
+    // Switch stopped flag
+    t->stopped = false;
+
+    // Set the new interval (may be same than it was before, but that's ok)
+    t->interval = newInterval;
+
+    // If the timer is in the callback, the insertion and setting of the
+    // absolute time will be done by the timer thread when returning from
+    // the timer's callback.
+    if (!(t->inCallback))
+    {
+        t->absoluteTime = nats_Now() + t->interval;
+        _insertTimer(t);
+    }
+
+    natsMutex_Unlock(t->mu);
 
     if (!(timers->changed))
         natsCondition_Signal(timers->cond);
@@ -209,6 +235,76 @@ nats_RemoveTimer(natsTimer *t)
 
     natsMutex_Unlock(timers->lock);
 }
+
+void
+nats_stopTimer(natsTimer *t)
+{
+    natsLibTimers   *timers = &(gLib.timers);
+    bool            doCb    = false;
+
+    natsMutex_Lock(timers->lock);
+    natsMutex_Lock(t->mu);
+
+    // If the timer was already stopped, nothing to do.
+    if (t->stopped)
+    {
+        natsMutex_Unlock(t->mu);
+        natsMutex_Unlock(timers->lock);
+
+        return;
+    }
+
+    _removeTimer(timers, t);
+
+    doCb = (!(t->inCallback) && (t->stopCb != NULL));
+
+    natsMutex_Unlock(t->mu);
+
+    if (!(timers->changed))
+        natsCondition_Signal(timers->cond);
+
+    timers->changed = true;
+
+    natsMutex_Unlock(timers->lock);
+
+    if (doCb)
+        (*(t->stopCb))(t, t->closure);
+}
+
+int
+nats_getTimersCount(void)
+{
+    int         count = 0;
+
+    natsMutex_Lock(gLib.timers.lock);
+
+    count = gLib.timers.count;
+
+    natsMutex_Unlock(gLib.timers.lock);
+
+    return count;
+}
+
+int
+nats_getTimersCountInList(void)
+{
+    int         count = 0;
+    natsTimer   *t;
+
+    natsMutex_Lock(gLib.timers.lock);
+
+    t = gLib.timers.timers;
+    while (t != NULL)
+    {
+        count++;
+        t = t->next;
+    }
+
+    natsMutex_Unlock(gLib.timers.lock);
+
+    return count;
+}
+
 
 static void
 _timerThread(void *arg)
@@ -216,7 +312,7 @@ _timerThread(void *arg)
     natsLibTimers   *timers = &(gLib.timers);
     natsTimer       *t      = NULL;
     natsStatus      s       = NATS_OK;
-    bool            doCb;
+    bool            doStopCb;
     int64_t         target;
 
     natsMutex_Lock(gLib.lock);
@@ -271,29 +367,34 @@ _timerThread(void *arg)
         t->prev = NULL;
         t->next = NULL;
 
-        doCb = (t->stopped ? false : true);
-        if (doCb)
-            t->inCallback = true;
+        t->inCallback = true;
+
+        // Retain the timer, since we are going to release the locks for the
+        // callback. The user may "destroy" the timer from there, so we need
+        // to be protected with reference counting.
+        t->refs++;
 
         natsMutex_Unlock(t->mu);
         natsMutex_Unlock(timers->lock);
 
-        if (doCb)
-            (*(t->cb))(t, t->closure);
+        (*(t->cb))(t, t->closure);
 
         natsMutex_Lock(timers->lock);
         natsMutex_Lock(t->mu);
 
         t->inCallback = false;
 
-        // Timer may have been stopped from within the callback,
-        // or any time while the timer's lock was not held.
-        doCb = (t->stopped);
+        // Timer may have been stopped from within the callback, or during
+        // the window the locks were released.
+        doStopCb = (t->stopped && (t->stopCb != NULL));
 
-        if (!doCb)
+        // If not stopped, we need to put it back in our list
+        if (!doStopCb)
         {
-            // Reset our view of what is the time this timer should
-            // fire.
+            // Reset our view of what is the time this timer should fire
+            // because:
+            // 1- the callback may have taken longer than it should
+            // 2- the user may have called Reset() with a new interval
             t->absoluteTime = nats_Now() + t->interval;
             _insertTimer(t);
         }
@@ -301,12 +402,12 @@ _timerThread(void *arg)
         natsMutex_Unlock(t->mu);
         natsMutex_Unlock(timers->lock);
 
-        if (doCb)
-        {
+        if (doStopCb)
             (*(t->stopCb))(t, t->closure);
 
-            natsTimer_Release(t);
-        }
+        // Compensate for the retain that we made before invoking the timer's
+        // callback
+        natsTimer_Release(t);
 
         natsMutex_Lock(timers->lock);
     }
@@ -318,11 +419,13 @@ _timerThread(void *arg)
         natsMutex_Lock(t->mu);
         t->stopped = true;
         t->inCallback = false;
+        doStopCb = (t->stopCb != NULL);
         natsMutex_Unlock(t->mu);
 
         natsMutex_Unlock(timers->lock);
 
-        (*(t->stopCb))(t, t->closure);
+        if (doStopCb)
+            (*(t->stopCb))(t, t->closure);
 
         natsTimer_Release(t);
 
@@ -408,7 +511,7 @@ _asyncCbsThread(void *arg)
 }
 
 natsStatus
-nats_PostAsyncCbInfo(natsAsyncCbInfo *info)
+nats_postAsyncCbInfo(natsAsyncCbInfo *info)
 {
     natsMutex_Lock(gLib.asyncCbs.lock);
 

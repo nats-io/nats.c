@@ -287,13 +287,23 @@ void
 natsLib_Release(void);
 
 void
-nats_AddTimer(natsTimer *t);
+nats_resetTimer(natsTimer *t, int64_t newInterval);
 
 void
-nats_RemoveTimer(natsTimer *t);
+nats_stopTimer(natsTimer *t);
+
+// Returns the number of timers that have been created and not stopped.
+int
+nats_getTimersCount(void);
+
+// Returns the number of timers actually in the list. This should be
+// equal to nats_getTimersCount() or nats_getTimersCount() - 1 when a
+// timer thread is invoking a timer's callback.
+int
+nats_getTimersCountInList(void);
 
 natsStatus
-nats_PostAsyncCbInfo(natsAsyncCbInfo *info);
+nats_postAsyncCbInfo(natsAsyncCbInfo *info);
 
 natsStatus
 natsInbox_Create(char **newInbox);

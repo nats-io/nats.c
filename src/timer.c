@@ -39,20 +39,21 @@ natsTimer_Create(natsTimer **timer, natsTimerCb timerCb, natsTimerStopCb stopCb,
     if (t == NULL)
         return NATS_NO_MEMORY;
 
-    t->refs         = 1;
-    t->cb           = timerCb;
-    t->stopCb       = stopCb;
-    t->interval     = interval;
-    t->absoluteTime = nats_Now() + interval;
-    t->closure      = closure;
+    t->refs    = 1;
+    t->cb      = timerCb;
+    t->stopCb  = stopCb;
+    t->closure = closure;
 
     s = natsMutex_Create(&(t->mu));
     if (s == NATS_OK)
     {
-        *timer = t;
+        // Doing so, so that nats_resetTimer() does not try to remove the timer
+        // from the list (since it is new it would not be there!).
+        t->stopped = true;
 
-        t->refs++;
-        nats_AddTimer(t);
+        nats_resetTimer(t, interval);
+
+        *timer = t;
     }
     else
         _freeTimer(t);
@@ -60,59 +61,19 @@ natsTimer_Create(natsTimer **timer, natsTimerCb timerCb, natsTimerStopCb stopCb,
     return s;
 }
 
-static void
-_stop(natsTimer *timer, bool duringReset)
-{
-    bool doCb = false;
-
-    natsMutex_Lock(timer->mu);
-
-    if (timer->stopped)
-    {
-        natsMutex_Unlock(timer->mu);
-        return;
-    }
-
-    timer->stopped = true;
-    doCb = !duringReset && !(timer->inCallback);
-
-    natsMutex_Unlock(timer->mu);
-
-    nats_RemoveTimer(timer);
-
-    if (doCb)
-    {
-        (*(timer->stopCb))(timer, timer->closure);
-
-        natsTimer_Release(timer);
-    }
-}
-
 void
 natsTimer_Stop(natsTimer *timer)
 {
-    _stop(timer, false);
+    // Proxy for this call:
+    nats_stopTimer(timer);
 }
 
 void
 natsTimer_Reset(natsTimer *timer, int64_t interval)
 {
-    _stop(timer, true);
-
-    natsMutex_Lock(timer->mu);
-
-    timer->stopped      = false;
-    timer->interval     = interval;
-    timer->absoluteTime = nats_Now() + interval;
-
-    if (!timer->inCallback)
-        timer->refs++;
-
-    natsMutex_Unlock(timer->mu);
-
-    nats_AddTimer(timer);
+    // Proxy for this call:
+    nats_resetTimer(timer, interval);
 }
-
 
 void
 natsTimer_Destroy(natsTimer *timer)
@@ -122,15 +83,6 @@ natsTimer_Destroy(natsTimer *timer)
     if (timer == NULL)
         return;
 
-    natsMutex_Lock(timer->mu);
-
-    if (!(timer->stopped))
-        doStop = true;
-
-    natsMutex_Unlock(timer->mu);
-
-    if (doStop)
-        natsTimer_Stop(timer);
-
+    nats_stopTimer(timer);
     natsTimer_Release(timer);
 }

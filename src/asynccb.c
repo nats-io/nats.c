@@ -31,7 +31,7 @@ _createAndPostCb(natsAsyncCbType type, natsConnection *nc, natsSubscription *sub
 
     natsConn_retain(nc);
 
-    s = nats_PostAsyncCbInfo(cb);
+    s = nats_postAsyncCbInfo(cb);
     if (s != NATS_OK)
     {
         _freeAsyncCbInfo(cb);

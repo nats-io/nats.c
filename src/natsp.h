@@ -30,7 +30,7 @@
 //#define DEV_MODE    (1)
 
 static const char* CString     = "C";
-static const char* Version     = "0.1.5-alpha";
+static const char* Version     = "0.1.7-alpha";
 
 static const char* NATS_DEFAULT_URL = "nats://localhost:4222";
 

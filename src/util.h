@@ -3,8 +3,6 @@
 #ifndef UTIL_H_
 #define UTIL_H_
 
-#include <stdint.h>
-
 #include "natsp.h"
 
 int64_t
@@ -24,5 +22,10 @@ nats_GetBoolStr(bool value);
 
 void
 nats_Sleep(int64_t timeout);
+
+#ifdef _WIN32
+char*
+nats_asprintf(const char *fmt, ...);
+#endif
 
 #endif /* UTIL_H_ */

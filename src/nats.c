@@ -694,7 +694,10 @@ nats_Open(int64_t lockSpinCount)
         return s;
     }
 
+#if defined(_WIN32)
+#else
     signal(SIGPIPE, SIG_IGN);
+#endif
 
     srand((unsigned int) nats_NowInNanoSeconds());
 
@@ -776,7 +779,8 @@ natsInbox_Create(natsInbox **newInbox)
 
     natsMutex_Lock(gLib.inboxesLock);
 
-    res = asprintf(&inbox, "%s%x.%" NATS_PRINTF_U64, inboxPrefix, rand(), ++(gLib.inboxesSeq));
+    res = nats_asprintf(&inbox, "%s%x.%" NATS_PRINTF_U64, inboxPrefix,
+                        rand(), ++(gLib.inboxesSeq));
     if (res < 0)
         s = NATS_NO_MEMORY;
     else

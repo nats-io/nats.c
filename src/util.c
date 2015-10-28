@@ -1,9 +1,11 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <stdint.h>
+#include "natsp.h"
+
+#include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 
-#include "natsp.h"
 #include "mem.h"
 #include "time.h"
 
@@ -151,3 +153,40 @@ nats_GetBoolStr(bool value)
 
     return "false";
 }
+
+#ifdef _WIN32
+char*
+nats_asprintf(const char *fmt, ...)
+{
+    char    tmp[128];
+    char    *str = NULL;
+    int     n;
+    va_list ap;
+
+    va_start(ap, fmt);
+    n = vsnprintf(tmp, sizeof(tmp), fmt, ap);
+    va_end(ap);
+
+    if (n < 0)
+        return NULL;
+
+    if (n < (int) sizeof(tmp))
+        return NATS_STRDUP(tmp);
+
+    str = NATS_MALLOC(n + 1);
+    if (str != NULL)
+    {
+        va_start(ap, fmt);
+        n = vsnprintf(str, sizeof(str), fmt, ap);
+        va_end(ap);
+
+        if (n < 0)
+        {
+            NATS_FREE(str);
+            str = NULL;
+        }
+    }
+
+    return str;
+}
+#endif

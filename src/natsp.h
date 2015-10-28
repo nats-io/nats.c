@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <signal.h>
 
 #include "status.h"
 #include "buf.h"
@@ -69,6 +70,8 @@ extern int64_t gLockSpinCount;
 struct __natsConnection;
 struct __natsSubscription;
 struct __natsPong;
+
+typedef void (*natsInitOnceCb)(void);
 
 // natsMsgHandler is a callback function that processes messages delivered to
 // asynchronous subscribers.

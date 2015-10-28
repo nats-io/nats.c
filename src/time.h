@@ -4,7 +4,7 @@
 #ifndef SRC_TIME_H_
 #define SRC_TIME_H_
 
-#include <sys/time.h>
+#include "natsp.h"
 
 typedef struct __natsDeadline
 {

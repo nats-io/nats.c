@@ -13,10 +13,10 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 
-
 typedef HANDLE              natsThread;
 typedef CRITICAL_SECTION    natsMutex;
 typedef CONDITION_VARIABLE  natsCondition;
+typedef PINIT_ONCE          natsInitOnceType;
 typedef SOCKET              natsSock;
 
 #define NATS_ONCE_TYPE          INIT_ONCE
@@ -29,5 +29,8 @@ typedef SOCKET              natsSock;
 #define NATS_SOCK_WOULD_BLOCK           (WSAEWOULDBLOCK)
 #define NATS_SOCK_ERROR                 (SOCKET_ERROR)
 #define NATS_SOCK_GET_ERROR             WSAGetLastError()
+
+#define NATS_PRINTF_U64                 "llu"
+#define NATS_PRINTF_D64                 "lld"
 
 #endif /* N_WIN_H_ */

@@ -20,8 +20,8 @@
 #include <netinet/tcp.h>
 #include <netdb.h>
 #include <pthread.h>
-#include <signal.h>
 #include <inttypes.h>
+#include <sys/time.h>
 
 typedef pthread_t       natsThread;
 typedef pthread_mutex_t natsMutex;
@@ -42,6 +42,6 @@ typedef int             natsSock;
 #define NATS_PRINTF_U64                 PRIu64
 #define NATS_PRINTF_D64                 PRId64
 
-typedef void (*natsInitOnceCb)(void);
+#define nats_asprintf   asprintf
 
 #endif /* N_UNIX_H_ */

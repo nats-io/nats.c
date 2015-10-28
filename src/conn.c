@@ -558,19 +558,19 @@ _connectProto(natsConnection *nc, char **proto)
     if (opts->name != NULL)
         name = opts->name;
 
-    res = asprintf(proto,
-                   "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s\"ssl_required\":%s," \
-                   "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\"}%s",
-                   nats_GetBoolStr(opts->verbose),
-                   nats_GetBoolStr(opts->pedantic),
-                   (user != NULL ? "\"user\":\"" : ""),
-                   (user != NULL ? user : ""),
-                   (user != NULL ? "\"," : ""),
-                   (pwd != NULL ? "\"pass\":\"" : ""),
-                   (pwd != NULL ? pwd : ""),
-                   (pwd != NULL ? "\"," : ""),
-                   nats_GetBoolStr(false),
-                   name, CString, Version, _CRLF_);
+    res = nats_asprintf(proto,
+                        "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s\"ssl_required\":%s," \
+                        "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\"}%s",
+                        nats_GetBoolStr(opts->verbose),
+                        nats_GetBoolStr(opts->pedantic),
+                        (user != NULL ? "\"user\":\"" : ""),
+                        (user != NULL ? user : ""),
+                        (user != NULL ? "\"," : ""),
+                        (pwd != NULL ? "\"pass\":\"" : ""),
+                        (pwd != NULL ? pwd : ""),
+                        (pwd != NULL ? "\"," : ""),
+                        nats_GetBoolStr(false),
+                        name, CString, Version, _CRLF_);
     if (res < 0)
         return NATS_NO_MEMORY;
 
@@ -585,9 +585,9 @@ _sendUnsubProto(natsConnection *nc, natsSubscription *sub)
     int         res     = 0;
 
     if (sub->max > 0)
-        res = asprintf(&proto, _UNSUB_PROTO_, (int) sub->sid, (int) sub->max);
+        res = nats_asprintf(&proto, _UNSUB_PROTO_, (int) sub->sid, (int) sub->max);
     else
-        res = asprintf(&proto, _UNSUB_NO_MAX_PROTO_, (int) sub->sid);
+        res = nats_asprintf(&proto, _UNSUB_NO_MAX_PROTO_, (int) sub->sid);
 
     if (res < 0)
         s = NATS_NO_MEMORY;
@@ -613,10 +613,10 @@ _resendSubscriptions(natsConnection *nc)
     while (natsHashIter_Next(&iter, NULL, (void**) &sub))
     {
         proto = NULL;
-        res = asprintf(&proto, _SUB_PROTO_,
-                       sub->subject,
-                       (sub->queue == NULL ? "" : sub->queue),
-                       (int) sub->sid);
+        res = nats_asprintf(&proto, _SUB_PROTO_,
+                            sub->subject,
+                            (sub->queue == NULL ? "" : sub->queue),
+                            (int) sub->sid);
         if (res < 0)
             s = NATS_NO_MEMORY;
 
@@ -1644,10 +1644,10 @@ natsConn_subscribe(natsSubscription **newSub,
             char    *proto = NULL;
             int     res    = 0;
 
-            res = asprintf(&proto, _SUB_PROTO_,
-                           subj,
-                           (queue == NULL ? "" : queue),
-                           (int) sub->sid);
+            res = nats_asprintf(&proto, _SUB_PROTO_,
+                                subj,
+                                (queue == NULL ? "" : queue),
+                                (int) sub->sid);
             if (res < 0)
                 s = NATS_NO_MEMORY;
 

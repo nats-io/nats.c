@@ -1317,12 +1317,7 @@ _removeAllSubscriptions(natsConnection *nc)
     {
         (void) natsHashIter_RemoveCurrent(&iter);
 
-        natsSub_Lock(sub);
-
-        sub->closed = true;
-        natsCondition_Signal(sub->cond);
-
-        natsSub_Unlock(sub);
+        natsSub_close(sub);
 
         natsSub_release(sub);
     }
@@ -1418,30 +1413,22 @@ static natsStatus
 _createMsg(natsMsg **newMsg, natsConnection *nc, char *buf, int bufLen)
 {
     natsStatus  s        = NATS_OK;
-    natsMsg     *msg     = NULL;
-    char        *subject = NULL;
+    int         subjLen  = 0;
     char        *reply   = NULL;
+    int         replyLen = 0;
 
-    s = nats_CreateStringFromBuffer(&subject, nc->ps->ma.subject);
-    if (s == NATS_OK)
-        s = nats_CreateStringFromBuffer(&reply, nc->ps->ma.reply);
-    if (s == NATS_OK)
-        s = natsMsg_create(&msg, buf, bufLen);
+    subjLen = natsBuf_Len(nc->ps->ma.subject);
 
-    if (s == NATS_OK)
+    if (nc->ps->ma.reply != NULL)
     {
-        msg->subject = subject;
-        msg->reply   = reply;
-
-        *newMsg = msg;
-    }
-    else
-    {
-        NATS_FREE(subject);
-        NATS_FREE(reply);
-        natsMsg_Destroy(msg);
+        reply    = natsBuf_Data(nc->ps->ma.reply);
+        replyLen = natsBuf_Len(nc->ps->ma.reply);
     }
 
+    s = natsMsg_create(newMsg,
+                       (const char*) natsBuf_Data(nc->ps->ma.subject), subjLen,
+                       (const char*) reply, replyLen,
+                       (const char*) buf, bufLen);
     return s;
 }
 
@@ -1504,10 +1491,10 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
             sub->msgList.count++;
 
-            if (!(sub->signaled))
+            if (sub->signalTimerInterval != 1)
             {
-                sub->signaled = true;
-                natsCondition_Signal(sub->cond);
+                sub->signalTimerInterval = 1;
+                natsTimer_Reset(sub->signalTimer, 1);
             }
         }
 
@@ -1606,15 +1593,7 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub, bo
     // Note that the sub may have already been removed, so 'sub == NULL'
     // is not an error.
     if (sub != NULL)
-    {
-        natsSub_Lock(sub);
-
-        // Kick out the deliverMsgs thread.
-        sub->closed = true;
-        natsCondition_Signal(sub->cond);
-
-        natsSub_Unlock(sub);
-    }
+        natsSub_close(sub);
 
     if (needsLock)
         natsConn_Unlock(nc);
@@ -1700,8 +1679,7 @@ natsConn_subscribe(natsSubscription **newSub,
         // A delivery thread may have been started, but the subscription not
         // added to the connection's subscription map. So this is necessary
         // for the delivery thread to unroll.
-        sub->closed = true;
-        natsCondition_Signal(sub->cond);
+        natsSub_close(sub);
 
         natsConn_removeSubscription(nc, sub, false);
 
@@ -1832,7 +1810,7 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     if (s == NATS_OK)
         *newConn = nc;
     else
-        _freeConn(nc);
+        natsConn_release(nc);
 
     return s;
 }

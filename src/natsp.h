@@ -177,6 +177,9 @@ typedef struct __natsSubscription
 
     natsThread                  *deliverMsgsThread;
     natsCondition               *cond;
+    natsTimer                   *signalTimer;
+    int64_t                     signalTimerInterval;
+    int                         signalFailCount;
     bool                        signaled;
     bool                        closed;
 

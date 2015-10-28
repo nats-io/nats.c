@@ -1,6 +1,6 @@
 
 - [ ] Plug with async/IO event libraries (such as libevent/libuv)
-- [ ] Pooling/garbage collection of structures
+- [x] Pooling/garbage collection of structures ~~(may add more later, and pool msgs structures and buffers, but that would introduce locking which may negate the benefits of the pooling)~~
 - [x] ~~Revisit connect logic to match GO Client~~ *Will actually do the opposite, that is change the GO Client connect/reconnect logic. The async reconnect logic is flawed and could cause issues when getting authentication errors during the process.*
 - [x] Revisit FlushTimeout to match GO Client
 - [ ] Revisit Flusher for the aggregation of more data before socket write

@@ -2,9 +2,25 @@
 
 #include "natsp.h"
 
+// Do this after including natsp.h in order to have some of the
+// GNU specific flag set first.
 #include <string.h>
 
 #include "mem.h"
+
+void
+natsMsg_free(void *object)
+{
+    natsMsg *msg;
+
+    if (object == NULL)
+        return;
+
+    msg = (natsMsg*) object;
+
+    NATS_FREE(msg->buffer);
+    NATS_FREE(msg);
+}
 
 void
 natsMsg_Destroy(natsMsg *msg)
@@ -12,10 +28,10 @@ natsMsg_Destroy(natsMsg *msg)
     if (msg == NULL)
         return;
 
-    NATS_FREE(msg->subject);
-    NATS_FREE(msg->reply);
-    NATS_FREE(msg->data);
-    NATS_FREE(msg);
+    if (natsGC_collect((natsGCItem *) msg))
+        return;
+
+    natsMsg_free((void*) msg);
 }
 
 const char*
@@ -55,26 +71,55 @@ natsMsg_GetDataLength(natsMsg *msg)
 }
 
 natsStatus
-natsMsg_create(natsMsg **newMsg, char *buf, int bufLen)
+natsMsg_create(natsMsg **newMsg,
+               const char *subject, int subjLen,
+               const char *reply, int replyLen,
+               const char *buf, int bufLen)
 {
-    natsMsg     *msg     = NULL;
+    natsMsg     *msg      = NULL;
+    char        *ptr      = NULL;
+    int         totalSize = 0;
 
-    msg = (natsMsg*) NATS_CALLOC(1, sizeof(natsMsg));
+    msg = NATS_CALLOC(1, sizeof(natsMsg));
     if (msg == NULL)
         return NATS_NO_MEMORY;
 
-    if (bufLen > 0)
-    {
-        msg->data = NATS_MALLOC(bufLen);
-        if (msg->data == NULL)
-        {
-            NATS_FREE(msg);
-            return NATS_NO_MEMORY;
-        }
+    totalSize  = subjLen;
+    totalSize += 1;
+    totalSize += replyLen;
+    totalSize += 1;
+    totalSize += bufLen;
+    totalSize += 1;
 
-        memcpy(msg->data, buf, bufLen);
-        msg->dataLen = bufLen;
+    msg->buffer = NATS_MALLOC(totalSize);
+    if (msg->buffer == NULL)
+    {
+        NATS_FREE(msg);
+        return NATS_NO_MEMORY;
     }
+    ptr = msg->buffer;
+
+    msg->subject = (const char*) ptr;
+    memcpy(ptr, subject, subjLen);
+    ptr += subjLen;
+    *(ptr++) = '\0';
+
+    msg->reply = (const char*) ptr;
+    if (replyLen > 0)
+    {
+        memcpy(ptr, reply, replyLen);
+        ptr += replyLen;
+    }
+    *(ptr++) = '\0';
+
+    msg->data    = (const char*) ptr;
+    msg->dataLen = bufLen;
+    memcpy(ptr, buf, bufLen);
+    ptr += bufLen;
+    *(ptr) = '\0';
+
+    // Setting the callback will trigger garbage collection
+    msg->gc.freeCb = natsMsg_free;
 
     *newMsg = msg;
 
@@ -85,31 +130,19 @@ natsStatus
 natsMsg_Create(natsMsg **newMsg, const char *subj, const char *reply,
                const char *data, int dataLen)
 {
-    natsStatus  s       = NATS_OK;
-    natsMsg     *msg    = NULL;
+    natsStatus  s = NATS_OK;
 
-    if ((newMsg == NULL) || (subj == NULL) || (strlen(subj) == 0))
+    if ((subj == NULL)
+        || (subj[0] == '\0')
+        || ((reply != NULL) && (reply[0] == '\0')))
+    {
         return NATS_INVALID_ARG;
-
-    s = natsMsg_create(&msg, (char*) data, dataLen);
-    if (s == NATS_OK)
-    {
-        msg->subject = NATS_STRDUP(subj);
-        if (msg->subject == NULL)
-            s = NATS_NO_MEMORY;
-    }
-    if ((s == NATS_OK) && (reply != NULL) && (strlen(reply) > 0))
-    {
-        msg->reply = NATS_STRDUP(reply);
-        if (msg->reply == NULL)
-            s = NATS_NO_MEMORY;
     }
 
-    if (s == NATS_OK)
-        *newMsg = msg;
-    else
-        natsMsg_Destroy(msg);
-
+    s = natsMsg_create(newMsg,
+                       subj, strlen(subj),
+                       reply, (reply == NULL ? 0 : strlen(reply)),
+                       data, dataLen);
     return s;
 }
 

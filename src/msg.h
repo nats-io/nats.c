@@ -4,14 +4,23 @@
 #define MSG_H_
 
 #include "status.h"
+#include "gc.h"
 
 struct __natsMsg;
 
 typedef struct __natsMsg
 {
-    char                *subject;
-    char                *reply;
-    char                *data;
+    natsGCItem          gc;
+
+    // This holds subject, reply and payload.
+    char                *buffer;
+
+    // These points to specific locations in 'buffer'. They must not be freed.
+    // (note that we could do without 'subject' since as of now, it is
+    // equivalent to 'buffer').
+    const char          *subject;
+    const char          *reply;
+    const char          *data;
     int                 dataLen;
 
     struct __natsMsg    *next;
@@ -21,7 +30,14 @@ typedef struct __natsMsg
 // PRIVATE
 
 natsStatus
-natsMsg_create(natsMsg **newMsg, char *buf, int bufLen);
+natsMsg_create(natsMsg **newMsg,
+               const char *subject, int subjLen,
+               const char *reply, int replyLen,
+               const char *buf, int bufLen);
+
+// This needs to follow the nats_FreeObjectCb prototype (see gc.h)
+void
+natsMsg_free(void *object);
 
 
 // PUBLIC

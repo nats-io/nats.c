@@ -41,6 +41,8 @@ _freeSubscription(natsSubscription *sub)
     NATS_FREE(sub->subject);
     NATS_FREE(sub->queue);
 
+    natsTimer_Destroy(sub->signalTimer);
+
     if (sub->deliverMsgsThread != NULL)
     {
         natsThread_Detach(sub->deliverMsgsThread);
@@ -149,6 +151,73 @@ natsSub_deliverMsgs(void *arg)
     natsSub_release(sub);
 }
 
+static void
+_signalMsgAvailable(natsTimer *timer, void *closure)
+{
+    natsSubscription *sub = (natsSubscription*) closure;
+
+    // See if we can get the lock
+    if (!natsMutex_TryLock(sub->mu))
+    {
+        // This variable is not protected by any lock, but used only
+        // here, so we are fine. This is check that if we failed too
+        // many times, then we will wait for the lock so that we
+        // reduce the risk of the list getting full too quickly.
+        if (++(sub->signalFailCount) == 10)
+        {
+            // Reset our counter.
+            sub->signalFailCount = 0;
+
+            // Now wait to grab the lock.
+            natsSub_Lock(sub);
+        }
+        else
+        {
+            // We did not get the lock, will try later.
+            return;
+        }
+    }
+
+    // We have the lock.
+
+    if (sub->msgList.count == 0)
+    {
+        // There was no message, reset our interval to a higher value.
+        sub->signalTimerInterval = 10000;
+        natsTimer_Reset(sub->signalTimer, sub->signalTimerInterval);
+    }
+    else
+    {
+        // Signal the delivery thread.
+        sub->signaled = true;
+        natsCondition_Signal(sub->cond);
+    }
+
+    natsSub_Unlock(sub);
+}
+
+static void
+_signalTimerStopped(natsTimer *timer, void *closure)
+{
+    natsSubscription *sub = (natsSubscription*) closure;
+
+    natsSub_release(sub);
+}
+
+void
+natsSub_close(natsSubscription *sub)
+{
+    natsSub_Lock(sub);
+
+    if (sub->signalTimer != NULL)
+        natsTimer_Stop(sub->signalTimer);
+
+    sub->closed = true;
+    natsCondition_Signal(sub->cond);
+
+    natsSub_Unlock(sub);
+}
+
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
                const char *queueGroup, natsMsgHandler cb, void *cbClosure)
@@ -160,6 +229,13 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     if (sub == NULL)
         return NATS_NO_MEMORY;
 
+    s = natsMutex_Create(&(sub->mu));
+    if (s != NATS_OK)
+    {
+        NATS_FREE(sub);
+        return s;
+    }
+
     natsConn_retain(nc);
 
     sub->refs           = 1;
@@ -167,13 +243,10 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     sub->msgCb          = cb;
     sub->msgCbClosure   = cbClosure;
 
-    s = natsMutex_Create(&(sub->mu));
-    if (s == NATS_OK)
-    {
-        sub->subject = NATS_STRDUP(subj);
-        if (sub->subject == NULL)
-            s = NATS_NO_MEMORY;
-    }
+    sub->subject = NATS_STRDUP(subj);
+    if (sub->subject == NULL)
+        s = NATS_NO_MEMORY;
+
     if ((s == NATS_OK) && (queueGroup != NULL) && (strlen(queueGroup) > 0))
     {
         sub->queue = NATS_STRDUP(queueGroup);
@@ -182,6 +255,19 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     }
     if (s == NATS_OK)
         s = natsCondition_Create(&(sub->cond));
+    if (s == NATS_OK)
+    {
+        // Set the interval to any value, really, it will get reset to
+        // a smaller value when the delivery thread should be signaled.
+        sub->signalTimerInterval = 10000;
+
+        s = natsTimer_Create(&(sub->signalTimer),
+                             _signalMsgAvailable,
+                             _signalTimerStopped,
+                             sub->signalTimerInterval, (void*) sub);
+        if (s == NATS_OK)
+            _retain(sub);
+    }
     if ((s == NATS_OK) && (cb != NULL))
     {
         // If we have an async callback, start up a sub specific
@@ -201,7 +287,7 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     if (s == NATS_OK)
         *newSub = sub;
     else
-        _freeSubscription(sub);
+        natsSub_release(sub);
 
     return s;
 }

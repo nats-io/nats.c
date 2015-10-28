@@ -30,6 +30,9 @@ natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
                const char *queueGroup, natsMsgHandler cb, void *cbClosure);
 
+void
+natsSub_close(natsSubscription *sub);
+
 // PUBLIC
 
 natsStatus

@@ -10,6 +10,12 @@
 #include "util.h"
 #include "asynccb.h"
 
+#define WAIT_LIB_INITIALIZED \
+        natsMutex_Lock(gLib.lock); \
+        while (!(gLib.initialized)) \
+            natsCondition_Wait(gLib.cond, gLib.lock); \
+        natsMutex_Unlock(gLib.lock)
+
 typedef struct __natsLibTimers
 {
     natsMutex       *lock;
@@ -33,6 +39,17 @@ typedef struct __natsLibAsyncCbs
 
 } natsLibAsyncCbs;
 
+typedef struct __natsGCList
+{
+    natsMutex       *lock;
+    natsCondition   *cond;
+    natsThread      *thread;
+    natsGCItem      *head;
+    bool            shutdown;
+    bool            inWait;
+
+} natsGCList;
+
 typedef struct __natsLib
 {
     // These 4 fields MUST NOT be moved!
@@ -48,6 +65,8 @@ typedef struct __natsLib
 
     natsMutex       *inboxesLock;
     uint64_t        inboxesSeq;
+
+    natsGCList      gc;
 
 } natsLib;
 
@@ -80,10 +99,21 @@ _freeAsyncCbs(void)
 }
 
 static void
+_freeGC(void)
+{
+    natsGCList *gc = &(gLib.gc);
+
+    natsThread_Destroy(gc->thread);
+    natsCondition_Destroy(gc->cond);
+    natsMutex_Destroy(gc->lock);
+}
+
+static void
 _freeLib(void)
 {
     _freeTimers();
     _freeAsyncCbs();
+    _freeGC();
 
     natsMutex_Destroy(gLib.inboxesLock);
     natsCondition_Destroy(gLib.cond);
@@ -315,12 +345,7 @@ _timerThread(void *arg)
     bool            doStopCb;
     int64_t         target;
 
-    natsMutex_Lock(gLib.lock);
-
-    while (!(gLib.initialized))
-        natsCondition_Wait(gLib.cond, gLib.lock);
-
-    natsMutex_Unlock(gLib.lock);
+    WAIT_LIB_INITIALIZED;
 
     natsMutex_Lock(timers->lock);
 
@@ -453,12 +478,7 @@ _asyncCbsThread(void *arg)
     natsAsyncCbInfo *cb       = NULL;
     natsConnection  *nc       = NULL;
 
-    natsMutex_Lock(gLib.lock);
-
-    while (!(gLib.initialized))
-        natsCondition_Wait(gLib.cond, gLib.lock);
-
-    natsMutex_Unlock(gLib.lock);
+    WAIT_LIB_INITIALIZED;
 
     natsMutex_Lock(asyncCbs->lock);
 
@@ -548,6 +568,99 @@ nats_postAsyncCbInfo(natsAsyncCbInfo *info)
 }
 
 static void
+_garbageCollector(void *closure)
+{
+    natsGCList *gc = &(gLib.gc);
+    natsGCItem *item;
+    natsGCItem *list;
+
+    WAIT_LIB_INITIALIZED;
+
+    natsMutex_Lock(gc->lock);
+
+    // Repeat until notified to shutdown.
+    while (!(gc->shutdown))
+    {
+        // Go into wait until we are notified to shutdown
+        // or there is something to garbage collect
+        gc->inWait = true;
+
+        while (!(gc->shutdown) && (gc->head == NULL))
+        {
+            natsCondition_Wait(gc->cond, gc->lock);
+        }
+
+        // Out of the wait. Setting this boolean avoids unnecessary
+        // signaling when an item is added to the collector.
+        gc->inWait = false;
+
+        // Do not break out on shutdown here, we want to clear the list,
+        // even on exit so that valgrind and the like are happy.
+
+        // Under the lock, we will switch to a local list and reset the
+        // GC's list (so that others can add to the list without contention
+        // (at least from the GC itself).
+        do
+        {
+            list = gc->head;
+            gc->head = NULL;
+
+            natsMutex_Unlock(gc->lock);
+
+            // Now that we are outside of the lock, we can empty the list.
+            while ((item = list) != NULL)
+            {
+                // Pops item from the beginning of the list.
+                list = item->next;
+                item->next = NULL;
+
+                // Invoke the freeCb associated with this object
+                (*(item->freeCb))((void*) item);
+            }
+
+            natsMutex_Lock(gc->lock);
+        }
+        while (gc->head != NULL);
+    }
+
+    natsMutex_Unlock(gc->lock);
+
+    natsLib_Release();
+}
+
+bool
+natsGC_collect(natsGCItem *item)
+{
+    natsGCList  *gc;
+    bool        signal;
+
+    // If the object was not setup for garbage collection, return false
+    // so the caller frees the object.
+    if (item->freeCb == NULL)
+        return false;
+
+    gc = &(gLib.gc);
+
+    natsMutex_Lock(gc->lock);
+
+    // We will signal only if the GC is in the condition wait.
+    signal = gc->inWait;
+
+    // Add to the front of the list.
+    item->next = gc->head;
+
+    // Update head.
+    gc->head = item;
+
+    if (signal)
+        natsCondition_Signal(gc->cond);
+
+    natsMutex_Unlock(gc->lock);
+
+    return true;
+}
+
+static void
 _libTearDown(void)
 {
     if (gLib.timers.thread != NULL)
@@ -555,6 +668,9 @@ _libTearDown(void)
 
     if (gLib.asyncCbs.thread != NULL)
         natsThread_Join(gLib.asyncCbs.thread);
+
+    if (gLib.gc.thread != NULL)
+        natsThread_Join(gLib.gc.thread);
 
     natsLib_Release();
 }
@@ -613,6 +729,16 @@ nats_Open(int64_t lockSpinCount)
         if (s == NATS_OK)
             gLib.refs++;
     }
+    if (s == NATS_OK)
+        s = natsMutex_Create(&(gLib.gc.lock));
+    if (s == NATS_OK)
+        s = natsCondition_Create(&(gLib.gc.cond));
+    if (s == NATS_OK)
+    {
+        s = natsThread_Create(&(gLib.gc.thread), _garbageCollector, NULL);
+        if (s == NATS_OK)
+            gLib.refs++;
+    }
 
     gLib.initialized = true;
 
@@ -624,6 +750,7 @@ nats_Open(int64_t lockSpinCount)
         {
             gLib.timers.shutdown = true;
             gLib.asyncCbs.shutdown = true;
+            gLib.gc.shutdown = true;
         }
         natsCondition_Broadcast(gLib.cond);
     }
@@ -683,11 +810,20 @@ nats_Close(void)
 
     gLib.closed = true;
 
+    natsMutex_Lock(gLib.timers.lock);
     gLib.timers.shutdown = true;
     natsCondition_Signal(gLib.timers.cond);
+    natsMutex_Unlock(gLib.timers.lock);
 
+    natsMutex_Lock(gLib.asyncCbs.lock);
     gLib.asyncCbs.shutdown = true;
     natsCondition_Signal(gLib.asyncCbs.cond);
+    natsMutex_Unlock(gLib.asyncCbs.lock);
+
+    natsMutex_Lock(gLib.gc.lock);
+    gLib.gc.shutdown = true;
+    natsCondition_Signal(gLib.gc.cond);
+    natsMutex_Unlock(gLib.gc.lock);
 
     natsMutex_Unlock(gLib.lock);
 

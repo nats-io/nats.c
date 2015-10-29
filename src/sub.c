@@ -106,14 +106,12 @@ natsSub_deliverMsgs(void *arg)
     {
         natsSub_Lock(sub);
 
-        while ((sub->msgList.count == 0)
-               && !(sub->signaled)
-               && !(sub->closed))
-        {
-            natsCondition_Wait(sub->cond, sub->mu);
-        }
+        sub->inWait = true;
 
-        sub->signaled = false;
+        while ((sub->msgList.count == 0) && !(sub->closed))
+            natsCondition_Wait(sub->cond, sub->mu);
+
+        sub->inWait = false;
 
         if (sub->closed)
         {
@@ -186,10 +184,9 @@ _signalMsgAvailable(natsTimer *timer, void *closure)
         sub->signalTimerInterval = 10000;
         natsTimer_Reset(sub->signalTimer, sub->signalTimerInterval);
     }
-    else
+    else if (sub->inWait)
     {
         // Signal the delivery thread.
-        sub->signaled = true;
         natsCondition_Signal(sub->cond);
     }
 
@@ -220,7 +217,8 @@ natsSub_close(natsSubscription *sub)
 
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
-               const char *queueGroup, natsMsgHandler cb, void *cbClosure)
+               const char *queueGroup, natsMsgHandler cb, void *cbClosure,
+               bool noDelay)
 {
     natsStatus          s = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -242,6 +240,8 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     sub->conn           = nc;
     sub->msgCb          = cb;
     sub->msgCbClosure   = cbClosure;
+    sub->noDelay        = noDelay;
+    sub->signalLimit    = (int)(nc->opts->maxPendingMsgs * 0.75);
 
     sub->subject = NATS_STRDUP(subj);
     if (sub->subject == NULL)
@@ -255,7 +255,7 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     }
     if (s == NATS_OK)
         s = natsCondition_Create(&(sub->cond));
-    if (s == NATS_OK)
+    if ((s == NATS_OK) && !(sub->noDelay))
     {
         // Set the interval to any value, really, it will get reset to
         // a smaller value when the delivery thread should be signaled.
@@ -302,7 +302,7 @@ natsStatus
 natsConnection_Subscribe(natsSubscription **sub, natsConnection *nc, const char *subject,
                          natsMsgHandler cb, void *cbClosure)
 {
-    return natsConn_subscribe(sub, nc, subject, NULL, cb, cbClosure);
+    return natsConn_subscribe(sub, nc, subject, NULL, cb, cbClosure, false);
 }
 
 /*
@@ -311,7 +311,7 @@ natsConnection_Subscribe(natsSubscription **sub, natsConnection *nc, const char 
 natsStatus
 natsConnection_SubscribeSync(natsSubscription **sub, natsConnection *nc, const char *subject)
 {
-    return natsConn_subscribe(sub, nc, subject, NULL, NULL, NULL);
+    return natsConn_subscribe(sub, nc, subject, NULL, NULL, NULL, false);
 }
 
 /*
@@ -328,7 +328,8 @@ natsConnection_QueueSubscribe(natsSubscription **sub, natsConnection *nc,
     if ((queueGroup == NULL) || (strlen(queueGroup) == 0) || (cb == NULL))
         return NATS_INVALID_ARG;
 
-    return natsConn_subscribe(sub, nc, subject, queueGroup, cb, cbClosure);
+    return natsConn_subscribe(sub, nc, subject, queueGroup, cb, cbClosure,
+                              false);
 }
 
 /*
@@ -341,8 +342,37 @@ natsConnection_QueueSubscribeSync(natsSubscription **sub, natsConnection *nc,
     if ((queueGroup == NULL) || (strlen(queueGroup) == 0))
         return NATS_INVALID_ARG;
 
-    return natsConn_subscribe(sub, nc, subject, queueGroup, NULL, NULL);
+    return natsConn_subscribe(sub, nc, subject, queueGroup, NULL, NULL,
+                              false);
 }
+
+/*
+ * By default, messages that arrive are not immediately delivered. This
+ * generally improves performance. However, in case of request-reply,
+ * this delay has a negative impact. In such case, call this function
+ * to have the subscriber be notified immediately each time a message
+ * arrives.
+ */
+natsStatus
+natsSubscription_NoDeliveryDelay(natsSubscription *sub)
+{
+    if (sub == NULL)
+        return NATS_INVALID_ARG;
+
+    natsSub_Lock(sub);
+
+    if (!(sub->noDelay))
+    {
+        sub->noDelay = true;
+
+        natsTimer_Stop(sub->signalTimer);
+    }
+
+    natsSub_Unlock(sub);
+
+    return NATS_OK;
+}
+
 
 /*
  * Return the next message available to a synchronous subscriber or block until
@@ -357,6 +387,9 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
     natsMsg         *msg = NULL;
     bool            removeSub = false;
     int64_t         target    = 0;
+
+    if ((sub == NULL) || (nextMsg == NULL))
+        return NATS_INVALID_ARG;
 
     natsSub_Lock(sub);
 
@@ -384,8 +417,9 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
 
     if (timeout > 0)
     {
+        sub->inWait = true;
+
         while ((sub->msgList.count == 0)
-               && !(sub->signaled)
                && (s != NATS_TIMEOUT)
                && !(sub->closed))
         {
@@ -395,7 +429,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
             s = natsCondition_AbsoluteTimedWait(sub->cond, sub->mu, target);
         }
 
-        sub->signaled = false;
+        sub->inWait = false;
 
         if (sub->closed)
             s = NATS_INVALID_SUBSCRIPTION;

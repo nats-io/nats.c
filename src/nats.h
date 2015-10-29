@@ -591,6 +591,16 @@ natsConnection_QueueSubscribeSync(natsSubscription **sub, natsConnection *nc,
                                   const char *subject, const char *queueGroup);
 
 /*
+ * By default, messages that arrive are not immediately delivered. This
+ * generally improves performance. However, in case of request-reply,
+ * this delay has a negative impact. In such case, call this function
+ * to have the subscriber be notified immediately each time a message
+ * arrives.
+ */
+natsStatus
+natsSubscription_NoDeliveryDelay(natsSubscription *sub);
+
+/*
  * Return the next message available to a synchronous subscriber or block until
  * one is available.
  * A timeout (expressed in milliseconds) can be used to return when no message

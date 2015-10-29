@@ -2325,6 +2325,8 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
             arg->status = natsConnection_PublishString(nc,
                                                        natsMsg_GetReply(msg),
                                                        arg->string);
+            if (arg->status == NATS_OK)
+                arg->status = natsConnection_Flush(nc);
             break;
         }
         case 5:
@@ -5279,6 +5281,81 @@ test_NextMsgCallOnAsyncSub(void)
 }
 
 static void
+test_NoDelay(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    natsMsg             *msg      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+    int                 i;
+    int64_t             start;
+    int64_t             withDelay;
+    int64_t             withNoDelay;
+    int                 count = 3000;
+
+    if (getenv("VALGRIND") != NULL)
+        count = 1000;
+
+    PRINT_TEST_NAME();
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    if (serverPid == NATS_INVALID_PID)
+        FAIL("Unable to start or verify that the server was started!");
+
+    arg.control = 4;
+    arg.string  = "reply";
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+
+    test("With delay: ");
+    start = nats_Now();
+    for (i=0; (s == NATS_OK) && (i<count); i++)
+    {
+        s = natsConnection_Request(&msg, nc, "foo", "help", 4, 1000);
+        if (s == NATS_OK)
+            natsMsg_Destroy(msg);
+    }
+    withDelay = nats_Now() - start;
+
+    natsMutex_Lock(arg.m);
+    testCond((s == NATS_OK) && (arg.status == NATS_OK));
+    natsMutex_Unlock(arg.m);
+
+    if (s == NATS_OK)
+        s = natsSubscription_NoDeliveryDelay(sub);
+
+    test("With no delay faster for req-reply: ");
+    start = nats_Now();
+    for (i=0; (s == NATS_OK) && (i<count); i++)
+    {
+        s = natsConnection_Request(&msg, nc, "foo", "help", 4, 1000);
+        if (s == NATS_OK)
+            natsMsg_Destroy(msg);
+    }
+    withNoDelay = nats_Now() - start;
+
+    natsMutex_Lock(arg.m);
+    testCond((s == NATS_OK) && (arg.status == NATS_OK) && (withNoDelay < withDelay));
+    natsMutex_Unlock(arg.m);
+
+    natsSubscription_Destroy(sub);
+
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_ServersOption(void)
 {
     natsStatus          s;
@@ -6141,6 +6218,7 @@ nats_tests:
     test_AsyncSubscriberStarvation();
     test_AsyncSubscriberOnClose();
     test_NextMsgCallOnAsyncSub();
+    test_NoDelay();
 
     printf("\n== Clusters Tests ==\n");
 

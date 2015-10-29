@@ -31,7 +31,7 @@
 //#define DEV_MODE    (1)
 
 static const char* CString     = "C";
-static const char* Version     = "0.1.7-alpha";
+static const char* Version     = "0.1.9-alpha";
 
 static const char* NATS_DEFAULT_URL = "nats://localhost:4222";
 
@@ -183,7 +183,8 @@ typedef struct __natsSubscription
     natsTimer                   *signalTimer;
     int64_t                     signalTimerInterval;
     int                         signalFailCount;
-    bool                        signaled;
+    int                         signalLimit;
+    bool                        inWait;
     bool                        closed;
 
     natsMsgHandler              msgCb;
@@ -194,6 +195,7 @@ typedef struct __natsSubscription
     int                         pendingMax;
 
     bool                        slowConsumer;
+    bool                        noDelay;
 
 } natsSubscription;
 

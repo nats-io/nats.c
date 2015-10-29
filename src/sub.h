@@ -28,12 +28,16 @@ natsSub_release(natsSubscription *sub);
 
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
-               const char *queueGroup, natsMsgHandler cb, void *cbClosure);
+               const char *queueGroup, natsMsgHandler cb, void *cbClosure,
+               bool noDelay);
 
 void
 natsSub_close(natsSubscription *sub);
 
 // PUBLIC
+
+natsStatus
+natsSubscription_NoDeliveryDelay(natsSubscription *sub);
 
 natsStatus
 natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);

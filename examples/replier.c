@@ -137,6 +137,8 @@ int main(int argc, char **argv)
             s = natsConnection_SubscribeSync(&sub, conn, subj);
     }
     if (s == NATS_OK)
+        s = natsSubscription_NoDeliveryDelay(sub);
+    if (s == NATS_OK)
         s = natsSubscription_AutoUnsubscribe(sub, total);
 
     if (s == NATS_OK)

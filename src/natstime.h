@@ -1,8 +1,8 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
 
-#ifndef SRC_TIME_H_
-#define SRC_TIME_H_
+#ifndef NATSTIME_H_
+#define NATSTIME_H_
 
 #include "natsp.h"
 
@@ -30,4 +30,4 @@ void
 natsDeadline_Clear(natsDeadline *deadline);
 
 
-#endif /* SRC_TIME_H_ */
+#endif /* NATSTIME_H_ */

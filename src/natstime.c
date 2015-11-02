@@ -4,7 +4,7 @@
 
 #include <assert.h>
 
-#include "time.h"
+#include "natstime.h"
 
 int64_t
 nats_Now(void)

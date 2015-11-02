@@ -7,7 +7,7 @@
 #include <string.h>
 
 #include "mem.h"
-#include "time.h"
+#include "natstime.h"
 
 #define ASCII_0 (48)
 #define ASCII_9 (57)

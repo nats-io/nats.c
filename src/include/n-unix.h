@@ -7,6 +7,9 @@
 #define _GNU_SOURCE
 #endif
 
+#include <stdint.h>
+#include <stdbool.h>
+
 #ifdef DARWIN
 #define FD_SETSIZE  (32768)
 #else
@@ -16,12 +19,12 @@
 #include <sys/select.h>
 #endif
 
+#include <sys/time.h>
 #include <fcntl.h>
 #include <netinet/tcp.h>
 #include <netdb.h>
 #include <pthread.h>
 #include <inttypes.h>
-#include <sys/time.h>
 
 typedef pthread_t       natsThread;
 typedef pthread_mutex_t natsMutex;

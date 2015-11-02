@@ -12,37 +12,106 @@ First, download the source code:
 git clone git@github.com:nats-io/cnats.git .
 ```
 
-Then, build the library:
+To build the library, we use [CMake](https://cmake.org/download/). Go into the `build` directory and issue this command for the first time:
 
 ```
-make install examples
+cmake ..
 ```
 
-This will build both the static and dynamic libraries and the examples binaries. After this step, the directory `install` contains two folders: `include` and `lib`, where the header files necessary for your application to use the C NATS library are located, and where the compiled libraries are located.
+You can review the default settings using the command:
 
-You have several targets to pass to the make command. Here is a list:
+```
+make edit_cache
+```
+
+When you are satified with the settings, simply invoke:
+
+```
+make
+```
+
+This is building the static and shared libraries and also the examples and the test program. Each are located in their respective directories under `build`: `src`, `examples` and `test`.
+
+```
+make install
+```
+
+Will copy both the static and shared libraries in the folder `install/lib` and the public headers in `install/include`.
+
+You can list all the possible `make` options with the command:
+
+```
+make help
+```
+
+The most common you will use are:
 
 * clean
 * install
-* examples
 * test
 
-You can compile in debug mode and/or in 32 bits using the command line parameters:
+To compile in debug mode and/or in 32 bits, you need to modify the cache:
 
-* debug
-* m
+```
+make edit_cache
+```
 
+Then modify the appropriate options and re-build.
+
+On platforms where `valgrind` is available, you can run the tests with memory checks.
 Here is an example:
 
 ```
-make debug=on m=32
+make test ARGS="-T memcheck"
 ```
 
-We recommand that your run the test suite to ensure that everything works fine in your environment
+Or, you can invoke directly the `ctest` program:
 
 ```
-make test
+ctest -T memcheck -V -I 1,4
 ```
+The above command would run the tests with `valgrind` (`-T memcheck`), with verbose output (`-V`), and run the tests from 1 to 4 (`-I 1,4`).
+
+If you add a test to `test/test.c`, you need to add it into the `allTests` array. Each entry contains a name, and the test function. You can add it anywhere into this array.
+Build you changes:
+
+```
+$ make
+[ 44%] Built target nats
+[ 88%] Built target nats_static
+[ 90%] Built target nats-publisher
+[ 92%] Built target nats-queuegroup
+[ 94%] Built target nats-replier
+[ 96%] Built target nats-requestor
+[ 98%] Built target nats-subscriber
+Scanning dependencies of target testsuite
+[100%] Building C object test/CMakeFiles/testsuite.dir/test.c.o
+Linking C executable testsuite
+[100%] Built target testsuite
+```
+
+Now regenerate the list by invoking the test suite without any argument:
+
+```
+$ ./test/testsuite
+Number of tests: 77
+```
+
+This list the number of tests added to the file `list.txt`. Move this file to the source's test directory.
+
+```
+$ mv list.txt ../test/
+```
+
+Then, refresh the build:
+
+```
+$ cmake ..
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/ivan/cnats/build
+```
+
 
 ## Basic Usage
 

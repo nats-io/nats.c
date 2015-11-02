@@ -11,7 +11,7 @@
 #include "status.h"
 #include "comsock.h"
 #include "mem.h"
-#include "time.h"
+#include "natstime.h"
 
 static void
 _closeFd(natsSock fd)

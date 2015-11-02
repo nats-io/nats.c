@@ -24,7 +24,7 @@
 #include "asynccb.h"
 #include "hash.h"
 #include "stats.h"
-#include "time.h"
+#include "natstime.h"
 
 // Comment/uncomment to replace some function calls with direct structure
 // access

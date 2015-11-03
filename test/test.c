@@ -18,6 +18,7 @@
 #include "sub.h"
 #include "msg.h"
 #include "stats.h"
+#include "comsock.h"
 
 static int tests = 0;
 static int fails = 0;
@@ -353,37 +354,60 @@ test_natsParseControl(void)
     s = nats_ParseControl(&c, NULL);
     testCond(s == NATS_PROTOCOL_ERROR);
 
-    test("Test line with no space: ");
-    s = nats_ParseControl(&c, "line_with_no_space");
-    testCond(s == NATS_PROTOCOL_ERROR);
-
-    test("Test line with 1 space: ");
-    s = nats_ParseControl(&c, "line with_one_space");
+    test("Test line with single op: ");
+    s = nats_ParseControl(&c, "op");
     testCond((s == NATS_OK)
-             && (strcmp(c.op, "line") == 0)
+             && (strcmp(c.op, "op") == 0)
              && (c.args == NULL));
-    if (s == NATS_OK)
-    {
-        free(c.op);
-        c.op = NULL;
-    }
 
-    test("Test line with 2 spaces: ");
-    s = nats_ParseControl(&c, "line with two_spaces");
+    free(c.op);
+    free(c.args);
+    c.op = NULL;
+    c.args = NULL;
+
+    test("Test line with trailing spaces: ");
+    s = nats_ParseControl(&c, "op   ");
     testCond((s == NATS_OK)
-             && (strcmp(c.op, "line") == 0)
-             && (strcmp(c.args, "with") == 0));
-    if (s == NATS_OK)
-    {
-        free(c.op);
-        free(c.args);
-        c.op = NULL;
-        c.args = NULL;
-    }
+             && (strcmp(c.op, "op") == 0)
+             && (c.args == NULL));
 
-    test("Test line with 3 spaces: ");
-    s = nats_ParseControl(&c, "line with three spaces");
-    testCond(s == NATS_PROTOCOL_ERROR);
+    free(c.op);
+    free(c.args);
+    c.op = NULL;
+    c.args = NULL;
+
+    test("Test line with op and args: ");
+    s = nats_ParseControl(&c, "op    args");
+    testCond((s == NATS_OK)
+             && (strcmp(c.op, "op") == 0)
+             && (strcmp(c.args, "args") == 0));
+
+    free(c.op);
+    free(c.args);
+    c.op = NULL;
+    c.args = NULL;
+
+    test("Test line with op and args and trailing spaces: ");
+    s = nats_ParseControl(&c, "op   args  ");
+    testCond((s == NATS_OK)
+             && (strcmp(c.op, "op") == 0)
+             && (strcmp(c.args, "args") == 0));
+
+    free(c.op);
+    free(c.args);
+    c.op = NULL;
+    c.args = NULL;
+
+    test("Test line with op and args args: ");
+    s = nats_ParseControl(&c, "op   args  args   ");
+    testCond((s == NATS_OK)
+             && (strcmp(c.op, "op") == 0)
+             && (strcmp(c.args, "args  args") == 0));
+
+    free(c.op);
+    free(c.args);
+    c.op = NULL;
+    c.args = NULL;
 }
 
 static void
@@ -3478,6 +3502,287 @@ test_IsReconnectingAndStatus(void)
 }
 
 static void
+_connectToMockupServer(void *closure)
+{
+    struct threadArg    *arg = (struct threadArg *) closure;
+    natsConnection      *nc = NULL;
+    natsStatus          s;
+
+    // Make sure that the server is ready to accept our connection.
+    nats_Sleep(100);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+
+    natsMutex_Lock(arg->m);
+
+    if (arg->control == 2)
+    {
+        int payload = 0;
+
+        if (s == NATS_OK)
+        {
+            test("Check expected max payload: ")
+            payload = natsConnection_GetMaxPayload(nc);
+            if (payload != 10)
+                s = NATS_ERR;
+            testCond(s == NATS_OK);
+        }
+        if (s == NATS_OK)
+        {
+            test("Expect getting an error when publish more than max payload: ");
+            s = natsConnection_PublishString(nc, "hello", "Hello World!");
+            testCond(s != NATS_OK);
+
+            // reset status
+            s = NATS_OK;
+        }
+        if (s == NATS_OK)
+        {
+            test("Expect success if publishing less than max payload: ");
+            s = natsConnection_PublishString(nc, "hello", "a");
+            testCond(s == NATS_OK);
+        }
+    }
+
+    natsConnection_Destroy(nc);
+
+    arg->status = s;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+test_ErrOnConnectAndDeadlock(void)
+{
+    struct addrinfo     hints;
+    struct addrinfo     *servinfo = NULL;
+    int                 res;
+    natsStatus          s = NATS_OK;
+    natsSock            sock       = NATS_SOCK_INVALID;
+    natsSock            clientSock = NATS_SOCK_INVALID;
+    natsThread          *t = NULL;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("@@ Unable to setup test!");
+
+    arg.control = 1;
+
+    test("Verify that bad INFO does not cause deadlock in client: ");
+
+    // We will hand run a fake server that will timeout and not return a proper
+    // INFO proto. This is to test that we do not deadlock.
+
+    memset(&hints,0,sizeof(hints));
+
+    hints.ai_family   = AF_INET6;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags    = AI_PASSIVE;
+
+    if ((res = getaddrinfo("localhost", "4222", &hints, &servinfo)) != 0)
+    {
+         hints.ai_family = AF_INET;
+
+         if ((res = getaddrinfo("localhost", "4222", &hints, &servinfo)) != 0)
+             s = NATS_SYS_ERROR;
+    }
+    if (s == NATS_OK)
+    {
+        sock = socket(servinfo->ai_family, servinfo->ai_socktype,
+                      servinfo->ai_protocol);
+        if (sock == NATS_SOCK_INVALID)
+            s = NATS_SYS_ERROR;
+        else
+        {
+            int yes = 1;
+            if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
+                s = NATS_SYS_ERROR;
+        }
+        if (s == NATS_OK)
+            s = natsSock_SetBlocking(sock, true);
+    }
+    if ((s == NATS_OK)
+        && (bind(sock, servinfo->ai_addr, servinfo->ai_addrlen) == NATS_SOCK_ERROR))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    if ((s == NATS_OK) && (listen(sock, 100) == NATS_SOCK_ERROR))
+        s = NATS_SYS_ERROR;
+
+    // Start the thread that will try to connect to our server...
+    if (s == NATS_OK)
+        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
+
+    if ((s == NATS_OK)
+        && ((clientSock = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID))
+    {
+        s = NATS_SYS_ERROR;
+    }
+
+    if (s == NATS_OK)
+    {
+        const char* badInfo = "INFOZ \r\n";
+
+        // Send back a mal-formed INFO.
+        s = natsSock_WriteFully(NULL, clientSock, NULL, badInfo, strlen(badInfo));
+    }
+
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+
+        while ((s == NATS_OK) && (arg.status == NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 3000);
+
+        natsMutex_Unlock(arg.m);
+    }
+
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    testCond((s == NATS_OK) && (arg.status != NATS_OK));
+
+    _destroyDefaultThreadArgs(&arg);
+
+    natsSock_Close(clientSock);
+    natsSock_Close(sock);
+
+    freeaddrinfo(servinfo);
+}
+
+static void
+test_ErrOnMaxPayloadLimit(void)
+{
+    struct addrinfo     hints;
+    struct addrinfo     *servinfo = NULL;
+    int                 res;
+    natsStatus          s = NATS_OK;
+    natsSock            sock       = NATS_SOCK_INVALID;
+    natsSock            clientSock = NATS_SOCK_INVALID;
+    natsThread          *t = NULL;
+    int                 expectedMaxPayLoad = 10;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("@@ Unable to setup test!");
+
+    arg.control = 2;
+
+    // We will hand run a fake server that will timeout and not return a proper
+    // INFO proto. This is to test that we do not deadlock.
+
+    memset(&hints,0,sizeof(hints));
+
+    hints.ai_family   = AF_INET6;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags    = AI_PASSIVE;
+
+    if ((res = getaddrinfo("localhost", "4222", &hints, &servinfo)) != 0)
+    {
+         hints.ai_family = AF_INET;
+
+         if ((res = getaddrinfo("localhost", "4222", &hints, &servinfo)) != 0)
+             s = NATS_SYS_ERROR;
+    }
+
+    if (s == NATS_OK)
+    {
+        sock = socket(servinfo->ai_family, servinfo->ai_socktype,
+                      servinfo->ai_protocol);
+        if (sock == NATS_SOCK_INVALID)
+            s = NATS_SYS_ERROR;
+        else
+        {
+            int yes = 1;
+            if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
+                s = NATS_SYS_ERROR;
+        }
+        if (s == NATS_OK)
+            s = natsSock_SetBlocking(sock, true);
+    }
+
+    if ((s == NATS_OK)
+        && (bind(sock, servinfo->ai_addr, servinfo->ai_addrlen) == NATS_SOCK_ERROR))
+    {
+        s = NATS_SYS_ERROR;
+    }
+
+    if ((s == NATS_OK) && (listen(sock, 100) == NATS_SOCK_ERROR))
+        s = NATS_SYS_ERROR;
+
+    // Start the thread that will try to connect to our server...
+    if (s == NATS_OK)
+        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
+
+    if ((s == NATS_OK)
+        && ((clientSock = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    if (s == NATS_OK)
+    {
+        char info[256];
+
+        snprintf(info, sizeof(info),
+                 "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":%d}\r\n",
+                 expectedMaxPayLoad);
+
+        // Send INFO.
+        s = natsSock_WriteFully(NULL, clientSock, NULL, info, strlen(info));
+        if (s == NATS_OK)
+        {
+            char buffer[1024];
+            int  n = 0;
+
+            memset(buffer, 0, sizeof(buffer));
+
+            // Read connect and ping commands sent from the client
+            s = natsSock_ReadLine(NULL, clientSock, NULL,
+                                  buffer, sizeof(buffer), &n);
+            if (s == NATS_OK)
+            {
+                char *next = NULL;
+
+                // The above call may have been put the PING, or not.
+                next = (char*) &buffer[strlen(buffer) + 2];
+                if (strstr(next, _CRLF_) == NULL)
+                {
+                    // Read the rest.
+                    s = natsSock_ReadLine(NULL, clientSock, NULL,
+                                          buffer, sizeof(buffer),
+                                          NULL);
+                }
+            }
+        }
+        // Send PONG
+        if (s == NATS_OK)
+            s = natsSock_WriteFully(NULL, clientSock, NULL,
+                                    _PONG_PROTO_, _PONG_PROTO_LEN_);
+    }
+
+    // Wait for the client to finish.
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    _destroyDefaultThreadArgs(&arg);
+
+    natsSock_Close(clientSock);
+    natsSock_Close(sock);
+
+    freeaddrinfo(servinfo);
+}
+
+static void
 test_Auth(void)
 {
     natsStatus          s;
@@ -6035,9 +6340,8 @@ static testInfo allTests[] =
     {"IsClosed",                        test_IsClosed},
     {"IsReconnectingAndStatus",         test_IsReconnectingAndStatus},
 
-// These 2 need a fake server... will do that later.
-//    test_ErrOnConnectAndDeadlock,
-//    test_TestErrOnMaxPayloadLimit,
+    {"ErrOnConnectAndDeadlock",         test_ErrOnConnectAndDeadlock},
+    {"ErrOnMaxPayloadLimit",            test_ErrOnMaxPayloadLimit},
 
     {"Auth",                            test_Auth},
     {"AuthFailNoDisconnectCB",          test_AuthFailNoDisconnectCB},

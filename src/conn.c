@@ -528,7 +528,7 @@ _processExpectedInfo(natsConnection *nc)
 
     if ((s == NATS_OK)
         && ((control.op == NULL)
-            || (strncmp(control.op, _INFO_OP_, strlen(_INFO_OP_)) != 0)))
+            || (strcmp(control.op, _INFO_OP_) != 0)))
     {
         s = NATS_PROTOCOL_ERROR;
     }
@@ -1013,7 +1013,7 @@ _connect(natsConnection *nc)
             if (s == NATS_OK)
             {
                 natsSrvPool_SetSrvDidConnect(pool, i, true);
-                natsSrvPool_SetSrvDidConnect(pool,i, 0);
+                natsSrvPool_SetSrvReconnects(pool, i, 0);
                 break;
             }
             else

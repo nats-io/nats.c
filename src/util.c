@@ -41,53 +41,81 @@ nats_ParseControl(natsControl *control, const char *line)
 {
     natsStatus  s           = NATS_OK;
     char        *tok        = NULL;
-    const char  *last       = line;
     int         len         = 0;
-    int         i           = 0;
 
     if (line == NULL)
         return NATS_PROTOCOL_ERROR;
 
-    while ((s == NATS_OK)
-           && ((tok = strchr(last, (int) ' ')) != NULL))
+    tok = strchr(line, (int) ' ');
+    if (tok == NULL)
     {
-        len = (int)(tok - last);
-        if (len <= 0)
-        {
-            s = NATS_PROTOCOL_ERROR;
-            break;
-        }
+        control->op = NATS_STRDUP(line);
+        if (control->op == NULL)
+            return NATS_NO_MEMORY;
 
-        if ((i == 0) || (i == 1))
-        {
-            char *tmp = NATS_MALLOC(len + 1);
-
-            if (tmp == NULL)
-                s = NATS_NO_MEMORY;
-
-            if (s == NATS_OK)
-            {
-                memcpy(tmp, last, len);
-                tmp[len] = '\0';
-
-                if (i == 0)
-                    control->op = tmp;
-                else
-                    control->args = tmp;
-            }
-        }
-
-        if (i++ > 2)
-            s = NATS_PROTOCOL_ERROR;
-
-        last = (tok + 1);
+        return NATS_OK;
     }
 
-    if ((i < 1) || (i > 2) || (s != NATS_OK))
+    len = (tok - line);
+    control->op = NATS_MALLOC(len + 1);
+    if (control->op == NULL)
     {
-        if (s == NATS_OK)
-            s = NATS_PROTOCOL_ERROR;
+        s = NATS_NO_MEMORY;
+    }
+    else
+    {
+        memcpy(control->op, line, len);
+        control->op[len] = '\0';
+    }
 
+    if (s == NATS_OK)
+    {
+        // Discard all spaces and the like in between the next token
+        while ((tok[0] != '\0')
+               && ((tok[0] == ' ')
+                   || (tok[0] == '\r')
+                   || (tok[0] == '\n')
+                   || (tok[0] == '\t')))
+        {
+            tok++;
+        }
+    }
+
+    // If there is a token...
+    if (tok[0] != '\0')
+    {
+        char *tmp;
+
+        len = strlen(tok);
+        tmp = &(tok[len - 1]);
+
+        // Remove trailing spaces and the like.
+        while ((tmp[0] != '\0')
+                && ((tmp[0] == ' ')
+                    || (tmp[0] == '\r')
+                    || (tmp[0] == '\n')
+                    || (tmp[0] == '\t')))
+        {
+            tmp--;
+            len--;
+        }
+
+        // We are sure that len is > 0 because of the first while() loop.
+
+        control->args = NATS_MALLOC(len + 1);
+        if (control->args == NULL)
+        {
+            s = NATS_NO_MEMORY;
+        }
+        else
+        {
+            memcpy(control->args, tok, len);
+            control->args[len] = '\0';
+        }
+    }
+
+    if (s != NATS_OK)
+    {
         NATS_FREE(control->op);
         control->op = NULL;
 

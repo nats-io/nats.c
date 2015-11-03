@@ -259,10 +259,7 @@ natsSock_ReadLine(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
         totalBytes += readBytes;
 
         if (totalBytes == maxBufferSize)
-        {
-            abort();
             return NATS_LINE_TOO_LONG;
-        }
     }
 }
 

@@ -30,7 +30,7 @@ struct __natsOptions;
 #define natsSrvPool_GetSrv(p,i)             ((p)->srvrs[(i)])
 #define natsSrvPool_GetSrvUrl(p,i)          (natsSrvPool_GetSrv((p),(i))->url)
 #define natsSrvPool_SetSrvDidConnect(p,i,c) (natsSrvPool_GetSrv((p),(i))->didConnect=(c))
-#define natsSrvPool_SetSrvReonnects(p,i,r)  (natsSrvPool_GetSrv((p),(i))->reconnects=(r))
+#define natsSrvPool_SetSrvReconnects(p,i,r) (natsSrvPool_GetSrv((p),(i))->reconnects=(r))
 
 // Create the server pool using the options given.
 // We will place a Url option first, followed by any

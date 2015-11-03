@@ -42,7 +42,11 @@ _publishEx(natsConnection *nc, const char *subj,
 
     // Pro-actively reject dataLen over the threshold set by server.
     if ((int64_t) dataLen > nc->info.maxPayload)
-        s = NATS_MAX_PAYLOAD;
+    {
+        natsConn_Unlock(nc);
+
+        return NATS_MAX_PAYLOAD;
+    }
 
     if ((s == NATS_OK) && natsConn_isClosed(nc))
     {

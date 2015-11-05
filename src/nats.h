@@ -555,7 +555,7 @@ natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
 
 /*
  * Expresses interest in the given subject. The subject can have wildcards
- * (partial:*, full:>). Messages will be delivered to the associated
+ * (partial.*, full.>). Messages will be delivered to the associated
  * natsMsgHandler.
  */
 natsStatus

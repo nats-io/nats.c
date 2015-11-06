@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "mem.h"
 #include "timer.h"
@@ -675,7 +676,7 @@ _libTearDown(void)
     natsLib_Release();
 }
 
-natsStatus
+NATS_EXTERN natsStatus
 nats_Open(int64_t lockSpinCount)
 {
     natsStatus s = NATS_OK;
@@ -694,7 +695,10 @@ nats_Open(int64_t lockSpinCount)
         return s;
     }
 
+#if defined(_WIN32)
+#else
     signal(SIGPIPE, SIG_IGN);
+#endif
 
     srand((unsigned int) nats_NowInNanoSeconds());
 
@@ -740,7 +744,8 @@ nats_Open(int64_t lockSpinCount)
             gLib.refs++;
     }
 
-    gLib.initialized = true;
+    if (s == NATS_OK)
+        gLib.initialized = true;
 
     // In case of success or error, broadcast so that lib's threads
     // can proceed.
@@ -763,7 +768,7 @@ nats_Open(int64_t lockSpinCount)
     return s;
 }
 
-natsStatus
+NATS_EXTERN natsStatus
 natsInbox_Create(natsInbox **newInbox)
 {
     natsStatus  s      = NATS_OK;
@@ -776,7 +781,8 @@ natsInbox_Create(natsInbox **newInbox)
 
     natsMutex_Lock(gLib.inboxesLock);
 
-    res = asprintf(&inbox, "%s%x.%" NATS_PRINTF_U64, inboxPrefix, rand(), ++(gLib.inboxesSeq));
+    res = nats_asprintf(&inbox, "%s%x.%" PRIu64, inboxPrefix,
+                        rand(), ++(gLib.inboxesSeq));
     if (res < 0)
         s = NATS_NO_MEMORY;
     else
@@ -787,7 +793,7 @@ natsInbox_Create(natsInbox **newInbox)
     return s;
 }
 
-void
+NATS_EXTERN void
 natsInbox_Destroy(natsInbox *inbox)
 {
     if (inbox == NULL)
@@ -797,12 +803,12 @@ natsInbox_Destroy(natsInbox *inbox)
 }
 
 
-void
+NATS_EXTERN void
 nats_Close(void)
 {
     natsMutex_Lock(gLib.lock);
 
-    if (gLib.closed)
+    if (gLib.closed || !(gLib.initialized))
     {
         natsMutex_Unlock(gLib.lock);
         return;

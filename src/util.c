@@ -2,10 +2,11 @@
 
 #include "natsp.h"
 
+#include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 
 #include "mem.h"
-#include "time.h"
 
 #define ASCII_0 (48)
 #define ASCII_9 (57)
@@ -54,7 +55,7 @@ nats_ParseControl(natsControl *control, const char *line)
         return NATS_OK;
     }
 
-    len = (tok - line);
+    len = (int) (tok - line);
     control->op = NATS_MALLOC(len + 1);
     if (control->op == NULL)
     {
@@ -84,7 +85,7 @@ nats_ParseControl(natsControl *control, const char *line)
     {
         char *tmp;
 
-        len = strlen(tok);
+        len = (int) strlen(tok);
         tmp = &(tok[len - 1]);
 
         // Remove trailing spaces and the like.
@@ -145,15 +146,14 @@ nats_CreateStringFromBuffer(char **newStr, natsBuffer *buf)
     return NATS_OK;
 }
 
-void
+NATS_EXTERN void
 nats_Sleep(int64_t millisec)
 {
-    struct timeval tv;
-
-    tv.tv_sec  = millisec / 1000;
-    tv.tv_usec = (millisec % 1000) * 1000;
-
-    select(0, NULL, NULL, NULL, &tv);
+#ifdef _WIN32
+    Sleep((DWORD) millisec);
+#else
+    usleep(millisec * 1000);
+#endif
 }
 
 void
@@ -161,7 +161,7 @@ nats_Randomize(int *array, int arraySize)
 {
     int i, j;
 
-    srand(nats_NowInNanoSeconds());
+    srand((unsigned int) nats_NowInNanoSeconds());
 
     for (i = 0; i < arraySize; i++)
     {

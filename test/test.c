@@ -4,9 +4,7 @@
 
 #include <stdio.h>
 #include <string.h>
-
-#include <unistd.h>
-#include <sys/wait.h>
+#include <errno.h>
 
 #include "buf.h"
 #include "timer.h"
@@ -24,10 +22,16 @@ static int tests = 0;
 static int fails = 0;
 
 static bool keepServerOutput    = false;
-static bool skipBuidlingBlocks  = false;
+static bool valgrind            = false;
+
+static const char *natsServerExe = "gnatsd";
 
 #define test(s)         { printf("#%02d ", ++tests); printf((s)); fflush(stdout); }
+#ifdef _WIN32
+#define testCond(c)     if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); fflush(stdout); fails++; }
+#else
 #define testCond(c)     if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); fflush(stdout); fails++; }
+#endif
 #define FAIL(m)         { printf("@@ %s @@\n", (m)); fails++; return; }
 #define IFOK(s, c)      if (s == NATS_OK) { s = (c); }
 
@@ -90,6 +94,87 @@ _destroyDefaultThreadArgs(struct threadArg *args)
     natsCondition_Destroy(args->c);
 }
 
+static void
+test_natsNowAndSleep(void)
+{
+    int64_t start;
+    int64_t end;
+
+    test("Check now and sleep: ")
+    start = nats_Now();
+    nats_Sleep(1000);
+    end = nats_Now();
+    testCond(((end - start) >= 990) && ((end - start) <= 1010));
+}
+
+static void
+test_natsAllocSprintf(void)
+{
+    char smallStr[20];
+    char mediumStr[256]; // This is the size of the temp buffer in nats_asprintf
+    char largeStr[1024];
+    char *ptr = NULL;
+    int ret;
+
+    memset(smallStr, 'A', sizeof(smallStr) - 1);
+    smallStr[sizeof(smallStr) - 1] = '\0';
+
+    memset(mediumStr, 'B', sizeof(mediumStr) - 1);
+    mediumStr[sizeof(mediumStr) - 1] = '\0';
+
+    memset(largeStr, 'C', sizeof(largeStr) - 1);
+    largeStr[sizeof(largeStr) - 1] = '\0';
+
+    test("Check alloc sprintf with small string: ");
+    ret = nats_asprintf(&ptr, "%s", smallStr);
+    testCond((ret >= 0)
+             && (strcmp(ptr, smallStr) == 0));
+
+    free(ptr);
+    ptr = NULL;
+
+    test("Check alloc sprintf with medium string: ");
+    ret = nats_asprintf(&ptr, "%s", mediumStr);
+    testCond((ret >= 0)
+             && (strcmp(ptr, mediumStr) == 0));
+
+    free(ptr);
+    ptr = NULL;
+
+    test("Check alloc sprintf with large string: ");
+    ret = nats_asprintf(&ptr, "%s", largeStr);
+    testCond((ret >= 0)
+             && (strcmp(ptr, largeStr) == 0));
+
+    free(ptr);
+    ptr = NULL;
+}
+
+static void
+test_natsStrCaseStr(void)
+{
+    const char *s1 = "Hello World!";
+    const char *s2 = "wo";
+    const char *res = NULL;
+
+    test("StrStr case insensitive (equal): ");
+    res = nats_strcasestr(s1, s1);
+    testCond((res != NULL)
+             && (strcmp(res, s1) == 0)
+             && (res == s1));
+
+    test("StrStr case insensitive (match): ");
+    res = nats_strcasestr(s1, s2);
+    testCond((res != NULL)
+             && (strcmp(res, "World!") == 0)
+             && (res == (s1 + 6)));
+
+    test("StrStr case insensitive (no match): ");
+    res = nats_strcasestr(s1, "xx");
+    testCond(res == NULL);
+
+}
+
 static void test_natsBuffer(void)
 {
     natsStatus  s;
@@ -97,7 +182,7 @@ static void test_natsBuffer(void)
     natsBuffer  *buf = NULL;
     natsBuffer  stackBuf;
 
-    printf("\n== Buffer without data ==\n");
+    printf("== Buffer without data ==\n");
 
     test("Create buffer owning its data: ");
     s = natsBuf_Create(&buf, 10);
@@ -312,8 +397,6 @@ test_natsParseInt64(void)
 {
     int64_t n;
 
-    printf("\n== ParseInt64 ==\n");
-
     test("Parse with non numeric: ");
     n = nats_ParseInt64("a", 1);
     testCond(n == -1);
@@ -352,8 +435,6 @@ test_natsParseControl(void)
     c.op   = NULL;
     c.args = NULL;
 
-    printf("\n== ParseControl ==\n");
-
     test("Test with NULL line: ");
     s = nats_ParseControl(&c, NULL);
     testCond(s == NATS_PROTOCOL_ERROR);
@@ -361,6 +442,7 @@ test_natsParseControl(void)
     test("Test line with single op: ");
     s = nats_ParseControl(&c, "op");
     testCond((s == NATS_OK)
+             && (c.op != NULL)
              && (strcmp(c.op, "op") == 0)
              && (c.args == NULL));
 
@@ -372,6 +454,7 @@ test_natsParseControl(void)
     test("Test line with trailing spaces: ");
     s = nats_ParseControl(&c, "op   ");
     testCond((s == NATS_OK)
+             && (c.op != NULL)
              && (strcmp(c.op, "op") == 0)
              && (c.args == NULL));
 
@@ -383,7 +466,9 @@ test_natsParseControl(void)
     test("Test line with op and args: ");
     s = nats_ParseControl(&c, "op    args");
     testCond((s == NATS_OK)
+             && (c.op != NULL)
              && (strcmp(c.op, "op") == 0)
+             && (c.args != NULL)
              && (strcmp(c.args, "args") == 0));
 
     free(c.op);
@@ -394,7 +479,9 @@ test_natsParseControl(void)
     test("Test line with op and args and trailing spaces: ");
     s = nats_ParseControl(&c, "op   args  ");
     testCond((s == NATS_OK)
+             && (c.op != NULL)
              && (strcmp(c.op, "op") == 0)
+             && (c.args != NULL)
              && (strcmp(c.args, "args") == 0));
 
     free(c.op);
@@ -405,7 +492,9 @@ test_natsParseControl(void)
     test("Test line with op and args args: ");
     s = nats_ParseControl(&c, "op   args  args   ");
     testCond((s == NATS_OK)
+             && (c.op != NULL)
              && (strcmp(c.op, "op") == 0)
+             && (c.args != NULL)
              && (strcmp(c.args, "args  args") == 0));
 
     free(c.op);
@@ -420,8 +509,6 @@ test_natsMutex(void)
     natsStatus  s;
     natsMutex   *m = NULL;
     bool        locked = false;
-
-    printf("\n== Mutexes ==\n");
 
     test("Create mutex: ");
     s = natsMutex_Create(&m);
@@ -478,7 +565,7 @@ static int NUM_THREADS = 1000;
 static void
 test_natsThread(void)
 {
-    natsStatus          s;
+    natsStatus          s  = NATS_OK;
     natsMutex           *m = NULL;
     natsThread          *t = NULL;
     bool                current = false;
@@ -486,22 +573,23 @@ test_natsThread(void)
     natsThread          **threads = NULL;
     int                 i,j;
 
-    if (getenv("VALGRIND") != NULL)
+    if (valgrind)
         NUM_THREADS = 100;
 
     threads = (natsThread**) calloc(NUM_THREADS, sizeof(natsThread*));
+    if (threads == NULL)
+        s = NATS_NO_MEMORY;
 
-    s = natsMutex_Create(&m);
+    if (s == NATS_OK)
+        s = natsMutex_Create(&m);
     if (s != NATS_OK)
-        FAIL("Unable to run test_natsThread because got an error while creating mutex!");
+        FAIL("Unable to setup test");
 
     natsMutex_Lock(m);
 
     tArgs.m         = m;
     tArgs.control   = 0;
     tArgs.current   = false;
-
-    printf("\n== Threads ==\n");
 
     test("Create thread: ");
     s = natsThread_Create(&t, testThread, &tArgs);
@@ -603,8 +691,6 @@ test_natsCondition(void)
     int64_t             before = 0;
     int64_t             diff   = 0;
     int64_t             target = 0;
-
-    printf("\n== Conditions ==\n");
 
     s = natsMutex_Create(&m);
     if (s != NATS_OK)
@@ -798,8 +884,6 @@ test_natsTimer(void)
     natsTimer           *t = NULL;
     struct threadArg    tArg;
 
-    printf("\n== Timers ==\n");
-
     s = _createDefaultThreadArgsForCbTests(&tArg);
     if (s != NATS_OK)
         FAIL("Unable to setup natsTimer test!");
@@ -970,7 +1054,8 @@ test_natsRandomize(void)
     int sameTotal = 0;
     int same;
 
-    printf("\n== Random of array ==\n");
+    if (array == NULL)
+        FAIL("@@ Unable to setup test!");
 
     test("Randomization of array: ");
     for (i = 0; i < RANDOM_ITER; i++)
@@ -999,8 +1084,6 @@ test_natsUrl(void)
 {
     natsStatus  s;
     natsUrl     *u = NULL;
-
-    printf("\n== URLs ==\n");
 
     test("NULL: ");
     s = natsUrl_Create(&u, NULL);
@@ -1174,8 +1257,6 @@ test_natsCreateStringFromBuffer(void)
     natsBuffer  buf;
     char        *str = NULL;
 
-    printf("\n== Create String From Buffer ==\n");
-
     test("NULL buffer: ");
     s = nats_CreateStringFromBuffer(&str, NULL);
     testCond((s == NATS_OK)
@@ -1211,7 +1292,7 @@ test_natsCreateStringFromBuffer(void)
 }
 
 #define INBOX_THREADS_COUNT     (10)
-#define INBOX_COUNT_PER_THREAD  (100000)
+#define INBOX_COUNT_PER_THREAD  (10000)
 #define INBOX_TOTAL             (INBOX_THREADS_COUNT * INBOX_COUNT_PER_THREAD)
 
 static void
@@ -1251,8 +1332,6 @@ test_natsInbox(void)
     natsInbox           *key, *oldInbox;
     natsStrHash         *inboxes = NULL;
     natsStrHashIter     iter;
-
-    printf("\n== Inboxes ==\n");
 
     test("Test inboxes are unique: ");
     for (i=0; i<INBOX_THREADS_COUNT; i++)
@@ -1322,16 +1401,15 @@ test_natsHashing(void)
     uint32_t r, lr;
     natsStatus s = NATS_OK;
     int64_t start, end;
-    int sizeLongKey = strlen(longKey);
+    int sizeLongKey = (int) strlen(longKey);
 
-    if (getenv("VALGRIND") != NULL)
+    if (valgrind)
         HASH_ITER = 10000;
 
-    printf("\n== Hashing ==\n");
     test("Test hashing algo: ");
     for (int i=0; i<(int)(sizeof(keys)/sizeof(char*)); i++)
     {
-        r = natsStrHash_Hash(keys[i], strlen(keys[i]));
+        r = natsStrHash_Hash(keys[i], (int) strlen(keys[i]));
         if (r != results[i])
         {
             printf("Expected: %u got: %u\n", results[i], r);
@@ -1375,7 +1453,6 @@ test_natsHash(void)
     for (int i=0; i<40; i++)
         values[i] = (i+1);
 
-    printf("\n== Hash ==\n");
     test("Create hash with invalid 0 size: ");
     s = natsHash_Create(&hash, 0);
     testCond((s != NATS_OK) && (hash == NULL));
@@ -1606,7 +1683,6 @@ test_natsStrHash(void)
     for (int i=0; i<40; i++)
         values[i] = (i+1);
 
-    printf("\n== StrHash ==\n");
     test("Create hash with invalid 0 size: ");
     s = natsStrHash_Create(&hash, 0);
     testCond((s != NATS_OK) && (hash == NULL));
@@ -1774,7 +1850,7 @@ test_natsStrHash(void)
 
     test("Copy key: ");
     snprintf(k, sizeof(k), "%s", "keycopied");
-    hk = natsStrHash_Hash(k, strlen(k));
+    hk = natsStrHash_Hash(k, (int) strlen(k));
     s = natsStrHash_Set(hash, k, true, (void*) t1, &oldval);
     if (s == NATS_OK)
     {
@@ -1790,7 +1866,7 @@ test_natsStrHash(void)
 
     test("Key referenced: ");
     snprintf(k, sizeof(k), "%s", "keyreferenced");
-    hk = natsStrHash_Hash(k, strlen(k));
+    hk = natsStrHash_Hash(k, (int) strlen(k));
     s = natsStrHash_Set(hash, k, false, (void*) t2, &oldval);
     if (s == NATS_OK)
     {
@@ -1832,7 +1908,6 @@ test_natsOptions(void)
     const char  *servers[] = {"1", "2", "3"};
     const char  *servers2[] = {"1", "2", "3", "4"};
 
-    printf("\n== Options ==\n");
     test("Create options: ");
     s = natsOptions_Create(&opts);
     testCond(s == NATS_OK);
@@ -2077,12 +2152,151 @@ test_natsOptions(void)
 
     test("Destroy original does not affect clone: ");
     natsOptions_Destroy(opts);
-    testCond(strcmp(cloned->url, "url") == 0);
+    testCond((cloned != NULL)
+             && (cloned->url != NULL)
+             && (strcmp(cloned->url, "url") == 0));
 
     natsOptions_Destroy(cloned);
 }
 
-#define NATS_SERVER_EXE "gnatsd"
+natsStatus
+_checkStart(const char *url)
+{
+    natsStatus      s;
+    natsUrl         *nUrl    = NULL;
+    natsSock        sock     = NATS_SOCK_INVALID;
+    int             attempts = 0;
+    natsDeadline    deadline;
+    fd_set          fdSet;
+
+    FD_ZERO(&fdSet);
+    natsDeadline_Init(&deadline, 2000);
+
+    s = natsUrl_Create(&nUrl, url);
+    if (s == NATS_OK)
+    {
+        while (((s = natsSock_ConnectTcp(&sock, &fdSet, &deadline,
+                                         nUrl->host, nUrl->port)) != NATS_OK)
+               && (attempts++ < 10))
+        {
+            nats_Sleep(200);
+        }
+
+        natsUrl_Destroy(nUrl);
+
+        if (s == NATS_OK)
+            natsSock_Close(sock);
+        else
+            return NATS_NO_SERVER;
+    }
+
+    return NATS_OK;
+}
+
+#ifdef _WIN32
+
+typedef PROCESS_INFORMATION *natsPid;
+#define NATS_INVALID_PID    (NULL)
+
+static void
+_stopServer(natsPid pid)
+{
+    if (pid == NATS_INVALID_PID)
+        return;
+
+    TerminateProcess(pid->hProcess, 0);
+    WaitForSingleObject(pid->hProcess, INFINITE);
+
+    CloseHandle(pid->hProcess);
+    CloseHandle(pid->hThread);
+
+    free(pid);
+}
+
+static natsPid
+_startServer(const char *url, const char *cmdLineOpts, bool checkStart)
+{
+    SECURITY_ATTRIBUTES     sa;
+    STARTUPINFO             si;
+    HANDLE                  h;
+    PROCESS_INFORMATION     *pid;
+    DWORD                   flags = 0;
+    BOOL                    createdOk = FALSE;
+    BOOL                    hInheritance = FALSE;
+    char                    *exeAndCmdLine = NULL;
+    int                     ret;
+
+    pid = calloc(1, sizeof(PROCESS_INFORMATION));
+    if (pid == NULL)
+        return NATS_INVALID_PID;
+
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+
+    ret = nats_asprintf(&exeAndCmdLine, "%s%s%s", natsServerExe,
+                        (cmdLineOpts != NULL ? " " : ""),
+                        (cmdLineOpts != NULL ? cmdLineOpts : ""));
+    if (ret < 0)
+    {
+        printf("No memory allocating command line string!\n");
+        return NATS_INVALID_PID;
+    }
+
+    if (!keepServerOutput)
+    {
+        ZeroMemory(&sa, sizeof(sa));
+        sa.nLength = sizeof(sa);
+        sa.lpSecurityDescriptor = NULL;
+        sa.bInheritHandle = TRUE;
+
+        h = CreateFile("server.log",
+                       GENERIC_WRITE,
+                       FILE_SHARE_WRITE | FILE_SHARE_READ,
+                       &sa,
+                       CREATE_ALWAYS,
+                       FILE_ATTRIBUTE_NORMAL,
+                       NULL);
+
+        si.dwFlags   |= STARTF_USESTDHANDLES;
+        si.hStdInput  = NULL;
+        si.hStdError  = h;
+        si.hStdOutput = h;
+
+        hInheritance = TRUE;
+        flags        = CREATE_NO_WINDOW;
+    }
+
+    // Start the child process.
+    if (!CreateProcess(NULL,
+                       (LPSTR) exeAndCmdLine,
+                       NULL,         // Process handle not inheritable
+                       NULL,         // Thread handle not inheritable
+                       hInheritance, // Set handle inheritance
+                       flags,        // Creation flags
+                       NULL,         // Use parent's environment block
+                       NULL,         // Use parent's starting directory
+                       &si,          // Pointer to STARTUPINFO structure
+                       pid))        // Pointer to PROCESS_INFORMATION structure
+    {
+
+        printf("Unable to start '%s': error (%d).\n",
+               exeAndCmdLine, GetLastError());
+        free(exeAndCmdLine);
+        return NATS_INVALID_PID;
+    }
+
+    free(exeAndCmdLine);
+
+    if (checkStart && (_checkStart(url) != NATS_OK))
+    {
+        _stopServer(pid);
+        return NATS_INVALID_PID;
+    }
+
+    return (natsPid) pid;
+}
+
+#else
 
 typedef pid_t               natsPid;
 #define NATS_INVALID_PID    (-1)
@@ -2124,7 +2338,7 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
         char *line = NULL;
         int index = 0;
 
-        snprintf(copyLine, sizeof(copyLine), "%s %s", NATS_SERVER_EXE,
+        snprintf(copyLine, sizeof(copyLine), "%s %s", natsServerExe,
                  (cmdLineOpts == NULL ? "" : cmdLineOpts));
 
         memset(argvPtrs, 0, sizeof(argvPtrs));
@@ -2156,30 +2370,17 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
         perror("Exec failed: ");
         exit(1);
     }
-    else if (checkStart)
+    else if (checkStart
+             && (_checkStart(url) != NATS_OK))
     {
-        natsConnection *test = NULL;
-        int attempts = 0;
-
-        do
-        {
-            if (natsConnection_ConnectTo(&test, url) != NATS_OK)
-                nats_Sleep(200);
-        }
-        while ((test == NULL) && (attempts++ < 10));
-
-        if (test == NULL)
-        {
-            _stopServer(pid);
-            return NATS_INVALID_PID;
-        }
-
-        natsConnection_Destroy(test);
+        _stopServer(pid);
+        return NATS_INVALID_PID;
     }
 
     // parent, return the child's PID back.
     return pid;
 }
+#endif
 
 static natsOptions*
 _createReconnectOptions(void)
@@ -2202,8 +2403,6 @@ _createReconnectOptions(void)
     return opts;
 }
 
-#define PRINT_TEST_NAME()   printf("\033[0;34m%s\033[0;0m\n", __FUNCTION__)
-
 static void
 test_ReconnectServerStats(void)
 {
@@ -2212,8 +2411,6 @@ test_ReconnectServerStats(void)
     natsOptions     *opts     = NULL;
     natsSrv         *srv      = NULL;
     natsPid         serverPid = NATS_INVALID_PID;
-
-    PRINT_TEST_NAME();
 
     test("Reconnect Server Stats: ");
 
@@ -2414,8 +2611,6 @@ test_ParseStateReconnectFunctionality(void)
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
-
     test("Parse State Reconnect Functionality: ");
 
     s = _createDefaultThreadArgsForCbTests(&arg);
@@ -2505,8 +2700,6 @@ test_ServersRandomize(void)
     natsConnection  *nc     = NULL;
     int serversCount;
 
-    PRINT_TEST_NAME();
-
     serversCount = sizeof(testServers) / sizeof(char *);
 
     test("Server Pool with Randomize: ");
@@ -2575,8 +2768,6 @@ test_SelectNextServer(void)
     natsSrv         *srv    = NULL;
     int             serversCount;
 
-    PRINT_TEST_NAME();
-
     serversCount = sizeof(testServers) / sizeof(char *);
 
     test("Test default server pool selection: ");
@@ -2594,35 +2785,68 @@ test_SelectNextServer(void)
     if (s == NATS_OK)
     {
         srv = natsSrvPool_GetNextServer(nc->srvPool, nc->opts, nc->url);
-        nc->url = srv->url;
+        if (srv != NULL)
+            nc->url = srv->url;
     }
-    testCond((s == NATS_OK) && (nc->url != NULL));
+    testCond((s == NATS_OK)
+             && (nc != NULL)
+             && (nc->url != NULL));
 
     test("Check list size: ");
-    testCond((s == NATS_OK) && (nc->srvPool->size == serversCount));
+    testCond((s == NATS_OK)
+             && (nc != NULL)
+             && (nc->srvPool != NULL)
+             && (nc->srvPool->size == serversCount));
 
     test("Check selection: ");
     testCond((s == NATS_OK)
+             && (nc != NULL)
+             && (nc->url != NULL)
+             && (nc->url->fullUrl != NULL)
              && (strcmp(nc->url->fullUrl, testServers[1]) == 0));
 
     test("Check old was pushed to last position: ");
     testCond((s == NATS_OK)
+             && (nc != NULL)
+             && (nc->srvPool != NULL)
+             && (nc->srvPool->srvrs != NULL)
+             && (nc->srvPool->size > 0)
+             && (nc->srvPool->srvrs[nc->srvPool->size - 1] != NULL)
+             && (nc->srvPool->srvrs[nc->srvPool->size - 1]->url != NULL)
+             && (nc->srvPool->srvrs[nc->srvPool->size - 1]->url->fullUrl != NULL)
              && (strcmp(nc->srvPool->srvrs[nc->srvPool->size - 1]->url->fullUrl,
                         testServers[0]) == 0));
 
     test("Got correct server: ");
     testCond((s == NATS_OK)
              && (srv != NULL)
+             && (nc != NULL)
+             && (nc->srvPool != NULL)
+             && (nc->srvPool->srvrs != NULL)
+             && (nc->srvPool->size > 0)
              && (srv == (nc->srvPool->srvrs[0])));
 
     // Test that we do not keep servers where we have tried to reconnect past our limit.
     if (s == NATS_OK)
     {
-        nc->srvPool->srvrs[0]->reconnects = nc->opts->maxReconnect;
-
         test("Get next server: ");
-        srv = natsSrvPool_GetNextServer(nc->srvPool, nc->opts, nc->url);
-        nc->url = srv->url;
+        if ((nc == NULL)
+            || (nc->srvPool == NULL)
+            || (nc->srvPool->srvrs == NULL)
+            || (nc->srvPool->srvrs[0] == NULL))
+        {
+            s = NATS_ERR;
+        }
+        else
+        {
+            nc->srvPool->srvrs[0]->reconnects = nc->opts->maxReconnect;
+        }
+        if (s == NATS_OK)
+        {
+            srv = natsSrvPool_GetNextServer(nc->srvPool, nc->opts, nc->url);
+            if (srv != NULL)
+                nc->url = srv->url;
+        }
         testCond((s == NATS_OK) && (nc->url != NULL));
     }
 
@@ -2633,10 +2857,20 @@ test_SelectNextServer(void)
 
     test("Check selection: ");
     testCond((s == NATS_OK)
+             && (nc != NULL)
+             && (nc->url != NULL)
+             && (nc->url->fullUrl != NULL)
              && (strcmp(nc->url->fullUrl, testServers[2]) == 0));
 
     test("Check last server was discarded: ");
     testCond((s == NATS_OK)
+             && (nc != NULL)
+             && (nc->srvPool != NULL)
+             && (nc->srvPool->srvrs != NULL)
+             && (nc->srvPool->size > 0)
+             && (nc->srvPool->srvrs[nc->srvPool->size - 1] != NULL)
+             && (nc->srvPool->srvrs[nc->srvPool->size - 1]->url != NULL)
+             && (nc->srvPool->srvrs[nc->srvPool->size - 1]->url->fullUrl != NULL)
              && (strcmp(nc->srvPool->srvrs[nc->srvPool->size - 1]->url->fullUrl,
                         testServers[1]) != 0));
 
@@ -2650,8 +2884,6 @@ test_DefaultConnection(void)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
@@ -2673,8 +2905,6 @@ test_UseDefaultURLIfNoServerSpecified(void)
     natsOptions         *opts     = NULL;
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
-
-    PRINT_TEST_NAME();
 
     s = natsOptions_Create(&opts);
     if (s != NATS_OK)
@@ -2700,8 +2930,6 @@ test_ConnectionStatus(void)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
@@ -2743,8 +2971,6 @@ test_ConnClosedCB(void)
     natsOptions         *opts     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s == NATS_OK)
@@ -2792,8 +3018,6 @@ test_CloseDisconnectedCB(void)
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
-
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s == NATS_OK)
         opts = _createReconnectOptions();
@@ -2840,8 +3064,6 @@ test_ServerStopDisconnectedCB(void)
     natsOptions         *opts     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s == NATS_OK)
@@ -2897,8 +3119,6 @@ test_ClosedConnections(void)
     natsSubscription    *sub      = NULL;
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
@@ -2969,8 +3189,6 @@ test_ReconnectTotalTime(void)
     natsStatus  s;
     natsOptions *opts = NULL;
 
-    PRINT_TEST_NAME();
-
     test("Check reconnect time: ");
     s = natsOptions_Create(&opts);
     testCond((s == NATS_OK)
@@ -2987,8 +3205,6 @@ test_ReconnectDisallowedFlags(void)
     natsOptions         *opts     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
     if (serverPid == NATS_INVALID_PID)
@@ -3032,8 +3248,6 @@ test_ReconnectAllowedFlags(void)
     natsOptions         *opts     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
     if (serverPid == NATS_INVALID_PID)
@@ -3091,8 +3305,6 @@ test_BasicReconnectFunctionality(void)
     natsOptions         *opts     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s == NATS_OK)
@@ -3192,8 +3404,6 @@ test_ExtendedReconnectFunctionality(void)
     natsOptions         *opts     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s == NATS_OK)
@@ -3321,8 +3531,6 @@ test_QueueSubsOnReconnect(void)
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
-
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s == NATS_OK)
     {
@@ -3440,8 +3648,6 @@ test_IsClosed(void)
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
 
-    PRINT_TEST_NAME();
-
     serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
@@ -3480,8 +3686,6 @@ test_IsReconnectingAndStatus(void)
     natsOptions         *opts     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
     if (serverPid == NATS_INVALID_PID)
@@ -3566,22 +3770,45 @@ test_IsReconnectingAndStatus(void)
 }
 
 static void
+_closeConnWithDelay(void *arg)
+{
+    natsConnection *nc = (natsConnection*) arg;
+
+    nats_Sleep(200);
+    natsConnection_Close(nc);
+}
+
+static void
 _connectToMockupServer(void *closure)
 {
     struct threadArg    *arg = (struct threadArg *) closure;
     natsConnection      *nc = NULL;
+    natsOptions         *opts = NULL;
     natsStatus          s;
 
     // Make sure that the server is ready to accept our connection.
     nats_Sleep(100);
 
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-
     natsMutex_Lock(arg->m);
+
+    if (arg->control == 3)
+    {
+        s = natsOptions_Create(&opts);
+        if (s == NATS_OK)
+            s = natsOptions_SetAllowReconnect(opts, false);
+        if (s == NATS_OK)
+            s = natsConnection_Connect(&nc, opts);
+
+        natsOptions_Destroy(opts);
+    }
+    else
+    {
+        s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    }
 
     if (arg->control == 2)
     {
-        int payload = 0;
+        int64_t payload = 0;
 
         if (s == NATS_OK)
         {
@@ -3607,6 +3834,23 @@ _connectToMockupServer(void *closure)
             testCond(s == NATS_OK);
         }
     }
+    else if (arg->control == 3)
+    {
+        natsThread *t = NULL;
+
+        s = natsThread_Create(&t, _closeConnWithDelay, (void*) nc);
+        if (s == NATS_OK)
+        {
+            s = natsConnection_Flush(nc);
+
+            natsThread_Join(t);
+            natsThread_Destroy(t);
+        }
+    }
+    else if (arg->control == 4)
+    {
+        s = natsConnection_Flush(nc);
+    }
 
     natsConnection_Destroy(nc);
 
@@ -3626,8 +3870,6 @@ test_ErrOnConnectAndDeadlock(void)
     natsSock            clientSock = NATS_SOCK_INVALID;
     natsThread          *t = NULL;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -3660,20 +3902,18 @@ test_ErrOnConnectAndDeadlock(void)
                       servinfo->ai_protocol);
         if (sock == NATS_SOCK_INVALID)
             s = NATS_SYS_ERROR;
-        else
-        {
-            int yes = 1;
-            if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
-                s = NATS_SYS_ERROR;
-        }
+
+        if (s == NATS_OK)
+            s = natsSock_SetCommonTcpOptions(sock);
         if (s == NATS_OK)
             s = natsSock_SetBlocking(sock, true);
     }
     if ((s == NATS_OK)
-        && (bind(sock, servinfo->ai_addr, servinfo->ai_addrlen) == NATS_SOCK_ERROR))
+        && (bind(sock, servinfo->ai_addr, (natsSockLen) servinfo->ai_addrlen) == NATS_SOCK_ERROR))
     {
         s = NATS_SYS_ERROR;
     }
+
     if ((s == NATS_OK) && (listen(sock, 100) == NATS_SOCK_ERROR))
         s = NATS_SYS_ERROR;
 
@@ -3682,7 +3922,8 @@ test_ErrOnConnectAndDeadlock(void)
         s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
 
     if ((s == NATS_OK)
-        && ((clientSock = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID))
+        && (((clientSock = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+            || (natsSock_SetCommonTcpOptions(clientSock) != NATS_OK)))
     {
         s = NATS_SYS_ERROR;
     }
@@ -3692,7 +3933,7 @@ test_ErrOnConnectAndDeadlock(void)
         const char* badInfo = "INFOZ \r\n";
 
         // Send back a mal-formed INFO.
-        s = natsSock_WriteFully(NULL, clientSock, NULL, badInfo, strlen(badInfo));
+        s = natsSock_WriteFully(NULL, clientSock, NULL, badInfo, (int) strlen(badInfo));
     }
 
     if (s == NATS_OK)
@@ -3734,16 +3975,11 @@ test_ErrOnMaxPayloadLimit(void)
     int                 expectedMaxPayLoad = 10;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
-
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
         FAIL("@@ Unable to setup test!");
 
     arg.control = 2;
-
-    // We will hand run a fake server that will timeout and not return a proper
-    // INFO proto. This is to test that we do not deadlock.
 
     memset(&hints,0,sizeof(hints));
 
@@ -3766,18 +4002,15 @@ test_ErrOnMaxPayloadLimit(void)
                       servinfo->ai_protocol);
         if (sock == NATS_SOCK_INVALID)
             s = NATS_SYS_ERROR;
-        else
-        {
-            int yes = 1;
-            if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
-                s = NATS_SYS_ERROR;
-        }
+
+        if (s == NATS_OK)
+            s = natsSock_SetCommonTcpOptions(sock);
         if (s == NATS_OK)
             s = natsSock_SetBlocking(sock, true);
     }
 
     if ((s == NATS_OK)
-        && (bind(sock, servinfo->ai_addr, servinfo->ai_addrlen) == NATS_SOCK_ERROR))
+        && (bind(sock, servinfo->ai_addr, (natsSockLen) servinfo->ai_addrlen) == NATS_SOCK_ERROR))
     {
         s = NATS_SYS_ERROR;
     }
@@ -3790,20 +4023,21 @@ test_ErrOnMaxPayloadLimit(void)
         s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
 
     if ((s == NATS_OK)
-        && ((clientSock = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID))
+        && (((clientSock = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+            || (natsSock_SetCommonTcpOptions(clientSock) != NATS_OK)))
     {
         s = NATS_SYS_ERROR;
     }
     if (s == NATS_OK)
     {
-        char info[256];
+        char info[1024];
 
         snprintf(info, sizeof(info),
                  "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":%d}\r\n",
                  expectedMaxPayLoad);
 
         // Send INFO.
-        s = natsSock_WriteFully(NULL, clientSock, NULL, info, strlen(info));
+        s = natsSock_WriteFully(NULL, clientSock, NULL, info, (int) strlen(info));
         if (s == NATS_OK)
         {
             char buffer[1024];
@@ -3857,8 +4091,6 @@ test_Auth(void)
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
 
-    PRINT_TEST_NAME();
-
     test("Server with auth on, client without should fail: ");
 
     serverPid = _startServer("nats://localhost:8232", "--user ivan --pass foo -p 8232", false);
@@ -3888,8 +4120,6 @@ test_AuthFailNoDisconnectCB(void)
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -3934,8 +4164,6 @@ test_ConnectedServer(void)
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     char                buffer[128];
-
-    PRINT_TEST_NAME();
 
     buffer[0] = '\0';
 
@@ -3996,8 +4224,6 @@ test_MultipleClose(void)
     natsThread          *threads[10];
     natsPid             serverPid = NATS_INVALID_PID;
 
-    PRINT_TEST_NAME();
-
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
@@ -4028,8 +4254,6 @@ test_SimplePublish(void)
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
 
-    PRINT_TEST_NAME();
-
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
@@ -4040,7 +4264,7 @@ test_SimplePublish(void)
         s = natsConnection_PublishString(nc, "foo", "Hello world!");
     if (s == NATS_OK)
         s = natsConnection_Publish(nc, "foo", (const void*) "Hello world!",
-                                   strlen("Hello world!"));
+                                   (int) strlen("Hello world!"));
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
@@ -4054,8 +4278,6 @@ test_SimplePublishNoData(void)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
@@ -4084,8 +4306,6 @@ test_AsyncSubscribe(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
@@ -4135,8 +4355,6 @@ test_SyncSubscribe(void)
     natsPid             serverPid = NATS_INVALID_PID;
     const char          *string   = "Hello World";
 
-    PRINT_TEST_NAME();
-
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
@@ -4169,8 +4387,6 @@ test_PubSubWithReply(void)
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     const char          *string   = "Hello World";
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
@@ -4233,9 +4449,6 @@ test_Flush(void)
     struct flushArg     args[3];
     int64_t             start = 0;
     int64_t             elapsed = 0;
-    int                 i;
-
-    PRINT_TEST_NAME();
 
     s = natsOptions_Create(&opts);
     if (s == NATS_OK)
@@ -4286,38 +4499,6 @@ test_Flush(void)
             s = args[i].s;
     }
     testCond(s == NATS_OK);
-
-    test("Check Flush while disconnect occurs: ");
-    for (int i=0; (s == NATS_OK) && (i < 3); i++)
-    {
-        args[i].nc = nc;
-        args[i].s  = NATS_OK;
-        s = natsThread_Create(&(threads[i]), _doFlush, (void*) &(args[i]));
-    }
-
-    nats_Sleep(600);
-
-    _stopServer(serverPid);
-    serverPid = NATS_INVALID_PID;
-
-    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
-    if (serverPid == NATS_INVALID_PID)
-        FAIL("Unable to start or verify that the server was started!");
-
-    for (int i=0; (i < 3); i++)
-    {
-        if (threads[i] == NULL)
-            continue;
-
-        natsThread_Join(threads[i]);
-        natsThread_Destroy(threads[i]);
-
-        if (args[i].s != NATS_OK)
-            s = args[i].s;
-    }
-    // We expect flush calls to actually fail (reporting that the connection
-    // is closed)
-    testCond(s != NATS_OK);
 
     natsConnection_Destroy(nc);
     nc = NULL;
@@ -4387,12 +4568,10 @@ test_QueueSubscriber(void)
     uint64_t            r1        = 0;
     uint64_t            r2        = 0;
     float               v         = 1000.0 * 0.15;
-    int                 d1;
-    int                 d2;
+    int64_t             d1;
+    int64_t             d2;
     natsPid             serverPid = NATS_INVALID_PID;
     const char          *string   = "Hello World";
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
@@ -4469,8 +4648,6 @@ test_ReplyArg(void)
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
-
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
         FAIL("Unable to setup test!");
@@ -4518,8 +4695,6 @@ test_SyncReplyArg(void)
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
 
-    PRINT_TEST_NAME();
-
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
@@ -4553,8 +4728,6 @@ test_Unsubscribe(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
@@ -4612,8 +4785,6 @@ test_DoubleUnsubscribe(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
 
-    PRINT_TEST_NAME();
-
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
@@ -4645,8 +4816,6 @@ test_RequestTimeout(void)
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
 
-    PRINT_TEST_NAME();
-
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
@@ -4671,8 +4840,6 @@ test_Request(void)
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
@@ -4730,8 +4897,6 @@ test_RequestNoBody(void)
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
-
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
         FAIL("Unable to setup test!");
@@ -4787,8 +4952,6 @@ test_FlushInCb(void)
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
-
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
         FAIL("Unable to setup test!");
@@ -4832,34 +4995,267 @@ test_FlushInCb(void)
 static void
 test_ReleaseFlush(void)
 {
-    natsStatus          s;
-    natsConnection      *nc       = NULL;
-    natsThread          *t        = NULL;
-    natsPid             serverPid = NATS_INVALID_PID;
+    struct addrinfo     hints;
+    struct addrinfo     *servinfo = NULL;
+    int                 res;
+    natsStatus          s = NATS_OK;
+    natsSock            sock       = NATS_SOCK_INVALID;
+    natsSock            clientSock = NATS_SOCK_INVALID;
+    natsThread          *t = NULL;
+    struct threadArg    arg;
 
-    PRINT_TEST_NAME();
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("@@ Unable to setup test!");
 
-    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
-    if (serverPid == NATS_INVALID_PID)
-        FAIL("Unable to start or verify that the server was started!");
+    test("Check that Flush() release on connection close: ")
 
-    test("Test Flush breaks out when a close happens: ")
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    for (int i=0; (s == NATS_OK) && (i<1000); i++)
-        s = natsConnection_PublishString(nc, "foo", "hello");
+    arg.control = 3;
+
+    // We will hand run a fake server that will to reply to the second PING
+
+    memset(&hints,0,sizeof(hints));
+
+    hints.ai_family   = AF_INET6;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags    = AI_PASSIVE;
+
+    if ((res = getaddrinfo("localhost", "4222", &hints, &servinfo)) != 0)
+    {
+         hints.ai_family = AF_INET;
+
+         if ((res = getaddrinfo("localhost", "4222", &hints, &servinfo)) != 0)
+             s = NATS_SYS_ERROR;
+    }
+
     if (s == NATS_OK)
-        s = natsThread_Create(&t, _closeConn, (void*) nc);
+    {
+        sock = socket(servinfo->ai_family, servinfo->ai_socktype,
+                      servinfo->ai_protocol);
+        if (sock == NATS_SOCK_INVALID)
+            s = NATS_SYS_ERROR;
+
+        if (s == NATS_OK)
+            s = natsSock_SetCommonTcpOptions(sock);
+        if (s == NATS_OK)
+            s = natsSock_SetBlocking(sock, true);
+    }
+
+    if ((s == NATS_OK)
+        && (bind(sock, servinfo->ai_addr, (natsSockLen) servinfo->ai_addrlen) == NATS_SOCK_ERROR))
+    {
+        s = NATS_SYS_ERROR;
+    }
+
+    if ((s == NATS_OK) && (listen(sock, 100) == NATS_SOCK_ERROR))
+        s = NATS_SYS_ERROR;
+
+    // Start the thread that will try to connect to our server...
     if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
 
-    natsThread_Join(t);
+    if ((s == NATS_OK)
+        && (((clientSock = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+            || natsSock_SetCommonTcpOptions(clientSock) != NATS_OK))
+    {
+        s = NATS_SYS_ERROR;
+    }
 
-    testCond(s == NATS_CONNECTION_CLOSED);
+    if (s == NATS_OK)
+    {
+        char buffer[1024];
+        char info[1024];
+        int  n = 0;
 
-    natsThread_Destroy(t);
-    natsConnection_Destroy(nc);
+        strncpy(info,
+                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":1048576}\r\n",
+                sizeof(info));
 
-    _stopServer(serverPid);
+        // Send INFO.
+        s = natsSock_WriteFully(NULL, clientSock, NULL, info, (int) strlen(info));
+        if (s == NATS_OK)
+        {
+            memset(buffer, 0, sizeof(buffer));
+
+            // Read connect and ping commands sent from the client
+            s = natsSock_ReadLine(NULL, clientSock, NULL,
+                                  buffer, sizeof(buffer), &n);
+            if (s == NATS_OK)
+            {
+                char *next = NULL;
+
+                // The above call may have been put the PING, or not.
+                next = (char*) &buffer[strlen(buffer) + 2];
+                if (strstr(next, _CRLF_) == NULL)
+                {
+                    // Read the rest.
+                    s = natsSock_ReadLine(NULL, clientSock, NULL,
+                                          buffer, sizeof(buffer),
+                                          NULL);
+                }
+            }
+        }
+        // Send PONG
+        if (s == NATS_OK)
+            s = natsSock_WriteFully(NULL, clientSock, NULL,
+                                    _PONG_PROTO_, _PONG_PROTO_LEN_);
+
+        // Get the PING
+        if (s == NATS_OK)
+            s = natsSock_ReadLine(NULL, clientSock, NULL,
+                                  buffer, sizeof(buffer), &n);
+    }
+
+    // Now wait for the client to close the connection...
+    nats_Sleep(500);
+
+    // Need to close those for the client side to unblock.
+    natsSock_Close(clientSock);
+    natsSock_Close(sock);
+
+    // Wait for the client to finish.
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    testCond((s == NATS_OK) && (arg.status != NATS_OK));
+
+    _destroyDefaultThreadArgs(&arg);
+
+    freeaddrinfo(servinfo);
+}
+
+
+static void
+test_FlushErrOnDisconnect(void)
+{
+    struct addrinfo     hints;
+    struct addrinfo     *servinfo = NULL;
+    int                 res;
+    natsStatus          s = NATS_OK;
+    natsSock            sock       = NATS_SOCK_INVALID;
+    natsSock            clientSock = NATS_SOCK_INVALID;
+    natsThread          *t = NULL;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("@@ Unable to setup test!");
+
+    test("Check that Flush() returns an error during a disconnect: ");
+
+    arg.control = 4;
+
+    // We will hand run a fake server that will to reply to the second PING
+
+    memset(&hints,0,sizeof(hints));
+
+    hints.ai_family   = AF_INET6;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags    = AI_PASSIVE;
+
+    if ((res = getaddrinfo("localhost", "4222", &hints, &servinfo)) != 0)
+    {
+         hints.ai_family = AF_INET;
+
+         if ((res = getaddrinfo("localhost", "4222", &hints, &servinfo)) != 0)
+             s = NATS_SYS_ERROR;
+    }
+
+    if (s == NATS_OK)
+    {
+        sock = socket(servinfo->ai_family, servinfo->ai_socktype,
+                      servinfo->ai_protocol);
+        if (sock == NATS_SOCK_INVALID)
+            s = NATS_SYS_ERROR;
+
+        if (s == NATS_OK)
+            s = natsSock_SetCommonTcpOptions(sock);
+        if (s == NATS_OK)
+            s = natsSock_SetBlocking(sock, true);
+    }
+
+    if ((s == NATS_OK)
+        && (bind(sock, servinfo->ai_addr, (natsSockLen) servinfo->ai_addrlen) == NATS_SOCK_ERROR))
+    {
+        s = NATS_SYS_ERROR;
+    }
+
+    if ((s == NATS_OK) && (listen(sock, 100) == NATS_SOCK_ERROR))
+        s = NATS_SYS_ERROR;
+
+    // Start the thread that will try to connect to our server...
+    if (s == NATS_OK)
+        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
+
+    if ((s == NATS_OK)
+        && (((clientSock = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+            || (natsSock_SetCommonTcpOptions(clientSock) != NATS_OK)))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    if (s == NATS_OK)
+    {
+        char info[1024];
+
+        strncpy(info,
+                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":1048576}\r\n",
+                sizeof(info));
+
+        // Send INFO.
+        s = natsSock_WriteFully(NULL, clientSock, NULL, info, (int) strlen(info));
+        if (s == NATS_OK)
+        {
+            char buffer[1024];
+            int  n = 0;
+
+            memset(buffer, 0, sizeof(buffer));
+
+            // Read connect and ping commands sent from the client
+            s = natsSock_ReadLine(NULL, clientSock, NULL,
+                                  buffer, sizeof(buffer), &n);
+            if (s == NATS_OK)
+            {
+                char *next = NULL;
+
+                // The above call may have been put the PING, or not.
+                next = (char*) &buffer[strlen(buffer) + 2];
+                if (strstr(next, _CRLF_) == NULL)
+                {
+                    // Read the rest.
+                    s = natsSock_ReadLine(NULL, clientSock, NULL,
+                                          buffer, sizeof(buffer),
+                                          NULL);
+                }
+            }
+        }
+        // Send PONG
+        if (s == NATS_OK)
+            s = natsSock_WriteFully(NULL, clientSock, NULL,
+                                    _PONG_PROTO_, _PONG_PROTO_LEN_);
+    }
+
+    // Wait a bit and kill the server.
+    nats_Sleep(500);
+    natsSock_Close(clientSock);
+    natsSock_Close(sock);
+
+    // Wait for the client to finish.
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    testCond(arg.status != NATS_OK);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    freeaddrinfo(servinfo);
 }
 
 static void
@@ -4867,8 +5263,6 @@ test_Inbox(void)
 {
     natsStatus  s;
     natsInbox   *inbox = NULL;
-
-    PRINT_TEST_NAME();
 
     test("Inbox starts with correct prefix: ");
     s = natsInbox_Create(&inbox);
@@ -4894,8 +5288,6 @@ test_Stats(void)
     uint64_t            outBytes = 0;
     uint64_t            inMsgs = 0;
     uint64_t            inBytes = 0;
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
@@ -4957,8 +5349,6 @@ test_BadSubject(void)
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
 
-    PRINT_TEST_NAME();
-
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
@@ -4986,8 +5376,6 @@ test_ClientAsyncAutoUnsub(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
@@ -5038,8 +5426,6 @@ test_ClientSyncAutoUnsub(void)
     natsPid             serverPid = NATS_INVALID_PID;
     int                 received  = 0;
 
-    PRINT_TEST_NAME();
-
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
@@ -5079,15 +5465,6 @@ test_ClientSyncAutoUnsub(void)
 }
 
 static void
-_closeConnWithDelay(void *arg)
-{
-    natsConnection *nc = (natsConnection*) arg;
-
-    nats_Sleep(200);
-    natsConnection_Close(nc);
-}
-
-static void
 test_CloseSubRelease(void)
 {
     natsStatus          s;
@@ -5097,8 +5474,6 @@ test_CloseSubRelease(void)
     natsThread          *t        = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int64_t             start, end;
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
@@ -5138,8 +5513,6 @@ test_IsValidSubscriber(void)
     natsSubscription    *sub      = NULL;
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
-
-    PRINT_TEST_NAME();
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
@@ -5190,8 +5563,6 @@ test_SlowSubscriber(void)
     natsPid             serverPid = NATS_INVALID_PID;
     int64_t             start, end;
 
-    PRINT_TEST_NAME();
-
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
@@ -5238,8 +5609,6 @@ test_SlowAsyncSubscriber(void)
     natsPid             serverPid = NATS_INVALID_PID;
     int64_t             start, end;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
@@ -5289,6 +5658,9 @@ test_SlowAsyncSubscriber(void)
 
     natsConnection_Destroy(nc);
 
+    if (valgrind)
+        nats_Sleep(1000);
+
     _destroyDefaultThreadArgs(&arg);
 
     _stopServer(serverPid);
@@ -5331,8 +5703,6 @@ test_AsyncErrHandler(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -5446,8 +5816,6 @@ test_AsyncSubscriberStarvation(void)
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
-
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
@@ -5503,8 +5871,6 @@ test_AsyncSubscriberOnClose(void)
     natsPid             serverPid = NATS_INVALID_PID;
     int                 seen      = 0;
     struct threadArg    arg;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -5567,8 +5933,6 @@ test_NextMsgCallOnAsyncSub(void)
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
 
-    PRINT_TEST_NAME();
-
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
@@ -5604,10 +5968,12 @@ test_NoDelay(void)
     int64_t             withNoDelay;
     int                 count = 3000;
 
-    if (getenv("VALGRIND") != NULL)
-        count = 1000;
-
-    PRINT_TEST_NAME();
+    if (valgrind)
+    {
+        test("Skipped when running with valgrind: ");
+        testCond(true);
+        return;
+    }
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -5673,8 +6039,6 @@ test_ServersOption(void)
     natsPid             serverPid = NATS_INVALID_PID;
     char                buffer[128];
     int                 serversCount;
-
-    PRINT_TEST_NAME();
 
     serversCount = sizeof(testServers) / sizeof(char *);
 
@@ -5749,8 +6113,6 @@ test_AuthServers(void)
                                           "nats://ivan:foo@localhost:1224"};
     int serversCount = 2;
 
-    PRINT_TEST_NAME();
-
     s = natsOptions_Create(&opts);
     if (s == NATS_OK)
         s = natsOptions_SetNoRandomize(opts, true);
@@ -5810,8 +6172,6 @@ test_AuthFailToReconnect(void)
     struct threadArg    args;
 
     int serversCount = 3;
-
-    PRINT_TEST_NAME();
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s == NATS_OK)
@@ -5906,8 +6266,6 @@ test_BasicClusterReconnect(void)
     int64_t             reconnectTimeStart, reconnectTime;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
-
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
@@ -5927,11 +6285,11 @@ test_BasicClusterReconnect(void)
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
 
-    serverPid1 = _startServer("nats://localhost:1222", "-p 1222", true);
+    serverPid1 = _startServer("nats://localhost:1222", "-p 1222 -DV", true);
     if (serverPid1 == NATS_INVALID_PID)
         FAIL("Unable to start or verify that the server was started!");
 
-    serverPid2 = _startServer("nats://localhost:1224", "-p 1224", true);
+    serverPid2 = _startServer("nats://localhost:1224", "-p 1224 -DV", true);
     if (serverPid2 == NATS_INVALID_PID)
     {
         _stopServer(serverPid1);
@@ -5953,7 +6311,7 @@ test_BasicClusterReconnect(void)
     // wait for reconnect
     natsMutex_Lock(arg.m);
     while ((s == NATS_OK) && !arg.reconnected)
-        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        s = natsCondition_TimedWait(arg.c, arg.m, 3000);
     natsMutex_Unlock(arg.m);
 
     test("Check connected to the right server: ");
@@ -5967,7 +6325,11 @@ test_BasicClusterReconnect(void)
     reconnectTime = nats_Now() - reconnectTimeStart;
 
     test("Check reconnect time did not take too long: ");
+#if _WIN32
+    testCond(reconnectTime <= 2100);
+#else
     testCond(reconnectTime <= 100);
+#endif
 
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
@@ -6000,7 +6362,11 @@ test_HotSpotReconnect(void)
     struct threadArg    arg;
     struct hashCount    *count = NULL;
 
-    PRINT_TEST_NAME();
+#if _WIN32
+    test("Skip when running on Windows: ");
+    testCond(true);
+    return;
+#endif
 
     memset(nc, 0, sizeof(nc));
 
@@ -6148,7 +6514,11 @@ test_ProperReconnectDelay(void)
     int                 serversCount;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
+#if _WIN32
+    test("Skip when running on Windows: ");
+    testCond(true);
+    return;
+#endif
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -6221,7 +6591,11 @@ test_ProperFalloutAfterMaxAttempts(void)
     int                 serversCount;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
+#if _WIN32
+    test("Skip when running on Windows: ");
+    testCond(true);
+    return;
+#endif
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -6291,7 +6665,11 @@ test_TimeoutOnNoServer(void)
     int64_t             startWait, timedWait;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
+#if _WIN32
+    test("Skip when running on Windows: ");
+    testCond(true);
+    return;
+#endif
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -6366,7 +6744,11 @@ test_PingReconnect(void)
     int64_t             disconnectedAt, reconnectedAt, pingCycle;
     struct threadArg    arg;
 
-    PRINT_TEST_NAME();
+#if _WIN32
+    test("Skip when running on Windows: ");
+    testCond(true);
+    return;
+#endif
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -6434,120 +6816,215 @@ test_PingReconnect(void)
 
 }
 
+typedef void (*testFunc)(void);
+
+typedef struct __testInfo
+{
+    const char  *name;
+    testFunc    func;
+
+} testInfo;
+
+static testInfo allTests[] =
+{
+    // Building blocks
+    {"natsNowAndSleep",                 test_natsNowAndSleep},
+    {"natsAllocSprintf",                test_natsAllocSprintf},
+    {"natsStrCaseStr",                  test_natsStrCaseStr},
+    {"natsBuffer",                      test_natsBuffer},
+    {"natsParseInt64",                  test_natsParseInt64},
+    {"natsParseControl",                test_natsParseControl},
+    {"natsMutex",                       test_natsMutex},
+    {"natsThread",                      test_natsThread},
+    {"natsCondition",                   test_natsCondition},
+    {"natsTimer",                       test_natsTimer},
+    {"natsRandomize",                   test_natsRandomize},
+    {"natsUrl",                         test_natsUrl},
+    {"natsCreateStringFromBuffer",      test_natsCreateStringFromBuffer},
+    {"natsHash",                        test_natsHash},
+    {"natsHashing",                     test_natsHashing},
+    {"natsStrHash",                     test_natsStrHash},
+    {"natsInbox",                       test_natsInbox},
+    {"natsOptions",                     test_natsOptions},
+
+    // Package Level Tests
+
+    {"ReconnectServerStats",            test_ReconnectServerStats},
+    {"ParseStateReconnectFunctionality",test_ParseStateReconnectFunctionality},
+    {"ServersRandomize",                test_ServersRandomize},
+    {"SelectNextServer",                test_SelectNextServer},
+
+    // Public API Tests
+
+    {"DefaultConnection",               test_DefaultConnection},
+    {"UseDefaultURLIfNoServerSpecified",test_UseDefaultURLIfNoServerSpecified},
+    {"ConnectionStatus",                test_ConnectionStatus},
+    {"ConnClosedCB",                    test_ConnClosedCB},
+    {"CloseDisconnectedCB",             test_CloseDisconnectedCB},
+    {"ServerStopDisconnectedCB",        test_ServerStopDisconnectedCB},
+    {"ClosedConnections",               test_ClosedConnections},
+    {"ReconnectTotalTime",              test_ReconnectTotalTime},
+    {"ReconnectDisallowedFlags",        test_ReconnectDisallowedFlags},
+    {"ReconnectAllowedFlags",           test_ReconnectAllowedFlags},
+    {"BasicReconnectFunctionality",     test_BasicReconnectFunctionality},
+    {"ExtendedReconnectFunctionality",  test_ExtendedReconnectFunctionality},
+    {"QueueSubsOnReconnect",            test_QueueSubsOnReconnect},
+    {"IsClosed",                        test_IsClosed},
+    {"IsReconnectingAndStatus",         test_IsReconnectingAndStatus},
+
+    {"ErrOnConnectAndDeadlock",         test_ErrOnConnectAndDeadlock},
+    {"ErrOnMaxPayloadLimit",            test_ErrOnMaxPayloadLimit},
+
+    {"Auth",                            test_Auth},
+    {"AuthFailNoDisconnectCB",          test_AuthFailNoDisconnectCB},
+    {"ConnectedServer",                 test_ConnectedServer},
+    {"MultipleClose",                   test_MultipleClose},
+    {"SimplePublish",                   test_SimplePublish},
+    {"SimplePublishNoData",             test_SimplePublishNoData},
+    {"AsyncSubscribe",                  test_AsyncSubscribe},
+    {"SyncSubscribe",                   test_SyncSubscribe},
+    {"PubSubWithReply",                 test_PubSubWithReply},
+    {"Flush",                           test_Flush},
+    {"QueueSubscriber",                 test_QueueSubscriber},
+    {"ReplyArg",                        test_ReplyArg},
+    {"SyncReplyArg",                    test_SyncReplyArg},
+    {"Unsubscribe",                     test_Unsubscribe},
+    {"DoubleUnsubscribe",               test_DoubleUnsubscribe},
+    {"RequestTimeout",                  test_RequestTimeout},
+    {"Request",                         test_Request},
+    {"RequestNoBody",                   test_RequestNoBody},
+    {"FlushInCb",                       test_FlushInCb},
+    {"ReleaseFlush",                    test_ReleaseFlush},
+    {"FlushErrOnDisconnect",            test_FlushErrOnDisconnect},
+    {"Inbox",                           test_Inbox},
+    {"Stats",                           test_Stats},
+    {"BadSubject",                      test_BadSubject},
+    {"ClientAsyncAutoUnsub",            test_ClientAsyncAutoUnsub},
+    {"ClientSyncAutoUnsub",             test_ClientSyncAutoUnsub},
+    {"CloseSubRelease",                 test_CloseSubRelease},
+    {"IsValidSubscriber",               test_IsValidSubscriber},
+    {"SlowSubscriber",                  test_SlowSubscriber},
+    {"SlowAsyncSubscriber",             test_SlowAsyncSubscriber},
+    {"AsyncErrHandler",                 test_AsyncErrHandler},
+    {"AsyncSubscriberStarvation",       test_AsyncSubscriberStarvation},
+    {"AsyncSubscriberOnClose",          test_AsyncSubscriberOnClose},
+    {"NextMsgCallOnAsyncSub",           test_NextMsgCallOnAsyncSub},
+    {"NoDelay",                         test_NoDelay},
+
+    // Clusters Tests
+
+    {"ServersOption",                   test_ServersOption},
+    {"AuthServers",                     test_AuthServers},
+    {"AuthFailToReconnect",             test_AuthFailToReconnect},
+    {"BasicClusterReconnect",           test_BasicClusterReconnect},
+    {"HotSpotReconnect",                test_HotSpotReconnect},
+    {"ProperReconnectDelay",            test_ProperReconnectDelay},
+    {"ProperFalloutAfterMaxAttempts",   test_ProperFalloutAfterMaxAttempts},
+    {"TimeoutOnNoServer",               test_TimeoutOnNoServer},
+    {"PingReconnect",                   test_PingReconnect}
+};
+
+static int  maxTests = (int) (sizeof(allTests)/sizeof(testInfo));
+
+static void
+generateList(void)
+{
+    FILE    *list = fopen("list.txt", "w");
+    int     i;
+
+    if (list == NULL)
+    {
+        printf("@@ Unable to create file 'list.txt': %d\n", errno);
+        return;
+    }
+
+    printf("Number of tests: %d\n", maxTests);
+
+    for (i=0; i<maxTests; i++)
+        fprintf(list, "%s\n", allTests[i].name);
+
+    fflush(list);
+    fclose(list);
+}
+
 int main(int argc, char **argv)
 {
+    const char *envStr;
+    int testStart   = 0;
+    int testEnd     = 0;
+    int i;
+
+    if (argc == 1)
+    {
+        generateList();
+        return 0;
+    }
+
+    if (argc == 3)
+    {
+        testStart = atoi(argv[1]);
+        testEnd   = atoi(argv[2]);
+    }
+
+    if ((argc != 3)
+        || (testStart < 0) || (testStart >= maxTests)
+        || (testEnd < 0) || (testEnd >= maxTests)
+        || (testStart > testEnd))
+    {
+        printf("@@ Usage: %s [start] [end] (0 .. %d)\n", argv[0], (maxTests - 1));
+        return 1;
+    }
+
+    envStr = getenv("NATS_TEST_VALGRIND");
+    if ((envStr != NULL) && (envStr[0] != '\0'))
+    {
+        valgrind = true;
+        printf("Test running in VALGRIND mode.\n");
+    }
+
+    envStr = getenv("NATS_TEST_KEEP_SERVER_OUTPUT");
+    if ((envStr != NULL) && (envStr[0] != '\0'))
+    {
+        keepServerOutput = true;
+        printf("Test prints server's output.\n");
+    }
+
+    envStr = getenv("NATS_TEST_SERVER_EXE");
+    if ((envStr != NULL) && (envStr[0] != '\0'))
+    {
+        natsServerExe = envStr;
+        printf("Test using server executable: %s\n", natsServerExe);
+    }
+
     if (nats_Open(-1) != NATS_OK)
     {
         printf("@@ Unable to run tests: unable to initialize the library!\n");
         return 1;
     }
 
-    if (skipBuidlingBlocks)
-        goto nats_tests;
-
-    printf("\n== Building Blocks Tests ==\n");
-
-    test_natsBuffer();
-    test_natsParseInt64();
-    test_natsParseControl();
-    test_natsMutex();
-    test_natsThread();
-    test_natsCondition();
-    test_natsTimer();
-    test_natsRandomize();
-    test_natsUrl();
-    test_natsCreateStringFromBuffer();
-    test_natsHash();
-    test_natsHashing();
-    test_natsStrHash();
-    test_natsInbox();
-    test_natsOptions();
-
-nats_tests:
-    printf("\n== Package Level Tests ==\n");
-
-    test_ReconnectServerStats();
-    test_ParseStateReconnectFunctionality();
-    test_ServersRandomize();
-    test_SelectNextServer();
-
-    printf("\n== Public API Tests ==\n");
-
-    test_DefaultConnection();
-    test_UseDefaultURLIfNoServerSpecified();
-    test_ConnectionStatus();
-    test_ConnClosedCB();
-    test_CloseDisconnectedCB();
-    test_ServerStopDisconnectedCB();
-    test_ClosedConnections();
-
-    test_ReconnectTotalTime();
-    test_ReconnectDisallowedFlags();
-    test_ReconnectAllowedFlags();
-    test_BasicReconnectFunctionality();
-    test_ExtendedReconnectFunctionality();
-    test_QueueSubsOnReconnect();
-    test_IsClosed();
-    test_IsReconnectingAndStatus();
-
-    test_ErrOnConnectAndDeadlock();
-    test_ErrOnMaxPayloadLimit();
-
-    test_Auth();
-    test_AuthFailNoDisconnectCB();
-    test_ConnectedServer();
-    test_MultipleClose();
-    test_SimplePublish();
-    test_SimplePublishNoData();
-    test_AsyncSubscribe();
-    test_SyncSubscribe();
-    test_PubSubWithReply();
-    test_Flush();
-    test_QueueSubscriber();
-    test_ReplyArg();
-    test_SyncReplyArg();
-    test_Unsubscribe();
-    test_DoubleUnsubscribe();
-    test_RequestTimeout();
-    test_Request();
-    test_RequestNoBody();
-    test_FlushInCb();
-    test_ReleaseFlush();
-    test_Inbox();
-    test_Stats();
-    test_BadSubject();
-    test_ClientAsyncAutoUnsub();
-    test_ClientSyncAutoUnsub();
-    test_CloseSubRelease();
-    test_IsValidSubscriber();
-    test_SlowSubscriber();
-    test_SlowAsyncSubscriber();
-    test_AsyncErrHandler();
-    test_AsyncSubscriberStarvation();
-    test_AsyncSubscriberOnClose();
-    test_NextMsgCallOnAsyncSub();
-    test_NoDelay();
-
-    printf("\n== Clusters Tests ==\n");
-
-    test_ServersOption();
-    test_AuthServers();
-    test_AuthFailToReconnect();
-    test_BasicClusterReconnect();
-    test_HotSpotReconnect();
-    test_ProperReconnectDelay();
-    test_ProperFalloutAfterMaxAttempts();
-    test_TimeoutOnNoServer();
-    test_PingReconnect();
+    // Execute tests
+    for (i=testStart; i<=testEnd; i++)
+    {
+#ifdef _WIN32
+        printf("\n== %s ==\n", allTests[i].name);
+#else
+        printf("\033[0;34m\n== %s ==\n\033[0;0m", allTests[i].name);
+#endif
+        (*(allTests[i].func))();
+    }
 
     // Makes valgrind happy
     nats_Close();
 
-    if (fails) {
-        printf("*** %d TESTS FAILED ***\n", fails);
+    if (valgrind)
+        nats_Sleep(500);
+
+    if (fails)
+    {
+        printf("*** %d TEST%s FAILED ***\n", fails, (fails > 1 ? "S" : ""));
         return 1;
     }
 
-    printf("ALL TESTS PASSED\n");
+    printf("ALL PASSED\n");
     return 0;
 }

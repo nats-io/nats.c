@@ -18,16 +18,16 @@ typedef struct __natsStatistics
 
 } natsStatistics;
 
-natsStatus
+NATS_EXTERN natsStatus
 natsStatistics_Create(natsStatistics **newStats);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsStatistics_GetCounts(natsStatistics *stats,
                          uint64_t *inMsgs, uint64_t *inBytes,
                          uint64_t *outMsgs, uint64_t *outBytes,
                          uint64_t *reconnects);
 
-void
+NATS_EXTERN void
 natsStatistics_Destroy(natsStatistics *stats);
 
 #endif /* STATS_H_ */

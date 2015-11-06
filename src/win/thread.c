@@ -1,14 +1,19 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
 #include "../natsp.h"
+
+#include <process.h>
+
 #include "../mem.h"
 
 static BOOL CALLBACK
-_initHandleFunction (PINIT_ONCE InitOnce, PVOID Parameter, PVOID *lpContext)
+_initHandleFunction(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *lpContext)
 {
-    natsInitOnceCb cb = (natsInitOnceCb*) Parameter;
+    natsInitOnceCb cb = (natsInitOnceCb) Parameter;
 
-    (*cb)(void);
+    (*cb)();
+
+	return TRUE;
 }
 
 bool
@@ -19,7 +24,7 @@ nats_InitOnce(natsInitOnceType *control, natsInitOnceCb cb)
     // Execute the initialization callback function
     bStatus = InitOnceExecuteOnce(control,
                                   _initHandleFunction,
-                                  &cb,
+                                  (PVOID) cb,
                                   NULL);
 
     // InitOnceExecuteOnce function succeeded.
@@ -52,25 +57,23 @@ natsThread_Create(natsThread **thread, natsThreadCb cb, void *arg)
     struct threadCtx    *ctx = NULL;
     natsThread          *t   = NULL;
     natsStatus          s    = NATS_OK;
-    int                 err;
 
     ctx = (struct threadCtx*) NATS_CALLOC(1, sizeof(*ctx));
     t = (natsThread*) NATS_CALLOC(1, sizeof(natsThread));
 
     if ((ctx == NULL) || (t == NULL))
         s = NATS_NO_MEMORY;
-    {
-        s = NATS_NO_MEMORY;
-    }
 
     if (s == NATS_OK)
     {
         ctx->entry  = cb;
         ctx->arg    = arg;
 
-        *t = (HANDLE) _beginthreadex(NULL, 0, _threadStart, ctx, 0, NULL);
-        if (*t == NULL)
+        t->t = (HANDLE) _beginthreadex(NULL, 0, _threadStart, ctx, 0, NULL);
+        if (t->t == NULL)
             s = NATS_NO_MEMORY;
+        else
+            t->id = GetThreadId(t->t);
     }
     if (s == NATS_OK)
     {
@@ -88,15 +91,15 @@ natsThread_Create(natsThread **thread, natsThreadCb cb, void *arg)
 void
 natsThread_Join(natsThread *t)
 {
-    if (GetCurrentThread() != *t)
+    if (GetCurrentThreadId() != t->id)
     {
-        if (WaitForSingleObject(*t, INFINITE))
+        if (WaitForSingleObject(t->t, INFINITE))
             abort();
     }
 }
 
 void
-natsThread_Detach(natsThread *)
+natsThread_Detach(natsThread *t)
 {
     // nothing for now.
 }
@@ -104,7 +107,7 @@ natsThread_Detach(natsThread *)
 bool
 natsThread_IsCurrent(natsThread *t)
 {
-    if (GetCurrentThread() == *t)
+    if (GetCurrentThreadId() == t->id)
         return true;
 
     return false;
@@ -116,7 +119,7 @@ natsThread_Destroy(natsThread *t)
     if (t == NULL)
         return;
 
-    CloseHandle(*t);
+    CloseHandle(t->t);
 
     NATS_FREE(t);
 }

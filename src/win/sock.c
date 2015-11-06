@@ -1,6 +1,10 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
 #include "../natsp.h"
+
+#include <errno.h>
+#include <io.h>
+
 #include "../mem.h"
 
 void
@@ -48,3 +52,28 @@ natsSock_IsConnected(natsSock fd)
     return true;
 }
 
+natsStatus
+natsSock_Flush(natsSock fd)
+{
+    HANDLE fh = (HANDLE)_get_osfhandle((int) fd);
+
+    if (fh == INVALID_HANDLE_VALUE)
+    {
+        errno = EBADF;
+        return NATS_INVALID_ARG;
+    }
+
+    if (!FlushFileBuffers(fh))
+    {
+        DWORD code = GetLastError();
+
+        if (code == ERROR_INVALID_HANDLE)
+            errno = EINVAL;
+        else
+            errno = EIO;
+
+        return NATS_IO_ERROR;
+    }
+
+    return NATS_OK;
+}

@@ -42,20 +42,20 @@ natsMsg_free(void *object);
 
 // PUBLIC
 
-natsStatus
+NATS_EXTERN natsStatus
 natsMsg_Create(natsMsg **newMsg, const char *subj, const char *reply,
                const char *data, int dataLen);
 
-const char*
+NATS_EXTERN const char*
 natsMsg_GetReply(natsMsg *msg);
 
-const char*
+NATS_EXTERN const char*
 natsMsg_GetData(natsMsg *msg);
 
-int
+NATS_EXTERN int
 natsMsg_GetDataLength(natsMsg *msg);
 
-void
+NATS_EXTERN void
 natsMsg_Destroy(natsMsg *msg);
 
 

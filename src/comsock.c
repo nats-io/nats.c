@@ -2,16 +2,15 @@
 
 #include "natsp.h"
 
-#include <unistd.h>
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
+#include <time.h>
 
 #include "status.h"
 #include "comsock.h"
 #include "mem.h"
-#include "time.h"
 
 static void
 _closeFd(natsSock fd)
@@ -33,18 +32,18 @@ natsSock_Shutdown(natsSock fd)
         NATS_SOCK_SHUTDOWN(fd);
 }
 
-static natsStatus
-_setTcpOptions(natsSock fd)
+natsStatus
+natsSock_SetCommonTcpOptions(natsSock fd)
 {
     struct linger   l;
     int             yes = 1;
 
-    if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes)) == -1)
+    if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const char*) &yes, sizeof(yes)) == -1)
         return NATS_SYS_ERROR;
 
     yes = 1;
 
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char*) &yes, sizeof(yes)) == -1)
         return NATS_SYS_ERROR;
 
     l.l_onoff  = 1;
@@ -61,7 +60,10 @@ natsSock_CreateFDSet(fd_set **newFDSet)
 {
     fd_set  *fdSet = NULL;
 
+#ifdef _WIN32
+#else
     assert(FD_SETSIZE == 32768);
+#endif
 
     fdSet = (fd_set*) NATS_MALLOC(sizeof(fd_set));
 
@@ -97,7 +99,7 @@ natsSock_WaitReady(bool forWrite, fd_set *fdSet, natsSock sock,
     if (deadline != NULL)
         timeout = natsDeadline_GetTimeout(deadline);
 
-    res = select(sock + 1,
+    res = select((int) (sock + 1),
                  (forWrite ? NULL : fdSet),
                  (forWrite ? fdSet : NULL),
                  NULL,
@@ -158,7 +160,7 @@ natsSock_ConnectTcp(natsSock *fd, fd_set *fdSet, natsDeadline *deadline,
         if (s != NATS_OK)
             break;
 
-        res = connect(sock, p->ai_addr, p->ai_addrlen);
+        res = connect(sock, p->ai_addr, (natsSockLen) p->ai_addrlen);
         if ((res == NATS_SOCK_ERROR)
             && (NATS_SOCK_GET_ERROR != NATS_SOCK_CONNECT_IN_PROGRESS))
         {
@@ -186,7 +188,7 @@ natsSock_ConnectTcp(natsSock *fd, fd_set *fdSet, natsDeadline *deadline,
             continue;
         }
 
-        s = _setTcpOptions(sock);
+        s = natsSock_SetCommonTcpOptions(sock);
     }
 
     if (s == NATS_OK)
@@ -221,7 +223,7 @@ natsSock_ReadLine(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
 
     while (1)
     {
-        readBytes = recv(fd, buffer, maxBufferSize - totalBytes, 0);
+        readBytes = recv(fd, buffer, (natsRecvLen) (maxBufferSize - totalBytes), 0);
         if (readBytes == 0)
         {
             return NATS_CONNECTION_CLOSED;
@@ -268,7 +270,7 @@ natsSock_Read(natsSock fd, char *buffer, size_t maxBufferSize, int *n)
 {
     int readBytes = 0;
 
-    readBytes = recv(fd, buffer, maxBufferSize, 0);
+    readBytes = recv(fd, buffer, (natsRecvLen) maxBufferSize, 0);
     if (readBytes == 0)
         return NATS_CONNECTION_CLOSED;
     else if (readBytes == NATS_SOCK_ERROR)
@@ -310,15 +312,6 @@ natsSock_WriteFully(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
         len -= bytes;
     }
     while (len != 0);
-
-    return NATS_OK;
-}
-
-natsStatus
-natsSock_Flush(natsSock fd)
-{
-    if (fsync(fd) != 0)
-        return NATS_IO_ERROR;
 
     return NATS_OK;
 }

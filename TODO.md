@@ -8,5 +8,5 @@
 - [x] Improve Request/Reply performance (*Solved by doing explicit flushing after sending the reply. The original performance issue is due to the way the flusher is implemented, whereby we sleep a millisecond to accumulate more work. So that limited the rate to 1000 messages/sec*).  
 - [ ] Make sure Inboxes are really unique (use of srand + seq for now)
 - [x] Port for Linux (~~may work as-is~~, need to check)
-- [ ] Port for Windows + Makefile
-- [ ] Some tests are not ported because they require a mockup server
+- [x] Port for Windows ~~+ Makefile~~ *(Use CMake for cross-platform support)
+- [x] Some tests are not ported because they require a mockup server

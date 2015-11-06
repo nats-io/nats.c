@@ -1,31 +1,6 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include <nats.h>
-
-static natsStatus
-printStats(natsConnection *conn, natsStatistics *stats)
-{
-    natsStatus  s = NATS_OK;
-    uint64_t    outMsgs, outBytes, reconnected;
-
-    s = natsConnection_GetStats(conn, stats);
-    if (s == NATS_OK)
-        s = natsStatistics_GetCounts(stats, NULL, NULL, &outMsgs, &outBytes,
-                                     &reconnected);
-    if (s == NATS_OK)
-    {
-        printf("Out Msgs: %12" NATS_PRINTF_U64 " - "\
-               "Out Bytes: %12" NATS_PRINTF_U64 " - "\
-               "Reconnected: %3" NATS_PRINTF_U64 "\n",
-                outMsgs, outBytes, reconnected);
-    }
-
-    return s;
-}
+#include "examples.h"
 
 int main(int argc, char **argv)
 {
@@ -50,7 +25,7 @@ int main(int argc, char **argv)
     txt   = argv[2];
     total = atol(argv[3]);
 
-    printf("Sending %" NATS_PRINTF_D64 " messages to subject '%s'\n", total, subj);
+    printf("Sending %" PRId64 " messages to subject '%s'\n", total, subj);
 
     s = natsConnection_ConnectTo(&conn, NATS_DEFAULT_URL);
 
@@ -66,7 +41,7 @@ int main(int argc, char **argv)
 
         if (nats_Now() - last >= 1000)
         {
-            s = printStats(conn, stats);
+            s = printStats(STATS_OUT, conn, NULL, stats, 0, 0);
             last = nats_Now();
         }
     }
@@ -76,14 +51,7 @@ int main(int argc, char **argv)
 
     if (s == NATS_OK)
     {
-        elapsed = nats_Now() - start;
-
-        if (elapsed <= 0)
-            printf("\nNot enough messages or too fast to report performance!\n");
-        else
-            printf("\nSent %" NATS_PRINTF_D64 " messages in "\
-                   "%" NATS_PRINTF_D64 " milliseconds (%d msgs/sec)\n",
-                   total, elapsed, (int)((total*1000)/elapsed));
+        printPerf("Sent", total, start, elapsed);
     }
     else
     {

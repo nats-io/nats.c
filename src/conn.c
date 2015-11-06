@@ -5,10 +5,8 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 #include <errno.h>
 
-#include "statusp.h"
 #include "conn.h"
 #include "mem.h"
 #include "buf.h"
@@ -290,7 +288,7 @@ natsConn_bufferWrite(natsConnection *nc, const char *buffer, int len)
 natsStatus
 natsConn_bufferWriteString(natsConnection *nc, const char *string)
 {
-    return natsConn_bufferWrite(nc, string, strlen(string));
+    return natsConn_bufferWrite(nc, string, (int) strlen(string));
 }
 
 // _createConn will connect to the server and do the right thing when an
@@ -404,7 +402,7 @@ _parseInfo(char **str, const char *field, int fieldType, void **addr)
     char        *end = NULL;
     char        *val = NULL;
 
-    ptr = strcasestr(*str, field);
+    ptr = nats_strcasestr(*str, field);
     if (ptr == NULL)
         return NATS_OK;
 
@@ -448,12 +446,12 @@ _parseInfo(char **str, const char *field, int fieldType, void **addr)
     else if ((fieldType == TYPE_INT)
              || (fieldType == TYPE_LONG))
     {
-        char        *tail = NULL;
-        long int    lval = 0;
+        char            *tail = NULL;
+        long long int   lval  = 0;
 
         errno = 0;
 
-        lval = strtod(ptr, &tail);
+        lval = strtoll(ptr, &tail, 10);
         if ((errno != 0) || (tail[0] != '\0'))
             return NATS_PROTOCOL_ERROR;
 
@@ -558,19 +556,19 @@ _connectProto(natsConnection *nc, char **proto)
     if (opts->name != NULL)
         name = opts->name;
 
-    res = asprintf(proto,
-                   "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s\"ssl_required\":%s," \
-                   "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\"}%s",
-                   nats_GetBoolStr(opts->verbose),
-                   nats_GetBoolStr(opts->pedantic),
-                   (user != NULL ? "\"user\":\"" : ""),
-                   (user != NULL ? user : ""),
-                   (user != NULL ? "\"," : ""),
-                   (pwd != NULL ? "\"pass\":\"" : ""),
-                   (pwd != NULL ? pwd : ""),
-                   (pwd != NULL ? "\"," : ""),
-                   nats_GetBoolStr(false),
-                   name, CString, Version, _CRLF_);
+    res = nats_asprintf(proto,
+                        "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s\"ssl_required\":%s," \
+                        "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\"}%s",
+                        nats_GetBoolStr(opts->verbose),
+                        nats_GetBoolStr(opts->pedantic),
+                        (user != NULL ? "\"user\":\"" : ""),
+                        (user != NULL ? user : ""),
+                        (user != NULL ? "\"," : ""),
+                        (pwd != NULL ? "\"pass\":\"" : ""),
+                        (pwd != NULL ? pwd : ""),
+                        (pwd != NULL ? "\"," : ""),
+                        nats_GetBoolStr(false),
+                        name, CString, Version, _CRLF_);
     if (res < 0)
         return NATS_NO_MEMORY;
 
@@ -585,9 +583,9 @@ _sendUnsubProto(natsConnection *nc, natsSubscription *sub)
     int         res     = 0;
 
     if (sub->max > 0)
-        res = asprintf(&proto, _UNSUB_PROTO_, (int) sub->sid, (int) sub->max);
+        res = nats_asprintf(&proto, _UNSUB_PROTO_, (int) sub->sid, (int) sub->max);
     else
-        res = asprintf(&proto, _UNSUB_NO_MAX_PROTO_, (int) sub->sid);
+        res = nats_asprintf(&proto, _UNSUB_NO_MAX_PROTO_, (int) sub->sid);
 
     if (res < 0)
         s = NATS_NO_MEMORY;
@@ -613,10 +611,10 @@ _resendSubscriptions(natsConnection *nc)
     while (natsHashIter_Next(&iter, NULL, (void**) &sub))
     {
         proto = NULL;
-        res = asprintf(&proto, _SUB_PROTO_,
-                       sub->subject,
-                       (sub->queue == NULL ? "" : sub->queue),
-                       (int) sub->sid);
+        res = nats_asprintf(&proto, _SUB_PROTO_,
+                            sub->subject,
+                            (sub->queue == NULL ? "" : sub->queue),
+                            (int) sub->sid);
         if (res < 0)
             s = NATS_NO_MEMORY;
 
@@ -708,7 +706,7 @@ _doReconnect(void *arg)
     natsThread              *tReconnect = NULL;
     natsSrv                 *cur;
     int64_t                 elapsed;
-    natsSrvPool             *pool;
+    natsSrvPool             *pool = NULL;
     struct threadsToJoin    ttj;
 
     natsConn_Lock(nc);
@@ -824,7 +822,7 @@ _doReconnect(void *arg)
             // Close the socket since we were connected, but a problem occurred.
             // (not doing this would cause an FD leak)
             natsSock_Close(nc->fd);
-            nc->fd = -1;
+            nc->fd = NATS_SOCK_INVALID;
 
             // We need to re-activate the use of pending since we
             // may go back to sleep and release the lock
@@ -1103,7 +1101,7 @@ _readLoop(void  *arg)
 {
     natsStatus  s = NATS_OK;
     char        buffer[DEFAULT_BUF_SIZE];
-    int         fd;
+    natsSock    fd;
     int         n;
 
     natsConnection *nc = (natsConnection*) arg;
@@ -1650,10 +1648,10 @@ natsConn_subscribe(natsSubscription **newSub,
             char    *proto = NULL;
             int     res    = 0;
 
-            res = asprintf(&proto, _SUB_PROTO_,
-                           subj,
-                           (queue == NULL ? "" : queue),
-                           (int) sub->sid);
+            res = nats_asprintf(&proto, _SUB_PROTO_,
+                                subj,
+                                (queue == NULL ? "" : queue),
+                                (int) sub->sid);
             if (res < 0)
                 s = NATS_NO_MEMORY;
 
@@ -1821,7 +1819,7 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     return s;
 }
 
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_Connect(natsConnection **newConn, natsOptions *options)
 {
     natsStatus      s;
@@ -1844,7 +1842,7 @@ natsConnection_Connect(natsConnection **newConn, natsOptions *options)
     return s;
 }
 
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_ConnectTo(natsConnection **newConn, const char *url)
 {
     natsStatus      s       = NATS_OK;
@@ -1868,7 +1866,7 @@ natsConnection_ConnectTo(natsConnection **newConn, const char *url)
 }
 
 // Test if connection  has been closed.
-bool
+NATS_EXTERN bool
 natsConnection_IsClosed(natsConnection *nc)
 {
     bool closed;
@@ -1886,7 +1884,7 @@ natsConnection_IsClosed(natsConnection *nc)
 }
 
 // Test if connection is reconnecting.
-bool
+NATS_EXTERN bool
 natsConnection_IsReconnecting(natsConnection *nc)
 {
     bool reconnecting;
@@ -1904,7 +1902,7 @@ natsConnection_IsReconnecting(natsConnection *nc)
 }
 
 // Returns the current state of the connection.
-natsConnStatus
+NATS_EXTERN natsConnStatus
 natsConnection_Status(natsConnection *nc)
 {
     natsConnStatus cs;
@@ -1931,7 +1929,7 @@ _destroyPong(natsConnection *nc, natsPong *pong)
         NATS_FREE(pong);
 }
 
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
 {
     natsStatus  s       = NATS_OK;
@@ -2012,13 +2010,13 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
     return s;
 }
 
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_Flush(natsConnection *nc)
 {
     return natsConnection_FlushTimeout(nc, 60000);
 }
 
-int
+NATS_EXTERN int
 natsConnection_Buffered(natsConnection *nc)
 {
     int buffered = -1;
@@ -2036,7 +2034,7 @@ natsConnection_Buffered(natsConnection *nc)
     return buffered;
 }
 
-int64_t
+NATS_EXTERN int64_t
 natsConnection_GetMaxPayload(natsConnection *nc)
 {
     int64_t mp = 0;
@@ -2053,7 +2051,7 @@ natsConnection_GetMaxPayload(natsConnection *nc)
     return mp;
 }
 
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_GetStats(natsConnection *nc, natsStatistics *stats)
 {
     natsStatus  s = NATS_OK;
@@ -2070,7 +2068,7 @@ natsConnection_GetStats(natsConnection *nc, natsStatistics *stats)
     return s;
 }
 
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_GetConnectedUrl(natsConnection *nc, char *buffer, size_t bufferSize)
 {
     natsStatus  s = NATS_OK;
@@ -2096,7 +2094,7 @@ natsConnection_GetConnectedUrl(natsConnection *nc, char *buffer, size_t bufferSi
     return s;
 }
 
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t bufferSize)
 {
     natsStatus  s = NATS_OK;
@@ -2122,7 +2120,7 @@ natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t buf
     return s;
 }
 
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_GetLastError(natsConnection *nc, const char **lastError)
 {
     natsStatus  s;
@@ -2145,7 +2143,7 @@ natsConnection_GetLastError(natsConnection *nc, const char **lastError)
     return s;
 }
 
-void
+NATS_EXTERN void
 natsConnection_Close(natsConnection *nc)
 {
     if (nc == NULL)
@@ -2154,7 +2152,7 @@ natsConnection_Close(natsConnection *nc)
     _close(nc, CLOSED, true);
 }
 
-void
+NATS_EXTERN void
 natsConnection_Destroy(natsConnection *nc)
 {
     if (nc == NULL)

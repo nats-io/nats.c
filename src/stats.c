@@ -1,13 +1,13 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <stdlib.h>
-#include <strings.h>
+#include "natsp.h"
 
+#include <stdlib.h>
 #include "status.h"
 #include "stats.h"
 #include "mem.h"
 
-natsStatus
+NATS_EXTERN natsStatus
 natsStatistics_Create(natsStatistics **newStats)
 {
     natsStatistics *stats = NULL;
@@ -21,7 +21,7 @@ natsStatistics_Create(natsStatistics **newStats)
     return NATS_OK;
 }
 
-natsStatus
+NATS_EXTERN natsStatus
 natsStatistics_GetCounts(natsStatistics *stats,
                          uint64_t *inMsgs, uint64_t *inBytes,
                          uint64_t *outMsgs, uint64_t *outBytes,
@@ -44,7 +44,7 @@ natsStatistics_GetCounts(natsStatistics *stats,
     return NATS_OK;
 }
 
-void
+NATS_EXTERN void
 natsStatistics_Destroy(natsStatistics *stats)
 {
     if (stats == NULL)

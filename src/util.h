@@ -3,8 +3,6 @@
 #ifndef UTIL_H_
 #define UTIL_H_
 
-#include <stdint.h>
-
 #include "natsp.h"
 
 int64_t
@@ -22,7 +20,7 @@ nats_Randomize(int *array, int arraySize);
 const char*
 nats_GetBoolStr(bool value);
 
-void
+NATS_EXTERN void
 nats_Sleep(int64_t timeout);
 
 #endif /* UTIL_H_ */

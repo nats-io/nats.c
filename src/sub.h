@@ -36,25 +36,25 @@ natsSub_close(natsSubscription *sub);
 
 // PUBLIC
 
-natsStatus
+NATS_EXTERN natsStatus
 natsSubscription_NoDeliveryDelay(natsSubscription *sub);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsSubscription_Unsubscribe(natsSubscription *sub);
 
-bool
+NATS_EXTERN bool
 natsSubscription_IsValid(natsSubscription *sub);
 
-void
+NATS_EXTERN void
 natsSubscription_Destroy(natsSubscription *sub);
 
 #endif /* SUB_H_ */

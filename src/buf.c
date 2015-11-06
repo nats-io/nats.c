@@ -166,7 +166,7 @@ natsBuf_AppendByte(natsBuffer *buf, char b)
     natsStatus s = NATS_OK;
 
     if (buf->len == buf->capacity)
-        s = natsBuf_Expand(buf, buf->capacity * 1.5);
+        s = natsBuf_Expand(buf, (int)((double) buf->capacity * 1.5));
 
     if (s == NATS_OK)
     {

@@ -113,6 +113,9 @@ _createEntry(int64_t key, void *data)
 {
     natsHashEntry *e = (natsHashEntry*) NATS_MALLOC(sizeof(natsHashEntry));
 
+    if (e == NULL)
+        return NULL;
+
     e->key  = key;
     e->data = data;
     e->next = NULL;
@@ -341,13 +344,13 @@ natsStrHash_Hash(const char *data, int dataLen)
     if ((dlen & _DWSZ) > 0)
     {
         k1  = *(uint64_t*) &(data[i]);
-        h32 = (uint32_t) (((uint64_t) h32) ^ k1) * _YP32;
+        h32 = (uint32_t) ((((uint64_t) h32) ^ k1) * _YP32);
         i += _DWSZ;
     }
     if ((dlen & _WSZ) > 0)
     {
         k1  = *(uint32_t*) &(data[i]);
-        h32 = (h32 ^ k1) * _YP32;
+        h32 = (uint32_t) ((((uint64_t) h32) ^ k1) * _YP32);
         i += _WSZ;
     }
     if ((dlen & 1) > 0)
@@ -451,6 +454,9 @@ _createStrEntry(uint32_t hk, char *key, bool copyKey, void *data)
 {
     natsStrHashEntry *e = (natsStrHashEntry*) NATS_MALLOC(sizeof(natsStrHashEntry));
 
+    if (e == NULL)
+        return NULL;
+
     e->hk       = hk;
     e->key      = (copyKey ? NATS_STRDUP(key) : key);
     e->freeKey  = copyKey;
@@ -480,7 +486,7 @@ natsStrHash_Set(natsStrHash *hash, char *key, bool copyKey,
     if (oldData != NULL)
         *oldData = NULL;
 
-    hk    = natsStrHash_Hash(key, strlen(key));
+    hk    = natsStrHash_Hash(key, (int) strlen(key));
     index = hk & hash->mask;
 
     e = (natsStrHashEntry*) hash->bkts[index];
@@ -530,7 +536,7 @@ void*
 natsStrHash_Get(natsStrHash *hash, char *key)
 {
     natsStrHashEntry    *e;
-    uint32_t            hk = natsStrHash_Hash(key, strlen(key));
+    uint32_t            hk = natsStrHash_Hash(key, (int) strlen(key));
 
     e = hash->bkts[hk & hash->mask];
     while (e != NULL)
@@ -564,7 +570,7 @@ natsStrHash_Remove(natsStrHash *hash, char *key)
     natsStrHashEntry    **e;
     uint32_t            hk;
 
-    hk = natsStrHash_Hash(key, strlen(key));
+    hk = natsStrHash_Hash(key, (int) strlen(key));
 
     e = (natsStrHashEntry**) &(hash->bkts[hk & hash->mask]);
     while (*e != NULL)

@@ -35,11 +35,16 @@ natsCondition_Wait(natsCondition *cond, natsMutex *mutex)
 }
 
 static natsStatus
-_timedWait(natsCondition *cond, natsMutex *mutex, bool isAbsolute, uint64_t timeout)
+_timedWait(natsCondition *cond, natsMutex *mutex, bool isAbsolute, int64_t timeout)
 {
     int     r;
     struct  timespec ts;
-    int64_t target = (isAbsolute ? timeout : (nats_Now() + timeout));
+    int64_t target;
+
+    if (timeout <= 0)
+        return NATS_TIMEOUT;
+
+    target = (isAbsolute ? timeout : (nats_Now() + timeout));
 
     ts.tv_sec = target / 1000;
     ts.tv_nsec = (target % 1000) * 1000000;
@@ -63,13 +68,13 @@ _timedWait(natsCondition *cond, natsMutex *mutex, bool isAbsolute, uint64_t time
 }
 
 natsStatus
-natsCondition_TimedWait(natsCondition *cond, natsMutex *mutex, uint64_t timeout)
+natsCondition_TimedWait(natsCondition *cond, natsMutex *mutex, int64_t timeout)
 {
     return _timedWait(cond, mutex, false, timeout);
 }
 
 natsStatus
-natsCondition_AbsoluteTimedWait(natsCondition *cond, natsMutex *mutex, uint64_t absoluteTime)
+natsCondition_AbsoluteTimedWait(natsCondition *cond, natsMutex *mutex, int64_t absoluteTime)
 {
     return _timedWait(cond, mutex, true, absoluteTime);
 }

@@ -140,6 +140,9 @@ natsMsg				*msg = NULL;
 // Connects to the default NATS Server running locally
 natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
 
+// Connects to a server with username and password
+natsConnection_ConnectTo(&nc, "ivan:secret@localhost:4222");
+
 // Simple publisher, sending the given string to subject "foo"
 natsConnection_PublishString(nc, "foo", "hello world");
 

@@ -14,10 +14,10 @@ typedef struct __natsDeadline
 
 } natsDeadline;
 
-int64_t
+NATS_EXTERN int64_t
 nats_Now(void);
 
-int64_t
+NATS_EXTERN int64_t
 nats_NowInNanoSeconds(void);
 
 void

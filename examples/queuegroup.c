@@ -1,10 +1,6 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <strings.h>
-
-#include <nats.h>
+#include "examples.h"
 
 static volatile int64_t count   = 0;
 static int64_t          total   = 0;
@@ -39,42 +35,6 @@ static void
 asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
     printf("Async error: %d - %s\n", err, natsStatus_GetText(err));
-}
-
-static natsStatus
-printStats(natsConnection *conn, natsSubscription *sub, natsStatistics *stats)
-{
-    natsStatus  s = NATS_OK;
-    uint64_t    inMsgs, inBytes, queued, reconnected;
-
-    s = natsConnection_GetStats(conn, stats);
-    if (s == NATS_OK)
-        s = natsStatistics_GetCounts(stats, &inMsgs, &inBytes, NULL, NULL,
-                                     &reconnected);
-    if (s == NATS_OK)
-    {
-        s = natsSubscription_QueuedMsgs(sub, &queued);
-
-        // When the subscription will auto-unsubscribe, this call would
-        // return "Invalid Subscription", so ignore this error.
-        if (s == NATS_INVALID_SUBSCRIPTION)
-        {
-            s = NATS_OK;
-            queued = 0;
-        }
-    }
-
-    if (s == NATS_OK)
-    {
-        printf("In Msgs: %9" NATS_PRINTF_U64 " - "\
-               "In Bytes: %9" NATS_PRINTF_U64 " - "\
-               "Delivered: %9" NATS_PRINTF_U64 " - "\
-               "Queued: %5" NATS_PRINTF_U64 " - "\
-               "Reconnected: %3" NATS_PRINTF_U64 "\n",
-                inMsgs, inBytes, count, queued, reconnected);
-    }
-
-    return s;
 }
 
 int main(int argc, char **argv)
@@ -119,7 +79,7 @@ int main(int argc, char **argv)
             s = natsConnection_QueueSubscribeSync(&sub, conn, subj, name);
     }
     if (s == NATS_OK)
-        s = natsSubscription_AutoUnsubscribe(sub, total);
+        s = natsSubscription_AutoUnsubscribe(sub, (int) total);
 
     if (s == NATS_OK)
         s = natsStatistics_Create(&stats);
@@ -128,7 +88,7 @@ int main(int argc, char **argv)
     {
         while (s == NATS_OK)
         {
-            s = printStats(conn, sub, stats);
+            s = printStats(STATS_IN|STATS_COUNT,conn, sub, stats, count, 0);
 
             if (count == total)
                 break;
@@ -152,7 +112,7 @@ int main(int argc, char **argv)
 
             if (nats_Now() - last >= 1000)
             {
-                s = printStats(conn, sub, stats);
+                s = printStats(STATS_IN|STATS_COUNT,conn, sub, stats, count, 0);
                 last = nats_Now();
             }
 
@@ -162,15 +122,7 @@ int main(int argc, char **argv)
 
     if (s == NATS_OK)
     {
-        if (elapsed == 0)
-            elapsed = nats_Now() - start;
-
-        if (elapsed <= 0)
-            printf("\nNot enough messages or too fast to report performance!\n");
-        else
-            printf("\nReceived %" NATS_PRINTF_D64 " messages in "\
-                   "%" NATS_PRINTF_D64 " milliseconds (%d msgs/sec)\n",
-                   total, elapsed, (int)((total*1000)/elapsed));
+        printPerf("Received", total, start, elapsed);
     }
     else
     {

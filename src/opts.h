@@ -12,70 +12,70 @@
 #define NATS_OPTS_DEFAULT_MAX_PING_OUT        (2)
 #define NATS_OPTS_DEFAULT_MAX_PENDING_MSGS    (65536)
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_Create(natsOptions **newOpts);
 
 natsOptions*
 natsOptions_clone(natsOptions *opts);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetURL(natsOptions *opts, const char *url);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetServers(natsOptions *opts, const char** servers, int serversCount);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetNoRandomize(natsOptions *opts, bool noRandomize);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetTimeout(natsOptions *opts, int64_t timeout);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetName(natsOptions *opts, const char *name);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetVerbose(natsOptions *opts, bool verbose);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetPedantic(natsOptions *opts, bool pedantic);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetPingInterval(natsOptions *opts, int64_t interval);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetMaxPingsOut(natsOptions *opts, int maxPignsOut);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetAllowReconnect(natsOptions *opts, bool allow);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetMaxReconnect(natsOptions *opts, int maxReconnect);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetReconnectWait(natsOptions *opts, int64_t reconnectWait);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetErrorHandler(natsOptions *opts, natsErrHandler errHandler,
                             void *closure);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetClosedCB(natsOptions *opts, natsConnectionHandler closedCb,
                         void *closure);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetDisconnectedCB(natsOptions *opts,
                               natsConnectionHandler disconnectedCb,
                               void *closure);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsOptions_SetReconnectedCB(natsOptions *opts,
                              natsConnectionHandler reconnectedCb,
                              void *closure);
 
-void
+NATS_EXTERN void
 natsOptions_Destroy(natsOptions *opts);
 
 #endif /* OPTS_H_ */

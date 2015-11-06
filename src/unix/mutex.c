@@ -53,7 +53,6 @@ natsMutex_TryLock(natsMutex *m)
     return false;
 }
 
-#include <stdio.h>
 void
 natsMutex_Lock(natsMutex *m)
 {

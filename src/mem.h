@@ -8,7 +8,12 @@
 #define NATS_MALLOC(s)      malloc((s))
 #define NATS_CALLOC(c,s)    calloc((c), (s))
 #define NATS_REALLOC(p, s)  realloc((p), (s))
+
+#ifdef _WIN32
+#define NATS_STRDUP(s)      _strdup((s))
+#else
 #define NATS_STRDUP(s)      strdup((s))
+#endif
 #define NATS_FREE(p)        free((p))
 
 

@@ -1,3 +1,6 @@
+natsNowAndSleep
+natsAllocSprintf
+natsStrCaseStr
 natsBuffer
 natsParseInt64
 natsParseControl
@@ -32,6 +35,8 @@ ExtendedReconnectFunctionality
 QueueSubsOnReconnect
 IsClosed
 IsReconnectingAndStatus
+ErrOnConnectAndDeadlock
+ErrOnMaxPayloadLimit
 Auth
 AuthFailNoDisconnectCB
 ConnectedServer
@@ -52,6 +57,7 @@ Request
 RequestNoBody
 FlushInCb
 ReleaseFlush
+FlushErrOnDisconnect
 Inbox
 Stats
 BadSubject

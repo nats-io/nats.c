@@ -63,9 +63,6 @@ typedef enum
 
 } natsStatus;
 
-const char*
-natsStatus_GetText(natsStatus s);
-
 #ifdef __cplusplus
 }
 #endif

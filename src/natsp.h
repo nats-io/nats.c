@@ -9,10 +9,22 @@
 # include "include/n-unix.h"
 #endif
 
+#if defined(_WIN32)
+  #if defined(nats_EXPORTS)
+    #define NATS_EXTERN __declspec(dllexport)
+  #else
+    #define NATS_EXTERN
+  #endif
+#else
+  #define NATS_EXTERN
+#endif
+
 #include <stdlib.h>
+#include <stdio.h>
 #include <stdbool.h>
+#include <inttypes.h>
 #include <stdint.h>
-#include <signal.h>
+//#include <signal.h>
 
 #include "status.h"
 #include "buf.h"
@@ -31,7 +43,7 @@
 //#define DEV_MODE    (1)
 
 static const char* CString     = "C";
-static const char* Version     = "0.1.9-alpha";
+static const char* Version     = "1.0.0";
 
 static const char* NATS_DEFAULT_URL = "nats://localhost:4222";
 
@@ -53,7 +65,7 @@ static const char* _SUB_PROTO_          = "SUB %s %s %d\r\n";
 static const char* _UNSUB_PROTO_        = "UNSUB %d %d\r\n";
 static const char* _UNSUB_NO_MAX_PROTO_ = "UNSUB %d \r\n";
 
-static const char* STALE_CONNECTION     = "State Connection";
+static const char* STALE_CONNECTION     = "Stale Connection";
 static int         STATE_CONNECTION_LEN = 16;
 
 #define _CRLF_LEN_          (2)
@@ -285,7 +297,7 @@ typedef char natsInbox;
 void
 natsSys_Init(void);
 
-natsStatus
+NATS_EXTERN natsStatus
 nats_Open(int64_t spinLockCount);
 
 void
@@ -313,13 +325,16 @@ nats_getTimersCountInList(void);
 natsStatus
 nats_postAsyncCbInfo(natsAsyncCbInfo *info);
 
-natsStatus
+NATS_EXTERN natsStatus
 natsInbox_Create(char **newInbox);
 
-void
+NATS_EXTERN void
 natsInbox_Destroy(char *inbox);
 
-void
+NATS_EXTERN const char*
+natsStatus_GetText(natsStatus s);
+
+NATS_EXTERN void
 nats_Close(void);
 
 
@@ -357,11 +372,11 @@ void
 natsCondition_Wait(natsCondition *cond, natsMutex *mutex);
 
 natsStatus
-natsCondition_TimedWait(natsCondition *cond, natsMutex *mutex, uint64_t timeout);
+natsCondition_TimedWait(natsCondition *cond, natsMutex *mutex, int64_t timeout);
 
 natsStatus
 natsCondition_AbsoluteTimedWait(natsCondition *cond, natsMutex *mutex,
-                                uint64_t absoluteTime);
+                                int64_t absoluteTime);
 
 void
 natsCondition_Signal(natsCondition *cond);

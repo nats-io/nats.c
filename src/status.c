@@ -1,13 +1,11 @@
 // Copyright 2015 Apcera Inc. All rights reserved.
 
-#include <stdio.h>
-#include <stdlib.h>
+#include "natsp.h"
 
-// UNIX
-//#include <execinfo.h>
+//#include <stdio.h>
+//#include <stdlib.h>
 
-#include "status.h"
-#include "statusp.h"
+//#include "status.h"
 
 static const char *statusText[] = {
     "OK",
@@ -52,30 +50,7 @@ static const char *statusText[] = {
     "Not Initialized"
 };
 
-const char* natsStatus_GetText(natsStatus s) {
+NATS_EXTERN const char*
+natsStatus_GetText(natsStatus s) {
     return statusText[(int) s];
 }
-
-#if 0
-natsStatus
-natsSetError(natsStatus s, char* file, int line)
-{
-    int     i, f;
-    void    *frames[100];
-    char    **symbolNames = NULL;
-
-    f = backtrace(frames, sizeof(frames));
-    if (f > 1)
-    {
-        symbolNames = backtrace_symbols(frames+1, f);
-
-        for (i=0; i<f-1; i++)
-            printf("[%s]\n", symbolNames[i]);
-
-        free(symbolNames);
-    }
-
-    return s;
-
-}
-#endif

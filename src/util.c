@@ -7,7 +7,6 @@
 #include <string.h>
 
 #include "mem.h"
-#include "natstime.h"
 
 #define ASCII_0 (48)
 #define ASCII_9 (57)
@@ -56,7 +55,7 @@ nats_ParseControl(natsControl *control, const char *line)
         return NATS_OK;
     }
 
-    len = (tok - line);
+    len = (int) (tok - line);
     control->op = NATS_MALLOC(len + 1);
     if (control->op == NULL)
     {
@@ -86,7 +85,7 @@ nats_ParseControl(natsControl *control, const char *line)
     {
         char *tmp;
 
-        len = strlen(tok);
+        len = (int) strlen(tok);
         tmp = &(tok[len - 1]);
 
         // Remove trailing spaces and the like.
@@ -147,15 +146,14 @@ nats_CreateStringFromBuffer(char **newStr, natsBuffer *buf)
     return NATS_OK;
 }
 
-void
+NATS_EXTERN void
 nats_Sleep(int64_t millisec)
 {
-    struct timeval tv;
-
-    tv.tv_sec  = millisec / 1000;
-    tv.tv_usec = (millisec % 1000) * 1000;
-
-    select(0, NULL, NULL, NULL, &tv);
+#ifdef _WIN32
+    Sleep((DWORD) millisec);
+#else
+    usleep(millisec * 1000);
+#endif
 }
 
 void
@@ -163,7 +161,7 @@ nats_Randomize(int *array, int arraySize)
 {
     int i, j;
 
-    srand(nats_NowInNanoSeconds());
+    srand((unsigned int) nats_NowInNanoSeconds());
 
     for (i = 0; i < arraySize; i++)
     {
@@ -181,40 +179,3 @@ nats_GetBoolStr(bool value)
 
     return "false";
 }
-
-#ifdef _WIN32
-char*
-nats_asprintf(const char *fmt, ...)
-{
-    char    tmp[128];
-    char    *str = NULL;
-    int     n;
-    va_list ap;
-
-    va_start(ap, fmt);
-    n = vsnprintf(tmp, sizeof(tmp), fmt, ap);
-    va_end(ap);
-
-    if (n < 0)
-        return NULL;
-
-    if (n < (int) sizeof(tmp))
-        return NATS_STRDUP(tmp);
-
-    str = NATS_MALLOC(n + 1);
-    if (str != NULL)
-    {
-        va_start(ap, fmt);
-        n = vsnprintf(str, sizeof(str), fmt, ap);
-        va_end(ap);
-
-        if (n < 0)
-        {
-            NATS_FREE(str);
-            str = NULL;
-        }
-    }
-
-    return str;
-}
-#endif

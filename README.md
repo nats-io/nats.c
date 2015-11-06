@@ -12,22 +12,22 @@ First, download the source code:
 git clone git@github.com:nats-io/cnats.git .
 ```
 
-To build the library, we use [CMake](https://cmake.org/download/). Go into the `build` directory and issue this command for the first time:
+To build the library, use [CMake](https://cmake.org/download/). Go into the `build` directory and issue this command for the first time:
 
 ```
 cmake ..
 ```
 
-You can review the default settings using the command:
-
-```
-make edit_cache
-```
-
-When you are satified with the settings, simply invoke:
+or use the GUI to setup the way you want. When you are satified with the settings, simply invoke:
 
 ```
 make
+```
+
+on Windows, you may do this for example:
+
+```
+cmake --build . --config "Release"
 ```
 
 This is building the static and shared libraries and also the examples and the test program. Each are located in their respective directories under `build`: `src`, `examples` and `test`.
@@ -49,14 +49,6 @@ The most common you will use are:
 * clean
 * install
 * test
-
-To compile in debug mode and/or in 32 bits, you need to modify the cache:
-
-```
-make edit_cache
-```
-
-Then modify the appropriate options and re-build.
 
 On platforms where `valgrind` is available, you can run the tests with memory checks.
 Here is an example:
@@ -110,6 +102,30 @@ $ cmake ..
 -- Configuring done
 -- Generating done
 -- Build files have been written to: /home/ivan/cnats/build
+```
+
+You can use the following environment variables to influence the testsuite behavior.
+
+When running with memory check, timing changes and overall performance is slower. The following variable allows the testsuite to adjust some of values used during the test:
+
+```
+NATS_TEST_VALGRIND=yes
+```
+
+When running the tests in verbose mode, the following environment variable allows you to see the server output from within the test itself. Without this option, the server output is silenced:
+
+```
+NATS_TEST_KEEP_SERVER_OUTPUT=yes
+```
+
+If you want to change the default server executable name (`gnastd`) or specify a specific location, use this environment variable:
+
+```
+NATS_TEST_SERVER_EXE=<full server executable path>
+
+for instance:
+
+NATS_TEST_SERVER_EXE=c:\test\gnatsd.exe
 ```
 
 

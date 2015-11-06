@@ -4,12 +4,19 @@
 
 #include <assert.h>
 
-#include "natstime.h"
+#ifdef _WIN32
+#include <sys/timeb.h>
+#endif
+#include <time.h>
 
-int64_t
+NATS_EXTERN int64_t
 nats_Now(void)
 {
-#if defined CLOCK_MONOTONIC
+#ifdef _WIN32
+    struct _timeb now;
+    _ftime_s(&now);
+    return (((int64_t)now.time) * 1000 + now.millitm);
+#elif defined CLOCK_MONOTONIC
     struct timespec ts;
     int rc = clock_gettime(CLOCK_REALTIME, &ts);
     assert(rc == 0);
@@ -22,10 +29,14 @@ nats_Now(void)
 #endif
 }
 
-int64_t
+NATS_EXTERN int64_t
 nats_NowInNanoSeconds(void)
 {
-#if defined CLOCK_MONOTONIC
+#ifdef _WIN32
+    struct _timeb now;
+    _ftime_s(&now);
+    return (((int64_t)now.time) * 1000 + now.millitm) * 1000000L;
+#elif defined CLOCK_MONOTONIC
     struct timespec ts;
     int rc = clock_gettime(CLOCK_REALTIME, &ts);
     assert (rc == 0);
@@ -43,7 +54,7 @@ natsDeadline_Init(natsDeadline *deadline, int64_t timeout)
 {
     deadline->active          = true;
     deadline->absoluteTime    = nats_Now() + timeout;
-    deadline->timeout.tv_sec  = timeout / 1000;
+    deadline->timeout.tv_sec  = (long) timeout / 1000;
     deadline->timeout.tv_usec = (timeout % 1000) * 1000;
 }
 
@@ -63,7 +74,7 @@ natsDeadline_GetTimeout(natsDeadline *deadline)
 
     timeout = deadline->absoluteTime - nats_Now();
 
-    deadline->timeout.tv_sec  = timeout / 1000;
+    deadline->timeout.tv_sec  = (long) (timeout / 1000);
     deadline->timeout.tv_usec = (timeout % 1000) * 1000;
 
     return &(deadline->timeout);

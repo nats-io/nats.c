@@ -26,8 +26,11 @@ natsCondition_Wait(natsCondition *cond, natsMutex *mutex)
 }
 
 natsStatus
-natsCondition_TimedWait(natsCondition *cond, natsMutex *mutex, uint64_t timeout)
+natsCondition_TimedWait(natsCondition *cond, natsMutex *mutex, int64_t timeout)
 {
+    if (timeout <= 0)
+        return NATS_TIMEOUT;
+
     if (SleepConditionVariableCS(cond, mutex, (DWORD) timeout) == 0)
     {
         if (GetLastError() == ERROR_TIMEOUT)
@@ -40,9 +43,9 @@ natsCondition_TimedWait(natsCondition *cond, natsMutex *mutex, uint64_t timeout)
 }
 
 natsStatus
-natsCondition_AbsoluteTimedWait(natsCondition *cond, natsMutex *mutex, uint64_t absoluteTime)
+natsCondition_AbsoluteTimedWait(natsCondition *cond, natsMutex *mutex, int64_t absoluteTime)
 {
-    int64_t now = nats_Now();
+    int64_t now = nats_Now();;
     int64_t sleepTime = absoluteTime - now;
 
     if (sleepTime <= 0)

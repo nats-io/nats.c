@@ -1,5 +1,6 @@
 # We need this directory to build the examples
 include_directories(${PROJECT_SOURCE_DIR}/src)
+include_directories(${PROJECT_SOURCE_DIR}/examples)
 
 # Get all the .c files in the examples directory
 file(GLOB EXAMPLES_SOURCES RELATIVE ${PROJECT_SOURCE_DIR}/examples *.c)

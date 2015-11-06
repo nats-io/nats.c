@@ -640,6 +640,12 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
             int remaining;
             int needed;
 
+#ifdef _WIN32
+// Suppresses the warning that nc->ps->argBuf may be NULL.
+// If nc->ps->argBuf is NULL above, then _cloneMsgArg() will set it. If 's'
+// is NATS_OK here, then nc->ps->argBuf can't be NULL.
+#pragma warning(suppress: 6011)
+#endif
             remaining = sizeof(nc->ps->scratch) - natsBuf_Len(nc->ps->argBuf);
             needed    = bufLen - nc->ps->afterSpace;
 

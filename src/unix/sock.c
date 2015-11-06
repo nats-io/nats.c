@@ -42,3 +42,12 @@ natsSock_IsConnected(natsSock fd)
 
     return true;
 }
+
+natsStatus
+natsSock_Flush(natsSock fd)
+{
+    if (fsync(fd) != 0)
+        return NATS_IO_ERROR;
+
+    return NATS_OK;
+}

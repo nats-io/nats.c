@@ -40,6 +40,9 @@ natsSock_Flush(natsSock fd);
 void
 natsSock_Close(natsSock fd);
 
+natsStatus
+natsSock_SetCommonTcpOptions(natsSock fd);
+
 void
 natsSock_Shutdown(natsSock fd);
 

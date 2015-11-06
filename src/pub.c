@@ -32,11 +32,13 @@ _publishEx(natsConnection *nc, const char *subj,
     if (nc == NULL)
         return NATS_INVALID_ARG;
 
-    if ((subj == NULL) || strlen(subj) == 0)
+    if ((subj == NULL)
+        || ((subjLen = (int) strlen(subj)) == 0))
+    {
         return NATS_INVALID_SUBJECT;
+    }
 
-    subjLen = strlen(subj);
-    replyLen = ((reply != NULL) ? strlen(reply) : 0);
+    replyLen = ((reply != NULL) ? (int) strlen(reply) : 0);
 
     natsConn_Lock(nc);
 
@@ -144,7 +146,7 @@ _publishEx(natsConnection *nc, const char *subj,
  * Publishes the data argument to the given subject. The data argument is left
  * untouched and needs to be correctly interpreted on the receiver.
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_Publish(natsConnection *nc, const char *subj,
                        const void *data, int dataLen)
 {
@@ -158,7 +160,7 @@ natsConnection_Publish(natsConnection *nc, const char *subj,
  *
  * natsPublish(nc, subj, (const void*) myString, (int) strlen(myString));
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_PublishString(natsConnection *nc, const char *subj,
                              const char *str)
 {
@@ -170,7 +172,7 @@ natsConnection_PublishString(natsConnection *nc, const char *subj,
  * Publishes the natsMsg structure, which includes the subject, an optional
  * reply and optional data.
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_PublishMsg(natsConnection *nc, natsMsg *msg)
 {
     return _publish(nc, msg->subject, msg->reply, msg->data, msg->dataLen);
@@ -181,7 +183,7 @@ natsConnection_PublishMsg(natsConnection *nc, natsMsg *msg)
  * the reply subject. Use natsConnection_Request() for automatically waiting for a
  * response inline.
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_PublishRequest(natsConnection *nc, const char *subj,
                               const char *reply, const void *data, int dataLen)
 {
@@ -200,7 +202,7 @@ natsConnection_PublishRequest(natsConnection *nc, const char *subj,
  * natsPublishRequest(nc, subj, reply, (const void*) myString,
  *                    (int) strlen(myString));
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
                                     const char *reply, const char *str)
 {
@@ -215,7 +217,7 @@ natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
  * set to that inbox. Returns the first reply received.
  * This is optimized for the case of multiple responses.
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
                        const void *data, int dataLen, int64_t timeout)
 {
@@ -252,7 +254,7 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
  * natsConnection_Request(nc, subj, reply, (const void*) myString,
  *                        (int) strlen(myString));
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
                              const char *subj, const char *str,
                              int64_t timeout)

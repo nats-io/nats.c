@@ -20,12 +20,7 @@ nats_Randomize(int *array, int arraySize);
 const char*
 nats_GetBoolStr(bool value);
 
-void
+NATS_EXTERN void
 nats_Sleep(int64_t timeout);
-
-#ifdef _WIN32
-char*
-nats_asprintf(const char *fmt, ...);
-#endif
 
 #endif /* UTIL_H_ */

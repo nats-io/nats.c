@@ -24,13 +24,17 @@
 #include <netinet/tcp.h>
 #include <netdb.h>
 #include <pthread.h>
-#include <inttypes.h>
+#include <unistd.h>
+#include <signal.h>
+#include <sys/wait.h>
 
 typedef pthread_t       natsThread;
 typedef pthread_mutex_t natsMutex;
 typedef pthread_cond_t  natsCondition;
 typedef pthread_once_t  natsInitOnceType;
 typedef int             natsSock;
+typedef socklen_t       natsSockLen;
+typedef size_t          natsRecvLen;
 
 #define NATS_ONCE_STATIC_INIT   PTHREAD_ONCE_INIT
 
@@ -42,9 +46,8 @@ typedef int             natsSock;
 #define NATS_SOCK_ERROR                 (-1)
 #define NATS_SOCK_GET_ERROR             (errno)
 
-#define NATS_PRINTF_U64                 PRIu64
-#define NATS_PRINTF_D64                 PRId64
-
-#define nats_asprintf   asprintf
+#define nats_asprintf       asprintf
+#define nats_strcasestr     strcasestr
+#define nats_strcasecmp     strcasecmp
 
 #endif /* N_UNIX_H_ */

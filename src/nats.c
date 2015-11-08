@@ -806,6 +806,11 @@ natsInbox_Destroy(natsInbox *inbox)
 NATS_EXTERN void
 nats_Close(void)
 {
+    // This is to protect against a call to nats_Close() while there
+    // was no prior call to nats_Open(), either directly or indirectly.
+    if (!nats_InitOnce(&gInitOnce, _doInitOnce))
+        return;
+
     natsMutex_Lock(gLib.lock);
 
     if (gLib.closed || !(gLib.initialized))

@@ -14,6 +14,7 @@
 #ifdef DEV_MODE
 
 static void _retain(natsSubscription *sub)   { sub->refs++; }
+static void _release(natsSubscription *sub)  { sub->refs--; }
 
 void natsSub_Lock(natsSubscription *sub)     { natsMutex_Lock(sub->mu);   }
 void natsSub_Unlock(natsSubscription *sub)   { natsMutex_Unlock(sub->mu); }
@@ -21,6 +22,7 @@ void natsSub_Unlock(natsSubscription *sub)   { natsMutex_Unlock(sub->mu); }
 #else
 
 #define _retain(s)  ((s)->refs++)
+#define _release(s) ((s)->refs--)
 
 #endif // DEV_MODE
 
@@ -95,6 +97,10 @@ natsSub_deliverMsgs(void *arg)
     uint64_t            delivered;
     uint64_t            max;
     natsMsg             *msg;
+
+    // This just servers as a barrier for the creation of this thread.
+    natsConn_Lock(nc);
+    natsConn_Unlock(nc);
 
     while (true)
     {
@@ -269,27 +275,29 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
         // a smaller value when the delivery thread should be signaled.
         sub->signalTimerInterval = 10000;
 
+        // Let's not rely on the created timer acquiring the lock that
+        // would make it safe to retain only on success.
+        _retain(sub);
+
         s = natsTimer_Create(&(sub->signalTimer),
                              _signalMsgAvailable,
                              _signalTimerStopped,
                              sub->signalTimerInterval, (void*) sub);
-        if (s == NATS_OK)
-            _retain(sub);
+        if (s != NATS_OK)
+            _release(sub);
     }
     if ((s == NATS_OK) && (cb != NULL))
     {
+        // Let's not rely on the created thread acquiring the lock that
+        // would make it safe to retain only on success.
+        _retain(sub);
+
         // If we have an async callback, start up a sub specific
         // thread to deliver the messages.
         s = natsThread_Create(&(sub->deliverMsgsThread), natsSub_deliverMsgs,
                               (void*) sub);
-        if (s == NATS_OK)
-        {
-            // If the thread above was created ok, we need a retain, since the
-            // thread will do a release on exit. It is safe to do the retain
-            // after the create because the thread needs a lock held by the
-            // caller.
-            _retain(sub);
-        }
+        if (s != NATS_OK)
+            _release(sub);
     }
 
     if (s == NATS_OK)

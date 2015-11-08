@@ -29,7 +29,7 @@
 // For type safety
 
 static void _retain(natsConnection *nc)  { nc->refs++; }
-//static void _release(natsConnection *nc) { nc->refs--; }
+static void _release(natsConnection *nc) { nc->refs--; }
 
 void natsConn_Lock(natsConnection *nc)   { natsMutex_Lock(nc->mu);   }
 void natsConn_Unlock(natsConnection *nc) { natsMutex_Unlock(nc->mu); }
@@ -1275,35 +1275,42 @@ _spinUpSocketWatchers(natsConnection *nc)
     nc->pout        = 0;
     nc->flusherStop = false;
 
+    // Let's not rely on the created threads acquiring lock that would make it
+    // safe to retain only on success.
+
+    _retain(nc);
+
     s = natsThread_Create(&(nc->readLoopThread), _readLoop, (void*) nc);
+    if (s != NATS_OK)
+        _release(nc);
+
     if (s == NATS_OK)
     {
-        // If the thread above was created ok, we need a retain, since the
-        // thread will do a release on exit. It is safe to do the retain
-        // after the create because the thread needs a lock held by the
-        // caller.
         _retain(nc);
 
         s = natsThread_Create(&(nc->flusherThread), _flusher, (void*) nc);
-        if (s == NATS_OK)
-        {
-            // See comment above.
-            _retain(nc);
-        }
+        if (s != NATS_OK)
+            _release(nc);
     }
+
     if ((s == NATS_OK) && (nc->opts->pingInterval > 0))
     {
+        _retain(nc);
+
         if (nc->ptmr == NULL)
+        {
             s = natsTimer_Create(&(nc->ptmr),
                                  _processPingTimer,
                                  _pingStopppedCb,
                                  nc->opts->pingInterval,
                                  (void*) nc);
+            if (s != NATS_OK)
+                _release(nc);
+        }
         else
+        {
             natsTimer_Reset(nc->ptmr, nc->opts->pingInterval);
-
-        if (s == NATS_OK)
-            _retain(nc);
+        }
     }
 
     return s;

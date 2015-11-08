@@ -96,12 +96,6 @@ natsSub_deliverMsgs(void *arg)
     uint64_t            max;
     natsMsg             *msg;
 
-    natsConn_Lock(nc);
-
-    max = sub->max;
-
-    natsConn_Unlock(nc);
-
     while (true)
     {
         natsSub_Lock(sub);
@@ -139,13 +133,19 @@ natsSub_deliverMsgs(void *arg)
 
         msg->next = NULL;
 
+        // Capture this under lock.
+        max = sub->max;
+
         natsSub_Unlock(sub);
 
         if ((max == 0) || (delivered <= max))
         {
            (*mcb)(nc, sub, msg, mcbClosure);
         }
-        else
+
+        // Don't do 'else' because we need to remove when we have hit
+        // the max (after the callback returns).
+        if ((max > 0) && (delivered >= max))
         {
             // If we have hit the max for delivered msgs, remove sub.
             natsConn_removeSubscription(nc, sub, true);
@@ -248,7 +248,8 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     sub->msgCb          = cb;
     sub->msgCbClosure   = cbClosure;
     sub->noDelay        = noDelay;
-    sub->signalLimit    = (int)(nc->opts->maxPendingMsgs * 0.75);
+    sub->pendingMax     = nc->opts->maxPendingMsgs;
+    sub->signalLimit    = (int)(sub->pendingMax * 0.75);
 
     sub->subject = NATS_STRDUP(subj);
     if (sub->subject == NULL)

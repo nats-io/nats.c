@@ -62,8 +62,8 @@ static const char* _PING_PROTO_         = "PING\r\n";
 static const char* _PONG_PROTO_         = "PONG\r\n";
 static const char* _PUB_PROTO_          = "PUB %s %s %d\r\n";
 static const char* _SUB_PROTO_          = "SUB %s %s %d\r\n";
-static const char* _UNSUB_PROTO_        = "UNSUB %d %d\r\n";
-static const char* _UNSUB_NO_MAX_PROTO_ = "UNSUB %d \r\n";
+static const char* _UNSUB_PROTO_        = "UNSUB %" PRId64 " %d\r\n";
+static const char* _UNSUB_NO_MAX_PROTO_ = "UNSUB %" PRId64 " \r\n";
 
 static const char* STALE_CONNECTION     = "Stale Connection";
 static int         STATE_CONNECTION_LEN = 16;
@@ -169,6 +169,60 @@ typedef struct __natsSubscription
 
     int                         refs;
 
+    // These two are updated by the connection in natsConn_processMsg.
+    // 'msgs' is used to determine if we have reached the max (if > 0).
+    uint64_t                    msgs;
+    uint64_t                    bytes;
+
+    // This is non-zero when auto-unsubscribe is used.
+    uint64_t                    max;
+
+    // This is updated in the delivery thread (or NextMsg) and indicates
+    // how many message have been presented to the callback (or returned
+    // from NextMsg). Like 'msgs', this is also used to determine if we
+    // have reached the max number of messages.
+    uint64_t                    delivered;
+
+    // The list of messages waiting to be delivered to the callback (or
+    // returned from NextMsg).
+    natsMsgList                 msgList;
+
+    // The max number of messages that should go in msgList.
+    int                         pendingMax;
+
+    // True if msgList.count is over pendingMax
+    bool                        slowConsumer;
+
+    // If 'true', the connection will notify the deliveryThread when a
+    // message arrives (if the delivery thread is in wait).
+    bool                        noDelay;
+
+    // Condition variable used to wait for message delivery.
+    natsCondition               *cond;
+
+    // When 'noDelay' is false, a timer is used to check for the need
+    // to notify the deliveryMsg thread.
+    natsTimer                   *signalTimer;
+
+    // Interval of the above timer.
+    int64_t                     signalTimerInterval;
+
+    // Indicates the number of time the signal timer failed to try to
+    // acquire the lock (after which it will call Lock()).
+    int                         signalFailCount;
+
+    // Temporarily voids the use of the signalTimer when the message list
+    // count reaches a certain threshold.
+    int                         signalLimit;
+
+    // This is 'true' when the delivery thread (or NextMsg) goes into a
+    // condition wait.
+    bool                        inWait;
+
+    // The subscriber is closed (or closing).
+    bool                        closed;
+
+    // Subscriber id. Assigned during the creation, does not change after that.
     int64_t                     sid;
 
     // Subject that represents this subscription. This can be different
@@ -180,34 +234,15 @@ typedef struct __natsSubscription
     // only be processed by one member of the group.
     char                        *queue;
 
-    // These are protected by the connection's lock
-    uint64_t                    msgs;
-    uint64_t                    bytes;
-    uint64_t                    max;
-
-    // This is protected by the subscription's lock
-    uint64_t                    delivered;
-
+    // Reference to the connection that created this subscription.
     struct __natsConnection     *conn;
 
+    // Delivery thread (for async subscription).
     natsThread                  *deliverMsgsThread;
-    natsCondition               *cond;
-    natsTimer                   *signalTimer;
-    int64_t                     signalTimerInterval;
-    int                         signalFailCount;
-    int                         signalLimit;
-    bool                        inWait;
-    bool                        closed;
 
+    // Message callback and closure (for async subscription).
     natsMsgHandler              msgCb;
     void                        *msgCbClosure;
-
-    natsMsgList                 msgList;
-
-    int                         pendingMax;
-
-    bool                        slowConsumer;
-    bool                        noDelay;
 
 } natsSubscription;
 

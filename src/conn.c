@@ -576,16 +576,16 @@ _connectProto(natsConnection *nc, char **proto)
 }
 
 static natsStatus
-_sendUnsubProto(natsConnection *nc, natsSubscription *sub)
+_sendUnsubProto(natsConnection *nc, int64_t subId, int max)
 {
     natsStatus  s       = NATS_OK;
     char        *proto  = NULL;
     int         res     = 0;
 
-    if (sub->max > 0)
-        res = nats_asprintf(&proto, _UNSUB_PROTO_, (int) sub->sid, (int) sub->max);
+    if (max > 0)
+        res = nats_asprintf(&proto, _UNSUB_PROTO_, subId, max);
     else
-        res = nats_asprintf(&proto, _UNSUB_NO_MAX_PROTO_, (int) sub->sid);
+        res = nats_asprintf(&proto, _UNSUB_NO_MAX_PROTO_, subId);
 
     if (res < 0)
         s = NATS_NO_MEMORY;
@@ -606,11 +606,18 @@ _resendSubscriptions(natsConnection *nc)
     natsHashIter        iter;
     char                *proto;
     int                 res;
+    int                 max;
 
     natsHashIter_Init(&iter, nc->subs);
     while (natsHashIter_Next(&iter, NULL, (void**) &sub))
     {
         proto = NULL;
+
+        natsSub_Lock(sub);
+        max = (int) sub->max;
+        natsSub_Unlock(sub);
+
+        // These sub's fields are immutable
         res = nats_asprintf(&proto, _SUB_PROTO_,
                             sub->subject,
                             (sub->queue == NULL ? "" : sub->queue),
@@ -625,8 +632,8 @@ _resendSubscriptions(natsConnection *nc)
             proto = NULL;
         }
 
-        if ((s == NATS_OK) && (sub->max > 0))
-            s = _sendUnsubProto(nc, sub);
+        if ((s == NATS_OK) && (max > 0))
+            s = _sendUnsubProto(nc, sub->sid, max);
     }
 
     return s;
@@ -1449,61 +1456,66 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         return NATS_OK;
     }
 
+    // Do this outside of sub's lock, even if we end-up having to destroy
+    // it because we have reached the maxPendingMsgs count. This reduces
+    // lock contention.
+    s = _createMsg(&msg, nc, buf, bufLen);
+    if (s != NATS_OK)
+    {
+        natsConn_Unlock(nc);
+        return s;
+    }
+
+    natsSub_Lock(sub);
+
     if ((sub->max > 0) && (sub->msgs > sub->max))
     {
+        natsMsg_Destroy(msg);
+        natsSub_Unlock(sub);
+
         natsConn_removeSubscription(nc, sub, false);
 
         natsConn_Unlock(nc);
         return NATS_OK;
     }
 
-    // Updated under the connection lock
     sub->msgs  += 1;
     sub->bytes += (uint64_t) bufLen;
 
-    // Do this outside of sub's lock, even if we end-up having to destroy
-    // it because we have reached the maxPendingMsgs count. This reduces
-    // lock contention.
-    s = _createMsg(&msg, nc, buf, bufLen);
-    if (s == NATS_OK)
+    if (sub->msgList.count >= sub->pendingMax)
     {
-        natsSub_Lock(sub);
+        natsMsg_Destroy(msg);
 
-        if (sub->msgList.count >= nc->opts->maxPendingMsgs)
-        {
-            natsMsg_Destroy(msg);
-
-            _processSlowConsumer(nc, sub);
-        }
-        else
-        {
-            sub->slowConsumer = false;
-
-            if (sub->msgList.head == NULL)
-                sub->msgList.head = msg;
-
-            if (sub->msgList.tail != NULL)
-                sub->msgList.tail->next = msg;
-
-            sub->msgList.tail = msg;
-
-            sub->msgList.count++;
-
-            if ((sub->noDelay)
-                || (sub->msgList.count >= sub->signalLimit))
-            {
-                if (sub->inWait)
-                    natsCondition_Signal(sub->cond);
-            }
-            else if (sub->signalTimerInterval != 1)
-            {
-                sub->signalTimerInterval = 1;
-                natsTimer_Reset(sub->signalTimer, 1);
-            }
-        }
-
-        natsSub_Unlock(sub);
+        _processSlowConsumer(nc, sub);
     }
+    else
+    {
+        sub->slowConsumer = false;
+
+        if (sub->msgList.head == NULL)
+            sub->msgList.head = msg;
+
+        if (sub->msgList.tail != NULL)
+            sub->msgList.tail->next = msg;
+
+        sub->msgList.tail = msg;
+
+        sub->msgList.count++;
+
+        if ((sub->noDelay)
+            || (sub->msgList.count >= sub->signalLimit))
+        {
+            if (sub->inWait)
+                natsCondition_Signal(sub->cond);
+        }
+        else if (sub->signalTimerInterval != 1)
+        {
+            sub->signalTimerInterval = 1;
+            natsTimer_Reset(sub->signalTimer, 1);
+        }
+    }
+
+    natsSub_Unlock(sub);
 
     natsConn_Unlock(nc);
 
@@ -1717,21 +1729,18 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
         return NATS_OK;
     }
 
-    if (max > 0)
-    {
-        sub->max = max;
-    }
-    else
-    {
-        sub->max = 0;
+    natsSub_Lock(sub);
+    sub->max = max;
+    natsSub_Unlock(sub);
+
+    if (max == 0)
         natsConn_removeSubscription(nc, sub, false);
-    }
 
     if (!_isReconnecting(nc))
     {
         // We will send these for all subs when we reconnect
         // so that we can suppress here.
-        s = _sendUnsubProto(nc, sub);
+        s = _sendUnsubProto(nc, sub->sid, max);
         if (s == NATS_OK)
             natsConn_kickFlusher(nc);
 

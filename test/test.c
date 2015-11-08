@@ -2531,10 +2531,12 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
             break;
         }
         case 3:
+        case 9:
         {
             doSignal = false;
             arg->sum++;
-            if (arg->sum == 10)
+
+            if ((arg->control != 9) && (arg->sum == 10))
             {
                 arg->status = natsSubscription_Unsubscribe(sub);
                 doSignal = true;
@@ -3785,28 +3787,24 @@ _connectToMockupServer(void *closure)
     natsConnection      *nc = NULL;
     natsOptions         *opts = NULL;
     natsStatus          s;
+    int                 control;
 
     // Make sure that the server is ready to accept our connection.
     nats_Sleep(100);
 
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetAllowReconnect(opts, false);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+
+    natsOptions_Destroy(opts);
+
     natsMutex_Lock(arg->m);
+    control = arg->control;
+    natsMutex_Unlock(arg->m);
 
-    if (arg->control == 3)
-    {
-        s = natsOptions_Create(&opts);
-        if (s == NATS_OK)
-            s = natsOptions_SetAllowReconnect(opts, false);
-        if (s == NATS_OK)
-            s = natsConnection_Connect(&nc, opts);
-
-        natsOptions_Destroy(opts);
-    }
-    else
-    {
-        s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    }
-
-    if (arg->control == 2)
+    if (control == 2)
     {
         int64_t payload = 0;
 
@@ -3833,8 +3831,13 @@ _connectToMockupServer(void *closure)
             s = natsConnection_PublishString(nc, "hello", "a");
             testCond(s == NATS_OK);
         }
+
+        natsMutex_Lock(arg->m);
+        arg->closed = true;
+        natsCondition_Signal(arg->c);
+        natsMutex_Unlock(arg->m);
     }
-    else if (arg->control == 3)
+    else if (control == 3)
     {
         natsThread *t = NULL;
 
@@ -3847,13 +3850,14 @@ _connectToMockupServer(void *closure)
             natsThread_Destroy(t);
         }
     }
-    else if (arg->control == 4)
+    else if (control == 4)
     {
         s = natsConnection_Flush(nc);
     }
 
     natsConnection_Destroy(nc);
 
+    natsMutex_Lock(arg->m);
     arg->status = s;
     natsCondition_Signal(arg->c);
     natsMutex_Unlock(arg->m);
@@ -4069,6 +4073,15 @@ test_ErrOnMaxPayloadLimit(void)
                                     _PONG_PROTO_, _PONG_PROTO_LEN_);
     }
 
+    // Wait for the client to be about to close the connection.
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !(arg.closed))
+        s = natsCondition_TimedWait(arg.c, arg.m, 3000);
+    natsMutex_Unlock(arg.m);
+
+    natsSock_Close(clientSock);
+    natsSock_Close(sock);
+
     // Wait for the client to finish.
     if (t != NULL)
     {
@@ -4076,10 +4089,10 @@ test_ErrOnMaxPayloadLimit(void)
         natsThread_Destroy(t);
     }
 
-    _destroyDefaultThreadArgs(&arg);
+    test("Test completed ok: ");
+    testCond(s == NATS_OK);
 
-    natsSock_Close(clientSock);
-    natsSock_Close(sock);
+    _destroyDefaultThreadArgs(&arg);
 
     freeaddrinfo(servinfo);
 }
@@ -5382,7 +5395,7 @@ test_ClientAsyncAutoUnsub(void)
         FAIL("Unable to setup test!");
 
     arg.status = NATS_OK;
-    arg.control= 3;
+    arg.control= 9;
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     if (serverPid == NATS_INVALID_PID)
@@ -7015,9 +7028,6 @@ int main(int argc, char **argv)
 
     // Makes valgrind happy
     nats_Close();
-
-    if (valgrind)
-        nats_Sleep(500);
 
     if (fails)
     {

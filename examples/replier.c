@@ -84,6 +84,14 @@ int main(int argc, char **argv)
     if ((s == NATS_OK) && async)
         s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);
 
+    // This is setting the maximum number of pending messages allowed in
+    // the library for each subscriber. For max performance, we set it
+    // here to the expected total number of messages. You can remove, or
+    // set it to a low number to see the effect of messages being dropped
+    // by the client library.
+    if (s == NATS_OK)
+        s = natsOptions_SetMaxPendingMsgs(opts, (int) total);
+
     if (s == NATS_OK)
         s = natsConnection_Connect(&conn, opts);
 

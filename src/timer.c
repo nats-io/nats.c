@@ -78,8 +78,6 @@ natsTimer_Reset(natsTimer *timer, int64_t interval)
 void
 natsTimer_Destroy(natsTimer *timer)
 {
-    bool doStop = false;
-
     if (timer == NULL)
         return;
 

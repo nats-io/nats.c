@@ -23,7 +23,7 @@
 extern "C" {
 #endif
 
-static const char *NATS_DEFAULT_URL = "nats://localhost:4222";
+#define NATS_DEFAULT_URL "nats://localhost:4222"
 
 //
 // Types.

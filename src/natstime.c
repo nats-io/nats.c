@@ -2,8 +2,6 @@
 
 #include "natsp.h"
 
-#include <assert.h>
-
 #ifdef _WIN32
 #include <sys/timeb.h>
 #endif
@@ -18,13 +16,13 @@ nats_Now(void)
     return (((int64_t)now.time) * 1000 + now.millitm);
 #elif defined CLOCK_MONOTONIC
     struct timespec ts;
-    int rc = clock_gettime(CLOCK_REALTIME, &ts);
-    assert(rc == 0);
+    if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
+        abort();
     return ((int64_t)ts.tv_sec) * 1000 + (((int64_t)ts.tv_nsec) / 1000000);
 #else
     struct timeval tv;
-    int rc = gettimeofday(&tv, NULL);
-    assert(rc == 0);
+    if (gettimeofday(&tv, NULL) != 0)
+        abort();
     return ((int64_t)tv.tv_sec) * 1000 + (((int64_t)tv.tv_usec) / 1000);
 #endif
 }
@@ -38,13 +36,13 @@ nats_NowInNanoSeconds(void)
     return (((int64_t)now.time) * 1000 + now.millitm) * 1000000L;
 #elif defined CLOCK_MONOTONIC
     struct timespec ts;
-    int rc = clock_gettime(CLOCK_REALTIME, &ts);
-    assert (rc == 0);
+    if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
+        abort();
     return ((int64_t)ts.tv_sec) * 1000000000L + ((int64_t)ts.tv_nsec);
 #else
     struct timeval tv;
-    int rc = gettimeofday(&tv, NULL);
-    assert(rc == 0);
+    if (gettimeofday(&tv, NULL) != 0)
+        abort();
     return ((int64_t)tv.tv_sec) * 1000000000L + (((int64_t)tv.tv_usec) * 1000);
 #endif
 }

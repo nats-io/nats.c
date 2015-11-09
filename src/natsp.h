@@ -42,31 +42,31 @@
 // access
 //#define DEV_MODE    (1)
 
-static const char* CString     = "C";
-static const char* Version     = "1.0.0";
+#define CString     "C"
+#define Version     "1.0.0"
 
-static const char* NATS_DEFAULT_URL = "nats://localhost:4222";
+#define NATS_DEFAULT_URL "nats://localhost:4222"
 
-static const char* _OK_OP_     = "+OK";
-static const char* _ERR_OP_    = "-ERR";
-static const char* _MSG_OP_    = "MSG";
-static const char* _PING_OP_   = "PING";
-static const char* _PONG_OP_   = "PONG";
-static const char* _INFO_OP_   = "INFO";
+#define _OK_OP_     "+OK"
+#define _ERR_OP_    "-ERR"
+#define _MSG_OP_    "MSG"
+#define _PING_OP_   "PING"
+#define _PONG_OP_   "PONG"
+#define _INFO_OP_   "INFO"
 
-static const char* _CRLF_      = "\r\n";
-static const char* _SPC_       = " ";
-static const char* _PUB_P_     = "PUB ";
+#define _CRLF_      "\r\n"
+#define _SPC_       " "
+#define _PUB_P_     "PUB "
 
-static const char* _PING_PROTO_         = "PING\r\n";
-static const char* _PONG_PROTO_         = "PONG\r\n";
-static const char* _PUB_PROTO_          = "PUB %s %s %d\r\n";
-static const char* _SUB_PROTO_          = "SUB %s %s %d\r\n";
-static const char* _UNSUB_PROTO_        = "UNSUB %" PRId64 " %d\r\n";
-static const char* _UNSUB_NO_MAX_PROTO_ = "UNSUB %" PRId64 " \r\n";
+#define _PING_PROTO_         "PING\r\n"
+#define _PONG_PROTO_         "PONG\r\n"
+#define _PUB_PROTO_          "PUB %s %s %d\r\n"
+#define _SUB_PROTO_          "SUB %s %s %d\r\n"
+#define _UNSUB_PROTO_        "UNSUB %" PRId64 " %d\r\n"
+#define _UNSUB_NO_MAX_PROTO_ "UNSUB %" PRId64 " \r\n"
 
-static const char* STALE_CONNECTION     = "Stale Connection";
-static int         STATE_CONNECTION_LEN = 16;
+#define STALE_CONNECTION     "Stale Connection"
+#define STATE_CONNECTION_LEN (16)
 
 #define _CRLF_LEN_          (2)
 #define _SPC_LEN_           (1)

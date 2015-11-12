@@ -1842,6 +1842,9 @@ natsConnection_Connect(natsConnection **newConn, natsOptions *options)
     natsConnection  *nc     = NULL;
     natsOptions     *opts   = NULL;
 
+    if (options == NULL)
+        return natsConnection_ConnectTo(newConn, NATS_DEFAULT_URL);
+
     opts = natsOptions_clone(options);
     if (opts == NULL)
         return NATS_NO_MEMORY;

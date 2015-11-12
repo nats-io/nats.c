@@ -2927,6 +2927,26 @@ test_UseDefaultURLIfNoServerSpecified(void)
 }
 
 static void
+test_ConnectionWithNullOptions(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    if (serverPid == NATS_INVALID_PID)
+        FAIL("Unable to start or verify that the server was started!");
+
+    test("Check connect with NULL options is allowed: ");
+    s = natsConnection_Connect(&nc, NULL);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_ConnectionStatus(void)
 {
     natsStatus          s;
@@ -6871,6 +6891,7 @@ static testInfo allTests[] =
 
     {"DefaultConnection",               test_DefaultConnection},
     {"UseDefaultURLIfNoServerSpecified",test_UseDefaultURLIfNoServerSpecified},
+    {"ConnectionWithNULLOptions",       test_ConnectionWithNullOptions},
     {"ConnectionStatus",                test_ConnectionStatus},
     {"ConnClosedCB",                    test_ConnClosedCB},
     {"CloseDisconnectedCB",             test_CloseDisconnectedCB},

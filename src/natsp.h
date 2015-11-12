@@ -43,7 +43,7 @@
 //#define DEV_MODE    (1)
 
 #define CString     "C"
-#define Version     "1.0.0"
+#define Version     "1.0.1"
 
 #define NATS_DEFAULT_URL "nats://localhost:4222"
 

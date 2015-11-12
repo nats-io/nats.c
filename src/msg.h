@@ -12,18 +12,18 @@ typedef struct __natsMsg
 {
     natsGCItem          gc;
 
-    // This holds subject, reply and payload.
-    char                *buffer;
-
-    // These points to specific locations in 'buffer'. They must not be freed.
-    // (note that we could do without 'subject' since as of now, it is
-    // equivalent to 'buffer').
+    // The message is allocated as a single memory block that contains
+    // this structure and enough space for the payload. The msg payload
+    // starts after the 'next' pointer.
     const char          *subject;
     const char          *reply;
     const char          *data;
     int                 dataLen;
 
+    // Must be last field!
     struct __natsMsg    *next;
+
+    // Nothing after this: the message payload goes there.
 
 } natsMsg;
 

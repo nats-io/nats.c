@@ -18,7 +18,6 @@ natsMsg_free(void *object)
 
     msg = (natsMsg*) object;
 
-    NATS_FREE(msg->buffer);
     NATS_FREE(msg);
 }
 
@@ -78,26 +77,31 @@ natsMsg_create(natsMsg **newMsg,
 {
     natsMsg     *msg      = NULL;
     char        *ptr      = NULL;
-    int         totalSize = 0;
+    int         bufSize   = 0;
 
-    msg = NATS_CALLOC(1, sizeof(natsMsg));
+    bufSize  = subjLen;
+    bufSize += 1;
+    bufSize += replyLen;
+    bufSize += 1;
+    bufSize += bufLen;
+    bufSize += 1;
+
+    msg = NATS_MALLOC(sizeof(natsMsg) + bufSize);
     if (msg == NULL)
         return NATS_NO_MEMORY;
 
-    totalSize  = subjLen;
-    totalSize += 1;
-    totalSize += replyLen;
-    totalSize += 1;
-    totalSize += bufLen;
-    totalSize += 1;
+    // To be safe, we could 'memset' the message up to sizeof(natsMsg),
+    // but since we are explicitly initializing most of the fields, we save
+    // on that call, but we need to make sure what we initialize all fields!!!
 
-    msg->buffer = NATS_MALLOC(totalSize);
-    if (msg->buffer == NULL)
-    {
-        NATS_FREE(msg);
-        return NATS_NO_MEMORY;
-    }
-    ptr = msg->buffer;
+    // That being said, we memset the 'gc' structure to protect us in case
+    // some fields are later added to this 'external' structure and we forget
+    // about updating this initialization code.
+    memset(&(msg->gc), 0, sizeof(natsGCItem));
+
+    msg->next = NULL;
+
+    ptr = (char*) (((char*) &(msg->next)) + sizeof(msg->next));
 
     msg->subject = (const char*) ptr;
     memcpy(ptr, subject, subjLen);
@@ -118,7 +122,8 @@ natsMsg_create(natsMsg **newMsg,
     ptr += bufLen;
     *(ptr) = '\0';
 
-    // Setting the callback will trigger garbage collection
+    // Setting the callback will trigger garbage collection when
+    // natsMsg_Destroy() is invoked.
     msg->gc.freeCb = natsMsg_free;
 
     *newMsg = msg;

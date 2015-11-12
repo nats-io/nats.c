@@ -128,6 +128,13 @@ for instance:
 NATS_TEST_SERVER_EXE=c:\test\gnatsd.exe
 ```
 
+## Documentation
+
+The public API has been documented using [Doxygen](http://www.stack.nl/~dimitri/doxygen/).
+
+You can check it [here](https://github.com/nats-io/cnats/tree/master/doc/html/index.html).
+
+The source code is also quite documented.
 
 ## Basic Usage
 

@@ -1,0 +1,26 @@
+var n_win_8h =
+[
+    [ "__natsThread", "struct____nats_thread.html", "struct____nats_thread" ],
+    [ "_CRT_SECURE_NO_WARNINGS", "n-win_8h.html#af08ec37a8c99d747fb60fa15bc28678b", null ],
+    [ "NATS_ONCE_STATIC_INIT", "n-win_8h.html#ae71c409b7e15234aae6bd55166f833e7", null ],
+    [ "NATS_ONCE_TYPE", "n-win_8h.html#a41c2706c45872947363c9e3591d3c9c8", null ],
+    [ "NATS_SOCK_CLOSE", "n-win_8h.html#a4c18a92e0de0fa78551c4a0378bed149", null ],
+    [ "NATS_SOCK_CONNECT_IN_PROGRESS", "n-win_8h.html#aedbe98169660208331ee123c64dbafd7", null ],
+    [ "NATS_SOCK_ERROR", "n-win_8h.html#ab8d3c37496db8759eb8492b9068c1c9a", null ],
+    [ "NATS_SOCK_GET_ERROR", "n-win_8h.html#af7f3f61991d6a24062c82e2d42c44a82", null ],
+    [ "NATS_SOCK_INVALID", "n-win_8h.html#a813db58c57e89c4763f18693cbf3ed7c", null ],
+    [ "NATS_SOCK_SHUTDOWN", "n-win_8h.html#a118361cf026b8fca4edb49cedecf18ae", null ],
+    [ "NATS_SOCK_WOULD_BLOCK", "n-win_8h.html#a794384840d50e2192b4d7b4d99a6259e", null ],
+    [ "snprintf", "n-win_8h.html#aa367b75c5aed883fef5befbdf04835a4", null ],
+    [ "strcasecmp", "n-win_8h.html#ac99ec3f1036620727a68aa8c25a8963c", null ],
+    [ "WIN32_LEAN_AND_MEAN", "n-win_8h.html#ac7bef5d85e3dcd73eef56ad39ffc84a9", null ],
+    [ "natsCondition", "n-win_8h.html#ab207c23cfb7ad8fe5fe1621be84cb847", null ],
+    [ "natsInitOnceType", "n-win_8h.html#a1db1ee49b8547c254b5876b44b10f7eb", null ],
+    [ "natsMutex", "n-win_8h.html#a859e7406c4ac3a118170614fc773efee", null ],
+    [ "natsRecvLen", "n-win_8h.html#a3ccdfc6340a58674ea40c1460426bc62", null ],
+    [ "natsSock", "n-win_8h.html#a8282165b12d195ae5dc3d1adaad69801", null ],
+    [ "natsSockLen", "n-win_8h.html#a36572e3b39207769332c9bec18d3ab7f", null ],
+    [ "natsThread", "n-win_8h.html#a58901797b55b9d2003930cd2fbccb477", null ],
+    [ "nats_asprintf", "n-win_8h.html#a73adf85986cbafe50af3e1957974eede", null ],
+    [ "nats_strcasestr", "n-win_8h.html#afbd8b6ebfe06a6707abfd0981f448898", null ]
+];

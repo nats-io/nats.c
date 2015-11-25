@@ -5,7 +5,6 @@ This is an alpha release, heavily based on the [NATS GO Client](https://github.c
 
 [![License MIT](https://img.shields.io/npm/l/express.svg)](http://opensource.org/licenses/MIT)
 [![Build Status](https://travis-ci.org/nats-io/cnats.svg?branch=master)](http://travis-ci.org/nats-io/cnats)
-[![Release][Release-Image]][Release-Url]
 
 ## Installation
 

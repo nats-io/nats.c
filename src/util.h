@@ -20,7 +20,4 @@ nats_Randomize(int *array, int arraySize);
 const char*
 nats_GetBoolStr(bool value);
 
-NATS_EXTERN void
-nats_Sleep(int64_t timeout);
-
 #endif /* UTIL_H_ */

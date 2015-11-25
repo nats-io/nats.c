@@ -22,5 +22,5 @@ add_library(nats_static STATIC ${SOURCES} ${PS_SOURCES})
 # --------------------------------------
 install(TARGETS nats DESTINATION lib)
 install(TARGETS nats_static DESTINATION lib)
-install(FILES nats.h status.h DESTINATION include)
+install(FILES nats.h status.h version.h DESTINATION include)
 

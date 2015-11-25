@@ -676,7 +676,7 @@ _libTearDown(void)
     natsLib_Release();
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 nats_Open(int64_t lockSpinCount)
 {
     natsStatus s = NATS_OK;
@@ -768,7 +768,7 @@ nats_Open(int64_t lockSpinCount)
     return s;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsInbox_Create(natsInbox **newInbox)
 {
     natsStatus  s      = NATS_OK;
@@ -793,7 +793,7 @@ natsInbox_Create(natsInbox **newInbox)
     return s;
 }
 
-NATS_EXTERN void
+void
 natsInbox_Destroy(natsInbox *inbox)
 {
     if (inbox == NULL)
@@ -803,7 +803,7 @@ natsInbox_Destroy(natsInbox *inbox)
 }
 
 
-NATS_EXTERN void
+void
 nats_Close(void)
 {
     // This is to protect against a call to nats_Close() while there
@@ -839,4 +839,49 @@ nats_Close(void)
     natsMutex_Unlock(gLib.lock);
 
     _libTearDown();
+}
+
+const char*
+nats_GetVersion(void)
+{
+    return LIB_NATS_VERSION_STRING;
+}
+
+uint32_t
+nats_GetVersionNumber(void)
+{
+    return LIB_NATS_VERSION_NUMBER;
+}
+
+static void
+_versionGetString(char *buffer, size_t bufLen, uint32_t verNumber)
+{
+    snprintf(buffer, bufLen, "%d.%d.%d",
+             ((verNumber >> 16) & 0xF),
+             ((verNumber >> 8) & 0xF),
+             (verNumber & 0xF));
+}
+
+bool
+nats_CheckCompatibilityImpl(uint32_t headerReqVerNumber, uint32_t headerVerNumber,
+                            const char *headerVerString)
+{
+    if ((headerVerNumber < LIB_NATS_VERSION_REQUIRED_NUMBER)
+        || (headerReqVerNumber > LIB_NATS_VERSION_NUMBER))
+    {
+        char reqVerString[10];
+        char libReqVerString[10];
+
+        _versionGetString(reqVerString, sizeof(reqVerString), headerReqVerNumber);
+        _versionGetString(libReqVerString, sizeof(libReqVerString), NATS_VERSION_REQUIRED_NUMBER);
+
+        printf("Incompatible versions:\n" \
+               "Header : %s (requires %s)\n" \
+               "Library: %s (requires %s)\n",
+               headerVerString, reqVerString,
+               NATS_VERSION_STRING, libReqVerString);
+        exit(1);
+    }
+
+    return true;
 }

@@ -14,7 +14,7 @@
 
 #define UNLOCK_OPTS(o) natsMutex_Unlock((o)->mu)
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetURL(natsOptions *opts, const char* url)
 {
     natsStatus s = NATS_OK;
@@ -56,7 +56,7 @@ _freeServers(natsOptions *opts)
     opts->serversCount  = 0;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetServers(natsOptions *opts, const char** servers, int serversCount)
 {
     natsStatus  s = NATS_OK;
@@ -92,7 +92,7 @@ natsOptions_SetServers(natsOptions *opts, const char** servers, int serversCount
     return s;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetNoRandomize(natsOptions *opts, bool noRandomize)
 {
     natsStatus  s = NATS_OK;
@@ -106,7 +106,7 @@ natsOptions_SetNoRandomize(natsOptions *opts, bool noRandomize)
     return s;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetTimeout(natsOptions *opts, int64_t timeout)
 {
     LOCK_AND_CHECK_OPTIONS(opts, (timeout < 0));
@@ -119,7 +119,7 @@ natsOptions_SetTimeout(natsOptions *opts, int64_t timeout)
 }
 
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetName(natsOptions *opts, const char *name)
 {
     natsStatus  s = NATS_OK;
@@ -140,7 +140,7 @@ natsOptions_SetName(natsOptions *opts, const char *name)
     return s;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetVerbose(natsOptions *opts, bool verbose)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0);
@@ -152,7 +152,7 @@ natsOptions_SetVerbose(natsOptions *opts, bool verbose)
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetPedantic(natsOptions *opts, bool pedantic)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0);
@@ -164,7 +164,7 @@ natsOptions_SetPedantic(natsOptions *opts, bool pedantic)
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetPingInterval(natsOptions *opts, int64_t interval)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0);
@@ -176,7 +176,7 @@ natsOptions_SetPingInterval(natsOptions *opts, int64_t interval)
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetMaxPingsOut(natsOptions *opts, int maxPignsOut)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0);
@@ -189,7 +189,7 @@ natsOptions_SetMaxPingsOut(natsOptions *opts, int maxPignsOut)
 }
 
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetAllowReconnect(natsOptions *opts, bool allow)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0);
@@ -201,7 +201,7 @@ natsOptions_SetAllowReconnect(natsOptions *opts, bool allow)
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetMaxReconnect(natsOptions *opts, int maxReconnect)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0);
@@ -213,7 +213,7 @@ natsOptions_SetMaxReconnect(natsOptions *opts, int maxReconnect)
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetReconnectWait(natsOptions *opts, int64_t reconnectWait)
 {
     LOCK_AND_CHECK_OPTIONS(opts, (reconnectWait < 0));
@@ -225,7 +225,7 @@ natsOptions_SetReconnectWait(natsOptions *opts, int64_t reconnectWait)
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending)
 {
     LOCK_AND_CHECK_OPTIONS(opts, (maxPending <= 0));
@@ -237,7 +237,7 @@ natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending)
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetErrorHandler(natsOptions *opts, natsErrHandler errHandler,
                             void *closure)
 {
@@ -251,7 +251,7 @@ natsOptions_SetErrorHandler(natsOptions *opts, natsErrHandler errHandler,
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetClosedCB(natsOptions *opts, natsConnectionHandler closedCb,
                         void *closure)
 {
@@ -265,7 +265,7 @@ natsOptions_SetClosedCB(natsOptions *opts, natsConnectionHandler closedCb,
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetDisconnectedCB(natsOptions *opts,
                               natsConnectionHandler disconnectedCb,
                               void *closure)
@@ -280,7 +280,7 @@ natsOptions_SetDisconnectedCB(natsOptions *opts,
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_SetReconnectedCB(natsOptions *opts,
                              natsConnectionHandler reconnectedCb,
                              void *closure)
@@ -309,7 +309,7 @@ _freeOptions(natsOptions *opts)
     NATS_FREE(opts);
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsOptions_Create(natsOptions **newOpts)
 {
     natsOptions *opts = (natsOptions*) NATS_CALLOC(1, sizeof(natsOptions));
@@ -397,7 +397,7 @@ natsOptions_clone(natsOptions *opts)
     return cloned;
 }
 
-NATS_EXTERN void
+void
 natsOptions_Destroy(natsOptions *opts)
 {
     if (opts == NULL)

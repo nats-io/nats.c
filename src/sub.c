@@ -314,7 +314,7 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
  * natsMsgHandler. If no natsMsgHandler is given, the subscription is a
  * synchronous subscription and can be polled via natsSubscription_NextMsg().
  */
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_Subscribe(natsSubscription **sub, natsConnection *nc, const char *subject,
                          natsMsgHandler cb, void *cbClosure)
 {
@@ -324,7 +324,7 @@ natsConnection_Subscribe(natsSubscription **sub, natsConnection *nc, const char 
 /*
  * natsSubscribeSync is syntactic sugar for natsSubscribe(&sub, nc, subject, NULL).
  */
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_SubscribeSync(natsSubscription **sub, natsConnection *nc, const char *subject)
 {
     return natsConn_subscribe(sub, nc, subject, NULL, NULL, NULL, false);
@@ -336,7 +336,7 @@ natsConnection_SubscribeSync(natsSubscription **sub, natsConnection *nc, const c
  * only one member of the group will be selected to receive any given
  * message asynchronously.
  */
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_QueueSubscribe(natsSubscription **sub, natsConnection *nc,
                    const char *subject, const char *queueGroup,
                    natsMsgHandler cb, void *cbClosure)
@@ -351,7 +351,7 @@ natsConnection_QueueSubscribe(natsSubscription **sub, natsConnection *nc,
 /*
  * Similar to natsQueueSubscribe except that the subscription is synchronous.
  */
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_QueueSubscribeSync(natsSubscription **sub, natsConnection *nc,
                        const char *subject, const char *queueGroup)
 {
@@ -369,7 +369,7 @@ natsConnection_QueueSubscribeSync(natsSubscription **sub, natsConnection *nc,
  * to have the subscriber be notified immediately each time a message
  * arrives.
  */
-NATS_EXTERN natsStatus
+natsStatus
 natsSubscription_NoDeliveryDelay(natsSubscription *sub)
 {
     if (sub == NULL)
@@ -395,7 +395,7 @@ natsSubscription_NoDeliveryDelay(natsSubscription *sub)
  * one is available. A timeout can be used to return when no message has been
  * delivered.
  */
-NATS_EXTERN natsStatus
+natsStatus
 natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout)
 {
     natsStatus      s    = NATS_OK;
@@ -525,7 +525,7 @@ _unsubscribe(natsSubscription *sub, int max)
  * a callback in progress, in that case, the subscription will still be valid
  * until the callback returns.
  */
-NATS_EXTERN natsStatus
+natsStatus
 natsSubscription_Unsubscribe(natsSubscription *sub)
 {
     return _unsubscribe(sub, 0);
@@ -537,7 +537,7 @@ natsSubscription_Unsubscribe(natsSubscription *sub)
  * This can be useful when sending a request to an unknown number
  * of subscribers.
  */
-NATS_EXTERN natsStatus
+natsStatus
 natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max)
 {
     return _unsubscribe(sub, max);
@@ -546,7 +546,7 @@ natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max)
 /*
  * Returns the number of queued messages in the client for this subscription.
  */
-NATS_EXTERN natsStatus
+natsStatus
 natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
 {
     if (sub == NULL)
@@ -573,7 +573,7 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
  * This will return false if the subscription has already been closed,
  * or auto unsubscribed.
  */
-NATS_EXTERN bool
+bool
 natsSubscription_IsValid(natsSubscription *sub)
 {
     bool valid = false;
@@ -594,7 +594,7 @@ natsSubscription_IsValid(natsSubscription *sub)
  * Destroys the subscription object, freeing up memory.
  * If not already done, this call will removes interest on the subject.
  */
-NATS_EXTERN void
+void
 natsSubscription_Destroy(natsSubscription *sub)
 {
     if (sub == NULL)

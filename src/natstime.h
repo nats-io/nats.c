@@ -14,12 +14,6 @@ typedef struct __natsDeadline
 
 } natsDeadline;
 
-NATS_EXTERN int64_t
-nats_Now(void);
-
-NATS_EXTERN int64_t
-nats_NowInNanoSeconds(void);
-
 void
 natsDeadline_Init(natsDeadline *deadline, int64_t timeout);
 

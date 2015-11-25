@@ -18,8 +18,6 @@ void natsSub_Unlock(natsSubscription *sub);
 
 #endif // DEV_MODE
 
-// PRIVATE
-
 void
 natsSub_retain(natsSubscription *sub);
 
@@ -33,28 +31,5 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
 
 void
 natsSub_close(natsSubscription *sub);
-
-// PUBLIC
-
-NATS_EXTERN natsStatus
-natsSubscription_NoDeliveryDelay(natsSubscription *sub);
-
-NATS_EXTERN natsStatus
-natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
-
-NATS_EXTERN natsStatus
-natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout);
-
-NATS_EXTERN natsStatus
-natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max);
-
-NATS_EXTERN natsStatus
-natsSubscription_Unsubscribe(natsSubscription *sub);
-
-NATS_EXTERN bool
-natsSubscription_IsValid(natsSubscription *sub);
-
-NATS_EXTERN void
-natsSubscription_Destroy(natsSubscription *sub);
 
 #endif /* SUB_H_ */

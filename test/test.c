@@ -3396,6 +3396,9 @@ test_BasicReconnectFunctionality(void)
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
 
+    if (valgrind)
+        nats_Sleep(1000);
+
     _destroyDefaultThreadArgs(&arg);
 
     _stopServer(serverPid);
@@ -6367,6 +6370,9 @@ test_BasicClusterReconnect(void)
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
+    if (valgrind)
+        nats_Sleep(1000);
+
     _destroyDefaultThreadArgs(&arg);
 
     _stopServer(serverPid2);
@@ -6849,6 +6855,23 @@ test_PingReconnect(void)
 
 }
 
+static void
+test_Version(void)
+{
+    const char *str = NULL;
+
+    test("Compatibility: ");
+    testCond(nats_CheckCompatibility() == true);
+
+    test("Version string: ");
+    str = nats_GetVersion();
+    testCond((str != NULL)
+             && (strcmp(str, LIB_NATS_VERSION_STRING) == 0));
+
+    test("Version number: ");
+    testCond(nats_GetVersionNumber() == LIB_NATS_VERSION_NUMBER);
+}
+
 typedef void (*testFunc)(void);
 
 typedef struct __testInfo
@@ -6861,6 +6884,7 @@ typedef struct __testInfo
 static testInfo allTests[] =
 {
     // Building blocks
+    {"Version",                         test_Version},
     {"natsNowAndSleep",                 test_natsNowAndSleep},
     {"natsAllocSprintf",                test_natsAllocSprintf},
     {"natsStrCaseStr",                  test_natsStrCaseStr},

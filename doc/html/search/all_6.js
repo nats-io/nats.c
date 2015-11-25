@@ -2,6 +2,7 @@ var searchData=
 [
   ['nats_2eh',['nats.h',['../nats_8h.html',1,'']]],
   ['nats_5faddress_5fmissing',['NATS_ADDRESS_MISSING',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae1d2c1366dbed428f6589f057acc507d',1,'status.h']]],
+  ['nats_5fcheckcompatibility',['nats_CheckCompatibility',['../group__library_group.html#ga8c2ad4df801bd9d11564587ed3a7081e',1,'nats.h']]],
   ['nats_5fclose',['nats_Close',['../group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e',1,'nats.h']]],
   ['nats_5fconnection_5fclosed',['NATS_CONNECTION_CLOSED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a476d7bcf9a593b749e435f20a9156eff',1,'status.h']]],
   ['nats_5fconnection_5fdisconnected',['NATS_CONNECTION_DISCONNECTED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80abef517217119e8446a8e3382e1f37eb3',1,'status.h']]],
@@ -9,6 +10,8 @@ var searchData=
   ['nats_5ferr',['NATS_ERR',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a40a08ae6ae17deaf390b1d0d7550791c',1,'status.h']]],
   ['nats_5fextern',['NATS_EXTERN',['../nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad',1,'nats.h']]],
   ['nats_5ffailed_5fto_5finitialize',['NATS_FAILED_TO_INITIALIZE',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a7cb64f52c8d91d6ade3db6bc82a96c42',1,'status.h']]],
+  ['nats_5fgetversion',['nats_GetVersion',['../group__library_group.html#gafc09930d38dcf3dcee144e8d3ffc225d',1,'nats.h']]],
+  ['nats_5fgetversionnumber',['nats_GetVersionNumber',['../group__library_group.html#ga5fbbaa19b0290b654d2669a05bd512e8',1,'nats.h']]],
   ['nats_5fillegal_5fstate',['NATS_ILLEGAL_STATE',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9bb78b4f245d2870040d25c450febd4b',1,'status.h']]],
   ['nats_5finsufficient_5fbuffer',['NATS_INSUFFICIENT_BUFFER',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a317fb9be1a80f6b1877f96a9a2db16ad',1,'status.h']]],
   ['nats_5finvalid_5farg',['NATS_INVALID_ARG',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a71b57630aebf5c20eecdab832c2a9235',1,'status.h']]],

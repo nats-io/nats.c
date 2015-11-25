@@ -7,7 +7,7 @@
 #include "stats.h"
 #include "mem.h"
 
-NATS_EXTERN natsStatus
+natsStatus
 natsStatistics_Create(natsStatistics **newStats)
 {
     natsStatistics *stats = NULL;
@@ -21,7 +21,7 @@ natsStatistics_Create(natsStatistics **newStats)
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsStatistics_GetCounts(natsStatistics *stats,
                          uint64_t *inMsgs, uint64_t *inBytes,
                          uint64_t *outMsgs, uint64_t *outBytes,
@@ -44,7 +44,7 @@ natsStatistics_GetCounts(natsStatistics *stats,
     return NATS_OK;
 }
 
-NATS_EXTERN void
+void
 natsStatistics_Destroy(natsStatistics *stats)
 {
     if (stats == NULL)

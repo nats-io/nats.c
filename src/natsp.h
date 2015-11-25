@@ -9,24 +9,10 @@
 # include "include/n-unix.h"
 #endif
 
-#if defined(_WIN32)
-  #if defined(nats_EXPORTS)
-    #define NATS_EXTERN __declspec(dllexport)
-  #else
-    #define NATS_EXTERN
-  #endif
-#else
-  #define NATS_EXTERN
-#endif
-
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdbool.h>
-#include <inttypes.h>
-#include <stdint.h>
-//#include <signal.h>
 
-#include "status.h"
+#include "nats.h"
 #include "buf.h"
 #include "parser.h"
 #include "timer.h"
@@ -42,10 +28,11 @@
 // access
 //#define DEV_MODE    (1)
 
-#define CString     "C"
-#define Version     "1.0.1"
+#define LIB_NATS_VERSION_STRING             NATS_VERSION_STRING
+#define LIB_NATS_VERSION_NUMBER             NATS_VERSION_NUMBER
+#define LIB_NATS_VERSION_REQUIRED_NUMBER    NATS_VERSION_REQUIRED_NUMBER
 
-#define NATS_DEFAULT_URL "nats://localhost:4222"
+#define CString     "C"
 
 #define _OK_OP_     "+OK"
 #define _ERR_OP_    "-ERR"
@@ -78,20 +65,7 @@
 
 extern int64_t gLockSpinCount;
 
-// Forward declarations
-struct __natsConnection;
-struct __natsSubscription;
-struct __natsPong;
-
 typedef void (*natsInitOnceCb)(void);
-
-// natsMsgHandler is a callback function that processes messages delivered to
-// asynchronous subscribers.
-typedef void (*natsMsgHandler)(
-        struct __natsConnection *nc,
-        struct __natsSubscription *sub,
-        struct __natsMsg *msg,
-        void *closure);
 
 typedef struct __natsControl
 {
@@ -112,14 +86,7 @@ typedef struct __natsServerInfo
 
 } natsServerInfo;
 
-typedef void (*natsConnectionHandler)(
-        struct __natsConnection *nc, void *closure);
-
-typedef void (*natsErrHandler)(
-        struct __natsConnection *nc, struct __natsSubscription *sub, natsStatus err,
-        void *closure);
-
-typedef struct __natsOptions
+struct __natsOptions
 {
     // This field must be the first (see natsOptions_clone, same if you add
     // allocated fields such as strings).
@@ -153,7 +120,7 @@ typedef struct __natsOptions
     int                     maxPingsOut;
     int                     maxPendingMsgs;
 
-} natsOptions;
+};
 
 typedef struct __natsMsgList
 {
@@ -163,7 +130,7 @@ typedef struct __natsMsgList
 
 } natsMsgList;
 
-typedef struct __natsSubscription
+struct __natsSubscription
 {
     natsMutex                   *mu;
 
@@ -244,8 +211,7 @@ typedef struct __natsSubscription
     natsMsgHandler              msgCb;
     void                        *msgCbClosure;
 
-} natsSubscription;
-
+};
 
 typedef struct __natsPong
 {
@@ -270,7 +236,7 @@ typedef struct __natsPongList
 
 } natsPongList;
 
-typedef struct __natsConnection
+struct __natsConnection
 {
     natsMutex           *mu;
     natsOptions         *opts;
@@ -321,19 +287,13 @@ typedef struct __natsConnection
 
     natsStatistics      stats;
 
-} natsConnection;
-
-typedef char natsInbox;
-
+};
 
 //
 // Library
 //
 void
 natsSys_Init(void);
-
-NATS_EXTERN natsStatus
-nats_Open(int64_t spinLockCount);
 
 void
 natsLib_Retain(void);
@@ -359,19 +319,6 @@ nats_getTimersCountInList(void);
 
 natsStatus
 nats_postAsyncCbInfo(natsAsyncCbInfo *info);
-
-NATS_EXTERN natsStatus
-natsInbox_Create(char **newInbox);
-
-NATS_EXTERN void
-natsInbox_Destroy(char *inbox);
-
-NATS_EXTERN const char*
-natsStatus_GetText(natsStatus s);
-
-NATS_EXTERN void
-nats_Close(void);
-
 
 //
 // Threads

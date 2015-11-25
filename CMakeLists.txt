@@ -9,6 +9,9 @@ include(CTest)
 # Uncomment to have the executable moved to 'build' instead of their respective 'build/xxx' directories
 #set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 
+set(NATS_INSTALL_PREFIX ../install CACHE PATH "Install prefix")
+set(CMAKE_INSTALL_PREFIX ${NATS_INSTALL_PREFIX} CACHE INTERNAL "")
+
 # Platform specific settings
 if(UNIX)
   #---------------------------------------------------------------------------
@@ -18,9 +21,6 @@ if(UNIX)
   set(CMAKE_BUILD_TYPE ${NATS_BUILD_TYPE} CACHE INTERNAL "")
 
   set(NATS_BUILD_ARCH "64" CACHE STRING "32 for 32bits builds")
-
-  set(NATS_INSTALL_PREFIX ../install CACHE PATH "Install prefix")
-  set(CMAKE_INSTALL_PREFIX ${NATS_INSTALL_PREFIX} CACHE INTERNAL "")
 
   set(NATS_MEMCHECK_CMD "/usr/bin/valgrind" CACHE FILE "Memcheck tool")
   set(MEMORYCHECK_COMMAND ${NATS_MEMCHECK_CMD} CACHE INTERNAL "")
@@ -70,16 +70,42 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_COMMON_C_FLAGS} ${NATS_USE_PTHREAD} $
 add_definitions(-D${NATS_OS})
 add_definitions(-D_REENTRANT)
 
+if (DEFINED ENV{TRAVIS})
+add_definitions(-DTRAVIS)
+endif()
+
 #---------------------------------------------------------------------
 # Add to the 'clean' target the list (and location) of files to remove
 
 list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/include/nats.h")
 list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/include/status.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}nats_static${CMAKE_STATIC_LIBRARY_SUFFIX}")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}nats${CMAKE_SHARED_LIBRARY_SUFFIX}")
+list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/include/version.h")
+list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/lib/${nats}")
+list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/lib/${nats_static}")
 
 set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${NATS_INSTALLED_FILES}")
 #---------------------------------------------------------------------
+
+#------------
+# Versionning
+
+set(NATS_VERSION_MAJOR  1)
+set(NATS_VERSION_MINOR  1)
+set(NATS_VERSION_PATCH  0)
+set(NATS_VERSION_SUFFIX "")
+
+set(NATS_VERSION_REQUIRED_NUMBER 0x010100)
+
+configure_file(
+	${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in
+	${CMAKE_CURRENT_SOURCE_DIR}/src/version.h
+	@ONLY)
+
+configure_file(
+	${CMAKE_SOURCE_DIR}/doc/DoxyFile.NATS.Client.in
+	${CMAKE_SOURCE_DIR}/doc/DoxyFile.NATS.Client
+	@ONLY)
+#------------
 
 #----------------------------
 # Add the project directories

@@ -7,14 +7,14 @@
 #endif
 #include <time.h>
 
-NATS_EXTERN int64_t
+int64_t
 nats_Now(void)
 {
 #ifdef _WIN32
     struct _timeb now;
     _ftime_s(&now);
     return (((int64_t)now.time) * 1000 + now.millitm);
-#elif defined CLOCK_MONOTONIC
+#elif defined (CLOCK_MONOTONIC) && !defined (TRAVIS)
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
         abort();
@@ -27,14 +27,14 @@ nats_Now(void)
 #endif
 }
 
-NATS_EXTERN int64_t
+int64_t
 nats_NowInNanoSeconds(void)
 {
 #ifdef _WIN32
     struct _timeb now;
     _ftime_s(&now);
     return (((int64_t)now.time) * 1000 + now.millitm) * 1000000L;
-#elif defined CLOCK_MONOTONIC
+#elif defined (CLOCK_MONOTONIC) && !defined (TRAVIS)
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
         abort();

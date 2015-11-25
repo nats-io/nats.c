@@ -50,7 +50,7 @@ static const char *statusText[] = {
     "Not Initialized"
 };
 
-NATS_EXTERN const char*
+const char*
 natsStatus_GetText(natsStatus s) {
     return statusText[(int) s];
 }

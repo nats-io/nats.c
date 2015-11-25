@@ -1,6 +1,9 @@
 var searchData=
 [
+  ['nats_5fcheckcompatibility',['nats_CheckCompatibility',['../group__library_group.html#ga8c2ad4df801bd9d11564587ed3a7081e',1,'nats.h']]],
   ['nats_5fclose',['nats_Close',['../group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e',1,'nats.h']]],
+  ['nats_5fgetversion',['nats_GetVersion',['../group__library_group.html#gafc09930d38dcf3dcee144e8d3ffc225d',1,'nats.h']]],
+  ['nats_5fgetversionnumber',['nats_GetVersionNumber',['../group__library_group.html#ga5fbbaa19b0290b654d2669a05bd512e8',1,'nats.h']]],
   ['nats_5fnow',['nats_Now',['../group__library_group.html#gaa3c10ba3ae001595007ad0dc5dccc15e',1,'nats.h']]],
   ['nats_5fnowinnanoseconds',['nats_NowInNanoSeconds',['../group__library_group.html#gacf5e423920d6a647df3bbf7de39d5223',1,'nats.h']]],
   ['nats_5fopen',['nats_Open',['../group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d',1,'nats.h']]],

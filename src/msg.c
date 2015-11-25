@@ -21,7 +21,7 @@ natsMsg_free(void *object)
     NATS_FREE(msg);
 }
 
-NATS_EXTERN void
+void
 natsMsg_Destroy(natsMsg *msg)
 {
     if (msg == NULL)
@@ -33,7 +33,7 @@ natsMsg_Destroy(natsMsg *msg)
     natsMsg_free((void*) msg);
 }
 
-NATS_EXTERN const char*
+const char*
 natsMsg_GetSubject(natsMsg *msg)
 {
     if (msg == NULL)
@@ -42,7 +42,7 @@ natsMsg_GetSubject(natsMsg *msg)
     return (const char*) msg->subject;
 }
 
-NATS_EXTERN const char*
+const char*
 natsMsg_GetReply(natsMsg *msg)
 {
     if (msg == NULL)
@@ -51,7 +51,7 @@ natsMsg_GetReply(natsMsg *msg)
     return (const char*) msg->reply;
 }
 
-NATS_EXTERN const char*
+const char*
 natsMsg_GetData(natsMsg *msg)
 {
     if (msg == NULL)
@@ -60,7 +60,7 @@ natsMsg_GetData(natsMsg *msg)
     return (const char*) msg->data;
 }
 
-NATS_EXTERN int
+int
 natsMsg_GetDataLength(natsMsg *msg)
 {
     if (msg == NULL)
@@ -131,7 +131,7 @@ natsMsg_create(natsMsg **newMsg,
     return NATS_OK;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsMsg_Create(natsMsg **newMsg, const char *subj, const char *reply,
                const char *data, int dataLen)
 {

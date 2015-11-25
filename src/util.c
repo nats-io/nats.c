@@ -146,7 +146,7 @@ nats_CreateStringFromBuffer(char **newStr, natsBuffer *buf)
     return NATS_OK;
 }
 
-NATS_EXTERN void
+void
 nats_Sleep(int64_t millisec)
 {
 #ifdef _WIN32

@@ -5,6 +5,8 @@ include_directories(${PROJECT_SOURCE_DIR}/examples)
 # Get all the .c files in the examples directory
 file(GLOB EXAMPLES_SOURCES RELATIVE ${PROJECT_SOURCE_DIR}/examples *.c)
 
+add_definitions(-Dnats_IMPORTS)
+
 # For each file...
 foreach(examples_src ${EXAMPLES_SOURCES})
 

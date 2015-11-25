@@ -8,6 +8,7 @@
 #include <inttypes.h>
 
 #include "status.h"
+#include "version.h"
 
 /** \def NATS_EXTERN
  *  \brief Needed for shared library.
@@ -19,6 +20,8 @@
 #if defined(_WIN32)
   #if defined(nats_EXPORTS)
     #define NATS_EXTERN __declspec(dllexport)
+  #elif defined(nats_IMPORTS)
+    #define NATS_EXTERN __declspec(dllimport)
   #else
     #define NATS_EXTERN
   #endif
@@ -192,6 +195,51 @@ typedef void (*natsErrHandler)(
  */
 NATS_EXTERN natsStatus
 nats_Open(int64_t lockSpinCount);
+
+
+/** \brief Returns the Library's version
+ *
+ * Returns the version of the library your application is linked with.
+ */
+NATS_EXTERN const char*
+nats_GetVersion(void);
+
+/** \brief Returns the Library's version as a number.
+ *
+ * The version is returned as an hexadecimal number. For instance, if the
+ * string version is "1.2.3", the value returned will be:
+ *
+ * > 0x010203
+ */
+NATS_EXTERN uint32_t
+nats_GetVersionNumber(void);
+
+#ifdef BUILD_IN_DOXYGEN
+/** \brief Check that the header is compatible with the library.
+ *
+ * The version of the header you used to compile your application may be
+ * incompatible with the library the application is linked with.
+ *
+ * This function will check that the two are compatibles. If they are not,
+ * a message is printed and the application will exit.
+ *
+ * @return `true` if the header and library are compatibles, otherwise the
+ * application exits.
+ *
+ * @see nats_GetVersion
+ * @see nats_GetVersionNumber
+ */
+NATS_EXTERN bool nats_CheckCompatibility(void);
+#else
+
+#define nats_CheckCompatibility() nats_CheckCompatibilityImpl(NATS_VERSION_REQUIRED_NUMBER, \
+                                                              NATS_VERSION_NUMBER, \
+                                                              NATS_VERSION_STRING)
+
+NATS_EXTERN bool
+nats_CheckCompatibilityImpl(uint32_t reqVerNumber, uint32_t verNumber, const char *verString);
+
+#endif
 
 /** \brief Gives the current time in milliseconds.
  *

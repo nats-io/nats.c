@@ -8,7 +8,7 @@
 
 struct __natsMsg;
 
-typedef struct __natsMsg
+struct __natsMsg
 {
     natsGCItem          gc;
 
@@ -25,9 +25,7 @@ typedef struct __natsMsg
 
     // Nothing after this: the message payload goes there.
 
-} natsMsg;
-
-// PRIVATE
+};
 
 natsStatus
 natsMsg_create(natsMsg **newMsg,
@@ -38,25 +36,5 @@ natsMsg_create(natsMsg **newMsg,
 // This needs to follow the nats_FreeObjectCb prototype (see gc.h)
 void
 natsMsg_free(void *object);
-
-
-// PUBLIC
-
-NATS_EXTERN natsStatus
-natsMsg_Create(natsMsg **newMsg, const char *subj, const char *reply,
-               const char *data, int dataLen);
-
-NATS_EXTERN const char*
-natsMsg_GetReply(natsMsg *msg);
-
-NATS_EXTERN const char*
-natsMsg_GetData(natsMsg *msg);
-
-NATS_EXTERN int
-natsMsg_GetDataLength(natsMsg *msg);
-
-NATS_EXTERN void
-natsMsg_Destroy(natsMsg *msg);
-
 
 #endif /* MSG_H_ */

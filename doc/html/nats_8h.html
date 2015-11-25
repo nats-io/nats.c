@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.0.1</span>
+   &#160;<span id="projectnumber">1.1.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -117,6 +117,7 @@ $(document).ready(function(){initNavTree('nats_8h.html','');});
 <code>#include &lt;stdbool.h&gt;</code><br />
 <code>#include &lt;inttypes.h&gt;</code><br />
 <code>#include &quot;<a class="el" href="status_8h_source.html">status.h</a>&quot;</code><br />
+<code>#include &quot;version.h&quot;</code><br />
 </div>
 <p><a href="nats_8h_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -164,6 +165,15 @@ Functions</h2></td></tr>
 <tr class="memitem:ga4a26d4caecb23348f6eee862c95fee7d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d">nats_Open</a> (int64_t lockSpinCount)</td></tr>
 <tr class="memdesc:ga4a26d4caecb23348f6eee862c95fee7d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Initializes the library.  <a href="group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d">More...</a><br /></td></tr>
 <tr class="separator:ga4a26d4caecb23348f6eee862c95fee7d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gafc09930d38dcf3dcee144e8d3ffc225d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#gafc09930d38dcf3dcee144e8d3ffc225d">nats_GetVersion</a> (void)</td></tr>
+<tr class="memdesc:gafc09930d38dcf3dcee144e8d3ffc225d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the Library's version.  <a href="group__library_group.html#gafc09930d38dcf3dcee144e8d3ffc225d">More...</a><br /></td></tr>
+<tr class="separator:gafc09930d38dcf3dcee144e8d3ffc225d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga5fbbaa19b0290b654d2669a05bd512e8"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> uint32_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#ga5fbbaa19b0290b654d2669a05bd512e8">nats_GetVersionNumber</a> (void)</td></tr>
+<tr class="memdesc:ga5fbbaa19b0290b654d2669a05bd512e8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the Library's version as a number.  <a href="group__library_group.html#ga5fbbaa19b0290b654d2669a05bd512e8">More...</a><br /></td></tr>
+<tr class="separator:ga5fbbaa19b0290b654d2669a05bd512e8"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga8c2ad4df801bd9d11564587ed3a7081e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#ga8c2ad4df801bd9d11564587ed3a7081e">nats_CheckCompatibility</a> (void)</td></tr>
+<tr class="memdesc:ga8c2ad4df801bd9d11564587ed3a7081e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Check that the header is compatible with the library.  <a href="group__library_group.html#ga8c2ad4df801bd9d11564587ed3a7081e">More...</a><br /></td></tr>
+<tr class="separator:ga8c2ad4df801bd9d11564587ed3a7081e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaa3c10ba3ae001595007ad0dc5dccc15e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#gaa3c10ba3ae001595007ad0dc5dccc15e">nats_Now</a> (void)</td></tr>
 <tr class="memdesc:gaa3c10ba3ae001595007ad0dc5dccc15e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gives the current time in milliseconds.  <a href="group__library_group.html#gaa3c10ba3ae001595007ad0dc5dccc15e">More...</a><br /></td></tr>
 <tr class="separator:gaa3c10ba3ae001595007ad0dc5dccc15e"><td class="memSeparator" colspan="2">&#160;</td></tr>

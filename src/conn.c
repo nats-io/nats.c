@@ -568,7 +568,7 @@ _connectProto(natsConnection *nc, char **proto)
                         (pwd != NULL ? pwd : ""),
                         (pwd != NULL ? "\"," : ""),
                         nats_GetBoolStr(false),
-                        name, CString, Version, _CRLF_);
+                        name, CString, NATS_VERSION_STRING, _CRLF_);
     if (res < 0)
         return NATS_NO_MEMORY;
 
@@ -1835,7 +1835,7 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     return s;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_Connect(natsConnection **newConn, natsOptions *options)
 {
     natsStatus      s;
@@ -1861,7 +1861,7 @@ natsConnection_Connect(natsConnection **newConn, natsOptions *options)
     return s;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_ConnectTo(natsConnection **newConn, const char *url)
 {
     natsStatus      s       = NATS_OK;
@@ -1885,7 +1885,7 @@ natsConnection_ConnectTo(natsConnection **newConn, const char *url)
 }
 
 // Test if connection  has been closed.
-NATS_EXTERN bool
+bool
 natsConnection_IsClosed(natsConnection *nc)
 {
     bool closed;
@@ -1903,7 +1903,7 @@ natsConnection_IsClosed(natsConnection *nc)
 }
 
 // Test if connection is reconnecting.
-NATS_EXTERN bool
+bool
 natsConnection_IsReconnecting(natsConnection *nc)
 {
     bool reconnecting;
@@ -1921,7 +1921,7 @@ natsConnection_IsReconnecting(natsConnection *nc)
 }
 
 // Returns the current state of the connection.
-NATS_EXTERN natsConnStatus
+natsConnStatus
 natsConnection_Status(natsConnection *nc)
 {
     natsConnStatus cs;
@@ -1948,7 +1948,7 @@ _destroyPong(natsConnection *nc, natsPong *pong)
         NATS_FREE(pong);
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
 {
     natsStatus  s       = NATS_OK;
@@ -2029,13 +2029,13 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
     return s;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_Flush(natsConnection *nc)
 {
     return natsConnection_FlushTimeout(nc, 60000);
 }
 
-NATS_EXTERN int
+int
 natsConnection_Buffered(natsConnection *nc)
 {
     int buffered = -1;
@@ -2053,7 +2053,7 @@ natsConnection_Buffered(natsConnection *nc)
     return buffered;
 }
 
-NATS_EXTERN int64_t
+int64_t
 natsConnection_GetMaxPayload(natsConnection *nc)
 {
     int64_t mp = 0;
@@ -2070,7 +2070,7 @@ natsConnection_GetMaxPayload(natsConnection *nc)
     return mp;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_GetStats(natsConnection *nc, natsStatistics *stats)
 {
     natsStatus  s = NATS_OK;
@@ -2087,7 +2087,7 @@ natsConnection_GetStats(natsConnection *nc, natsStatistics *stats)
     return s;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_GetConnectedUrl(natsConnection *nc, char *buffer, size_t bufferSize)
 {
     natsStatus  s = NATS_OK;
@@ -2113,7 +2113,7 @@ natsConnection_GetConnectedUrl(natsConnection *nc, char *buffer, size_t bufferSi
     return s;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t bufferSize)
 {
     natsStatus  s = NATS_OK;
@@ -2139,7 +2139,7 @@ natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t buf
     return s;
 }
 
-NATS_EXTERN natsStatus
+natsStatus
 natsConnection_GetLastError(natsConnection *nc, const char **lastError)
 {
     natsStatus  s;
@@ -2162,7 +2162,7 @@ natsConnection_GetLastError(natsConnection *nc, const char **lastError)
     return s;
 }
 
-NATS_EXTERN void
+void
 natsConnection_Close(natsConnection *nc)
 {
     if (nc == NULL)
@@ -2171,7 +2171,7 @@ natsConnection_Close(natsConnection *nc)
     _close(nc, CLOSED, true);
 }
 
-NATS_EXTERN void
+void
 natsConnection_Destroy(natsConnection *nc)
 {
     if (nc == NULL)

@@ -4,6 +4,7 @@ A C client for the [NATS messaging system](https://nats.io).
 This is an alpha release, heavily based on the [NATS GO Client](https://github.com/nats-io/nats).
 
 [![License MIT](https://img.shields.io/npm/l/express.svg)](http://opensource.org/licenses/MIT)
+[![Build Status](https://travis-ci.org/nats-io/cnats.svg?branch=master)](http://travis-ci.org/nats-io/cnats)
 
 ## Installation
 

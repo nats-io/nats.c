@@ -133,7 +133,9 @@ NATS_TEST_SERVER_EXE=c:\test\gnatsd.exe
 
 The public API has been documented using [Doxygen](http://www.stack.nl/~dimitri/doxygen/).
 
-To see the documentation, point your browser to the file `index.html` in the `doc/html` directory.
+To see the documentation, point your browser to the file `index.html` in the `doc/html` directory. 
+
+Go here for a [preview](http://htmlpreview.github.com/?https://github.com/nats-io/cnats/blob/master/doc/html/index.html).
 
 The source code is also quite documented.
 
@@ -453,4 +455,5 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
+
 

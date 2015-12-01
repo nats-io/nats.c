@@ -1,7 +1,7 @@
 # NATS - C Client 
 A C client for the [NATS messaging system](https://nats.io).
 
-This is an alpha release, heavily based on the [NATS GO Client](https://github.com/nats-io/nats).
+This NATS Client implementation is heavily based on the [NATS GO Client](https://github.com/nats-io/nats). There is support for Mac OS/X, Linux and Windows (although we don't have specific platform support matrix).
 
 [![License MIT](https://img.shields.io/npm/l/express.svg)](http://opensource.org/licenses/MIT)
 [![Build Status](https://travis-ci.org/nats-io/cnats.svg?branch=master)](http://travis-ci.org/nats-io/cnats)
@@ -13,13 +13,13 @@ First, download the source code:
 git clone git@github.com:nats-io/cnats.git .
 ```
 
-To build the library, use [CMake](https://cmake.org/download/). Go into the `build` directory and issue this command for the first time:
+To build the library, use [CMake](https://cmake.org/download/). Create a `build` directory from the root, and `cd` into it. Then issue this command for the first time:
 
 ```
 cmake ..
 ```
 
-or use the GUI to setup the way you want. When you are satified with the settings, simply invoke:
+or use the GUI to setup the way you want. We recommend that you use the GUI for Windows so you can beter select the build generator. When you are satified with the settings, simply invoke:
 
 ```
 make
@@ -29,6 +29,12 @@ on Windows, you may do this for example:
 
 ```
 cmake --build . --config "Release"
+```
+
+or, if you have selected the "NMake Makefiles" build generator:
+
+```
+nmake
 ```
 
 This is building the static and shared libraries and also the examples and the test program. Each are located in their respective directories under `build`: `src`, `examples` and `test`.
@@ -455,5 +461,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
-
 

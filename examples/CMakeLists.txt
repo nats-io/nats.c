@@ -18,7 +18,7 @@ foreach(examples_src ${EXAMPLES_SOURCES})
     add_executable(${exampleexe} ${PROJECT_SOURCE_DIR}/examples/${examples_src} )
 
     # Link dynamically
-    target_link_libraries(${exampleexe} nats)
+    target_link_libraries(${exampleexe} nats ${NATS_EXTRA_LIB})
 
 endforeach()
 

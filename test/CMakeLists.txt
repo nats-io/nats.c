@@ -5,7 +5,7 @@ include_directories(${PROJECT_SOURCE_DIR}/src)
 add_executable(testsuite test.c)
 
 # Link statically with the library
-target_link_libraries(testsuite nats_static)
+target_link_libraries(testsuite nats_static ${NATS_EXTRA_LIB})
 
 # Set the test index to 0
 set(testIndex 0)

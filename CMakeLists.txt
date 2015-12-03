@@ -12,6 +12,8 @@ include(CTest)
 set(NATS_INSTALL_PREFIX ../install CACHE PATH "Install prefix")
 set(CMAKE_INSTALL_PREFIX ${NATS_INSTALL_PREFIX} CACHE INTERNAL "")
 
+option(NATS_UPDATE_VERSION "Update the version file" OFF)
+
 # Platform specific settings
 if(UNIX)
   #---------------------------------------------------------------------------
@@ -46,6 +48,7 @@ if(UNIX)
   else(APPLE)
     set(NATS_OS "LINUX")
     set(NATS_USE_PTHREAD "-pthread")
+    set(NATS_EXTRA_LIB "rt")
   endif(APPLE)
   
   if (${NATS_BUILD_ARCH} MATCHES "32")
@@ -70,10 +73,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_COMMON_C_FLAGS} ${NATS_USE_PTHREAD} $
 add_definitions(-D${NATS_OS})
 add_definitions(-D_REENTRANT)
 
-if (DEFINED ENV{TRAVIS})
-add_definitions(-DTRAVIS)
-endif()
-
 #---------------------------------------------------------------------
 # Add to the 'clean' target the list (and location) of files to remove
 
@@ -86,12 +85,13 @@ list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/lib/${nats_static}")
 set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${NATS_INSTALLED_FILES}")
 #---------------------------------------------------------------------
 
+if(NATS_UPDATE_VERSION)
 #------------
 # Versionning
 
 set(NATS_VERSION_MAJOR  1)
 set(NATS_VERSION_MINOR  1)
-set(NATS_VERSION_PATCH  0)
+set(NATS_VERSION_PATCH  1)
 set(NATS_VERSION_SUFFIX "")
 
 set(NATS_VERSION_REQUIRED_NUMBER 0x010100)
@@ -106,6 +106,7 @@ configure_file(
 	${CMAKE_SOURCE_DIR}/doc/DoxyFile.NATS.Client
 	@ONLY)
 #------------
+endif()
 
 #----------------------------
 # Add the project directories

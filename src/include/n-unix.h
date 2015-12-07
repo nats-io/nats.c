@@ -29,6 +29,7 @@
 #include <sys/wait.h>
 
 typedef pthread_t       natsThread;
+typedef pthread_key_t   natsThreadLocal;
 typedef pthread_mutex_t natsMutex;
 typedef pthread_cond_t  natsCondition;
 typedef pthread_once_t  natsInitOnceType;

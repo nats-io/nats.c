@@ -2,12 +2,9 @@
 
 #include "examples.h"
 
-static volatile int64_t count   = 0;
-static volatile int64_t errors  = 0;
-static int64_t          total   = 0;
-static int64_t          start   = 0;
-static volatile int64_t elapsed = 0;
-static bool             print   = false;
+static const char *usage = "" \
+"-sync          receive synchronously (default is asynchronous)\n" \
+"-count         number of expected requests\n";
 
 static void
 onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
@@ -31,18 +28,11 @@ onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
     // We should be using a mutex to protect those variables since
     // they are used from the subscription's delivery and the main
     // threads. For demo purposes, this is fine.
-    if (count + 1 == total)
-    {
-        if (s == NATS_OK)
-            s = natsConnection_FlushTimeout(nc, 1000);
-
+    if (++count == total)
         elapsed = nats_Now() - start;
-    }
 
     if (s != NATS_OK)
         errors++;
-
-    count++;
 
     natsMsg_Destroy(msg);
 }
@@ -62,27 +52,14 @@ int main(int argc, char **argv)
     natsSubscription    *sub   = NULL;
     natsStatistics      *stats = NULL;
     natsMsg             *msg   = NULL;
-    bool                async  = true;
-    const char          *subj  = NULL;
     natsStatus          s;
 
-    if (argc != 4)
-    {
-        printf("Usage: %s <mode:async|sync> <subject> <count>\n", argv[0]);
-        exit(1);
-    }
+    opts = parseArgs(argc, argv, usage);
 
-    async = (strcasecmp(argv[1], "async") == 0);
-    subj  = argv[2];
-    total = atol(argv[3]);
     printf("Listening %ssynchronously for requests on '%s'\n",
            (async ? "a" : ""), subj);
 
-    s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, NATS_DEFAULT_URL);
-    if ((s == NATS_OK) && async)
-        s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);
+    s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);
 
     // This is setting the maximum number of pending messages allowed in
     // the library for each subscriber. For max performance, we set it

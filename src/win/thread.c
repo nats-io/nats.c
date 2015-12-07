@@ -124,3 +124,44 @@ natsThread_Destroy(natsThread *t)
     NATS_FREE(t);
 }
 
+natsStatus
+natsThreadLocal_CreateKey(natsThreadLocal *tl, void (*destructor)(void*))
+{
+    if ((*tl = TlsAlloc()) == TLS_OUT_OF_INDEXES)
+    {
+        return nats_setError(NATS_SYS_ERROR,
+                             "Error creating thread local key: %d",
+                              GetLastError());
+    }
+
+    return NATS_OK;
+}
+
+void*
+natsThreadLocal_Get(natsThreadLocal tl)
+{
+    return (void*) TlsGetValue(tl);
+}
+
+natsStatus
+natsThreadLocal_SetEx(natsThreadLocal tl, const void *value, bool setErr)
+{
+    if (TlsSetValue(tl, (LPVOID) value) == 0)
+    {
+        if (setErr)
+            return nats_setError(NATS_SYS_ERROR,
+                                 "Error setting thread local value: %d",
+                                 GetLastError());
+        else
+            return NATS_SYS_ERROR;
+    }
+
+    return NATS_OK;
+}
+
+void
+natsThreadLocal_DestroyKey(natsThreadLocal tl)
+{
+    TlsFree(tl);
+}
+

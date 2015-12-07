@@ -6,8 +6,7 @@
 #include "natsp.h"
 
 natsStatus
-natsSock_ConnectTcp(natsSock *fd, fd_set *fdSet, natsDeadline *deadline,
-                    const char *host, int port);
+natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port);
 
 natsStatus
 natsSock_SetBlocking(natsSock fd, bool blocking);
@@ -21,18 +20,26 @@ natsSock_DestroyFDSet(fd_set *fdSet);
 bool
 natsSock_IsConnected(natsSock fd);
 
+// Reads a line from the socket and returns it without the line-ending characters.
+// This call blocks until the line is complete, or the socket is closed or an
+// error occurs.
+// Handles blocking and non-blocking sockets. For the later, an optional 'deadline'
+// indicates how long it can wait for the full read to complete.
 natsStatus
-natsSock_ReadLine(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
-                  char *buffer, size_t maxBufferSize, int *n);
+natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n);
 
+// Reads up to 'maxBufferSize' bytes from the socket and put them in 'buffer'.
+// If the socket is blocking, wait until some data is available or the socket
+// is closed or an error occurs.
+// If the socket is non-blocking, wait up to the optional 'deadline'. If NULL,
+// behaves like a blocking socket.
 natsStatus
-natsSock_Read(natsSock fd, char *buffer, size_t maxBufferSize, int *n);
+natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n);
 
 // Writes 'len' bytes to the socket. Does not return until all bytes
 // have been written, unless the socket is closed or an error occurs.
 natsStatus
-natsSock_WriteFully(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
-                    const char *data, int len);
+natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len);
 
 natsStatus
 natsSock_Flush(natsSock fd);

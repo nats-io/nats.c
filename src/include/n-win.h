@@ -22,6 +22,8 @@ typedef struct __natsThread
 
 } natsThread;
 
+typedef DWORD               natsThreadLocal;
+
 typedef CRITICAL_SECTION    natsMutex;
 typedef CONDITION_VARIABLE  natsCondition;
 typedef INIT_ONCE           natsInitOnceType;

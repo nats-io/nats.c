@@ -18,8 +18,10 @@ static const char *statusText[] = {
     "Connection Closed",
     "No server available for connection",
     "State Connection",
+    "Secure Connection not available",
     "Secure Connection Required",
     "Connection Disconnected",
+    "Authentication Violation",
 
     "Not Permitted",
     "Not Found",
@@ -47,7 +49,9 @@ static const char *statusText[] = {
     "Timeout",
 
     "Initialization Failed",
-    "Not Initialized"
+    "Not Initialized",
+
+    "SSL Error"
 };
 
 const char*

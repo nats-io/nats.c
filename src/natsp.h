@@ -9,8 +9,11 @@
 # include "include/n-unix.h"
 #endif
 
-#include <stdlib.h>
 #include <stdio.h>
+
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/x509v3.h>
 
 #include "nats.h"
 #include "buf.h"
@@ -63,6 +66,8 @@
 #define _PING_PROTO_LEN_    (6)
 #define _PONG_PROTO_LEN_    (6)
 
+#define NATS_SSL_ERR_REASON_STRING ERR_reason_error_string(ERR_get_error())
+
 extern int64_t gLockSpinCount;
 
 typedef void (*natsInitOnceCb)(void);
@@ -81,10 +86,21 @@ typedef struct __natsServerInfo
     int         port;
     char        *version;
     bool        authRequired;
-    bool        sslRequired;
+    bool        tlsRequired;
     int64_t     maxPayload;
 
 } natsServerInfo;
+
+typedef struct __natsSSLCtx
+{
+    natsMutex   *lock;
+    int         refs;
+    SSL_CTX     *ctx;
+    char        *expectedHostname;
+
+} natsSSLCtx;
+
+#define natsSSLCtx_getExpectedHostname(ctx) ((ctx)->expectedHostname)
 
 struct __natsOptions
 {
@@ -101,6 +117,7 @@ struct __natsOptions
     bool                    verbose;
     bool                    pedantic;
     bool                    allowReconnect;
+    bool                    secure;
     int                     maxReconnect;
     int64_t                 reconnectWait;
 
@@ -119,6 +136,14 @@ struct __natsOptions
     int64_t                 pingInterval;
     int                     maxPingsOut;
     int                     maxPendingMsgs;
+
+//    char                    *tlsCACert;
+//    char                    *tlsCert;
+//    char                    *tlsKey;
+//    char                    *tlsCiphers;
+//    char                    *tlsHostname;
+
+    natsSSLCtx              *sslCtx;
 
 };
 
@@ -236,6 +261,22 @@ typedef struct __natsPongList
 
 } natsPongList;
 
+typedef struct __natsSockCtx
+{
+    natsSock        fd;
+    bool            fdActive;
+
+    // We switch to blocking socket after receiving the PONG to the first PING
+    // during the connect process. Should we make all read/writes non blocking,
+    // then we will use two different fd sets, and also probably pass deadlines
+    // individually as opposed to use one at the connection level.
+    fd_set          *fdSet;
+    natsDeadline    deadline;
+
+    SSL             *ssl;
+
+} natsSockCtx;
+
 struct __natsConnection
 {
     natsMutex           *mu;
@@ -243,15 +284,9 @@ struct __natsConnection
     const natsUrl       *url;
 
     int                 refs;
-    natsSock            fd;
-    bool                fdActive;
 
-    // We switch to blocking socket after receiving the PONG to the first PING
-    // during the connect process. Should we make all read/writes non blocking,
-    // then we will use two different fd sets, and also probably pass deadlines
-    // individually as opposed to use one at the connection level.
-    fd_set              *fdSet;
-    natsDeadline        deadline;
+    natsSockCtx         sockCtx;
+//    SSL_CTX             *sslCtx;
 
     natsSrvPool         *srvPool;
 
@@ -286,7 +321,6 @@ struct __natsConnection
     natsThread          *reconnectThread;
 
     natsStatistics      stats;
-
 };
 
 //
@@ -320,6 +354,17 @@ nats_getTimersCountInList(void);
 natsStatus
 nats_postAsyncCbInfo(natsAsyncCbInfo *info);
 
+#define nats_setError(e, f, ...) nats_setErrorReal(__FILE__, __LINE__, (e), (f), __VA_ARGS__)
+
+natsStatus
+nats_setErrorReal(const char *fileName, int line, natsStatus errSts, const void *errTxtFmt, ...);
+
+void
+nats_sslRegisterThreadForCleanup(void);
+
+natsStatus
+nats_sslInit(void);
+
 //
 // Threads
 //
@@ -339,6 +384,20 @@ natsThread_Detach(natsThread *t);
 
 void
 natsThread_Destroy(natsThread *t);
+
+natsStatus
+natsThreadLocal_CreateKey(natsThreadLocal *tl, void (*destructor)(void*));
+
+void*
+natsThreadLocal_Get(natsThreadLocal tl);
+
+#define natsThreadLocal_Set(k, v) natsThreadLocal_SetEx((k), (v), true)
+
+natsStatus
+natsThreadLocal_SetEx(natsThreadLocal tl, const void *value, bool setErr);
+
+void
+natsThreadLocal_DestroyKey(natsThreadLocal tl);
 
 bool
 nats_InitOnce(natsInitOnceType *control, natsInitOnceCb cb);

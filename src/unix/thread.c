@@ -3,7 +3,6 @@
 #include "../natsp.h"
 #include "../mem.h"
 
-
 bool
 nats_InitOnce(natsInitOnceType *control, natsInitOnceCb cb)
 {
@@ -111,5 +110,47 @@ natsThread_Destroy(natsThread *t)
         return;
 
     NATS_FREE(t);
+}
+
+natsStatus
+natsThreadLocal_CreateKey(natsThreadLocal *tl, void (*destructor)(void*))
+{
+    int ret;
+
+    if ((ret = pthread_key_create(tl, destructor)) != 0)
+    {
+        return nats_setError(NATS_SYS_ERROR,
+                             "Error creating thread local key: %d",
+                             ret);
+    }
+
+    return NATS_OK;
+}
+
+void*
+natsThreadLocal_Get(natsThreadLocal tl)
+{
+    return pthread_getspecific(tl);
+}
+
+natsStatus
+natsThreadLocal_SetEx(natsThreadLocal tl, const void *value, bool setErr)
+{
+    int ret;
+
+    if ((ret = pthread_setspecific(tl, value)) != 0)
+    {
+        return nats_setError(NATS_SYS_ERROR,
+                             "Error setting thread local value: %d",
+                             ret);
+    }
+
+    return NATS_OK;
+}
+
+void
+natsThreadLocal_DestroyKey(natsThreadLocal tl)
+{
+    pthread_key_delete(tl);
 }
 

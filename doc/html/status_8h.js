@@ -16,8 +16,10 @@ var status_8h =
       [ "NATS_CONNECTION_CLOSED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a476d7bcf9a593b749e435f20a9156eff", null ],
       [ "NATS_NO_SERVER", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a47034d8889521bbd300f45fdc19e1127", null ],
       [ "NATS_STALE_CONNECTION", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80aa76d5e3ce051bc7510be90e73663c93d", null ],
+      [ "NATS_SECURE_CONNECTION_WANTED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a0aa3d1e18a2a217149fa8b1a306c9b08", null ],
       [ "NATS_SECURE_CONNECTION_REQUIRED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80abc76f1b31fdac4525583cc19588240dc", null ],
       [ "NATS_CONNECTION_DISCONNECTED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80abef517217119e8446a8e3382e1f37eb3", null ],
+      [ "NATS_CONNECTION_AUTH_FAILED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a473ea6cfa03490838fafee8730b48a2a", null ],
       [ "NATS_NOT_PERMITTED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ac3abc147873fe999c86431f9222eebf5", null ],
       [ "NATS_NOT_FOUND", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ad0229a12b17d3d12a28efed6213720d8", null ],
       [ "NATS_ADDRESS_MISSING", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae1d2c1366dbed428f6589f057acc507d", null ],
@@ -34,6 +36,7 @@ var status_8h =
       [ "NATS_SYS_ERROR", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a984189ec4cfe3e7647268c99f7e49ec9", null ],
       [ "NATS_TIMEOUT", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed", null ],
       [ "NATS_FAILED_TO_INITIALIZE", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a7cb64f52c8d91d6ade3db6bc82a96c42", null ],
-      [ "NATS_NOT_INITIALIZED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae47047f2fac5f2f2a434fc501e5c3d4e", null ]
+      [ "NATS_NOT_INITIALIZED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae47047f2fac5f2f2a434fc501e5c3d4e", null ],
+      [ "NATS_SSL_ERROR", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a892183c32b4929388bb75dc62230ddf3", null ]
     ] ]
 ];

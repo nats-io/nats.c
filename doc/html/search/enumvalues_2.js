@@ -1,6 +1,7 @@
 var searchData=
 [
   ['nats_5faddress_5fmissing',['NATS_ADDRESS_MISSING',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae1d2c1366dbed428f6589f057acc507d',1,'status.h']]],
+  ['nats_5fconnection_5fauth_5ffailed',['NATS_CONNECTION_AUTH_FAILED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a473ea6cfa03490838fafee8730b48a2a',1,'status.h']]],
   ['nats_5fconnection_5fclosed',['NATS_CONNECTION_CLOSED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a476d7bcf9a593b749e435f20a9156eff',1,'status.h']]],
   ['nats_5fconnection_5fdisconnected',['NATS_CONNECTION_DISCONNECTED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80abef517217119e8446a8e3382e1f37eb3',1,'status.h']]],
   ['nats_5ferr',['NATS_ERR',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a40a08ae6ae17deaf390b1d0d7550791c',1,'status.h']]],
@@ -23,7 +24,9 @@ var searchData=
   ['nats_5fok',['NATS_OK',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9cee6c417868ecaa69f99ff4f6576990',1,'status.h']]],
   ['nats_5fprotocol_5ferror',['NATS_PROTOCOL_ERROR',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a113ffbe9a1f243582c38ebd876cb736d',1,'status.h']]],
   ['nats_5fsecure_5fconnection_5frequired',['NATS_SECURE_CONNECTION_REQUIRED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80abc76f1b31fdac4525583cc19588240dc',1,'status.h']]],
+  ['nats_5fsecure_5fconnection_5fwanted',['NATS_SECURE_CONNECTION_WANTED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a0aa3d1e18a2a217149fa8b1a306c9b08',1,'status.h']]],
   ['nats_5fslow_5fconsumer',['NATS_SLOW_CONSUMER',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae93ff5b7fe31f8570308385d92d317b0',1,'status.h']]],
+  ['nats_5fssl_5ferror',['NATS_SSL_ERROR',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a892183c32b4929388bb75dc62230ddf3',1,'status.h']]],
   ['nats_5fstale_5fconnection',['NATS_STALE_CONNECTION',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80aa76d5e3ce051bc7510be90e73663c93d',1,'status.h']]],
   ['nats_5fsys_5ferror',['NATS_SYS_ERROR',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a984189ec4cfe3e7647268c99f7e49ec9',1,'status.h']]],
   ['nats_5ftimeout',['NATS_TIMEOUT',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed',1,'status.h']]]

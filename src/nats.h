@@ -3,6 +3,7 @@
 #ifndef NATS_H_
 #define NATS_H_
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <inttypes.h>
@@ -266,6 +267,21 @@ nats_NowInNanoSeconds(void);
 NATS_EXTERN void
 nats_Sleep(int64_t sleepTime);
 
+/** \brief Returns the calling thread's last known error.
+ *
+ * Returns the calling thread's last known error. This can be useful when
+ * #natsConnection_Connect fails. Since no connection object is returned,
+ * you would not be able to call #natsConnection_GetLastError.
+ *
+ * @param status if not `NULL`, this function will store the last error status
+ * in there.
+ * @return the thread local error string.
+ *
+ * \warning Do not free the string returned by this function.
+ */
+NATS_EXTERN const char*
+nats_GetLastError(natsStatus *status);
+
 /** \brief Tear down the library.
  *
  * Releases memory used by the library.
@@ -454,6 +470,91 @@ natsOptions_SetTimeout(natsOptions *opts, int64_t timeout);
  */
 NATS_EXTERN natsStatus
 natsOptions_SetName(natsOptions *opts, const char *name);
+
+/** \brief Sets the secure mode.
+ *
+ * Indicates to the server if the client wants a secure (SSL/TLS) connection.
+ *
+ * The default is `false`.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param secure `true` for a secure connection, `false` otherwise.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetSecure(natsOptions *opts, bool secure);
+
+/** \brief Loads the trusted CA certificates from a file.
+ *
+ * Loads the trusted CA certificates from a file.
+ *
+ * Note that the certificates
+ * are added to a SSL context for this #natsOptions object at the time of
+ * this call, so possible errors while loading the certificates will be
+ * reported now instead of when a connection is created. You can get extra
+ * information by calling #nats_GetLastError.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param fileName the file containing the CA certificates.
+ *
+ */
+NATS_EXTERN natsStatus
+natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName);
+
+/** \brief Loads the certificate chain from a file.
+ *
+ * The certificates must be in PEM format and must be sorted starting with
+ * the subject's certificate, followed by intermediate CA certificates if
+ * applicable, and ending at the highest level (root) CA.
+ *
+ * See #natsOptions_LoadCATrustedCertificates regarding error reports.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param fileName the file containing the client certificates.
+ */
+NATS_EXTERN natsStatus
+natsOptions_LoadCertificatesChain(natsOptions *opts, const char *fileName);
+
+/** \brief Loads the private key from a file.
+ *
+ * Loads the first private key found in the file. The formatting type of the
+ * certificate that is supported is PEM.
+ *
+ * See #natsOptions_LoadCATrustedCertificates regarding error reports.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param fileName the file containing the client private key.
+ *
+ */
+NATS_EXTERN natsStatus
+natsOptions_LoadPrivateKey(natsOptions *opts, const char *fileName);
+
+/** \brief Sets the list of available ciphers.
+ *
+ * Sets the list of available ciphers.
+ * Check https://www.openssl.org/docs/manmaster/apps/ciphers.html for the
+ * proper syntax. Here is an example:
+ *
+ * > "-ALL:HIGH"
+ *
+ * See #natsOptions_LoadCATrustedCertificates regarding error reports.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param ciphers the ciphers suite.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetCiphers(natsOptions *opts, const char *ciphers);
+
+/** \brief Sets the server certificate's expected hostname.
+ *
+ * If set, the library will check that the hostname in the server
+ * certificate matches the given `hostname`. This will occur when a connection
+ * is created, not at the time of this call.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param hostname the expected server certificate hostname.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
 
 /** \brief Sets the verbose mode.
  *

@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 2.8)
 project(cnats)
 include(CTest)
 
+find_package(OpenSSL REQUIRED)
+
 # Uncomment to have the build process verbose
 #set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
@@ -13,6 +15,7 @@ set(NATS_INSTALL_PREFIX ../install CACHE PATH "Install prefix")
 set(CMAKE_INSTALL_PREFIX ${NATS_INSTALL_PREFIX} CACHE INTERNAL "")
 
 option(NATS_UPDATE_VERSION "Update the version file" OFF)
+option(NATS_COVERAGE "Code coverage" OFF)
 
 # Platform specific settings
 if(UNIX)
@@ -30,9 +33,6 @@ if(UNIX)
   set(NATS_MEMCHECK_CMD_OPTS "--leak-check=full --track-fds=yes --show-reachable=yes --num-callers=50" CACHE STRING "Memcheck options")
   set(MEMORYCHECK_COMMAND_OPTIONS ${NATS_MEMCHECK_CMD_OPTS} CACHE INTERNAL "")
 
-  set(NATS_SUPPRESSIONS_FILE ${PROJECT_SOURCE_DIR}/test/valgrind.sup CACHE FILE "Suppressions file")
-  set(MEMORYCHECK_SUPPRESSIONS_FILE ${NATS_SUPPRESSIONS_FILE} CACHE INTERNAL "")
-
   set(NATS_COMMON_C_FLAGS "-std=c99 -pedantic")
   
   if(NATS_BUILD_TYPE MATCHES "Debug")
@@ -49,6 +49,9 @@ if(UNIX)
     set(NATS_OS "LINUX")
     set(NATS_USE_PTHREAD "-pthread")
     set(NATS_EXTRA_LIB "rt")
+    if(NATS_COVERAGE)
+      set(NATS_CODE_COVERAGE "--coverage")
+    endif()
   endif(APPLE)
   
   if (${NATS_BUILD_ARCH} MATCHES "32")
@@ -68,7 +71,7 @@ elseif(WIN32)
   set(NATS_PLATFORM_INCLUDE "win") 
 endif(UNIX)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_COMMON_C_FLAGS} ${NATS_USE_PTHREAD} ${NATS_WARNINGS}") 
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_CODE_COVERAGE} ${NATS_COMMON_C_FLAGS} ${NATS_USE_PTHREAD} ${NATS_WARNINGS}")
 
 add_definitions(-D${NATS_OS})
 add_definitions(-D_REENTRANT)
@@ -90,9 +93,9 @@ if(NATS_UPDATE_VERSION)
 # Versionning
 
 set(NATS_VERSION_MAJOR  1)
-set(NATS_VERSION_MINOR  1)
-set(NATS_VERSION_PATCH  1)
-set(NATS_VERSION_SUFFIX "")
+set(NATS_VERSION_MINOR  2)
+set(NATS_VERSION_PATCH  0)
+set(NATS_VERSION_SUFFIX "-beta")
 
 set(NATS_VERSION_REQUIRED_NUMBER 0x010100)
 

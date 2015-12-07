@@ -2,32 +2,23 @@
 
 #include "examples.h"
 
+static const char *usage = ""\
+"-txt           text to send (default is 'hello')\n" \
+"-count         number of messages to send\n";
+
 int main(int argc, char **argv)
 {
     natsConnection  *conn  = NULL;
     natsStatistics  *stats = NULL;
-    const char      *subj  = NULL;
-    const char      *txt   = NULL;
-    int64_t         total  = 0;
-    int64_t         count  = 0;
-    int64_t         start  = 0;
+    natsOptions     *opts  = NULL;
     int64_t         last   = 0;
-    int64_t         elapsed= 0;
     natsStatus      s;
 
-    if (argc != 4)
-    {
-        printf("Usage: %s <subject> <msg content> <count>\n", argv[0]);
-        exit(1);
-    }
-
-    subj  = argv[1];
-    txt   = argv[2];
-    total = atol(argv[3]);
+    opts = parseArgs(argc, argv, usage);
 
     printf("Sending %" PRId64 " messages to subject '%s'\n", total, subj);
 
-    s = natsConnection_ConnectTo(&conn, NATS_DEFAULT_URL);
+    s = natsConnection_Connect(&conn, opts);
 
     if (s == NATS_OK)
         s = natsStatistics_Create(&stats);
@@ -61,6 +52,7 @@ int main(int argc, char **argv)
     // Destroy all our objects to avoid report of memory leak
     natsStatistics_Destroy(stats);
     natsConnection_Destroy(conn);
+    natsOptions_Destroy(opts);
 
     // To silence reports of memory still in used with valgrind
     nats_Close();

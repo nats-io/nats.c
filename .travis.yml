@@ -14,6 +14,7 @@ addons:
   apt:
     packages:
     - valgrind
+    - libssl-dev
 #    - libc6-dev-i386
 
 before_install:
@@ -24,12 +25,12 @@ before_script:
   - mkdir build && cd build
 
 env:
-  - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release"
-  - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DNATS_MEMCHECK_CMD=`which valgrind` -DNATS_SUPPRESSIONS_FILE=$TRAVIS_BUILD_DIR/test/valgrind_travis.sup" NATS_TEST_VALGRIND=yes CTEST_OPT="-T memcheck"
+  - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no"
+  - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DNATS_MEMCHECK_CMD=`which valgrind`" NATS_TEST_VALGRIND=yes CTEST_OPT="-T memcheck" DO_COVERAGE="no"
+  - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DNATS_COVERAGE=ON" DO_COVERAGE="coverage"
 
 script:
-  - cmake .. $BUILD_OPT && make rebuild_cache && make 
-  - ctest --timeout 60 $CTEST_OPT 
+  - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT" "$CTEST_OPT"
 
 notifications:
   email: false

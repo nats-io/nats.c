@@ -147,7 +147,9 @@ _freeConn(natsConnection *nc)
     natsThread_Destroy(nc->flusherThread);
     natsHash_Destroy(nc->subs);
     natsOptions_Destroy(nc->opts);
-    natsSock_DestroyFDSet(nc->fdSet);
+    natsSock_DestroyFDSet(nc->sockCtx.fdSet);
+    if (nc->sockCtx.ssl != NULL)
+        SSL_free(nc->sockCtx.ssl);
     natsMutex_Destroy(nc->mu);
 
     NATS_FREE(nc);
@@ -221,8 +223,7 @@ natsConn_bufferFlush(natsConnection *nc)
     }
     else
     {
-        s = natsSock_WriteFully(nc->fdSet, nc->fd, &(nc->deadline),
-                                natsBuf_Data(nc->bw), bufLen);
+        s = natsSock_WriteFully(&(nc->sockCtx), natsBuf_Data(nc->bw), bufLen);
     }
 
     if (s == NATS_OK)
@@ -251,8 +252,7 @@ natsConn_bufferWrite(natsConnection *nc, const char *buffer, int len)
         if (natsBuf_Len(nc->bw) == 0)
         {
             // Do a single socket write to avoid a copy
-            s = natsSock_WriteFully(nc->fdSet, nc->fd, &(nc->deadline),
-                                    buffer + offset, len);
+            s = natsSock_WriteFully(&(nc->sockCtx), buffer + offset, len);
 
             // We are done
             return s;
@@ -308,13 +308,12 @@ _createConn(natsConnection *nc)
     // Sets a deadline for the connect process (not just the low level
     // tcp connect. The deadline will be removed when we have received
     // the PONG to our initial PING. See _processConnInit().
-    natsDeadline_Init(&(nc->deadline), nc->opts->timeout);
+    natsDeadline_Init(&(nc->sockCtx.deadline), nc->opts->timeout);
 
-    s = natsSock_ConnectTcp(&(nc->fd), nc->fdSet, &(nc->deadline),
-                            nc->url->host, nc->url->port);
+    s = natsSock_ConnectTcp(&(nc->sockCtx), nc->url->host, nc->url->port);
     if (s == NATS_OK)
     {
-        nc->fdActive = true;
+        nc->sockCtx.fdActive = true;
 
         if ((nc->pending != NULL) && (nc->bw != NULL)
             && (natsBuf_Len(nc->bw) > 0))
@@ -336,7 +335,7 @@ _createConn(natsConnection *nc)
     if (s != NATS_OK)
     {
         // reset the deadline
-        natsDeadline_Clear(&(nc->deadline));
+        natsDeadline_Clear(&(nc->sockCtx.deadline));
         nc->err = s;
     }
 
@@ -381,8 +380,7 @@ _readOp(natsConnection *nc, natsControl *control)
     natsStatus  s = NATS_OK;
     char        buffer[DEFAULT_BUF_SIZE];
 
-    s = natsSock_ReadLine(nc->fdSet, nc->fd, &(nc->deadline),
-                          buffer, sizeof(buffer), NULL);
+    s = natsSock_ReadLine(&(nc->sockCtx), buffer, sizeof(buffer), NULL);
     if (s == NATS_OK)
         s = nats_ParseControl(control, buffer);
 
@@ -496,7 +494,7 @@ _processInfo(natsConnection *nc, char *info)
     if (s == NATS_OK)
         s = _parseInfo(&ptr, "auth_required", TYPE_BOOL, (void**) &(nc->info.authRequired));
     if (s == NATS_OK)
-        s = _parseInfo(&ptr, "ssl_required", TYPE_BOOL, (void**) &(nc->info.sslRequired));
+        s = _parseInfo(&ptr, "tls_required", TYPE_BOOL, (void**) &(nc->info.tlsRequired));
     if (s == NATS_OK)
         s = _parseInfo(&ptr, "max_payload", TYPE_LONG, (void**) &(nc->info.maxPayload));
 
@@ -504,11 +502,120 @@ _processInfo(natsConnection *nc, char *info)
     fprintf(stderr, "Id=%s Version=%s Host=%s Port=%d Auth=%s SSL=%s Payload=%d\n",
             nc->info.id, nc->info.version, nc->info.host, nc->info.port,
             nats_GetBoolStr(nc->info.authRequired),
-            nats_GetBoolStr(nc->info.sslRequired),
+            nats_GetBoolStr(nc->info.tlsRequired),
             (int) nc->info.maxPayload);
 #endif
 
     NATS_FREE(copy);
+    return s;
+}
+
+// makeTLSConn will wrap an existing Conn using TLS
+static natsStatus
+_makeTLSConn(natsConnection *nc)
+{
+    natsStatus  s       = NATS_OK;
+    SSL         *ssl    = NULL;
+
+    // Reset nc->errStr before initiating the handshake...
+    nc->errStr[0] = '\0';
+
+    natsMutex_Lock(nc->opts->sslCtx->lock);
+
+    s = natsSock_SetBlocking(nc->sockCtx.fd, true);
+    if (s == NATS_OK)
+    {
+        ssl = SSL_new(nc->opts->sslCtx->ctx);
+        if (ssl == NULL)
+        {
+            s = nats_setError(NATS_SSL_ERROR,
+                              "Error creating SSL object: %s",
+                              NATS_SSL_ERR_REASON_STRING);
+        }
+        else
+        {
+            nats_sslRegisterThreadForCleanup();
+
+            SSL_set_ex_data(ssl, 0, (void*) nc);
+        }
+    }
+    if (s == NATS_OK)
+    {
+        SSL_set_connect_state(ssl);
+
+        if (SSL_set_fd(ssl, (int) nc->sockCtx.fd) != 1)
+        {
+            s = nats_setError(NATS_SSL_ERROR,
+                              "Error connecting the SSL object to a file descriptor : %s",
+                              NATS_SSL_ERR_REASON_STRING);
+        }
+    }
+    if (s == NATS_OK)
+    {
+        if (SSL_do_handshake(ssl) != 1)
+        {
+            s = nats_setError(NATS_SSL_ERROR,
+                              "SSL handshake error: %s",
+                              NATS_SSL_ERR_REASON_STRING);
+        }
+    }
+    if (s == NATS_OK)
+    {
+        X509 *cert = SSL_get_peer_certificate(ssl);
+
+        if (cert != NULL)
+        {
+            if ((SSL_get_verify_result(ssl) != X509_V_OK)
+                || (nc->errStr[0] != '\0'))
+            {
+                s = nats_setError(NATS_SSL_ERROR,
+                                  "Server certificate verification failed: %s",
+                                  nc->errStr);
+            }
+            X509_free(cert);
+        }
+        else
+        {
+            s = nats_setError(NATS_SSL_ERROR, "%s",
+                              "Server did not provide a certificate");
+        }
+    }
+
+    if (s == NATS_OK)
+        s = natsSock_SetBlocking(nc->sockCtx.fd, false);
+
+    natsMutex_Unlock(nc->opts->sslCtx->lock);
+
+    if (s != NATS_OK)
+    {
+        if (ssl != NULL)
+            SSL_free(ssl);
+    }
+    else
+    {
+        nc->sockCtx.ssl = ssl;
+    }
+
+    return s;
+}
+
+// This will check to see if the connection should be
+// secure. This can be dictated from either end and should
+// only be called after the INIT protocol has been received.
+static natsStatus
+_checkForSecure(natsConnection *nc)
+{
+    natsStatus  s = NATS_OK;
+
+    // Check for mismatch in setups
+    if (nc->opts->secure && !nc->info.tlsRequired)
+        s = NATS_SECURE_CONNECTION_WANTED;
+    else if (nc->info.tlsRequired && !nc->opts->secure)
+        s = NATS_SECURE_CONNECTION_REQUIRED;
+
+    if ((s == NATS_OK) && nc->opts->secure)
+        s = _makeTLSConn(nc);
+
     return s;
 }
 
@@ -528,12 +635,15 @@ _processExpectedInfo(natsConnection *nc)
         && ((control.op == NULL)
             || (strcmp(control.op, _INFO_OP_) != 0)))
     {
-        s = NATS_PROTOCOL_ERROR;
+        s = nats_setError(NATS_PROTOCOL_ERROR,
+                          "Unexpected protocol: got '%s' instead of '%s'",
+                          (control.op == NULL ? "<null>" : control.op),
+                          _INFO_OP_);
     }
     if (s == NATS_OK)
         s = _processInfo(nc, control.args);
-    if ((s == NATS_OK) && nc->info.sslRequired)
-        s = NATS_SECURE_CONNECTION_REQUIRED;
+    if (s == NATS_OK)
+        s = _checkForSecure(nc);
 
     _clearControlContent(&control);
 
@@ -557,7 +667,7 @@ _connectProto(natsConnection *nc, char **proto)
         name = opts->name;
 
     res = nats_asprintf(proto,
-                        "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s\"ssl_required\":%s," \
+                        "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s\"tls_required\":%s," \
                         "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\"}%s",
                         nats_GetBoolStr(opts->verbose),
                         nats_GetBoolStr(opts->pedantic),
@@ -567,8 +677,9 @@ _connectProto(natsConnection *nc, char **proto)
                         (pwd != NULL ? "\"pass\":\"" : ""),
                         (pwd != NULL ? pwd : ""),
                         (pwd != NULL ? "\"," : ""),
-                        nats_GetBoolStr(false),
-                        name, CString, NATS_VERSION_STRING, _CRLF_);
+                        nats_GetBoolStr(opts->secure),
+                        (name != NULL ? name : ""),
+                        CString, NATS_VERSION_STRING, _CRLF_);
     if (res < 0)
         return NATS_NO_MEMORY;
 
@@ -828,8 +939,8 @@ _doReconnect(void *arg)
 
             // Close the socket since we were connected, but a problem occurred.
             // (not doing this would cause an FD leak)
-            natsSock_Close(nc->fd);
-            nc->fd = NATS_SOCK_INVALID;
+            natsSock_Close(nc->sockCtx.fd);
+            nc->sockCtx.fd = NATS_SOCK_INVALID;
 
             // We need to re-activate the use of pending since we
             // may go back to sleep and release the lock
@@ -936,8 +1047,7 @@ _sendConnect(natsConnection *nc)
 
         buffer[0] = '\0';
 
-        s = natsSock_ReadLine(nc->fdSet, nc->fd, &(nc->deadline),
-                              buffer, sizeof(buffer), NULL);
+        s = natsSock_ReadLine(&(nc->sockCtx), buffer, sizeof(buffer), NULL);
         if (s == NATS_OK)
         {
             // We except the PONG protocol
@@ -948,7 +1058,7 @@ _sendConnect(natsConnection *nc)
                 // authentication failure.
 
                 if (strstr(buffer, "Authorization") != NULL)
-                    s = NATS_NOT_PERMITTED;
+                    s = NATS_CONNECTION_AUTH_FAILED;
                 else
                     s = NATS_NO_SERVER;
             }
@@ -978,11 +1088,11 @@ _processConnInit(natsConnection *nc)
         s = _sendConnect(nc);
 
     // Clear our deadline, regardless of error
-    natsDeadline_Clear(&(nc->deadline));
+    natsDeadline_Clear(&(nc->sockCtx.deadline));
 
     // Switch to blocking socket here...
     if (s == NATS_OK)
-        s = natsSock_SetBlocking(nc->fd, true);
+        s = natsSock_SetBlocking(nc->sockCtx.fd, true);
 
     // Start the readLoop and flusher threads
     if (s == NATS_OK)
@@ -1075,12 +1185,12 @@ _processOpError(natsConnection *nc, natsStatus s)
         if (nc->ptmr != NULL)
             natsTimer_Stop(nc->ptmr);
 
-        if (nc->fdActive)
+        if (nc->sockCtx.fdActive)
         {
             natsConn_bufferFlush(nc);
 
-            natsSock_Shutdown(nc->fd);
-            nc->fdActive = false;
+            natsSock_Shutdown(nc->sockCtx.fd);
+            nc->sockCtx.fdActive = false;
         }
 
         // Start the reconnect thread
@@ -1104,6 +1214,17 @@ _processOpError(natsConnection *nc, natsStatus s)
 }
 
 static void
+natsConn_clearSSL(natsConnection *nc)
+{
+    if (nc->sockCtx.ssl == NULL)
+        return;
+
+//    SSL_clear(nc->sockCtx.ssl);
+    SSL_free(nc->sockCtx.ssl);
+    nc->sockCtx.ssl = NULL;
+}
+
+static void
 _readLoop(void  *arg)
 {
     natsStatus  s = NATS_OK;
@@ -1115,7 +1236,10 @@ _readLoop(void  *arg)
 
     natsConn_Lock(nc);
 
-    fd = nc->fd;
+    if (nc->sockCtx.ssl != NULL)
+        nats_sslRegisterThreadForCleanup();
+
+    fd = nc->sockCtx.fd;
 
     if (nc->ps == NULL)
         s = natsParser_Create(&(nc->ps));
@@ -1128,7 +1252,7 @@ _readLoop(void  *arg)
 
         n = 0;
 
-        s = natsSock_Read(fd, buffer, sizeof(buffer), &n);
+        s = natsSock_Read(&(nc->sockCtx), buffer, sizeof(buffer), &n);
         if (s == NATS_OK)
             s = natsParser_Parse(nc, buffer, n);
 
@@ -1139,8 +1263,12 @@ _readLoop(void  *arg)
     }
 
     natsSock_Close(fd);
-    nc->fd       = NATS_SOCK_INVALID;
-    nc->fdActive = false;
+    nc->sockCtx.fd       = NATS_SOCK_INVALID;
+    nc->sockCtx.fdActive = false;
+
+    // We need to cleanup some things if the connection was SSL.
+    if (nc->sockCtx.ssl != NULL)
+        natsConn_clearSSL(nc);
 
     natsParser_Destroy(nc->ps);
     nc->ps = NULL;
@@ -1185,7 +1313,7 @@ _flusher(void *arg)
             break;
         }
 
-        if (nc->fdActive && (natsBuf_Len(nc->bw) > 0))
+        if (nc->sockCtx.fdActive && (natsBuf_Len(nc->bw) > 0))
             nc->err = natsConn_bufferFlush(nc);
 
         natsConn_Unlock(nc);
@@ -1371,7 +1499,7 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
 
     // Go ahead and make sure we have flushed the outbound buffer.
     nc->status = CLOSED;
-    if (nc->fdActive)
+    if (nc->sockCtx.fdActive)
     {
         natsConn_bufferFlush(nc);
 
@@ -1379,16 +1507,20 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
         // the socket. Otherwise, _readLoop is the one doing it.
         if (ttj.readLoop == NULL)
         {
-            natsSock_Close(nc->fd);
-            nc->fd = NATS_SOCK_INVALID;
+            natsSock_Close(nc->sockCtx.fd);
+            nc->sockCtx.fd = NATS_SOCK_INVALID;
+
+            // We need to cleanup some things if the connection was SSL.
+            if (nc->sockCtx.ssl != NULL)
+                natsConn_clearSSL(nc);
         }
         else
         {
             // Shutdown the socket to stop any read/write operations.
             // The socket will be closed by the _readLoop thread.
-            natsSock_Shutdown(nc->fd);
+            natsSock_Shutdown(nc->sockCtx.fd);
         }
-        nc->fdActive = false;
+        nc->sockCtx.fdActive = false;
     }
 
     // Perform appropriate callback if needed for a disconnect.
@@ -1792,14 +1924,14 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
         // options have been cloned or created for the connection,
         // which was supposed to take ownership, so destroy it now.
         natsOptions_Destroy(options);
-        return NATS_NO_MEMORY;
+        return s = NATS_NO_MEMORY;
     }
 
     natsLib_Retain();
 
-    nc->refs = 1;
-    nc->fd   = NATS_SOCK_INVALID;
-    nc->opts = options;
+    nc->refs        = 1;
+    nc->sockCtx.fd  = NATS_SOCK_INVALID;
+    nc->opts        = options;
 
     if (nc->opts->maxPingsOut == 0)
         nc->opts->maxPingsOut = NATS_OPTS_DEFAULT_MAX_PING_OUT;
@@ -1815,8 +1947,8 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     if (s == NATS_OK)
         s = natsHash_Create(&(nc->subs), 8);
     if (s == NATS_OK)
-        s = natsSock_CreateFDSet(&(nc->fdSet));
-        if (s == NATS_OK)
+        s =  natsSock_CreateFDSet(&(nc->sockCtx.fdSet));
+    if (s == NATS_OK)
     {
         s = natsBuf_Create(&(nc->scratch), DEFAULT_SCRATCH_SIZE);
         if (s == NATS_OK)

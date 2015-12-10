@@ -7225,10 +7225,6 @@ test_SSLMultithreads(void)
     int                 i;
     struct threadArg    args;
 
-    test("Skipped until server is fixed: ");
-    testCond(true);
-    return;
-
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s == NATS_OK)
         s = natsOptions_Create(&opts);

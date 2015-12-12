@@ -2919,6 +2919,7 @@ test_DefaultConnection(void)
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
 
     _stopServer(serverPid);
 }

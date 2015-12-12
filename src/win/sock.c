@@ -33,7 +33,9 @@ natsSock_SetBlocking(natsSock fd, bool blocking)
         iMode = 1;
 
     if (ioctlsocket(fd, FIONBIO, &iMode) != NO_ERROR)
-        return NATS_SYS_ERROR;
+        return nats_setError(NATS_SYS_ERROR,
+                             "ioctlsocket error: %d",
+                             NATS_SOCK_GET_ERROR);
 
     return NATS_OK;
 }
@@ -60,7 +62,8 @@ natsSock_Flush(natsSock fd)
     if (fh == INVALID_HANDLE_VALUE)
     {
         errno = EBADF;
-        return NATS_INVALID_ARG;
+        return nats_setError(NATS_INVALID_ARG, "%s",
+                             "Error setting flushing socket. Invalid handle");
     }
 
     if (!FlushFileBuffers(fh))
@@ -72,7 +75,9 @@ natsSock_Flush(natsSock fd)
         else
             errno = EIO;
 
-        return NATS_IO_ERROR;
+        return nats_setError(NATS_IO_ERROR,
+                             "Error setting flushing socket. Error: %d",
+                             NATS_SOCK_GET_ERROR);
     }
 
     return NATS_OK;

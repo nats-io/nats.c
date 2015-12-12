@@ -9,7 +9,7 @@
 
 #define LOCK_AND_CHECK_OPTIONS(o, c) \
     if (((o) == NULL) || ((c))) \
-        return nats_setError(NATS_INVALID_ARG, "%s", "Invalid argument!"); \
+        return nats_setDefaultError(NATS_INVALID_ARG); \
     natsMutex_Lock((o)->mu);
 
 #define UNLOCK_OPTS(o) natsMutex_Unlock((o)->mu)
@@ -31,7 +31,7 @@ natsOptions_SetURL(natsOptions *opts, const char* url)
     {
         opts->url = NATS_STRDUP(url);
         if (opts->url == NULL)
-            s = NATS_NO_MEMORY;
+            s = nats_setDefaultError(NATS_NO_MEMORY);
     }
 
     UNLOCK_OPTS(opts);
@@ -72,13 +72,13 @@ natsOptions_SetServers(natsOptions *opts, const char** servers, int serversCount
     {
         opts->servers = (char**) NATS_CALLOC(serversCount, sizeof(char*));
         if (opts->servers == NULL)
-            s = NATS_NO_MEMORY;
+            s = nats_setDefaultError(NATS_NO_MEMORY);
 
         for (i = 0; (s == NATS_OK) && (i < serversCount); i++)
         {
             opts->servers[i] = (char*) NATS_STRDUP(servers[i]);
             if (opts->servers[i] == NULL)
-                s = NATS_NO_MEMORY;
+                s = nats_setDefaultError(NATS_NO_MEMORY);
             else
                 opts->serversCount++;
         }
@@ -132,7 +132,7 @@ natsOptions_SetName(natsOptions *opts, const char *name)
     {
         opts->name = NATS_STRDUP(name);
         if (opts->name == NULL)
-            s = NATS_NO_MEMORY;
+            s = nats_setDefaultError(NATS_NO_MEMORY);
     }
 
     UNLOCK_OPTS(opts);
@@ -332,7 +332,7 @@ _createSSLCtx(natsSSLCtx **newCtx)
 
     ctx = (natsSSLCtx*) NATS_CALLOC(1, sizeof(natsSSLCtx));
     if (ctx == NULL)
-        s = nats_setError(NATS_NO_MEMORY, "%s", "Unable to create natsSSLCtx");
+        s = nats_setDefaultError(NATS_NO_MEMORY);
 
     if (s == NATS_OK)
     {
@@ -367,7 +367,7 @@ _createSSLCtx(natsSSLCtx **newCtx)
         natsSSLCtx_release(ctx);
     }
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static natsStatus
@@ -404,7 +404,7 @@ _getSSLCtx(natsOptions *opts)
     if (s == NATS_OK)
         s = _createSSLCtx(&(opts->sslCtx));
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -429,7 +429,7 @@ natsOptions_SetSecure(natsOptions *opts, bool secure)
 
     UNLOCK_OPTS(opts);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -554,9 +554,7 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname)
             opts->sslCtx->expectedHostname = NATS_STRDUP(hostname);
             if (opts->sslCtx->expectedHostname == NULL)
             {
-                s = nats_setError(NATS_NO_MEMORY,
-                                  "No memory setting expected hostname: %s",
-                                  hostname);
+                s = nats_setDefaultError(NATS_NO_MEMORY);
             }
         }
     }
@@ -742,12 +740,12 @@ natsOptions_Create(natsOptions **newOpts)
     natsOptions *opts = (natsOptions*) NATS_CALLOC(1, sizeof(natsOptions));
 
     if (opts == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     if (natsMutex_Create(&(opts->mu)) != NATS_OK)
     {
         NATS_FREE(opts);
-        return NATS_NO_MEMORY;
+        return NATS_UPDATE_ERR_STACK(NATS_NO_MEMORY);
     }
 
     opts->allowReconnect = true;
@@ -771,8 +769,11 @@ natsOptions_clone(natsOptions *opts)
     natsOptions *cloned = NULL;
     int         muSize;
 
-    if (natsOptions_Create(&cloned) != NATS_OK)
+    if ((s = natsOptions_Create(&cloned)) != NATS_OK)
+    {
+        NATS_UPDATE_ERR_STACK(s);
         return NULL;
+    }
 
     natsMutex_Lock(opts->mu);
 
@@ -812,6 +813,7 @@ natsOptions_clone(natsOptions *opts)
     {
         _freeOptions(cloned);
         cloned = NULL;
+        NATS_UPDATE_ERR_STACK(s);
     }
 
     natsMutex_Unlock(opts->mu);

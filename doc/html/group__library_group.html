@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.2.1-beta</span>
+   &#160;<span id="projectnumber">1.2.3-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -132,6 +132,12 @@ Functions</h2></td></tr>
 <tr class="memitem:ga2610d5691a89a0f2526989083bee0fd3"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#ga2610d5691a89a0f2526989083bee0fd3">nats_GetLastError</a> (<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> *status)</td></tr>
 <tr class="memdesc:ga2610d5691a89a0f2526989083bee0fd3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the calling thread's last known error.  <a href="#ga2610d5691a89a0f2526989083bee0fd3">More...</a><br /></td></tr>
 <tr class="separator:ga2610d5691a89a0f2526989083bee0fd3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaca24172e1b97ca01cee29ca437f5702e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#gaca24172e1b97ca01cee29ca437f5702e">nats_GetLastErrorStack</a> (char *buffer, size_t bufLen)</td></tr>
+<tr class="memdesc:gaca24172e1b97ca01cee29ca437f5702e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the calling thread's last known error stack.  <a href="#gaca24172e1b97ca01cee29ca437f5702e">More...</a><br /></td></tr>
+<tr class="separator:gaca24172e1b97ca01cee29ca437f5702e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga5fab3b18c4fe3630254483575f6066f4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#ga5fab3b18c4fe3630254483575f6066f4">nats_PrintLastErrorStack</a> (FILE *file)</td></tr>
+<tr class="memdesc:ga5fab3b18c4fe3630254483575f6066f4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Prints the calling thread's last known error stack into the file.  <a href="#ga5fab3b18c4fe3630254483575f6066f4">More...</a><br /></td></tr>
+<tr class="separator:ga5fab3b18c4fe3630254483575f6066f4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gae75131e0ce4e5b89d0f82ea7892f112e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e">nats_Close</a> (void)</td></tr>
 <tr class="memdesc:gae75131e0ce4e5b89d0f82ea7892f112e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tear down the library.  <a href="#gae75131e0ce4e5b89d0f82ea7892f112e">More...</a><br /></td></tr>
 <tr class="separator:gae75131e0ce4e5b89d0f82ea7892f112e"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -301,6 +307,64 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>the thread local error string.</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>Do not free the string returned by this function. </dd></dl>
+
+</div>
+</div>
+<a class="anchor" id="gaca24172e1b97ca01cee29ca437f5702e"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> nats_GetLastErrorStack </td>
+          <td>(</td>
+          <td class="paramtype">char *&#160;</td>
+          <td class="paramname"><em>buffer</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t&#160;</td>
+          <td class="paramname"><em>bufLen</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Copies the calling thread's last known error stack into the provided buffer. If the buffer is not big enough, <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a317fb9be1a80f6b1877f96a9a2db16ad">NATS_INSUFFICIENT_BUFFER</a> is returned.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">buffer</td><td>the buffer into the stack is copied. </td></tr>
+    <tr><td class="paramname">bufLen</td><td>the size of the buffer </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga5fab3b18c4fe3630254483575f6066f4"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void nats_PrintLastErrorStack </td>
+          <td>(</td>
+          <td class="paramtype">FILE *&#160;</td>
+          <td class="paramname"><em>file</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This call prints the calling thread's last known error stack into the file <code>file</code>. It first prints the error status and the error string, then the stack.</p>
+<p>Here is an example for a call:</p>
+<div class="fragment"><div class="line"><a name="l00001"></a><span class="lineno">    1</span>&#160;Error: 29 - SSL Error - (conn.c:565): SSL handshake error: sslv3 alert bad certificate</div><div class="line"><a name="l00002"></a><span class="lineno">    2</span>&#160;Stack: (library version: 1.2.3-beta)</div><div class="line"><a name="l00003"></a><span class="lineno">    3</span>&#160;  01 - _makeTLSConn</div><div class="line"><a name="l00004"></a><span class="lineno">    4</span>&#160;  02 - _checkForSecure</div><div class="line"><a name="l00005"></a><span class="lineno">    5</span>&#160;  03 - _processExpectedInfo</div><div class="line"><a name="l00006"></a><span class="lineno">    6</span>&#160;  04 - _processConnInit</div><div class="line"><a name="l00007"></a><span class="lineno">    7</span>&#160;  05 - _connect</div><div class="line"><a name="l00008"></a><span class="lineno">    8</span>&#160;  06 - natsConnection_Connect</div></div><!-- fragment --><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">file</td><td>the file the stack is printed to. </td></tr>
+  </table>
+  </dd>
+</dl>
 
 </div>
 </div>

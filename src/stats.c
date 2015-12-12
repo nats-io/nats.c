@@ -14,7 +14,7 @@ natsStatistics_Create(natsStatistics **newStats)
 
     stats = (natsStatistics*) NATS_CALLOC(1, sizeof(natsStatistics));
     if (stats == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     *newStats = stats;
 
@@ -28,7 +28,7 @@ natsStatistics_GetCounts(natsStatistics *stats,
                          uint64_t *reconnects)
 {
     if (stats == NULL)
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     if (inMsgs != NULL)
         *inMsgs = stats->inMsgs;

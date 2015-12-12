@@ -88,7 +88,7 @@ natsMsg_create(natsMsg **newMsg,
 
     msg = NATS_MALLOC(sizeof(natsMsg) + bufSize);
     if (msg == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     // To be safe, we could 'memset' the message up to sizeof(natsMsg),
     // but since we are explicitly initializing most of the fields, we save
@@ -141,13 +141,14 @@ natsMsg_Create(natsMsg **newMsg, const char *subj, const char *reply,
         || (subj[0] == '\0')
         || ((reply != NULL) && (reply[0] == '\0')))
     {
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
     }
 
     s = natsMsg_create(newMsg,
                        subj, (int) strlen(subj),
                        reply, (reply == NULL ? 0 : (int) strlen(reply)),
                        data, dataLen);
-    return s;
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 

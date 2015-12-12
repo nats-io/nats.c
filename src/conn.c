@@ -255,7 +255,7 @@ natsConn_bufferWrite(natsConnection *nc, const char *buffer, int len)
             s = natsSock_WriteFully(&(nc->sockCtx), buffer + offset, len);
 
             // We are done
-            return s;
+            return NATS_UPDATE_ERR_STACK(s);
         }
 
         // We already have data in the buffer, check how many more bytes
@@ -282,13 +282,15 @@ natsConn_bufferWrite(natsConnection *nc, const char *buffer, int len)
     if ((s == NATS_OK) && (len > 0))
         s = natsBuf_Append(nc->bw, buffer + offset, len);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsConn_bufferWriteString(natsConnection *nc, const char *string)
 {
-    return natsConn_bufferWrite(nc, string, (int) strlen(string));
+    natsStatus s = natsConn_bufferWrite(nc, string, (int) strlen(string));
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 // _createConn will connect to the server and do the right thing when an
@@ -301,7 +303,7 @@ _createConn(natsConnection *nc)
 
     cur = natsSrvPool_GetCurrentServer(nc->srvPool, nc->url, NULL);
     if (cur == NULL)
-        return NATS_NO_SERVER;
+        return nats_setDefaultError(NATS_NO_SERVER);
 
     cur->lastAttempt = nats_Now();
 
@@ -339,7 +341,7 @@ _createConn(natsConnection *nc)
         nc->err = s;
     }
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static void
@@ -368,7 +370,7 @@ natsConn_isClosed(natsConnection *nc)
     return nc->status == CLOSED;
 }
 
-bool
+static bool
 _isReconnecting(natsConnection *nc)
 {
     return (nc->status == RECONNECTING);
@@ -384,7 +386,7 @@ _readOp(natsConnection *nc, natsControl *control)
     if (s == NATS_OK)
         s = nats_ParseControl(control, buffer);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 #define TYPE_STR    (0)
@@ -421,7 +423,9 @@ _parseInfo(char **str, const char *field, int fieldType, void **addr)
     }
 
     if (end == NULL)
-        return NATS_PROTOCOL_ERROR;
+        return nats_setError(NATS_PROTOCOL_ERROR,
+                             "Invalid protocol: field=%s type=%d ptr=%s",
+                             field, fieldType, ptr);
 
     *str = (end + 1);
     *end = '\0';
@@ -430,7 +434,7 @@ _parseInfo(char **str, const char *field, int fieldType, void **addr)
     {
         val = NATS_STRDUP(ptr);
         if (val == NULL)
-            return NATS_NO_MEMORY;
+            nats_setDefaultError(NATS_NO_MEMORY);
 
         (*(char**)addr) = val;
     }
@@ -451,7 +455,9 @@ _parseInfo(char **str, const char *field, int fieldType, void **addr)
 
         lval = strtoll(ptr, &tail, 10);
         if ((errno != 0) || (tail[0] != '\0'))
-            return NATS_PROTOCOL_ERROR;
+            return nats_setError(NATS_PROTOCOL_ERROR,
+                                 "Invalid protocol: field=%s type=%d ptr=%s",
+                                 field, fieldType, ptr);
 
         if (fieldType == TYPE_INT)
             (*(int*)addr) = (int) lval;
@@ -463,7 +469,7 @@ _parseInfo(char **str, const char *field, int fieldType, void **addr)
         abort();
     }
 
-    return s;
+    return NATS_OK;
 }
 
 static natsStatus
@@ -480,7 +486,7 @@ _processInfo(natsConnection *nc, char *info)
 
     copy = NATS_STRDUP(info);
     if (copy == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     ptr = copy;
 
@@ -507,7 +513,7 @@ _processInfo(natsConnection *nc, char *info)
 #endif
 
     NATS_FREE(copy);
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 // makeTLSConn will wrap an existing Conn using TLS
@@ -596,7 +602,7 @@ _makeTLSConn(natsConnection *nc)
         nc->sockCtx.ssl = ssl;
     }
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 // This will check to see if the connection should be
@@ -609,14 +615,14 @@ _checkForSecure(natsConnection *nc)
 
     // Check for mismatch in setups
     if (nc->opts->secure && !nc->info.tlsRequired)
-        s = NATS_SECURE_CONNECTION_WANTED;
+        s = nats_setDefaultError(NATS_SECURE_CONNECTION_WANTED);
     else if (nc->info.tlsRequired && !nc->opts->secure)
-        s = NATS_SECURE_CONNECTION_REQUIRED;
+        s = nats_setDefaultError(NATS_SECURE_CONNECTION_REQUIRED);
 
     if ((s == NATS_OK) && nc->opts->secure)
         s = _makeTLSConn(nc);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static natsStatus
@@ -629,7 +635,7 @@ _processExpectedInfo(natsConnection *nc)
 
     s = _readOp(nc, &control);
     if (s != NATS_OK)
-        return s;
+        return NATS_UPDATE_ERR_STACK(s);
 
     if ((s == NATS_OK)
         && ((control.op == NULL)
@@ -647,7 +653,7 @@ _processExpectedInfo(natsConnection *nc)
 
     _clearControlContent(&control);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static natsStatus
@@ -699,14 +705,14 @@ _sendUnsubProto(natsConnection *nc, int64_t subId, int max)
         res = nats_asprintf(&proto, _UNSUB_NO_MAX_PROTO_, subId);
 
     if (res < 0)
-        s = NATS_NO_MEMORY;
+        s = nats_setDefaultError(NATS_NO_MEMORY);
     else
     {
         s = natsConn_bufferWriteString(nc, proto);
         NATS_FREE(proto);
     }
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static natsStatus
@@ -1098,7 +1104,7 @@ _processConnInit(natsConnection *nc)
     if (s == NATS_OK)
         s = _spinUpSocketWatchers(nc);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 // Main connect function. Will connect to the server
@@ -1154,12 +1160,12 @@ _connect(natsConnection *nc)
     if ((nc->err == NATS_OK) && (nc->status != CONNECTED))
     {
         nc->err = NATS_NO_SERVER;
-        s = nc->err;
+        s = nats_setDefaultError(nc->err);
     }
 
     natsConn_Unlock(nc);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 // _processOpError handles errors from reading or parsing the protocol.
@@ -1732,7 +1738,7 @@ natsConn_addSubcription(natsConnection *nc, natsSubscription *sub)
         natsSub_retain(sub);
     }
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void
@@ -1769,10 +1775,10 @@ natsConn_subscribe(natsSubscription **newSub,
     natsSubscription    *sub = NULL;
 
     if (nc == NULL)
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     if ((subj == NULL) || (strlen(subj) == 0))
-        return NATS_INVALID_SUBJECT;
+        return nats_setDefaultError(NATS_INVALID_SUBJECT);
 
     natsConn_Lock(nc);
 
@@ -1780,7 +1786,7 @@ natsConn_subscribe(natsSubscription **newSub,
     {
         natsConn_Unlock(nc);
 
-        return NATS_CONNECTION_CLOSED;
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
     s = natsSub_create(&sub, nc, subj, queue, cb, cbClosure, noDelay);
@@ -1804,7 +1810,7 @@ natsConn_subscribe(natsSubscription **newSub,
                                 (queue == NULL ? "" : queue),
                                 (int) sub->sid);
             if (res < 0)
-                s = NATS_NO_MEMORY;
+                s = nats_setDefaultError(NATS_NO_MEMORY);
 
             if (s == NATS_OK)
             {
@@ -1843,7 +1849,7 @@ natsConn_subscribe(natsSubscription **newSub,
 
     natsConn_Unlock(nc);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 // Performs the low level unsubscribe to the server.
@@ -1857,7 +1863,7 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
     if (natsConn_isClosed(nc))
     {
         natsConn_Unlock(nc);
-        return NATS_CONNECTION_CLOSED;
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
     sub = natsHash_Get(nc->subs, sub->sid);
@@ -1905,7 +1911,7 @@ _setupServerPool(natsConnection *nc)
     if (s == NATS_OK)
         nc->url = natsSrvPool_GetSrvUrl(nc->srvPool, 0);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -1924,7 +1930,7 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
         // options have been cloned or created for the connection,
         // which was supposed to take ownership, so destroy it now.
         natsOptions_Destroy(options);
-        return s = NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
     }
 
     natsLib_Retain();
@@ -1964,24 +1970,28 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     else
         natsConn_release(nc);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsConnection_Connect(natsConnection **newConn, natsOptions *options)
 {
-    natsStatus      s;
+    natsStatus      s       = NATS_OK;
     natsConnection  *nc     = NULL;
     natsOptions     *opts   = NULL;
 
     if (options == NULL)
-        return natsConnection_ConnectTo(newConn, NATS_DEFAULT_URL);
+    {
+        s = natsConnection_ConnectTo(newConn, NATS_DEFAULT_URL);
+        return NATS_UPDATE_ERR_STACK(s);
+    }
 
     opts = natsOptions_clone(options);
     if (opts == NULL)
-        return NATS_NO_MEMORY;
+        s = NATS_NO_MEMORY;
 
-    s = natsConn_create(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConn_create(&nc, opts);
     if (s == NATS_OK)
         s = _connect(nc);
 
@@ -1990,7 +2000,7 @@ natsConnection_Connect(natsConnection **newConn, natsOptions *options)
     else
         natsConn_release(nc);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -2013,7 +2023,7 @@ natsConnection_ConnectTo(natsConnection **newConn, const char *url)
     else
         natsConn_release(nc);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 // Test if connection  has been closed.
@@ -2088,15 +2098,15 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
     natsPong    *pong   = NULL;
 
     if (nc == NULL)
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     if (timeout <= 0)
-        return NATS_INVALID_TIMEOUT;
+        return nats_setDefaultError(NATS_INVALID_TIMEOUT);
 
     natsConn_lockAndRetain(nc);
 
     if (natsConn_isClosed(nc))
-        s = NATS_CONNECTION_CLOSED;
+        s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
 
     if (s == NATS_OK)
     {
@@ -2108,7 +2118,7 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
             pong = (natsPong*) NATS_CALLOC(1, sizeof(natsPong));
 
         if (pong == NULL)
-            s = NATS_NO_MEMORY;
+            s = nats_setDefaultError(NATS_NO_MEMORY);
     }
 
     if (s == NATS_OK)
@@ -2131,18 +2141,18 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
         // Report any error that occurred while we were waiting.
         if (nc->err != NATS_OK)
         {
-            s = nc->err;
+            s = nats_setDefaultError(nc->err);
         }
         else if ((s == NATS_OK) && (nc->status == CLOSED))
         {
             // The connection has been closed while we were waiting
-            s = NATS_CONNECTION_CLOSED;
+            s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
         }
         else if ((s == NATS_OK) && (pong->id == -1))
         {
             // The connection was disconnected and the library is in the
             // process of trying to reconnect
-            s = NATS_CONNECTION_DISCONNECTED;
+            s = nats_setDefaultError(NATS_CONNECTION_DISCONNECTED);
         }
 
         if (s != NATS_OK)
@@ -2158,13 +2168,14 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
 
     natsConn_unlockAndRelease(nc);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsConnection_Flush(natsConnection *nc)
 {
-    return natsConnection_FlushTimeout(nc, 60000);
+    natsStatus s = natsConnection_FlushTimeout(nc, 60000);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 int
@@ -2173,7 +2184,7 @@ natsConnection_Buffered(natsConnection *nc)
     int buffered = -1;
 
     if (nc == NULL)
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsConn_Lock(nc);
 
@@ -2208,7 +2219,7 @@ natsConnection_GetStats(natsConnection *nc, natsStatistics *stats)
     natsStatus  s = NATS_OK;
 
     if ((nc == NULL) || (stats == NULL))
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsConn_Lock(nc);
 
@@ -2225,7 +2236,7 @@ natsConnection_GetConnectedUrl(natsConnection *nc, char *buffer, size_t bufferSi
     natsStatus  s = NATS_OK;
 
     if ((nc == NULL) || (buffer == NULL))
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsConn_Lock(nc);
 
@@ -2234,7 +2245,7 @@ natsConnection_GetConnectedUrl(natsConnection *nc, char *buffer, size_t bufferSi
     if ((nc->status == CONNECTED) && (nc->url->fullUrl != NULL))
     {
         if (strlen(nc->url->fullUrl) >= bufferSize)
-            s = NATS_INSUFFICIENT_BUFFER;
+            s = nats_setDefaultError(NATS_INSUFFICIENT_BUFFER);
 
         if (s == NATS_OK)
             snprintf(buffer, bufferSize, "%s", nc->url->fullUrl);
@@ -2251,7 +2262,7 @@ natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t buf
     natsStatus  s = NATS_OK;
 
     if ((nc == NULL) || (buffer == NULL))
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsConn_Lock(nc);
 
@@ -2260,7 +2271,7 @@ natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t buf
     if ((nc->status == CONNECTED) && (nc->info.id != NULL))
     {
         if (strlen(nc->info.id) >= bufferSize)
-            s = NATS_INSUFFICIENT_BUFFER;
+            s = nats_setDefaultError(NATS_INSUFFICIENT_BUFFER);
 
         if (s == NATS_OK)
             snprintf(buffer, bufferSize, "%s", nc->info.id);
@@ -2277,7 +2288,7 @@ natsConnection_GetLastError(natsConnection *nc, const char **lastError)
     natsStatus  s;
 
     if (nc == NULL)
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsConn_Lock(nc);
 

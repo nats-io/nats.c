@@ -141,6 +141,7 @@ int main(int argc, char **argv)
     else
     {
         printf("Error: %d - %s\n", s, natsStatus_GetText(s));
+        nats_PrintLastErrorStack(stderr);
     }
 
     // Destroy all our objects to avoid report of memory leak

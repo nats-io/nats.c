@@ -29,12 +29,12 @@ natsHash_Create(natsHash **newHash, int initialSize)
     if ((initialSize == 0) || ((initialSize & (initialSize - 1)) != 0))
     {
         // Size of buckets must be power of 2
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
     }
 
     hash = (natsHash*) NATS_CALLOC(1, sizeof(natsHash));
     if (hash == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     hash->mask      = (initialSize - 1);
     hash->numBkts   = initialSize;
@@ -43,7 +43,7 @@ natsHash_Create(natsHash **newHash, int initialSize)
     if (hash->bkts == NULL)
     {
         NATS_FREE(hash);
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
     }
 
     *newHash = hash;
@@ -63,7 +63,7 @@ _resize(natsHash *hash, int newSize)
 
     bkts = (natsHashEntry**) NATS_CALLOC(newSize, sizeof(natsHashEntry*));
     if (bkts == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     for (k = 0; k < hash->numBkts; k++)
     {
@@ -92,7 +92,7 @@ _grow(natsHash *hash)
 {
     // Can't grow beyond max signed int for now
     if (hash->numBkts >= _MAX_BKT_SIZE)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     return _resize(hash, 2 * (hash->numBkts));
 }
@@ -152,7 +152,7 @@ natsHash_Set(natsHash *hash, int64_t key, void *data, void **oldData)
     // We have a new entry here
     newEntry = _createEntry(key, data);
     if (newEntry == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     newEntry->next = hash->bkts[index];
     hash->bkts[index] = newEntry;
@@ -162,7 +162,7 @@ natsHash_Set(natsHash *hash, int64_t key, void *data, void **oldData)
     if (hash->canResize && (hash->used > hash->numBkts))
         s = _grow(hash);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void*
@@ -306,7 +306,7 @@ natsHashIter_RemoveCurrent(natsHashIter *iter)
     int64_t key;
 
     if (iter->current == NULL)
-        return NATS_NOT_FOUND;
+        return nats_setDefaultError(NATS_NOT_FOUND);
 
     key = iter->current->key;
     iter->current = iter->next;
@@ -369,12 +369,12 @@ natsStrHash_Create(natsStrHash **newHash, int initialSize)
     if ((initialSize == 0) || ((initialSize & (initialSize - 1)) != 0))
     {
         // Size of buckets must be power of 2
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
     }
 
     hash = (natsStrHash*) NATS_CALLOC(1, sizeof(natsStrHash));
     if (hash == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     hash->mask      = (initialSize - 1);
     hash->numBkts   = initialSize;
@@ -383,7 +383,7 @@ natsStrHash_Create(natsStrHash **newHash, int initialSize)
     if (hash->bkts == NULL)
     {
         NATS_FREE(hash);
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
     }
 
     *newHash = hash;
@@ -403,7 +403,7 @@ _resizeStr(natsStrHash *hash, int newSize)
 
     bkts = (natsStrHashEntry**) NATS_CALLOC(newSize, sizeof(natsStrHashEntry*));
     if (bkts == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     for (k = 0; k < hash->numBkts; k++)
     {
@@ -432,7 +432,7 @@ _growStr(natsStrHash *hash)
 {
     // Can't grow beyond max signed int for now
     if (hash->numBkts >= _MAX_BKT_SIZE)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     return _resizeStr(hash, 2 * (hash->numBkts));
 }
@@ -519,7 +519,7 @@ natsStrHash_Set(natsStrHash *hash, char *key, bool copyKey,
     // We have a new entry here
     newEntry = _createStrEntry(hk, key, copyKey, data);
     if (newEntry == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     newEntry->next = hash->bkts[index];
     hash->bkts[index] = newEntry;
@@ -529,7 +529,7 @@ natsStrHash_Set(natsStrHash *hash, char *key, bool copyKey,
     if (hash->canResize && (hash->used > hash->numBkts))
         s = _growStr(hash);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void*
@@ -690,7 +690,7 @@ natsStrHashIter_RemoveCurrent(natsStrHashIter *iter)
     char *key;
 
     if (iter->current == NULL)
-        return NATS_NOT_FOUND;
+        return nats_setDefaultError(NATS_NOT_FOUND);
 
     key = iter->current->key;
     iter->current = iter->next;

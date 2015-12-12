@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <inttypes.h>
+#include <stdio.h>
 
 #include "status.h"
 #include "version.h"
@@ -281,6 +282,40 @@ nats_Sleep(int64_t sleepTime);
  */
 NATS_EXTERN const char*
 nats_GetLastError(natsStatus *status);
+
+/** \brief Returns the calling thread's last known error stack.
+ *
+ * Copies the calling thread's last known error stack into the provided buffer.
+ * If the buffer is not big enough, #NATS_INSUFFICIENT_BUFFER is returned.
+ *
+ * @param buffer the buffer into the stack is copied.
+ * @param bufLen the size of the buffer
+ */
+NATS_EXTERN natsStatus
+nats_GetLastErrorStack(char *buffer, size_t bufLen);
+
+/** \brief Prints the calling thread's last known error stack into the file.
+ *
+ * This call prints the calling thread's last known error stack into the file `file`.
+ * It first prints the error status and the error string, then the stack.
+ *
+ * Here is an example for a call:
+ *
+ * \code{.unparsed}
+ * Error: 29 - SSL Error - (conn.c:565): SSL handshake error: sslv3 alert bad certificate
+ * Stack: (library version: 1.2.3-beta)
+ *   01 - _makeTLSConn
+ *   02 - _checkForSecure
+ *   03 - _processExpectedInfo
+ *   04 - _processConnInit
+ *   05 - _connect
+ *   06 - natsConnection_Connect
+ * \endcode
+ *
+ * @param file the file the stack is printed to.
+ */
+NATS_EXTERN void
+nats_PrintLastErrorStack(FILE *file);
 
 /** \brief Tear down the library.
  *
@@ -1108,9 +1143,11 @@ natsConnection_Publish(natsConnection *nc, const char *subj,
  *
  * Convenient function to publish a string. This call is equivalent to:
  *
- * > const char* myString = "hello";
- * >
- * > natsConnection_Publish(nc, subj, (const void*) myString, (int) strlen(myString));
+ * \code{.c}
+ * const char* myString = "hello";
+ *
+ * natsConnection_Publish(nc, subj, (const void*) myString, (int) strlen(myString));
+ * \endcode
  *
  * @param nc the pointer to the #natsConnection object.
  * @param subj the subject the data is sent to.
@@ -1154,10 +1191,11 @@ natsConnection_PublishRequest(natsConnection *nc, const char *subj,
  * Convenient function to publish a request as a string. This call is
  * equivalent to:
  *
- * > const char* myString = "hello";
- * >
- * > natsPublishRequest(nc, subj, reply, (const void*) myString,
- * >                    (int) strlen(myString));
+ * \code{.c}
+ * const char* myString = "hello";
+ *
+ * natsPublishRequest(nc, subj, reply, (const void*) myString, (int) strlen(myString));
+ * \endcode
  *
  * @param nc the pointer to the #natsConnection object.
  * @param subj the subject the request is sent to.
@@ -1192,10 +1230,11 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
  * Convenient function to send a request as a string. This call is
  * equivalent to:
  *
- * > const char* myString = "hello";
- * >
- * > natsConnection_Request(replyMsg, nc, subj,
- * >                        (const void*) myString, (int) strlen(myString));
+ * \code{.c}
+ * const char* myString = "hello";
+ *
+ * natsConnection_Request(replyMsg, nc, subj, (const void*) myString, (int) strlen(myString));
+ * \endcode
  *
  * @param replyMsg the location where to store the pointer to the received
  * #natsMsg reply.

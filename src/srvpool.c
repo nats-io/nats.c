@@ -23,7 +23,7 @@ _createSrv(natsSrv **newSrv, char *url)
     natsSrv     *srv = (natsSrv*) NATS_CALLOC(1, sizeof(natsSrv));
 
     if (srv == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     s = natsUrl_Create(&(srv->url), url);
     if (s == NATS_OK)
@@ -31,7 +31,7 @@ _createSrv(natsSrv **newSrv, char *url)
     else
         _freeSrv(srv);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsSrv*
@@ -124,8 +124,8 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
     natsStatus  s        = NATS_OK;
     int         *indexes = NULL;
     natsSrvPool *pool    = NULL;
+    natsSrv     *srv     = NULL;
     int         poolSize;
-    natsSrv     *srv;
 
     poolSize  = (opts->url != NULL ? 1 : 0);
     poolSize += opts->serversCount;
@@ -136,13 +136,13 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
 
     pool = (natsSrvPool*) NATS_CALLOC(1, sizeof(natsSrvPool));
     if (pool == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     pool->srvrs = (natsSrv**) NATS_CALLOC(poolSize, sizeof(natsSrv*));
     if (pool->srvrs == NULL)
     {
         NATS_FREE(pool);
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
     }
 
     if (opts->url != NULL)
@@ -159,7 +159,7 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
     {
         indexes = (int*) NATS_CALLOC(opts->serversCount, sizeof(int));
         if (indexes == NULL)
-            s = NATS_NO_MEMORY;
+            return nats_setDefaultError(NATS_NO_MEMORY);
     }
 
     if ((s == NATS_OK) && (opts->serversCount > 0))
@@ -198,5 +198,5 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
 
     NATS_FREE(indexes);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }

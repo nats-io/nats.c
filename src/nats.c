@@ -17,10 +17,14 @@
             natsCondition_Wait(gLib.cond, gLib.lock); \
         natsMutex_Unlock(gLib.lock)
 
+#define MAX_FRAMES (50)
+
 typedef struct natsTLError
 {
     natsStatus  sts;
     char        text[256];
+    const char  *func[MAX_FRAMES];
+    int         framesCount;
 
 } natsTLError;
 
@@ -908,7 +912,7 @@ natsInbox_Create(natsInbox **newInbox)
     res = nats_asprintf(&inbox, "%s%x.%" PRIu64, inboxPrefix,
                         rand(), ++(gLib.inboxesSeq));
     if (res < 0)
-        s = NATS_NO_MEMORY;
+        s = nats_setDefaultError(NATS_NO_MEMORY);
     else
         *newInbox = inbox;
 
@@ -1030,7 +1034,10 @@ _getTLError(void)
     if (errTL == NULL)
     {
         errTL = (natsTLError*) NATS_CALLOC(1, sizeof(natsTLError));
+        if (errTL != NULL)
+            errTL->framesCount = -1;
         needFree = (errTL != NULL);
+
     }
 
     if ((errTL != NULL)
@@ -1059,8 +1066,28 @@ _getErrorShortFileName(const char* fileName)
     return file;
 }
 
+static void
+_updateStack(natsTLError *errTL, const char *funcName)
+{
+    int idx;
+
+    idx = errTL->framesCount;
+    if ((idx >= 0)
+        && (strcmp(errTL->func[idx], funcName) == 0))
+    {
+        return;
+    }
+
+    idx = ++(errTL->framesCount);
+
+    if (idx >= MAX_FRAMES)
+        return;
+
+    errTL->func[idx] = funcName;
+}
+
 natsStatus
-nats_setErrorReal(const char *fileName, int line, natsStatus errSts, const void *errTxtFmt, ...)
+nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStatus errSts, const void *errTxtFmt, ...)
 {
     natsTLError *errTL  = _getTLError();
     char        tmp[256];
@@ -1071,6 +1098,7 @@ nats_setErrorReal(const char *fileName, int line, natsStatus errSts, const void 
         return errSts;
 
     errTL->sts = errSts;
+    errTL->framesCount = -1;
 
     va_start(ap, errTxtFmt);
     n = vsnprintf(tmp, sizeof(tmp), errTxtFmt, ap);
@@ -1082,7 +1110,22 @@ nats_setErrorReal(const char *fileName, int line, natsStatus errSts, const void 
                  _getErrorShortFileName(fileName), line, tmp);
     }
 
+    _updateStack(errTL, funcName);
+
     return errSts;
+}
+
+natsStatus
+nats_updateErrStack(natsStatus err, const char *func)
+{
+    natsTLError *errTL = _getTLError();
+
+    if (errTL == NULL)
+        return err;
+
+    _updateStack(errTL, func);
+
+    return err;
 }
 
 const char*
@@ -1107,6 +1150,96 @@ nats_GetLastError(natsStatus *status)
         *status = errTL->sts;
 
     return errTL->text;
+}
+
+natsStatus
+nats_GetLastErrorStack(char *buffer, size_t bufLen)
+{
+    natsTLError *errTL  = NULL;
+    int         offset  = 0;
+    int         i, max, n, len;
+
+    if ((buffer == NULL) || (bufLen == 0))
+        return NATS_INVALID_ARG;
+
+    buffer[0] = '\0';
+    len = (int) bufLen;
+
+    // Ensure the library is loaded
+    if (nats_Open(-1) != NATS_OK)
+        return NATS_FAILED_TO_INITIALIZE;
+
+    errTL = natsThreadLocal_Get(gLib.errTLKey);
+    if ((errTL == NULL) || (errTL->sts == NATS_OK) || (errTL->framesCount == -1))
+        return NATS_OK;
+
+    max = errTL->framesCount;
+    if (max >= MAX_FRAMES)
+        max = MAX_FRAMES - 1;
+
+    for (i=0; (i<=max) && (len > 0); i++)
+    {
+        n = snprintf(buffer + offset, len, "%s%s",
+                     errTL->func[i],
+                     (i < max ? "\n" : ""));
+        // On Windows, n will be < 0 if len is not big enough.
+        if (n < 0)
+        {
+            len = 0;
+        }
+        else
+        {
+            offset += n;
+            len    -= n;
+        }
+    }
+
+    if ((max != errTL->framesCount) && (len > 0))
+    {
+        n = snprintf(buffer + offset, len, "%d more...",
+                     errTL->framesCount - max);
+        // On Windows, n will be < 0 if len is not big enough.
+        if (n < 0)
+            len = 0;
+        else
+            len -= n;
+    }
+
+    if (len <= 0)
+        return NATS_INSUFFICIENT_BUFFER;
+
+    return NATS_OK;
+}
+
+void
+nats_PrintLastErrorStack(FILE *file)
+{
+    natsTLError *errTL  = NULL;
+    int i, max;
+
+    // Ensure the library is loaded
+    if (nats_Open(-1) != NATS_OK)
+        return;
+
+    errTL = natsThreadLocal_Get(gLib.errTLKey);
+    if ((errTL == NULL) || (errTL->sts == NATS_OK) || (errTL->framesCount == -1))
+        return;
+
+    fprintf(file, "Error: %d - %s - %s\n",
+            errTL->sts, natsStatus_GetText(errTL->sts), errTL->text);
+    fprintf(file, "Stack: (library version: %s)\n", nats_GetVersion());
+
+    max = errTL->framesCount;
+    if (max >= MAX_FRAMES)
+        max = MAX_FRAMES - 1;
+
+    for (i=0; i<=max; i++)
+        fprintf(file, "  %02d - %s\n", (i+1), errTL->func[i]);
+
+    if (max != errTL->framesCount)
+        fprintf(file, " %d more...\n", errTL->framesCount - max);
+
+    fflush(file);
 }
 
 void
@@ -1145,5 +1278,5 @@ nats_sslInit(void)
 
     natsMutex_Unlock(gLib.lock);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }

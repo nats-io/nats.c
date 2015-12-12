@@ -9,12 +9,11 @@
 # include "include/n-unix.h"
 #endif
 
-#include <stdio.h>
-
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
 
+#include "err.h"
 #include "nats.h"
 #include "buf.h"
 #include "parser.h"
@@ -65,8 +64,6 @@
 #define _PONG_OP_LEN_       (4)
 #define _PING_PROTO_LEN_    (6)
 #define _PONG_PROTO_LEN_    (6)
-
-#define NATS_SSL_ERR_REASON_STRING ERR_reason_error_string(ERR_get_error())
 
 extern int64_t gLockSpinCount;
 
@@ -353,11 +350,6 @@ nats_getTimersCountInList(void);
 
 natsStatus
 nats_postAsyncCbInfo(natsAsyncCbInfo *info);
-
-#define nats_setError(e, f, ...) nats_setErrorReal(__FILE__, __LINE__, (e), (f), __VA_ARGS__)
-
-natsStatus
-nats_setErrorReal(const char *fileName, int line, natsStatus errSts, const void *errTxtFmt, ...);
 
 void
 nats_sslRegisterThreadForCleanup(void);

@@ -30,12 +30,12 @@ _publishEx(natsConnection *nc, const char *subj,
     int         sizeSize = 0;
 
     if (nc == NULL)
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     if ((subj == NULL)
         || ((subjLen = (int) strlen(subj)) == 0))
     {
-        return NATS_INVALID_SUBJECT;
+        return nats_setDefaultError(NATS_INVALID_SUBJECT);
     }
 
     replyLen = ((reply != NULL) ? (int) strlen(reply) : 0);
@@ -47,16 +47,19 @@ _publishEx(natsConnection *nc, const char *subj,
     {
         natsConn_Unlock(nc);
 
-        return NATS_MAX_PAYLOAD;
+        return nats_setError(NATS_MAX_PAYLOAD,
+                             "Payload %d greater than maximum allowed: %" PRId64,
+                             dataLen, nc->info.maxPayload);
+
     }
 
     if ((s == NATS_OK) && natsConn_isClosed(nc))
     {
-        s = NATS_CONNECTION_CLOSED;
+        s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
-    else if (s == NATS_OK)
+    else if ((s == NATS_OK) && (nc->err != NATS_OK))
     {
-        s = nc->err;
+        s = nats_setError(nc->err, "%s", nc->errStr);
     }
 
     if (s == NATS_OK)
@@ -139,7 +142,7 @@ _publishEx(natsConnection *nc, const char *subj,
 
     natsConn_Unlock(nc);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -150,7 +153,9 @@ natsStatus
 natsConnection_Publish(natsConnection *nc, const char *subj,
                        const void *data, int dataLen)
 {
-    return _publish(nc, subj, NULL, data, dataLen);
+    natsStatus s = _publish(nc, subj, NULL, data, dataLen);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -164,8 +169,10 @@ natsStatus
 natsConnection_PublishString(natsConnection *nc, const char *subj,
                              const char *str)
 {
-    return _publish(nc, subj, NULL, (const void*) str,
-                    (str != NULL ? (int) strlen(str) : 0));
+    natsStatus s = _publish(nc, subj, NULL, (const void*) str,
+                            (str != NULL ? (int) strlen(str) : 0));
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -175,7 +182,10 @@ natsConnection_PublishString(natsConnection *nc, const char *subj,
 natsStatus
 natsConnection_PublishMsg(natsConnection *nc, natsMsg *msg)
 {
-    return _publish(nc, msg->subject, msg->reply, msg->data, msg->dataLen);
+    natsStatus s = _publish(nc, msg->subject, msg->reply,
+                            msg->data, msg->dataLen);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -187,10 +197,14 @@ natsStatus
 natsConnection_PublishRequest(natsConnection *nc, const char *subj,
                               const char *reply, const void *data, int dataLen)
 {
-    if ((reply == NULL) || (strlen(reply) == 0))
-        return NATS_INVALID_ARG;
+    natsStatus s;
 
-    return _publish(nc, subj, reply, data, dataLen);
+    if ((reply == NULL) || (strlen(reply) == 0))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _publish(nc, subj, reply, data, dataLen);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -206,10 +220,14 @@ natsStatus
 natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
                                     const char *reply, const char *str)
 {
-    if ((reply == NULL) || (strlen(reply) == 0))
-        return NATS_INVALID_ARG;
+    natsStatus s;
 
-    return _publish(nc, subj, reply, (const void*) str, (int) strlen(str));
+    if ((reply == NULL) || (strlen(reply) == 0))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _publish(nc, subj, reply, (const void*) str, (int) strlen(str));
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -226,7 +244,7 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
     natsInbox           *inbox  = NULL;
 
     if (replyMsg == NULL)
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     s = natsInbox_Create(&inbox);
     if (s == NATS_OK)
@@ -242,7 +260,7 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
     natsSubscription_Unsubscribe(sub);
     natsSubscription_Destroy(sub);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -259,7 +277,11 @@ natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
                              const char *subj, const char *str,
                              int64_t timeout)
 {
-    return natsConnection_Request(replyMsg, nc, subj, (const void*) str,
-                                  (str == NULL ? 0 : (int) strlen(str)),
-                                  timeout);
+    natsStatus s;
+
+    s = natsConnection_Request(replyMsg, nc, subj, (const void*) str,
+                               (str == NULL ? 0 : (int) strlen(str)),
+                               timeout);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }

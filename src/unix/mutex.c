@@ -12,25 +12,28 @@ natsMutex_Create(natsMutex **newMutex)
     bool                noAttrDestroy = false;
 
     if (m == NULL)
-        s = NATS_NO_MEMORY;
+        s = nats_setDefaultError(NATS_NO_MEMORY);
 
     if ((s == NATS_OK)
         && (pthread_mutexattr_init(&attr) != 0)
         && (noAttrDestroy = true))
     {
-        s = NATS_SYS_ERROR;
+        s = nats_setError(NATS_SYS_ERROR, "pthread_mutexattr_init error: %d",
+                          errno);
     }
 
     if ((s == NATS_OK)
         && (pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE) != 0))
     {
-        s = NATS_SYS_ERROR;
+        s = nats_setError(NATS_SYS_ERROR, "pthread_mutexattr_settype error: %d",
+                          errno);
     }
 
     if ((s == NATS_OK)
         && (pthread_mutex_init(m, &attr) != 0))
     {
-        s = NATS_SYS_ERROR;
+        s = nats_setError(NATS_SYS_ERROR, "pthread_mutex_init error: %d",
+                          errno);
     }
 
     if (!noAttrDestroy)

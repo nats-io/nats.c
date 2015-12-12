@@ -10,7 +10,7 @@ natsCondition_Create(natsCondition **cond)
     natsStatus      s  = NATS_OK;
 
     if (c == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     InitializeConditionVariable(c);
     *cond = c;
@@ -56,7 +56,9 @@ natsCondition_AbsoluteTimedWait(natsCondition *cond, natsMutex *mutex, int64_t a
         if (GetLastError() == ERROR_TIMEOUT)
             return NATS_TIMEOUT;
 
-        abort();
+        return nats_setError(NATS_SYS_ERROR,
+                             "SleepConditionVariableCS error: %d",
+                             GetLastError());
     }
 
     return NATS_OK;

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <assert.h>
 
+#include "err.h"
 #include "mem.h"
 #include "buf.h"
 
@@ -24,7 +25,7 @@ _init(natsBuffer *newBuf, char *data, int len, int capacity)
     {
         buf->data = (char*) NATS_MALLOC(capacity);
         if (buf->data == NULL)
-            return NATS_NO_MEMORY;
+            return nats_setDefaultError(NATS_NO_MEMORY);
 
         buf->ownData = true;
     }
@@ -58,12 +59,12 @@ _newBuf(natsBuffer **newBuf, char *data, int len, int capacity)
 
     buf = (natsBuffer*) NATS_MALLOC(sizeof(natsBuffer));
     if (buf == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     if (_init(buf, data, len, capacity) != NATS_OK)
     {
         NATS_FREE(buf);
-        return NATS_NO_MEMORY;
+        return NATS_UPDATE_ERR_STACK(NATS_NO_MEMORY);
     }
 
     buf->doFree = true;
@@ -76,16 +77,21 @@ _newBuf(natsBuffer **newBuf, char *data, int len, int capacity)
 natsStatus
 natsBuf_CreateWithBackend(natsBuffer **newBuf, char *data, int len, int capacity)
 {
-    if (data == NULL)
-        return NATS_INVALID_ARG;
+    natsStatus s;
 
-    return _newBuf(newBuf, data, len, capacity);
+    if (data == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _newBuf(newBuf, data, len, capacity);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsBuf_Create(natsBuffer **newBuf, int capacity)
 {
-    return _newBuf(newBuf, NULL, 0, capacity);
+    natsStatus s = _newBuf(newBuf, NULL, 0, capacity);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void
@@ -112,19 +118,19 @@ natsBuf_Expand(natsBuffer *buf, int newSize)
     char    *newData = NULL;
 
     if (newSize <= buf->capacity)
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     if (buf->ownData)
     {
         newData = NATS_REALLOC(buf->data, newSize);
         if (newData == NULL)
-            return NATS_NO_MEMORY;
+            return nats_setDefaultError(NATS_NO_MEMORY);
     }
     else
     {
         newData = NATS_MALLOC(newSize);
         if (newData == NULL)
-            return NATS_NO_MEMORY;
+            return nats_setDefaultError(NATS_NO_MEMORY);
 
         memcpy(newData, buf->data, buf->len);
         buf->ownData = true;
@@ -157,7 +163,7 @@ natsBuf_Append(natsBuffer *buf, const char* data, int dataLen)
         buf->len += dataLen;
     }
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -174,7 +180,7 @@ natsBuf_AppendByte(natsBuffer *buf, char b)
         buf->len++;
     }
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void

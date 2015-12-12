@@ -32,7 +32,7 @@ static const char *natsServerExe = "gnatsd";
 #define testCond(c)     if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); fflush(stdout); fails++; }
 #else
 #define NATS_INVALID_PID  (-1)
-#define testCond(c)     if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); fflush(stdout); fails++; }
+#define testCond(c)     if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); fails++; }
 #endif
 #define FAIL(m)         { printf("@@ %s @@\n", (m)); fails++; return; }
 #define IFOK(s, c)      if (s == NATS_OK) { s = (c); }
@@ -2895,6 +2895,21 @@ test_DefaultConnection(void)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
+    natsOptions         *opts     = NULL;
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, 500);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Check connection fails without running server: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s != NATS_OK)
+        s = natsConnection_Connect(&nc, NULL);
+    if (s != NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_NO_SERVER);
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     CHECK_SERVER_STARTED(serverPid);
@@ -6848,6 +6863,10 @@ test_GetLastError(void)
     natsOptions *opts = NULL;
     const char  *getLastErr = NULL;
     natsThread  *t = NULL;
+    char        stackBuf[256];
+    FILE        *stackFile = NULL;
+
+    stackBuf[0] = '\0';
 
     test("Check GetLastError returns proper status: ");
     s = natsOptions_Create(&opts);
@@ -6861,6 +6880,52 @@ test_GetLastError(void)
              && (strstr(getLastErr, "Invalid") != NULL));
 
     natsOptions_Destroy(opts);
+
+    test("Check GetLastErrorStack with invalid args: ");
+    s = nats_GetLastErrorStack(NULL, 10);
+    if (s != NATS_OK)
+        s = nats_GetLastErrorStack(stackBuf, 0);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check GetLastErrorStack returns proper insufficient buffer: ");
+    s = nats_GetLastErrorStack(stackBuf, 10);
+    testCond(s == NATS_INSUFFICIENT_BUFFER);
+
+    test("Check GetLastErrorStack: ");
+    s = nats_GetLastErrorStack(stackBuf, sizeof(stackBuf));
+    testCond((s == NATS_OK)
+             && (strlen(stackBuf) > 0)
+             && (strstr(stackBuf, "natsOptions_LoadCATrustedCertificates") != NULL));
+
+    test("Check PrintStack: ");
+    stackBuf[0] = '\0';
+    stackFile = fopen("stack.txt", "w");
+    if (stackFile == NULL)
+        FAIL("Unable to create a file for print stack test");
+
+    s = NATS_OK;
+    nats_PrintLastErrorStack(stackFile);
+    fclose(stackFile);
+    stackFile = fopen("stack.txt", "r");
+    s = (fgets(stackBuf, sizeof(stackBuf), stackFile) == NULL ? NATS_ERR : NATS_OK);
+    if ((s == NATS_OK)
+        && ((strlen(stackBuf) == 0)
+            || (strstr(stackBuf, "Invalid Argument") == NULL)))
+    {
+        s = NATS_ERR;
+    }
+    s = (fgets(stackBuf, sizeof(stackBuf), stackFile) == NULL ? NATS_ERR : NATS_OK);
+    if (s == NATS_OK)
+        s = (fgets(stackBuf, sizeof(stackBuf), stackFile) == NULL ? NATS_ERR : NATS_OK);
+    if ((s == NATS_OK)
+        && ((strlen(stackBuf) == 0)
+            || (strstr(stackBuf, "natsOptions_LoadCATrustedCertificates") == NULL)))
+    {
+        s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+    fclose(stackFile);
+    remove("stack.txt");
 
     test("Check the error not cleared until next error occurs: ");
     s = natsOptions_Create(&opts);

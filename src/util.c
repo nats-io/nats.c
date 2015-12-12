@@ -43,14 +43,14 @@ nats_ParseControl(natsControl *control, const char *line)
     int         len         = 0;
 
     if (line == NULL)
-        return NATS_PROTOCOL_ERROR;
+        return nats_setDefaultError(NATS_PROTOCOL_ERROR);
 
     tok = strchr(line, (int) ' ');
     if (tok == NULL)
     {
         control->op = NATS_STRDUP(line);
         if (control->op == NULL)
-            return NATS_NO_MEMORY;
+            return nats_setDefaultError(NATS_NO_MEMORY);
 
         return NATS_OK;
     }
@@ -59,7 +59,7 @@ nats_ParseControl(natsControl *control, const char *line)
     control->op = NATS_MALLOC(len + 1);
     if (control->op == NULL)
     {
-        s = NATS_NO_MEMORY;
+        s = nats_setDefaultError(NATS_NO_MEMORY);
     }
     else
     {
@@ -104,7 +104,7 @@ nats_ParseControl(natsControl *control, const char *line)
         control->args = NATS_MALLOC(len + 1);
         if (control->args == NULL)
         {
-            s = NATS_NO_MEMORY;
+            s = nats_setDefaultError(NATS_NO_MEMORY);
         }
         else
         {
@@ -122,7 +122,7 @@ nats_ParseControl(natsControl *control, const char *line)
         control->args = NULL;
     }
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -136,7 +136,7 @@ nats_CreateStringFromBuffer(char **newStr, natsBuffer *buf)
 
     str = NATS_MALLOC(len + 1);
     if (str == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     memcpy(str, natsBuf_Data(buf), len);
     str[len] = '\0';

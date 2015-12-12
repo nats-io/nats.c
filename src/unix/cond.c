@@ -14,10 +14,10 @@ natsCondition_Create(natsCondition **cond)
     natsStatus      s  = NATS_OK;
 
     if (c == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     if (pthread_cond_init(c, NULL) != 0)
-        s = NATS_SYS_ERROR;
+        s = nats_setError(NATS_SYS_ERROR, "pthread_cond_init error: %d", errno);
 
     if (s == NATS_OK)
         *cond = c;
@@ -63,8 +63,7 @@ _timedWait(natsCondition *cond, natsMutex *mutex, bool isAbsolute, int64_t timeo
     if (r == ETIMEDOUT)
         return NATS_TIMEOUT;
 
-    abort();
-    return NATS_SYS_ERROR;
+    return nats_setError(NATS_SYS_ERROR, "pthread_cond_timedwait error: %d", errno);
 }
 
 natsStatus

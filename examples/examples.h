@@ -287,7 +287,7 @@ parseArgs(int argc, char **argv, const char *usage)
         printf("Error parsing arguments: %d - %s\n",
                s, natsStatus_GetText(s));
 
-        printf("Last Error:\n%s\n", nats_GetLastError(NULL));
+        nats_PrintLastErrorStack(stderr);
 
         natsOptions_Destroy(opts);
         nats_Close();

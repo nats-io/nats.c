@@ -29,7 +29,7 @@ if [ $res -ne 0 ]; then
   exit $res
 fi
 
-ctest --timeout 60 $4
+ctest --timeout 60 --output-on-failure $4
 res=$?
 if [ $res -ne 0 ]; then
   exit $res

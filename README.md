@@ -283,8 +283,8 @@ natsOptions_SetSecure(opts, true);
 
 // For a server with a trusted chain built into the client host,
 // simply designate the server name that is expected. Without this
-// call, the server certificate is still verified, but no the
-// hostname part of it.
+// call, the server certificate is still verified, but not the
+// hostname.
 natsOptions_SetExpectedHostname(opts, "localhost");
 
 // Instead, if you are using a self-signed cert and need to load in the CA.

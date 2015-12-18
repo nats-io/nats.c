@@ -535,33 +535,24 @@ natsOptions_SetSecure(natsOptions *opts, bool secure);
 NATS_EXTERN natsStatus
 natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName);
 
-/** \brief Loads the certificate chain from a file.
+/** \brief Loads the certificate chain from a file, using the given key.
  *
  * The certificates must be in PEM format and must be sorted starting with
  * the subject's certificate, followed by intermediate CA certificates if
  * applicable, and ending at the highest level (root) CA.
  *
- * See #natsOptions_LoadCATrustedCertificates regarding error reports.
- *
- * @param opts the pointer to the #natsOptions object.
- * @param fileName the file containing the client certificates.
- */
-NATS_EXTERN natsStatus
-natsOptions_LoadCertificatesChain(natsOptions *opts, const char *fileName);
-
-/** \brief Loads the private key from a file.
- *
- * Loads the first private key found in the file. The formatting type of the
- * certificate that is supported is PEM.
+ * The private key file format supported is also PEM.
  *
  * See #natsOptions_LoadCATrustedCertificates regarding error reports.
  *
  * @param opts the pointer to the #natsOptions object.
- * @param fileName the file containing the client private key.
- *
+ * @param certsFileName the file containing the client certificates.
+ * @param keyFileName the file containing the client private key.
  */
 NATS_EXTERN natsStatus
-natsOptions_LoadPrivateKey(natsOptions *opts, const char *fileName);
+natsOptions_LoadCertificatesChain(natsOptions *opts,
+                                  const char *certsFileName,
+                                  const char *keyFileName);
 
 /** \brief Sets the list of available ciphers.
  *

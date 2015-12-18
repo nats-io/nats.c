@@ -7047,9 +7047,9 @@ test_SSLVerify(void)
     testCond(s == NATS_SSL_ERROR);
 
     test("Check that connect succeeds with proper certs: ");
-    s = natsOptions_LoadCertificatesChain(opts, "certs/client-cert.pem");
-    if (s == NATS_OK)
-        s = natsOptions_LoadPrivateKey(opts, "certs/client-key.pem");
+    s = natsOptions_LoadCertificatesChain(opts,
+                                          "certs/client-cert.pem",
+                                          "certs/client-key.pem");
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     if (s == NATS_OK)

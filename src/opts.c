@@ -459,48 +459,41 @@ natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName)
 }
 
 natsStatus
-natsOptions_LoadCertificatesChain(natsOptions *opts, const char *fileName)
+natsOptions_LoadCertificatesChain(natsOptions *opts,
+                                  const char *certFileName,
+                                  const char *keyFileName)
 {
     natsStatus s = NATS_OK;
 
-    LOCK_AND_CHECK_OPTIONS(opts, ((fileName == NULL) || (fileName[0] == '\0')));
+    if ((certFileName == NULL) || (certFileName[0] == '\0')
+        || (keyFileName == NULL) || (keyFileName[0] == '\0'))
+    {
+        return nats_setError(NATS_INVALID_ARG, "%s",
+                             "certificate and key file names can't be NULL nor empty");
+    }
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
 
     s = _getSSLCtx(opts);
     if (s == NATS_OK)
     {
         nats_sslRegisterThreadForCleanup();
 
-        if (SSL_CTX_use_certificate_chain_file(opts->sslCtx->ctx, fileName) != 1)
+        if (SSL_CTX_use_certificate_chain_file(opts->sslCtx->ctx, certFileName) != 1)
         {
             s = nats_setError(NATS_SSL_ERROR,
                               "Error loading certificate chain '%s': %s",
-                              fileName,
+                              certFileName,
                               NATS_SSL_ERR_REASON_STRING);
         }
     }
-
-    UNLOCK_OPTS(opts);
-
-    return s;
-}
-
-natsStatus
-natsOptions_LoadPrivateKey(natsOptions *opts, const char *fileName)
-{
-    natsStatus s = NATS_OK;
-
-    LOCK_AND_CHECK_OPTIONS(opts, ((fileName == NULL) || (fileName[0] == '\0')));
-
-    s = _getSSLCtx(opts);
     if (s == NATS_OK)
     {
-        nats_sslRegisterThreadForCleanup();
-
-        if (SSL_CTX_use_PrivateKey_file(opts->sslCtx->ctx, fileName, SSL_FILETYPE_PEM) != 1)
+        if (SSL_CTX_use_PrivateKey_file(opts->sslCtx->ctx, keyFileName, SSL_FILETYPE_PEM) != 1)
         {
             s = nats_setError(NATS_SSL_ERROR,
                               "Error loading private key '%s': %s",
-                              fileName,
+                              keyFileName,
                               NATS_SSL_ERR_REASON_STRING);
         }
     }

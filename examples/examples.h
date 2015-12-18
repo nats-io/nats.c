@@ -37,6 +37,9 @@ bool             print   = false;
 
 natsOptions      *opts   = NULL;
 
+const char       *certFile = NULL;
+const char       *keyFile  = NULL;
+
 static natsStatus
 printStats(int mode, natsConnection *conn, natsSubscription *sub,
            natsStatistics *stats, uint64_t count, uint64_t errors)
@@ -210,35 +213,35 @@ parseArgs(int argc, char **argv, const char *usage)
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            s= natsOptions_LoadCATrustedCertificates(opts, argv[++i]);
+            s = natsOptions_LoadCATrustedCertificates(opts, argv[++i]);
         }
         else if (strcasecmp(argv[i], "-tlscert") == 0)
         {
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            s= natsOptions_LoadCertificatesChain(opts, argv[++i]);
+            certFile = argv[++i];
         }
         else if (strcasecmp(argv[i], "-tlskey") == 0)
         {
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            s= natsOptions_LoadPrivateKey(opts, argv[++i]);
+            keyFile = argv[++i];
         }
         else if (strcasecmp(argv[i], "-tlsciphers") == 0)
         {
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            s= natsOptions_SetCiphers(opts, argv[++i]);
+            s = natsOptions_SetCiphers(opts, argv[++i]);
         }
         else if (strcasecmp(argv[i], "-tlshost") == 0)
         {
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            s= natsOptions_SetExpectedHostname(opts, argv[++i]);
+            s = natsOptions_SetExpectedHostname(opts, argv[++i]);
         }
         else if (strcasecmp(argv[i], "-sync") == 0)
         {
@@ -278,6 +281,9 @@ parseArgs(int argc, char **argv, const char *usage)
             printUsageAndExit(argv[0], usage);
         }
     }
+
+    if ((s == NATS_OK) && ((certFile != NULL) || (keyFile != NULL)))
+        s = natsOptions_LoadCertificatesChain(opts, certFile, keyFile);
 
     if ((s == NATS_OK) && !urlsSet)
         s = parseUrls(NATS_DEFAULT_URL, opts);

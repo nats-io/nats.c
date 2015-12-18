@@ -16,7 +16,7 @@ natsSock_SetBlocking(natsSock fd, bool blocking)
     int flags;
 
     if ((flags = fcntl(fd, F_GETFL)) == -1)
-        return NATS_SYS_ERROR;
+        return nats_setError(NATS_SYS_ERROR, "fcntl error: %d", errno);
 
     if (blocking)
         flags &= ~O_NONBLOCK;
@@ -24,7 +24,7 @@ natsSock_SetBlocking(natsSock fd, bool blocking)
         flags |= O_NONBLOCK;
 
     if (fcntl(fd, F_SETFL, flags) == -1)
-        return NATS_SYS_ERROR;
+        return nats_setError(NATS_SYS_ERROR, "fcntl error: %d", errno);
 
     return NATS_OK;
 }
@@ -47,7 +47,9 @@ natsStatus
 natsSock_Flush(natsSock fd)
 {
     if (fsync(fd) != 0)
-        return NATS_IO_ERROR;
+        return nats_setError(NATS_IO_ERROR,
+                             "Error flushing socket. Error: %d",
+                             NATS_SOCK_GET_ERROR);
 
     return NATS_OK;
 }

@@ -74,6 +74,12 @@ AsyncSubscriberStarvation
 AsyncSubscriberOnClose
 NextMsgCallOnAsyncSub
 NoDelay
+GetLastError
+SSLBasic
+SSLVerify
+SSLVerifyHostname
+SSLCiphers
+SSLMultithreads
 ServersOption
 AuthServers
 AuthFailToReconnect

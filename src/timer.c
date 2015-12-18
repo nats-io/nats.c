@@ -37,7 +37,7 @@ natsTimer_Create(natsTimer **timer, natsTimerCb timerCb, natsTimerStopCb stopCb,
     natsTimer   *t = (natsTimer*) NATS_CALLOC(1, sizeof(natsTimer));
 
     if (t == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     t->refs    = 1;
     t->cb      = timerCb;
@@ -58,7 +58,7 @@ natsTimer_Create(natsTimer **timer, natsTimerCb timerCb, natsTimerStopCb stopCb,
     else
         _freeTimer(t);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void

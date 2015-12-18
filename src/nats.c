@@ -17,6 +17,17 @@
             natsCondition_Wait(gLib.cond, gLib.lock); \
         natsMutex_Unlock(gLib.lock)
 
+#define MAX_FRAMES (50)
+
+typedef struct natsTLError
+{
+    natsStatus  sts;
+    char        text[256];
+    const char  *func[MAX_FRAMES];
+    int         framesCount;
+
+} natsTLError;
+
 typedef struct __natsLibTimers
 {
     natsMutex       *lock;
@@ -53,11 +64,18 @@ typedef struct __natsGCList
 
 typedef struct __natsLib
 {
-    // These 4 fields MUST NOT be moved!
+    // Leave these fields before 'refs'
     natsMutex       *lock;
+    volatile bool   wasOpenedOnce;
+    bool            sslInitialized;
+    natsThreadLocal errTLKey;
+    natsThreadLocal sslTLKey;
     bool            initialized;
     bool            closed;
+    // Do not move 'refs' without checking _freeLib()
     int             refs;
+
+    bool            initializing;
 
     natsLibTimers   timers;
     natsLibAsyncCbs asyncCbs;
@@ -78,6 +96,107 @@ static const char *inboxPrefix = "_INBOX.";
 static natsInitOnceType gInitOnce = NATS_ONCE_STATIC_INIT;
 static natsLib          gLib;
 
+static void
+_destroyErrTL(void *localStorage)
+{
+    natsTLError *err = (natsTLError*) localStorage;
+
+    NATS_FREE(err);
+}
+
+static void
+_cleanupThreadSSL(void *localStorage)
+{
+    ERR_remove_thread_state(0);
+}
+
+static void
+_finalCleanup(void)
+{
+    int refs = 0;
+
+    natsMutex_Lock(gLib.lock);
+    refs = gLib.refs;
+    natsMutex_Unlock(gLib.lock);
+
+    // If some thread is still around when the process exits and has a
+    // reference to the library, then don't do the final cleanup...
+    if (refs != 0)
+        return;
+
+    if (gLib.sslInitialized)
+    {
+        ERR_free_strings();
+        EVP_cleanup();
+        CRYPTO_cleanup_all_ex_data();
+        ERR_remove_thread_state(0);
+        sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
+    }
+
+    natsMutex_Destroy(gLib.lock);
+    gLib.lock = NULL;
+}
+
+static void
+_cleanupThreadLocals(void)
+{
+    void *tl = NULL;
+
+    tl = natsThreadLocal_Get(gLib.errTLKey);
+    if (tl != NULL)
+        _destroyErrTL(tl);
+
+    tl = NULL;
+
+    natsMutex_Lock(gLib.lock);
+    if (gLib.sslInitialized)
+    {
+        tl = natsThreadLocal_Get(gLib.sslTLKey);
+        if (tl != NULL)
+            _cleanupThreadSSL(tl);
+    }
+    natsMutex_Unlock(gLib.lock);
+}
+
+
+#if _WIN32
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, // DLL module handle
+    DWORD fdwReason,                    // reason called
+    LPVOID lpvReserved)                 // reserved
+{
+    switch (fdwReason)
+    {
+        // The thread of the attached process terminates.
+        case DLL_THREAD_DETACH:
+        case DLL_PROCESS_DETACH:
+        {
+            _cleanupThreadLocals();
+
+            if (fdwReason == DLL_PROCESS_DETACH)
+                _finalCleanup();
+            break;
+        }
+        default:
+            break;
+    }
+
+    return TRUE;
+    UNREFERENCED_PARAMETER(hinstDLL);
+    UNREFERENCED_PARAMETER(lpvReserved);
+}
+#else
+__attribute__((destructor)) void natsLib_Destructor(void)
+{
+    if (!(gLib.wasOpenedOnce))
+        return;
+
+    // Destroy thread locals for the current thread.
+    _cleanupThreadLocals();
+
+    // Do the final cleanup if possible
+    _finalCleanup();
+}
+#endif
 
 static void
 _freeTimers(void)
@@ -686,14 +805,18 @@ nats_Open(int64_t lockSpinCount)
 
     natsMutex_Lock(gLib.lock);
 
-    if (gLib.closed || gLib.initialized)
+    if (gLib.closed || gLib.initialized || gLib.initializing)
     {
         if (gLib.closed)
             s = NATS_FAILED_TO_INITIALIZE;
+        else if (gLib.initializing)
+            s = NATS_ILLEGAL_STATE;
 
         natsMutex_Unlock(gLib.lock);
         return s;
     }
+
+    gLib.initializing = true;
 
 #if defined(_WIN32)
 #else
@@ -743,6 +866,8 @@ nats_Open(int64_t lockSpinCount)
         if (s == NATS_OK)
             gLib.refs++;
     }
+    if (s == NATS_OK)
+        s = natsThreadLocal_CreateKey(&(gLib.errTLKey), _destroyErrTL);
 
     if (s == NATS_OK)
         gLib.initialized = true;
@@ -759,6 +884,9 @@ nats_Open(int64_t lockSpinCount)
         }
         natsCondition_Broadcast(gLib.cond);
     }
+
+    gLib.initializing  = false;
+    gLib.wasOpenedOnce = true;
 
     natsMutex_Unlock(gLib.lock);
 
@@ -784,7 +912,7 @@ natsInbox_Create(natsInbox **newInbox)
     res = nats_asprintf(&inbox, "%s%x.%" PRIu64, inboxPrefix,
                         rand(), ++(gLib.inboxesSeq));
     if (res < 0)
-        s = NATS_NO_MEMORY;
+        s = nats_setDefaultError(NATS_NO_MEMORY);
     else
         *newInbox = inbox;
 
@@ -884,4 +1012,271 @@ nats_CheckCompatibilityImpl(uint32_t headerReqVerNumber, uint32_t headerVerNumbe
     }
 
     return true;
+}
+
+static natsTLError*
+_getTLError(void)
+{
+    natsTLError *errTL   = NULL;
+    bool        needFree = false;
+
+    // The library should already be initialized, but let's protect against
+    // situations where foo() invokes bar(), which invokes baz(), which
+    // invokes nats_Open(). If that last call fails, when we un-wind down
+    // to foo(), it may be difficult to know that nats_Open() failed and
+    // that we should not try to invoke natsLib_setError. So we check again
+    // here that the library has been initialized properly, and if not, we
+    // simply don't set the error.
+    if (nats_Open(-1) != NATS_OK)
+        return NULL;
+
+    errTL = natsThreadLocal_Get(gLib.errTLKey);
+    if (errTL == NULL)
+    {
+        errTL = (natsTLError*) NATS_CALLOC(1, sizeof(natsTLError));
+        if (errTL != NULL)
+            errTL->framesCount = -1;
+        needFree = (errTL != NULL);
+
+    }
+
+    if ((errTL != NULL)
+        && (natsThreadLocal_SetEx(gLib.errTLKey,
+                                  (const void*) errTL, false) != NATS_OK))
+    {
+        if (needFree)
+            NATS_FREE(errTL);
+
+        errTL = NULL;
+    }
+
+    return errTL;
+}
+
+static char*
+_getErrorShortFileName(const char* fileName)
+{
+    char *file = strstr(fileName, "src");
+
+    if (file != NULL)
+        file = (file + 4);
+    else
+        file = (char*) fileName;
+
+    return file;
+}
+
+static void
+_updateStack(natsTLError *errTL, const char *funcName)
+{
+    int idx;
+
+    idx = errTL->framesCount;
+    if ((idx >= 0)
+        && (strcmp(errTL->func[idx], funcName) == 0))
+    {
+        return;
+    }
+
+    idx = ++(errTL->framesCount);
+
+    if (idx >= MAX_FRAMES)
+        return;
+
+    errTL->func[idx] = funcName;
+}
+
+natsStatus
+nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStatus errSts, const void *errTxtFmt, ...)
+{
+    natsTLError *errTL  = _getTLError();
+    char        tmp[256];
+    va_list     ap;
+    int         n;
+
+    if (errTL == NULL)
+        return errSts;
+
+    errTL->sts = errSts;
+    errTL->framesCount = -1;
+
+    va_start(ap, errTxtFmt);
+    n = vsnprintf(tmp, sizeof(tmp), errTxtFmt, ap);
+    va_end(ap);
+
+    if (n > 0)
+    {
+        snprintf(errTL->text, sizeof(errTL->text), "(%s:%d): %s",
+                 _getErrorShortFileName(fileName), line, tmp);
+    }
+
+    _updateStack(errTL, funcName);
+
+    return errSts;
+}
+
+natsStatus
+nats_updateErrStack(natsStatus err, const char *func)
+{
+    natsTLError *errTL = _getTLError();
+
+    if (errTL == NULL)
+        return err;
+
+    _updateStack(errTL, func);
+
+    return err;
+}
+
+const char*
+nats_GetLastError(natsStatus *status)
+{
+    natsStatus  s;
+    natsTLError *errTL  = NULL;
+
+    if (status != NULL)
+        *status = NATS_OK;
+
+    // Ensure the library is loaded
+    s = nats_Open(-1);
+    if (s != NATS_OK)
+        return NULL;
+
+    errTL = natsThreadLocal_Get(gLib.errTLKey);
+    if ((errTL == NULL) || (errTL->sts == NATS_OK))
+        return NULL;
+
+    if (status != NULL)
+        *status = errTL->sts;
+
+    return errTL->text;
+}
+
+natsStatus
+nats_GetLastErrorStack(char *buffer, size_t bufLen)
+{
+    natsTLError *errTL  = NULL;
+    int         offset  = 0;
+    int         i, max, n, len;
+
+    if ((buffer == NULL) || (bufLen == 0))
+        return NATS_INVALID_ARG;
+
+    buffer[0] = '\0';
+    len = (int) bufLen;
+
+    // Ensure the library is loaded
+    if (nats_Open(-1) != NATS_OK)
+        return NATS_FAILED_TO_INITIALIZE;
+
+    errTL = natsThreadLocal_Get(gLib.errTLKey);
+    if ((errTL == NULL) || (errTL->sts == NATS_OK) || (errTL->framesCount == -1))
+        return NATS_OK;
+
+    max = errTL->framesCount;
+    if (max >= MAX_FRAMES)
+        max = MAX_FRAMES - 1;
+
+    for (i=0; (i<=max) && (len > 0); i++)
+    {
+        n = snprintf(buffer + offset, len, "%s%s",
+                     errTL->func[i],
+                     (i < max ? "\n" : ""));
+        // On Windows, n will be < 0 if len is not big enough.
+        if (n < 0)
+        {
+            len = 0;
+        }
+        else
+        {
+            offset += n;
+            len    -= n;
+        }
+    }
+
+    if ((max != errTL->framesCount) && (len > 0))
+    {
+        n = snprintf(buffer + offset, len, "%d more...",
+                     errTL->framesCount - max);
+        // On Windows, n will be < 0 if len is not big enough.
+        if (n < 0)
+            len = 0;
+        else
+            len -= n;
+    }
+
+    if (len <= 0)
+        return NATS_INSUFFICIENT_BUFFER;
+
+    return NATS_OK;
+}
+
+void
+nats_PrintLastErrorStack(FILE *file)
+{
+    natsTLError *errTL  = NULL;
+    int i, max;
+
+    // Ensure the library is loaded
+    if (nats_Open(-1) != NATS_OK)
+        return;
+
+    errTL = natsThreadLocal_Get(gLib.errTLKey);
+    if ((errTL == NULL) || (errTL->sts == NATS_OK) || (errTL->framesCount == -1))
+        return;
+
+    fprintf(file, "Error: %d - %s - %s\n",
+            errTL->sts, natsStatus_GetText(errTL->sts), errTL->text);
+    fprintf(file, "Stack: (library version: %s)\n", nats_GetVersion());
+
+    max = errTL->framesCount;
+    if (max >= MAX_FRAMES)
+        max = MAX_FRAMES - 1;
+
+    for (i=0; i<=max; i++)
+        fprintf(file, "  %02d - %s\n", (i+1), errTL->func[i]);
+
+    if (max != errTL->framesCount)
+        fprintf(file, " %d more...\n", errTL->framesCount - max);
+
+    fflush(file);
+}
+
+void
+nats_sslRegisterThreadForCleanup(void)
+{
+    // Set anything. The goal is that at thread exit, the thread local key
+    // will have something non NULL associated, which will trigger the
+    // destructor that we have registered.
+    (void) natsThreadLocal_Set(gLib.sslTLKey, (void*) 1);
+}
+
+natsStatus
+nats_sslInit(void)
+{
+    natsStatus s = NATS_OK;
+
+    // Ensure the library is loaded
+    s = nats_Open(-1);
+    if (s != NATS_OK)
+        return s;
+
+    natsMutex_Lock(gLib.lock);
+
+    if (!(gLib.sslInitialized))
+    {
+        // Regardless of success, mark as initialized so that we
+        // can do cleanup on exit.
+        gLib.sslInitialized = true;
+
+        // Initialize SSL.
+        SSL_library_init();
+        SSL_load_error_strings();
+
+        s = natsThreadLocal_CreateKey(&(gLib.sslTLKey), _cleanupThreadSSL);
+    }
+
+    natsMutex_Unlock(gLib.lock);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }

@@ -39,18 +39,21 @@ natsSock_SetCommonTcpOptions(natsSock fd)
     int             yes = 1;
 
     if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const char*) &yes, sizeof(yes)) == -1)
-        return NATS_SYS_ERROR;
+        return nats_setError(NATS_SYS_ERROR, "setsockopt TCP_NO_DELAY error: %d",
+                             NATS_SOCK_GET_ERROR);
 
     yes = 1;
 
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char*) &yes, sizeof(yes)) == -1)
-        return NATS_SYS_ERROR;
+        return nats_setError(NATS_SYS_ERROR, "setsockopt SO_REUSEADDR error: %d",
+                             NATS_SOCK_GET_ERROR);
 
     l.l_onoff  = 1;
     l.l_linger = 0;
 
     if (setsockopt(fd, SOL_SOCKET, SO_LINGER, (void*)&l, sizeof(l)) == -1)
-        return NATS_SYS_ERROR;
+        return nats_setError(NATS_SYS_ERROR, "setsockopt SO_LINGER error: %d",
+                             NATS_SOCK_GET_ERROR);
 
     return NATS_OK;
 }
@@ -68,7 +71,7 @@ natsSock_CreateFDSet(fd_set **newFDSet)
     fdSet = (fd_set*) NATS_MALLOC(sizeof(fd_set));
 
     if (fdSet == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     FD_ZERO(fdSet);
 
@@ -87,11 +90,13 @@ natsSock_DestroyFDSet(fd_set *fdSet)
 }
 
 natsStatus
-natsSock_WaitReady(bool forWrite, fd_set *fdSet, natsSock sock,
-                   natsDeadline *deadline)
+natsSock_WaitReady(bool forWrite, natsSockCtx *ctx)
 {
     struct timeval  *timeout = NULL;
     int             res;
+    fd_set          *fdSet = ctx->fdSet;
+    natsSock        sock = ctx->fd;
+    natsDeadline    *deadline = &(ctx->deadline);
 
     FD_ZERO(fdSet);
     FD_SET(sock, fdSet);
@@ -106,7 +111,7 @@ natsSock_WaitReady(bool forWrite, fd_set *fdSet, natsSock sock,
                  timeout);
 
     if (res == NATS_SOCK_ERROR)
-        return NATS_IO_ERROR;
+        return nats_setError(NATS_IO_ERROR, "select error: %d", res);
 
     if ((res == 0) || !FD_ISSET(sock, fdSet))
         return NATS_TIMEOUT;
@@ -115,11 +120,9 @@ natsSock_WaitReady(bool forWrite, fd_set *fdSet, natsSock sock,
 }
 
 natsStatus
-natsSock_ConnectTcp(natsSock *fd, fd_set *fdSet, natsDeadline *deadline,
-                    const char *host, int port)
+natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port)
 {
     natsStatus      s    = NATS_OK;
-    natsSock        sock = NATS_SOCK_INVALID;
     int             res;
     char            sport[6];
     struct addrinfo hints;
@@ -129,7 +132,7 @@ natsSock_ConnectTcp(natsSock *fd, fd_set *fdSet, natsDeadline *deadline,
     bool            error = false;
 
     if (host == NULL)
-        return NATS_ADDRESS_MISSING;
+        return nats_setError(NATS_ADDRESS_MISSING, "%s", "No host specified");
 
     snprintf(sport, sizeof(sport), "%d", port);
 
@@ -146,21 +149,24 @@ natsSock_ConnectTcp(natsSock *fd, fd_set *fdSet, natsDeadline *deadline,
          hints.ai_family = AF_INET;
 
          if ((res = getaddrinfo(host, sport, &hints, &servinfo)) != 0)
-             s = NATS_SYS_ERROR;
+         {
+             s = nats_setError(NATS_SYS_ERROR, "getaddrinfo error: %s",
+                               gai_strerror(res));
+         }
     }
     for (p = servinfo; (s == NATS_OK) && (p != NULL); p = p->ai_next)
     {
-        sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-        if (sock == NATS_SOCK_INVALID)
+        ctx->fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (ctx->fd == NATS_SOCK_INVALID)
             continue;
 
         error = false;
 
-        s = natsSock_SetBlocking(sock, false);
+        s = natsSock_SetBlocking(ctx->fd, false);
         if (s != NATS_OK)
             break;
 
-        res = connect(sock, p->ai_addr, (natsSockLen) p->ai_addrlen);
+        res = connect(ctx->fd, p->ai_addr, (natsSockLen) p->ai_addrlen);
         if ((res == NATS_SOCK_ERROR)
             && (NATS_SOCK_GET_ERROR != NATS_SOCK_CONNECT_IN_PROGRESS))
         {
@@ -174,8 +180,8 @@ natsSock_ConnectTcp(natsSock *fd, fd_set *fdSet, natsDeadline *deadline,
         if (!error)
         {
             if (waitForConnect
-                && ((natsSock_WaitReady(true, fdSet, sock, deadline) != NATS_OK)
-                    || !natsSock_IsConnected(sock)))
+                && ((natsSock_WaitReady(true, ctx) != NATS_OK)
+                    || !natsSock_IsConnected(ctx->fd)))
             {
                 error = true;
             }
@@ -183,37 +189,33 @@ natsSock_ConnectTcp(natsSock *fd, fd_set *fdSet, natsDeadline *deadline,
 
         if (error)
         {
-            _closeFd(sock);
-            sock = NATS_SOCK_INVALID;
+            _closeFd(ctx->fd);
+            ctx->fd = NATS_SOCK_INVALID;
             continue;
         }
 
-        s = natsSock_SetCommonTcpOptions(sock);
+        s = natsSock_SetCommonTcpOptions(ctx->fd);
     }
 
     if (s == NATS_OK)
     {
-        if (sock != NATS_SOCK_INVALID)
-            *fd = sock;
-        else
-            s = NATS_NO_SERVER;
+        if (ctx->fd == NATS_SOCK_INVALID)
+            s = nats_setDefaultError(NATS_NO_SERVER);
     }
 
     if (s != NATS_OK)
-        _closeFd(sock);
+    {
+        _closeFd(ctx->fd);
+        ctx->fd = NATS_SOCK_INVALID;
+    }
 
     freeaddrinfo(servinfo);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
-// Reads a line from the socket and returns it without the line-ending characters.
-// This call blocks until the line is complete, or the socket is closed or an
-// error occurs.
-// Assumes the socket is blocking.
 natsStatus
-natsSock_ReadLine(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
-                  char *buffer, size_t maxBufferSize, int *n)
+natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
 {
     natsStatus  s           = NATS_OK;
     int         readBytes   = 0;
@@ -223,22 +225,9 @@ natsSock_ReadLine(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
 
     while (1)
     {
-        readBytes = recv(fd, buffer, (natsRecvLen) (maxBufferSize - totalBytes), 0);
-        if (readBytes == 0)
-        {
-            return NATS_CONNECTION_CLOSED;
-        }
-        else if (readBytes == NATS_SOCK_ERROR)
-        {
-            if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
-                return NATS_IO_ERROR;
-
-            s = natsSock_WaitReady(false, fdSet, fd, deadline);
-            if (s != NATS_OK)
-                return s;
-
-            continue;
-        }
+        s = natsSock_Read(ctx, buffer, (maxBufferSize - totalBytes), &readBytes);
+        if (s != NATS_OK)
+            return NATS_UPDATE_ERR_STACK(s);
 
         if (n != NULL)
             *n += readBytes;
@@ -261,49 +250,111 @@ natsSock_ReadLine(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
         totalBytes += readBytes;
 
         if (totalBytes == maxBufferSize)
-            return NATS_LINE_TOO_LONG;
+            return nats_setDefaultError(NATS_LINE_TOO_LONG);
     }
 }
 
 natsStatus
-natsSock_Read(natsSock fd, char *buffer, size_t maxBufferSize, int *n)
+natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
 {
-    int readBytes = 0;
+    natsStatus  s         = NATS_OK;
+    int         readBytes = 0;
+    bool        needRead  = true;
 
-    readBytes = recv(fd, buffer, (natsRecvLen) maxBufferSize, 0);
-    if (readBytes == 0)
-        return NATS_CONNECTION_CLOSED;
-    else if (readBytes == NATS_SOCK_ERROR)
-        return NATS_IO_ERROR;
+    while (needRead)
+    {
+        if (ctx->ssl != NULL)
+            readBytes = SSL_read(ctx->ssl, buffer, (int) maxBufferSize);
+        else
+            readBytes = recv(ctx->fd, buffer, (natsRecvLen) maxBufferSize, 0);
 
-    if (n != NULL)
-        *n = readBytes;
+        if (readBytes == 0)
+        {
+            return NATS_CONNECTION_CLOSED;
+        }
+        else if (readBytes == NATS_SOCK_ERROR)
+        {
+            if (ctx->ssl != NULL)
+            {
+                int sslErr = SSL_get_error(ctx->ssl, readBytes);
+
+                if ((sslErr != SSL_ERROR_WANT_READ)
+                    && (sslErr != SSL_ERROR_WANT_WRITE))
+                {
+                    return nats_setError(NATS_IO_ERROR, "SSL_read error: %s",
+                                         NATS_SSL_ERR_REASON_STRING);
+                }
+
+                if (ctx->fdSet == NULL)
+                    continue;
+            }
+            else if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
+            {
+                return nats_setError(NATS_IO_ERROR, "recv error: %d",
+                                     NATS_SOCK_GET_ERROR);
+            }
+
+            // For non-blocking sockets, if the read would block, we need to
+            // wait up to the deadline.
+            s = natsSock_WaitReady(false, ctx);
+            if (s != NATS_OK)
+                return NATS_UPDATE_ERR_STACK(s);
+
+            continue;
+        }
+
+        if (n != NULL)
+            *n = readBytes;
+
+        needRead = false;
+    }
 
     return NATS_OK;
 }
 
 natsStatus
-natsSock_WriteFully(fd_set *fdSet, natsSock fd, natsDeadline *deadline,
-                    const char *data, int len)
+natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len)
 {
     natsStatus  s     = NATS_OK;
     int         bytes = 0;
 
     do
     {
-        bytes = send(fd, data, len, 0);
+        if (ctx->ssl != NULL)
+            bytes = SSL_write(ctx->ssl, data, len);
+        else
+            bytes = send(ctx->fd, data, len, 0);
+
         if (bytes == 0)
         {
             return NATS_CONNECTION_CLOSED;
         }
         else if (bytes == NATS_SOCK_ERROR)
         {
-            if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
-                return NATS_IO_ERROR;
+            if (ctx->ssl != NULL)
+            {
+                int sslErr = SSL_get_error(ctx->ssl, bytes);
+                if ((sslErr != SSL_ERROR_WANT_READ)
+                    && (sslErr != SSL_ERROR_WANT_WRITE))
+                {
+                    return nats_setError(NATS_IO_ERROR, "SSL_write error: %s",
+                                         NATS_SSL_ERR_REASON_STRING);
+                }
 
-            s = natsSock_WaitReady(true, fdSet, fd, deadline);
+                if (ctx->fdSet == NULL)
+                    continue;
+            }
+            else if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
+            {
+                return nats_setError(NATS_IO_ERROR, "send error: %d",
+                                     NATS_SOCK_GET_ERROR);
+            }
+
+            // For non-blocking sockets, if the write would block, we need to
+            // wait up to the deadline.
+            s = natsSock_WaitReady(true, ctx);
             if (s != NATS_OK)
-                return s;
+                return NATS_UPDATE_ERR_STACK(s);
 
             continue;
         }

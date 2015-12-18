@@ -2,12 +2,9 @@
 
 #include "examples.h"
 
-static volatile int64_t count   = 0;
-static volatile int64_t errors  = 0;
-static int64_t          total   = 0;
-static int64_t          start   = 0;
-static volatile int64_t elapsed = 0;
-static bool             print   = false;
+static const char *usage = ""\
+"-sync          receive synchronously (default is asynchronous)\n" \
+"-count         number of expected messages\n";
 
 static void
 onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
@@ -45,27 +42,14 @@ int main(int argc, char **argv)
     natsSubscription    *sub   = NULL;
     natsStatistics      *stats = NULL;
     natsMsg             *msg   = NULL;
-    bool                async  = true;
-    const char          *subj  = NULL;
     natsStatus          s;
 
-    if (argc != 4)
-    {
-        printf("Usage: %s <mode:async|sync> <subject> <count>\n", argv[0]);
-        exit(1);
-    }
+    opts = parseArgs(argc, argv, usage);
 
-    async = (strcasecmp(argv[1], "async") == 0);
-    subj  = argv[2];
-    total = atol(argv[3]);
     printf("Listening %ssynchronously on '%s'.\n",
            (async ? "a" : ""), subj);
 
-    s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, NATS_DEFAULT_URL);
-    if ((s == NATS_OK) && async)
-        s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);
+    s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);
 
     // This is setting the maximum number of pending messages allowed in
     // the library for each subscriber. For max performance, we set it
@@ -136,6 +120,7 @@ int main(int argc, char **argv)
     else
     {
         printf("Error: %d - %s\n", s, natsStatus_GetText(s));
+        nats_PrintLastErrorStack(stderr);
     }
 
     // Destroy all our objects to avoid report of memory leak

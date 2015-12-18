@@ -62,7 +62,7 @@ natsThread_Create(natsThread **thread, natsThreadCb cb, void *arg)
     t = (natsThread*) NATS_CALLOC(1, sizeof(natsThread));
 
     if ((ctx == NULL) || (t == NULL))
-        s = NATS_NO_MEMORY;
+        s = nats_setDefaultError(NATS_NO_MEMORY);
 
     if (s == NATS_OK)
     {
@@ -71,7 +71,9 @@ natsThread_Create(natsThread **thread, natsThreadCb cb, void *arg)
 
         t->t = (HANDLE) _beginthreadex(NULL, 0, _threadStart, ctx, 0, NULL);
         if (t->t == NULL)
-            s = NATS_NO_MEMORY;
+            s = nats_setError(NATS_SYS_ERROR,
+                              "_beginthreadex error: %d",
+                              GetLastError());
         else
             t->id = GetThreadId(t->t);
     }
@@ -122,5 +124,46 @@ natsThread_Destroy(natsThread *t)
     CloseHandle(t->t);
 
     NATS_FREE(t);
+}
+
+natsStatus
+natsThreadLocal_CreateKey(natsThreadLocal *tl, void (*destructor)(void*))
+{
+    if ((*tl = TlsAlloc()) == TLS_OUT_OF_INDEXES)
+    {
+        return nats_setError(NATS_SYS_ERROR,
+                             "TlsAlloc error: %d",
+                              GetLastError());
+    }
+
+    return NATS_OK;
+}
+
+void*
+natsThreadLocal_Get(natsThreadLocal tl)
+{
+    return (void*) TlsGetValue(tl);
+}
+
+natsStatus
+natsThreadLocal_SetEx(natsThreadLocal tl, const void *value, bool setErr)
+{
+    if (TlsSetValue(tl, (LPVOID) value) == 0)
+    {
+        if (setErr)
+            return nats_setError(NATS_SYS_ERROR,
+                                 "TlsSetValue error: %d",
+                                 GetLastError());
+        else
+            return NATS_SYS_ERROR;
+    }
+
+    return NATS_OK;
+}
+
+void
+natsThreadLocal_DestroyKey(natsThreadLocal tl)
+{
+    TlsFree(tl);
 }
 

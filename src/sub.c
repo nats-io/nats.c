@@ -238,13 +238,13 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
 
     sub = (natsSubscription*) NATS_CALLOC(1, sizeof(natsSubscription));
     if (sub == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     s = natsMutex_Create(&(sub->mu));
     if (s != NATS_OK)
     {
         NATS_FREE(sub);
-        return s;
+        return NATS_UPDATE_ERR_STACK(s);
     }
 
     natsConn_retain(nc);
@@ -259,13 +259,13 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
 
     sub->subject = NATS_STRDUP(subj);
     if (sub->subject == NULL)
-        s = NATS_NO_MEMORY;
+        s = nats_setDefaultError(NATS_NO_MEMORY);
 
     if ((s == NATS_OK) && (queueGroup != NULL) && (strlen(queueGroup) > 0))
     {
         sub->queue = NATS_STRDUP(queueGroup);
         if (sub->queue == NULL)
-            s = NATS_NO_MEMORY;
+            s = nats_setDefaultError(NATS_NO_MEMORY);
     }
     if (s == NATS_OK)
         s = natsCondition_Create(&(sub->cond));
@@ -305,7 +305,7 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     else
         natsSub_release(sub);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -327,7 +327,11 @@ natsConnection_Subscribe(natsSubscription **sub, natsConnection *nc, const char 
 natsStatus
 natsConnection_SubscribeSync(natsSubscription **sub, natsConnection *nc, const char *subject)
 {
-    return natsConn_subscribe(sub, nc, subject, NULL, NULL, NULL, false);
+    natsStatus s;
+
+    s = natsConn_subscribe(sub, nc, subject, NULL, NULL, NULL, false);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -341,11 +345,15 @@ natsConnection_QueueSubscribe(natsSubscription **sub, natsConnection *nc,
                    const char *subject, const char *queueGroup,
                    natsMsgHandler cb, void *cbClosure)
 {
-    if ((queueGroup == NULL) || (strlen(queueGroup) == 0) || (cb == NULL))
-        return NATS_INVALID_ARG;
+    natsStatus s;
 
-    return natsConn_subscribe(sub, nc, subject, queueGroup, cb, cbClosure,
-                              false);
+    if ((queueGroup == NULL) || (strlen(queueGroup) == 0) || (cb == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = natsConn_subscribe(sub, nc, subject, queueGroup, cb, cbClosure,
+                           false);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -355,11 +363,15 @@ natsStatus
 natsConnection_QueueSubscribeSync(natsSubscription **sub, natsConnection *nc,
                        const char *subject, const char *queueGroup)
 {
-    if ((queueGroup == NULL) || (strlen(queueGroup) == 0))
-        return NATS_INVALID_ARG;
+    natsStatus s;
 
-    return natsConn_subscribe(sub, nc, subject, queueGroup, NULL, NULL,
-                              false);
+    if ((queueGroup == NULL) || (strlen(queueGroup) == 0))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = natsConn_subscribe(sub, nc, subject, queueGroup, NULL, NULL,
+                           false);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -373,7 +385,7 @@ natsStatus
 natsSubscription_NoDeliveryDelay(natsSubscription *sub)
 {
     if (sub == NULL)
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsSub_Lock(sub);
 
@@ -405,7 +417,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
     int64_t         target    = 0;
 
     if ((sub == NULL) || (nextMsg == NULL))
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsSub_Lock(sub);
 
@@ -413,20 +425,20 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
     {
         natsSub_Unlock(sub);
 
-        return NATS_CONNECTION_CLOSED;
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
     if (sub->msgCb != NULL)
     {
         natsSub_Unlock(sub);
 
-        return NATS_ILLEGAL_STATE;
+        return nats_setDefaultError(NATS_ILLEGAL_STATE);
     }
     if (sub->slowConsumer)
     {
         sub->slowConsumer = false;
         natsSub_Unlock(sub);
 
-        return NATS_SLOW_CONSUMER;
+        return nats_setDefaultError(NATS_SLOW_CONSUMER);
     }
 
     nc = sub->conn;
@@ -448,7 +460,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
         sub->inWait = false;
 
         if (sub->closed)
-            s = NATS_INVALID_SUBSCRIPTION;
+            s = nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
     else
     {
@@ -487,7 +499,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
     if (removeSub)
         natsConn_removeSubscription(nc, sub, true);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static natsStatus
@@ -497,7 +509,7 @@ _unsubscribe(natsSubscription *sub, int max)
     natsConnection  *nc = NULL;
 
     if (sub == NULL)
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsSub_Lock(sub);
 
@@ -505,7 +517,7 @@ _unsubscribe(natsSubscription *sub, int max)
     {
         natsSub_Unlock(sub);
 
-        return NATS_CONNECTION_CLOSED;
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
     nc = sub->conn;
@@ -517,7 +529,7 @@ _unsubscribe(natsSubscription *sub, int max)
 
     natsSub_release(sub);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -528,7 +540,8 @@ _unsubscribe(natsSubscription *sub, int max)
 natsStatus
 natsSubscription_Unsubscribe(natsSubscription *sub)
 {
-    return _unsubscribe(sub, 0);
+    natsStatus s = _unsubscribe(sub, 0);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -540,7 +553,9 @@ natsSubscription_Unsubscribe(natsSubscription *sub)
 natsStatus
 natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max)
 {
-    return _unsubscribe(sub, max);
+    natsStatus s = _unsubscribe(sub, max);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 /*
@@ -550,7 +565,7 @@ natsStatus
 natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
 {
     if (sub == NULL)
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsSub_Lock(sub);
 
@@ -558,7 +573,7 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
     {
         natsSub_Unlock(sub);
 
-        return NATS_INVALID_SUBSCRIPTION;
+        return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
     *queuedMsgs = (uint64_t) sub->msgList.count;

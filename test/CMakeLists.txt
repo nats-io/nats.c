@@ -1,5 +1,6 @@
 # We need this to build the test program
 include_directories(${PROJECT_SOURCE_DIR}/src)
+include_directories(${OPENSSL_INCLUDE_DIR})
 
 # Build the test program
 add_executable(testsuite test.c)
@@ -18,7 +19,9 @@ foreach(name ${listOfTestNames})
 
   # Create a test and pass the index (start and end are the same)
   # to the testsuite executable
-  add_test(Test_${name} testsuite ${testIndex} ${testIndex})
+  add_test(NAME Test_${name}
+           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+           COMMAND testsuite ${testIndex} ${testIndex})
 
   # Make sure the test passes
   set_tests_properties(Test_${name} PROPERTIES PASS_REGULAR_EXPRESSION "ALL PASSED")

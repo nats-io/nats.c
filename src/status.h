@@ -36,13 +36,14 @@ typedef enum
                                         ///  reached or is not running.
     NATS_STALE_CONNECTION,              ///< The server closed our connection because it
                                         ///  did not receive PINGs at the expected interval.
+    NATS_SECURE_CONNECTION_WANTED,      ///< The client is configured to use TLS, but the
+                                        ///  server is not.
     NATS_SECURE_CONNECTION_REQUIRED,    ///< The server expects a TLS connection.
     NATS_CONNECTION_DISCONNECTED,       ///< The connection was disconnected. Depending on
                                         ///  the configuration, the connection may reconnect.
 
-    NATS_NOT_PERMITTED,                 ///< The action is not permitted. For instance, the
-                                        ///  server requires authentication and no user name
-                                        ///  and password were provided.
+    NATS_CONNECTION_AUTH_FAILED,        ///< The connection failed due to authentication error.
+    NATS_NOT_PERMITTED,                 ///< The action is not permitted.
     NATS_NOT_FOUND,                     ///< An action could not complete because something
                                         ///  was not found. So far, this is an internal error.
 
@@ -81,7 +82,10 @@ typedef enum
                                         ///  #natsSubscription_NextMsg().
 
     NATS_FAILED_TO_INITIALIZE,          ///< The library failed to initialize.
-    NATS_NOT_INITIALIZED                ///< The library is not yet initialized.
+    NATS_NOT_INITIALIZED,               ///< The library is not yet initialized.
+
+    NATS_SSL_ERROR                      ///< An SSL error occurred when trying to establish a
+                                        ///  connection.
 
 } natsStatus;
 

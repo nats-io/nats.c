@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.1.1</span>
+   &#160;<span id="projectnumber">1.2.5-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -113,9 +113,11 @@ $(document).ready(function(){initNavTree('nats_8h.html','');});
 <div class="title">nats.h File Reference</div>  </div>
 </div><!--header-->
 <div class="contents">
-<div class="textblock"><code>#include &lt;stdint.h&gt;</code><br />
+<div class="textblock"><code>#include &lt;stdlib.h&gt;</code><br />
+<code>#include &lt;stdint.h&gt;</code><br />
 <code>#include &lt;stdbool.h&gt;</code><br />
 <code>#include &lt;inttypes.h&gt;</code><br />
+<code>#include &lt;stdio.h&gt;</code><br />
 <code>#include &quot;<a class="el" href="status_8h_source.html">status.h</a>&quot;</code><br />
 <code>#include &quot;version.h&quot;</code><br />
 </div>
@@ -183,6 +185,15 @@ Functions</h2></td></tr>
 <tr class="memitem:gad5040264cd4b1404956babf3c03a4f09"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#gad5040264cd4b1404956babf3c03a4f09">nats_Sleep</a> (int64_t sleepTime)</td></tr>
 <tr class="memdesc:gad5040264cd4b1404956babf3c03a4f09"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sleeps for a given number of milliseconds.  <a href="group__library_group.html#gad5040264cd4b1404956babf3c03a4f09">More...</a><br /></td></tr>
 <tr class="separator:gad5040264cd4b1404956babf3c03a4f09"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga2610d5691a89a0f2526989083bee0fd3"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#ga2610d5691a89a0f2526989083bee0fd3">nats_GetLastError</a> (<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> *status)</td></tr>
+<tr class="memdesc:ga2610d5691a89a0f2526989083bee0fd3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the calling thread's last known error.  <a href="group__library_group.html#ga2610d5691a89a0f2526989083bee0fd3">More...</a><br /></td></tr>
+<tr class="separator:ga2610d5691a89a0f2526989083bee0fd3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaca24172e1b97ca01cee29ca437f5702e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#gaca24172e1b97ca01cee29ca437f5702e">nats_GetLastErrorStack</a> (char *buffer, size_t bufLen)</td></tr>
+<tr class="memdesc:gaca24172e1b97ca01cee29ca437f5702e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the calling thread's last known error stack.  <a href="group__library_group.html#gaca24172e1b97ca01cee29ca437f5702e">More...</a><br /></td></tr>
+<tr class="separator:gaca24172e1b97ca01cee29ca437f5702e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga5fab3b18c4fe3630254483575f6066f4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#ga5fab3b18c4fe3630254483575f6066f4">nats_PrintLastErrorStack</a> (FILE *file)</td></tr>
+<tr class="memdesc:ga5fab3b18c4fe3630254483575f6066f4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Prints the calling thread's last known error stack into the file.  <a href="group__library_group.html#ga5fab3b18c4fe3630254483575f6066f4">More...</a><br /></td></tr>
+<tr class="separator:ga5fab3b18c4fe3630254483575f6066f4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gae75131e0ce4e5b89d0f82ea7892f112e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e">nats_Close</a> (void)</td></tr>
 <tr class="memdesc:gae75131e0ce4e5b89d0f82ea7892f112e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tear down the library.  <a href="group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e">More...</a><br /></td></tr>
 <tr class="separator:gae75131e0ce4e5b89d0f82ea7892f112e"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -216,6 +227,21 @@ Functions</h2></td></tr>
 <tr class="memitem:ga1c529d347be0fe2eec17c7f4698e283e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga1c529d347be0fe2eec17c7f4698e283e">natsOptions_SetName</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *name)</td></tr>
 <tr class="memdesc:ga1c529d347be0fe2eec17c7f4698e283e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the name.  <a href="group__opts_group.html#ga1c529d347be0fe2eec17c7f4698e283e">More...</a><br /></td></tr>
 <tr class="separator:ga1c529d347be0fe2eec17c7f4698e283e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaa1f09416d443fa7a6af6b695da563eba"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba">natsOptions_SetSecure</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool secure)</td></tr>
+<tr class="memdesc:gaa1f09416d443fa7a6af6b695da563eba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the secure mode.  <a href="group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba">More...</a><br /></td></tr>
+<tr class="separator:gaa1f09416d443fa7a6af6b695da563eba"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga2cd6563694a439b3949a31fd81103099"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga2cd6563694a439b3949a31fd81103099">natsOptions_LoadCATrustedCertificates</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *fileName)</td></tr>
+<tr class="memdesc:ga2cd6563694a439b3949a31fd81103099"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads the trusted CA certificates from a file.  <a href="group__opts_group.html#ga2cd6563694a439b3949a31fd81103099">More...</a><br /></td></tr>
+<tr class="separator:ga2cd6563694a439b3949a31fd81103099"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga36943e2ba53d05407cdabc4e7e96484b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga36943e2ba53d05407cdabc4e7e96484b">natsOptions_LoadCertificatesChain</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *certsFileName, const char *keyFileName)</td></tr>
+<tr class="memdesc:ga36943e2ba53d05407cdabc4e7e96484b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads the certificate chain from a file, using the given key.  <a href="group__opts_group.html#ga36943e2ba53d05407cdabc4e7e96484b">More...</a><br /></td></tr>
+<tr class="separator:ga36943e2ba53d05407cdabc4e7e96484b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga5698f020e8eb3e7440eb073fe08ef62c"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga5698f020e8eb3e7440eb073fe08ef62c">natsOptions_SetCiphers</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *ciphers)</td></tr>
+<tr class="memdesc:ga5698f020e8eb3e7440eb073fe08ef62c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the list of available ciphers.  <a href="group__opts_group.html#ga5698f020e8eb3e7440eb073fe08ef62c">More...</a><br /></td></tr>
+<tr class="separator:ga5698f020e8eb3e7440eb073fe08ef62c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga0ba43ba9930df385e4781b12be9f2851"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga0ba43ba9930df385e4781b12be9f2851">natsOptions_SetExpectedHostname</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *hostname)</td></tr>
+<tr class="memdesc:ga0ba43ba9930df385e4781b12be9f2851"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the server certificate's expected hostname.  <a href="group__opts_group.html#ga0ba43ba9930df385e4781b12be9f2851">More...</a><br /></td></tr>
+<tr class="separator:ga0ba43ba9930df385e4781b12be9f2851"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaa16bfd09ef318af18c27a0e199681b69"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gaa16bfd09ef318af18c27a0e199681b69">natsOptions_SetVerbose</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool verbose)</td></tr>
 <tr class="memdesc:gaa16bfd09ef318af18c27a0e199681b69"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the verbose mode.  <a href="group__opts_group.html#gaa16bfd09ef318af18c27a0e199681b69">More...</a><br /></td></tr>
 <tr class="separator:gaa16bfd09ef318af18c27a0e199681b69"><td class="memSeparator" colspan="2">&#160;</td></tr>

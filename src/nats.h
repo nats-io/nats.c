@@ -3,9 +3,11 @@
 #ifndef NATS_H_
 #define NATS_H_
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <inttypes.h>
+#include <stdio.h>
 
 #include "status.h"
 #include "version.h"
@@ -266,6 +268,55 @@ nats_NowInNanoSeconds(void);
 NATS_EXTERN void
 nats_Sleep(int64_t sleepTime);
 
+/** \brief Returns the calling thread's last known error.
+ *
+ * Returns the calling thread's last known error. This can be useful when
+ * #natsConnection_Connect fails. Since no connection object is returned,
+ * you would not be able to call #natsConnection_GetLastError.
+ *
+ * @param status if not `NULL`, this function will store the last error status
+ * in there.
+ * @return the thread local error string.
+ *
+ * \warning Do not free the string returned by this function.
+ */
+NATS_EXTERN const char*
+nats_GetLastError(natsStatus *status);
+
+/** \brief Returns the calling thread's last known error stack.
+ *
+ * Copies the calling thread's last known error stack into the provided buffer.
+ * If the buffer is not big enough, #NATS_INSUFFICIENT_BUFFER is returned.
+ *
+ * @param buffer the buffer into the stack is copied.
+ * @param bufLen the size of the buffer
+ */
+NATS_EXTERN natsStatus
+nats_GetLastErrorStack(char *buffer, size_t bufLen);
+
+/** \brief Prints the calling thread's last known error stack into the file.
+ *
+ * This call prints the calling thread's last known error stack into the file `file`.
+ * It first prints the error status and the error string, then the stack.
+ *
+ * Here is an example for a call:
+ *
+ * \code{.unparsed}
+ * Error: 29 - SSL Error - (conn.c:565): SSL handshake error: sslv3 alert bad certificate
+ * Stack: (library version: 1.2.3-beta)
+ *   01 - _makeTLSConn
+ *   02 - _checkForSecure
+ *   03 - _processExpectedInfo
+ *   04 - _processConnInit
+ *   05 - _connect
+ *   06 - natsConnection_Connect
+ * \endcode
+ *
+ * @param file the file the stack is printed to.
+ */
+NATS_EXTERN void
+nats_PrintLastErrorStack(FILE *file);
+
 /** \brief Tear down the library.
  *
  * Releases memory used by the library.
@@ -454,6 +505,82 @@ natsOptions_SetTimeout(natsOptions *opts, int64_t timeout);
  */
 NATS_EXTERN natsStatus
 natsOptions_SetName(natsOptions *opts, const char *name);
+
+/** \brief Sets the secure mode.
+ *
+ * Indicates to the server if the client wants a secure (SSL/TLS) connection.
+ *
+ * The default is `false`.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param secure `true` for a secure connection, `false` otherwise.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetSecure(natsOptions *opts, bool secure);
+
+/** \brief Loads the trusted CA certificates from a file.
+ *
+ * Loads the trusted CA certificates from a file.
+ *
+ * Note that the certificates
+ * are added to a SSL context for this #natsOptions object at the time of
+ * this call, so possible errors while loading the certificates will be
+ * reported now instead of when a connection is created. You can get extra
+ * information by calling #nats_GetLastError.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param fileName the file containing the CA certificates.
+ *
+ */
+NATS_EXTERN natsStatus
+natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName);
+
+/** \brief Loads the certificate chain from a file, using the given key.
+ *
+ * The certificates must be in PEM format and must be sorted starting with
+ * the subject's certificate, followed by intermediate CA certificates if
+ * applicable, and ending at the highest level (root) CA.
+ *
+ * The private key file format supported is also PEM.
+ *
+ * See #natsOptions_LoadCATrustedCertificates regarding error reports.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param certsFileName the file containing the client certificates.
+ * @param keyFileName the file containing the client private key.
+ */
+NATS_EXTERN natsStatus
+natsOptions_LoadCertificatesChain(natsOptions *opts,
+                                  const char *certsFileName,
+                                  const char *keyFileName);
+
+/** \brief Sets the list of available ciphers.
+ *
+ * Sets the list of available ciphers.
+ * Check https://www.openssl.org/docs/manmaster/apps/ciphers.html for the
+ * proper syntax. Here is an example:
+ *
+ * > "-ALL:HIGH"
+ *
+ * See #natsOptions_LoadCATrustedCertificates regarding error reports.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param ciphers the ciphers suite.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetCiphers(natsOptions *opts, const char *ciphers);
+
+/** \brief Sets the server certificate's expected hostname.
+ *
+ * If set, the library will check that the hostname in the server
+ * certificate matches the given `hostname`. This will occur when a connection
+ * is created, not at the time of this call.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param hostname the expected server certificate hostname.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
 
 /** \brief Sets the verbose mode.
  *
@@ -1007,9 +1134,11 @@ natsConnection_Publish(natsConnection *nc, const char *subj,
  *
  * Convenient function to publish a string. This call is equivalent to:
  *
- * > const char* myString = "hello";
- * >
- * > natsConnection_Publish(nc, subj, (const void*) myString, (int) strlen(myString));
+ * \code{.c}
+ * const char* myString = "hello";
+ *
+ * natsConnection_Publish(nc, subj, (const void*) myString, (int) strlen(myString));
+ * \endcode
  *
  * @param nc the pointer to the #natsConnection object.
  * @param subj the subject the data is sent to.
@@ -1053,10 +1182,11 @@ natsConnection_PublishRequest(natsConnection *nc, const char *subj,
  * Convenient function to publish a request as a string. This call is
  * equivalent to:
  *
- * > const char* myString = "hello";
- * >
- * > natsPublishRequest(nc, subj, reply, (const void*) myString,
- * >                    (int) strlen(myString));
+ * \code{.c}
+ * const char* myString = "hello";
+ *
+ * natsPublishRequest(nc, subj, reply, (const void*) myString, (int) strlen(myString));
+ * \endcode
  *
  * @param nc the pointer to the #natsConnection object.
  * @param subj the subject the request is sent to.
@@ -1091,10 +1221,11 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
  * Convenient function to send a request as a string. This call is
  * equivalent to:
  *
- * > const char* myString = "hello";
- * >
- * > natsConnection_Request(replyMsg, nc, subj,
- * >                        (const void*) myString, (int) strlen(myString));
+ * \code{.c}
+ * const char* myString = "hello";
+ *
+ * natsConnection_Request(replyMsg, nc, subj, (const void*) myString, (int) strlen(myString));
+ * \endcode
  *
  * @param replyMsg the location where to store the pointer to the received
  * #natsMsg reply.

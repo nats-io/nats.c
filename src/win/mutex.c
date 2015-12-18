@@ -9,7 +9,7 @@ natsMutex_Create(natsMutex **newMutex)
     natsMutex *m = NATS_CALLOC(1, sizeof(natsMutex));
 
     if (m == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     if (gLockSpinCount > 0)
         InitializeCriticalSectionAndSpinCount(m, (DWORD) gLockSpinCount);

@@ -3,7 +3,6 @@
 #include "../natsp.h"
 #include "../mem.h"
 
-
 bool
 nats_InitOnce(natsInitOnceType *control, natsInitOnceCb cb)
 {
@@ -43,7 +42,7 @@ natsThread_Create(natsThread **thread, natsThreadCb cb, void *arg)
     t = (natsThread*) NATS_CALLOC(1, sizeof(natsThread));
 
     if ((ctx == NULL) || (t == NULL))
-        s = NATS_NO_MEMORY;
+        s = nats_setDefaultError(NATS_NO_MEMORY);
 
     if (s == NATS_OK)
     {
@@ -52,7 +51,8 @@ natsThread_Create(natsThread **thread, natsThreadCb cb, void *arg)
 
         err = pthread_create(t, NULL, _threadStart, ctx);
         if (err)
-            s = NATS_SYS_ERROR;
+            s = nats_setError(NATS_SYS_ERROR,
+                              "pthread_create error: %d", errno);
     }
 
     if (s == NATS_OK)
@@ -111,5 +111,46 @@ natsThread_Destroy(natsThread *t)
         return;
 
     NATS_FREE(t);
+}
+
+natsStatus
+natsThreadLocal_CreateKey(natsThreadLocal *tl, void (*destructor)(void*))
+{
+    int ret;
+
+    if ((ret = pthread_key_create(tl, destructor)) != 0)
+    {
+        return nats_setError(NATS_SYS_ERROR,
+                             "pthread_key_create error: %d", ret);
+    }
+
+    return NATS_OK;
+}
+
+void*
+natsThreadLocal_Get(natsThreadLocal tl)
+{
+    return pthread_getspecific(tl);
+}
+
+natsStatus
+natsThreadLocal_SetEx(natsThreadLocal tl, const void *value, bool setErr)
+{
+    int ret;
+
+    if ((ret = pthread_setspecific(tl, value)) != 0)
+    {
+        return nats_setError(NATS_SYS_ERROR,
+                             "pthread_setspecific: %d",
+                             ret);
+    }
+
+    return NATS_OK;
+}
+
+void
+natsThreadLocal_DestroyKey(natsThreadLocal tl)
+{
+    pthread_key_delete(tl);
 }
 

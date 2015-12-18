@@ -268,6 +268,40 @@ All subscriptions with the same queue name will form a queue group. Each message
 ncConnection_QueueSubscribe(&sub, nc, "foo", "job_workers", onMsg, NULL);
 ```
 
+## TLS
+
+An SSL/TLS connection is configured through the use of `natsOptions`. Depending on the level of security you desire, it can be as simple as setting the secure boolean to true on the `natsOptions_SetSecure()` call.
+
+Even with full security (client verifying server certificate, and server requiring client certificates), the setup involves only a few calls.
+
+```c
+// Create an options object.
+natsOptions_Create(&opts);
+
+// Set the secure flag.
+natsOptions_SetSecure(opts, true);
+
+// For a server with a trusted chain built into the client host,
+// simply designate the server name that is expected. Without this
+// call, the server certificate is still verified, but no the
+// hostname part of it.
+natsOptions_SetExpectedHostname(opts, "localhost");
+
+// Instead, if you are using a self-signed cert and need to load in the CA.
+natsOptions_LoadCATrustedCertificates(opts, caCertFileName);
+
+// If the server requires client certificates, provide them along with the
+// private key, all in one call.
+natsOptions_LoadCertificatesChain(opts, certChainFileName, privateKeyFileName);
+
+// You can also specify preferred ciphers if you want.
+natsOptions_SetCiphers(opts, "-ALL:HIGH");
+
+// Then simply pass the options object to the connect call:
+natsConnection_Connect(&nc, opts);
+
+// That's it! On success you will have a secure connection with the server!
+```
 
 ## Advanced Usage
 

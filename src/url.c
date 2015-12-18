@@ -38,14 +38,16 @@ _parseHostAndPort(natsUrl *url, char *host, bool uInfo)
     {
         url->host = NATS_STRDUP(host + 1);
         *host = '\0';
+
+        if (url->host == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
     }
     else
     {
         url->host = NATS_STRDUP(host);
+        if (url->host == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
     }
-
-    if (url->host == NULL)
-        s = NATS_NO_MEMORY;
 
     return s;
 }
@@ -62,21 +64,21 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
     natsUrl     *url   = NULL;
 
     if ((urlStr == NULL) || (strlen(urlStr) == 0))
-        return NATS_INVALID_ARG;
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     url = (natsUrl*) NATS_CALLOC(1, sizeof(natsUrl));
     if (url == NULL)
-        return NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     url->fullUrl = NATS_STRDUP(urlStr);
     if (url->fullUrl == NULL)
-        s = NATS_NO_MEMORY;
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     if (s == NATS_OK)
     {
         copy = NATS_STRDUP(urlStr);
         if (copy == NULL)
-            s = NATS_NO_MEMORY;
+            return nats_setDefaultError(NATS_NO_MEMORY);
     }
 
     // This is based on the results of the Go parsing.
@@ -109,14 +111,14 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
                 *pwd = '\0';
 
                 if (url->password == NULL)
-                    s = NATS_NO_MEMORY;
+                    return nats_setDefaultError(NATS_NO_MEMORY);
             }
 
             if ((s == NATS_OK) && (strlen(ptr) > 0))
             {
                 url->username = NATS_STRDUP(ptr);
                 if (url->username == NULL)
-                    s = NATS_NO_MEMORY;
+                    return nats_setDefaultError(NATS_NO_MEMORY);
             }
         }
     }
@@ -128,5 +130,5 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
     else
         natsUrl_Destroy(url);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }

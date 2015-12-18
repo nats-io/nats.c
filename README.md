@@ -270,7 +270,7 @@ ncConnection_QueueSubscribe(&sub, nc, "foo", "job_workers", onMsg, NULL);
 
 ## TLS
 
-An SSL/TLS connection is configured through the use of `natsOptions`. Depending on the level of security you desire, it can be as simple as set the secure boolean to true on the `natsOptions_SetSecure()` call.
+An SSL/TLS connection is configured through the use of `natsOptions`. Depending on the level of security you desire, it can be as simple as setting the secure boolean to true on the `natsOptions_SetSecure()` call.
 
 Even with full security (client verifying server certificate, and server requiring client certificates), the setup involves only a few calls.
 
@@ -282,8 +282,9 @@ natsOptions_Create(&opts);
 natsOptions_SetSecure(opts, true);
 
 // For a server with a trusted chain built into the client host,
-// simply designate theserver name that is expected. Without this call,
-// the client would not verify the server certificate.
+// simply designate the server name that is expected. Without this
+// call, the server certificate is still verified, but no the
+// hostname part of it.
 natsOptions_SetExpectedHostname(opts, "localhost");
 
 // Instead, if you are using a self-signed cert and need to load in the CA.

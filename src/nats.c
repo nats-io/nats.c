@@ -1067,7 +1067,8 @@ _getErrorShortFileName(const char* fileName)
 }
 
 static void
-_updateStack(natsTLError *errTL, const char *funcName)
+_updateStack(natsTLError *errTL, const char *funcName, natsStatus errSts,
+             bool calledFromSetError)
 {
     int idx;
 
@@ -1077,6 +1078,10 @@ _updateStack(natsTLError *errTL, const char *funcName)
     {
         return;
     }
+
+    // In case no error was already set...
+    if ((errTL->framesCount == -1) && !calledFromSetError)
+        errTL->sts = errSts;
 
     idx = ++(errTL->framesCount);
 
@@ -1110,7 +1115,7 @@ nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStat
                  _getErrorShortFileName(fileName), line, tmp);
     }
 
-    _updateStack(errTL, funcName);
+    _updateStack(errTL, funcName, errSts, true);
 
     return errSts;
 }
@@ -1123,9 +1128,22 @@ nats_updateErrStack(natsStatus err, const char *func)
     if (errTL == NULL)
         return err;
 
-    _updateStack(errTL, func);
+    _updateStack(errTL, func, err, false);
 
     return err;
+}
+
+void
+nats_clearLastError(void)
+{
+    natsTLError *errTL  = _getTLError();
+
+    if (errTL == NULL)
+        return;
+
+    errTL->sts         = NATS_OK;
+    errTL->text[0]     = '\0';
+    errTL->framesCount = -1;
 }
 
 const char*
@@ -1225,8 +1243,11 @@ nats_PrintLastErrorStack(FILE *file)
     if ((errTL == NULL) || (errTL->sts == NATS_OK) || (errTL->framesCount == -1))
         return;
 
-    fprintf(file, "Error: %d - %s - %s\n",
-            errTL->sts, natsStatus_GetText(errTL->sts), errTL->text);
+    fprintf(file, "Error: %d - %s",
+            errTL->sts, natsStatus_GetText(errTL->sts));
+    if (errTL->text[0] != '\0')
+        fprintf(file, " - %s", errTL->text);
+    fprintf(file, "\n");
     fprintf(file, "Stack: (library version: %s)\n", nats_GetVersion());
 
     max = errTL->framesCount;

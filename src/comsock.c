@@ -114,7 +114,7 @@ natsSock_WaitReady(bool forWrite, natsSockCtx *ctx)
         return nats_setError(NATS_IO_ERROR, "select error: %d", res);
 
     if ((res == 0) || !FD_ISSET(sock, fdSet))
-        return NATS_TIMEOUT;
+        return nats_setDefaultError(NATS_TIMEOUT);
 
     return NATS_OK;
 }

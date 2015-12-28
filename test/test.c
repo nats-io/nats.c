@@ -2175,7 +2175,7 @@ test_natsOptions(void)
 natsStatus
 _checkStart(const char *url)
 {
-    natsStatus      s;
+    natsStatus      s        = NATS_OK;
     natsUrl         *nUrl    = NULL;
     int             attempts = 0;
     natsSockCtx     ctx;
@@ -2202,10 +2202,12 @@ _checkStart(const char *url)
         if (s == NATS_OK)
             natsSock_Close(ctx.fd);
         else
-            return NATS_NO_SERVER;
+            s = NATS_NO_SERVER;
     }
 
-    return NATS_OK;
+    nats_clearLastError();
+
+    return s;
 }
 
 #ifdef _WIN32
@@ -2412,6 +2414,12 @@ _createReconnectOptions(void)
         s = natsOptions_SetReconnectWait(opts, 100);
     if (s == NATS_OK)
         s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+
+    if (s != NATS_OK)
+    {
+        natsOptions_Destroy(opts);
+        opts = NULL;
+    }
 
     return opts;
 }

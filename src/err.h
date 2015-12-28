@@ -21,4 +21,7 @@ nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStat
 natsStatus
 nats_updateErrStack(natsStatus err, const char *func);
 
+void
+nats_clearLastError(void);
+
 #endif /* ERR_H_ */

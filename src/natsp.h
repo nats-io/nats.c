@@ -135,12 +135,6 @@ struct __natsOptions
     int                     maxPingsOut;
     int                     maxPendingMsgs;
 
-//    char                    *tlsCACert;
-//    char                    *tlsCert;
-//    char                    *tlsKey;
-//    char                    *tlsCiphers;
-//    char                    *tlsHostname;
-
     natsSSLCtx              *sslCtx;
 
 };
@@ -284,7 +278,6 @@ struct __natsConnection
     int                 refs;
 
     natsSockCtx         sockCtx;
-//    SSL_CTX             *sslCtx;
 
     natsSrvPool         *srvPool;
 

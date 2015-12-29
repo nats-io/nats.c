@@ -187,10 +187,6 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
                     case 'm':
                         nc->ps->state = OP_M;
                         break;
-                    case 'C':
-                    case 'c':
-                        nc->ps->state = OP_C;
-                        break;
                     case 'P':
                     case 'p':
                         nc->ps->state = OP_P;

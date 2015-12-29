@@ -17,6 +17,7 @@ natsHashing
 natsStrHash
 natsInbox
 natsOptions
+natsSock_ReadLine
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize
@@ -29,6 +30,7 @@ ConnClosedCB
 CloseDisconnectedCB
 ServerStopDisconnectedCB
 ClosedConnections
+ConnectVerboseOption
 ReconnectTotalTime
 ReconnectDisallowedFlags
 ReconnectAllowedFlags
@@ -80,6 +82,7 @@ SSLVerify
 SSLVerifyHostname
 SSLCiphers
 SSLMultithreads
+SSLConnectVerboseOption
 ServersOption
 AuthServers
 AuthFailToReconnect

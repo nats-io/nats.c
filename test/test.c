@@ -2172,6 +2172,31 @@ test_natsOptions(void)
     natsOptions_Destroy(cloned);
 }
 
+static void
+test_natsSock_ReadLine(void)
+{
+    char        buffer[20];
+    natsStatus  s;
+    natsSockCtx ctx;
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    snprintf(buffer, sizeof(buffer), "%s", "+OK\r\nPONG\r\nFOO\r\nxxx");
+    buffer[3] = '\0';
+
+    test("Read second line from buffer: ");
+    s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+    testCond((s == NATS_OK) && (strcmp(buffer, "PONG") == 0));
+
+    test("Read third line from buffer: ");
+    s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+    testCond((s == NATS_OK) && (strcmp(buffer, "FOO") == 0));
+
+    test("Next call should trigger recv, which is expected to fail: ");
+    s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+    testCond(s != NATS_OK);
+}
+
 natsStatus
 _checkStart(const char *url)
 {
@@ -3231,6 +3256,64 @@ test_ClosedConnections(void)
 }
 
 static void
+test_ConnectVerboseOption(void)
+{
+    natsStatus          s         = NATS_OK;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    args;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+    {
+        opts = _createReconnectOptions();
+        if (opts == NULL)
+            s = NATS_ERR;
+    }
+    if (s == NATS_OK)
+        s = natsOptions_SetVerbose(opts, true);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check connect OK with Verbose option: ");
+
+    s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    testCond(s == NATS_OK)
+
+    _stopServer(serverPid);
+    serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check reconnect OK with Verbose option: ");
+
+    natsMutex_Lock(args.m);
+    while ((s == NATS_OK) && !(args.reconnected))
+        s = natsCondition_TimedWait(args.c, args.m, 5000);
+    natsMutex_Unlock(args.m);
+
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_ReconnectTotalTime(void)
 {
     natsStatus  s;
@@ -4085,26 +4168,13 @@ test_ErrOnMaxPayloadLimit(void)
         if (s == NATS_OK)
         {
             char buffer[1024];
-            int  n = 0;
 
             memset(buffer, 0, sizeof(buffer));
 
             // Read connect and ping commands sent from the client
-            s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer), &n);
+            s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
             if (s == NATS_OK)
-            {
-                char *next = NULL;
-
-                // The above call may have been put the PING, or not.
-                next = (char*) &buffer[strlen(buffer) + 2];
-                if (strstr(next, _CRLF_) == NULL)
-                {
-                    // Read the rest.
-                    s = natsSock_ReadLine(&ctx,
-                                          buffer, sizeof(buffer),
-                                          NULL);
-                }
-            }
+                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
         }
         // Send PONG
         if (s == NATS_OK)
@@ -5099,7 +5169,6 @@ test_ReleaseFlush(void)
     {
         char buffer[1024];
         char info[1024];
-        int  n = 0;
 
         strncpy(info,
                 "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":1048576}\r\n",
@@ -5112,22 +5181,9 @@ test_ReleaseFlush(void)
             memset(buffer, 0, sizeof(buffer));
 
             // Read connect and ping commands sent from the client
-            s = natsSock_ReadLine(&ctx,
-                                  buffer, sizeof(buffer), &n);
+            s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
             if (s == NATS_OK)
-            {
-                char *next = NULL;
-
-                // The above call may have been put the PING, or not.
-                next = (char*) &buffer[strlen(buffer) + 2];
-                if (strstr(next, _CRLF_) == NULL)
-                {
-                    // Read the rest.
-                    s = natsSock_ReadLine(&ctx,
-                                          buffer, sizeof(buffer),
-                                          NULL);
-                }
-            }
+                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
         }
         // Send PONG
         if (s == NATS_OK)
@@ -5136,8 +5192,7 @@ test_ReleaseFlush(void)
 
         // Get the PING
         if (s == NATS_OK)
-            s = natsSock_ReadLine(&ctx,
-                                  buffer, sizeof(buffer), &n);
+            s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
     }
 
     // Now wait for the client to close the connection...
@@ -5246,27 +5301,13 @@ test_FlushErrOnDisconnect(void)
         if (s == NATS_OK)
         {
             char buffer[1024];
-            int  n = 0;
 
             memset(buffer, 0, sizeof(buffer));
 
             // Read connect and ping commands sent from the client
-            s = natsSock_ReadLine(&ctx,
-                                  buffer, sizeof(buffer), &n);
+            s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
             if (s == NATS_OK)
-            {
-                char *next = NULL;
-
-                // The above call may have been put the PING, or not.
-                next = (char*) &buffer[strlen(buffer) + 2];
-                if (strstr(next, _CRLF_) == NULL)
-                {
-                    // Read the rest.
-                    s = natsSock_ReadLine(&ctx,
-                                          buffer, sizeof(buffer),
-                                          NULL);
-                }
-            }
+                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
         }
         // Send PONG
         if (s == NATS_OK)
@@ -7353,6 +7394,77 @@ test_SSLMultithreads(void)
     _stopServer(serverPid);
 }
 
+static void
+test_SSLConnectVerboseOption(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    args;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+    {
+        opts = _createReconnectOptions();
+        if (opts == NULL)
+            s = NATS_ERR;
+    }
+    if (s == NATS_OK)
+        s = natsOptions_SetVerbose(opts, true);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+    if (opts == NULL)
+        FAIL("Unable to setup test!");
+
+    serverPid = _startServer("nats://localhost:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsOptions_SetURL(opts, "nats://localhost:4443");
+    if (s == NATS_OK)
+        s = natsOptions_SetSecure(opts, true);
+    // For test purposes, we provide the CA trusted certs
+    if (s == NATS_OK)
+        s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
+    if (s == NATS_OK)
+        s = natsOptions_SetExpectedHostname(opts, "localhost");
+
+    test("Check that SSL connect OK when Verbose set: ");
+
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    testCond(s == NATS_OK);
+
+    _stopServer(serverPid);
+    serverPid = _startServer("nats://localhost:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check that SSL reconnect OK when Verbose set: ");
+
+    natsMutex_Lock(args.m);
+    while ((s == NATS_OK) && !args.reconnected)
+        s = natsCondition_TimedWait(args.c, args.m, 5000);
+    natsMutex_Unlock(args.m);
+
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+
+    if (valgrind)
+        nats_Sleep(1000);
+
+    _stopServer(serverPid);
+}
+
 typedef void (*testFunc)(void);
 
 typedef struct __testInfo
@@ -7384,6 +7496,7 @@ static testInfo allTests[] =
     {"natsStrHash",                     test_natsStrHash},
     {"natsInbox",                       test_natsInbox},
     {"natsOptions",                     test_natsOptions},
+    {"natsSock_ReadLine",               test_natsSock_ReadLine},
 
     // Package Level Tests
 
@@ -7402,6 +7515,7 @@ static testInfo allTests[] =
     {"CloseDisconnectedCB",             test_CloseDisconnectedCB},
     {"ServerStopDisconnectedCB",        test_ServerStopDisconnectedCB},
     {"ClosedConnections",               test_ClosedConnections},
+    {"ConnectVerboseOption",            test_ConnectVerboseOption},
     {"ReconnectTotalTime",              test_ReconnectTotalTime},
     {"ReconnectDisallowedFlags",        test_ReconnectDisallowedFlags},
     {"ReconnectAllowedFlags",           test_ReconnectAllowedFlags},
@@ -7455,6 +7569,7 @@ static testInfo allTests[] =
     {"SSLVerifyHostname",               test_SSLVerifyHostname},
     {"SSLCiphers",                      test_SSLCiphers},
     {"SSLMultithreads",                 test_SSLMultithreads},
+    {"SSLConnectVerboseOption",         test_SSLConnectVerboseOption},
 
     // Clusters Tests
 

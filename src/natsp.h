@@ -64,6 +64,7 @@
 #define _PONG_OP_LEN_       (4)
 #define _PING_PROTO_LEN_    (6)
 #define _PONG_PROTO_LEN_    (6)
+#define _OK_OP_LEN_         (3)
 
 extern int64_t gLockSpinCount;
 

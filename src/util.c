@@ -42,7 +42,7 @@ nats_ParseControl(natsControl *control, const char *line)
     char        *tok        = NULL;
     int         len         = 0;
 
-    if (line == NULL)
+    if ((line == NULL) || (line[0] == '\0'))
         return nats_setDefaultError(NATS_PROTOCOL_ERROR);
 
     tok = strchr(line, (int) ' ');

@@ -382,7 +382,9 @@ _readOp(natsConnection *nc, natsControl *control)
     natsStatus  s = NATS_OK;
     char        buffer[DEFAULT_BUF_SIZE];
 
-    s = natsSock_ReadLine(&(nc->sockCtx), buffer, sizeof(buffer), NULL);
+    buffer[0] = '\0';
+
+    s = natsSock_ReadLine(&(nc->sockCtx), buffer, sizeof(buffer));
     if (s == NATS_OK)
         s = nats_ParseControl(control, buffer);
 
@@ -1028,6 +1030,9 @@ _sendConnect(natsConnection *nc)
 {
     natsStatus  s       = NATS_OK;
     char        *cProto = NULL;
+    char        buffer[DEFAULT_BUF_SIZE];
+
+    buffer[0] = '\0';
 
     // Create the CONNECT protocol
     s = _connectProto(nc, &cProto);
@@ -1048,27 +1053,38 @@ _sendConnect(natsConnection *nc)
 
     // Now read the response from the server.
     if (s == NATS_OK)
+        s = natsSock_ReadLine(&(nc->sockCtx), buffer, sizeof(buffer));
+
+    // If Verbose is set, we expect +OK first.
+    if ((s == NATS_OK) && nc->opts->verbose)
     {
-        char buffer[DEFAULT_BUF_SIZE];
-
-        buffer[0] = '\0';
-
-        s = natsSock_ReadLine(&(nc->sockCtx), buffer, sizeof(buffer), NULL);
-        if (s == NATS_OK)
+        // Check protocol is as expected
+        if (strncmp(buffer, _OK_OP_, _OK_OP_LEN_) != 0)
         {
-            // We except the PONG protocol
-            if (strncmp(buffer, _PONG_OP_, _PONG_OP_LEN_) != 0)
-            {
-                // But it could be something else, like -ERR
-                // Search if the error message says something about
-                // authentication failure.
-
-                if (strstr(buffer, "Authorization") != NULL)
-                    s = NATS_CONNECTION_AUTH_FAILED;
-                else
-                    s = NATS_NO_SERVER;
-            }
+            s = nats_setError(NATS_PROTOCOL_ERROR,
+                              "Expected '%s', got '%s'",
+                              _OK_OP_, buffer);
         }
+
+        // Read the rest now...
+        if (s == NATS_OK)
+            s = natsSock_ReadLine(&(nc->sockCtx), buffer, sizeof(buffer));
+    }
+
+    // We except the PONG protocol
+    if ((s == NATS_OK) && (strncmp(buffer, _PONG_OP_, _PONG_OP_LEN_) != 0))
+    {
+        // But it could be something else, like -ERR
+        // Search if the error message says something about
+        // authentication failure.
+
+        if (strstr(buffer, "Authorization") != NULL)
+            s = nats_setError(NATS_CONNECTION_AUTH_FAILED,
+                              "%s", buffer);
+        else
+            s = nats_setError(NATS_PROTOCOL_ERROR,
+                              "Expected '%s', got '%s'",
+                              _PONG_OP_, buffer);
     }
 
     if (s == NATS_OK)

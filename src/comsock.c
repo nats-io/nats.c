@@ -215,42 +215,82 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port)
 }
 
 natsStatus
-natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
+natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize)
 {
     natsStatus  s           = NATS_OK;
     int         readBytes   = 0;
     size_t      totalBytes  = 0;
-    int         i;
-    char        *p;
+    char        *p          = buffer;
+    char        *eol;
+
+    // By contract, the caller needs to set buffer[0] to '\0' before the first
+    // call.
+    if (*p != '\0')
+    {
+        // We assume that this is not the first call with the given buffer.
+        // Move possible data after the first line to the beginning of the
+        // buffer.
+        char    *nextLine;
+        size_t  nextStart;
+        size_t  len = 0;
+
+        // The start of the next line will be the length of the line at the
+        // start of the buffer + 2, which is the number of characters
+        // representing CRLF.
+        nextStart = strlen(buffer) + 2;
+        nextLine  = (char*) (buffer + nextStart);
+
+        // There is some data...
+        if (*nextLine != '\0')
+        {
+            // The next line (even if partial) is guaranteed to be NULL
+            // terminated.
+            len = strlen(nextLine);
+
+            // Move to the beginning of the buffer (and include the NULL char)
+            memmove(buffer, nextLine, len + 1);
+
+            // Now, if the string contains a CRLF, we don't even need to read
+            // from the socket. Update the buffer and return.
+            if ((eol = strstr(buffer, _CRLF_)) != NULL)
+            {
+                // Replace the '\r' with '\0' to NULL terminate the string.
+                *eol = '\0';
+
+                // We are done!
+                return NATS_OK;
+            }
+
+            // This is a partial, we need to read more data until we get to
+            // the end of the line (\r\n).
+            p = (char*) (p + len);
+        }
+        else
+        {
+            *p = '\0';
+        }
+    }
 
     while (1)
     {
-        s = natsSock_Read(ctx, buffer, (maxBufferSize - totalBytes), &readBytes);
+        s = natsSock_Read(ctx, p, (maxBufferSize - totalBytes), &readBytes);
         if (s != NATS_OK)
             return NATS_UPDATE_ERR_STACK(s);
 
-        if (n != NULL)
-            *n += readBytes;
+        if (totalBytes + readBytes == maxBufferSize)
+            return nats_setDefaultError(NATS_LINE_TOO_LONG);
 
-        p = buffer;
+        // We need to append a NULL character after what we have received.
+        *(p + readBytes) = '\0';
 
-        for (i = 0; i < readBytes; i++)
+        if ((eol = strstr(p, _CRLF_)) != NULL)
         {
-            if ((*p == '\n')
-                && ((totalBytes > 0) || (i > 0))
-                && (*(p - 1) == '\r'))
-            {
-                *(p - 1) = '\0';
-                return NATS_OK;
-            }
-            p++;
+            *eol = '\0';
+            return NATS_OK;
         }
 
-        buffer     += readBytes;
+        p          += readBytes;
         totalBytes += readBytes;
-
-        if (totalBytes == maxBufferSize)
-            return nats_setDefaultError(NATS_LINE_TOO_LONG);
     }
 }
 

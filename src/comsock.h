@@ -25,8 +25,13 @@ natsSock_IsConnected(natsSock fd);
 // error occurs.
 // Handles blocking and non-blocking sockets. For the later, an optional 'deadline'
 // indicates how long it can wait for the full read to complete.
+//
+// NOTE: 'buffer[0]' must be set to '\0' prior to the very first call. If the
+// peer is sending multiple lines, it is possible that this function reads the
+// next line(s) (or partials) in a single call. In this case, the caller needs
+// to repeat the call with the same buffer to "read" the next line.
 natsStatus
-natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n);
+natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize);
 
 // Reads up to 'maxBufferSize' bytes from the socket and put them in 'buffer'.
 // If the socket is blocking, wait until some data is available or the socket

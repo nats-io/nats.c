@@ -148,7 +148,7 @@ doxygen DoxyFile.NATS.Client
 
 The generated documenation will be located in the `html` directory. To see the documentation, point your browser to the file `index.html` in that directory.
 
-Go [here](http://nats-io.githbu.io/cnats) for the online documentation.
+Go [here](http://nats-io.github.io/cnats) for the online documentation.
 
 The source code is also quite documented.
 

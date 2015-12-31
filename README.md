@@ -162,6 +162,10 @@ natsConnection_ConnectTo(&nc, "ivan:secret@localhost:4222");
 // Simple publisher, sending the given string to subject "foo"
 natsConnection_PublishString(nc, "foo", "hello world");
 
+// Publish binary data. Content is not interpreted as a string.
+char data[] = {1, 2, 0, 4, 5};
+natsConnection_Publish(nc, "foo", (const void*) data, 5);
+
 // Simple asynchronous subscriber on subject foo, invoking message 
 // handler 'onMsg' when messages are received, and not providing a closure.
 natsConnection_Subscribe(&sub, nc, "foo", onMsg, NULL);
@@ -171,7 +175,7 @@ natsConnection_SubscribeSync(&nc, nc, "foo");
 
 // Using a synchronous subscriber, gets the first message available, waiting
 // up to 1000 milliseconds (1 second)
-s = natsSubscription_NextMsg(&msg, sub, 1000);
+natsSubscription_NextMsg(&msg, sub, 1000);
 
 // Destroy any message received (asynchronously or synchronously) or created
 // by your application. Note that if 'msg' is NULL, the call has no effect.

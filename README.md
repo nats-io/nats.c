@@ -5,6 +5,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 
 [![License MIT](https://img.shields.io/npm/l/express.svg)](http://opensource.org/licenses/MIT)
 [![Build Status](https://travis-ci.org/nats-io/cnats.svg?branch=master)](http://travis-ci.org/nats-io/cnats)
+[![Documentation](https://img.shields.io/badge/doc-Doxygen-brightgreen.svg?style=flat)](http://nats-io.github.io/cnats)
 
 ## Installation
 
@@ -139,9 +140,15 @@ NATS_TEST_SERVER_EXE=c:\test\gnatsd.exe
 
 The public API has been documented using [Doxygen](http://www.stack.nl/~dimitri/doxygen/).
 
-To see the documentation, point your browser to the file `index.html` in the `doc/html` directory. 
+To generate the documentation, go to the `doc` directory and type the following command:
 
-Go here for a [preview](http://htmlpreview.github.com/?https://github.com/nats-io/cnats/blob/master/doc/html/index.html).
+```
+doxygen DoxyFile.NATS.Client
+```
+
+The generated documenation will be located in the `html` directory. To see the documentation, point your browser to the file `index.html` in that directory.
+
+Go [here](http://nats-io.githbu.io/cnats) for the online documentation.
 
 The source code is also quite documented.
 

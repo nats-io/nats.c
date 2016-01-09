@@ -229,7 +229,7 @@ natsConn_bufferFlush(natsConnection *nc)
     if (s == NATS_OK)
         natsBuf_Reset(nc->bw);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus

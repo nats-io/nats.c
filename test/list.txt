@@ -67,6 +67,7 @@ Stats
 BadSubject
 ClientAsyncAutoUnsub
 ClientSyncAutoUnsub
+NextMsgOnClosedSub
 CloseSubRelease
 IsValidSubscriber
 SlowSubscriber

@@ -215,7 +215,7 @@ _signalTimerStopped(natsTimer *timer, void *closure)
 }
 
 void
-natsSub_close(natsSubscription *sub)
+natsSub_close(natsSubscription *sub, bool connectionClosed)
 {
     natsSub_Lock(sub);
 
@@ -223,6 +223,7 @@ natsSub_close(natsSubscription *sub)
         natsTimer_Stop(sub->signalTimer);
 
     sub->closed = true;
+    sub->connClosed = connectionClosed;
     natsCondition_Signal(sub->cond);
 
     natsSub_Unlock(sub);
@@ -421,11 +422,22 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
 
     natsSub_Lock(sub);
 
-    if (sub->closed)
+    if (sub->connClosed)
     {
         natsSub_Unlock(sub);
 
         return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    }
+    if (sub->closed)
+    {
+        if ((sub->max > 0) && (sub->delivered >= sub->max))
+            s = NATS_MAX_DELIVERED_MSGS;
+        else
+            s = NATS_INVALID_SUBSCRIPTION;
+
+        natsSub_Unlock(sub);
+
+        return nats_setDefaultError(s);
     }
     if (sub->msgCb != NULL)
     {
@@ -473,7 +485,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
         if (sub->max > 0)
         {
             if (sub->delivered > sub->max)
-                s = NATS_MAX_DELIVERED_MSGS;
+                s = nats_setDefaultError(NATS_MAX_DELIVERED_MSGS);
             else if (sub->delivered == sub->max)
                 removeSub = true;
         }

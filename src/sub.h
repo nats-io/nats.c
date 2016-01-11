@@ -30,6 +30,6 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
                bool noDelay);
 
 void
-natsSub_close(natsSubscription *sub);
+natsSub_close(natsSubscription *sub, bool connectionClosed);
 
 #endif /* SUB_H_ */

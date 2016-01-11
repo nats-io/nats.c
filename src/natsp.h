@@ -206,6 +206,10 @@ struct __natsSubscription
     // The subscriber is closed (or closing).
     bool                        closed;
 
+    // If true, the subscription is closed, but because the connection
+    // was closed, not because of subscription (auto-)unsubscribe.
+    bool                        connClosed;
+
     // Subscriber id. Assigned during the creation, does not change after that.
     int64_t                     sid;
 

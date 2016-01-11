@@ -1479,7 +1479,7 @@ _removeAllSubscriptions(natsConnection *nc)
     {
         (void) natsHashIter_RemoveCurrent(&iter);
 
-        natsSub_close(sub);
+        natsSub_close(sub, true);
 
         natsSub_release(sub);
     }
@@ -1770,7 +1770,7 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub, bo
     // Note that the sub may have already been removed, so 'sub == NULL'
     // is not an error.
     if (sub != NULL)
-        natsSub_close(sub);
+        natsSub_close(sub, false);
 
     if (needsLock)
         natsConn_Unlock(nc);
@@ -1856,7 +1856,7 @@ natsConn_subscribe(natsSubscription **newSub,
         // A delivery thread may have been started, but the subscription not
         // added to the connection's subscription map. So this is necessary
         // for the delivery thread to unroll.
-        natsSub_close(sub);
+        natsSub_close(sub, false);
 
         natsConn_removeSubscription(nc, sub, false);
 

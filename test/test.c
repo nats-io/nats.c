@@ -5554,6 +5554,7 @@ test_ClientSyncAutoUnsub(void)
     if (s == NATS_OK)
         s = natsConnection_Flush(nc);
 
+    test("Get correct error: ");
     for (int i=0; (s == NATS_OK) && (i<100); i++)
     {
         s = natsSubscription_NextMsg(&msg, sub, 10);
@@ -5563,12 +5564,42 @@ test_ClientSyncAutoUnsub(void)
             natsMsg_Destroy(msg);
         }
     }
+    testCond(s == NATS_MAX_DELIVERED_MSGS);
 
     test("Received no more than max: ");
     testCond(received == 10);
 
     test("IsValid should be false: ");
     testCond((sub != NULL) && !natsSubscription_IsValid(sub));
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
+test_NextMsgOnClosedSub(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    natsMsg             *msg      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    if (s == NATS_OK)
+        s = natsSubscription_Unsubscribe(sub);
+
+    test("Get correct error: ");
+    if (s == NATS_OK)
+        s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond(s == NATS_INVALID_SUBSCRIPTION);
 
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
@@ -7591,6 +7622,7 @@ static testInfo allTests[] =
     {"BadSubject",                      test_BadSubject},
     {"ClientAsyncAutoUnsub",            test_ClientAsyncAutoUnsub},
     {"ClientSyncAutoUnsub",             test_ClientSyncAutoUnsub},
+    {"NextMsgOnClosedSub",              test_NextMsgOnClosedSub},
     {"CloseSubRelease",                 test_CloseSubRelease},
     {"IsValidSubscriber",               test_IsValidSubscriber},
     {"SlowSubscriber",                  test_SlowSubscriber},

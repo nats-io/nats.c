@@ -186,38 +186,59 @@ static void test_natsBuffer(void)
     char        backend[10];
     natsBuffer  *buf = NULL;
     natsBuffer  stackBuf;
+    int         oldCapacity = 0;
 
     printf("== Buffer without data ==\n");
 
     test("Create buffer owning its data: ");
-    s = natsBuf_Create(&buf, 10);
+    s = natsBuf_Create(&buf, 1);
     testCond((s == NATS_OK)
              && (natsBuf_Len(buf) == 0)
-             && (natsBuf_Capacity(buf) == 10));
+             && (natsBuf_Capacity(buf) == 1));
 
     test("Append less than capacity does not expand buffer: ");
-    IFOK(s, natsBuf_Append(buf, "abcdefghij", 10));
+    IFOK(s, natsBuf_Append(buf, "a", 1));
     testCond((s == NATS_OK)
-            && (natsBuf_Len(buf) == 10)
-            && (natsBuf_Capacity(buf) == 10)
+            && (natsBuf_Len(buf) == 1)
+            && (natsBuf_Capacity(buf) == 1)
             && (natsBuf_Available(buf) == 0));
 
-    test("Appending one more increases capacity: ");
+    test("Appending one more (AppendByte) increases capacity: ");
     if (s == NATS_OK)
     {
-        int oldCapacity = natsBuf_Capacity(buf);
+        oldCapacity = natsBuf_Capacity(buf);
 
-        s = natsBuf_AppendByte(buf, 'k');
-        testCond((s == NATS_OK)
-                 && (natsBuf_Len(buf) == 11)
-                 && (natsBuf_Capacity(buf) > oldCapacity)
-                 && (natsBuf_Available(buf) > 0));
+        s = natsBuf_AppendByte(buf, 'b');
     }
+    testCond((s == NATS_OK)
+             && (natsBuf_Len(buf) == 2)
+             && (natsBuf_Capacity(buf) > oldCapacity)
+             && (natsBuf_Available(buf) > 0));
 
     test("Checking content: ");
     testCond((s == NATS_OK)
              && (natsBuf_Data(buf) != NULL)
-             && (strncmp(natsBuf_Data(buf), "abcdefghijk", 10) == 0));
+             && (strncmp(natsBuf_Data(buf), "ab", 2) == 0));
+
+    natsBuf_Destroy(buf);
+    buf = NULL;
+
+    oldCapacity = 0;
+    test("Appending one more byte increases capacity: ");
+    s = natsBuf_Create(&buf, 1);
+    if (s == NATS_OK)
+        s = natsBuf_Append(buf, "a", 1);
+    if (s == NATS_OK)
+    {
+        oldCapacity = natsBuf_Capacity(buf);
+
+        // Add one more!
+        s = natsBuf_Append(buf, "b", 1);
+    }
+    testCond((s == NATS_OK)
+             && (natsBuf_Len(buf) == 2)
+             && (natsBuf_Capacity(buf) > oldCapacity)
+             && (natsBuf_Available(buf) > 0));
 
     natsBuf_Destroy(buf);
     buf = NULL;
@@ -266,10 +287,11 @@ static void test_natsBuffer(void)
     }
 
     test("Adding more causes expand: ");
+    oldCapacity = natsBuf_Capacity(buf);
     IFOK(s, natsBuf_Append(buf, "fghij", 5));
     testCond((s == NATS_OK)
             && (natsBuf_Len(buf) == 10)
-            && (natsBuf_Capacity(buf) > 10));
+            && (natsBuf_Capacity(buf) > oldCapacity));
 
     test("Check that the backend did not change");
     testCond((s == NATS_OK)
@@ -309,7 +331,7 @@ static void test_natsBuffer(void)
     test("Appending one more increases capacity: ");
     if (s == NATS_OK)
     {
-        int oldCapacity = natsBuf_Capacity(buf);
+        oldCapacity = natsBuf_Capacity(buf);
 
         s = natsBuf_AppendByte(buf, 'k');
         testCond((s == NATS_OK)
@@ -395,6 +417,21 @@ static void test_natsBuffer(void)
              && (natsBuf_Available(buf) == 0));
 
     buf = NULL;
+
+    test("Check maximum size: ");
+    s = natsBuf_Create(&buf, 5);
+    if (s == NATS_OK)
+        s = natsBuf_Append(buf, "abcd", 4);
+    if (s == NATS_OK)
+        s = natsBuf_Append(buf, "fake size that goes over int max size", 0x7FFFFFFC);
+    testCond(s == NATS_NO_MEMORY);
+
+    test("Check maximum size (append byte): ");
+    buf->len = 0x7FFFFFFE;
+    s = natsBuf_Append(buf, "e", 1);
+    testCond(s == NATS_NO_MEMORY);
+
+    natsBuf_Destroy(buf);
 }
 
 static void

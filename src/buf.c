@@ -153,8 +153,26 @@ natsBuf_Append(natsBuffer *buf, const char* data, int dataLen)
     natsStatus  s = NATS_OK;
     int         n = buf->len + dataLen;
 
+    // We could use int64_t and check for 0x7FFFFFFF, but keeping
+    // all int is faster.
+    if (n < 0)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
     if (n > buf->capacity)
-        s = natsBuf_Expand(buf, (n + 1) * 2);
+    {
+        // Increase by 10%
+        int extra = n * 0.1;
+        int newSize;
+
+        // Make sure that we have at least some bytes left after adding.
+        newSize = (n + (extra < 64 ? 64 : extra));
+
+        // Overrun.
+        if (newSize < 0)
+            return nats_setDefaultError(NATS_NO_MEMORY);
+
+        s = natsBuf_Expand(buf, newSize);
+    }
 
     if (s == NATS_OK)
     {
@@ -169,10 +187,24 @@ natsBuf_Append(natsBuffer *buf, const char* data, int dataLen)
 natsStatus
 natsBuf_AppendByte(natsBuffer *buf, char b)
 {
-    natsStatus s = NATS_OK;
+    natsStatus  s = NATS_OK;
+    int         c = buf->capacity;
 
-    if (buf->len == buf->capacity)
-        s = natsBuf_Expand(buf, (int)((double) buf->capacity * 1.5));
+    if (buf->len == c)
+    {
+        // Increase by 10%
+        int extra = c * 0.1;
+        int newSize;
+
+        // Make sure that we have at least some bytes left after adding.
+        newSize = (c + (extra < 64 ? 64 : extra));
+
+        // Overrun.
+        if (newSize < 0)
+            return nats_setDefaultError(NATS_NO_MEMORY);
+
+        s = natsBuf_Expand(buf, newSize);
+    }
 
     if (s == NATS_OK)
     {

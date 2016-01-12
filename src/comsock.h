@@ -36,10 +36,20 @@ natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize);
 // Reads up to 'maxBufferSize' bytes from the socket and put them in 'buffer'.
 // If the socket is blocking, wait until some data is available or the socket
 // is closed or an error occurs.
-// If the socket is non-blocking, wait up to the optional 'deadline'. If NULL,
-// behaves like a blocking socket.
+// If the socket is non-blocking, wait up to the optional deadline (set in
+// the context). If NULL, behaves like a blocking socket.
+// If an external event loop is used, it is possible that this function
+// returns NATS_OK with 'n' == 0.
 natsStatus
 natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n);
+
+// Writes up to 'len' bytes to the socket. If the socket is blocking,
+// wait for some data to be sent. If the socket is non-blocking, wait up
+// to the optional deadline (set in ctx).
+// If an external event loop is used, it is possible that this function
+// returns NATS_OK with 'n' == 0.
+natsStatus
+natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n);
 
 // Writes 'len' bytes to the socket. Does not return until all bytes
 // have been written, unless the socket is closed or an error occurs.

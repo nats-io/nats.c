@@ -16,6 +16,11 @@ set(CMAKE_INSTALL_PREFIX ${NATS_INSTALL_PREFIX} CACHE INTERNAL "")
 
 option(NATS_UPDATE_VERSION "Update the version file" OFF)
 option(NATS_COVERAGE "Code coverage" OFF)
+option(NATS_BUILD_LIBUV_EXAMPLE "Compile libuv example" OFF)
+option(NATS_BUILD_LIBEVENT_EXAMPLE "Compile libevent example" OFF)
+
+set(LIBUV_DIR "/usr/local/" CACHE PATH "Libuv install directory")
+set(LIBEVENT_DIR "/usr/local/" CACHE PATH "Libevent install directory")
 
 # Platform specific settings
 if(UNIX)
@@ -93,9 +98,9 @@ if(NATS_UPDATE_VERSION)
 # Versionning
 
 set(NATS_VERSION_MAJOR  1)
-set(NATS_VERSION_MINOR  2)
-set(NATS_VERSION_PATCH  6)
-set(NATS_VERSION_SUFFIX "")
+set(NATS_VERSION_MINOR  3)
+set(NATS_VERSION_PATCH  1)
+set(NATS_VERSION_SUFFIX "-beta")
 
 set(NATS_VERSION_REQUIRED_NUMBER 0x010100)
 

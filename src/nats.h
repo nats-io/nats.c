@@ -20,6 +20,7 @@
  *  when building the shared library.
  */
 #if defined(_WIN32)
+  #include <winsock2.h>
   #if defined(nats_EXPORTS)
     #define NATS_EXTERN __declspec(dllexport)
   #elif defined(nats_IMPORTS)
@@ -27,8 +28,11 @@
   #else
     #define NATS_EXTERN
   #endif
+
+  typedef SOCKET      natsSock;
 #else
   #define NATS_EXTERN
+  typedef int         natsSock;
 #endif
 
 #ifdef __cplusplus
@@ -56,7 +60,7 @@ extern "C" {
  *
  * - [General Documentation for nats.io](http://nats.io/documentation)
  * - [NATS C Client found on GitHub](https://github.com/nats-io/cnats)
- * - [The `NATS Server` (gnatsd) found on GitHub](https://github.com/nats-io/gnatsd)
+ * - [The NATS Server (gnatsd) found on GitHub](https://github.com/nats-io/gnatsd)
  */
 
 /** \brief The default `NATS Server` URL.
@@ -166,6 +170,61 @@ typedef void (*natsConnectionHandler)(
 typedef void (*natsErrHandler)(
         natsConnection *nc, natsSubscription *subscription, natsStatus err,
         void *closure);
+
+/** \brief Attach this connection to the external event loop.
+ *
+ * After a connection has (re)connected, this callback is invoked. It should
+ * perform the necessary work to start polling the given socket for READ events.
+ *
+ * @param userData location where the adapter implementation will store the
+ * object it created and that will later be passed to all other callbacks. If
+ * `*userData` is not `NULL`, this means that this is a reconnect event.
+ * @param loop the event loop (as a generic void*) this connection is being
+ * attached to.
+ * @param nc the connection being attached to the event loop.
+ * @param socket the socket to poll for read/write events.
+ */
+typedef natsStatus (*natsEvLoop_Attach)(
+        void            **userData,
+        void            *loop,
+        natsConnection  *nc,
+        int             socket);
+
+/** \brief Read event needs to be added or removed.
+ *
+ * The `NATS` library will invoked this callback to indicate if the event
+ * loop should start (`add is `true`) or stop (`add` is `false`) polling
+ * for read events on the socket.
+ *
+ * @param userData the pointer to an user object created in #natsEvLoop_Attach.
+ * @param add `true` if the event library should start polling, `false` otherwise.
+ */
+typedef natsStatus (*natsEvLoop_ReadAddRemove)(
+        void            *userData,
+        bool            add);
+
+/** \brief Write event needs to be added or removed.
+ *
+ * The `NATS` library will invoked this callback to indicate if the event
+ * loop should start (`add is `true`) or stop (`add` is `false`) polling
+ * for write events on the socket.
+ *
+ * @param userData the pointer to an user object created in #natsEvLoop_Attach.
+ * @param add `true` if the event library should start polling, `false` otherwise.
+ */
+typedef natsStatus (*natsEvLoop_WriteAddRemove)(
+        void            *userData,
+        bool            add);
+
+/** \brief Detach from the event loop.
+ *
+ * The `NATS` library will invoked this callback to indicate that the connection
+ * no longer needs to be attached to the event loop. User can cleanup some state.
+ *
+ * @param userData the pointer to an user object created in #natsEvLoop_Attach.
+ */
+typedef natsStatus (*natsEvLoop_Detach)(
+        void            *userData);
 
 /** @} */ // end of callbacksGroup
 
@@ -768,6 +827,31 @@ natsOptions_SetReconnectedCB(natsOptions *opts,
                              natsConnectionHandler reconnectedCb,
                              void *closure);
 
+/** \brief Sets the external event loop and associated callbacks.
+ *
+ * If you want to use an external event loop, the `NATS` library will not
+ * create a thread to read data from the socket, and will not directly write
+ * data to the socket. Instead, the library will invoke those callbacks
+ * for various events.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param loop the `void*` pointer to the external event loop.
+ * @param attachCb the callback invoked after the connection is connected,
+ * or reconnected.
+ * @param readCb the callback invoked when the event library should start or
+ * stop polling for read events.
+ * @param writeCb the callback invoked when the event library should start or
+ * stop polling for write events.
+ * @param detachCb the callback invoked when a connection is closed.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetEventLoop(natsOptions *opts,
+                         void *loop,
+                         natsEvLoop_Attach          attachCb,
+                         natsEvLoop_ReadAddRemove   readCb,
+                         natsEvLoop_WriteAddRemove  writeCb,
+                         natsEvLoop_Detach          detachCb);
+
 /** \brief Destroys a #natsOptions object.
  *
  * Destroys the natsOptions object, freeing used memory. See the note in
@@ -933,6 +1017,24 @@ natsMsg_Destroy(natsMsg *msg);
  */
 NATS_EXTERN natsStatus
 natsConnection_Connect(natsConnection **nc, natsOptions *options);
+
+/** \brief Process a read event when using external event loop.
+ *
+ * When using an external event loop, and the callback indicating that
+ * the socket is ready for reading, this call will read data from the
+ * socket and process it.
+ */
+NATS_EXTERN void
+natsConnection_ProcessReadEvent(natsConnection *nc);
+
+/** \brief Process a write event when using external event loop.
+ *
+ * When using an external event loop, and the callback indicating that
+ * the socket is ready for writing, this call will write data to the
+ * socket.
+ */
+NATS_EXTERN void
+natsConnection_ProcessWriteEvent(natsConnection *nc);
 
 /** \brief Connects to the `NATS Server` running at the given URL.
  *

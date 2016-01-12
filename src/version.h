@@ -11,10 +11,10 @@ extern "C" {
 #endif
 
 #define NATS_VERSION_MAJOR  1
-#define NATS_VERSION_MINOR  2
-#define NATS_VERSION_PATCH  6 
+#define NATS_VERSION_MINOR  3
+#define NATS_VERSION_PATCH  1
 
-#define NATS_VERSION_STRING "1.2.6"
+#define NATS_VERSION_STRING "1.3.1-beta"
 			 				  
 #define NATS_VERSION_NUMBER ((NATS_VERSION_MAJOR << 16) | \
                              (NATS_VERSION_MINOR <<  8) | \

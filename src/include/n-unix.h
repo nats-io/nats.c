@@ -33,7 +33,6 @@ typedef pthread_key_t   natsThreadLocal;
 typedef pthread_mutex_t natsMutex;
 typedef pthread_cond_t  natsCondition;
 typedef pthread_once_t  natsInitOnceType;
-typedef int             natsSock;
 typedef socklen_t       natsSockLen;
 typedef size_t          natsRecvLen;
 

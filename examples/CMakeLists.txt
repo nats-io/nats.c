@@ -2,6 +2,20 @@
 include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${PROJECT_SOURCE_DIR}/examples)
 
+if(NATS_BUILD_LIBUV_EXAMPLE)
+  include_directories(${LIBUV_DIR}/include)
+endif()
+
+if(NATS_BUILD_LIBEVENT_EXAMPLE)
+  include_directories(${LIBEVENT_DIR}/include)
+endif()
+
+if(WIN32)
+  set(LIB_SUFFIX ${CMAKE_STATIC_LIBRARY_SUFFIX})
+else()
+  set(LIB_SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX})
+endif()
+
 # Get all the .c files in the examples directory
 file(GLOB EXAMPLES_SOURCES RELATIVE ${PROJECT_SOURCE_DIR}/examples *.c)
 
@@ -14,11 +28,28 @@ foreach(examples_src ${EXAMPLES_SOURCES})
     string(REPLACE ".c" "" examplename ${examples_src})
     set(exampleexe "nats-${examplename}")
 
-    # Build the executable
-    add_executable(${exampleexe} ${PROJECT_SOURCE_DIR}/examples/${examples_src} )
+    set(buildExample OFF)
 
-    # Link dynamically
-    target_link_libraries(${exampleexe} nats ${NATS_EXTRA_LIB})
+    if(examplename MATCHES "libuv")
+      if(NATS_BUILD_LIBUV_EXAMPLE)
+        set(buildExample ON)
+        set(NATS_ASYNC_IO_LIB ${LIBUV_DIR}/lib/libuv${LIB_SUFFIX})
+      endif()
+    elseif(examplename MATCHES "libevent")
+      if(NATS_BUILD_LIBEVENT_EXAMPLE)
+        set(buildExample ON)
+        set(NATS_ASYNC_IO_LIB ${LIBEVENT_DIR}/lib/libevent${LIB_SUFFIX})
+      endif()
+    else()
+      set(buildExample ON)
+    endif()
+
+    if(buildExample)
+      # Build the executable
+      add_executable(${exampleexe} ${PROJECT_SOURCE_DIR}/examples/${examples_src})
+
+      # Link dynamically
+      target_link_libraries(${exampleexe} nats ${NATS_EXTRA_LIB} ${NATS_ASYNC_IO_LIB})
+    endif()
 
 endforeach()
-

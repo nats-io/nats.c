@@ -712,6 +712,30 @@ natsOptions_SetReconnectedCB(natsOptions *opts,
     return NATS_OK;
 }
 
+natsStatus
+natsOptions_SetEventLoop(natsOptions *opts,
+                         void *loop,
+                         natsEvLoop_Attach          attachCb,
+                         natsEvLoop_ReadAddRemove   readCb,
+                         natsEvLoop_WriteAddRemove  writeCb,
+                         natsEvLoop_Detach          detachCb)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, (loop == NULL)
+                                 || (attachCb == NULL)
+                                 || (readCb == NULL)
+                                 || (writeCb == NULL)
+                                 || (detachCb == NULL));
+
+    opts->evLoop        = loop;
+    opts->evCbs.attach  = attachCb;
+    opts->evCbs.read    = readCb;
+    opts->evCbs.write   = writeCb;
+    opts->evCbs.detach  = detachCb;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
 
 static void
 _freeOptions(natsOptions *opts)

@@ -324,14 +324,27 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
                     return nats_setError(NATS_IO_ERROR, "SSL_read error: %s",
                                          NATS_SSL_ERR_REASON_STRING);
                 }
-
-                if (ctx->fdSet == NULL)
+                else
+                {
+                    // SSL requires that we go back with the same buffer
+                    // and size. We can't return until SSL_read returns
+                    // success (bytes read) or a different error.
                     continue;
+                }
             }
             else if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
             {
                 return nats_setError(NATS_IO_ERROR, "recv error: %d",
                                      NATS_SOCK_GET_ERROR);
+            }
+            else if (ctx->useEventLoop)
+            {
+                // When using an external event loop, we are done. We will be
+                // called again...
+                if (n != NULL)
+                    *n = 0;
+
+                return NATS_OK;
             }
 
             // For non-blocking sockets, if the read would block, we need to
@@ -353,12 +366,13 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
 }
 
 natsStatus
-natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len)
+natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
 {
-    natsStatus  s     = NATS_OK;
-    int         bytes = 0;
+    natsStatus  s         = NATS_OK;
+    int         bytes     = 0;
+    bool        needWrite = true;
 
-    do
+    while (needWrite)
     {
         if (ctx->ssl != NULL)
             bytes = SSL_write(ctx->ssl, data, len);
@@ -380,14 +394,27 @@ natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len)
                     return nats_setError(NATS_IO_ERROR, "SSL_write error: %s",
                                          NATS_SSL_ERR_REASON_STRING);
                 }
-
-                if (ctx->fdSet == NULL)
+                else
+                {
+                    // SSL requires that we go back with the same buffer
+                    // and size. We can't return until SSL_write returns
+                    // success (bytes written) a different error.
                     continue;
+                }
             }
             else if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
             {
                 return nats_setError(NATS_IO_ERROR, "send error: %d",
                                      NATS_SOCK_GET_ERROR);
+            }
+            else if (ctx->useEventLoop)
+            {
+                // With external event loop, we are done now, we will be
+                // called later for more.
+                if (n != NULL)
+                    *n = 0;
+
+                return NATS_OK;
             }
 
             // For non-blocking sockets, if the write would block, we need to
@@ -399,10 +426,40 @@ natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len)
             continue;
         }
 
-        data += bytes;
-        len -= bytes;
+        if (n != NULL)
+            *n = bytes;
+
+        needWrite = false;
     }
-    while (len != 0);
 
     return NATS_OK;
+}
+
+natsStatus
+natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len)
+{
+    natsStatus  s     = NATS_OK;
+    int         bytes = 0;
+    int         n     = 0;
+
+    do
+    {
+        s = natsSock_Write(ctx, data, len, &n);
+        if (s == NATS_OK)
+        {
+            if (n > 0)
+            {
+                data += n;
+                len  -= n;
+            }
+
+            // We use an external event loop and got nothing, or we have
+            // sent the whole buffer. Return.
+            if ((n == 0) || (len == 0))
+                return NATS_OK;
+        }
+    }
+    while (s == NATS_OK);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }

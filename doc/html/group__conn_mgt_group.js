@@ -1,6 +1,8 @@
 var group__conn_mgt_group =
 [
     [ "natsConnection_Connect", "group__conn_mgt_group.html#ga740be1ba16a8570eb98ef6755ebf52ce", null ],
+    [ "natsConnection_ProcessReadEvent", "group__conn_mgt_group.html#gaa89c06e30e19ff361125bfc9114d89a8", null ],
+    [ "natsConnection_ProcessWriteEvent", "group__conn_mgt_group.html#gad81b603b84c0180aefc6d5ebad7f2a47", null ],
     [ "natsConnection_ConnectTo", "group__conn_mgt_group.html#gad1c2d10f1ef4082c3f6522fede27ac64", null ],
     [ "natsConnection_IsClosed", "group__conn_mgt_group.html#ga530f0f1c75c58a81aae1a59f15b46d9f", null ],
     [ "natsConnection_IsReconnecting", "group__conn_mgt_group.html#ga5aa349fc3895dde772671b324b07a688", null ],

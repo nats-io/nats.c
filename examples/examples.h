@@ -12,7 +12,9 @@
 #define strcasecmp  _stricmp
 #define strdup      _strdup
 #else
+#ifndef NATS_LIBUV_INCLUDE
 extern char *strdup(const char *s);
+#endif
 #include <strings.h>
 #endif
 
@@ -98,7 +100,7 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
 static void
 printPerf(const char *txt, int64_t count, int64_t start, int64_t elapsed)
 {
-    if (elapsed == 0)
+    if ((start > 0) && (elapsed == 0))
         elapsed = nats_Now() - start;
 
     if (elapsed <= 0)

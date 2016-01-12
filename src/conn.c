@@ -2451,6 +2451,12 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
 
     natsConn_Lock(nc);
 
+    if (!(nc->el.attached))
+    {
+        natsConn_Unlock(nc);
+        return;
+    }
+
     if (nc->ps == NULL)
     {
         s = natsParser_Create(&(nc->ps));
@@ -2496,6 +2502,12 @@ natsConnection_ProcessWriteEvent(natsConnection *nc)
 
     natsConn_Lock(nc);
 
+    if (!(nc->el.attached) || (nc->sockCtx.fd == NATS_SOCK_INVALID))
+    {
+        natsConn_Unlock(nc);
+        return;
+    }
+
     buf = natsBuf_Data(nc->bw);
     len = natsBuf_Len(nc->bw);
 
@@ -2517,9 +2529,7 @@ natsConnection_ProcessWriteEvent(natsConnection *nc)
         else
         {
             // We sent some part of the buffer. Move the remaining at the beginning.
-            int remaining = nc->bw->len - n;
-            memmove(nc->bw->data, nc->bw->data + n, remaining);
-            natsBuf_RewindTo(nc->bw, remaining);
+            natsBuf_Consume(nc->bw, n);
         }
     }
 

@@ -97,6 +97,11 @@ natsBuf_Append(natsBuffer *buf, const char* data, int dataLen);
 natsStatus
 natsBuf_AppendByte(natsBuffer *buf, char b);
 
+// Consume data from a buffer, overwriting the 'n' first bytes by the remaining
+// of data in this buffer.
+void
+natsBuf_Consume(natsBuffer *buf, int n);
+
 // Reads better when dealing with a buffer that was initialized as opposed to
 // created, but calling natsBuf_Destroy() will do the right thing regardless
 // of how the buffer was created.

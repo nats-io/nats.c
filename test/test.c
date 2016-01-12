@@ -432,6 +432,30 @@ static void test_natsBuffer(void)
     testCond(s == NATS_NO_MEMORY);
 
     natsBuf_Destroy(buf);
+    buf = NULL;
+
+    test("Consume half: ");
+    s = natsBuf_Create(&buf, 10);
+    if (s == NATS_OK)
+        s = natsBuf_Append(buf, "abcdefghij", 10);
+    if (s == NATS_OK)
+        natsBuf_Consume(buf, 5);
+    testCond((s == NATS_OK)
+             && (natsBuf_Len(buf) == 5)
+             && (strncmp(natsBuf_Data(buf), "fghij", 5) == 0)
+             && (natsBuf_Available(buf) == 5)
+             && (*(buf->pos) == 'f'));
+
+    test("Consume rest: ");
+    if (s == NATS_OK)
+        natsBuf_Consume(buf, 5);
+    testCond((s == NATS_OK)
+             && (natsBuf_Len(buf) == 0)
+             && (natsBuf_Available(buf) == 10)
+             && (*(buf->pos) == 'f'));
+
+    natsBuf_Destroy(buf);
+    buf = NULL;
 }
 
 static void

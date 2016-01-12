@@ -482,6 +482,61 @@ reconnectedCb(natsConnection *nc, void *closure)
 }
 ```
 
+## Using an Event Loop Library
+
+For each connection, the `NATS` library creates a thread reading data from the socket. Publishing data results in the data being appended to a buffer, which is 'flushed' from a timer callback or in place when the buffer reaches a certain size. Flushing means that we write to the socket (and the socket is in blocking-mode).
+
+If you have multiple connections running in your process, the number of threads will increase (because each connection uses a thread for receiving data from the socket). If this becomes an issue, or if you are already using an event notification library, you can instruct the `NATS` library to use that event library instead of using a thread to do the reads, and directly writting to the socket when data is published.
+
+This works by setting the event loop and various callbacks through the `natsOptions_SetEventLoop()` API. Depending of the event loop you are using, you then have extra API calls to make. The API is in the `adapters` directory and is documented.
+
+We provide adapters for two event notification libraries: [libevent](https://github.com/libevent/libevent), and [libuv](https://github.com/libuv/libuv).
+
+```c
+// Create an event loop object
+uv_loop_t *uvLoop = uv_default_loop();
+
+// Set it into an options object
+natsOptions_SetEventLoop(opts,
+                         (void*) uvLoop,
+                         natsLibuv_Attach,
+                         natsLibuv_Read,
+                         natsLibuv_Write,
+                         natsLibuv_Detach);
+
+// Connect (as usual)
+natsConnection_Connect(&conn, opts);
+
+// Subscribe (as usual)
+natsConnection_Subscribe(&sub, conn, subj, onMsg, NULL);
+
+// Run the event loop
+uv_run(uvLoop, UV_RUN_DEFAULT);
+```
+
+The callback `onMsg` that you have registered will be triggered as usual when data becomes available.
+
+Where it becomes tricky is when publishing data. Indeed, publishing is merely putting data in a buffer, and it is the event library that will notify a callback that write to the socket should be performed. For that, the event loop needs to be 'running'.
+
+So if you publish from the thread where the event loop is running, you need to 'run' the loop after each (or a number) of publish calls in order for data to actually be sent out. Alternatively, you can publish from a different thread than the thread running the event loop.
+
+The above is important to keep in mind regarding calls that are doing request-reply. They should not be made from the thread running the event loop. Here is an example of such calls:
+
+```
+natsConnection_Request()
+natsConnection_Flush()
+natsConnection_FlushTimeout()
+...
+```
+
+Indeed, since these calls publish data and wait for a 'response', if you execute then in the event loop thread (or while the loop is not 'running'), then data will not be sent out. Calls will fail to get a response and timeout.
+
+For `natsConnection_Request()`, use the `natsConnection_PublishRequest()` instead, and have a subscriber for the response registered.
+
+For others, asynchronous version of these calls should be made available.
+
+See examples in the `examples` directory for complete usage.
+
 
 ## License
 

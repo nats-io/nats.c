@@ -161,7 +161,7 @@ natsBuf_Append(natsBuffer *buf, const char* data, int dataLen)
     if (n > buf->capacity)
     {
         // Increase by 10%
-        int extra = n * 0.1;
+        int extra = (int) (n * 0.1);
         int newSize;
 
         // Make sure that we have at least some bytes left after adding.
@@ -193,7 +193,7 @@ natsBuf_AppendByte(natsBuffer *buf, char b)
     if (buf->len == c)
     {
         // Increase by 10%
-        int extra = c * 0.1;
+        int extra = (int) (c * 0.1);
         int newSize;
 
         // Make sure that we have at least some bytes left after adding.

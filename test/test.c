@@ -7063,6 +7063,34 @@ test_GetLastError(void)
     }
 
     natsOptions_Destroy(opts);
+
+    nats_clearLastError();
+    stackBuf[0] = '\0';
+
+    test("Check stack not updated when asked: ");
+    nats_doNotUpdateErrStack(true);
+    s = natsConnection_Publish(NULL, NULL, NULL, 0);
+    nats_GetLastErrorStack(stackBuf, sizeof(stackBuf));
+    testCond((s != NATS_OK)
+             && (stackBuf[0] == '\0'));
+
+    test("Check call reentrant: ");
+    nats_doNotUpdateErrStack(true);
+    nats_doNotUpdateErrStack(false);
+    s = natsConnection_Publish(NULL, NULL, NULL, 0);
+    nats_GetLastErrorStack(stackBuf, sizeof(stackBuf));
+    testCond((s != NATS_OK)
+             && (stackBuf[0] == '\0'));
+
+    nats_doNotUpdateErrStack(false);
+
+    test("Check stack updates again: ");
+    s = natsConnection_Publish(NULL, NULL, NULL, 0);
+    nats_GetLastErrorStack(stackBuf, sizeof(stackBuf));
+    testCond((s != NATS_OK)
+             && (stackBuf[0] != '\0'));
+
+    nats_clearLastError();
 }
 
 static void

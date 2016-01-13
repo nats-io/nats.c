@@ -1909,8 +1909,11 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
         // with the buffer write (except if it is no memory).
         // For IO errors (if we just got disconnected), the
         // reconnect logic will resend the unsub protocol.
-        if (s != NATS_NO_MEMORY)
+        if ((s != NATS_OK) && (s != NATS_NO_MEMORY))
+        {
+            nats_clearLastError();
             s = NATS_OK;
+        }
     }
 
     natsConn_Unlock(nc);
@@ -2327,7 +2330,11 @@ natsConnection_Close(natsConnection *nc)
     if (nc == NULL)
         return;
 
+    nats_doNotUpdateErrStack(true);
+
     _close(nc, CLOSED, true);
+
+    nats_doNotUpdateErrStack(false);
 }
 
 void
@@ -2336,7 +2343,12 @@ natsConnection_Destroy(natsConnection *nc)
     if (nc == NULL)
         return;
 
+    nats_doNotUpdateErrStack(true);
+
     _close(nc, CLOSED, true);
+
+    nats_doNotUpdateErrStack(false);
+
     natsConn_release(nc);
 }
 

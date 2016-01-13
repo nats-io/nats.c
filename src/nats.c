@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <assert.h>
 
 #include "mem.h"
 #include "timer.h"
@@ -25,6 +26,7 @@ typedef struct natsTLError
     char        text[256];
     const char  *func[MAX_FRAMES];
     int         framesCount;
+    int         skipUpdate;
 
 } natsTLError;
 
@@ -1099,7 +1101,7 @@ nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStat
     va_list     ap;
     int         n;
 
-    if (errTL == NULL)
+    if ((errTL == NULL) || errTL->skipUpdate)
         return errSts;
 
     errTL->sts = errSts;
@@ -1125,7 +1127,7 @@ nats_updateErrStack(natsStatus err, const char *func)
 {
     natsTLError *errTL = _getTLError();
 
-    if (errTL == NULL)
+    if ((errTL == NULL) || errTL->skipUpdate)
         return err;
 
     _updateStack(errTL, func, err, false);
@@ -1138,12 +1140,31 @@ nats_clearLastError(void)
 {
     natsTLError *errTL  = _getTLError();
 
-    if (errTL == NULL)
+    if ((errTL == NULL) || errTL->skipUpdate)
         return;
 
     errTL->sts         = NATS_OK;
     errTL->text[0]     = '\0';
     errTL->framesCount = -1;
+}
+
+void
+nats_doNotUpdateErrStack(bool skipStackUpdate)
+{
+    natsTLError *errTL  = _getTLError();
+
+    if (errTL == NULL)
+        return;
+
+    if (skipStackUpdate)
+    {
+        errTL->skipUpdate++;
+    }
+    else
+    {
+        errTL->skipUpdate--;
+        assert(errTL->skipUpdate >= 0);
+    }
 }
 
 const char*

@@ -256,9 +256,13 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
     if (s == NATS_OK)
         s = natsSubscription_NextMsg(replyMsg, sub, timeout);
 
+    nats_doNotUpdateErrStack(true);
+
     natsInbox_Destroy(inbox);
     natsSubscription_Unsubscribe(sub);
     natsSubscription_Destroy(sub);
+
+    nats_doNotUpdateErrStack(false);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

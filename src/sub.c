@@ -467,6 +467,8 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
                 target = nats_Now() + timeout;
 
             s = natsCondition_AbsoluteTimedWait(sub->cond, sub->mu, target);
+            if (s != NATS_OK)
+                s = nats_setDefaultError(s);
         }
 
         sub->inWait = false;
@@ -477,6 +479,8 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
     else
     {
         s = (sub->msgList.count == 0 ? NATS_TIMEOUT : NATS_OK);
+        if (s != NATS_OK)
+            s = nats_setDefaultError(s);
     }
 
     if (s == NATS_OK)
@@ -525,11 +529,15 @@ _unsubscribe(natsSubscription *sub, int max)
 
     natsSub_Lock(sub);
 
-    if (sub->closed)
+    if (sub->connClosed)
+        s = NATS_CONNECTION_CLOSED;
+    else if (sub->closed)
+        s = NATS_INVALID_SUBSCRIPTION;
+
+    if (s != NATS_OK)
     {
         natsSub_Unlock(sub);
-
-        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+        return nats_setDefaultError(s);
     }
 
     nc = sub->conn;
@@ -566,7 +574,6 @@ natsStatus
 natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max)
 {
     natsStatus s = _unsubscribe(sub, max);
-
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -627,7 +634,11 @@ natsSubscription_Destroy(natsSubscription *sub)
     if (sub == NULL)
         return;
 
+    nats_doNotUpdateErrStack(true);
+
     (void) natsSubscription_Unsubscribe(sub);
+
+    nats_doNotUpdateErrStack(false);
 
     natsSub_release(sub);
 }

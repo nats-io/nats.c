@@ -24,4 +24,7 @@ nats_updateErrStack(natsStatus err, const char *func);
 void
 nats_clearLastError(void);
 
+void
+nats_doNotUpdateErrStack(bool skipStackUpdate);
+
 #endif /* ERR_H_ */

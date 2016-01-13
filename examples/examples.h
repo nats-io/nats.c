@@ -268,7 +268,7 @@ parseArgs(int argc, char **argv, const char *usage)
 
             total = atol(argv[++i]);
         }
-        else if (strcasecmp(argv[i], "-text") == 0)
+        else if (strcasecmp(argv[i], "-txt") == 0)
         {
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);

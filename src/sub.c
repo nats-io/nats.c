@@ -631,14 +631,19 @@ natsSubscription_IsValid(natsSubscription *sub)
 void
 natsSubscription_Destroy(natsSubscription *sub)
 {
+    bool doUnsub = false;
+
     if (sub == NULL)
         return;
 
-    nats_doNotUpdateErrStack(true);
+    natsSub_Lock(sub);
 
-    (void) natsSubscription_Unsubscribe(sub);
+    doUnsub = !(sub->closed);
 
-    nats_doNotUpdateErrStack(false);
+    natsSub_Unlock(sub);
+
+    if (doUnsub)
+        (void) natsSubscription_Unsubscribe(sub);
 
     natsSub_release(sub);
 }

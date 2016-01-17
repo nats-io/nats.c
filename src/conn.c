@@ -1666,8 +1666,8 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         if ((sub->noDelay)
             || (sub->msgList.count >= sub->signalLimit))
         {
-            if (sub->inWait)
-                natsCondition_Signal(sub->cond);
+            if (sub->inWait > 0)
+                natsCondition_Broadcast(sub->cond);
         }
         else if (sub->signalTimerInterval != 1)
         {

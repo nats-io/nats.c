@@ -106,12 +106,12 @@ natsSub_deliverMsgs(void *arg)
     {
         natsSub_Lock(sub);
 
-        sub->inWait = true;
+        sub->inWait++;
 
         while ((sub->msgList.count == 0) && !(sub->closed))
             natsCondition_Wait(sub->cond, sub->mu);
 
-        sub->inWait = false;
+        sub->inWait--;
 
         if (sub->closed)
         {
@@ -197,10 +197,10 @@ _signalMsgAvailable(natsTimer *timer, void *closure)
         sub->signalTimerInterval = 10000;
         natsTimer_Reset(sub->signalTimer, sub->signalTimerInterval);
     }
-    else if (sub->inWait)
+    else if (sub->inWait > 0)
     {
-        // Signal the delivery thread.
-        natsCondition_Signal(sub->cond);
+        // Signal the waiters
+        natsCondition_Broadcast(sub->cond);
     }
 
     natsSub_Unlock(sub);
@@ -224,7 +224,7 @@ natsSub_close(natsSubscription *sub, bool connectionClosed)
 
     sub->closed = true;
     sub->connClosed = connectionClosed;
-    natsCondition_Signal(sub->cond);
+    natsCondition_Broadcast(sub->cond);
 
     natsSub_Unlock(sub);
 }
@@ -457,7 +457,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
 
     if (timeout > 0)
     {
-        sub->inWait = true;
+        sub->inWait++;
 
         while ((sub->msgList.count == 0)
                && (s != NATS_TIMEOUT)
@@ -471,7 +471,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
                 s = nats_setDefaultError(s);
         }
 
-        sub->inWait = false;
+        sub->inWait--;
 
         if (sub->closed)
             s = nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);

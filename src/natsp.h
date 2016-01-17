@@ -199,9 +199,9 @@ struct __natsSubscription
     // count reaches a certain threshold.
     int                         signalLimit;
 
-    // This is 'true' when the delivery thread (or NextMsg) goes into a
+    // This is > 0 when the delivery thread (or NextMsg) goes into a
     // condition wait.
-    bool                        inWait;
+    int                         inWait;
 
     // The subscriber is closed (or closing).
     bool                        closed;

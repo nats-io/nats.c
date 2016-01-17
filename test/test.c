@@ -5608,15 +5608,25 @@ test_NextMsgOnClosedSub(void)
 }
 
 static void
+_nextMsgKickedOut(void *closure)
+{
+    natsSubscription    *sub = (natsSubscription*) closure;
+    natsMsg             *msg = NULL;
+
+    (void) natsSubscription_NextMsg(&msg, sub, 10000);
+}
+
+static void
 test_CloseSubRelease(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsSubscription    *sub      = NULL;
-    natsMsg             *msg      = NULL;
     natsThread          *t        = NULL;
+    natsThread          *subs[3];
     natsPid             serverPid = NATS_INVALID_PID;
     int64_t             start, end;
+    int                 i;
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     CHECK_SERVER_STARTED(serverPid);
@@ -5625,12 +5635,22 @@ test_CloseSubRelease(void)
     if (s == NATS_OK)
         s = natsConnection_SubscribeSync(&sub, nc, "foo");
 
+    for (i=0; i<3; i++)
+        s = natsThread_Create(&(subs[i]), _nextMsgKickedOut, (void*) sub);
+
     start = nats_Now();
 
     if (s == NATS_OK)
         s = natsThread_Create(&t, _closeConnWithDelay, (void*) nc);
-    if (s == NATS_OK)
-        s = natsSubscription_NextMsg(&msg, sub, 10000);
+
+    for (i=0; i<3; i++)
+    {
+        if (subs[i] != NULL)
+        {
+            natsThread_Join(subs[i]);
+            natsThread_Destroy(subs[i]);
+        }
+    }
 
     end = nats_Now();
 

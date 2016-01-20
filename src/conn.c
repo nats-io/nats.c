@@ -1494,6 +1494,7 @@ static void
 _close(natsConnection *nc, natsConnStatus status, bool doCBs)
 {
     struct threadsToJoin    ttj;
+    bool                    sockWasActive = false;
 
     natsConn_lockAndRetain(nc);
 
@@ -1543,10 +1544,13 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
             natsSock_Shutdown(nc->sockCtx.fd);
         }
         nc->sockCtx.fdActive = false;
+        sockWasActive = true;
     }
 
     // Perform appropriate callback if needed for a disconnect.
-    if (doCBs && (nc->opts->disconnectedCb != NULL))
+    // Do not invoke if we were disconnected and failed to reconnect (since
+    // it has already been invoked in doReconnect).
+    if (doCBs && (nc->opts->disconnectedCb != NULL) && sockWasActive)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
     natsConn_Unlock(nc);

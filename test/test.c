@@ -6793,6 +6793,9 @@ test_ProperFalloutAfterMaxAttempts(void)
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.closed);
 
+    test("Disconnected should have been called only once: ");
+    testCond((s == NATS_OK) && arg.disconnects == 1);
+
     test("Connection should be closed: ")
     testCond((s == NATS_OK)
              && natsConnection_IsClosed(nc));

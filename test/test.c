@@ -4314,6 +4314,31 @@ test_AuthFailNoDisconnectCB(void)
 }
 
 static void
+test_AuthToken(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    serverPid = _startServer("nats://localhost:8232", "-auth testSecret -p 8232", false);
+    CHECK_SERVER_STARTED(serverPid);
+
+    nats_Sleep(1000);
+
+    test("Server with token authorization, client without should fail: ");
+    s = natsConnection_ConnectTo(&nc, "nats://localhost:8232");
+    testCond(s != NATS_OK);
+
+    test("Server with token authorization, client with proper auth should succeed: ");
+    s = natsConnection_ConnectTo(&nc, "nats://testSecret@localhost:8232");
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_ConnectedServer(void)
 {
     natsStatus          s;
@@ -7649,6 +7674,7 @@ static testInfo allTests[] =
 
     {"Auth",                            test_Auth},
     {"AuthFailNoDisconnectCB",          test_AuthFailNoDisconnectCB},
+    {"AuthToken",                       test_AuthToken},
     {"ConnectedServer",                 test_ConnectedServer},
     {"MultipleClose",                   test_MultipleClose},
     {"SimplePublish",                   test_SimplePublish},

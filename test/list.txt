@@ -43,6 +43,7 @@ ErrOnConnectAndDeadlock
 ErrOnMaxPayloadLimit
 Auth
 AuthFailNoDisconnectCB
+AuthToken
 ConnectedServer
 MultipleClose
 SimplePublish

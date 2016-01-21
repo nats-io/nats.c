@@ -164,7 +164,10 @@ natsMsg				*msg = NULL;
 natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
 
 // Connects to a server with username and password
-natsConnection_ConnectTo(&nc, "ivan:secret@localhost:4222");
+natsConnection_ConnectTo(&nc, "nats://ivan:secret@localhost:4222");
+
+// Connects to a server with token authentication
+natsConnection_ConnectTo(&nc, "nats://myTopSecretAuthenticationToken@localhost:4222");
 
 // Simple publisher, sending the given string to subject "foo"
 natsConnection_PublishString(nc, "foo", "hello world");

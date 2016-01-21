@@ -662,6 +662,7 @@ static natsStatus
 _connectProto(natsConnection *nc, char **proto)
 {
     natsOptions *opts = nc->opts;
+    const char  *token= NULL;
     const char  *user = NULL;
     const char  *pwd  = NULL;
     const char  *name = NULL;
@@ -671,11 +672,16 @@ _connectProto(natsConnection *nc, char **proto)
         user = nc->url->username;
     if (nc->url->password != NULL)
         pwd = nc->url->password;
+    if ((user != NULL) && (pwd == NULL))
+    {
+        token = user;
+        user  = NULL;
+    }
     if (opts->name != NULL)
         name = opts->name;
 
     res = nats_asprintf(proto,
-                        "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s\"tls_required\":%s," \
+                        "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s%s%s%s\"tls_required\":%s," \
                         "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\"}%s",
                         nats_GetBoolStr(opts->verbose),
                         nats_GetBoolStr(opts->pedantic),
@@ -685,6 +691,9 @@ _connectProto(natsConnection *nc, char **proto)
                         (pwd != NULL ? "\"pass\":\"" : ""),
                         (pwd != NULL ? pwd : ""),
                         (pwd != NULL ? "\"," : ""),
+                        (token != NULL ? "\"auth_token\":\"" :""),
+                        (token != NULL ? token : ""),
+                        (token != NULL ? "\"," : ""),
                         nats_GetBoolStr(opts->secure),
                         (name != NULL ? name : ""),
                         CString, NATS_VERSION_STRING, _CRLF_);

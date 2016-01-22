@@ -284,6 +284,11 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
                             nc->ps->drop        = 0;
                             nc->ps->afterSpace  = i+1;
                             nc->ps->state       = MSG_PAYLOAD;
+
+                            // jump ahead with the index. If this overruns
+                            // what is left we fall out and process split
+                            // buffer.
+                            i = nc->ps->afterSpace + nc->ps->ma.size - 1;
                         }
                         break;
                     }
@@ -311,7 +316,23 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
                     }
                     else
                     {
-                        s = natsBuf_AppendByte(nc->ps->msgBuf, b);
+                        // copy as much as we can to the buffer and skip ahead.
+                        int toCopy = nc->ps->ma.size - natsBuf_Len(nc->ps->msgBuf);
+                        int avail  = bufLen - i;
+
+                        if (avail < toCopy)
+                            toCopy = avail;
+
+                        if (toCopy > 0)
+                        {
+                            s = natsBuf_Append(nc->ps->msgBuf, buf+i, toCopy);
+                            if (s == NATS_OK)
+                                i += toCopy - 1;
+                        }
+                        else
+                        {
+                            s = natsBuf_AppendByte(nc->ps->msgBuf, b);
+                        }
                     }
                 }
                 else if (i-nc->ps->afterSpace >= nc->ps->ma.size)

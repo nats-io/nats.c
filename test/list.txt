@@ -22,6 +22,11 @@ ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize
 SelectNextServer
+ParserPing
+ParserErr
+ParserOK
+ParserSouldFail
+ParserSplitMsg
 DefaultConnection
 UseDefaultURLIfNoServerSpecified
 ConnectionWithNULLOptions

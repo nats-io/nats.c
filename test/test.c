@@ -26,7 +26,7 @@ static bool valgrind            = false;
 
 static const char *natsServerExe = "gnatsd";
 
-#define test(s)         { printf("#%02d ", ++tests); printf((s)); fflush(stdout); }
+#define test(s)         { printf("#%02d ", ++tests); printf("%s", (s)); fflush(stdout); }
 #ifdef _WIN32
 #define NATS_INVALID_PID  (NULL)
 #define testCond(c)     if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); fflush(stdout); fails++; }
@@ -2957,6 +2957,576 @@ test_SelectNextServer(void)
 
     natsConn_release(nc);
     natsOptions_Destroy(opts);
+}
+
+static void
+parserNegTest(int lineNum)
+{
+    char txt[64];
+
+    snprintf(txt, sizeof(txt), "Test line %d: ", lineNum);
+    test(txt);
+}
+
+#define PARSER_START_TEST parserNegTest(__LINE__)
+
+static void
+test_ParserPing(void)
+{
+    natsConnection  *nc = NULL;
+    natsOptions     *opts = NULL;
+    natsStatus      s;
+    char            ping[64];
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsConn_create(&nc, opts);
+    if (s == NATS_OK)
+        s = natsParser_Create(&(nc->ps));
+    if (s == NATS_OK)
+        s = natsBuf_Create(&(nc->pending), 1000);
+    if (s == NATS_OK)
+        nc->usePending = true;
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+
+    PARSER_START_TEST;
+    testCond(nc->ps->state == OP_START);
+
+    snprintf(ping, sizeof(ping), "PING\r\n");
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, ping, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_P));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, ping + 1, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_PI));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, ping + 2, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_PIN));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, ping + 3, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_PING));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, ping + 4, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_PING));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, ping + 5, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, ping, (int)strlen(ping));
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+    // Should tolerate spaces
+    snprintf(ping, sizeof(ping), "%s", "PING  \r");
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, ping, (int)strlen(ping));
+    testCond((s == NATS_OK) && (nc->ps->state == OP_PING));
+
+    nc->ps->state = OP_START;
+    snprintf(ping, sizeof(ping), "%s", "PING  \r  \n");
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, ping, (int)strlen(ping));
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+    natsConnection_Destroy(nc);
+}
+
+static void
+test_ParserErr(void)
+{
+    natsConnection  *nc = NULL;
+    natsOptions     *opts = NULL;
+    natsStatus      s;
+    char            errProto[256];
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsConn_create(&nc, opts);
+    if (s == NATS_OK)
+        s = natsParser_Create(&(nc->ps));
+    if (s == NATS_OK)
+        s = natsBuf_Create(&(nc->pending), 1000);
+    if (s == NATS_OK)
+    {
+        nc->usePending = true;
+        nc->status = CLOSED;
+    }
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    PARSER_START_TEST;
+    testCond(nc->ps->state == OP_START);
+
+    snprintf(errProto, sizeof(errProto), "-ERR  %s\r\n", STALE_CONNECTION);
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, errProto, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_MINUS));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, errProto + 1, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_MINUS_E));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, errProto + 2, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_MINUS_ER));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, errProto + 3, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_MINUS_ERR));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, errProto + 4, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_MINUS_ERR_SPC));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, errProto + 5, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_MINUS_ERR_SPC));
+
+    // Check with split arg buffer
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, errProto + 6, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == MINUS_ERR_ARG));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, errProto + 7, 3);
+    testCond((s == NATS_OK) && (nc->ps->state == MINUS_ERR_ARG));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, errProto + 10, (int)strlen(errProto) - 10);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+    // Check without split arg buffer
+    snprintf(errProto, sizeof(errProto), "-ERR %s\r\n", STALE_CONNECTION);
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, errProto, (int)strlen(errProto));
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+    natsConnection_Destroy(nc);
+}
+
+static void
+test_ParserOK(void)
+{
+    natsConnection  *nc = NULL;
+    natsOptions     *opts = NULL;
+    natsStatus      s;
+    char            okProto[256];
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsConn_create(&nc, opts);
+    if (s == NATS_OK)
+        s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    PARSER_START_TEST;
+    testCond(nc->ps->state == OP_START);
+
+    snprintf(okProto, sizeof(okProto), "+OKay\r\n");
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, okProto, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_PLUS));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, okProto + 1, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_PLUS_O));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, okProto + 2, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_PLUS_OK));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, okProto + 3, (int)strlen(okProto) - 3);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+    natsConnection_Destroy(nc);
+}
+
+static void
+test_ParserShouldFail(void)
+{
+    natsConnection  *nc = NULL;
+    natsOptions     *opts = NULL;
+    natsStatus      s;
+    char            buf[64];
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsConn_create(&nc, opts);
+    if (s == NATS_OK)
+        s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    // Negative tests:
+
+    PARSER_START_TEST;
+    snprintf(buf, sizeof(buf), "%s", " PING");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "POO");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "Px");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "PIx");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "PINx");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+
+        // Stop here because 'PING' protos are tolerant for anything between PING and \n
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "POx");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "PONx");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+
+        // Stop here because 'PONG' protos are tolerant for anything between PONG and \n
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "ZOO");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "Mx\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "MSx\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "MSGx\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "MSG  foo\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "MSG \r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "MSG foo 1\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "MSG foo bar 1\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "MSG foo bar 1 baz\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "MSG foo 1 bar baz\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "+x\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "+Ox\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "-x\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "-Ex\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "-ERx\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+    if (s != NATS_OK)
+    {
+        PARSER_START_TEST;
+        nc->ps->state = OP_START;
+        snprintf(buf, sizeof(buf), "%s", "-ERRx\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        testCond(s != NATS_OK);
+    }
+
+    natsConnection_Destroy(nc);
+}
+
+static void
+test_ParserSplitMsg(void)
+{
+    natsConnection  *nc = NULL;
+    natsOptions     *opts = NULL;
+    natsStatus      s;
+    char            buf[2048];
+    uint64_t        expectedCount;
+    uint64_t        expectedSize;
+    int             msgSize, start, i;
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsConn_create(&nc, opts);
+    if (s == NATS_OK)
+        s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    expectedCount = 1;
+    expectedSize = 3;
+
+    snprintf(buf, sizeof(buf), "%s", "MSG a 1 3\r\nfoo\r\n");
+
+    // parsing: 'MSG a'
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf, 5);
+    testCond((s == NATS_OK) && (nc->ps->argBuf != NULL));
+
+    // parsing: ' 1 3\r\nf'
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf + 5, 7);
+    testCond((s == NATS_OK)
+             && (nc->ps->ma.size == 3)
+             && (nc->ps->ma.sid == 1)
+             && (nc->ps->ma.subject->len == 1)
+             && (strncmp(nc->ps->ma.subject->data, "a", 1) == 0)
+             && (nc->ps->msgBuf != NULL));
+
+    // parsing: 'oo\r\n'
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf + 12, (int)strlen(buf) - 12);
+    testCond((s == NATS_OK)
+             && (nc->stats.inMsgs == expectedCount)
+             && (nc->stats.inBytes == expectedSize)
+             && (nc->ps->argBuf == NULL)
+             && (nc->ps->msgBuf == NULL)
+             && (nc->ps->state == OP_START));
+
+    // parsing: 'MSG a 1 3\r\nfo'
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf, 13);
+    testCond((s == NATS_OK)
+             && (nc->ps->ma.size == 3)
+             && (nc->ps->ma.sid == 1)
+             && (nc->ps->ma.subject->len == 1)
+             && (strncmp(nc->ps->ma.subject->data, "a", 1) == 0)
+             && (nc->ps->argBuf != NULL)
+             && (nc->ps->msgBuf != NULL));
+
+    expectedCount++;
+    expectedSize += 3;
+
+    // parsing: 'o\r\n'
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf + 13, (int)strlen(buf) - 13);
+    testCond((s == NATS_OK)
+             && (nc->stats.inMsgs == expectedCount)
+             && (nc->stats.inBytes == expectedSize)
+             && (nc->ps->argBuf == NULL)
+             && (nc->ps->msgBuf == NULL)
+             && (nc->ps->state == OP_START));
+
+    snprintf(buf, sizeof(buf), "%s", "MSG a 1 6\r\nfoobar\r\n");
+
+    // parsing: 'MSG a 1 6\r\nfo'
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf, 13);
+    testCond((s == NATS_OK)
+             && (nc->ps->ma.size == 6)
+             && (nc->ps->ma.sid == 1)
+             && (nc->ps->ma.subject->len == 1)
+             && (strncmp(nc->ps->ma.subject->data, "a", 1) == 0)
+             && (nc->ps->argBuf != NULL)
+             && (nc->ps->msgBuf != NULL));
+
+    // parsing: 'ob'
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf + 13, 2);
+    testCond(s == NATS_OK)
+
+    expectedCount++;
+    expectedSize += 6;
+
+    // parsing: 'ar\r\n'
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf + 15, (int)strlen(buf) - 15);
+    testCond((s == NATS_OK)
+             && (nc->stats.inMsgs == expectedCount)
+             && (nc->stats.inBytes == expectedSize)
+             && (nc->ps->argBuf == NULL)
+             && (nc->ps->msgBuf == NULL)
+             && (nc->ps->state == OP_START));
+
+    // Let's have a msg that is bigger than the parser's scratch size.
+    // Since we prepopulate the msg with 'foo', adding 3 to the size.
+    msgSize = sizeof(nc->ps->scratch) + 100 + 3;
+
+    snprintf(buf, sizeof(buf), "MSG a 1 b %d\r\nfoo", msgSize);
+    start = (int)strlen(buf);
+    for (i=0; i<msgSize - 3; i++)
+        buf[start + i] = 'a' + (i % 26);
+    buf[start + i++] = '\r';
+    buf[start + i++] = '\n';
+    buf[start + i++] = '\0';
+
+    // parsing: 'MSG a 1 b <size>\r\nfoo'
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf, start);
+    testCond((s == NATS_OK)
+             && (nc->ps->ma.size == msgSize)
+             && (nc->ps->ma.sid == 1)
+             && (nc->ps->ma.subject->len == 1)
+             && (strncmp(nc->ps->ma.subject->data, "a", 1) == 0)
+             && (nc->ps->ma.reply->len == 1)
+             && (strncmp(nc->ps->ma.reply->data, "b", 1) == 0)
+             && (nc->ps->argBuf != NULL)
+             && (nc->ps->msgBuf != NULL));
+
+    expectedCount++;
+    expectedSize += (uint64_t)msgSize;
+
+    // parsing: 'abcde...'
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf + start, (int)strlen(buf) - start - 2);
+    testCond((s == NATS_OK)
+             && (nc->ps->argBuf != NULL)
+             && (nc->ps->msgBuf != NULL)
+             && (nc->ps->state == MSG_PAYLOAD));
+
+    // Verify content
+    if (s == NATS_OK)
+    {
+        PARSER_START_TEST;
+        s = ((strncmp(nc->ps->msgBuf->data, "foo", 3) == 0) ? NATS_OK : NATS_ERR);
+        if (s == NATS_OK)
+        {
+            int k;
+
+            for (k=3; (s == NATS_OK) && (k<nc->ps->ma.size); k++)
+                s = (nc->ps->msgBuf->data[k] == (char)('a' + ((k-3) % 26)) ? NATS_OK : NATS_ERR);
+        }
+        testCond(s == NATS_OK)
+        if (s != NATS_OK)
+            printf("Wrong content: %.*s\n", nc->ps->msgBuf->len, nc->ps->msgBuf->data);
+    }
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf + (int)strlen(buf) - 2, 2);
+    testCond((s == NATS_OK)
+             && (nc->stats.inMsgs == expectedCount)
+             && (nc->stats.inBytes == expectedSize)
+             && (nc->ps->argBuf == NULL)
+             && (nc->ps->msgBuf == NULL)
+             && (nc->ps->state == OP_START));
+
+    natsConnection_Destroy(nc);
 }
 
 static void
@@ -7648,6 +8218,11 @@ static testInfo allTests[] =
     {"ParseStateReconnectFunctionality",test_ParseStateReconnectFunctionality},
     {"ServersRandomize",                test_ServersRandomize},
     {"SelectNextServer",                test_SelectNextServer},
+    {"ParserPing",                      test_ParserPing},
+    {"ParserErr",                       test_ParserErr},
+    {"ParserOK",                        test_ParserOK},
+    {"ParserSouldFail",                 test_ParserShouldFail},
+    {"ParserSplitMsg",                  test_ParserSplitMsg},
 
     // Public API Tests
 

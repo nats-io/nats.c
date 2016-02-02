@@ -153,11 +153,6 @@ struct __natsSubscription
 
     int                         refs;
 
-    // These two are updated by the connection in natsConn_processMsg.
-    // 'msgs' is used to determine if we have reached the max (if > 0).
-    uint64_t                    msgs;
-    uint64_t                    bytes;
-
     // This is non-zero when auto-unsubscribe is used.
     uint64_t                    max;
 

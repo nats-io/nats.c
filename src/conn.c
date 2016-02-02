@@ -338,7 +338,6 @@ _createConn(natsConnection *nc)
     {
         // reset the deadline
         natsDeadline_Clear(&(nc->sockCtx.deadline));
-        nc->err = s;
     }
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -857,22 +856,14 @@ _doReconnect(void *arg)
     // Kick out all calls to natsConnection_Flush[Timeout]().
     _clearPendingFlushRequests(nc);
 
-    // Create the pending buffer to hold all write requests while we try
-    // to reconnect.
-    s = natsBuf_Create(&(nc->pending), DEFAULT_PENDING_SIZE);
-    if (s == NATS_OK)
-    {
-        nc->usePending = true;
+    // Clear any error.
+    nc->err         = NATS_OK;
+    nc->errStr[0]   = '\0';
 
-        // Clear any error.
-        nc->err         = NATS_OK;
-        nc->errStr[0]   = '\0';
-
-        pool = nc->srvPool;
-    }
+    pool = nc->srvPool;
 
     // Perform appropriate callback if needed for a disconnect.
-    if ((s == NATS_OK) && (nc->opts->disconnectedCb != NULL))
+    if (nc->opts->disconnectedCb != NULL)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
     // Note that the pool's size may decrement after the call to
@@ -912,12 +903,15 @@ _doReconnect(void *arg)
         s = _createConn(nc);
         if (s != NATS_OK)
         {
+            // Reset error here. We will return NATS_NO_SERVERS at the end of
+            // this loop if appropriate.
+            nc->err = NATS_OK;
+
             // Reset status
             s = NATS_OK;
 
             // Not yet connected, retry...
             // Continue to hold the lock
-            nc->err = s;
             continue;
         }
 
@@ -951,6 +945,10 @@ _doReconnect(void *arg)
 
         if (s != NATS_OK)
         {
+            // In case we were at the last iteration, this is the error
+            // we will report.
+            nc->err = s;
+
             // Reset status
             s = NATS_OK;
 
@@ -1137,6 +1135,7 @@ static natsStatus
 _connect(natsConnection *nc)
 {
     natsStatus  s     = NATS_OK;
+    natsStatus  retSts= NATS_OK;
     natsSrvPool *pool = NULL;
     int         i;
 
@@ -1160,11 +1159,12 @@ _connect(natsConnection *nc)
             {
                 natsSrvPool_SetSrvDidConnect(pool, i, true);
                 natsSrvPool_SetSrvReconnects(pool, i, 0);
+                retSts = NATS_OK;
                 break;
             }
             else
             {
-                nc->err = s;
+                retSts = s;
 
                 natsConn_Unlock(nc);
 
@@ -1178,14 +1178,13 @@ _connect(natsConnection *nc)
         else
         {
             if (s == NATS_IO_ERROR)
-                nc->err = NATS_OK;
+                retSts = NATS_OK;
         }
     }
 
-    if ((nc->err == NATS_OK) && (nc->status != CONNECTED))
+    if ((retSts == NATS_OK) && (nc->status != CONNECTED))
     {
-        nc->err = NATS_NO_SERVER;
-        s = nats_setDefaultError(nc->err);
+        s = nats_setDefaultError(NATS_NO_SERVER);
     }
 
     natsConn_Unlock(nc);
@@ -1210,6 +1209,8 @@ _processOpError(natsConnection *nc, natsStatus s)
     // Do reconnect only if allowed and we were actually connected
     if (nc->opts->allowReconnect && (nc->status == CONNECTED))
     {
+        natsStatus ls;
+
         // Set our new status
         nc->status = RECONNECTING;
 
@@ -1224,9 +1225,18 @@ _processOpError(natsConnection *nc, natsStatus s)
             nc->sockCtx.fdActive = false;
         }
 
-        // Start the reconnect thread
-        if (natsThread_Create(&(nc->reconnectThread),
-                              _doReconnect, (void*) nc) == NATS_OK)
+        // Create the pending buffer to hold all write requests while we try
+        // to reconnect.
+        ls = natsBuf_Create(&(nc->pending), DEFAULT_PENDING_SIZE);
+        if (ls == NATS_OK)
+        {
+            nc->usePending = true;
+
+            // Start the reconnect thread
+            ls = natsThread_Create(&(nc->reconnectThread),
+                                  _doReconnect, (void*) nc);
+        }
+        if (ls ==  NATS_OK)
         {
             natsConn_Unlock(nc);
 
@@ -1250,7 +1260,6 @@ natsConn_clearSSL(natsConnection *nc)
     if (nc->sockCtx.ssl == NULL)
         return;
 
-//    SSL_clear(nc->sockCtx.ssl);
     SSL_free(nc->sockCtx.ssl);
     nc->sockCtx.ssl = NULL;
 }
@@ -1313,6 +1322,7 @@ static void
 _flusher(void *arg)
 {
     natsConnection  *nc  = (natsConnection*) arg;
+    natsStatus      s;
 
     while (true)
     {
@@ -1345,7 +1355,11 @@ _flusher(void *arg)
         }
 
         if (nc->sockCtx.fdActive && (natsBuf_Len(nc->bw) > 0))
-            nc->err = natsConn_bufferFlush(nc);
+        {
+            s = natsConn_bufferFlush(nc);
+            if (s != NATS_OK)
+                nc->err = s;
+        }
 
         natsConn_Unlock(nc);
     }
@@ -1642,20 +1656,6 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
     natsSub_Lock(sub);
 
-    if ((sub->max > 0) && (sub->msgs > sub->max))
-    {
-        natsMsg_Destroy(msg);
-        natsSub_Unlock(sub);
-
-        natsConn_removeSubscription(nc, sub, false);
-
-        natsConn_Unlock(nc);
-        return NATS_OK;
-    }
-
-    sub->msgs  += 1;
-    sub->bytes += (uint64_t) bufLen;
-
     if (sub->msgList.count >= sub->pendingMax)
     {
         natsMsg_Destroy(msg);
@@ -1712,6 +1712,7 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
     else
     {
         natsConn_Lock(nc);
+        nc->err = NATS_ERR;
         snprintf(nc->errStr, sizeof(nc->errStr), "%.*s", bufLen, buf);
         natsConn_Unlock(nc);
         _close(nc, CLOSED, true);
@@ -2170,12 +2171,7 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
             s = natsCondition_AbsoluteTimedWait(nc->pongs.cond, nc->mu, target);
         }
 
-        // Report any error that occurred while we were waiting.
-        if (nc->err != NATS_OK)
-        {
-            s = nats_setDefaultError(nc->err);
-        }
-        else if ((s == NATS_OK) && (nc->status == CLOSED))
+        if ((s == NATS_OK) && (nc->status == CLOSED))
         {
             // The connection has been closed while we were waiting
             s = nats_setDefaultError(NATS_CONNECTION_CLOSED);

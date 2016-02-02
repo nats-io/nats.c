@@ -57,10 +57,6 @@ _publishEx(natsConnection *nc, const char *subj,
     {
         s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
-    else if ((s == NATS_OK) && (nc->err != NATS_OK))
-    {
-        s = nats_setError(nc->err, "%s", nc->errStr);
-    }
 
     if (s == NATS_OK)
     {
@@ -134,10 +130,6 @@ _publishEx(natsConnection *nc, const char *subj,
     {
         nc->stats.outMsgs  += 1;
         nc->stats.outBytes += dataLen;
-    }
-    else
-    {
-        nc->err = s;
     }
 
     natsConn_Unlock(nc);

@@ -2658,6 +2658,9 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
         }
         case 7:
         {
+            arg->msgReceived = true;
+            natsCondition_Signal(arg->c);
+
             while (!arg->closed)
                 natsCondition_Wait(arg->c, arg->m);
 
@@ -6315,19 +6318,27 @@ test_SlowSubscriber(void)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsSubscription    *sub      = NULL;
+    natsOptions         *opts     = NULL;
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
+    int                 total     = 100;
     int64_t             start, end;
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetMaxPendingMsgs(opts, total);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    s = natsConnection_Connect(&nc, opts);
     if (s == NATS_OK)
         s = natsConnection_SubscribeSync(&sub, nc, "foo");
 
     for (int i=0;
-        (s == NATS_OK) && (i < (NATS_OPTS_DEFAULT_MAX_PENDING_MSGS + 100)); i++)
+        (s == NATS_OK) && (i < total + 100); i++)
     {
         s = natsConnection_PublishString(nc, "foo", "hello");
     }
@@ -6350,6 +6361,7 @@ test_SlowSubscriber(void)
 
     natsMsg_Destroy(msg);
     natsSubscription_Destroy(sub);
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     _stopServer(serverPid);
@@ -6361,9 +6373,18 @@ test_SlowAsyncSubscriber(void)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsSubscription    *sub      = NULL;
+    natsOptions         *opts     = NULL;
+    const char          *lastErr  = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
+    int                 total     = 100;
     int64_t             start, end;
     struct threadArg    arg;
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetMaxPendingMsgs(opts, total);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
@@ -6375,15 +6396,18 @@ test_SlowAsyncSubscriber(void)
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    s = natsConnection_Connect(&nc, opts);
     if (s == NATS_OK)
         s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
 
     for (int i=0;
-        (s == NATS_OK) && (i < (NATS_OPTS_DEFAULT_MAX_PENDING_MSGS + 100)); i++)
+        (s == NATS_OK) && (i < (total + 100)); i++)
     {
         s = natsConnection_PublishString(nc, "foo", "hello");
     }
+
+    test("Check Publish does not fail due to SlowConsumer: ");
+    testCond(s == NATS_OK);
 
     test("Check flush returns before timeout: ");
     start = nats_Now();
@@ -6394,8 +6418,20 @@ test_SlowAsyncSubscriber(void)
 
     testCond((end - start) < 5000);
 
-    test("Flush should report an error: ");
-    testCond(s != NATS_OK);
+    test("Flush should not report an error: ");
+    testCond(s == NATS_OK);
+
+    // Make sure the callback blocks before checking for slow consumer
+    natsMutex_Lock(arg.m);
+
+    while ((s == NATS_OK) && !(arg.msgReceived))
+        s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+
+    natsMutex_Unlock(arg.m);
+
+    test("Last Error should be SlowConsumer: ");
+    testCond((s == NATS_OK)
+             && natsConnection_GetLastError(nc, &lastErr) == NATS_SLOW_CONSUMER);
 
     // Release the sub
     natsMutex_Lock(arg.m);
@@ -6410,6 +6446,7 @@ test_SlowAsyncSubscriber(void)
     natsCondition_Signal(arg.c);
     natsMutex_Unlock(arg.m);
 
+    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
     if (valgrind)

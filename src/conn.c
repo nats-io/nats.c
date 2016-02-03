@@ -1357,7 +1357,7 @@ _flusher(void *arg)
         if (nc->sockCtx.fdActive && (natsBuf_Len(nc->bw) > 0))
         {
             s = natsConn_bufferFlush(nc);
-            if (s != NATS_OK)
+            if ((s != NATS_OK) && (nc->err == NATS_OK))
                 nc->err = s;
         }
 

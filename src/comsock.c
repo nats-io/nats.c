@@ -303,9 +303,11 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
 
     while (needRead)
     {
+#if defined(NATS_HAS_TLS)
         if (ctx->ssl != NULL)
             readBytes = SSL_read(ctx->ssl, buffer, (int) maxBufferSize);
         else
+#endif
             readBytes = recv(ctx->fd, buffer, (natsRecvLen) maxBufferSize, 0);
 
         if (readBytes == 0)
@@ -314,6 +316,7 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
         }
         else if (readBytes == NATS_SOCK_ERROR)
         {
+#if defined(NATS_HAS_TLS)
             if (ctx->ssl != NULL)
             {
                 int sslErr = SSL_get_error(ctx->ssl, readBytes);
@@ -328,7 +331,9 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
                 if (ctx->fdSet == NULL)
                     continue;
             }
-            else if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
+            else
+#endif
+                if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
             {
                 return nats_setError(NATS_IO_ERROR, "recv error: %d",
                                      NATS_SOCK_GET_ERROR);
@@ -360,9 +365,11 @@ natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len)
 
     do
     {
+#if defined(NATS_HAS_TLS)
         if (ctx->ssl != NULL)
             bytes = SSL_write(ctx->ssl, data, len);
         else
+#endif
             bytes = send(ctx->fd, data, len, 0);
 
         if (bytes == 0)
@@ -371,6 +378,7 @@ natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len)
         }
         else if (bytes == NATS_SOCK_ERROR)
         {
+#if defined(NATS_HAS_TLS)
             if (ctx->ssl != NULL)
             {
                 int sslErr = SSL_get_error(ctx->ssl, bytes);
@@ -384,7 +392,9 @@ natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len)
                 if (ctx->fdSet == NULL)
                     continue;
             }
-            else if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
+            else
+#endif
+                if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
             {
                 return nats_setError(NATS_IO_ERROR, "send error: %d",
                                      NATS_SOCK_GET_ERROR);

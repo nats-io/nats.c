@@ -3,8 +3,6 @@ cmake_minimum_required(VERSION 2.8)
 project(cnats)
 include(CTest)
 
-find_package(OpenSSL REQUIRED)
-
 # Uncomment to have the build process verbose
 #set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
@@ -16,6 +14,11 @@ set(CMAKE_INSTALL_PREFIX ${NATS_INSTALL_PREFIX} CACHE INTERNAL "")
 
 option(NATS_UPDATE_VERSION "Update the version file" OFF)
 option(NATS_COVERAGE "Code coverage" OFF)
+option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
+
+if(NATS_BUILD_WITH_TLS)
+find_package(OpenSSL REQUIRED)
+endif(NATS_BUILD_WITH_TLS)
 
 # Platform specific settings
 if(UNIX)
@@ -75,6 +78,9 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_CODE_COVERAGE} ${NATS_COMMON_C_FLAGS}
 
 add_definitions(-D${NATS_OS})
 add_definitions(-D_REENTRANT)
+if(NATS_BUILD_WITH_TLS)
+add_definitions(-DNATS_HAS_TLS)
+endif(NATS_BUILD_WITH_TLS)
 
 #---------------------------------------------------------------------
 # Add to the 'clean' target the list (and location) of files to remove

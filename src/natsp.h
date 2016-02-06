@@ -9,9 +9,17 @@
 # include "include/n-unix.h"
 #endif
 
+#if defined(NATS_HAS_TLS)
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
+#else
+#define SSL             void*
+#define SSL_free(c)     { (c) = NULL; }
+#define SSL_CTX         void*
+#define SSL_CTX_free(c) { (c) = NULL; }
+#define NO_SSL_ERR  "The library was built without SSL support!"
+#endif
 
 #include "err.h"
 #include "nats.h"
@@ -136,7 +144,6 @@ struct __natsOptions
     int                     maxPendingMsgs;
 
     natsSSLCtx              *sslCtx;
-
 };
 
 typedef struct __natsMsgList

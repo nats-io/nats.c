@@ -2101,11 +2101,19 @@ test_natsOptions(void)
 
     test("Set Secure: ");
     s = natsOptions_SetSecure(opts, true);
+#if defined(NATS_HAS_TLS)
     testCond((s == NATS_OK) && (opts->secure == true));
+#else
+    testCond((s == NATS_ILLEGAL_STATE) && (opts->secure == false));
+#endif
 
     test("Remove Secure: ");
     s = natsOptions_SetSecure(opts, false);
+#if defined(NATS_HAS_TLS)
     testCond((s == NATS_OK) && (opts->secure == false));
+#else
+    testCond((s == NATS_ILLEGAL_STATE) && (opts->secure == false));
+#endif
 
     test("Set Pedantic: ");
     s = natsOptions_SetPedantic(opts, true);
@@ -7645,17 +7653,13 @@ test_GetLastError(void)
     stackBuf[0] = '\0';
 
     test("Check GetLastError returns proper status: ");
-    s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_LoadCATrustedCertificates(opts, "");
+    s = natsOptions_SetAllowReconnect(NULL, false);
 
     getLastErr = nats_GetLastError(&getLastErrSts);
 
     testCond((s == getLastErrSts)
              && (getLastErr != NULL)
              && (strstr(getLastErr, "Invalid") != NULL));
-
-    natsOptions_Destroy(opts);
 
     test("Check GetLastErrorStack with invalid args: ");
     s = nats_GetLastErrorStack(NULL, 10);
@@ -7671,7 +7675,7 @@ test_GetLastError(void)
     s = nats_GetLastErrorStack(stackBuf, sizeof(stackBuf));
     testCond((s == NATS_OK)
              && (strlen(stackBuf) > 0)
-             && (strstr(stackBuf, "natsOptions_LoadCATrustedCertificates") != NULL));
+             && (strstr(stackBuf, "natsOptions_SetAllowReconnect") != NULL));
 
     test("Check PrintStack: ");
     stackBuf[0] = '\0';
@@ -7695,7 +7699,7 @@ test_GetLastError(void)
         s = (fgets(stackBuf, sizeof(stackBuf), stackFile) == NULL ? NATS_ERR : NATS_OK);
     if ((s == NATS_OK)
         && ((strlen(stackBuf) == 0)
-            || (strstr(stackBuf, "natsOptions_LoadCATrustedCertificates") == NULL)))
+            || (strstr(stackBuf, "natsOptions_SetAllowReconnect") == NULL)))
     {
         s = NATS_ERR;
     }
@@ -8002,6 +8006,7 @@ test_ServerErrorClosesConnection(void)
 static void
 test_SSLBasic(void)
 {
+#if defined(NATS_HAS_TLS)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsOptions         *opts     = NULL;
@@ -8064,11 +8069,16 @@ test_SSLBasic(void)
     _destroyDefaultThreadArgs(&args);
 
     _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
 }
 
 static void
 test_SSLVerify(void)
 {
+#if defined(NATS_HAS_TLS)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsOptions         *opts     = NULL;
@@ -8134,11 +8144,16 @@ test_SSLVerify(void)
     _destroyDefaultThreadArgs(&args);
 
     _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
 }
 
 static void
 test_SSLVerifyHostname(void)
 {
+#if defined(NATS_HAS_TLS)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsOptions         *opts     = NULL;
@@ -8204,11 +8219,16 @@ test_SSLVerifyHostname(void)
     _destroyDefaultThreadArgs(&args);
 
     _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
 }
 
 static void
 test_SSLCiphers(void)
 {
+#if defined(NATS_HAS_TLS)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsOptions         *opts     = NULL;
@@ -8276,8 +8296,13 @@ test_SSLCiphers(void)
     _destroyDefaultThreadArgs(&args);
 
     _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
 }
 
+#if defined(NATS_HAS_TLS)
 static void
 _sslMT(void *closure)
 {
@@ -8329,10 +8354,12 @@ _sslMT(void *closure)
 }
 
 #define SSL_THREADS (3)
+#endif
 
 static void
 test_SSLMultithreads(void)
 {
+#if defined(NATS_HAS_TLS)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsOptions         *opts     = NULL;
@@ -8393,11 +8420,16 @@ test_SSLMultithreads(void)
     _destroyDefaultThreadArgs(&args);
 
     _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
 }
 
 static void
 test_SSLConnectVerboseOption(void)
 {
+#if defined(NATS_HAS_TLS)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsOptions         *opts     = NULL;
@@ -8464,6 +8496,10 @@ test_SSLConnectVerboseOption(void)
         nats_Sleep(1000);
 
     _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
 }
 
 typedef void (*testFunc)(void);

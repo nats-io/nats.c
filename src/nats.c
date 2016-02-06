@@ -6,6 +6,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <assert.h>
+#include <stdarg.h>
 
 #include "mem.h"
 #include "timer.h"
@@ -109,7 +110,9 @@ _destroyErrTL(void *localStorage)
 static void
 _cleanupThreadSSL(void *localStorage)
 {
+#if defined(NATS_HAS_TLS)
     ERR_remove_thread_state(0);
+#endif
 }
 
 static void
@@ -128,11 +131,13 @@ _finalCleanup(void)
 
     if (gLib.sslInitialized)
     {
+#if defined(NATS_HAS_TLS)
         ERR_free_strings();
         EVP_cleanup();
         CRYPTO_cleanup_all_ex_data();
         ERR_remove_thread_state(0);
         sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
+#endif
     }
 
     natsMutex_Destroy(gLib.lock);
@@ -1287,10 +1292,12 @@ nats_PrintLastErrorStack(FILE *file)
 void
 nats_sslRegisterThreadForCleanup(void)
 {
+#if defined(NATS_HAS_TLS)
     // Set anything. The goal is that at thread exit, the thread local key
     // will have something non NULL associated, which will trigger the
     // destructor that we have registered.
     (void) natsThreadLocal_Set(gLib.sslTLKey, (void*) 1);
+#endif
 }
 
 natsStatus
@@ -1311,10 +1318,12 @@ nats_sslInit(void)
         // can do cleanup on exit.
         gLib.sslInitialized = true;
 
+#if defined(NATS_HAS_TLS)
         // Initialize SSL.
         SSL_library_init();
         SSL_load_error_strings();
 
+#endif
         s = natsThreadLocal_CreateKey(&(gLib.sslTLKey), _cleanupThreadSSL);
     }
 

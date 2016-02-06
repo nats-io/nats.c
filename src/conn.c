@@ -521,6 +521,7 @@ _processInfo(natsConnection *nc, char *info)
 static natsStatus
 _makeTLSConn(natsConnection *nc)
 {
+#if defined(NATS_HAS_TLS)
     natsStatus  s       = NATS_OK;
     SSL         *ssl    = NULL;
 
@@ -604,6 +605,9 @@ _makeTLSConn(natsConnection *nc)
     }
 
     return NATS_UPDATE_ERR_STACK(s);
+#else
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+#endif
 }
 
 // This will check to see if the connection should be

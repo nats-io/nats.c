@@ -173,6 +173,7 @@ natsSSLCtx_retain(natsSSLCtx *ctx)
     return ctx;
 }
 
+#if defined(NATS_HAS_TLS)
 // See section RFC 6125 Sections 2.4 and 3.1
 static bool
 _hostnameMatches(char *expr, char *string)
@@ -556,6 +557,42 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname)
 
     return s;
 }
+
+#else
+
+natsStatus
+natsOptions_SetSecure(natsOptions *opts, bool secure)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
+natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
+natsOptions_LoadCertificatesChain(natsOptions *opts,
+                                  const char *certFileName,
+                                  const char *keyFileName)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
+natsOptions_SetCiphers(natsOptions *opts, const char *ciphers)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
+natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+#endif
 
 natsStatus
 natsOptions_SetVerbose(natsOptions *opts, bool verbose)

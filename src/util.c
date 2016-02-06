@@ -179,3 +179,42 @@ nats_GetBoolStr(bool value)
 
     return "false";
 }
+
+void
+nats_NormalizeErr(char *error)
+{
+    int start = 0;
+    int end   = 0;
+    int len   = (int) strlen(error);
+    int i;
+
+    if (strncmp(error, _ERR_OP_, _ERR_OP_LEN_) == 0)
+        start = _ERR_OP_LEN_;
+
+    for (i=start; i<len; i++)
+    {
+        if ((error[i] != ' ') && (error[i] != '\''))
+            break;
+    }
+
+    start = i;
+    if (start == len)
+    {
+        error[0] = '\0';
+        return;
+    }
+
+    for (end=len-1; end>0; end--)
+        if ((error[end] != ' ') && (error[end] != '\''))
+            break;
+
+    if (end <= start)
+    {
+        error[0] = '\0';
+        return;
+    }
+
+    len = end - start + 1;
+    memmove(error, error + start, len);
+    error[len] = '\0';
+}

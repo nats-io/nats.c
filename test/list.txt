@@ -5,6 +5,7 @@ natsStrCaseStr
 natsBuffer
 natsParseInt64
 natsParseControl
+natsNormalizeErr
 natsMutex
 natsThread
 natsCondition
@@ -84,6 +85,8 @@ AsyncSubscriberOnClose
 NextMsgCallOnAsyncSub
 NoDelay
 GetLastError
+StaleConnection
+ServerErrorClosesConnection
 SSLBasic
 SSLVerify
 SSLVerifyHostname

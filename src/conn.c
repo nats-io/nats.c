@@ -1082,16 +1082,27 @@ _sendConnect(natsConnection *nc)
     if ((s == NATS_OK) && (strncmp(buffer, _PONG_OP_, _PONG_OP_LEN_) != 0))
     {
         // But it could be something else, like -ERR
-        // Search if the error message says something about
-        // authentication failure.
 
-        if (strstr(buffer, "Authorization") != NULL)
-            s = nats_setError(NATS_CONNECTION_AUTH_FAILED,
-                              "%s", buffer);
+        if (strncmp(buffer, _ERR_OP_, _ERR_OP_LEN_) == 0)
+        {
+            // Remove -ERR, trim spaces and quotes.
+            nats_NormalizeErr(buffer);
+
+            // Search if the error message says something about
+            // authentication failure.
+
+            if (nats_strcasestr(buffer, "authorization") != NULL)
+                s = nats_setError(NATS_CONNECTION_AUTH_FAILED,
+                                  "%s", buffer);
+            else
+                s = nats_setError(NATS_ERR, "%s", buffer);
+        }
         else
+        {
             s = nats_setError(NATS_PROTOCOL_ERROR,
                               "Expected '%s', got '%s'",
                               _PONG_OP_, buffer);
+        }
     }
 
     if (s == NATS_OK)
@@ -1099,7 +1110,7 @@ _sendConnect(natsConnection *nc)
 
     free(cProto);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static natsStatus
@@ -1705,7 +1716,15 @@ natsConn_processOK(natsConnection *nc)
 void
 natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
 {
-    if (strncmp(buf, STALE_CONNECTION, STATE_CONNECTION_LEN) == 0)
+    char error[256];
+
+    // Copy the error in this local buffer.
+    snprintf(error, sizeof(error), "%.*s", bufLen, buf);
+
+    // Trim spaces and remove quotes.
+    nats_NormalizeErr(error);
+
+    if (strcasecmp(error, STALE_CONNECTION) == 0)
     {
         _processOpError(nc, NATS_STALE_CONNECTION);
     }
@@ -1713,7 +1732,7 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
     {
         natsConn_Lock(nc);
         nc->err = NATS_ERR;
-        snprintf(nc->errStr, sizeof(nc->errStr), "%.*s", bufLen, buf);
+        snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
         natsConn_Unlock(nc);
         _close(nc, CLOSED, true);
     }

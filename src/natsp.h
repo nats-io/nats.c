@@ -55,7 +55,6 @@
 #define _UNSUB_NO_MAX_PROTO_ "UNSUB %" PRId64 " \r\n"
 
 #define STALE_CONNECTION     "Stale Connection"
-#define STATE_CONNECTION_LEN (16)
 
 #define _CRLF_LEN_          (2)
 #define _SPC_LEN_           (1)
@@ -65,6 +64,7 @@
 #define _PING_PROTO_LEN_    (6)
 #define _PONG_PROTO_LEN_    (6)
 #define _OK_OP_LEN_         (3)
+#define _ERR_OP_LEN_        (4)
 
 extern int64_t gLockSpinCount;
 

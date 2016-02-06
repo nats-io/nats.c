@@ -20,4 +20,7 @@ nats_Randomize(int *array, int arraySize);
 const char*
 nats_GetBoolStr(bool value);
 
+void
+nats_NormalizeErr(char *error);
+
 #endif /* UTIL_H_ */

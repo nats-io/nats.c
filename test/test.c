@@ -7450,6 +7450,102 @@ test_ProperFalloutAfterMaxAttempts(void)
 }
 
 static void
+test_ProperFalloutAfterMaxAttemptsWithAuthMismatch(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsPid             serverPid2= NATS_INVALID_PID;
+    const char          *servers[]= {"nats://localhost:1222", "nats://localhost:1223"};
+    natsStatistics      *stats    = NULL;
+    int                 serversCount;
+    struct threadArg    arg;
+
+#if _WIN32
+    test("Skip when running on Windows: ");
+    testCond(true);
+    return;
+#endif
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    serversCount = sizeof(servers) / sizeof(char*);
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetNoRandomize(opts, true);
+    if (s == NATS_OK)
+        s = natsOptions_SetMaxReconnect(opts, 5);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectWait(opts, 25);
+    if (s == NATS_OK)
+        s = natsOptions_SetServers(opts, servers, serversCount);
+    if (s == NATS_OK)
+        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
+
+    if (s == NATS_OK)
+        s = natsStatistics_Create(&stats);
+
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test ServerOptions");
+
+    serverPid = _startServer("nats://localhost:1222", "-p 1222", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    serverPid2 = _startServer("nats://localhost:1223", "-p 1223 -user ivan -pass secret", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_Connect(&nc, opts);
+
+    _stopServer(serverPid);
+
+    // wait for disconnect
+    test("Wait for disconnected: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && arg.disconnected);
+
+    // wait for closed
+    test("Wait for closed: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && arg.closed);
+
+    // Make sure we have not exceeded MaxReconnect
+    test("Test MaxReconnect: ");
+    if (s == NATS_OK)
+        natsConnection_GetStats(nc, stats);
+    testCond((s == NATS_OK)
+             && (stats != NULL)
+             && (stats->reconnects == 5));
+
+    // Disconnected from server 1, then from server 2.
+    test("Disconnected should have been called twice: ");
+    testCond((s == NATS_OK) && arg.disconnects == 2);
+
+    test("Connection should be closed: ")
+    testCond((s == NATS_OK)
+             && natsConnection_IsClosed(nc));
+
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+    natsStatistics_Destroy(stats);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid2);
+}
+
+static void
 test_TimeoutOnNoServer(void)
 {
     natsStatus          s;
@@ -8627,6 +8723,7 @@ static testInfo allTests[] =
     {"HotSpotReconnect",                test_HotSpotReconnect},
     {"ProperReconnectDelay",            test_ProperReconnectDelay},
     {"ProperFalloutAfterMaxAttempts",   test_ProperFalloutAfterMaxAttempts},
+    {"ProperFalloutMaxAttemptsAuth",    test_ProperFalloutAfterMaxAttemptsWithAuthMismatch},
     {"TimeoutOnNoServer",               test_TimeoutOnNoServer},
     {"PingReconnect",                   test_PingReconnect}
 };

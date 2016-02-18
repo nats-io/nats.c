@@ -928,10 +928,6 @@ _doReconnect(void *arg)
         // We are reconnected
         nc->stats.reconnects += 1;
 
-        // Clear out server stats for the server we connected to..
-        cur->didConnect = true;
-        cur->reconnects = 0;
-
         // Process Connect logic
         s = _processConnInit(nc);
 
@@ -971,6 +967,10 @@ _doReconnect(void *arg)
         }
 
         // No more failure allowed past this point.
+
+        // Clear out server stats for the server we connected to..
+        cur->didConnect = true;
+        cur->reconnects = 0;
 
         tReconnect = nc->reconnectThread;
         nc->reconnectThread = NULL;

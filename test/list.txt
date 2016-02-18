@@ -100,5 +100,6 @@ BasicClusterReconnect
 HotSpotReconnect
 ProperReconnectDelay
 ProperFalloutAfterMaxAttempts
+ProperFalloutMaxAttemptsAuth
 TimeoutOnNoServer
 PingReconnect

@@ -2073,6 +2073,70 @@ natsConnection_Connect(natsConnection **newConn, natsOptions *options)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_processUrlString(natsOptions *opts, const char *urls)
+{
+    int         count        = 0;
+    natsStatus  s            = NATS_OK;
+    char        **serverUrls = NULL;
+    char        *urlsCopy    = NULL;
+    char        *commaPos    = NULL;
+    char        *ptr         = NULL;
+    int         len;
+
+    ptr = (char*) urls;
+    while ((ptr = strchr(ptr, ',')) != NULL)
+    {
+        ptr++;
+        count++;
+    }
+    if (count == 0)
+        return natsOptions_SetURL(opts, urls);
+
+    serverUrls = (char**) NATS_CALLOC(count + 1, sizeof(char*));
+    if (serverUrls == NULL)
+        s = NATS_NO_MEMORY;
+    if (s == NATS_OK)
+    {
+        urlsCopy = NATS_STRDUP(urls);
+        if (urlsCopy == NULL)
+        {
+            NATS_FREE(serverUrls);
+            return NATS_NO_MEMORY;
+        }
+    }
+
+    count = 0;
+    ptr = urlsCopy;
+
+    do
+    {
+        while (*ptr == ' ')
+            ptr++;
+        serverUrls[count++] = ptr;
+
+        commaPos = strchr(ptr, ',');
+        if (commaPos != NULL)
+        {
+            ptr = (char*)(commaPos + 1);
+            *(commaPos) = '\0';
+        }
+
+        len = (int) strlen(ptr);
+        while ((len > 0) && (ptr[len-1] == ' '))
+            ptr[--len] = '\0';
+
+    } while (commaPos != NULL);
+
+    if (s == NATS_OK)
+        s = natsOptions_SetServers(opts, (const char**) serverUrls, count);
+
+    NATS_FREE(urlsCopy);
+    NATS_FREE(serverUrls);
+
+    return s;
+}
+
 natsStatus
 natsConnection_ConnectTo(natsConnection **newConn, const char *url)
 {
@@ -2082,7 +2146,7 @@ natsConnection_ConnectTo(natsConnection **newConn, const char *url)
 
     s = natsOptions_Create(&opts);
     if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, url);
+        s = _processUrlString(opts, url);
     if (s == NATS_OK)
         s = natsConn_create(&nc, opts);
     if (s == NATS_OK)

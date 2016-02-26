@@ -3666,6 +3666,43 @@ test_UseDefaultURLIfNoServerSpecified(void)
 }
 
 static void
+test_ConnectToWithMultipleURLs(void)
+{
+    natsStatus      s;
+    natsConnection  *nc       = NULL;
+    natsPid         serverPid = NATS_INVALID_PID;
+    char            buf[256];
+
+    buf[0] = '\0';
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check multiple URLs work: ");
+    s = natsConnection_ConnectTo(&nc, "nats://localhost:4444,nats://localhost:4443,nats://localhost:4222");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    if (s == NATS_OK)
+        s = natsConnection_GetConnectedUrl(nc, buf, sizeof(buf));
+    testCond((s == NATS_OK)
+             && (strcmp(buf, NATS_DEFAULT_URL) == 0));
+    natsConnection_Destroy(nc);
+
+    test("Check multiple URLs work, even with spaces: ");
+    s = natsConnection_ConnectTo(&nc, "nats://localhost:4444 , nats://localhost:4443  ,  nats://localhost:4222   ");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    if (s == NATS_OK)
+        s = natsConnection_GetConnectedUrl(nc, buf, sizeof(buf));
+    testCond((s == NATS_OK)
+             && (strcmp(buf, NATS_DEFAULT_URL) == 0));
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+
+static void
 test_ConnectionWithNullOptions(void)
 {
     natsStatus          s;
@@ -8719,6 +8756,7 @@ static testInfo allTests[] =
 
     {"DefaultConnection",               test_DefaultConnection},
     {"UseDefaultURLIfNoServerSpecified",test_UseDefaultURLIfNoServerSpecified},
+    {"ConnectToWithMultipleURLs",       test_ConnectToWithMultipleURLs},
     {"ConnectionWithNULLOptions",       test_ConnectionWithNullOptions},
     {"ConnectionStatus",                test_ConnectionStatus},
     {"ConnClosedCB",                    test_ConnClosedCB},

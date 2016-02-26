@@ -30,6 +30,7 @@ ParserSouldFail
 ParserSplitMsg
 DefaultConnection
 UseDefaultURLIfNoServerSpecified
+ConnectToWithMultipleURLs
 ConnectionWithNULLOptions
 ConnectionStatus
 ConnClosedCB

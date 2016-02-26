@@ -934,18 +934,24 @@ natsMsg_Destroy(natsMsg *msg);
 NATS_EXTERN natsStatus
 natsConnection_Connect(natsConnection **nc, natsOptions *options);
 
-/** \brief Connects to the `NATS Server` running at the given URL.
+/** \brief Connects to a `NATS Server` using any of the URL from the given list.
  *
- * Attempts to connect to a `NATS Server` at the given URL.
+ * Attempts to connect to a `NATS Server`.
+ *
+ * This call supports multiple comma separated URLs. If more than one is
+ * specified, it behaves as if you were using a #natsOptions object and
+ * called #natsOptions_SetServers() with the equivalent array of URLs.
+ * The list is randomized before the connect sequence starts.
  *
  * @see #natsConnection_Destroy()
+ * @see #natsOptions_SetServers()
  *
  * @param nc the location where to store the pointer to the newly created
  * #natsConnection object.
- * @param url the URL to connect to.
+ * @param urls the URL to connect to, or the list of URLs to chose from.
  */
 NATS_EXTERN natsStatus
-natsConnection_ConnectTo(natsConnection **nc, const char *url);
+natsConnection_ConnectTo(natsConnection **nc, const char *urls);
 
 /** \brief Test if connection has been closed.
  *

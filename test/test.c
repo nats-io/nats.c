@@ -6188,6 +6188,77 @@ test_ClientSyncAutoUnsub(void)
 }
 
 static void
+test_ClientAutoUnsubAndReconnect(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    opts = _createReconnectOptions();
+    if ((opts == NULL)
+        || ((s = _createDefaultThreadArgsForCbTests(&arg)) != NATS_OK))
+    {
+        FAIL("Unable to setup test!");
+    }
+
+    arg.status = NATS_OK;
+    arg.control= 9;
+
+    s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+    if (s == NATS_OK)
+        s = natsSubscription_AutoUnsubscribe(sub, 10);
+
+    // Send less than the max
+    for (int i=0; (s == NATS_OK) && (i<5); i++)
+        s = natsConnection_PublishString(nc, "foo", "hello");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    // Restart the server
+    _stopServer(serverPid);
+    serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    // Wait for reconnect
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+    natsMutex_Unlock(arg.m);
+
+    // Now send more than the max
+    for (int i=0; (s == NATS_OK) && (i<50); i++)
+        s = natsConnection_PublishString(nc, "foo", "hello");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    nats_Sleep(10);
+
+    test("Received no more than max: ");
+    testCond((s == NATS_OK) && (arg.sum == 10));
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
+
+static void
 test_NextMsgOnClosedSub(void)
 {
     natsStatus          s;
@@ -8694,6 +8765,7 @@ static testInfo allTests[] =
     {"BadSubject",                      test_BadSubject},
     {"ClientAsyncAutoUnsub",            test_ClientAsyncAutoUnsub},
     {"ClientSyncAutoUnsub",             test_ClientSyncAutoUnsub},
+    {"ClientAutoUnsubAndReconnect",     test_ClientAutoUnsubAndReconnect},
     {"NextMsgOnClosedSub",              test_NextMsgOnClosedSub},
     {"CloseSubRelease",                 test_CloseSubRelease},
     {"IsValidSubscriber",               test_IsValidSubscriber},

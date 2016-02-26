@@ -737,15 +737,29 @@ _resendSubscriptions(natsConnection *nc)
     natsHashIter        iter;
     char                *proto;
     int                 res;
-    int                 max;
+    int                 adjustedMax;
 
     natsHashIter_Init(&iter, nc->subs);
-    while (natsHashIter_Next(&iter, NULL, (void**) &sub))
+    while ((s == NATS_OK) && natsHashIter_Next(&iter, NULL, (void**) &sub))
     {
         proto = NULL;
 
+        adjustedMax = 0;
         natsSub_Lock(sub);
-        max = (int) sub->max;
+        if (sub->max > 0)
+        {
+            if (sub->delivered < sub->max)
+                adjustedMax = (int)(sub->max - sub->delivered);
+
+            // The adjusted max could be 0 here if the number of delivered
+            // messages have reached the max, if so, unsubscribe.
+            if (adjustedMax == 0)
+            {
+                natsSub_Unlock(sub);
+                s = _sendUnsubProto(nc, sub->sid, 0);
+                continue;
+            }
+        }
         natsSub_Unlock(sub);
 
         // These sub's fields are immutable
@@ -763,8 +777,8 @@ _resendSubscriptions(natsConnection *nc)
             proto = NULL;
         }
 
-        if ((s == NATS_OK) && (max > 0))
-            s = _sendUnsubProto(nc, sub->sid, max);
+        if ((s == NATS_OK) && (adjustedMax > 0))
+            s = _sendUnsubProto(nc, sub->sid, adjustedMax);
     }
 
     return s;

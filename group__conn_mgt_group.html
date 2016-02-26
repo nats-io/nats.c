@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.2.8</span>
+   &#160;<span id="projectnumber">1.2.10</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -111,9 +111,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga740be1ba16a8570eb98ef6755ebf52ce"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#ga740be1ba16a8570eb98ef6755ebf52ce">natsConnection_Connect</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> **nc, <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *options)</td></tr>
 <tr class="memdesc:ga740be1ba16a8570eb98ef6755ebf52ce"><td class="mdescLeft">&#160;</td><td class="mdescRight">Connects to a <code>NATS Server</code> using the provided options.  <a href="#ga740be1ba16a8570eb98ef6755ebf52ce">More...</a><br /></td></tr>
 <tr class="separator:ga740be1ba16a8570eb98ef6755ebf52ce"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:gad1c2d10f1ef4082c3f6522fede27ac64"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#gad1c2d10f1ef4082c3f6522fede27ac64">natsConnection_ConnectTo</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> **nc, const char *url)</td></tr>
-<tr class="memdesc:gad1c2d10f1ef4082c3f6522fede27ac64"><td class="mdescLeft">&#160;</td><td class="mdescRight">Connects to the <code>NATS Server</code> running at the given URL.  <a href="#gad1c2d10f1ef4082c3f6522fede27ac64">More...</a><br /></td></tr>
-<tr class="separator:gad1c2d10f1ef4082c3f6522fede27ac64"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gafb83c8d7970ba68be0e6c40c38cdfde4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#gafb83c8d7970ba68be0e6c40c38cdfde4">natsConnection_ConnectTo</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> **nc, const char *urls)</td></tr>
+<tr class="memdesc:gafb83c8d7970ba68be0e6c40c38cdfde4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Connects to a <code>NATS Server</code> using any of the URL from the given list.  <a href="#gafb83c8d7970ba68be0e6c40c38cdfde4">More...</a><br /></td></tr>
+<tr class="separator:gafb83c8d7970ba68be0e6c40c38cdfde4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga530f0f1c75c58a81aae1a59f15b46d9f"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#ga530f0f1c75c58a81aae1a59f15b46d9f">natsConnection_IsClosed</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
 <tr class="memdesc:ga530f0f1c75c58a81aae1a59f15b46d9f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Test if connection has been closed.  <a href="#ga530f0f1c75c58a81aae1a59f15b46d9f">More...</a><br /></td></tr>
 <tr class="separator:ga530f0f1c75c58a81aae1a59f15b46d9f"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -188,14 +188,14 @@ Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the location where to store the pointer to the newly created <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
-    <tr><td class="paramname">options</td><td>the options to use for this connection. If <code>NULL</code> this call is equivalent to <a class="el" href="group__conn_mgt_group.html#gad1c2d10f1ef4082c3f6522fede27ac64" title="Connects to the NATS Server running at the given URL. ">natsConnection_ConnectTo()</a> with <a class="el" href="nats_8h.html#a911c54900b46b968205871cd9f68d36c" title="The default NATS Server URL. ">NATS_DEFAULT_URL</a>. </td></tr>
+    <tr><td class="paramname">options</td><td>the options to use for this connection. If <code>NULL</code> this call is equivalent to <a class="el" href="group__conn_mgt_group.html#gafb83c8d7970ba68be0e6c40c38cdfde4" title="Connects to a NATS Server using any of the URL from the given list. ">natsConnection_ConnectTo()</a> with <a class="el" href="nats_8h.html#a911c54900b46b968205871cd9f68d36c" title="The default NATS Server URL. ">NATS_DEFAULT_URL</a>. </td></tr>
   </table>
   </dd>
 </dl>
 
 </div>
 </div>
-<a class="anchor" id="gad1c2d10f1ef4082c3f6522fede27ac64"></a>
+<a class="anchor" id="gafb83c8d7970ba68be0e6c40c38cdfde4"></a>
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
@@ -209,7 +209,7 @@ Functions</h2></td></tr>
           <td class="paramkey"></td>
           <td></td>
           <td class="paramtype">const char *&#160;</td>
-          <td class="paramname"><em>url</em>&#160;</td>
+          <td class="paramname"><em>urls</em>&#160;</td>
         </tr>
         <tr>
           <td></td>
@@ -218,12 +218,15 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Attempts to connect to a <code>NATS Server</code> at the given URL.</p>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__conn_mgt_group.html#gafda2f702276fb0ac301efac10df09495" title="Destroys the connection object. ">natsConnection_Destroy()</a></dd></dl>
+<p>Attempts to connect to a <code>NATS Server</code>.</p>
+<p>This call supports multiple comma separated URLs. If more than one is specified, it behaves as if you were using a <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object and called <a class="el" href="group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf" title="Set the list of servers to try to (re)connect to. ">natsOptions_SetServers()</a> with the equivalent array of URLs. The list is randomized before the connect sequence starts.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__conn_mgt_group.html#gafda2f702276fb0ac301efac10df09495" title="Destroys the connection object. ">natsConnection_Destroy()</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf" title="Set the list of servers to try to (re)connect to. ">natsOptions_SetServers()</a></dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the location where to store the pointer to the newly created <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
-    <tr><td class="paramname">url</td><td>the URL to connect to. </td></tr>
+    <tr><td class="paramname">urls</td><td>the URL to connect to, or the list of URLs to chose from. </td></tr>
   </table>
   </dd>
 </dl>

@@ -6,6 +6,7 @@ var NAVTREE =
       [ "Installation", "index.html#install_sec", null ],
       [ "Other Documentation", "index.html#other_doc_section", null ]
     ] ],
+    [ "Deprecated List", "deprecated.html", null ],
     [ "Modules", "modules.html", "modules" ],
     [ "Files", null, [
       [ "File List", "files.html", "files" ],
@@ -23,8 +24,8 @@ var NAVTREE =
 
 var NAVTREEINDEX =
 [
-"files.html",
-"status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51acdaad1112073e3e2ea032424c38c34e1"
+"deprecated.html",
+"status_8h.html#a36c934157b663b7b5fb5d6609c897c80ac3abc147873fe999c86431f9222eebf5"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

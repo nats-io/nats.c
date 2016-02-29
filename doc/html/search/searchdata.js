@@ -7,7 +7,8 @@ var indexSectionsWithContent =
   4: "n",
   5: "cdnr",
   6: "n",
-  7: "cfilmopstw"
+  7: "cfilmopstw",
+  8: "d"
 };
 
 var indexSectionNames =
@@ -19,7 +20,8 @@ var indexSectionNames =
   4: "enums",
   5: "enumvalues",
   6: "defines",
-  7: "groups"
+  7: "groups",
+  8: "pages"
 };
 
 var indexSectionLabels =
@@ -31,6 +33,7 @@ var indexSectionLabels =
   4: "Enumerations",
   5: "Enumerator",
   6: "Macros",
-  7: "Modules"
+  7: "Modules",
+  8: "Pages"
 };
 

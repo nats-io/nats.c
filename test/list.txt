@@ -82,6 +82,8 @@ CloseSubRelease
 IsValidSubscriber
 SlowSubscriber
 SlowAsyncSubscriber
+PendingLimitsDeliveredAndDropped
+PendingLimitsWithSyncSub
 AsyncErrHandler
 AsyncSubscriberStarvation
 AsyncSubscriberOnClose

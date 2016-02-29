@@ -1410,11 +1410,104 @@ natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max);
  *
  * Returns the number of queued messages in the client for this subscription.
  *
+ * \deprecated Use #natsSubscription_GetPending instead.
+ *
  * @param sub the pointer to the #natsSubscription object.
  * @param queuedMsgs the location where to store the number of queued messages.
  */
 NATS_EXTERN natsStatus
 natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
+
+/** \brief Sets the limit for pending messages and bytes.
+ *
+ * Specifies the maximum number and size of incoming messages that can be
+ * buffered in the library for this subscription, before new incoming messages are
+ * dropped and #NATS_SLOW_CONSUMER status is reported to the #natsErrHandler
+ * callback (if one has been set).
+ *
+ * If no limit is set at the subscription level, the limit set by #natsOptions_SetMaxPendingMsgs
+ * before creating the connection will be used.
+ *
+ * \note If no option is set, there is still a default of `65536` messages and
+ * `65536 * 1024` bytes.
+ *
+ * @see natsOptions_SetMaxPendingMsgs
+ * @see natsSubscription_GetPendingLimits
+ *
+ * @param sub he pointer to the #natsSubscription object.
+ * @param msgLimit the limit in number of messages that the subscription can hold.
+ * @param bytesLimit the limit in bytes that the subscription can hold.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytesLimit);
+
+/** \brief Returns the current limit for pending messages and bytes.
+ *
+ * Regardless if limits have been explicitly set with #natsSubscription_SetPendingLimits,
+ * this call will store in the provided memory locations, the limits set for
+ * this subscription.
+ *
+ * \note It is possible for `msgLimit` and/or `bytesLimits` to be `NULL`, in which
+ * case the corresponding value is obviously not stored, but the function will
+ * not return an error.
+ *
+ * @see natsOptions_SetMaxPendingMsgs
+ * @see natsSubscription_SetPendingLimits
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param msgLimit if not `NULL`, the memory location where to store the maximum
+ * number of pending messages for this subscription.
+ * @param bytesLimit if not `NULL`, the memory location where to store the maximum
+ * size of pending messages for this subscription.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetPendingLimits(natsSubscription *sub, int *msgLimit, int *bytesLimit);
+
+/** \brief Returns the number of pending messages and bytes.
+ *
+ * Returns the total number and size of pending messages on this subscription.
+ *
+ * \note It is possible for `msgs` and `bytes` to be NULL, in which case the
+ * corresponding values are obviously not stored, but the function will not return
+ * an error.
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param msgs if not `NULL`, the memory location where to store the number of
+ * pending messages.
+ * @param bytes if not `NULL`, the memory location where to store the total size of
+ * pending messages.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes);
+
+/** \brief Returns the number of delivered messages.
+ *
+ * Returns the number of delivered messages for this subscription.
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param msgs the memory location where to store the number of
+ * delivered messages.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetDelivered(natsSubscription *sub, int *msgs);
+
+/** \brief Returns the number of dropped messages.
+ *
+ * Returns the number of knwon dropped messages for this subscription. This happens
+ * when a consumer is not keeping up and the library starts to drop messages
+ * when the maximum number (and/or size) of pending messages has been reached.
+ *
+ * \note If the server declares the connection a slow consumer, this number may
+ * not be valid.
+ *
+ * @see natsOptions_SetMaxPendingMsgs
+ * @see natsSubscription_SetPendingLimits
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param msgs the memory location where to store the number of dropped messages.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetDropped(natsSubscription *sub, int *msgs);
 
 /** \brief Checks the validity of the subscription.
  *

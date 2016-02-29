@@ -1685,9 +1685,19 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
     natsSub_Lock(sub);
 
-    if (sub->msgList.count >= sub->pendingMax)
+    sub->msgList.msgs++;
+    sub->msgList.bytes += bufLen;
+
+    if ((sub->msgList.msgs > sub->msgsLimit)
+        || (sub->msgList.bytes > sub->bytesLimit))
     {
         natsMsg_Destroy(msg);
+
+        sub->dropped++;
+
+        // Undo stats from above.
+        sub->msgList.msgs--;
+        sub->msgList.bytes -= bufLen;
 
         _processSlowConsumer(nc, sub);
     }
@@ -1703,10 +1713,8 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
         sub->msgList.tail = msg;
 
-        sub->msgList.count++;
-
         if ((sub->noDelay)
-            || (sub->msgList.count >= sub->signalLimit))
+            || (sub->msgList.msgs >= sub->signalLimit))
         {
             if (sub->inWait > 0)
                 natsCondition_Broadcast(sub->cond);

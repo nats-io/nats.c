@@ -151,7 +151,8 @@ typedef struct __natsMsgList
 {
     natsMsg     *head;
     natsMsg     *tail;
-    int         count;
+    int         msgs;
+    int         bytes;
 
 } natsMsgList;
 
@@ -173,9 +174,6 @@ struct __natsSubscription
     // The list of messages waiting to be delivered to the callback (or
     // returned from NextMsg).
     natsMsgList                 msgList;
-
-    // The max number of messages that should go in msgList.
-    int                         pendingMax;
 
     // True if msgList.count is over pendingMax
     bool                        slowConsumer;
@@ -234,6 +232,11 @@ struct __natsSubscription
     // Message callback and closure (for async subscription).
     natsMsgHandler              msgCb;
     void                        *msgCbClosure;
+
+    // Pending limits, etc..
+    int                         msgsLimit;
+    int                         bytesLimit;
+    int                         dropped;
 
 };
 

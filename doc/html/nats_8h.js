@@ -44,6 +44,7 @@ var nats_8h =
     [ "natsOptions_SetAllowReconnect", "group__opts_group.html#ga3d1d3cb2f2a0e23d27dd60e96d1cc91b", null ],
     [ "natsOptions_SetMaxReconnect", "group__opts_group.html#gab54cd2719c0b64eebd6c7b83dd2908a0", null ],
     [ "natsOptions_SetReconnectWait", "group__opts_group.html#ga2730f4e16e318a2ef8de98dbf6ede807", null ],
+    [ "natsOptions_SetReconnectBufSize", "group__opts_group.html#gaa0d4b7ece8477cb9879f0dafff3456a5", null ],
     [ "natsOptions_SetMaxPendingMsgs", "group__opts_group.html#ga95510436eee06f9992ded96a44795c40", null ],
     [ "natsOptions_SetErrorHandler", "group__opts_group.html#ga127ec7a8196b453947a7fa9a64096cbd", null ],
     [ "natsOptions_SetClosedCB", "group__opts_group.html#ga44410242e73134e5bb51ef27904a9253", null ],

@@ -103,6 +103,7 @@ var searchData=
   ['natsoptions_5fsetnorandomize',['natsOptions_SetNoRandomize',['../group__opts_group.html#gaabf8763b931dcf389c83fd95d760a413',1,'nats.h']]],
   ['natsoptions_5fsetpedantic',['natsOptions_SetPedantic',['../group__opts_group.html#ga26f166af20de98bec67bc6cc916f769e',1,'nats.h']]],
   ['natsoptions_5fsetpinginterval',['natsOptions_SetPingInterval',['../group__opts_group.html#gae68fb615835364c0809555e8dc93f57e',1,'nats.h']]],
+  ['natsoptions_5fsetreconnectbufsize',['natsOptions_SetReconnectBufSize',['../group__opts_group.html#gaa0d4b7ece8477cb9879f0dafff3456a5',1,'nats.h']]],
   ['natsoptions_5fsetreconnectedcb',['natsOptions_SetReconnectedCB',['../group__opts_group.html#ga26a48c8529fffa5f5d1a61c030979980',1,'nats.h']]],
   ['natsoptions_5fsetreconnectwait',['natsOptions_SetReconnectWait',['../group__opts_group.html#ga2730f4e16e318a2ef8de98dbf6ede807',1,'nats.h']]],
   ['natsoptions_5fsetsecure',['natsOptions_SetSecure',['../group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba',1,'nats.h']]],

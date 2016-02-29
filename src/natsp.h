@@ -126,6 +126,7 @@ struct __natsOptions
     bool                    secure;
     int                     maxReconnect;
     int64_t                 reconnectWait;
+    int                     reconnectBufSize;
 
     natsConnectionHandler   closedCb;
     void                    *closedCbClosure;

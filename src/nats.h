@@ -674,6 +674,21 @@ natsOptions_SetMaxReconnect(natsOptions *opts, int maxReconnect);
 NATS_EXTERN natsStatus
 natsOptions_SetReconnectWait(natsOptions *opts, int64_t reconnectWait);
 
+/** \brief Sets the size of the backing buffer used during reconnect.
+ *
+ * Sets the size, in bytes, of the backing buffer holding published data
+ * while the library is reconnecting. Once this buffer has been exhausted,
+ * publish operations will return the #NATS_INSUFFICIENT_BUFFER error.
+ * If not specified, or the value is 0, the library will use a default value,
+ * currently set to 8MB.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param reconnectBufSize the size, in bytes, of the backing buffer for
+ * write operations during a reconnect.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetReconnectBufSize(natsOptions *opts, int reconnectBufSize);
+
 /** \brief Sets the maximum number of pending messages per subscription.
  *
  * Specifies the maximum number of inbound messages that can be buffered in the

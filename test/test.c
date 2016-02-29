@@ -4611,6 +4611,80 @@ test_IsReconnectingAndStatus(void)
 }
 
 static void
+test_ReconnectBufSize(void)
+{
+    natsStatus          s         = NATS_OK;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        opts = _createReconnectOptions();
+        if (opts == NULL)
+            s = NATS_ERR;
+    }
+    if (s == NATS_OK)
+        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg);
+
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Option invalid settings. NULL options: ");
+    s = natsOptions_SetReconnectBufSize(NULL, 1);
+    testCond(s != NATS_OK);
+
+    test("Option invalid settings. Negative value: ");
+    s = natsOptions_SetReconnectBufSize(opts, -1);
+    testCond(s != NATS_OK);
+
+    test("Option valid settings. Zero: ");
+    s = natsOptions_SetReconnectBufSize(opts, 0);
+    testCond(s == NATS_OK);
+
+    serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    // For this test, set to a low value.
+    s = natsOptions_SetReconnectBufSize(opts, 32);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    _stopServer(serverPid);
+
+    // Wait until we get the disconnected callback
+    test("Check we are disconnected: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && arg.disconnected);
+
+    // Publish 2 messages, they should be accepted
+    test("Can publish while server is down: ");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "abcd");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "abcd");
+    testCond(s == NATS_OK);
+
+    // This publish should fail
+    test("Exhausted buffer should return an error: ");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "abcd");
+    testCond(s == NATS_INSUFFICIENT_BUFFER);
+
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 _closeConnWithDelay(void *arg)
 {
     natsConnection *nc = (natsConnection*) arg;
@@ -8772,6 +8846,7 @@ static testInfo allTests[] =
     {"QueueSubsOnReconnect",            test_QueueSubsOnReconnect},
     {"IsClosed",                        test_IsClosed},
     {"IsReconnectingAndStatus",         test_IsReconnectingAndStatus},
+    {"ReconnectBufSize",                test_ReconnectBufSize},
 
     {"ErrOnConnectAndDeadlock",         test_ErrOnConnectAndDeadlock},
     {"ErrOnMaxPayloadLimit",            test_ErrOnMaxPayloadLimit},

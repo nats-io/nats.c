@@ -46,6 +46,7 @@ ExtendedReconnectFunctionality
 QueueSubsOnReconnect
 IsClosed
 IsReconnectingAndStatus
+ReconnectBufSize
 ErrOnConnectAndDeadlock
 ErrOnMaxPayloadLimit
 Auth

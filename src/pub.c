@@ -58,6 +58,21 @@ _publishEx(natsConnection *nc, const char *subj,
         s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
+    // Check if we are reconnecting, and if so check if
+    // we have exceeded our reconnect outbound buffer limits.
+    if ((s == NATS_OK) && natsConn_isReconnecting(nc))
+    {
+        // Flush to underlying buffer.
+        natsConn_bufferFlush(nc);
+
+        // Check if we are over
+        if (natsBuf_Len(nc->pending) >= nc->opts->reconnectBufSize)
+        {
+            natsConn_Unlock(nc);
+            return NATS_INSUFFICIENT_BUFFER;
+        }
+    }
+
     if (s == NATS_OK)
     {
         if (dataLen > 0)

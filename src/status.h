@@ -71,7 +71,6 @@ typedef enum
                                         ///  instance because of #natsSubscription_AutoUnsubscribe().
 
     NATS_INSUFFICIENT_BUFFER,           ///< A buffer is not large enough to accommodate the data.
-                                        ///  This is an internal error.
 
     NATS_NO_MEMORY,                     ///< An operation could not complete because of insufficient
                                         ///  memory.

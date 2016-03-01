@@ -6757,6 +6757,7 @@ test_PendingLimitsDeliveredAndDropped(void)
 
     test("Check pending values, NULL bytes: ");
     s = natsSubscription_GetPending(sub, &msgs, NULL);
+    testCond(s == NATS_OK);
 
     msgs = 0;
     bytes = 0;
@@ -6793,6 +6794,28 @@ test_PendingLimitsDeliveredAndDropped(void)
     s = natsSubscription_GetDelivered(sub, &msgs);
     testCond((s == NATS_OK) && (msgs == 1));
 
+    test("Check get stats pending: ");
+    s = natsSubscription_GetStats(sub, &msgs, &bytes, NULL, NULL, NULL, NULL);
+    testCond((s == NATS_OK) && (msgs == total - 1) && (bytes == msgs * 5));
+
+    test("Check get stats max pending: ");
+    s = natsSubscription_GetStats(sub, NULL, NULL, &msgs, &bytes, NULL, NULL);
+    testCond((s == NATS_OK)
+             && (msgs >= total - 1) && (msgs <= total)
+             && (bytes >= (total - 1) * 5) && (bytes <= total * 5));
+
+    test("Check get stats delivered: ");
+    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, &msgs, NULL);
+    testCond((s == NATS_OK) && (msgs == 1));
+
+    test("Check get stats dropped: ");
+    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, NULL, &msgs);
+    testCond((s == NATS_OK) && (msgs == sent - total));
+
+    test("Check get stats all NULL: ");
+    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, NULL, NULL);
+    testCond(s == NATS_OK);
+
     // Release the sub
     natsMutex_Lock(arg.m);
 
@@ -6825,6 +6848,10 @@ test_PendingLimitsDeliveredAndDropped(void)
 
     test("GetDropped on closed sub: ");
     s = natsSubscription_GetDropped(sub, &msgs);
+    testCond(s != NATS_OK);
+
+    test("Check get stats on closed sub: ");
+    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, NULL, NULL);
     testCond(s != NATS_OK);
 
     natsSubscription_Destroy(sub);

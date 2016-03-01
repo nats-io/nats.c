@@ -600,8 +600,6 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
 natsStatus
 natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes)
 {
-    natsStatus  s = NATS_OK;
-
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
@@ -621,14 +619,12 @@ natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes)
 
     natsSub_Unlock(sub);
 
-    return s;
+    return NATS_OK;
 }
 
 natsStatus
 natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytesLimit)
 {
-    natsStatus  s = NATS_OK;
-
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
@@ -648,14 +644,12 @@ natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytes
 
     natsSub_Unlock(sub);
 
-    return s;
+    return NATS_OK;
 }
 
 natsStatus
 natsSubscription_GetPendingLimits(natsSubscription *sub, int *msgLimit, int *bytesLimit)
 {
-    natsStatus  s = NATS_OK;
-
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
@@ -675,14 +669,12 @@ natsSubscription_GetPendingLimits(natsSubscription *sub, int *msgLimit, int *byt
 
     natsSub_Unlock(sub);
 
-    return s;
+    return NATS_OK;
 }
 
 natsStatus
 natsSubscription_GetDelivered(natsSubscription *sub, int *msgs)
 {
-    natsStatus  s = NATS_OK;
-
     if ((sub == NULL) || (msgs == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
@@ -698,14 +690,12 @@ natsSubscription_GetDelivered(natsSubscription *sub, int *msgs)
 
     natsSub_Unlock(sub);
 
-    return s;
+    return NATS_OK;
 }
 
 natsStatus
 natsSubscription_GetDropped(natsSubscription *sub, int *msgs)
 {
-    natsStatus  s = NATS_OK;
-
     if ((sub == NULL) || (msgs == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
@@ -721,14 +711,12 @@ natsSubscription_GetDropped(natsSubscription *sub, int *msgs)
 
     natsSub_Unlock(sub);
 
-    return s;
+    return NATS_OK;
 }
 
 natsStatus
 natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes)
 {
-    natsStatus  s = NATS_OK;
-
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
@@ -748,14 +736,12 @@ natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes)
 
     natsSub_Unlock(sub);
 
-    return s;
+    return NATS_OK;
 }
 
 natsStatus
 natsSubscription_ClearMaxPending(natsSubscription *sub)
 {
-    natsStatus  s = NATS_OK;
-
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
@@ -772,7 +758,50 @@ natsSubscription_ClearMaxPending(natsSubscription *sub)
 
     natsSub_Unlock(sub);
 
-    return s;
+    return NATS_OK;
+}
+
+natsStatus
+natsSubscription_GetStats(natsSubscription *sub,
+        int *pendingMsgs,
+        int *pendingBytes,
+        int *maxPendingMsgs,
+        int *maxPendingBytes,
+        int *deliveredMsgs,
+        int *droppedMsgs)
+{
+    if (sub == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsSub_Lock(sub);
+
+    if (sub->closed)
+    {
+        natsSub_Unlock(sub);
+        return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
+    }
+
+    if (pendingMsgs != NULL)
+        *pendingMsgs = sub->msgList.msgs;
+
+    if (pendingBytes != NULL)
+        *pendingBytes = sub->msgList.bytes;
+
+    if (maxPendingMsgs != NULL)
+        *maxPendingMsgs = sub->msgsMax;
+
+    if (maxPendingBytes != NULL)
+        *maxPendingBytes = sub->bytesMax;
+
+    if (deliveredMsgs != NULL)
+        *deliveredMsgs = (int) sub->delivered;
+
+    if (droppedMsgs != NULL)
+        *droppedMsgs = sub->dropped;
+
+    natsSub_Unlock(sub);
+
+    return NATS_OK;
 }
 
 /*

@@ -1533,6 +1533,41 @@ natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes);
 NATS_EXTERN natsStatus
 natsSubscription_ClearMaxPending(natsSubscription *sub);
 
+/** \brief Get various statistics from this subscription.
+ *
+ * This is a convenient function to get several subscription's statistics
+ * in one call.
+ *
+ * \note Any or all of the statistics pointers can be `NULL`.
+ *
+ * @see natsSubscription_GetPending
+ * @see natsSubscription_GetMaxPending
+ * @see natsSubscription_GetDelivered
+ * @see natsSubscription_GetDropped
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param pendingMsgs if not `NULL`, memory location where to store the
+ * number of pending messages.
+ * @param pendingBytes if not `NULL`, memory location where to store the
+ * total size of pending messages.
+ * @param maxPendingMsgs if not `NULL`, memory location where to store the
+ * maximum number of pending messages seen so far.
+ * @param maxPendingBytes if not `NULL`, memory location where to store the
+ * maximum total size of pending messages seen so far.
+ * @param deliveredMsgs if not `NULL`, memory location where to store the
+ * number of delivered messages.
+ * @param droppedMsgs if not `NULL`, memory location where to store the
+ * number of dropped messages.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetStats(natsSubscription *sub,
+                          int *pendingMsgs,
+                          int *pendingBytes,
+                          int *maxPendingMsgs,
+                          int *maxPendingBytes,
+                          int *deliveredMsgs,
+                          int *droppedMsgs);
+
 /** \brief Checks the validity of the subscription.
  *
  * Returns a boolean indicating whether the subscription is still active.

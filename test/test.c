@@ -2532,7 +2532,11 @@ _createReconnectOptions(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
     if (s == NATS_OK)
+#ifdef WIN32
+        s = natsOptions_SetTimeout(opts, 500);
+#else
         s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
 
     if (s != NATS_OK)
     {
@@ -3620,10 +3624,10 @@ test_DefaultConnection(void)
         FAIL("Unable to setup test");
 
     test("Check connection fails without running server: ");
+#ifndef _WIN32
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
     if (s != NATS_OK)
-        s = natsConnection_Connect(&nc, NULL);
-    if (s != NATS_OK)
+#endif
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_NO_SERVER);
 
@@ -5057,10 +5061,8 @@ test_AuthFailNoDisconnectCB(void)
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
 
-    serverPid = _startServer("nats://localhost:8232", "--user ivan --pass foo -p 8232", false);
+    serverPid = _startServer("nats://localhost:8232", "--user ivan --pass foo -p 8232", true);
     CHECK_SERVER_STARTED(serverPid);
-
-    nats_Sleep(1000);
 
     opts = _createReconnectOptions();
     if (opts == NULL)
@@ -5404,6 +5406,10 @@ test_Flush(void)
         s = natsOptions_SetReconnectWait(opts, 100);
     if (s == NATS_OK)
         s = natsOptions_SetPingInterval(opts, 100);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, 500);
+#endif
 
     if (s != NATS_OK)
         FAIL("Unable to setup test");
@@ -7608,6 +7614,10 @@ test_ServersOption(void)
     serversCount = sizeof(testServers) / sizeof(char *);
 
     s = natsOptions_Create(&opts);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, 500);
+#endif
     if (s == NATS_OK)
         s = natsOptions_SetNoRandomize(opts, true);
 
@@ -7842,6 +7852,10 @@ test_BasicClusterReconnect(void)
         s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, 500);
+#endif
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -8890,6 +8904,10 @@ test_SSLBasic(void)
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_SECURE_CONNECTION_REQUIRED);
@@ -8967,6 +8985,10 @@ test_SSLVerify(void)
         s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_SSL_ERROR);
@@ -9044,6 +9066,10 @@ test_SSLVerifyHostname(void)
         s = natsOptions_SetExpectedHostname(opts, "foo");
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_SSL_ERROR);
@@ -9119,6 +9145,10 @@ test_SSLCiphers(void)
         s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
     if (s == NATS_OK)
         s = natsOptions_SetCiphers(opts, "-ALL:RSA");
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s != NATS_OK);
@@ -9249,6 +9279,10 @@ test_SSLMultithreads(void)
         s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
     if (s == NATS_OK)
         s = natsOptions_SetExpectedHostname(opts, "localhost");
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
 
     args.opts = opts;
 
@@ -9311,6 +9345,10 @@ test_SSLConnectVerboseOption(void)
         s = natsOptions_SetVerbose(opts, true);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
     if (opts == NULL)
         FAIL("Unable to setup test!");
 

@@ -234,6 +234,8 @@ struct __natsSubscription
     void                        *msgCbClosure;
 
     // Pending limits, etc..
+    int                         msgsMax;
+    int                         bytesMax;
     int                         msgsLimit;
     int                         bytesLimit;
     int                         dropped;

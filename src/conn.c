@@ -1703,6 +1703,12 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     }
     else
     {
+        if (sub->msgList.msgs > sub->msgsMax)
+            sub->msgsMax = sub->msgList.msgs;
+
+        if (sub->msgList.bytes > sub->bytesMax)
+            sub->bytesMax = sub->msgList.bytes;
+
         sub->slowConsumer = false;
 
         if (sub->msgList.head == NULL)

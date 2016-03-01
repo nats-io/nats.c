@@ -724,6 +724,56 @@ natsSubscription_GetDropped(natsSubscription *sub, int *msgs)
     return s;
 }
 
+natsStatus
+natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes)
+{
+    natsStatus  s = NATS_OK;
+
+    if (sub == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsSub_Lock(sub);
+
+    if (sub->closed)
+    {
+        natsSub_Unlock(sub);
+        return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
+    }
+
+    if (msgs != NULL)
+        *msgs = sub->msgsMax;
+
+    if (bytes != NULL)
+        *bytes = sub->bytesMax;
+
+    natsSub_Unlock(sub);
+
+    return s;
+}
+
+natsStatus
+natsSubscription_ClearMaxPending(natsSubscription *sub)
+{
+    natsStatus  s = NATS_OK;
+
+    if (sub == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsSub_Lock(sub);
+
+    if (sub->closed)
+    {
+        natsSub_Unlock(sub);
+        return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
+    }
+
+    sub->msgsMax = 0;
+    sub->bytesMax = 0;
+
+    natsSub_Unlock(sub);
+
+    return s;
+}
 
 /*
  * Returns a boolean indicating whether the subscription is still active.

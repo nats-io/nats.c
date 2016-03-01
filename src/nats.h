@@ -1493,7 +1493,7 @@ natsSubscription_GetDelivered(natsSubscription *sub, int *msgs);
 
 /** \brief Returns the number of dropped messages.
  *
- * Returns the number of knwon dropped messages for this subscription. This happens
+ * Returns the number of known dropped messages for this subscription. This happens
  * when a consumer is not keeping up and the library starts to drop messages
  * when the maximum number (and/or size) of pending messages has been reached.
  *
@@ -1508,6 +1508,30 @@ natsSubscription_GetDelivered(natsSubscription *sub, int *msgs);
  */
 NATS_EXTERN natsStatus
 natsSubscription_GetDropped(natsSubscription *sub, int *msgs);
+
+/** \brief Returns the maximum number of pending messages and bytes.
+ *
+ * Returns the maximum of pending messages and bytes seen so far.
+ *
+ * \note `msgs` and/or `bytes` can be NULL.
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param msgs if not `NULL`, the memory location where to store the maximum
+ * number of pending messages seen so far.
+ * @param bytes if not `NULL`, the memory location where to store the maximum
+ * number of bytes pending seen so far.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes);
+
+/** \brief Clears the statistics regarding the maximum pending values.
+ *
+ * Clears the statistics regarding the maximum pending values.
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_ClearMaxPending(natsSubscription *sub);
 
 /** \brief Checks the validity of the subscription.
  *

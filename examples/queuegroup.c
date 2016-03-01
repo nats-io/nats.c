@@ -79,7 +79,7 @@ int main(int argc, char **argv)
     {
         while (s == NATS_OK)
         {
-            s = printStats(STATS_IN|STATS_COUNT,conn, sub, stats, count, 0);
+            s = printStats(STATS_IN|STATS_COUNT,conn, sub, stats);
 
             if (count == total)
                 break;
@@ -103,7 +103,7 @@ int main(int argc, char **argv)
 
             if (nats_Now() - last >= 1000)
             {
-                s = printStats(STATS_IN|STATS_COUNT,conn, sub, stats, count, 0);
+                s = printStats(STATS_IN|STATS_COUNT,conn, sub, stats);
                 last = nats_Now();
             }
 

@@ -32,7 +32,8 @@ asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure
 {
     if (print)
         printf("Async error: %d - %s\n", err, natsStatus_GetText(err));
-    errors++;
+
+    natsSubscription_GetDropped(sub, (int*) &dropped);
 }
 
 int main(int argc, char **argv)
@@ -79,10 +80,9 @@ int main(int argc, char **argv)
     {
         while (s == NATS_OK)
         {
-            s = printStats(STATS_IN|STATS_COUNT|STATS_ERRORS, conn, sub, stats,
-                           count, errors);
+            s = printStats(STATS_IN|STATS_COUNT, conn, sub, stats);
 
-            if (count + errors == total)
+            if (count + dropped == total)
                 break;
 
             if (s == NATS_OK)
@@ -104,8 +104,7 @@ int main(int argc, char **argv)
 
             if (nats_Now() - last >= 1000)
             {
-                s = printStats(STATS_IN|STATS_COUNT|STATS_ERRORS, conn, sub, stats,
-                               count, errors);
+                s = printStats(STATS_IN|STATS_COUNT, conn, sub, stats);
                 last = nats_Now();
             }
 

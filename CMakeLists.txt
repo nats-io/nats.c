@@ -15,6 +15,7 @@ set(CMAKE_INSTALL_PREFIX ${NATS_INSTALL_PREFIX} CACHE INTERNAL "")
 option(NATS_UPDATE_VERSION "Update the version file" OFF)
 option(NATS_COVERAGE "Code coverage" OFF)
 option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
+option(NATS_BUILD_WITH_TLS_CLIENT_METHOD "Use TLS_client_method()" OFF)
 
 if(NATS_BUILD_WITH_TLS)
 find_package(OpenSSL REQUIRED)
@@ -80,6 +81,9 @@ add_definitions(-D${NATS_OS})
 add_definitions(-D_REENTRANT)
 if(NATS_BUILD_WITH_TLS)
 add_definitions(-DNATS_HAS_TLS)
+if(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
+add_definitions(-DNATS_USE_TLS_CLIENT_METHOD)
+endif(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
 endif(NATS_BUILD_WITH_TLS)
 
 #---------------------------------------------------------------------

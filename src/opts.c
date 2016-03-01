@@ -343,7 +343,11 @@ _createSSLCtx(natsSSLCtx **newCtx)
     }
     if (s == NATS_OK)
     {
-        ctx->ctx = SSL_CTX_new(SSLv23_method());
+#if defined(NATS_USE_TLS_CLIENT_METHOD)
+        ctx->ctx = SSL_CTX_new(TLS_client_method());
+#else
+        ctx->ctx = SSL_CTX_new(TLSv1_2_client_method());
+#endif
         if (ctx->ctx == NULL)
             s = nats_setError(NATS_SSL_ERROR,
                               "Unable to create SSL context: %s",

@@ -10,6 +10,8 @@ var group__sub_group =
     [ "natsSubscription_GetPending", "group__sub_group.html#gaca6262e2ef842caa701a9f233db72707", null ],
     [ "natsSubscription_GetDelivered", "group__sub_group.html#gabfd2ef233d921b5b06ee85c9c2b739ef", null ],
     [ "natsSubscription_GetDropped", "group__sub_group.html#gad111cf1ae84b4ddbd18bdc8b8f4e3fab", null ],
+    [ "natsSubscription_GetMaxPending", "group__sub_group.html#ga0abc5d9afbc6b0c9c5adaf533904c968", null ],
+    [ "natsSubscription_ClearMaxPending", "group__sub_group.html#gafe31911d8372db401d33856465421710", null ],
     [ "natsSubscription_IsValid", "group__sub_group.html#ga5e6454bbc7a90b9694112d45bd8de903", null ],
     [ "natsSubscription_Destroy", "group__sub_group.html#ga50a95dd96e9b714201679a015d62832f", null ]
 ];

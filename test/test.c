@@ -1391,19 +1391,20 @@ _testInbox(void *closure)
 {
     struct threadArg    *args = (struct threadArg*) closure;
     natsStatus          s     = NATS_OK;
-    natsInbox           *inbox, *oldInbox;
+    natsInbox           *inbox;
+    void                *oldValue;
 
     for (int i=0; (s == NATS_OK) && (i<INBOX_COUNT_PER_THREAD); i++)
     {
         inbox    = NULL;
-        oldInbox = NULL;
+        oldValue = NULL;
 
         s = natsInbox_Create(&inbox);
         if (s == NATS_OK)
-            s = natsStrHash_Set(args->inboxes, inbox, true, (void*) 1, (void**) &oldInbox);
-        if ((s == NATS_OK) && (oldInbox != NULL))
+            s = natsStrHash_Set(args->inboxes, inbox, true, (void*) 1, (void**) &oldValue);
+        if ((s == NATS_OK) && (oldValue != NULL))
         {
-            printf("Duplicate inbox: %s\n", oldInbox);
+            printf("Duplicate inbox: %s\n", inbox);
             s = NATS_ERR;
         }
 
@@ -1441,11 +1442,12 @@ test_natsInbox(void)
             s = natsThread_Create(&(threads[i]), _testInbox, &(args[i]));
     }
 
-    for (i=0; (s == NATS_OK) && (i<INBOX_THREADS_COUNT); i++)
+    for (i=0; (i<INBOX_THREADS_COUNT); i++)
     {
         natsThread_Join(threads[i]);
 
-        s = args[i].status;
+        if (s == NATS_OK)
+            s = args[i].status;
         if (s == NATS_OK)
         {
             j = 0;

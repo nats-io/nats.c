@@ -7,6 +7,7 @@
 #include "conn.h"
 #include "sub.h"
 #include "msg.h"
+#include "nuid.h"
 
 static const char *digits = "0123456789";
 
@@ -248,12 +249,12 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
 {
     natsStatus          s       = NATS_OK;
     natsSubscription    *sub    = NULL;
-    natsInbox           *inbox  = NULL;
+    char                inbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1];
 
     if (replyMsg == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = natsInbox_Create(&inbox);
+    s = natsInbox_init(inbox, sizeof(inbox));
     if (s == NATS_OK)
         s = natsConn_subscribe(&sub, nc, inbox, NULL, NULL, NULL, true);
     if (s == NATS_OK)
@@ -263,7 +264,6 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
     if (s == NATS_OK)
         s = natsSubscription_NextMsg(replyMsg, sub, timeout);
 
-    natsInbox_Destroy(inbox);
     natsSubscription_Destroy(sub);
 
     return NATS_UPDATE_ERR_STACK(s);

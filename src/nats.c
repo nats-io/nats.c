@@ -85,16 +85,11 @@ typedef struct __natsLib
 
     natsCondition   *cond;
 
-    natsMutex       *inboxesLock;
-    uint64_t        inboxesSeq;
-
     natsGCList      gc;
 
 } natsLib;
 
 int64_t gLockSpinCount = 2000;
-
-static const char *inboxPrefix = "_INBOX.";
 
 static natsInitOnceType gInitOnce = NATS_ONCE_STATIC_INIT;
 static natsLib          gLib;
@@ -241,8 +236,8 @@ _freeLib(void)
     _freeTimers();
     _freeAsyncCbs();
     _freeGC();
+    natsNUID_free();
 
-    natsMutex_Destroy(gLib.inboxesLock);
     natsCondition_Destroy(gLib.cond);
 
     memset(&(gLib.refs), 0, sizeof(natsLib) - ((char *)&(gLib.refs) - (char*)&gLib));
@@ -839,8 +834,6 @@ nats_Open(int64_t lockSpinCount)
         gLockSpinCount = lockSpinCount;
 
     s = natsCondition_Create(&(gLib.cond));
-    if (s == NATS_OK)
-        s = natsMutex_Create(&(gLib.inboxesLock));
 
     if (s == NATS_OK)
         s = natsMutex_Create(&(gLib.timers.lock));
@@ -875,6 +868,8 @@ nats_Open(int64_t lockSpinCount)
     }
     if (s == NATS_OK)
         s = natsThreadLocal_CreateKey(&(gLib.errTLKey), _destroyErrTL);
+    if (s == NATS_OK)
+        s = natsNUID_init();
 
     if (s == NATS_OK)
         gLib.initialized = true;
@@ -906,24 +901,42 @@ nats_Open(int64_t lockSpinCount)
 natsStatus
 natsInbox_Create(natsInbox **newInbox)
 {
-    natsStatus  s      = NATS_OK;
+    natsStatus  s;
     char        *inbox = NULL;
-    int         res    = 0;
+    char        tmpInbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1];
 
     s = nats_Open(-1);
     if (s != NATS_OK)
         return s;
 
-    natsMutex_Lock(gLib.inboxesLock);
-
-    res = nats_asprintf(&inbox, "%s%x.%" PRIu64, inboxPrefix,
-                        rand(), ++(gLib.inboxesSeq));
-    if (res < 0)
-        s = nats_setDefaultError(NATS_NO_MEMORY);
-    else
+    sprintf(tmpInbox, "%s", inboxPrefix);
+    s = natsNUID_Next(tmpInbox + NATS_INBOX_PRE_LEN, NUID_BUFFER_LEN + 1);
+    if (s == NATS_OK)
+    {
+        inbox = NATS_STRDUP(tmpInbox);
+        if (inbox == NULL)
+            s = NATS_NO_MEMORY;
+    }
+    if (s == NATS_OK)
         *newInbox = inbox;
 
-    natsMutex_Unlock(gLib.inboxesLock);
+    return s;
+}
+
+natsStatus
+natsInbox_init(char *inbox, int inboxLen)
+{
+    natsStatus s;
+
+    s = nats_Open(-1);
+    if (s != NATS_OK)
+        return s;
+
+    if (inboxLen < (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1))
+        return NATS_INSUFFICIENT_BUFFER;
+
+    sprintf(inbox, "%s", inboxPrefix);
+    s = natsNUID_Next(inbox + NATS_INBOX_PRE_LEN, NUID_BUFFER_LEN + 1);
 
     return s;
 }

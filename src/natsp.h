@@ -13,6 +13,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
+#include <openssl/rand.h>
 #else
 #define SSL             void*
 #define SSL_free(c)     { (c) = NULL; }
@@ -33,6 +34,7 @@
 #include "hash.h"
 #include "stats.h"
 #include "natstime.h"
+#include "nuid.h"
 
 // Comment/uncomment to replace some function calls with direct structure
 // access
@@ -73,6 +75,9 @@
 #define _PONG_PROTO_LEN_    (6)
 #define _OK_OP_LEN_         (3)
 #define _ERR_OP_LEN_        (4)
+
+static const char *inboxPrefix = "_INBOX.";
+#define NATS_INBOX_PRE_LEN (7)
 
 extern int64_t gLockSpinCount;
 
@@ -362,6 +367,9 @@ nats_sslRegisterThreadForCleanup(void);
 
 natsStatus
 nats_sslInit(void);
+
+natsStatus
+natsInbox_init(char *inbox, int inboxLen);
 
 //
 // Threads

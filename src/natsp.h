@@ -13,6 +13,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
+#include <openssl/rand.h>
 #else
 #define SSL             void*
 #define SSL_free(c)     { (c) = NULL; }
@@ -33,6 +34,7 @@
 #include "hash.h"
 #include "stats.h"
 #include "natstime.h"
+#include "nuid.h"
 
 // Comment/uncomment to replace some function calls with direct structure
 // access
@@ -73,6 +75,9 @@
 #define _PONG_PROTO_LEN_    (6)
 #define _OK_OP_LEN_         (3)
 #define _ERR_OP_LEN_        (4)
+
+static const char *inboxPrefix = "_INBOX.";
+#define NATS_INBOX_PRE_LEN (7)
 
 extern int64_t gLockSpinCount;
 
@@ -126,6 +131,7 @@ struct __natsOptions
     bool                    secure;
     int                     maxReconnect;
     int64_t                 reconnectWait;
+    int                     reconnectBufSize;
 
     natsConnectionHandler   closedCb;
     void                    *closedCbClosure;
@@ -150,7 +156,8 @@ typedef struct __natsMsgList
 {
     natsMsg     *head;
     natsMsg     *tail;
-    int         count;
+    int         msgs;
+    int         bytes;
 
 } natsMsgList;
 
@@ -172,9 +179,6 @@ struct __natsSubscription
     // The list of messages waiting to be delivered to the callback (or
     // returned from NextMsg).
     natsMsgList                 msgList;
-
-    // The max number of messages that should go in msgList.
-    int                         pendingMax;
 
     // True if msgList.count is over pendingMax
     bool                        slowConsumer;
@@ -233,6 +237,13 @@ struct __natsSubscription
     // Message callback and closure (for async subscription).
     natsMsgHandler              msgCb;
     void                        *msgCbClosure;
+
+    // Pending limits, etc..
+    int                         msgsMax;
+    int                         bytesMax;
+    int                         msgsLimit;
+    int                         bytesLimit;
+    int                         dropped;
 
 };
 
@@ -356,6 +367,9 @@ nats_sslRegisterThreadForCleanup(void);
 
 natsStatus
 nats_sslInit(void);
+
+natsStatus
+natsInbox_init(char *inbox, int inboxLen);
 
 //
 // Threads

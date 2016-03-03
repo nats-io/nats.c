@@ -684,6 +684,18 @@ natsOptions_SetReconnectWait(natsOptions *opts, int64_t reconnectWait)
 }
 
 natsStatus
+natsOptions_SetReconnectBufSize(natsOptions *opts, int reconnectBufSize)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, (reconnectBufSize < 0));
+
+    opts->reconnectBufSize = reconnectBufSize;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
 natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending)
 {
     LOCK_AND_CHECK_OPTIONS(opts, (maxPending <= 0));

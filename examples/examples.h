@@ -19,7 +19,6 @@ extern char *strdup(const char *s);
 #define STATS_IN        0x1
 #define STATS_OUT       0x2
 #define STATS_COUNT     0x4
-#define STATS_ERRORS    0x8
 
 #define MAX_SERVERS     (10)
 
@@ -30,7 +29,7 @@ const char  *name   = "worker";
 int64_t     total   = 1000000;
 
 volatile int64_t count   = 0;
-volatile int64_t errors  = 0;
+volatile int     dropped = 0;
 int64_t          start   = 0;
 volatile int64_t elapsed = 0;
 bool             print   = false;
@@ -42,10 +41,11 @@ const char       *keyFile  = NULL;
 
 static natsStatus
 printStats(int mode, natsConnection *conn, natsSubscription *sub,
-           natsStatistics *stats, uint64_t count, uint64_t errors)
+           natsStatistics *stats)
 {
     natsStatus  s = NATS_OK;
-    uint64_t    inMsgs, inBytes, outMsgs, outBytes, queued, reconnected;
+    uint64_t    inMsgs, inBytes, outMsgs, outBytes, reconnected;
+    int         pending, delivered, dropped;
 
     s = natsConnection_GetStats(conn, stats);
     if (s == NATS_OK)
@@ -53,7 +53,8 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
                                      &outMsgs, &outBytes, &reconnected);
     if ((s == NATS_OK) && (sub != NULL))
     {
-        s = natsSubscription_QueuedMsgs(sub, &queued);
+        s = natsSubscription_GetStats(sub, &pending, NULL, NULL, NULL,
+                                      &delivered, &dropped);
 
         // Since we use AutoUnsubscribe(), when the max has been reached,
         // the subscription is automatically closed, so this call would
@@ -61,7 +62,7 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
         if (s == NATS_INVALID_SUBSCRIPTION)
         {
             s = NATS_OK;
-            queued = 0;
+            pending = 0;
         }
     }
 
@@ -79,15 +80,9 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
         }
         if (mode & STATS_COUNT)
         {
-            printf("Delivered: %9" PRIu64 " - ", count);
-        }
-        if (sub != NULL)
-        {
-            printf("Queued: %5" PRIu64 " - ", queued);
-        }
-        if (mode & STATS_ERRORS)
-        {
-            printf("Errors: %9" PRIu64 " - ", errors);
+            printf("Delivered: %9d - ", delivered);
+            printf("Pending: %5d - ", pending);
+            printf("Dropped: %5d - ", dropped);
         }
         printf("Reconnected: %3" PRIu64 "\n", reconnected);
     }

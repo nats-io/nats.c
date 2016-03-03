@@ -11,6 +11,7 @@
 #define NATS_OPTS_DEFAULT_PING_INTERVAL       (2 * 60 * 1000)     // 2 minutes
 #define NATS_OPTS_DEFAULT_MAX_PING_OUT        (2)
 #define NATS_OPTS_DEFAULT_MAX_PENDING_MSGS    (65536)
+#define NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE  (8 * 1024 * 1024)   // 8 MB
 
 natsOptions*
 natsOptions_clone(natsOptions *opts);

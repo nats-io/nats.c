@@ -46,6 +46,7 @@ ExtendedReconnectFunctionality
 QueueSubsOnReconnect
 IsClosed
 IsReconnectingAndStatus
+ReconnectBufSize
 ErrOnConnectAndDeadlock
 ErrOnMaxPayloadLimit
 Auth
@@ -81,6 +82,12 @@ CloseSubRelease
 IsValidSubscriber
 SlowSubscriber
 SlowAsyncSubscriber
+PendingLimitsDeliveredAndDropped
+PendingLimitsWithSyncSub
+AsyncSubscriptionPending
+AsyncSubscriptionPendingDrain
+SyncSubscriptionPending
+SyncSubscriptionPendingDrain
 AsyncErrHandler
 AsyncSubscriberStarvation
 AsyncSubscriberOnClose

@@ -1391,19 +1391,20 @@ _testInbox(void *closure)
 {
     struct threadArg    *args = (struct threadArg*) closure;
     natsStatus          s     = NATS_OK;
-    natsInbox           *inbox, *oldInbox;
+    natsInbox           *inbox;
+    void                *oldValue;
 
     for (int i=0; (s == NATS_OK) && (i<INBOX_COUNT_PER_THREAD); i++)
     {
         inbox    = NULL;
-        oldInbox = NULL;
+        oldValue = NULL;
 
         s = natsInbox_Create(&inbox);
         if (s == NATS_OK)
-            s = natsStrHash_Set(args->inboxes, inbox, true, (void*) 1, (void**) &oldInbox);
-        if ((s == NATS_OK) && (oldInbox != NULL))
+            s = natsStrHash_Set(args->inboxes, inbox, true, (void*) 1, (void**) &oldValue);
+        if ((s == NATS_OK) && (oldValue != NULL))
         {
-            printf("Duplicate inbox: %s\n", oldInbox);
+            printf("Duplicate inbox: %s\n", inbox);
             s = NATS_ERR;
         }
 
@@ -1441,11 +1442,12 @@ test_natsInbox(void)
             s = natsThread_Create(&(threads[i]), _testInbox, &(args[i]));
     }
 
-    for (i=0; (s == NATS_OK) && (i<INBOX_THREADS_COUNT); i++)
+    for (i=0; (i<INBOX_THREADS_COUNT); i++)
     {
         natsThread_Join(threads[i]);
 
-        s = args[i].status;
+        if (s == NATS_OK)
+            s = args[i].status;
         if (s == NATS_OK)
         {
             j = 0;
@@ -2532,7 +2534,11 @@ _createReconnectOptions(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
     if (s == NATS_OK)
+#ifdef WIN32
+        s = natsOptions_SetTimeout(opts, 500);
+#else
         s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
 
     if (s != NATS_OK)
     {
@@ -3620,10 +3626,10 @@ test_DefaultConnection(void)
         FAIL("Unable to setup test");
 
     test("Check connection fails without running server: ");
+#ifndef _WIN32
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
     if (s != NATS_OK)
-        s = natsConnection_Connect(&nc, NULL);
-    if (s != NATS_OK)
+#endif
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_NO_SERVER);
 
@@ -4611,6 +4617,80 @@ test_IsReconnectingAndStatus(void)
 }
 
 static void
+test_ReconnectBufSize(void)
+{
+    natsStatus          s         = NATS_OK;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        opts = _createReconnectOptions();
+        if (opts == NULL)
+            s = NATS_ERR;
+    }
+    if (s == NATS_OK)
+        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg);
+
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Option invalid settings. NULL options: ");
+    s = natsOptions_SetReconnectBufSize(NULL, 1);
+    testCond(s != NATS_OK);
+
+    test("Option invalid settings. Negative value: ");
+    s = natsOptions_SetReconnectBufSize(opts, -1);
+    testCond(s != NATS_OK);
+
+    test("Option valid settings. Zero: ");
+    s = natsOptions_SetReconnectBufSize(opts, 0);
+    testCond(s == NATS_OK);
+
+    serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    // For this test, set to a low value.
+    s = natsOptions_SetReconnectBufSize(opts, 32);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    _stopServer(serverPid);
+
+    // Wait until we get the disconnected callback
+    test("Check we are disconnected: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && arg.disconnected);
+
+    // Publish 2 messages, they should be accepted
+    test("Can publish while server is down: ");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "abcd");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "abcd");
+    testCond(s == NATS_OK);
+
+    // This publish should fail
+    test("Exhausted buffer should return an error: ");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "abcd");
+    testCond(s == NATS_INSUFFICIENT_BUFFER);
+
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 _closeConnWithDelay(void *arg)
 {
     natsConnection *nc = (natsConnection*) arg;
@@ -4983,10 +5063,8 @@ test_AuthFailNoDisconnectCB(void)
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
 
-    serverPid = _startServer("nats://localhost:8232", "--user ivan --pass foo -p 8232", false);
+    serverPid = _startServer("nats://localhost:8232", "--user ivan --pass foo -p 8232", true);
     CHECK_SERVER_STARTED(serverPid);
-
-    nats_Sleep(1000);
 
     opts = _createReconnectOptions();
     if (opts == NULL)
@@ -5330,6 +5408,10 @@ test_Flush(void)
         s = natsOptions_SetReconnectWait(opts, 100);
     if (s == NATS_OK)
         s = natsOptions_SetPingInterval(opts, 100);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, 500);
+#endif
 
     if (s != NATS_OK)
         FAIL("Unable to setup test");
@@ -6577,6 +6659,619 @@ test_SlowAsyncSubscriber(void)
 }
 
 static void
+test_PendingLimitsDeliveredAndDropped(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    const char          *lastErr  = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    int                 total     = 100;
+    int                 sent      = total + 20;
+    int                 msgsLimit = 0;
+    int                 bytesLimit= 0;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    arg.status = NATS_OK;
+    arg.control= 7;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    test("Settings, invalid args, NULL sub: ");
+    s = natsSubscription_SetPendingLimits(NULL, 1, 1);
+    testCond(s != NATS_OK);
+
+    test("Settings, invalid args, negative msgs: ");
+    s = natsSubscription_SetPendingLimits(sub, -1, 1);
+    testCond(s != NATS_OK);
+
+    test("Settings, invalid args, negative bytes: ");
+    s = natsSubscription_SetPendingLimits(sub, 1, -1);
+    testCond(s != NATS_OK);
+
+    test("Check pending limits, NULL sub: ");
+    s = natsSubscription_GetPendingLimits(NULL, &msgsLimit, &bytesLimit);
+    testCond(s != NATS_OK);
+
+    test("Check pending limits, other params NULL are OK: ");
+    s = natsSubscription_GetPendingLimits(sub, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check pending limits, msgsLimit NULL is OK: ");
+    s = natsSubscription_GetPendingLimits(sub, NULL, &bytesLimit);
+    testCond((s == NATS_OK) && (bytesLimit == NATS_OPTS_DEFAULT_MAX_PENDING_MSGS * 1024));
+
+    test("Check pending limits, msgsLibytesLimitmit NULL is OK: ");
+    s = natsSubscription_GetPendingLimits(sub, &msgsLimit, NULL);
+    testCond((s == NATS_OK) && (msgsLimit == NATS_OPTS_DEFAULT_MAX_PENDING_MSGS));
+
+    msgsLimit = 0;
+    bytesLimit = 0;
+
+    test("Set valid values: ");
+    s = natsSubscription_SetPendingLimits(sub, total, total * 1024);
+    testCond(s == NATS_OK);
+
+    test("Check pending limits: ");
+    s = natsSubscription_GetPendingLimits(sub, &msgsLimit, &bytesLimit);
+    testCond((s == NATS_OK) && (msgsLimit == total) && (bytesLimit == total * 1024));
+
+    for (int i=0;
+        (s == NATS_OK) && (i < sent); i++)
+    {
+        s = natsConnection_PublishString(nc, "foo", "hello");
+    }
+
+    // Make sure the callback blocks before checking for slow consumer
+    natsMutex_Lock(arg.m);
+
+    while ((s == NATS_OK) && !(arg.msgReceived))
+        s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+
+    natsMutex_Unlock(arg.m);
+
+    test("Last Error should be SlowConsumer: ");
+    testCond((s == NATS_OK)
+             && natsConnection_GetLastError(nc, &lastErr) == NATS_SLOW_CONSUMER);
+
+    // Check the pending values
+    test("Check pending values, NULL sub: ");
+    s = natsSubscription_GetPending(NULL, &msgs, &bytes);
+    testCond(s != NATS_OK);
+
+    test("Check pending values, NULL msgs: ");
+    s = natsSubscription_GetPending(sub, NULL, &bytes);
+    testCond(s == NATS_OK);
+
+    test("Check pending values, NULL bytes: ");
+    s = natsSubscription_GetPending(sub, &msgs, NULL);
+    testCond(s == NATS_OK);
+
+    msgs = 0;
+    bytes = 0;
+
+    test("Check pending values: ");
+    s = natsSubscription_GetPending(sub, &msgs, &bytes);
+    testCond((s == NATS_OK)
+             && (msgs == total - 1)
+             && (bytes == msgs * 5));
+
+    test("Check dropped: NULL sub: ");
+    s = natsSubscription_GetDropped(NULL, &msgs);
+    testCond(s != NATS_OK);
+
+    test("Check dropped, NULL msgs: ");
+    s = natsSubscription_GetDropped(sub, NULL);
+    testCond(s != NATS_OK);
+
+    msgs = 0;
+    test("Check dropped: ");
+    s = natsSubscription_GetDropped(sub, &msgs);
+    testCond((s == NATS_OK) && (msgs == sent - total));
+
+    test("Check delivered: NULL sub: ");
+    s = natsSubscription_GetDelivered(NULL, &msgs);
+    testCond(s != NATS_OK);
+
+    test("Check delivered: NULL msgs: ");
+    s = natsSubscription_GetDelivered(sub, NULL);
+    testCond(s != NATS_OK);
+
+    msgs = 0;
+    test("Check delivered: ");
+    s = natsSubscription_GetDelivered(sub, &msgs);
+    testCond((s == NATS_OK) && (msgs == 1));
+
+    test("Check get stats pending: ");
+    s = natsSubscription_GetStats(sub, &msgs, &bytes, NULL, NULL, NULL, NULL);
+    testCond((s == NATS_OK) && (msgs == total - 1) && (bytes == msgs * 5));
+
+    test("Check get stats max pending: ");
+    s = natsSubscription_GetStats(sub, NULL, NULL, &msgs, &bytes, NULL, NULL);
+    testCond((s == NATS_OK)
+             && (msgs >= total - 1) && (msgs <= total)
+             && (bytes >= (total - 1) * 5) && (bytes <= total * 5));
+
+    test("Check get stats delivered: ");
+    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, &msgs, NULL);
+    testCond((s == NATS_OK) && (msgs == 1));
+
+    test("Check get stats dropped: ");
+    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, NULL, &msgs);
+    testCond((s == NATS_OK) && (msgs == sent - total));
+
+    test("Check get stats all NULL: ");
+    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    // Release the sub
+    natsMutex_Lock(arg.m);
+
+    // Unblock the wait
+    arg.closed = true;
+
+    // And close the subscription here so that the next msg callback
+    // is not invoked.
+    natsSubscription_Unsubscribe(sub);
+
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    // All these calls should fail with a closed subscription
+    test("SetPendingLimit on closed sub: ");
+    s = natsSubscription_SetPendingLimits(sub, 1, 1);
+    testCond(s != NATS_OK);
+
+    test("GetPendingLimit on closed sub: ");
+    s = natsSubscription_GetPendingLimits(sub, NULL, NULL);
+    testCond(s != NATS_OK);
+
+    test("GetPending on closed sub: ");
+    s = natsSubscription_GetPending(sub, &msgs, &bytes);
+    testCond(s != NATS_OK);
+
+    test("GetDelivered on closed sub: ");
+    s = natsSubscription_GetDelivered(sub, &msgs);
+    testCond(s != NATS_OK);
+
+    test("GetDropped on closed sub: ");
+    s = natsSubscription_GetDropped(sub, &msgs);
+    testCond(s != NATS_OK);
+
+    test("Check get stats on closed sub: ");
+    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, NULL, NULL);
+    testCond(s != NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
+static void
+test_PendingLimitsWithSyncSub(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    natsMsg             *msg      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    int                 msgsLimit = 0;
+    int                 bytesLimit= 0;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    if (s == NATS_OK)
+        s = natsSubscription_SetPendingLimits(sub, 10000, 10);
+
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    test("Check pending limits: ");
+    s = natsSubscription_GetPendingLimits(sub, &msgsLimit, &bytesLimit);
+    testCond((s == NATS_OK) && (msgsLimit == 10000) && (bytesLimit == 10));
+
+    test("Can publish: ");
+    s = natsConnection_PublishString(nc, "foo", "abcde");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "abcdefghijklmnopqrstuvwxyz");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    testCond(s == NATS_OK);
+
+    // Check the pending values
+    test("Check pending values: ");
+    s = natsSubscription_GetPending(sub, &msgs, &bytes);
+    testCond((s == NATS_OK) && (msgs == 1) && (bytes == 5));
+
+    msgs = 0;
+    test("Check dropped: ");
+    s = natsSubscription_GetDropped(sub, &msgs);
+    testCond((s == NATS_OK) && (msgs == 1));
+
+    test("Can publish small: ");
+    s = natsConnection_PublishString(nc, "foo", "abc");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    testCond(s == NATS_OK);
+
+    test("Receive first msg: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+             && (msg != NULL)
+             && (strcmp(natsMsg_GetData(msg), "abcde") == 0));
+
+    msgs = 0;
+    test("Check delivered: ");
+    s = natsSubscription_GetDelivered(sub, &msgs);
+    testCond((s == NATS_OK) && (msgs == 1));
+
+    natsMsg_Destroy(msg);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
+test_AsyncSubscriptionPending(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    int                 total     = 100;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
+    int                 mlen      = 10;
+    int                 totalSize = total * mlen;
+    uint64_t            queuedMsgs= 0;
+    int                 i;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    arg.status = NATS_OK;
+    arg.control= 7;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    // Check with invalid args
+    test("Call MaxPending with invalid args: NULL sub: ");
+    s = natsSubscription_GetMaxPending(NULL, &msgs, &bytes);
+    testCond(s != NATS_OK);
+
+    test("Call MaxPending with invalid args: other NULL params OK: ");
+    s = natsSubscription_GetMaxPending(sub, NULL, &bytes);
+    if (s == NATS_OK)
+        s = natsSubscription_GetMaxPending(sub, &msgs, NULL);
+    if (s == NATS_OK)
+        s = natsSubscription_GetMaxPending(sub, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    for (i = 0; (s == NATS_OK) && (i < total); i++)
+        s = natsConnection_PublishString(nc, "foo", "0123456789");
+
+    if (s == NATS_OK)
+        natsConnection_Flush(nc);
+
+    // Wait that a message is received, so checks are safe
+    natsMutex_Lock(arg.m);
+
+    while ((s == NATS_OK) && !(arg.msgReceived))
+        s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+
+    natsMutex_Unlock(arg.m);
+
+    // Test old way
+    test("Test queued msgs old way: ");
+    s = natsSubscription_QueuedMsgs(sub, &queuedMsgs);
+    testCond((s == NATS_OK)
+            && (((int)queuedMsgs == total) || ((int)queuedMsgs == total - 1)));
+
+    // New way, make sure the same and check bytes.
+    test("Test new way: ");
+    s = natsSubscription_GetPending(sub, &msgs, &bytes);
+    testCond((s == NATS_OK)
+             && ((msgs == total) || (msgs == total - 1))
+             && ((bytes == totalSize) || (bytes == totalSize - mlen)));
+
+
+    // Make sure max has been set. Since we block after the first message is
+    // received, MaxPending should be >= total - 1 and <= total
+    test("Check max pending: ");
+    s = natsSubscription_GetMaxPending(sub, &msgs, &bytes);
+    testCond((s == NATS_OK)
+             && ((msgs <= total) && (msgs >= total-1))
+             && ((bytes <= totalSize) && (bytes >= totalSize-mlen)));
+
+    test("Check ClearMaxPending: ");
+    s = natsSubscription_ClearMaxPending(sub);
+    if (s == NATS_OK)
+        s = natsSubscription_GetMaxPending(sub, &msgs, &bytes);
+    testCond((s == NATS_OK) && (msgs == 0) && (bytes == 0));
+
+    natsMutex_Lock(arg.m);
+    arg.closed = true;
+    natsSubscription_Unsubscribe(sub);
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    // These calls should fail once the subscription is closed.
+    test("Check MaxPending on closed sub: ");
+    s = natsSubscription_GetMaxPending(sub, &msgs, &bytes);
+    testCond(s != NATS_OK);
+
+    test("Check ClearMaxPending on closed sub: ");
+    s = natsSubscription_ClearMaxPending(sub);
+    testCond(s != NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
+static void
+test_AsyncSubscriptionPendingDrain(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    int                 total     = 100;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
+    int                 mlen      = 10;
+    int                 totalSize = total * mlen;
+    uint64_t            queuedMsgs= 0;
+    int                 i;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    arg.status = NATS_OK;
+    arg.string = "0123456789";
+    arg.control= 1;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    for (i = 0; (s == NATS_OK) && (i < total); i++)
+        s = natsConnection_PublishString(nc, "foo", arg.string);
+
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    test("Wait for all delivered: ");
+    msgs = 0;
+    for (i=0; (s == NATS_OK) && (i<500); i++)
+    {
+        s = natsSubscription_GetDelivered(sub, &msgs);
+        if ((s == NATS_OK) && (msgs == total))
+            break;
+
+        nats_Sleep(10);
+    }
+    testCond((s == NATS_OK) && (msgs == total));
+
+    test("Check pending: ");
+    s = natsSubscription_GetPending(sub, &msgs, &bytes);
+    testCond((s == NATS_OK) && (msgs == 0) && (bytes == 0));
+
+    natsSubscription_Unsubscribe(sub);
+
+    test("Check Delivered on closed sub: ");
+    s = natsSubscription_GetDelivered(sub, &msgs);
+    testCond(s != NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
+static void
+test_SyncSubscriptionPending(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsMsg             *msg      = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    int                 total     = 100;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
+    int                 mlen      = 10;
+    int                 totalSize = total * mlen;
+    uint64_t            queuedMsgs= 0;
+    int                 i;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    // Check with invalid args
+    test("Call MaxPending with invalid args: NULL sub: ");
+    s = natsSubscription_GetMaxPending(NULL, &msgs, &bytes);
+    testCond(s != NATS_OK);
+
+    test("Call MaxPending with invalid args: other NULL params OK: ");
+    s = natsSubscription_GetMaxPending(sub, NULL, &bytes);
+    if (s == NATS_OK)
+        s = natsSubscription_GetMaxPending(sub, &msgs, NULL);
+    if (s == NATS_OK)
+        s = natsSubscription_GetMaxPending(sub, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    for (i = 0; (s == NATS_OK) && (i < total); i++)
+        s = natsConnection_PublishString(nc, "foo", "0123456789");
+
+    if (s == NATS_OK)
+        natsConnection_Flush(nc);
+
+    // Test old way
+    test("Test queued msgs old way: ");
+    s = natsSubscription_QueuedMsgs(sub, &queuedMsgs);
+    testCond((s == NATS_OK)
+            && (((int)queuedMsgs == total) || ((int)queuedMsgs == total - 1)));
+
+    // New way, make sure the same and check bytes.
+    test("Test new way: ");
+    s = natsSubscription_GetPending(sub, &msgs, &bytes);
+    testCond((s == NATS_OK)
+             && ((msgs == total) || (msgs == total - 1))
+             && ((bytes == totalSize) || (bytes == totalSize - mlen)));
+
+
+    // Make sure max has been set. Since we block after the first message is
+    // received, MaxPending should be >= total - 1 and <= total
+    test("Check max pending: ");
+    s = natsSubscription_GetMaxPending(sub, &msgs, &bytes);
+    testCond((s == NATS_OK)
+             && ((msgs <= total) && (msgs >= total-1))
+             && ((bytes <= totalSize) && (bytes >= totalSize-mlen)));
+
+    test("Check ClearMaxPending: ");
+    s = natsSubscription_ClearMaxPending(sub);
+    if (s == NATS_OK)
+        s = natsSubscription_GetMaxPending(sub, &msgs, &bytes);
+    testCond((s == NATS_OK) && (msgs == 0) && (bytes == 0));
+
+    // Drain all but one
+    for (i=0; (s == NATS_OK) && (i<total-1); i++)
+    {
+        s = natsSubscription_NextMsg(&msg, sub, 1000);
+        if (s == NATS_OK)
+            natsMsg_Destroy(msg);
+    }
+
+    test("Check pending: ");
+    s = natsSubscription_GetPending(sub, &msgs, &bytes);
+    testCond((s == NATS_OK) && (msgs == 1) && (bytes == mlen));
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
+test_SyncSubscriptionPendingDrain(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsMsg             *msg      = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    int                 total     = 100;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
+    int                 i;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    for (i = 0; (s == NATS_OK) && (i < total); i++)
+        s = natsConnection_PublishString(nc, "foo", "0123456789");
+
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    test("Wait for all delivered: ");
+    do
+    {
+        do
+        {
+            s = natsSubscription_NextMsg(&msg, sub, 10);
+            if (s == NATS_OK)
+                natsMsg_Destroy(msg);
+        }
+        while (s == NATS_OK);
+
+        s = natsSubscription_GetDelivered(sub, &msgs);
+        if ((s == NATS_OK) && (msgs == total))
+            break;
+
+        nats_Sleep(100);
+        i++;
+    }
+    while ((s == NATS_OK) && (i < 50));
+    testCond((s == NATS_OK) && (msgs == total));
+
+    test("Check pending: ");
+    s = natsSubscription_GetPending(sub, &msgs, &bytes);
+    testCond((s == NATS_OK) && (msgs == 0) && (bytes == 0));
+
+    natsSubscription_Unsubscribe(sub);
+
+    test("Check Delivered on closed sub: ");
+    s = natsSubscription_GetDelivered(sub, &msgs);
+    testCond(s != NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
 _asyncErrCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void* closure)
 {
     struct threadArg    *arg = (struct threadArg*) closure;
@@ -6948,6 +7643,10 @@ test_ServersOption(void)
     serversCount = sizeof(testServers) / sizeof(char *);
 
     s = natsOptions_Create(&opts);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, 500);
+#endif
     if (s == NATS_OK)
         s = natsOptions_SetNoRandomize(opts, true);
 
@@ -7182,6 +7881,10 @@ test_BasicClusterReconnect(void)
         s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, 500);
+#endif
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -8230,6 +8933,10 @@ test_SSLBasic(void)
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_SECURE_CONNECTION_REQUIRED);
@@ -8307,6 +9014,10 @@ test_SSLVerify(void)
         s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_SSL_ERROR);
@@ -8384,6 +9095,10 @@ test_SSLVerifyHostname(void)
         s = natsOptions_SetExpectedHostname(opts, "foo");
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_SSL_ERROR);
@@ -8459,6 +9174,10 @@ test_SSLCiphers(void)
         s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
     if (s == NATS_OK)
         s = natsOptions_SetCiphers(opts, "-ALL:RSA");
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s != NATS_OK);
@@ -8589,6 +9308,10 @@ test_SSLMultithreads(void)
         s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
     if (s == NATS_OK)
         s = natsOptions_SetExpectedHostname(opts, "localhost");
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
 
     args.opts = opts;
 
@@ -8651,6 +9374,10 @@ test_SSLConnectVerboseOption(void)
         s = natsOptions_SetVerbose(opts, true);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+#ifdef _WIN32
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, NATS_OPTS_DEFAULT_TIMEOUT);
+#endif
     if (opts == NULL)
         FAIL("Unable to setup test!");
 
@@ -8772,6 +9499,7 @@ static testInfo allTests[] =
     {"QueueSubsOnReconnect",            test_QueueSubsOnReconnect},
     {"IsClosed",                        test_IsClosed},
     {"IsReconnectingAndStatus",         test_IsReconnectingAndStatus},
+    {"ReconnectBufSize",                test_ReconnectBufSize},
 
     {"ErrOnConnectAndDeadlock",         test_ErrOnConnectAndDeadlock},
     {"ErrOnMaxPayloadLimit",            test_ErrOnMaxPayloadLimit},
@@ -8809,6 +9537,12 @@ static testInfo allTests[] =
     {"IsValidSubscriber",               test_IsValidSubscriber},
     {"SlowSubscriber",                  test_SlowSubscriber},
     {"SlowAsyncSubscriber",             test_SlowAsyncSubscriber},
+    {"PendingLimitsDeliveredAndDropped",test_PendingLimitsDeliveredAndDropped},
+    {"PendingLimitsWithSyncSub",        test_PendingLimitsWithSyncSub},
+    {"AsyncSubscriptionPending",        test_AsyncSubscriptionPending},
+    {"AsyncSubscriptionPendingDrain",   test_AsyncSubscriptionPendingDrain},
+    {"SyncSubscriptionPending",         test_SyncSubscriptionPending},
+    {"SyncSubscriptionPendingDrain",    test_SyncSubscriptionPendingDrain},
     {"AsyncErrHandler",                 test_AsyncErrHandler},
     {"AsyncSubscriberStarvation",       test_AsyncSubscriberStarvation},
     {"AsyncSubscriberOnClose",          test_AsyncSubscriberOnClose},

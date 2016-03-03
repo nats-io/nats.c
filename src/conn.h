@@ -37,6 +37,9 @@ natsConn_bufferFlush(natsConnection *nc);
 bool
 natsConn_isClosed(natsConnection *nc);
 
+bool
+natsConn_isReconnecting(natsConnection *nc);
+
 void
 natsConn_kickFlusher(natsConnection *nc);
 

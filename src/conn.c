@@ -369,8 +369,8 @@ natsConn_isClosed(natsConnection *nc)
     return nc->status == CLOSED;
 }
 
-static bool
-_isReconnecting(natsConnection *nc)
+bool
+natsConn_isReconnecting(natsConnection *nc)
 {
     return (nc->status == RECONNECTING);
 }
@@ -1228,7 +1228,7 @@ _processOpError(natsConnection *nc, natsStatus s)
 {
     natsConn_Lock(nc);
 
-    if (_isConnecting(nc) || natsConn_isClosed(nc) || _isReconnecting(nc))
+    if (_isConnecting(nc) || natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
     {
         natsConn_Unlock(nc);
 
@@ -1256,7 +1256,7 @@ _processOpError(natsConnection *nc, natsStatus s)
 
         // Create the pending buffer to hold all write requests while we try
         // to reconnect.
-        ls = natsBuf_Create(&(nc->pending), DEFAULT_PENDING_SIZE);
+        ls = natsBuf_Create(&(nc->pending), nc->opts->reconnectBufSize);
         if (ls == NATS_OK)
         {
             nc->usePending = true;
@@ -1315,7 +1315,7 @@ _readLoop(void  *arg)
 
     while ((s == NATS_OK)
            && !natsConn_isClosed(nc)
-           && !_isReconnecting(nc))
+           && !natsConn_isReconnecting(nc))
     {
         natsConn_Unlock(nc);
 
@@ -1377,7 +1377,7 @@ _flusher(void *arg)
 
         nc->flusherSignaled = false;
 
-        if (natsConn_isClosed(nc) || _isReconnecting(nc))
+        if (natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
         {
             natsConn_Unlock(nc);
             break;
@@ -1685,14 +1685,30 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
     natsSub_Lock(sub);
 
-    if (sub->msgList.count >= sub->pendingMax)
+    sub->msgList.msgs++;
+    sub->msgList.bytes += bufLen;
+
+    if ((sub->msgList.msgs > sub->msgsLimit)
+        || (sub->msgList.bytes > sub->bytesLimit))
     {
         natsMsg_Destroy(msg);
+
+        sub->dropped++;
+
+        // Undo stats from above.
+        sub->msgList.msgs--;
+        sub->msgList.bytes -= bufLen;
 
         _processSlowConsumer(nc, sub);
     }
     else
     {
+        if (sub->msgList.msgs > sub->msgsMax)
+            sub->msgsMax = sub->msgList.msgs;
+
+        if (sub->msgList.bytes > sub->bytesMax)
+            sub->bytesMax = sub->msgList.bytes;
+
         sub->slowConsumer = false;
 
         if (sub->msgList.head == NULL)
@@ -1703,10 +1719,8 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
         sub->msgList.tail = msg;
 
-        sub->msgList.count++;
-
         if ((sub->noDelay)
-            || (sub->msgList.count >= sub->signalLimit))
+            || (sub->msgList.msgs >= sub->signalLimit))
         {
             if (sub->inWait > 0)
                 natsCondition_Broadcast(sub->cond);
@@ -1867,7 +1881,7 @@ natsConn_subscribe(natsSubscription **newSub,
     {
         // We will send these for all subs when we reconnect
         // so that we can suppress here.
-        if (!_isReconnecting(nc))
+        if (!natsConn_isReconnecting(nc))
         {
             char    *proto = NULL;
             int     res    = 0;
@@ -1948,7 +1962,7 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
     if (max == 0)
         natsConn_removeSubscription(nc, sub, false);
 
-    if (!_isReconnecting(nc))
+    if (!natsConn_isReconnecting(nc))
     {
         // We will send these for all subs when we reconnect
         // so that we can suppress here.
@@ -2014,6 +2028,9 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
 
     if (nc->opts->maxPendingMsgs == 0)
         nc->opts->maxPendingMsgs = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
+
+    if (nc->opts->reconnectBufSize == 0)
+        nc->opts->reconnectBufSize = NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE;
 
     nc->errStr[0] = '\0';
 
@@ -2189,7 +2206,7 @@ natsConnection_IsReconnecting(natsConnection *nc)
 
     natsConn_Lock(nc);
 
-    reconnecting = _isReconnecting(nc);
+    reconnecting = natsConn_isReconnecting(nc);
 
     natsConn_Unlock(nc);
 

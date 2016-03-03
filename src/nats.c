@@ -15,7 +15,7 @@
 
 #define WAIT_LIB_INITIALIZED \
         natsMutex_Lock(gLib.lock); \
-        while (!(gLib.initialized)) \
+        while (!(gLib.initialized) && !(gLib.initAborted)) \
             natsCondition_Wait(gLib.cond, gLib.lock); \
         natsMutex_Unlock(gLib.lock)
 
@@ -79,6 +79,7 @@ typedef struct __natsLib
     int             refs;
 
     bool            initializing;
+    bool            initAborted;
 
     natsLibTimers   timers;
     natsLibAsyncCbs asyncCbs;
@@ -824,6 +825,7 @@ nats_Open(int64_t lockSpinCount)
     }
 
     gLib.initializing = true;
+    gLib.initAborted = false;
 
 #if defined(_WIN32)
 #else
@@ -885,6 +887,7 @@ nats_Open(int64_t lockSpinCount)
     {
         if (s != NATS_OK)
         {
+            gLib.initAborted = true;
             gLib.timers.shutdown = true;
             gLib.asyncCbs.shutdown = true;
             gLib.gc.shutdown = true;

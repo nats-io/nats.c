@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.2.10</span>
+   &#160;<span id="projectnumber">1.3.1-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -49,6 +49,7 @@ var searchBox = new SearchBox("searchBox", "search",false,'Search');
   <div id="navrow1" class="tabs">
     <ul class="tablist">
       <li><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="pages.html"><span>Related&#160;Pages</span></a></li>
       <li class="current"><a href="modules.html"><span>Modules</span></a></li>
       <li><a href="files.html"><span>Files</span></a></li>
       <li>
@@ -162,6 +163,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga2730f4e16e318a2ef8de98dbf6ede807"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga2730f4e16e318a2ef8de98dbf6ede807">natsOptions_SetReconnectWait</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int64_t reconnectWait)</td></tr>
 <tr class="memdesc:ga2730f4e16e318a2ef8de98dbf6ede807"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the time between reconnect attempts.  <a href="#ga2730f4e16e318a2ef8de98dbf6ede807">More...</a><br /></td></tr>
 <tr class="separator:ga2730f4e16e318a2ef8de98dbf6ede807"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaa0d4b7ece8477cb9879f0dafff3456a5"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gaa0d4b7ece8477cb9879f0dafff3456a5">natsOptions_SetReconnectBufSize</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int reconnectBufSize)</td></tr>
+<tr class="memdesc:gaa0d4b7ece8477cb9879f0dafff3456a5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the size of the backing buffer used during reconnect.  <a href="#gaa0d4b7ece8477cb9879f0dafff3456a5">More...</a><br /></td></tr>
+<tr class="separator:gaa0d4b7ece8477cb9879f0dafff3456a5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga95510436eee06f9992ded96a44795c40"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga95510436eee06f9992ded96a44795c40">natsOptions_SetMaxPendingMsgs</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int maxPending)</td></tr>
 <tr class="memdesc:ga95510436eee06f9992ded96a44795c40"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the maximum number of pending messages per subscription.  <a href="#ga95510436eee06f9992ded96a44795c40">More...</a><br /></td></tr>
 <tr class="separator:ga95510436eee06f9992ded96a44795c40"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -815,6 +819,40 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
     <tr><td class="paramname">reconnectWait</td><td>the time, in milliseconds, to wait between attempts to reconnect to the same server. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="gaa0d4b7ece8477cb9879f0dafff3456a5"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetReconnectBufSize </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname"><em>reconnectBufSize</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Sets the size, in bytes, of the backing buffer holding published data while the library is reconnecting. Once this buffer has been exhausted, publish operations will return the <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a317fb9be1a80f6b1877f96a9a2db16ad" title="A buffer is not large enough to accommodate the data. ">NATS_INSUFFICIENT_BUFFER</a> error. If not specified, or the value is 0, the library will use a default value, currently set to 8MB.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">reconnectBufSize</td><td>the size, in bytes, of the backing buffer for write operations during a reconnect. </td></tr>
   </table>
   </dd>
 </dl>

@@ -41,6 +41,7 @@ ConnectVerboseOption
 ReconnectTotalTime
 ReconnectDisallowedFlags
 ReconnectAllowedFlags
+ConnCloseBreaksReconnectLoop
 BasicReconnectFunctionality
 ExtendedReconnectFunctionality
 QueueSubsOnReconnect

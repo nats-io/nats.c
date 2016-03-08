@@ -4151,6 +4151,87 @@ test_ReconnectAllowedFlags(void)
 }
 
 static void
+_closeConn(void *arg)
+{
+    natsConnection *nc = (natsConnection*) arg;
+
+    natsConnection_Close(nc);
+}
+
+static void
+test_ConnCloseBreaksReconnectLoop(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsThread          *t        = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        opts = _createReconnectOptions();
+        if (opts == NULL)
+            s = NATS_NO_MEMORY;
+    }
+    if (s == NATS_OK)
+        s = natsOptions_SetMaxReconnect(opts, 1000);
+    if (s == NATS_OK)
+        s = natsOptions_SetClosedCB(opts, _closedCb, &arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connection close breaks out reconnect loop: ");
+    s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    // Shutdown the server
+    _stopServer(serverPid);
+
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 3000);
+    natsMutex_Unlock(arg.m);
+
+    // Wait a bit before trying to close the connection to make sure
+    // that the reconnect loop has started.
+    nats_Sleep(1000);
+
+    // Close the connection, this should break the reconnect loop.
+    // Do this in a go routine since the issue was that Close()
+    // would block until the reconnect loop is done.
+    s = natsThread_Create(&t, _closeConn, (void*) nc);
+
+    // Even on Windows (where a createConn takes more than a second)
+    // we should be able to break the reconnect loop with the following
+    // timeout.
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 3000);
+    natsMutex_Unlock(arg.m);
+
+    testCond((s == NATS_OK) && arg.closed);
+
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 test_BasicReconnectFunctionality(void)
 {
     natsStatus          s;
@@ -5165,14 +5246,6 @@ test_ConnectedServer(void)
     natsConnection_Destroy(nc);
 
     _stopServer(serverPid);
-}
-
-static void
-_closeConn(void *arg)
-{
-    natsConnection *nc = (natsConnection*) arg;
-
-    natsConnection_Close(nc);
 }
 
 static void
@@ -9494,6 +9567,7 @@ static testInfo allTests[] =
     {"ReconnectTotalTime",              test_ReconnectTotalTime},
     {"ReconnectDisallowedFlags",        test_ReconnectDisallowedFlags},
     {"ReconnectAllowedFlags",           test_ReconnectAllowedFlags},
+    {"ConnCloseBreaksReconnectLoop",    test_ConnCloseBreaksReconnectLoop},
     {"BasicReconnectFunctionality",     test_BasicReconnectFunctionality},
     {"ExtendedReconnectFunctionality",  test_ExtendedReconnectFunctionality},
     {"QueueSubsOnReconnect",            test_QueueSubsOnReconnect},

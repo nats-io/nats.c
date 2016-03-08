@@ -859,6 +859,7 @@ _doReconnect(void *arg)
     natsSrv                 *cur;
     int64_t                 elapsed;
     natsSrvPool             *pool = NULL;
+    int64_t                 sleepTime;
     struct threadsToJoin    ttj;
 
     natsConn_Lock(nc);
@@ -896,19 +897,22 @@ _doReconnect(void *arg)
             break;
         }
 
+        sleepTime = 0;
+
         // Sleep appropriate amount of time before the
         // connection attempt if connecting to same server
         // we just got disconnected from..
         if (((elapsed = nats_Now() - cur->lastAttempt)) < nc->opts->reconnectWait)
-        {
-            int64_t sleepTime = (nc->opts->reconnectWait - elapsed);
+            sleepTime = (nc->opts->reconnectWait - elapsed);
 
-            natsConn_Unlock(nc);
+        natsConn_Unlock(nc);
 
+        if (sleepTime > 0)
             nats_Sleep(sleepTime);
+        else
+            natsThread_Yield();
 
-            natsConn_Lock(nc);
-        }
+        natsConn_Lock(nc);
 
         // Check if we have been closed first.
         if (natsConn_isClosed(nc))

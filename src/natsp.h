@@ -389,6 +389,9 @@ void
 natsThread_Detach(natsThread *t);
 
 void
+natsThread_Yield(void);
+
+void
 natsThread_Destroy(natsThread *t);
 
 natsStatus

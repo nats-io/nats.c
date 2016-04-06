@@ -372,7 +372,6 @@ _createConn(natsConnection *nc)
     {
         // reset the deadline
         natsDeadline_Clear(&(nc->sockCtx.deadline));
-        nc->err = s;
     }
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -404,8 +403,8 @@ natsConn_isClosed(natsConnection *nc)
     return nc->status == CLOSED;
 }
 
-static bool
-_isReconnecting(natsConnection *nc)
+bool
+natsConn_isReconnecting(natsConnection *nc)
 {
     return (nc->status == RECONNECTING);
 }
@@ -556,6 +555,7 @@ _processInfo(natsConnection *nc, char *info)
 static natsStatus
 _makeTLSConn(natsConnection *nc)
 {
+#if defined(NATS_HAS_TLS)
     natsStatus  s       = NATS_OK;
     SSL         *ssl    = NULL;
 
@@ -639,6 +639,9 @@ _makeTLSConn(natsConnection *nc)
     }
 
     return NATS_UPDATE_ERR_STACK(s);
+#else
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+#endif
 }
 
 // This will check to see if the connection should be
@@ -696,6 +699,7 @@ static natsStatus
 _connectProto(natsConnection *nc, char **proto)
 {
     natsOptions *opts = nc->opts;
+    const char  *token= NULL;
     const char  *user = NULL;
     const char  *pwd  = NULL;
     const char  *name = NULL;
@@ -705,11 +709,16 @@ _connectProto(natsConnection *nc, char **proto)
         user = nc->url->username;
     if (nc->url->password != NULL)
         pwd = nc->url->password;
+    if ((user != NULL) && (pwd == NULL))
+    {
+        token = user;
+        user  = NULL;
+    }
     if (opts->name != NULL)
         name = opts->name;
 
     res = nats_asprintf(proto,
-                        "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s\"tls_required\":%s," \
+                        "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s%s%s%s\"tls_required\":%s," \
                         "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\"}%s",
                         nats_GetBoolStr(opts->verbose),
                         nats_GetBoolStr(opts->pedantic),
@@ -719,6 +728,9 @@ _connectProto(natsConnection *nc, char **proto)
                         (pwd != NULL ? "\"pass\":\"" : ""),
                         (pwd != NULL ? pwd : ""),
                         (pwd != NULL ? "\"," : ""),
+                        (token != NULL ? "\"auth_token\":\"" :""),
+                        (token != NULL ? token : ""),
+                        (token != NULL ? "\"," : ""),
                         nats_GetBoolStr(opts->secure),
                         (name != NULL ? name : ""),
                         CString, NATS_VERSION_STRING, _CRLF_);
@@ -759,15 +771,29 @@ _resendSubscriptions(natsConnection *nc)
     natsHashIter        iter;
     char                *proto;
     int                 res;
-    int                 max;
+    int                 adjustedMax;
 
     natsHashIter_Init(&iter, nc->subs);
-    while (natsHashIter_Next(&iter, NULL, (void**) &sub))
+    while ((s == NATS_OK) && natsHashIter_Next(&iter, NULL, (void**) &sub))
     {
         proto = NULL;
 
+        adjustedMax = 0;
         natsSub_Lock(sub);
-        max = (int) sub->max;
+        if (sub->max > 0)
+        {
+            if (sub->delivered < sub->max)
+                adjustedMax = (int)(sub->max - sub->delivered);
+
+            // The adjusted max could be 0 here if the number of delivered
+            // messages have reached the max, if so, unsubscribe.
+            if (adjustedMax == 0)
+            {
+                natsSub_Unlock(sub);
+                s = _sendUnsubProto(nc, sub->sid, 0);
+                continue;
+            }
+        }
         natsSub_Unlock(sub);
 
         // These sub's fields are immutable
@@ -785,8 +811,8 @@ _resendSubscriptions(natsConnection *nc)
             proto = NULL;
         }
 
-        if ((s == NATS_OK) && (max > 0))
-            s = _sendUnsubProto(nc, sub->sid, max);
+        if ((s == NATS_OK) && (adjustedMax > 0))
+            s = _sendUnsubProto(nc, sub->sid, adjustedMax);
     }
 
     return s;
@@ -867,6 +893,7 @@ _doReconnect(void *arg)
     natsSrv                 *cur;
     int64_t                 elapsed;
     natsSrvPool             *pool = NULL;
+    int64_t                 sleepTime;
     struct threadsToJoin    ttj;
 
     natsConn_Lock(nc);
@@ -882,22 +909,14 @@ _doReconnect(void *arg)
     // Kick out all calls to natsConnection_Flush[Timeout]().
     _clearPendingFlushRequests(nc);
 
-    // Create the pending buffer to hold all write requests while we try
-    // to reconnect.
-    s = natsBuf_Create(&(nc->pending), DEFAULT_PENDING_SIZE);
-    if (s == NATS_OK)
-    {
-        nc->usePending = true;
+    // Clear any error.
+    nc->err         = NATS_OK;
+    nc->errStr[0]   = '\0';
 
-        // Clear any error.
-        nc->err         = NATS_OK;
-        nc->errStr[0]   = '\0';
-
-        pool = nc->srvPool;
-    }
+    pool = nc->srvPool;
 
     // Perform appropriate callback if needed for a disconnect.
-    if ((s == NATS_OK) && (nc->opts->disconnectedCb != NULL))
+    if (nc->opts->disconnectedCb != NULL)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
     // Note that the pool's size may decrement after the call to
@@ -912,19 +931,22 @@ _doReconnect(void *arg)
             break;
         }
 
+        sleepTime = 0;
+
         // Sleep appropriate amount of time before the
         // connection attempt if connecting to same server
         // we just got disconnected from..
         if (((elapsed = nats_Now() - cur->lastAttempt)) < nc->opts->reconnectWait)
-        {
-            int64_t sleepTime = (nc->opts->reconnectWait - elapsed);
+            sleepTime = (nc->opts->reconnectWait - elapsed);
 
-            natsConn_Unlock(nc);
+        natsConn_Unlock(nc);
 
+        if (sleepTime > 0)
             nats_Sleep(sleepTime);
+        else
+            natsThread_Yield();
 
-            natsConn_Lock(nc);
-        }
+        natsConn_Lock(nc);
 
         // Check if we have been closed first.
         if (natsConn_isClosed(nc))
@@ -937,12 +959,15 @@ _doReconnect(void *arg)
         s = _createConn(nc);
         if (s != NATS_OK)
         {
+            // Reset error here. We will return NATS_NO_SERVERS at the end of
+            // this loop if appropriate.
+            nc->err = NATS_OK;
+
             // Reset status
             s = NATS_OK;
 
             // Not yet connected, retry...
             // Continue to hold the lock
-            nc->err = s;
             continue;
         }
 
@@ -954,10 +979,6 @@ _doReconnect(void *arg)
 
         // We are reconnected
         nc->stats.reconnects += 1;
-
-        // Clear out server stats for the server we connected to..
-        cur->didConnect = true;
-        cur->reconnects = 0;
 
         // Process Connect logic
         s = _processConnInit(nc);
@@ -976,6 +997,10 @@ _doReconnect(void *arg)
 
         if (s != NATS_OK)
         {
+            // In case we were at the last iteration, this is the error
+            // we will report.
+            nc->err = s;
+
             // Reset status
             s = NATS_OK;
 
@@ -994,6 +1019,10 @@ _doReconnect(void *arg)
         }
 
         // No more failure allowed past this point.
+
+        // Clear out server stats for the server we connected to..
+        cur->didConnect = true;
+        cur->reconnects = 0;
 
         tReconnect = nc->reconnectThread;
         nc->reconnectThread = NULL;
@@ -1109,16 +1138,27 @@ _sendConnect(natsConnection *nc)
     if ((s == NATS_OK) && (strncmp(buffer, _PONG_OP_, _PONG_OP_LEN_) != 0))
     {
         // But it could be something else, like -ERR
-        // Search if the error message says something about
-        // authentication failure.
 
-        if (strstr(buffer, "Authorization") != NULL)
-            s = nats_setError(NATS_CONNECTION_AUTH_FAILED,
-                              "%s", buffer);
+        if (strncmp(buffer, _ERR_OP_, _ERR_OP_LEN_) == 0)
+        {
+            // Remove -ERR, trim spaces and quotes.
+            nats_NormalizeErr(buffer);
+
+            // Search if the error message says something about
+            // authentication failure.
+
+            if (nats_strcasestr(buffer, "authorization") != NULL)
+                s = nats_setError(NATS_CONNECTION_AUTH_FAILED,
+                                  "%s", buffer);
+            else
+                s = nats_setError(NATS_ERR, "%s", buffer);
+        }
         else
+        {
             s = nats_setError(NATS_PROTOCOL_ERROR,
                               "Expected '%s', got '%s'",
                               _PONG_OP_, buffer);
+        }
     }
 
     if (s == NATS_OK)
@@ -1126,7 +1166,7 @@ _sendConnect(natsConnection *nc)
 
     free(cProto);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static natsStatus
@@ -1198,6 +1238,7 @@ static natsStatus
 _connect(natsConnection *nc)
 {
     natsStatus  s     = NATS_OK;
+    natsStatus  retSts= NATS_OK;
     natsSrvPool *pool = NULL;
     int         i;
 
@@ -1221,11 +1262,12 @@ _connect(natsConnection *nc)
             {
                 natsSrvPool_SetSrvDidConnect(pool, i, true);
                 natsSrvPool_SetSrvReconnects(pool, i, 0);
+                retSts = NATS_OK;
                 break;
             }
             else
             {
-                nc->err = s;
+                retSts = s;
 
                 natsConn_Unlock(nc);
 
@@ -1239,14 +1281,13 @@ _connect(natsConnection *nc)
         else
         {
             if (s == NATS_IO_ERROR)
-                nc->err = NATS_OK;
+                retSts = NATS_OK;
         }
     }
 
-    if ((nc->err == NATS_OK) && (nc->status != CONNECTED))
+    if ((retSts == NATS_OK) && (nc->status != CONNECTED))
     {
-        nc->err = NATS_NO_SERVER;
-        s = nats_setDefaultError(nc->err);
+        s = nats_setDefaultError(NATS_NO_SERVER);
     }
 
     natsConn_Unlock(nc);
@@ -1261,7 +1302,7 @@ _processOpError(natsConnection *nc, natsStatus s)
 {
     natsConn_Lock(nc);
 
-    if (_isConnecting(nc) || natsConn_isClosed(nc) || _isReconnecting(nc))
+    if (_isConnecting(nc) || natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
     {
         natsConn_Unlock(nc);
 
@@ -1299,10 +1340,18 @@ _processOpError(natsConnection *nc, natsStatus s)
                 ls = nc->opts->evCbs.write(nc->el.data, NATS_EVENT_ACTION_REMOVE);
         }
 
-        // Start the reconnect thread
-        if ((ls == NATS_OK)
-            && (natsThread_Create(&(nc->reconnectThread),
-                                  _doReconnect, (void*) nc) == NATS_OK))
+        // Create the pending buffer to hold all write requests while we try
+        // to reconnect.
+        ls = natsBuf_Create(&(nc->pending), nc->opts->reconnectBufSize);
+        if (ls == NATS_OK)
+        {
+            nc->usePending = true;
+
+            // Start the reconnect thread
+            ls = natsThread_Create(&(nc->reconnectThread),
+                                  _doReconnect, (void*) nc);
+        }
+        if (ls ==  NATS_OK)
         {
             natsConn_Unlock(nc);
 
@@ -1326,7 +1375,6 @@ natsConn_clearSSL(natsConnection *nc)
     if (nc->sockCtx.ssl == NULL)
         return;
 
-//    SSL_clear(nc->sockCtx.ssl);
     SSL_free(nc->sockCtx.ssl);
     nc->sockCtx.ssl = NULL;
 }
@@ -1353,7 +1401,7 @@ _readLoop(void  *arg)
 
     while ((s == NATS_OK)
            && !natsConn_isClosed(nc)
-           && !_isReconnecting(nc))
+           && !natsConn_isReconnecting(nc))
     {
         natsConn_Unlock(nc);
 
@@ -1389,6 +1437,7 @@ static void
 _flusher(void *arg)
 {
     natsConnection  *nc  = (natsConnection*) arg;
+    natsStatus      s;
 
     while (true)
     {
@@ -1414,14 +1463,18 @@ _flusher(void *arg)
 
         nc->flusherSignaled = false;
 
-        if (natsConn_isClosed(nc) || _isReconnecting(nc))
+        if (natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
         {
             natsConn_Unlock(nc);
             break;
         }
 
         if (nc->sockCtx.fdActive && (natsBuf_Len(nc->bw) > 0))
-            nc->err = natsConn_bufferFlush(nc);
+        {
+            s = natsConn_bufferFlush(nc);
+            if ((s != NATS_OK) && (nc->err == NATS_OK))
+                nc->err = s;
+        }
 
         natsConn_Unlock(nc);
     }
@@ -1581,6 +1634,7 @@ static void
 _close(natsConnection *nc, natsConnStatus status, bool doCBs)
 {
     struct threadsToJoin    ttj;
+    bool                    sockWasActive = false;
     bool                    detach = false;
 
     natsConn_lockAndRetain(nc);
@@ -1631,10 +1685,13 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
             natsSock_Shutdown(nc->sockCtx.fd);
         }
         nc->sockCtx.fdActive = false;
+        sockWasActive = true;
     }
 
     // Perform appropriate callback if needed for a disconnect.
-    if (doCBs && (nc->opts->disconnectedCb != NULL))
+    // Do not invoke if we were disconnected and failed to reconnect (since
+    // it has already been invoked in doReconnect).
+    if (doCBs && (nc->opts->disconnectedCb != NULL) && sockWasActive)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
     natsConn_Unlock(nc);
@@ -1730,28 +1787,30 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
     natsSub_Lock(sub);
 
-    if ((sub->max > 0) && (sub->msgs > sub->max))
+    sub->msgList.msgs++;
+    sub->msgList.bytes += bufLen;
+
+    if ((sub->msgList.msgs > sub->msgsLimit)
+        || (sub->msgList.bytes > sub->bytesLimit))
     {
         natsMsg_Destroy(msg);
-        natsSub_Unlock(sub);
 
-        natsConn_removeSubscription(nc, sub, false);
+        sub->dropped++;
 
-        natsConn_Unlock(nc);
-        return NATS_OK;
-    }
-
-    sub->msgs  += 1;
-    sub->bytes += (uint64_t) bufLen;
-
-    if (sub->msgList.count >= sub->pendingMax)
-    {
-        natsMsg_Destroy(msg);
+        // Undo stats from above.
+        sub->msgList.msgs--;
+        sub->msgList.bytes -= bufLen;
 
         _processSlowConsumer(nc, sub);
     }
     else
     {
+        if (sub->msgList.msgs > sub->msgsMax)
+            sub->msgsMax = sub->msgList.msgs;
+
+        if (sub->msgList.bytes > sub->bytesMax)
+            sub->bytesMax = sub->msgList.bytes;
+
         sub->slowConsumer = false;
 
         if (sub->msgList.head == NULL)
@@ -1762,13 +1821,11 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
         sub->msgList.tail = msg;
 
-        sub->msgList.count++;
-
         if ((sub->noDelay)
-            || (sub->msgList.count >= sub->signalLimit))
+            || (sub->msgList.msgs >= sub->signalLimit))
         {
-            if (sub->inWait)
-                natsCondition_Signal(sub->cond);
+            if (sub->inWait > 0)
+                natsCondition_Broadcast(sub->cond);
         }
         else if (sub->signalTimerInterval != 1)
         {
@@ -1793,14 +1850,23 @@ natsConn_processOK(natsConnection *nc)
 void
 natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
 {
-    if (strncmp(buf, STALE_CONNECTION, STATE_CONNECTION_LEN) == 0)
+    char error[256];
+
+    // Copy the error in this local buffer.
+    snprintf(error, sizeof(error), "%.*s", bufLen, buf);
+
+    // Trim spaces and remove quotes.
+    nats_NormalizeErr(error);
+
+    if (strcasecmp(error, STALE_CONNECTION) == 0)
     {
         _processOpError(nc, NATS_STALE_CONNECTION);
     }
     else
     {
         natsConn_Lock(nc);
-        snprintf(nc->errStr, sizeof(nc->errStr), "%.*s", bufLen, buf);
+        nc->err = NATS_ERR;
+        snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
         natsConn_Unlock(nc);
         _close(nc, CLOSED, true);
     }
@@ -1917,7 +1983,7 @@ natsConn_subscribe(natsSubscription **newSub,
     {
         // We will send these for all subs when we reconnect
         // so that we can suppress here.
-        if (!_isReconnecting(nc))
+        if (!natsConn_isReconnecting(nc))
         {
             char    *proto = NULL;
             int     res    = 0;
@@ -1998,7 +2064,7 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
     if (max == 0)
         natsConn_removeSubscription(nc, sub, false);
 
-    if (!_isReconnecting(nc))
+    if (!natsConn_isReconnecting(nc))
     {
         // We will send these for all subs when we reconnect
         // so that we can suppress here.
@@ -2010,8 +2076,11 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
         // with the buffer write (except if it is no memory).
         // For IO errors (if we just got disconnected), the
         // reconnect logic will resend the unsub protocol.
-        if (s != NATS_NO_MEMORY)
+        if ((s != NATS_OK) && (s != NATS_NO_MEMORY))
+        {
+            nats_clearLastError();
             s = NATS_OK;
+        }
     }
 
     natsConn_Unlock(nc);
@@ -2061,6 +2130,9 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
 
     if (nc->opts->maxPendingMsgs == 0)
         nc->opts->maxPendingMsgs = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
+
+    if (nc->opts->reconnectBufSize == 0)
+        nc->opts->reconnectBufSize = NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE;
 
     nc->errStr[0] = '\0';
 
@@ -2120,6 +2192,70 @@ natsConnection_Connect(natsConnection **newConn, natsOptions *options)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_processUrlString(natsOptions *opts, const char *urls)
+{
+    int         count        = 0;
+    natsStatus  s            = NATS_OK;
+    char        **serverUrls = NULL;
+    char        *urlsCopy    = NULL;
+    char        *commaPos    = NULL;
+    char        *ptr         = NULL;
+    int         len;
+
+    ptr = (char*) urls;
+    while ((ptr = strchr(ptr, ',')) != NULL)
+    {
+        ptr++;
+        count++;
+    }
+    if (count == 0)
+        return natsOptions_SetURL(opts, urls);
+
+    serverUrls = (char**) NATS_CALLOC(count + 1, sizeof(char*));
+    if (serverUrls == NULL)
+        s = NATS_NO_MEMORY;
+    if (s == NATS_OK)
+    {
+        urlsCopy = NATS_STRDUP(urls);
+        if (urlsCopy == NULL)
+        {
+            NATS_FREE(serverUrls);
+            return NATS_NO_MEMORY;
+        }
+    }
+
+    count = 0;
+    ptr = urlsCopy;
+
+    do
+    {
+        while (*ptr == ' ')
+            ptr++;
+        serverUrls[count++] = ptr;
+
+        commaPos = strchr(ptr, ',');
+        if (commaPos != NULL)
+        {
+            ptr = (char*)(commaPos + 1);
+            *(commaPos) = '\0';
+        }
+
+        len = (int) strlen(ptr);
+        while ((len > 0) && (ptr[len-1] == ' '))
+            ptr[--len] = '\0';
+
+    } while (commaPos != NULL);
+
+    if (s == NATS_OK)
+        s = natsOptions_SetServers(opts, (const char**) serverUrls, count);
+
+    NATS_FREE(urlsCopy);
+    NATS_FREE(serverUrls);
+
+    return s;
+}
+
 natsStatus
 natsConnection_ConnectTo(natsConnection **newConn, const char *url)
 {
@@ -2129,7 +2265,7 @@ natsConnection_ConnectTo(natsConnection **newConn, const char *url)
 
     s = natsOptions_Create(&opts);
     if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, url);
+        s = _processUrlString(opts, url);
     if (s == NATS_OK)
         s = natsConn_create(&nc, opts);
     if (s == NATS_OK)
@@ -2172,7 +2308,7 @@ natsConnection_IsReconnecting(natsConnection *nc)
 
     natsConn_Lock(nc);
 
-    reconnecting = _isReconnecting(nc);
+    reconnecting = natsConn_isReconnecting(nc);
 
     natsConn_Unlock(nc);
 
@@ -2255,12 +2391,7 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
             s = natsCondition_AbsoluteTimedWait(nc->pongs.cond, nc->mu, target);
         }
 
-        // Report any error that occurred while we were waiting.
-        if (nc->err != NATS_OK)
-        {
-            s = nats_setDefaultError(nc->err);
-        }
-        else if ((s == NATS_OK) && (nc->status == CLOSED))
+        if ((s == NATS_OK) && (nc->status == CLOSED))
         {
             // The connection has been closed while we were waiting
             s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
@@ -2428,7 +2559,11 @@ natsConnection_Close(natsConnection *nc)
     if (nc == NULL)
         return;
 
+    nats_doNotUpdateErrStack(true);
+
     _close(nc, CLOSED, true);
+
+    nats_doNotUpdateErrStack(false);
 }
 
 void
@@ -2437,7 +2572,12 @@ natsConnection_Destroy(natsConnection *nc)
     if (nc == NULL)
         return;
 
+    nats_doNotUpdateErrStack(true);
+
     _close(nc, CLOSED, true);
+
+    nats_doNotUpdateErrStack(false);
+
     natsConn_release(nc);
 }
 
@@ -2464,7 +2604,7 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
             nats_setDefaultError(NATS_NO_MEMORY);
     }
 
-    if ((s != NATS_OK) || natsConn_isClosed(nc) || _isReconnecting(nc))
+    if ((s != NATS_OK) || natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
     {
         (void) NATS_UPDATE_ERR_STACK(s);
         natsConn_Unlock(nc);

@@ -2,8 +2,8 @@
 - [ ] Expand on the use of nats_setError
 - [ ] Revisit Flusher for the aggregation of more data before socket write
 - [ ] Decide if we go full non-blocking sockets, so we can apply deadline to all read/writes
-- [ ] Make sure Inboxes are really unique (use of srand + seq for now)
 - [x] Plug with async/IO event libraries (such as libevent/libuv)
+- [x] Make sure Inboxes are really unique (use of srand + seq for now)
 - [x] SSL/TLS
 - [x] Pooling/garbage collection of structures ~~(may add more later, and pool msgs structures and buffers, but that would introduce locking which may negate the benefits of the pooling)~~
 - [x] ~~Revisit connect logic to match GO Client~~ *Will actually do the opposite, that is change the GO Client connect/reconnect logic. The async reconnect logic is flawed and could cause issues when getting authentication errors during the process.*

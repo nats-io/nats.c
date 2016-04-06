@@ -155,6 +155,12 @@ _processMsgArgs(natsConnection *nc, char *buf, int bufLen)
                  bufLen, buf);
         s = NATS_PROTOCOL_ERROR;
     }
+    if (nc->ps->ma.sid < 0)
+    {
+        snprintf(nc->errStr, sizeof(nc->errStr), "processMsgArgs Bad or Missing Sid: '%.*s'",
+                 bufLen, buf);
+        s = NATS_PROTOCOL_ERROR;
+    }
     if (nc->ps->ma.size < 0)
     {
         snprintf(nc->errStr, sizeof(nc->errStr), "processMsgArgs Bad or Missing Size: '%.*s'",
@@ -284,6 +290,11 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
                             nc->ps->drop        = 0;
                             nc->ps->afterSpace  = i+1;
                             nc->ps->state       = MSG_PAYLOAD;
+
+                            // jump ahead with the index. If this overruns
+                            // what is left we fall out and process split
+                            // buffer.
+                            i = nc->ps->afterSpace + nc->ps->ma.size - 1;
                         }
                         break;
                     }
@@ -311,7 +322,23 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
                     }
                     else
                     {
-                        s = natsBuf_AppendByte(nc->ps->msgBuf, b);
+                        // copy as much as we can to the buffer and skip ahead.
+                        int toCopy = nc->ps->ma.size - natsBuf_Len(nc->ps->msgBuf);
+                        int avail  = bufLen - i;
+
+                        if (avail < toCopy)
+                            toCopy = avail;
+
+                        if (toCopy > 0)
+                        {
+                            s = natsBuf_Append(nc->ps->msgBuf, buf+i, toCopy);
+                            if (s == NATS_OK)
+                                i += toCopy - 1;
+                        }
+                        else
+                        {
+                            s = natsBuf_AppendByte(nc->ps->msgBuf, b);
+                        }
                     }
                 }
                 else if (i-nc->ps->afterSpace >= nc->ps->ma.size)
@@ -633,8 +660,8 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
 
         if (s == NATS_OK)
         {
-            int remaining;
-            int needed;
+            int remainingInScratch;
+            int toCopy;
 
 #ifdef _WIN32
 // Suppresses the warning that nc->ps->argBuf may be NULL.
@@ -642,25 +669,28 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
 // is NATS_OK here, then nc->ps->argBuf can't be NULL.
 #pragma warning(suppress: 6011)
 #endif
-            remaining = sizeof(nc->ps->scratch) - natsBuf_Len(nc->ps->argBuf);
-            needed    = bufLen - nc->ps->afterSpace;
 
-            if (needed > remaining)
+            // If we will overflow the scratch buffer, just create a
+            // new buffer to hold the split message.
+            remainingInScratch = sizeof(nc->ps->scratch) - natsBuf_Len(nc->ps->argBuf);
+            toCopy = bufLen - nc->ps->afterSpace;
+
+            if (nc->ps->ma.size > remainingInScratch)
             {
-                s = natsBuf_Create(&(nc->ps->msgBuf), needed);
+                s = natsBuf_Create(&(nc->ps->msgBuf), nc->ps->ma.size);
             }
             else
             {
                 s = natsBuf_InitWithBackend(&(nc->ps->msgBufRec),
                                             nc->ps->scratch + natsBuf_Len(nc->ps->argBuf),
-                                            0, remaining);
+                                            0, remainingInScratch);
                 if (s == NATS_OK)
                     nc->ps->msgBuf = &(nc->ps->msgBufRec);
             }
             if (s == NATS_OK)
                 s = natsBuf_Append(nc->ps->msgBuf,
                                    buf + nc->ps->afterSpace,
-                                   needed);
+                                   toCopy);
         }
     }
 
@@ -680,6 +710,9 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
     return s;
 
 parseErr:
+    if (s == NATS_OK)
+        s = NATS_PROTOCOL_ERROR;
+
     natsMutex_Lock(nc->mu);
 
     snprintf(nc->errStr, sizeof(nc->errStr),

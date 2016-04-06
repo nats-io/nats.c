@@ -7,6 +7,7 @@
 #include "conn.h"
 #include "sub.h"
 #include "msg.h"
+#include "nuid.h"
 
 static const char *digits = "0123456789";
 
@@ -57,9 +58,20 @@ _publishEx(natsConnection *nc, const char *subj,
     {
         s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
-    else if ((s == NATS_OK) && (nc->err != NATS_OK))
+
+    // Check if we are reconnecting, and if so check if
+    // we have exceeded our reconnect outbound buffer limits.
+    if ((s == NATS_OK) && natsConn_isReconnecting(nc))
     {
-        s = nats_setError(nc->err, "%s", nc->errStr);
+        // Flush to underlying buffer.
+        natsConn_bufferFlush(nc);
+
+        // Check if we are over
+        if (natsBuf_Len(nc->pending) >= nc->opts->reconnectBufSize)
+        {
+            natsConn_Unlock(nc);
+            return NATS_INSUFFICIENT_BUFFER;
+        }
     }
 
     if (s == NATS_OK)
@@ -134,10 +146,6 @@ _publishEx(natsConnection *nc, const char *subj,
     {
         nc->stats.outMsgs  += 1;
         nc->stats.outBytes += dataLen;
-    }
-    else
-    {
-        nc->err = s;
     }
 
     natsConn_Unlock(nc);
@@ -241,12 +249,12 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
 {
     natsStatus          s       = NATS_OK;
     natsSubscription    *sub    = NULL;
-    natsInbox           *inbox  = NULL;
+    char                inbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1];
 
     if (replyMsg == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = natsInbox_Create(&inbox);
+    s = natsInbox_init(inbox, sizeof(inbox));
     if (s == NATS_OK)
         s = natsConn_subscribe(&sub, nc, inbox, NULL, NULL, NULL, true);
     if (s == NATS_OK)
@@ -256,8 +264,6 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
     if (s == NATS_OK)
         s = natsSubscription_NextMsg(replyMsg, sub, timeout);
 
-    natsInbox_Destroy(inbox);
-    natsSubscription_Unsubscribe(sub);
     natsSubscription_Destroy(sub);
 
     return NATS_UPDATE_ERR_STACK(s);

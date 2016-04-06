@@ -7,56 +7,64 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 [![Build Status](https://travis-ci.org/nats-io/cnats.svg?branch=master)](http://travis-ci.org/nats-io/cnats)
 [![Documentation](https://img.shields.io/badge/doc-Doxygen-brightgreen.svg?style=flat)](http://nats-io.github.io/cnats)
 
-## Installation
+## Build
 
 First, download the source code:
 ```
 git clone git@github.com:nats-io/cnats.git .
 ```
 
-To build the library, use [CMake](https://cmake.org/download/). Create a `build` directory from the root, and `cd` into it. Then issue this command for the first time:
+To build the library, use [CMake](https://cmake.org/download/).
+
+Make sure that CMake is added to your path. If building on Windows, open a command shell from the Visual Studio Tools menu, and select the appropriate command shell (x64 or x86 for 64 or 32 bit builds respectively). You will also probably need to run this with administrator privileges.
+
+Create a `build` directory (any name would work) from the root source tree, and `cd` into it. Then issue this command for the first time:
 
 ```
 cmake ..
 ```
 
-or use the GUI to setup the way you want. We recommend that you use the GUI for Windows so you can beter select the build generator. When you are satified with the settings, simply invoke:
+You can also specify command line parameters to set some of the cmake options directly. For instance, if you want to build the library without TLS support, do this:
 
 ```
-make
+cmake .. -DNATS_BUILD_WITH_TLS=OFF
 ```
 
-on Windows, you may do this for example:
+If you had previously build the library, you may need to do a `make clean`, or simply delete and re-create the build directory before executing the cmake command.
+
+To build on Windows, you would need to select the build generator. For instance, to select `nmake`, you would run:
 
 ```
-cmake --build . --config "Release"
+cmake .. -G "NMake Makefiles"
 ```
 
-or, if you have selected the "NMake Makefiles" build generator:
+Running `cmake -h` would give you the list of possible options and all the generator names.
+
+Alternatively, you can run the GUI version. From that same *build* command shell, start the GUI:
 
 ```
-nmake
+c:\program files (x86)\CMake\bin\cmake-gui.exe
 ```
 
-This is building the static and shared libraries and also the examples and the test program. Each are located in their respective directories under `build`: `src`, `examples` and `test`.
+If you started with an empty build directory, you would need to select the source and build directory, then click `Configure`. Here, you will be able to select from the drop-down box the name of the build generator. When done, click `Generate`. Then you can go back to your command shell, or Visual Studio and build.
+
+To modify some of the build options, you need to edit the cache and rebuild.
+
+```
+make edit_cache
+```
+
+Note that if you build on Windows and have selected "NMake Makefiles", replace all following references to `make` with `nmake`.
+
+Editing the cache allows you to select the build type (Debug, Release, etc), the architecture (64 or 32bit), and so on.
+
+The default target will build everything, that is, the static and shared NATS libraries and also the examples and the test program. Each are located in their respective directories under your build directory: `src`, `examples` and `test`.
 
 ```
 make install
 ```
 
 Will copy both the static and shared libraries in the folder `install/lib` and the public headers in `install/include`.
-
-You can list all the possible `make` options with the command:
-
-```
-make help
-```
-
-The most common you will use are:
-
-* clean
-* install
-* test
 
 On platforms where `valgrind` is available, you can run the tests with memory checks.
 Here is an example:
@@ -117,23 +125,21 @@ You can use the following environment variables to influence the testsuite behav
 When running with memory check, timing changes and overall performance is slower. The following variable allows the testsuite to adjust some of values used during the test:
 
 ```
-NATS_TEST_VALGRIND=yes
+export NATS_TEST_VALGRIND=yes
 ```
+
+On Windows, it would be `set` instead of `export`.
 
 When running the tests in verbose mode, the following environment variable allows you to see the server output from within the test itself. Without this option, the server output is silenced:
 
 ```
-NATS_TEST_KEEP_SERVER_OUTPUT=yes
+export NATS_TEST_KEEP_SERVER_OUTPUT=yes
 ```
 
 If you want to change the default server executable name (`gnastd`) or specify a specific location, use this environment variable:
 
 ```
-NATS_TEST_SERVER_EXE=<full server executable path>
-
-for instance:
-
-NATS_TEST_SERVER_EXE=c:\test\gnatsd.exe
+set NATS_TEST_SERVER_EXE=c:\test\gnatsd.exe
 ```
 
 ## Documentation
@@ -164,7 +170,10 @@ natsMsg				*msg = NULL;
 natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
 
 // Connects to a server with username and password
-natsConnection_ConnectTo(&nc, "ivan:secret@localhost:4222");
+natsConnection_ConnectTo(&nc, "nats://ivan:secret@localhost:4222");
+
+// Connects to a server with token authentication
+natsConnection_ConnectTo(&nc, "nats://myTopSecretAuthenticationToken@localhost:4222");
 
 // Simple publisher, sending the given string to subject "foo"
 natsConnection_PublishString(nc, "foo", "hello world");
@@ -280,6 +289,8 @@ ncConnection_QueueSubscribe(&sub, nc, "foo", "job_workers", onMsg, NULL);
 ```
 
 ## TLS
+
+(Note that the library needs to be built with TLS support - which is by default - for these APIs to work. See the Build chapter on how to build with or without TLS for more details).
 
 An SSL/TLS connection is configured through the use of `natsOptions`. Depending on the level of security you desire, it can be as simple as setting the secure boolean to true on the `natsOptions_SetSecure()` call.
 

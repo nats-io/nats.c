@@ -9,9 +9,18 @@
 # include "include/n-unix.h"
 #endif
 
+#if defined(NATS_HAS_TLS)
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
+#include <openssl/rand.h>
+#else
+#define SSL             void*
+#define SSL_free(c)     { (c) = NULL; }
+#define SSL_CTX         void*
+#define SSL_CTX_free(c) { (c) = NULL; }
+#define NO_SSL_ERR  "The library was built without SSL support!"
+#endif
 
 #include "err.h"
 #include "nats.h"
@@ -25,6 +34,7 @@
 #include "hash.h"
 #include "stats.h"
 #include "natstime.h"
+#include "nuid.h"
 
 // Comment/uncomment to replace some function calls with direct structure
 // access
@@ -55,7 +65,6 @@
 #define _UNSUB_NO_MAX_PROTO_ "UNSUB %" PRId64 " \r\n"
 
 #define STALE_CONNECTION     "Stale Connection"
-#define STATE_CONNECTION_LEN (16)
 
 #define _CRLF_LEN_          (2)
 #define _SPC_LEN_           (1)
@@ -65,6 +74,10 @@
 #define _PING_PROTO_LEN_    (6)
 #define _PONG_PROTO_LEN_    (6)
 #define _OK_OP_LEN_         (3)
+#define _ERR_OP_LEN_        (4)
+
+static const char *inboxPrefix = "_INBOX.";
+#define NATS_INBOX_PRE_LEN (7)
 
 extern int64_t gLockSpinCount;
 
@@ -127,6 +140,7 @@ struct __natsOptions
     bool                    secure;
     int                     maxReconnect;
     int64_t                 reconnectWait;
+    int                     reconnectBufSize;
 
     natsConnectionHandler   closedCb;
     void                    *closedCbClosure;
@@ -155,7 +169,8 @@ typedef struct __natsMsgList
 {
     natsMsg     *head;
     natsMsg     *tail;
-    int         count;
+    int         msgs;
+    int         bytes;
 
 } natsMsgList;
 
@@ -164,11 +179,6 @@ struct __natsSubscription
     natsMutex                   *mu;
 
     int                         refs;
-
-    // These two are updated by the connection in natsConn_processMsg.
-    // 'msgs' is used to determine if we have reached the max (if > 0).
-    uint64_t                    msgs;
-    uint64_t                    bytes;
 
     // This is non-zero when auto-unsubscribe is used.
     uint64_t                    max;
@@ -182,9 +192,6 @@ struct __natsSubscription
     // The list of messages waiting to be delivered to the callback (or
     // returned from NextMsg).
     natsMsgList                 msgList;
-
-    // The max number of messages that should go in msgList.
-    int                         pendingMax;
 
     // True if msgList.count is over pendingMax
     bool                        slowConsumer;
@@ -211,9 +218,9 @@ struct __natsSubscription
     // count reaches a certain threshold.
     int                         signalLimit;
 
-    // This is 'true' when the delivery thread (or NextMsg) goes into a
+    // This is > 0 when the delivery thread (or NextMsg) goes into a
     // condition wait.
-    bool                        inWait;
+    int                         inWait;
 
     // The subscriber is closed (or closing).
     bool                        closed;
@@ -243,6 +250,13 @@ struct __natsSubscription
     // Message callback and closure (for async subscription).
     natsMsgHandler              msgCb;
     void                        *msgCbClosure;
+
+    // Pending limits, etc..
+    int                         msgsMax;
+    int                         bytesMax;
+    int                         msgsLimit;
+    int                         bytesLimit;
+    int                         dropped;
 
 };
 
@@ -378,6 +392,9 @@ nats_sslRegisterThreadForCleanup(void);
 natsStatus
 nats_sslInit(void);
 
+natsStatus
+natsInbox_init(char *inbox, int inboxLen);
+
 //
 // Threads
 //
@@ -394,6 +411,9 @@ natsThread_Join(natsThread *t);
 
 void
 natsThread_Detach(natsThread *t);
+
+void
+natsThread_Yield(void);
 
 void
 natsThread_Destroy(natsThread *t);

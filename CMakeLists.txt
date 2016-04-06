@@ -3,8 +3,6 @@ cmake_minimum_required(VERSION 2.8)
 project(cnats)
 include(CTest)
 
-find_package(OpenSSL REQUIRED)
-
 # Uncomment to have the build process verbose
 #set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
@@ -16,8 +14,14 @@ set(CMAKE_INSTALL_PREFIX ${NATS_INSTALL_PREFIX} CACHE INTERNAL "")
 
 option(NATS_UPDATE_VERSION "Update the version file" OFF)
 option(NATS_COVERAGE "Code coverage" OFF)
+option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
+option(NATS_BUILD_WITH_TLS_CLIENT_METHOD "Use TLS_client_method()" OFF)
 option(NATS_BUILD_LIBUV_EXAMPLE "Compile libuv example" OFF)
 option(NATS_BUILD_LIBEVENT_EXAMPLE "Compile libevent example" OFF)
+
+if(NATS_BUILD_WITH_TLS)
+find_package(OpenSSL REQUIRED)
+endif(NATS_BUILD_WITH_TLS)
 
 set(LIBUV_DIR "/usr/local/" CACHE PATH "Libuv install directory")
 set(LIBEVENT_DIR "/usr/local/" CACHE PATH "Libevent install directory")
@@ -80,6 +84,12 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_CODE_COVERAGE} ${NATS_COMMON_C_FLAGS}
 
 add_definitions(-D${NATS_OS})
 add_definitions(-D_REENTRANT)
+if(NATS_BUILD_WITH_TLS)
+add_definitions(-DNATS_HAS_TLS)
+if(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
+add_definitions(-DNATS_USE_TLS_CLIENT_METHOD)
+endif(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
+endif(NATS_BUILD_WITH_TLS)
 
 #---------------------------------------------------------------------
 # Add to the 'clean' target the list (and location) of files to remove
@@ -99,7 +109,7 @@ if(NATS_UPDATE_VERSION)
 
 set(NATS_VERSION_MAJOR  1)
 set(NATS_VERSION_MINOR  3)
-set(NATS_VERSION_PATCH  1)
+set(NATS_VERSION_PATCH  3)
 set(NATS_VERSION_SUFFIX "-beta")
 
 set(NATS_VERSION_REQUIRED_NUMBER 0x010100)

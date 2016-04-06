@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <assert.h>
+#include <stdarg.h>
 
 #include "mem.h"
 #include "timer.h"
@@ -13,7 +15,7 @@
 
 #define WAIT_LIB_INITIALIZED \
         natsMutex_Lock(gLib.lock); \
-        while (!(gLib.initialized)) \
+        while (!(gLib.initialized) && !(gLib.initAborted)) \
             natsCondition_Wait(gLib.cond, gLib.lock); \
         natsMutex_Unlock(gLib.lock)
 
@@ -25,6 +27,7 @@ typedef struct natsTLError
     char        text[256];
     const char  *func[MAX_FRAMES];
     int         framesCount;
+    int         skipUpdate;
 
 } natsTLError;
 
@@ -76,22 +79,18 @@ typedef struct __natsLib
     int             refs;
 
     bool            initializing;
+    bool            initAborted;
 
     natsLibTimers   timers;
     natsLibAsyncCbs asyncCbs;
 
     natsCondition   *cond;
 
-    natsMutex       *inboxesLock;
-    uint64_t        inboxesSeq;
-
     natsGCList      gc;
 
 } natsLib;
 
 int64_t gLockSpinCount = 2000;
-
-static const char *inboxPrefix = "_INBOX.";
 
 static natsInitOnceType gInitOnce = NATS_ONCE_STATIC_INIT;
 static natsLib          gLib;
@@ -107,7 +106,9 @@ _destroyErrTL(void *localStorage)
 static void
 _cleanupThreadSSL(void *localStorage)
 {
+#if defined(NATS_HAS_TLS)
     ERR_remove_thread_state(0);
+#endif
 }
 
 static void
@@ -126,11 +127,13 @@ _finalCleanup(void)
 
     if (gLib.sslInitialized)
     {
+#if defined(NATS_HAS_TLS)
         ERR_free_strings();
         EVP_cleanup();
         CRYPTO_cleanup_all_ex_data();
         ERR_remove_thread_state(0);
         sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
+#endif
     }
 
     natsMutex_Destroy(gLib.lock);
@@ -234,8 +237,8 @@ _freeLib(void)
     _freeTimers();
     _freeAsyncCbs();
     _freeGC();
+    natsNUID_free();
 
-    natsMutex_Destroy(gLib.inboxesLock);
     natsCondition_Destroy(gLib.cond);
 
     memset(&(gLib.refs), 0, sizeof(natsLib) - ((char *)&(gLib.refs) - (char*)&gLib));
@@ -817,6 +820,7 @@ nats_Open(int64_t lockSpinCount)
     }
 
     gLib.initializing = true;
+    gLib.initAborted = false;
 
 #if defined(_WIN32)
 #else
@@ -832,8 +836,6 @@ nats_Open(int64_t lockSpinCount)
         gLockSpinCount = lockSpinCount;
 
     s = natsCondition_Create(&(gLib.cond));
-    if (s == NATS_OK)
-        s = natsMutex_Create(&(gLib.inboxesLock));
 
     if (s == NATS_OK)
         s = natsMutex_Create(&(gLib.timers.lock));
@@ -868,6 +870,8 @@ nats_Open(int64_t lockSpinCount)
     }
     if (s == NATS_OK)
         s = natsThreadLocal_CreateKey(&(gLib.errTLKey), _destroyErrTL);
+    if (s == NATS_OK)
+        s = natsNUID_init();
 
     if (s == NATS_OK)
         gLib.initialized = true;
@@ -878,6 +882,7 @@ nats_Open(int64_t lockSpinCount)
     {
         if (s != NATS_OK)
         {
+            gLib.initAborted = true;
             gLib.timers.shutdown = true;
             gLib.asyncCbs.shutdown = true;
             gLib.gc.shutdown = true;
@@ -899,24 +904,42 @@ nats_Open(int64_t lockSpinCount)
 natsStatus
 natsInbox_Create(natsInbox **newInbox)
 {
-    natsStatus  s      = NATS_OK;
+    natsStatus  s;
     char        *inbox = NULL;
-    int         res    = 0;
+    char        tmpInbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1];
 
     s = nats_Open(-1);
     if (s != NATS_OK)
         return s;
 
-    natsMutex_Lock(gLib.inboxesLock);
-
-    res = nats_asprintf(&inbox, "%s%x.%" PRIu64, inboxPrefix,
-                        rand(), ++(gLib.inboxesSeq));
-    if (res < 0)
-        s = nats_setDefaultError(NATS_NO_MEMORY);
-    else
+    sprintf(tmpInbox, "%s", inboxPrefix);
+    s = natsNUID_Next(tmpInbox + NATS_INBOX_PRE_LEN, NUID_BUFFER_LEN + 1);
+    if (s == NATS_OK)
+    {
+        inbox = NATS_STRDUP(tmpInbox);
+        if (inbox == NULL)
+            s = NATS_NO_MEMORY;
+    }
+    if (s == NATS_OK)
         *newInbox = inbox;
 
-    natsMutex_Unlock(gLib.inboxesLock);
+    return s;
+}
+
+natsStatus
+natsInbox_init(char *inbox, int inboxLen)
+{
+    natsStatus s;
+
+    s = nats_Open(-1);
+    if (s != NATS_OK)
+        return s;
+
+    if (inboxLen < (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1))
+        return NATS_INSUFFICIENT_BUFFER;
+
+    sprintf(inbox, "%s", inboxPrefix);
+    s = natsNUID_Next(inbox + NATS_INBOX_PRE_LEN, NUID_BUFFER_LEN + 1);
 
     return s;
 }
@@ -1099,7 +1122,7 @@ nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStat
     va_list     ap;
     int         n;
 
-    if (errTL == NULL)
+    if ((errTL == NULL) || errTL->skipUpdate)
         return errSts;
 
     errTL->sts = errSts;
@@ -1125,7 +1148,7 @@ nats_updateErrStack(natsStatus err, const char *func)
 {
     natsTLError *errTL = _getTLError();
 
-    if (errTL == NULL)
+    if ((errTL == NULL) || errTL->skipUpdate)
         return err;
 
     _updateStack(errTL, func, err, false);
@@ -1138,12 +1161,31 @@ nats_clearLastError(void)
 {
     natsTLError *errTL  = _getTLError();
 
-    if (errTL == NULL)
+    if ((errTL == NULL) || errTL->skipUpdate)
         return;
 
     errTL->sts         = NATS_OK;
     errTL->text[0]     = '\0';
     errTL->framesCount = -1;
+}
+
+void
+nats_doNotUpdateErrStack(bool skipStackUpdate)
+{
+    natsTLError *errTL  = _getTLError();
+
+    if (errTL == NULL)
+        return;
+
+    if (skipStackUpdate)
+    {
+        errTL->skipUpdate++;
+    }
+    else
+    {
+        errTL->skipUpdate--;
+        assert(errTL->skipUpdate >= 0);
+    }
 }
 
 const char*
@@ -1266,10 +1308,12 @@ nats_PrintLastErrorStack(FILE *file)
 void
 nats_sslRegisterThreadForCleanup(void)
 {
+#if defined(NATS_HAS_TLS)
     // Set anything. The goal is that at thread exit, the thread local key
     // will have something non NULL associated, which will trigger the
     // destructor that we have registered.
     (void) natsThreadLocal_Set(gLib.sslTLKey, (void*) 1);
+#endif
 }
 
 natsStatus
@@ -1290,10 +1334,12 @@ nats_sslInit(void)
         // can do cleanup on exit.
         gLib.sslInitialized = true;
 
+#if defined(NATS_HAS_TLS)
         // Initialize SSL.
         SSL_library_init();
         SSL_load_error_strings();
 
+#endif
         s = natsThreadLocal_CreateKey(&(gLib.sslTLKey), _cleanupThreadSSL);
     }
 

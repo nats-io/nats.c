@@ -116,6 +116,17 @@ natsThread_IsCurrent(natsThread *t)
 }
 
 void
+natsThread_Yield()
+{
+    // The correct way would be to call the following function.
+    // However, it looks like the connection reconnect test
+    // is failing on Windows without a proper sleep (that is,
+    // even Sleep(0) does not help).
+//    SwitchToThread();
+    nats_Sleep(1);
+}
+
+void
 natsThread_Destroy(natsThread *t)
 {
     if (t == NULL)

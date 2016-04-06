@@ -12,7 +12,7 @@ _init(natsBuffer *newBuf, char *data, int len, int capacity)
 {
     natsBuffer *buf = newBuf;
 
-    memset(buf, 0, sizeof(natsBuffer));
+    // Since we explicitly set all fields, no need for memset
 
     buf->doFree = false;
 

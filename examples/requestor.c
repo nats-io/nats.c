@@ -43,7 +43,7 @@ int main(int argc, char **argv)
 
         if (nats_Now() - last >= 1000)
         {
-            s = printStats(STATS_OUT,conn, NULL, stats, 0, 0);
+            s = printStats(STATS_OUT,conn, NULL, stats);
             last = nats_Now();
         }
 

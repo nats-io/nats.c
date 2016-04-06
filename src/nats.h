@@ -733,6 +733,21 @@ natsOptions_SetMaxReconnect(natsOptions *opts, int maxReconnect);
 NATS_EXTERN natsStatus
 natsOptions_SetReconnectWait(natsOptions *opts, int64_t reconnectWait);
 
+/** \brief Sets the size of the backing buffer used during reconnect.
+ *
+ * Sets the size, in bytes, of the backing buffer holding published data
+ * while the library is reconnecting. Once this buffer has been exhausted,
+ * publish operations will return the #NATS_INSUFFICIENT_BUFFER error.
+ * If not specified, or the value is 0, the library will use a default value,
+ * currently set to 8MB.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param reconnectBufSize the size, in bytes, of the backing buffer for
+ * write operations during a reconnect.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetReconnectBufSize(natsOptions *opts, int reconnectBufSize);
+
 /** \brief Sets the maximum number of pending messages per subscription.
  *
  * Specifies the maximum number of inbound messages that can be buffered in the
@@ -1023,6 +1038,10 @@ natsConnection_Connect(natsConnection **nc, natsOptions *options);
  * When using an external event loop, and the callback indicating that
  * the socket is ready for reading, this call will read data from the
  * socket and process it.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ *
+ * \warning This API is reserved for external event loop adapters.
  */
 NATS_EXTERN void
 natsConnection_ProcessReadEvent(natsConnection *nc);
@@ -1032,22 +1051,32 @@ natsConnection_ProcessReadEvent(natsConnection *nc);
  * When using an external event loop, and the callback indicating that
  * the socket is ready for writing, this call will write data to the
  * socket.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ *
+ * \warning This API is reserved for external event loop adapters.
  */
 NATS_EXTERN void
 natsConnection_ProcessWriteEvent(natsConnection *nc);
 
-/** \brief Connects to the `NATS Server` running at the given URL.
+/** \brief Connects to a `NATS Server` using any of the URL from the given list.
  *
- * Attempts to connect to a `NATS Server` at the given URL.
+ * Attempts to connect to a `NATS Server`.
+ *
+ * This call supports multiple comma separated URLs. If more than one is
+ * specified, it behaves as if you were using a #natsOptions object and
+ * called #natsOptions_SetServers() with the equivalent array of URLs.
+ * The list is randomized before the connect sequence starts.
  *
  * @see #natsConnection_Destroy()
+ * @see #natsOptions_SetServers()
  *
  * @param nc the location where to store the pointer to the newly created
  * #natsConnection object.
- * @param url the URL to connect to.
+ * @param urls the URL to connect to, or the list of URLs to chose from.
  */
 NATS_EXTERN natsStatus
-natsConnection_ConnectTo(natsConnection **nc, const char *url);
+natsConnection_ConnectTo(natsConnection **nc, const char *urls);
 
 /** \brief Test if connection has been closed.
  *
@@ -1491,11 +1520,163 @@ natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max);
  *
  * Returns the number of queued messages in the client for this subscription.
  *
+ * \deprecated Use #natsSubscription_GetPending instead.
+ *
  * @param sub the pointer to the #natsSubscription object.
  * @param queuedMsgs the location where to store the number of queued messages.
  */
 NATS_EXTERN natsStatus
 natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
+
+/** \brief Sets the limit for pending messages and bytes.
+ *
+ * Specifies the maximum number and size of incoming messages that can be
+ * buffered in the library for this subscription, before new incoming messages are
+ * dropped and #NATS_SLOW_CONSUMER status is reported to the #natsErrHandler
+ * callback (if one has been set).
+ *
+ * If no limit is set at the subscription level, the limit set by #natsOptions_SetMaxPendingMsgs
+ * before creating the connection will be used.
+ *
+ * \note If no option is set, there is still a default of `65536` messages and
+ * `65536 * 1024` bytes.
+ *
+ * @see natsOptions_SetMaxPendingMsgs
+ * @see natsSubscription_GetPendingLimits
+ *
+ * @param sub he pointer to the #natsSubscription object.
+ * @param msgLimit the limit in number of messages that the subscription can hold.
+ * @param bytesLimit the limit in bytes that the subscription can hold.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytesLimit);
+
+/** \brief Returns the current limit for pending messages and bytes.
+ *
+ * Regardless if limits have been explicitly set with #natsSubscription_SetPendingLimits,
+ * this call will store in the provided memory locations, the limits set for
+ * this subscription.
+ *
+ * \note It is possible for `msgLimit` and/or `bytesLimits` to be `NULL`, in which
+ * case the corresponding value is obviously not stored, but the function will
+ * not return an error.
+ *
+ * @see natsOptions_SetMaxPendingMsgs
+ * @see natsSubscription_SetPendingLimits
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param msgLimit if not `NULL`, the memory location where to store the maximum
+ * number of pending messages for this subscription.
+ * @param bytesLimit if not `NULL`, the memory location where to store the maximum
+ * size of pending messages for this subscription.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetPendingLimits(natsSubscription *sub, int *msgLimit, int *bytesLimit);
+
+/** \brief Returns the number of pending messages and bytes.
+ *
+ * Returns the total number and size of pending messages on this subscription.
+ *
+ * \note It is possible for `msgs` and `bytes` to be NULL, in which case the
+ * corresponding values are obviously not stored, but the function will not return
+ * an error.
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param msgs if not `NULL`, the memory location where to store the number of
+ * pending messages.
+ * @param bytes if not `NULL`, the memory location where to store the total size of
+ * pending messages.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes);
+
+/** \brief Returns the number of delivered messages.
+ *
+ * Returns the number of delivered messages for this subscription.
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param msgs the memory location where to store the number of
+ * delivered messages.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetDelivered(natsSubscription *sub, int *msgs);
+
+/** \brief Returns the number of dropped messages.
+ *
+ * Returns the number of known dropped messages for this subscription. This happens
+ * when a consumer is not keeping up and the library starts to drop messages
+ * when the maximum number (and/or size) of pending messages has been reached.
+ *
+ * \note If the server declares the connection a slow consumer, this number may
+ * not be valid.
+ *
+ * @see natsOptions_SetMaxPendingMsgs
+ * @see natsSubscription_SetPendingLimits
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param msgs the memory location where to store the number of dropped messages.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetDropped(natsSubscription *sub, int *msgs);
+
+/** \brief Returns the maximum number of pending messages and bytes.
+ *
+ * Returns the maximum of pending messages and bytes seen so far.
+ *
+ * \note `msgs` and/or `bytes` can be NULL.
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param msgs if not `NULL`, the memory location where to store the maximum
+ * number of pending messages seen so far.
+ * @param bytes if not `NULL`, the memory location where to store the maximum
+ * number of bytes pending seen so far.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes);
+
+/** \brief Clears the statistics regarding the maximum pending values.
+ *
+ * Clears the statistics regarding the maximum pending values.
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_ClearMaxPending(natsSubscription *sub);
+
+/** \brief Get various statistics from this subscription.
+ *
+ * This is a convenient function to get several subscription's statistics
+ * in one call.
+ *
+ * \note Any or all of the statistics pointers can be `NULL`.
+ *
+ * @see natsSubscription_GetPending
+ * @see natsSubscription_GetMaxPending
+ * @see natsSubscription_GetDelivered
+ * @see natsSubscription_GetDropped
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param pendingMsgs if not `NULL`, memory location where to store the
+ * number of pending messages.
+ * @param pendingBytes if not `NULL`, memory location where to store the
+ * total size of pending messages.
+ * @param maxPendingMsgs if not `NULL`, memory location where to store the
+ * maximum number of pending messages seen so far.
+ * @param maxPendingBytes if not `NULL`, memory location where to store the
+ * maximum total size of pending messages seen so far.
+ * @param deliveredMsgs if not `NULL`, memory location where to store the
+ * number of delivered messages.
+ * @param droppedMsgs if not `NULL`, memory location where to store the
+ * number of dropped messages.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetStats(natsSubscription *sub,
+                          int *pendingMsgs,
+                          int *pendingBytes,
+                          int *maxPendingMsgs,
+                          int *maxPendingBytes,
+                          int *deliveredMsgs,
+                          int *droppedMsgs);
 
 /** \brief Checks the validity of the subscription.
  *

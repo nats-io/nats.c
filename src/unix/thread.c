@@ -105,6 +105,12 @@ natsThread_IsCurrent(natsThread *t)
 }
 
 void
+natsThread_Yield(void)
+{
+    sched_yield();
+}
+
+void
 natsThread_Destroy(natsThread *t)
 {
     if (t == NULL)

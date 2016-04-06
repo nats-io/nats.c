@@ -113,6 +113,15 @@ typedef struct __natsSSLCtx
 
 #define natsSSLCtx_getExpectedHostname(ctx) ((ctx)->expectedHostname)
 
+typedef struct
+{
+    natsEvLoop_Attach           attach;
+    natsEvLoop_ReadAddRemove    read;
+    natsEvLoop_WriteAddRemove   write;
+    natsEvLoop_Detach           detach;
+
+} natsEvLoopCallbacks;
+
 struct __natsOptions
 {
     // This field must be the first (see natsOptions_clone, same if you add
@@ -150,6 +159,10 @@ struct __natsOptions
     int                     maxPendingMsgs;
 
     natsSSLCtx              *sslCtx;
+
+    void                    *evLoop;
+    natsEvLoopCallbacks     evCbs;
+
 };
 
 typedef struct __natsMsgList
@@ -284,6 +297,9 @@ typedef struct __natsSockCtx
 
     SSL             *ssl;
 
+    // This is true when we are using an external event loop (such as libuv).
+    bool            useEventLoop;
+
 } natsSockCtx;
 
 struct __natsConnection
@@ -329,6 +345,14 @@ struct __natsConnection
     natsThread          *reconnectThread;
 
     natsStatistics      stats;
+
+    struct
+    {
+        bool            attached;
+        bool            writeAdded;
+        void            *buffer;
+        void            *data;
+    } el;
 };
 
 //

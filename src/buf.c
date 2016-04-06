@@ -216,6 +216,21 @@ natsBuf_AppendByte(natsBuffer *buf, char b)
 }
 
 void
+natsBuf_Consume(natsBuffer *buf, int n)
+{
+    int remaining;
+
+    assert(n >= buf->len);
+
+    remaining = buf->len - n;
+    if (remaining > 0)
+        memmove(buf->data, buf->data + n, remaining);
+
+    buf->len = remaining;
+    buf->pos = buf->data + remaining;
+}
+
+void
 natsBuf_Destroy(natsBuffer *buf)
 {
     if (buf == NULL)

@@ -25,6 +25,9 @@
 #define DEFAULT_BUF_SIZE        (32768)
 #define DEFAULT_PENDING_SIZE    (1024 * 1024)
 
+#define NATS_EVENT_ACTION_ADD       (true)
+#define NATS_EVENT_ACTION_REMOVE    (false)
+
 #ifdef DEV_MODE
 // For type safety
 
@@ -150,6 +153,7 @@ _freeConn(natsConnection *nc)
     natsSock_DestroyFDSet(nc->sockCtx.fdSet);
     if (nc->sockCtx.ssl != NULL)
         SSL_free(nc->sockCtx.ssl);
+    NATS_FREE(nc->el.buffer);
     natsMutex_Destroy(nc->mu);
 
     NATS_FREE(nc);
@@ -211,7 +215,7 @@ natsConn_unlockAndRelease(natsConnection *nc)
 natsStatus
 natsConn_bufferFlush(natsConnection *nc)
 {
-    natsStatus  s;
+    natsStatus  s      = NATS_OK;
     int         bufLen = natsBuf_Len(nc->bw);
 
     if (bufLen == 0)
@@ -220,6 +224,19 @@ natsConn_bufferFlush(natsConnection *nc)
     if (nc->usePending)
     {
         s = natsBuf_Append(nc->pending, natsBuf_Data(nc->bw), bufLen);
+    }
+    else if (nc->sockCtx.useEventLoop)
+    {
+        if (!(nc->el.writeAdded))
+        {
+            nc->el.writeAdded = true;
+            s = nc->opts->evCbs.write(nc->el.data, NATS_EVENT_ACTION_ADD);
+            if (s != NATS_OK)
+                nats_setError(s, "Error processing write request: %d - %s",
+                              s, natsStatus_GetText(s));
+        }
+
+        return NATS_UPDATE_ERR_STACK(s);
     }
     else
     {
@@ -244,6 +261,23 @@ natsConn_bufferWrite(natsConnection *nc, const char *buffer, int len)
 
     if (nc->usePending)
         return natsBuf_Append(nc->pending, buffer, len);
+
+    if (nc->sockCtx.useEventLoop)
+    {
+        s = natsBuf_Append(nc->bw, buffer, len);
+        if ((s == NATS_OK)
+            && (natsBuf_Len(nc->bw) >= DEFAULT_BUF_SIZE)
+            && !(nc->el.writeAdded))
+        {
+            nc->el.writeAdded = true;
+            s = nc->opts->evCbs.write(nc->el.data, NATS_EVENT_ACTION_ADD);
+            if (s != NATS_OK)
+                nats_setError(s, "Error processing write request: %d - %s",
+                              s, natsStatus_GetText(s));
+        }
+
+        return NATS_UPDATE_ERR_STACK(s);
+    }
 
     // If we have more data that can fit..
     while ((s == NATS_OK) && (len > natsBuf_Available(nc->bw)))
@@ -1160,6 +1194,42 @@ _processConnInit(natsConnection *nc)
     if (s == NATS_OK)
         s = _spinUpSocketWatchers(nc);
 
+    if ((s == NATS_OK) && (nc->opts->evLoop != NULL))
+    {
+        s = natsSock_SetBlocking(nc->sockCtx.fd, false);
+
+        // If we are reconnecting, buffer will have already been allocated
+        if ((s == NATS_OK) && (nc->el.buffer == NULL))
+        {
+            nc->el.buffer = (char*) malloc(DEFAULT_BUF_SIZE);
+            if (nc->el.buffer == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+        }
+        if (s == NATS_OK)
+        {
+            // Set this first in case the event loop triggers the first READ
+            // event just after this call returns.
+            nc->sockCtx.useEventLoop = true;
+
+            s = nc->opts->evCbs.attach(&(nc->el.data),
+                                       nc->opts->evLoop,
+                                       nc,
+                                       (int) nc->sockCtx.fd);
+            if (s == NATS_OK)
+            {
+                nc->el.attached = true;
+            }
+            else
+            {
+                nc->sockCtx.useEventLoop = false;
+
+                nats_setError(s,
+                              "Error attaching to the event loop: %d - %s",
+                              s, natsStatus_GetText(s));
+            }
+        }
+    }
+
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -1242,7 +1312,7 @@ _processOpError(natsConnection *nc, natsStatus s)
     // Do reconnect only if allowed and we were actually connected
     if (nc->opts->allowReconnect && (nc->status == CONNECTED))
     {
-        natsStatus ls;
+        natsStatus ls = NATS_OK;
 
         // Set our new status
         nc->status = RECONNECTING;
@@ -1256,6 +1326,18 @@ _processOpError(natsConnection *nc, natsStatus s)
 
             natsSock_Shutdown(nc->sockCtx.fd);
             nc->sockCtx.fdActive = false;
+        }
+
+        // If we use an external event loop, we need to stop polling
+        // on the socket since we are going to reconnect.
+        if (nc->el.attached)
+        {
+            // Stop polling for READ/WRITE events on that socket.
+            nc->sockCtx.useEventLoop = false;
+            nc->el.writeAdded = false;
+            ls = nc->opts->evCbs.read(nc->el.data, NATS_EVENT_ACTION_REMOVE);
+            if (ls == NATS_OK)
+                ls = nc->opts->evCbs.write(nc->el.data, NATS_EVENT_ACTION_REMOVE);
         }
 
         // Create the pending buffer to hold all write requests while we try
@@ -1476,19 +1558,21 @@ _pingStopppedCb(natsTimer *timer, void *closure)
 static natsStatus
 _spinUpSocketWatchers(natsConnection *nc)
 {
-    natsStatus  s;
+    natsStatus  s = NATS_OK;
 
     nc->pout        = 0;
     nc->flusherStop = false;
 
-    // Let's not rely on the created threads acquiring lock that would make it
-    // safe to retain only on success.
+    if (nc->opts->evLoop == NULL)
+    {
+        // Let's not rely on the created threads acquiring lock that would make it
+        // safe to retain only on success.
+        _retain(nc);
 
-    _retain(nc);
-
-    s = natsThread_Create(&(nc->readLoopThread), _readLoop, (void*) nc);
-    if (s != NATS_OK)
-        _release(nc);
+        s = natsThread_Create(&(nc->readLoopThread), _readLoop, (void*) nc);
+        if (s != NATS_OK)
+            _release(nc);
+    }
 
     if (s == NATS_OK)
     {
@@ -1551,6 +1635,7 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
 {
     struct threadsToJoin    ttj;
     bool                    sockWasActive = false;
+    bool                    detach = false;
 
     natsConn_lockAndRetain(nc);
 
@@ -1584,7 +1669,7 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
 
         // If there is no readLoop, then it is our responsibility to close
         // the socket. Otherwise, _readLoop is the one doing it.
-        if (ttj.readLoop == NULL)
+        if ((ttj.readLoop == NULL) && (nc->opts->evLoop == NULL))
         {
             natsSock_Close(nc->sockCtx.fd);
             nc->sockCtx.fd = NATS_SOCK_INVALID;
@@ -1621,7 +1706,20 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
 
     nc->status = status;
 
+    if (nc->el.attached)
+    {
+        nc->el.attached = false;
+        detach = true;
+        _retain(nc);
+    }
+
     natsConn_unlockAndRelease(nc);
+
+    if (detach)
+    {
+        nc->opts->evCbs.detach(nc->el.data);
+        natsConn_release(nc);
+    }
 }
 
 static void
@@ -2483,3 +2581,102 @@ natsConnection_Destroy(natsConnection *nc)
     natsConn_release(nc);
 }
 
+void
+natsConnection_ProcessReadEvent(natsConnection *nc)
+{
+    natsStatus      s = NATS_OK;
+    int             n = 0;
+    char            *buffer;
+    int             size;
+
+    natsConn_Lock(nc);
+
+    if (!(nc->el.attached))
+    {
+        natsConn_Unlock(nc);
+        return;
+    }
+
+    if (nc->ps == NULL)
+    {
+        s = natsParser_Create(&(nc->ps));
+        if (s != NATS_OK)
+            nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    if ((s != NATS_OK) || natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
+    {
+        (void) NATS_UPDATE_ERR_STACK(s);
+        natsConn_Unlock(nc);
+        return;
+    }
+
+    _retain(nc);
+
+    buffer = nc->el.buffer;
+    size   = DEFAULT_BUF_SIZE;
+
+    natsConn_Unlock(nc);
+
+    // Do not try to read again here on success. If more than one connection
+    // is attached to the same loop, and there is a constant stream of data
+    // coming for the first connection, this would starve the second connection.
+    // So return and we will be called back later by the event loop.
+    s = natsSock_Read(&(nc->sockCtx), buffer, size, &n);
+    if (s == NATS_OK)
+        s = natsParser_Parse(nc, buffer, n);
+
+    if (s != NATS_OK)
+        _processOpError(nc, s);
+
+    natsConn_release(nc);
+}
+
+void
+natsConnection_ProcessWriteEvent(natsConnection *nc)
+{
+    natsStatus  s = NATS_OK;
+    int         n = 0;
+    char        *buf;
+    int         len;
+
+    natsConn_Lock(nc);
+
+    if (!(nc->el.attached) || (nc->sockCtx.fd == NATS_SOCK_INVALID))
+    {
+        natsConn_Unlock(nc);
+        return;
+    }
+
+    buf = natsBuf_Data(nc->bw);
+    len = natsBuf_Len(nc->bw);
+
+    s = natsSock_Write(&(nc->sockCtx), buf, len, &n);
+    if (s == NATS_OK)
+    {
+        if (n == len)
+        {
+            // We sent all the data, reset buffer and remove WRITE event.
+            natsBuf_Reset(nc->bw);
+
+            s = nc->opts->evCbs.write(nc->el.data, NATS_EVENT_ACTION_REMOVE);
+            if (s == NATS_OK)
+                nc->el.writeAdded = false;
+            else
+                nats_setError(s, "Error processing write request: %d - %s",
+                              s, natsStatus_GetText(s));
+        }
+        else
+        {
+            // We sent some part of the buffer. Move the remaining at the beginning.
+            natsBuf_Consume(nc->bw, n);
+        }
+    }
+
+    natsConn_Unlock(nc);
+
+    if (s != NATS_OK)
+        _processOpError(nc, s);
+
+    (void) NATS_UPDATE_ERR_STACK(s);
+}

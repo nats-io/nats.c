@@ -27,7 +27,6 @@ typedef DWORD               natsThreadLocal;
 typedef CRITICAL_SECTION    natsMutex;
 typedef CONDITION_VARIABLE  natsCondition;
 typedef INIT_ONCE           natsInitOnceType;
-typedef SOCKET              natsSock;
 typedef int                 natsSockLen;
 typedef int                 natsRecvLen;
 

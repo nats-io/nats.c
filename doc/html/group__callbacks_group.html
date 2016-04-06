@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.3.1-beta</span>
+   &#160;<span id="projectnumber">1.3.3-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -118,6 +118,18 @@ Typedefs</h2></td></tr>
 <tr class="memitem:ga9e511dffa471dfb971b7dd2b12329626"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga9e511dffa471dfb971b7dd2b12329626">natsErrHandler</a>) (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *subscription, <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> err, void *closure)</td></tr>
 <tr class="memdesc:ga9e511dffa471dfb971b7dd2b12329626"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify the user of errors encountered while processing inbound messages.  <a href="#ga9e511dffa471dfb971b7dd2b12329626">More...</a><br /></td></tr>
 <tr class="separator:ga9e511dffa471dfb971b7dd2b12329626"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gabe15a94f952bcd0198f6ac5c5187c3da"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gabe15a94f952bcd0198f6ac5c5187c3da">natsEvLoop_Attach</a>) (void **userData, void *loop, <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, int socket)</td></tr>
+<tr class="memdesc:gabe15a94f952bcd0198f6ac5c5187c3da"><td class="mdescLeft">&#160;</td><td class="mdescRight">Attach this connection to the external event loop.  <a href="#gabe15a94f952bcd0198f6ac5c5187c3da">More...</a><br /></td></tr>
+<tr class="separator:gabe15a94f952bcd0198f6ac5c5187c3da"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaea4c125ecfb43eaf43da20e8444c2aaa"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gaea4c125ecfb43eaf43da20e8444c2aaa">natsEvLoop_ReadAddRemove</a>) (void *userData, bool add)</td></tr>
+<tr class="memdesc:gaea4c125ecfb43eaf43da20e8444c2aaa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read event needs to be added or removed.  <a href="#gaea4c125ecfb43eaf43da20e8444c2aaa">More...</a><br /></td></tr>
+<tr class="separator:gaea4c125ecfb43eaf43da20e8444c2aaa"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga2bb5dd2d821ca5bbc0488f7e6aceed17"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga2bb5dd2d821ca5bbc0488f7e6aceed17">natsEvLoop_WriteAddRemove</a>) (void *userData, bool add)</td></tr>
+<tr class="memdesc:ga2bb5dd2d821ca5bbc0488f7e6aceed17"><td class="mdescLeft">&#160;</td><td class="mdescRight">Write event needs to be added or removed.  <a href="#ga2bb5dd2d821ca5bbc0488f7e6aceed17">More...</a><br /></td></tr>
+<tr class="separator:ga2bb5dd2d821ca5bbc0488f7e6aceed17"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gab63dee7f7012ba11ae20b76dbc36f2d0">natsEvLoop_Detach</a>) (void *userData)</td></tr>
+<tr class="memdesc:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Detach from the event loop.  <a href="#gab63dee7f7012ba11ae20b76dbc36f2d0">More...</a><br /></td></tr>
+<tr class="separator:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>NATS Callbacks. </p>
@@ -167,6 +179,87 @@ Typedefs</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>This callback is used to process asynchronous errors encountered while processing inbound messages, such as <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae93ff5b7fe31f8570308385d92d317b0">NATS_SLOW_CONSUMER</a>. </p>
+
+</div>
+</div>
+<a class="anchor" id="gabe15a94f952bcd0198f6ac5c5187c3da"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(* natsEvLoop_Attach) (void **userData, void *loop, <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, int socket)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>After a connection has (re)connected, this callback is invoked. It should perform the necessary work to start polling the given socket for READ events.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">userData</td><td>location where the adapter implementation will store the object it created and that will later be passed to all other callbacks. If <code>*userData</code> is not <code>NULL</code>, this means that this is a reconnect event. </td></tr>
+    <tr><td class="paramname">loop</td><td>the event loop (as a generic void*) this connection is being attached to. </td></tr>
+    <tr><td class="paramname">nc</td><td>the connection being attached to the event loop. </td></tr>
+    <tr><td class="paramname">socket</td><td>the socket to poll for read/write events. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="gaea4c125ecfb43eaf43da20e8444c2aaa"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(* natsEvLoop_ReadAddRemove) (void *userData, bool add)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>The <code>NATS</code> library will invoked this callback to indicate if the event loop should start (<code>add is</code>true<code>) or stop (</code>add<code>is</code>false`) polling for read events on the socket.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">userData</td><td>the pointer to an user object created in <a class="el" href="group__callbacks_group.html#gabe15a94f952bcd0198f6ac5c5187c3da" title="Attach this connection to the external event loop. ">natsEvLoop_Attach</a>. </td></tr>
+    <tr><td class="paramname">add</td><td><code>true</code> if the event library should start polling, <code>false</code> otherwise. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga2bb5dd2d821ca5bbc0488f7e6aceed17"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(* natsEvLoop_WriteAddRemove) (void *userData, bool add)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>The <code>NATS</code> library will invoked this callback to indicate if the event loop should start (<code>add is</code>true<code>) or stop (</code>add<code>is</code>false`) polling for write events on the socket.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">userData</td><td>the pointer to an user object created in <a class="el" href="group__callbacks_group.html#gabe15a94f952bcd0198f6ac5c5187c3da" title="Attach this connection to the external event loop. ">natsEvLoop_Attach</a>. </td></tr>
+    <tr><td class="paramname">add</td><td><code>true</code> if the event library should start polling, <code>false</code> otherwise. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="gab63dee7f7012ba11ae20b76dbc36f2d0"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(* natsEvLoop_Detach) (void *userData)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>The <code>NATS</code> library will invoked this callback to indicate that the connection no longer needs to be attached to the event loop. User can cleanup some state.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">userData</td><td>the pointer to an user object created in <a class="el" href="group__callbacks_group.html#gabe15a94f952bcd0198f6ac5c5187c3da" title="Attach this connection to the external event loop. ">natsEvLoop_Attach</a>. </td></tr>
+  </table>
+  </dd>
+</dl>
 
 </div>
 </div>

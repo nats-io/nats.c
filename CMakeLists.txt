@@ -16,10 +16,15 @@ option(NATS_UPDATE_VERSION "Update the version file" OFF)
 option(NATS_COVERAGE "Code coverage" OFF)
 option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
 option(NATS_BUILD_WITH_TLS_CLIENT_METHOD "Use TLS_client_method()" OFF)
+option(NATS_BUILD_LIBUV_EXAMPLE "Compile libuv example" OFF)
+option(NATS_BUILD_LIBEVENT_EXAMPLE "Compile libevent example" OFF)
 
 if(NATS_BUILD_WITH_TLS)
 find_package(OpenSSL REQUIRED)
 endif(NATS_BUILD_WITH_TLS)
+
+set(LIBUV_DIR "/usr/local/" CACHE PATH "Libuv install directory")
+set(LIBEVENT_DIR "/usr/local/" CACHE PATH "Libevent install directory")
 
 # Platform specific settings
 if(UNIX)
@@ -104,7 +109,7 @@ if(NATS_UPDATE_VERSION)
 
 set(NATS_VERSION_MAJOR  1)
 set(NATS_VERSION_MINOR  3)
-set(NATS_VERSION_PATCH  1)
+set(NATS_VERSION_PATCH  3)
 set(NATS_VERSION_SUFFIX "-beta")
 
 set(NATS_VERSION_REQUIRED_NUMBER 0x010100)

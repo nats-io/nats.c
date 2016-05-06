@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.3.3-RC</span>
+   &#160;<span id="projectnumber">1.3.5-RC</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -124,30 +124,30 @@ Functions</h2></td></tr>
 <tr class="memitem:ga8a37b2d5290da3aecc05483d79e7e254"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga8a37b2d5290da3aecc05483d79e7e254">natsSubscription_QueuedMsgs</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, uint64_t *queuedMsgs)</td></tr>
 <tr class="memdesc:ga8a37b2d5290da3aecc05483d79e7e254"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gets the number of pending messages.  <a href="#ga8a37b2d5290da3aecc05483d79e7e254">More...</a><br /></td></tr>
 <tr class="separator:ga8a37b2d5290da3aecc05483d79e7e254"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga68a7cea89e75c529a7dd3bb77303dda4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga68a7cea89e75c529a7dd3bb77303dda4">natsSubscription_SetPendingLimits</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int msgLimit, int bytesLimit)</td></tr>
-<tr class="memdesc:ga68a7cea89e75c529a7dd3bb77303dda4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the limit for pending messages and bytes.  <a href="#ga68a7cea89e75c529a7dd3bb77303dda4">More...</a><br /></td></tr>
-<tr class="separator:ga68a7cea89e75c529a7dd3bb77303dda4"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga786bb458981274fe717f266bd3b96d96"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga786bb458981274fe717f266bd3b96d96">natsSubscription_GetPendingLimits</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int *msgLimit, int *bytesLimit)</td></tr>
-<tr class="memdesc:ga786bb458981274fe717f266bd3b96d96"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the current limit for pending messages and bytes.  <a href="#ga786bb458981274fe717f266bd3b96d96">More...</a><br /></td></tr>
-<tr class="separator:ga786bb458981274fe717f266bd3b96d96"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:gaca6262e2ef842caa701a9f233db72707"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#gaca6262e2ef842caa701a9f233db72707">natsSubscription_GetPending</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int *msgs, int *bytes)</td></tr>
-<tr class="memdesc:gaca6262e2ef842caa701a9f233db72707"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of pending messages and bytes.  <a href="#gaca6262e2ef842caa701a9f233db72707">More...</a><br /></td></tr>
-<tr class="separator:gaca6262e2ef842caa701a9f233db72707"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:gabfd2ef233d921b5b06ee85c9c2b739ef"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#gabfd2ef233d921b5b06ee85c9c2b739ef">natsSubscription_GetDelivered</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int *msgs)</td></tr>
-<tr class="memdesc:gabfd2ef233d921b5b06ee85c9c2b739ef"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of delivered messages.  <a href="#gabfd2ef233d921b5b06ee85c9c2b739ef">More...</a><br /></td></tr>
-<tr class="separator:gabfd2ef233d921b5b06ee85c9c2b739ef"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:gad111cf1ae84b4ddbd18bdc8b8f4e3fab"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#gad111cf1ae84b4ddbd18bdc8b8f4e3fab">natsSubscription_GetDropped</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int *msgs)</td></tr>
-<tr class="memdesc:gad111cf1ae84b4ddbd18bdc8b8f4e3fab"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of dropped messages.  <a href="#gad111cf1ae84b4ddbd18bdc8b8f4e3fab">More...</a><br /></td></tr>
-<tr class="separator:gad111cf1ae84b4ddbd18bdc8b8f4e3fab"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga0abc5d9afbc6b0c9c5adaf533904c968"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga0abc5d9afbc6b0c9c5adaf533904c968">natsSubscription_GetMaxPending</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int *msgs, int *bytes)</td></tr>
-<tr class="memdesc:ga0abc5d9afbc6b0c9c5adaf533904c968"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the maximum number of pending messages and bytes.  <a href="#ga0abc5d9afbc6b0c9c5adaf533904c968">More...</a><br /></td></tr>
-<tr class="separator:ga0abc5d9afbc6b0c9c5adaf533904c968"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga851cb07ce287fb27cd1bf1563e279bc4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga851cb07ce287fb27cd1bf1563e279bc4">natsSubscription_SetPendingLimits</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int64_t msgLimit, int64_t bytesLimit)</td></tr>
+<tr class="memdesc:ga851cb07ce287fb27cd1bf1563e279bc4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the limit for pending messages and bytes.  <a href="#ga851cb07ce287fb27cd1bf1563e279bc4">More...</a><br /></td></tr>
+<tr class="separator:ga851cb07ce287fb27cd1bf1563e279bc4"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga31a8eadb9af3fd12fa304d915f4c61fd"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga31a8eadb9af3fd12fa304d915f4c61fd">natsSubscription_GetPendingLimits</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int64_t *msgLimit, int64_t *bytesLimit)</td></tr>
+<tr class="memdesc:ga31a8eadb9af3fd12fa304d915f4c61fd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the current limit for pending messages and bytes.  <a href="#ga31a8eadb9af3fd12fa304d915f4c61fd">More...</a><br /></td></tr>
+<tr class="separator:ga31a8eadb9af3fd12fa304d915f4c61fd"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga43360e851df1a162b2351e1230a1ec43"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga43360e851df1a162b2351e1230a1ec43">natsSubscription_GetPending</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int64_t *msgs, int64_t *bytes)</td></tr>
+<tr class="memdesc:ga43360e851df1a162b2351e1230a1ec43"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of pending messages and bytes.  <a href="#ga43360e851df1a162b2351e1230a1ec43">More...</a><br /></td></tr>
+<tr class="separator:ga43360e851df1a162b2351e1230a1ec43"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga476b7276d0b7f9946834d2bb2423e955"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga476b7276d0b7f9946834d2bb2423e955">natsSubscription_GetDelivered</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int64_t *msgs)</td></tr>
+<tr class="memdesc:ga476b7276d0b7f9946834d2bb2423e955"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of delivered messages.  <a href="#ga476b7276d0b7f9946834d2bb2423e955">More...</a><br /></td></tr>
+<tr class="separator:ga476b7276d0b7f9946834d2bb2423e955"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga24f1636869e26661ce62c9c9f4d80823"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga24f1636869e26661ce62c9c9f4d80823">natsSubscription_GetDropped</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int64_t *msgs)</td></tr>
+<tr class="memdesc:ga24f1636869e26661ce62c9c9f4d80823"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of dropped messages.  <a href="#ga24f1636869e26661ce62c9c9f4d80823">More...</a><br /></td></tr>
+<tr class="separator:ga24f1636869e26661ce62c9c9f4d80823"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga4a7947182fefdaec0e534338f794b704"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga4a7947182fefdaec0e534338f794b704">natsSubscription_GetMaxPending</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int64_t *msgs, int64_t *bytes)</td></tr>
+<tr class="memdesc:ga4a7947182fefdaec0e534338f794b704"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the maximum number of pending messages and bytes.  <a href="#ga4a7947182fefdaec0e534338f794b704">More...</a><br /></td></tr>
+<tr class="separator:ga4a7947182fefdaec0e534338f794b704"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gafe31911d8372db401d33856465421710"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#gafe31911d8372db401d33856465421710">natsSubscription_ClearMaxPending</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub)</td></tr>
 <tr class="memdesc:gafe31911d8372db401d33856465421710"><td class="mdescLeft">&#160;</td><td class="mdescRight">Clears the statistics regarding the maximum pending values.  <a href="#gafe31911d8372db401d33856465421710">More...</a><br /></td></tr>
 <tr class="separator:gafe31911d8372db401d33856465421710"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga6a26f3a4548d6390549dd310e329cded"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga6a26f3a4548d6390549dd310e329cded">natsSubscription_GetStats</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int *pendingMsgs, int *pendingBytes, int *maxPendingMsgs, int *maxPendingBytes, int *deliveredMsgs, int *droppedMsgs)</td></tr>
-<tr class="memdesc:ga6a26f3a4548d6390549dd310e329cded"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get various statistics from this subscription.  <a href="#ga6a26f3a4548d6390549dd310e329cded">More...</a><br /></td></tr>
-<tr class="separator:ga6a26f3a4548d6390549dd310e329cded"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga548775b0b593dd570876ed8c7d78dcba"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga548775b0b593dd570876ed8c7d78dcba">natsSubscription_GetStats</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int64_t *pendingMsgs, int64_t *pendingBytes, int64_t *maxPendingMsgs, int64_t *maxPendingBytes, int64_t *deliveredMsgs, int64_t *droppedMsgs)</td></tr>
+<tr class="memdesc:ga548775b0b593dd570876ed8c7d78dcba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get various statistics from this subscription.  <a href="#ga548775b0b593dd570876ed8c7d78dcba">More...</a><br /></td></tr>
+<tr class="separator:ga548775b0b593dd570876ed8c7d78dcba"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga5e6454bbc7a90b9694112d45bd8de903"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga5e6454bbc7a90b9694112d45bd8de903">natsSubscription_IsValid</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub)</td></tr>
 <tr class="memdesc:ga5e6454bbc7a90b9694112d45bd8de903"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks the validity of the subscription.  <a href="#ga5e6454bbc7a90b9694112d45bd8de903">More...</a><br /></td></tr>
 <tr class="separator:ga5e6454bbc7a90b9694112d45bd8de903"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -303,7 +303,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Returns the number of queued messages in the client for this subscription.</p>
-<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000001">Deprecated:</a></b></dt><dd>Use <a class="el" href="group__sub_group.html#gaca6262e2ef842caa701a9f233db72707" title="Returns the number of pending messages and bytes. ">natsSubscription_GetPending</a> instead.</dd></dl>
+<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000001">Deprecated:</a></b></dt><dd>Use <a class="el" href="group__sub_group.html#ga43360e851df1a162b2351e1230a1ec43" title="Returns the number of pending messages and bytes. ">natsSubscription_GetPending</a> instead.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
@@ -314,7 +314,7 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a class="anchor" id="ga68a7cea89e75c529a7dd3bb77303dda4"></a>
+<a class="anchor" id="ga851cb07ce287fb27cd1bf1563e279bc4"></a>
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
@@ -327,13 +327,13 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int&#160;</td>
+          <td class="paramtype">int64_t&#160;</td>
           <td class="paramname"><em>msgLimit</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int&#160;</td>
+          <td class="paramtype">int64_t&#160;</td>
           <td class="paramname"><em>bytesLimit</em>&#160;</td>
         </tr>
         <tr>
@@ -348,7 +348,7 @@ Functions</h2></td></tr>
 <dl class="section note"><dt>Note</dt><dd>If no option is set, there is still a default of <code>65536</code> messages and <code>65536 * 1024</code> bytes.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga95510436eee06f9992ded96a44795c40" title="Sets the maximum number of pending messages per subscription. ">natsOptions_SetMaxPendingMsgs</a> </dd>
 <dd>
-<a class="el" href="group__sub_group.html#ga786bb458981274fe717f266bd3b96d96" title="Returns the current limit for pending messages and bytes. ">natsSubscription_GetPendingLimits</a></dd></dl>
+<a class="el" href="group__sub_group.html#ga31a8eadb9af3fd12fa304d915f4c61fd" title="Returns the current limit for pending messages and bytes. ">natsSubscription_GetPendingLimits</a></dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>he pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
@@ -360,7 +360,7 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a class="anchor" id="ga786bb458981274fe717f266bd3b96d96"></a>
+<a class="anchor" id="ga31a8eadb9af3fd12fa304d915f4c61fd"></a>
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
@@ -373,13 +373,13 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>msgLimit</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>bytesLimit</em>&#160;</td>
         </tr>
         <tr>
@@ -389,11 +389,11 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Regardless if limits have been explicitly set with <a class="el" href="group__sub_group.html#ga68a7cea89e75c529a7dd3bb77303dda4" title="Sets the limit for pending messages and bytes. ">natsSubscription_SetPendingLimits</a>, this call will store in the provided memory locations, the limits set for this subscription.</p>
+<p>Regardless if limits have been explicitly set with <a class="el" href="group__sub_group.html#ga851cb07ce287fb27cd1bf1563e279bc4" title="Sets the limit for pending messages and bytes. ">natsSubscription_SetPendingLimits</a>, this call will store in the provided memory locations, the limits set for this subscription.</p>
 <dl class="section note"><dt>Note</dt><dd>It is possible for <code>msgLimit</code> and/or <code>bytesLimits</code> to be <code>NULL</code>, in which case the corresponding value is obviously not stored, but the function will not return an error.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga95510436eee06f9992ded96a44795c40" title="Sets the maximum number of pending messages per subscription. ">natsOptions_SetMaxPendingMsgs</a> </dd>
 <dd>
-<a class="el" href="group__sub_group.html#ga68a7cea89e75c529a7dd3bb77303dda4" title="Sets the limit for pending messages and bytes. ">natsSubscription_SetPendingLimits</a></dd></dl>
+<a class="el" href="group__sub_group.html#ga851cb07ce287fb27cd1bf1563e279bc4" title="Sets the limit for pending messages and bytes. ">natsSubscription_SetPendingLimits</a></dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
@@ -405,7 +405,7 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a class="anchor" id="gaca6262e2ef842caa701a9f233db72707"></a>
+<a class="anchor" id="ga43360e851df1a162b2351e1230a1ec43"></a>
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
@@ -418,13 +418,13 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>msgs</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>bytes</em>&#160;</td>
         </tr>
         <tr>
@@ -447,7 +447,7 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a class="anchor" id="gabfd2ef233d921b5b06ee85c9c2b739ef"></a>
+<a class="anchor" id="ga476b7276d0b7f9946834d2bb2423e955"></a>
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
@@ -460,7 +460,7 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>msgs</em>&#160;</td>
         </tr>
         <tr>
@@ -481,7 +481,7 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a class="anchor" id="gad111cf1ae84b4ddbd18bdc8b8f4e3fab"></a>
+<a class="anchor" id="ga24f1636869e26661ce62c9c9f4d80823"></a>
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
@@ -494,7 +494,7 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>msgs</em>&#160;</td>
         </tr>
         <tr>
@@ -508,7 +508,7 @@ Functions</h2></td></tr>
 <dl class="section note"><dt>Note</dt><dd>If the server declares the connection a slow consumer, this number may not be valid.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga95510436eee06f9992ded96a44795c40" title="Sets the maximum number of pending messages per subscription. ">natsOptions_SetMaxPendingMsgs</a> </dd>
 <dd>
-<a class="el" href="group__sub_group.html#ga68a7cea89e75c529a7dd3bb77303dda4" title="Sets the limit for pending messages and bytes. ">natsSubscription_SetPendingLimits</a></dd></dl>
+<a class="el" href="group__sub_group.html#ga851cb07ce287fb27cd1bf1563e279bc4" title="Sets the limit for pending messages and bytes. ">natsSubscription_SetPendingLimits</a></dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
@@ -519,7 +519,7 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a class="anchor" id="ga0abc5d9afbc6b0c9c5adaf533904c968"></a>
+<a class="anchor" id="ga4a7947182fefdaec0e534338f794b704"></a>
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
@@ -532,13 +532,13 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>msgs</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>bytes</em>&#160;</td>
         </tr>
         <tr>
@@ -584,7 +584,7 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a class="anchor" id="ga6a26f3a4548d6390549dd310e329cded"></a>
+<a class="anchor" id="ga548775b0b593dd570876ed8c7d78dcba"></a>
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
@@ -597,37 +597,37 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>pendingMsgs</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>pendingBytes</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>maxPendingMsgs</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>maxPendingBytes</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>deliveredMsgs</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int *&#160;</td>
+          <td class="paramtype">int64_t *&#160;</td>
           <td class="paramname"><em>droppedMsgs</em>&#160;</td>
         </tr>
         <tr>
@@ -639,13 +639,13 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 <p>This is a convenient function to get several subscription's statistics in one call.</p>
 <dl class="section note"><dt>Note</dt><dd>Any or all of the statistics pointers can be <code>NULL</code>.</dd></dl>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__sub_group.html#gaca6262e2ef842caa701a9f233db72707" title="Returns the number of pending messages and bytes. ">natsSubscription_GetPending</a> </dd>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__sub_group.html#ga43360e851df1a162b2351e1230a1ec43" title="Returns the number of pending messages and bytes. ">natsSubscription_GetPending</a> </dd>
 <dd>
-<a class="el" href="group__sub_group.html#ga0abc5d9afbc6b0c9c5adaf533904c968" title="Returns the maximum number of pending messages and bytes. ">natsSubscription_GetMaxPending</a> </dd>
+<a class="el" href="group__sub_group.html#ga4a7947182fefdaec0e534338f794b704" title="Returns the maximum number of pending messages and bytes. ">natsSubscription_GetMaxPending</a> </dd>
 <dd>
-<a class="el" href="group__sub_group.html#gabfd2ef233d921b5b06ee85c9c2b739ef" title="Returns the number of delivered messages. ">natsSubscription_GetDelivered</a> </dd>
+<a class="el" href="group__sub_group.html#ga476b7276d0b7f9946834d2bb2423e955" title="Returns the number of delivered messages. ">natsSubscription_GetDelivered</a> </dd>
 <dd>
-<a class="el" href="group__sub_group.html#gad111cf1ae84b4ddbd18bdc8b8f4e3fab" title="Returns the number of dropped messages. ">natsSubscription_GetDropped</a></dd></dl>
+<a class="el" href="group__sub_group.html#ga24f1636869e26661ce62c9c9f4d80823" title="Returns the number of dropped messages. ">natsSubscription_GetDropped</a></dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>

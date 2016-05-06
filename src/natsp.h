@@ -169,8 +169,8 @@ typedef struct __natsMsgList
 {
     natsMsg     *head;
     natsMsg     *tail;
-    int         msgs;
-    int         bytes;
+    int64_t     msgs;
+    int64_t     bytes;
 
 } natsMsgList;
 
@@ -252,11 +252,11 @@ struct __natsSubscription
     void                        *msgCbClosure;
 
     // Pending limits, etc..
-    int                         msgsMax;
-    int                         bytesMax;
-    int                         msgsLimit;
-    int                         bytesLimit;
-    int                         dropped;
+    int64_t                     msgsMax;
+    int64_t                     bytesMax;
+    int64_t                     msgsLimit;
+    int64_t                     bytesLimit;
+    int64_t                     dropped;
 
 };
 

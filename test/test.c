@@ -6765,10 +6765,10 @@ test_PendingLimitsDeliveredAndDropped(void)
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
     int                 sent      = total + 20;
-    int                 msgsLimit = 0;
-    int                 bytesLimit= 0;
-    int                 msgs      = 0;
-    int                 bytes     = 0;
+    int64_t             msgsLimit = 0;
+    int64_t             bytesLimit= 0;
+    int64_t             msgs      = 0;
+    int64_t             bytes     = 0;
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
@@ -6969,10 +6969,10 @@ test_PendingLimitsWithSyncSub(void)
     natsSubscription    *sub      = NULL;
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
-    int                 msgsLimit = 0;
-    int                 bytesLimit= 0;
-    int                 msgs      = 0;
-    int                 bytes     = 0;
+    int64_t             msgsLimit = 0;
+    int64_t             bytesLimit= 0;
+    int64_t             msgs      = 0;
+    int64_t             bytes     = 0;
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     CHECK_SERVER_STARTED(serverPid);
@@ -7040,8 +7040,8 @@ test_AsyncSubscriptionPending(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
-    int                 msgs      = 0;
-    int                 bytes     = 0;
+    int64_t             msgs      = 0;
+    int64_t             bytes     = 0;
     int                 mlen      = 10;
     int                 totalSize = total * mlen;
     uint64_t            queuedMsgs= 0;
@@ -7150,8 +7150,8 @@ test_AsyncSubscriptionPendingDrain(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
-    int                 msgs      = 0;
-    int                 bytes     = 0;
+    int64_t             msgs      = 0;
+    int64_t             bytes     = 0;
     int                 mlen      = 10;
     int                 totalSize = total * mlen;
     uint64_t            queuedMsgs= 0;
@@ -7220,8 +7220,8 @@ test_SyncSubscriptionPending(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
-    int                 msgs      = 0;
-    int                 bytes     = 0;
+    int64_t             msgs      = 0;
+    int64_t             bytes     = 0;
     int                 mlen      = 10;
     int                 totalSize = total * mlen;
     uint64_t            queuedMsgs= 0;
@@ -7311,8 +7311,8 @@ test_SyncSubscriptionPendingDrain(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
-    int                 msgs      = 0;
-    int                 bytes     = 0;
+    int64_t             msgs      = 0;
+    int64_t             bytes     = 0;
     int                 i;
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);

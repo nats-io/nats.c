@@ -33,7 +33,7 @@ asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure
     if (print)
         printf("Async error: %d - %s\n", err, natsStatus_GetText(err));
 
-    natsSubscription_GetDropped(sub, (int*) &dropped);
+    natsSubscription_GetDropped(sub, (int64_t*) &dropped);
 }
 
 int main(int argc, char **argv)

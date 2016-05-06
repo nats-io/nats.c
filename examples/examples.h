@@ -31,7 +31,7 @@ const char  *name   = "worker";
 int64_t     total   = 1000000;
 
 volatile int64_t count   = 0;
-volatile int     dropped = 0;
+volatile int64_t dropped = 0;
 int64_t          start   = 0;
 volatile int64_t elapsed = 0;
 bool             print   = false;
@@ -47,7 +47,7 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
 {
     natsStatus  s = NATS_OK;
     uint64_t    inMsgs, inBytes, outMsgs, outBytes, reconnected;
-    int         pending, delivered, dropped;
+    int64_t     pending, delivered, dropped = 0;
 
     s = natsConnection_GetStats(conn, stats);
     if (s == NATS_OK)
@@ -82,9 +82,9 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
         }
         if (mode & STATS_COUNT)
         {
-            printf("Delivered: %9d - ", delivered);
-            printf("Pending: %5d - ", pending);
-            printf("Dropped: %5d - ", dropped);
+            printf("Delivered: %9" PRId64 " - ", delivered);
+            printf("Pending: %5" PRId64 " - ", pending);
+            printf("Dropped: %5" PRId64 " - ", dropped);
         }
         printf("Reconnected: %3" PRIu64 "\n", reconnected);
     }

@@ -1549,7 +1549,7 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
  * @param bytesLimit the limit in bytes that the subscription can hold.
  */
 NATS_EXTERN natsStatus
-natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytesLimit);
+natsSubscription_SetPendingLimits(natsSubscription *sub, int64_t msgLimit, int64_t bytesLimit);
 
 /** \brief Returns the current limit for pending messages and bytes.
  *
@@ -1571,7 +1571,7 @@ natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytes
  * size of pending messages for this subscription.
  */
 NATS_EXTERN natsStatus
-natsSubscription_GetPendingLimits(natsSubscription *sub, int *msgLimit, int *bytesLimit);
+natsSubscription_GetPendingLimits(natsSubscription *sub, int64_t *msgLimit, int64_t *bytesLimit);
 
 /** \brief Returns the number of pending messages and bytes.
  *
@@ -1588,7 +1588,7 @@ natsSubscription_GetPendingLimits(natsSubscription *sub, int *msgLimit, int *byt
  * pending messages.
  */
 NATS_EXTERN natsStatus
-natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes);
+natsSubscription_GetPending(natsSubscription *sub, int64_t *msgs, int64_t *bytes);
 
 /** \brief Returns the number of delivered messages.
  *
@@ -1599,7 +1599,7 @@ natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes);
  * delivered messages.
  */
 NATS_EXTERN natsStatus
-natsSubscription_GetDelivered(natsSubscription *sub, int *msgs);
+natsSubscription_GetDelivered(natsSubscription *sub, int64_t *msgs);
 
 /** \brief Returns the number of dropped messages.
  *
@@ -1617,7 +1617,7 @@ natsSubscription_GetDelivered(natsSubscription *sub, int *msgs);
  * @param msgs the memory location where to store the number of dropped messages.
  */
 NATS_EXTERN natsStatus
-natsSubscription_GetDropped(natsSubscription *sub, int *msgs);
+natsSubscription_GetDropped(natsSubscription *sub, int64_t *msgs);
 
 /** \brief Returns the maximum number of pending messages and bytes.
  *
@@ -1632,7 +1632,7 @@ natsSubscription_GetDropped(natsSubscription *sub, int *msgs);
  * number of bytes pending seen so far.
  */
 NATS_EXTERN natsStatus
-natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes);
+natsSubscription_GetMaxPending(natsSubscription *sub, int64_t *msgs, int64_t *bytes);
 
 /** \brief Clears the statistics regarding the maximum pending values.
  *
@@ -1671,12 +1671,12 @@ natsSubscription_ClearMaxPending(natsSubscription *sub);
  */
 NATS_EXTERN natsStatus
 natsSubscription_GetStats(natsSubscription *sub,
-                          int *pendingMsgs,
-                          int *pendingBytes,
-                          int *maxPendingMsgs,
-                          int *maxPendingBytes,
-                          int *deliveredMsgs,
-                          int *droppedMsgs);
+                          int64_t *pendingMsgs,
+                          int64_t *pendingBytes,
+                          int64_t *maxPendingMsgs,
+                          int64_t *maxPendingBytes,
+                          int64_t *deliveredMsgs,
+                          int64_t *droppedMsgs);
 
 /** \brief Checks the validity of the subscription.
  *

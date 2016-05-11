@@ -2523,8 +2523,11 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
         {
             // Close the stdout/stderr so that the server's output
             // does not mingle with the test suite output.
-            close(1);
-            close(2);
+
+// Disabling this for now, looks like it is causing failures
+// in Travis when using gnatsd 0.8.0.
+//            close(1);
+//            close(2);
         }
         execvp(argvPtrs[0], argvPtrs);
         perror("Exec failed: ");

@@ -256,9 +256,9 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     sub->msgCb          = cb;
     sub->msgCbClosure   = cbClosure;
     sub->noDelay        = noDelay;
-    sub->msgsLimit      = nc->opts->maxPendingMsgs;
+    sub->msgsLimit      = (int64_t) nc->opts->maxPendingMsgs;
     sub->bytesLimit     = sub->msgsLimit * 1024;
-    sub->signalLimit    = (int)(sub->msgsLimit * 0.75);
+    sub->signalLimit    = (int64_t)(sub->msgsLimit * 0.75);
 
     sub->subject = NATS_STRDUP(subj);
     if (sub->subject == NULL)

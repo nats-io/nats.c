@@ -29,6 +29,7 @@ foreach(examples_src ${EXAMPLES_SOURCES})
     set(exampleexe "nats-${examplename}")
 
     set(buildExample OFF)
+    set(NATS_ASYNC_IO_LIB "")
 
     if(examplename MATCHES "libuv")
       if(NATS_BUILD_LIBUV_EXAMPLE)

@@ -29,10 +29,12 @@ static const char *natsServerExe = "gnatsd";
 #define test(s)         { printf("#%02d ", ++tests); printf("%s", (s)); fflush(stdout); }
 #ifdef _WIN32
 #define NATS_INVALID_PID  (NULL)
-#define testCond(c)     if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); fflush(stdout); fails++; }
+#define testCond(c)     if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); fails++; }
+#define LOGFILE_NAME    "wserver.log"
 #else
 #define NATS_INVALID_PID  (-1)
 #define testCond(c)     if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); fails++; }
+#define LOGFILE_NAME    "server.log"
 #endif
 #define FAIL(m)         { printf("@@ %s @@\n", (m)); fails++; return; }
 #define IFOK(s, c)      if (s == NATS_OK) { s = (c); }
@@ -2359,6 +2361,8 @@ _checkStart(const char *url)
 
 typedef PROCESS_INFORMATION *natsPid;
 
+static HANDLE logHandle = NULL;
+
 static void
 _stopServer(natsPid pid)
 {
@@ -2400,6 +2404,7 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
     if (ret < 0)
     {
         printf("No memory allocating command line string!\n");
+        free(pid);
         return NATS_INVALID_PID;
     }
 
@@ -2410,13 +2415,17 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
         sa.lpSecurityDescriptor = NULL;
         sa.bInheritHandle = TRUE;
 
-        h = CreateFile("server.log",
-                       GENERIC_WRITE,
-                       FILE_SHARE_WRITE | FILE_SHARE_READ,
-                       &sa,
-                       CREATE_ALWAYS,
-                       FILE_ATTRIBUTE_NORMAL,
-                       NULL);
+        h = logHandle;
+        if (h == NULL)
+        {
+            h = CreateFile(LOGFILE_NAME,
+                           GENERIC_WRITE,
+                           FILE_SHARE_WRITE | FILE_SHARE_READ,
+                           &sa,
+                           CREATE_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL,
+                           NULL);
+        }
 
         si.dwFlags   |= STARTF_USESTDHANDLES;
         si.hStdInput  = NULL;
@@ -2425,6 +2434,9 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
 
         hInheritance = TRUE;
         flags        = CREATE_NO_WINDOW;
+
+        if (logHandle == NULL)
+            logHandle = h;
     }
 
     // Start the child process.
@@ -2498,8 +2510,9 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
         char *line = NULL;
         int index = 0;
 
-        snprintf(copyLine, sizeof(copyLine), "%s %s", natsServerExe,
-                 (cmdLineOpts == NULL ? "" : cmdLineOpts));
+        snprintf(copyLine, sizeof(copyLine), "%s %s%s", natsServerExe,
+                 (cmdLineOpts == NULL ? "" : cmdLineOpts),
+                 (keepServerOutput ? "" : " -l " LOGFILE_NAME));
 
         memset(argvPtrs, 0, sizeof(argvPtrs));
         line = copyLine;
@@ -2519,16 +2532,6 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
         argvPtrs[index++] = NULL;
 
         // Child process. Replace with NATS server
-        if (!keepServerOutput)
-        {
-            // Close the stdout/stderr so that the server's output
-            // does not mingle with the test suite output.
-
-// Disabling this for now, looks like it is causing failures
-// in Travis when using gnatsd 0.8.0.
-//            close(1);
-//            close(2);
-        }
         execvp(argvPtrs[0], argvPtrs);
         perror("Exec failed: ");
         exit(1);
@@ -9761,6 +9764,16 @@ int main(int argc, char **argv)
 #endif
         (*(allTests[i].func))();
     }
+
+#ifdef _WIN32
+    if (logHandle != NULL)
+    {
+        CloseHandle(logHandle);
+        DeleteFile(LOGFILE_NAME);
+    }
+#else
+    remove(LOGFILE_NAME);
+#endif
 
     // Makes valgrind happy
     nats_Close();

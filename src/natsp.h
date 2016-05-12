@@ -216,7 +216,7 @@ struct __natsSubscription
 
     // Temporarily voids the use of the signalTimer when the message list
     // count reaches a certain threshold.
-    int                         signalLimit;
+    int64_t                     signalLimit;
 
     // This is > 0 when the delivery thread (or NextMsg) goes into a
     // condition wait.

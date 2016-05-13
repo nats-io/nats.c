@@ -1790,8 +1790,8 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     sub->msgList.msgs++;
     sub->msgList.bytes += bufLen;
 
-    if ((sub->msgList.msgs > sub->msgsLimit)
-        || (sub->msgList.bytes > sub->bytesLimit))
+    if (((sub->msgsLimit > 0) && (sub->msgList.msgs > sub->msgsLimit))
+        || ((sub->bytesLimit > 0) && (sub->msgList.bytes > sub->bytesLimit)))
     {
         natsMsg_Destroy(msg);
 

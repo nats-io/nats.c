@@ -256,9 +256,12 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     sub->msgCb          = cb;
     sub->msgCbClosure   = cbClosure;
     sub->noDelay        = noDelay;
-    sub->msgsLimit      = (int64_t) nc->opts->maxPendingMsgs;
+    sub->msgsLimit      = nc->opts->maxPendingMsgs;
     sub->bytesLimit     = sub->msgsLimit * 1024;
-    sub->signalLimit    = (int64_t)(sub->msgsLimit * 0.75);
+    sub->signalLimit    = (int) (sub->msgsLimit * 0.75);
+
+    if (sub->bytesLimit <= 0)
+        return nats_setError(NATS_INVALID_ARG, "Invalid bytes limit of %d", sub->bytesLimit);
 
     sub->subject = NATS_STRDUP(subj);
     if (sub->subject == NULL)
@@ -585,7 +588,7 @@ natsStatus
 natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
 {
     natsStatus  s;
-    int64_t     msgs = 0;
+    int         msgs = 0;
 
     if (queuedMsgs == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -598,7 +601,7 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
 }
 
 natsStatus
-natsSubscription_GetPending(natsSubscription *sub, int64_t *msgs, int64_t *bytes)
+natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes)
 {
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -623,13 +626,14 @@ natsSubscription_GetPending(natsSubscription *sub, int64_t *msgs, int64_t *bytes
 }
 
 natsStatus
-natsSubscription_SetPendingLimits(natsSubscription *sub, int64_t msgLimit, int64_t bytesLimit)
+natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytesLimit)
 {
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if ((msgLimit < 0) || (bytesLimit < 0))
-        return nats_setError(NATS_INVALID_ARG, "%s", "Limits must be positive numbers");
+    if ((msgLimit == 0) || (bytesLimit == 0))
+        return nats_setError(NATS_INVALID_ARG, "%s",
+                "Limits must be either > 0 or negative to specify no limit");
 
     natsSub_Lock(sub);
 
@@ -648,7 +652,7 @@ natsSubscription_SetPendingLimits(natsSubscription *sub, int64_t msgLimit, int64
 }
 
 natsStatus
-natsSubscription_GetPendingLimits(natsSubscription *sub, int64_t *msgLimit, int64_t *bytesLimit)
+natsSubscription_GetPendingLimits(natsSubscription *sub, int *msgLimit, int *bytesLimit)
 {
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -715,7 +719,7 @@ natsSubscription_GetDropped(natsSubscription *sub, int64_t *msgs)
 }
 
 natsStatus
-natsSubscription_GetMaxPending(natsSubscription *sub, int64_t *msgs, int64_t *bytes)
+natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes)
 {
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -763,10 +767,10 @@ natsSubscription_ClearMaxPending(natsSubscription *sub)
 
 natsStatus
 natsSubscription_GetStats(natsSubscription *sub,
-        int64_t *pendingMsgs,
-        int64_t *pendingBytes,
-        int64_t *maxPendingMsgs,
-        int64_t *maxPendingBytes,
+        int     *pendingMsgs,
+        int     *pendingBytes,
+        int     *maxPendingMsgs,
+        int     *maxPendingBytes,
         int64_t *deliveredMsgs,
         int64_t *droppedMsgs)
 {

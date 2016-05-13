@@ -6771,10 +6771,12 @@ test_PendingLimitsDeliveredAndDropped(void)
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
     int                 sent      = total + 20;
-    int64_t             msgsLimit = 0;
-    int64_t             bytesLimit= 0;
-    int64_t             msgs      = 0;
-    int64_t             bytes     = 0;
+    int                 msgsLimit = 0;
+    int                 bytesLimit= 0;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
+    int64_t             dropped   = 0;
+    int64_t             delivered = 0;
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
@@ -6798,12 +6800,12 @@ test_PendingLimitsDeliveredAndDropped(void)
     s = natsSubscription_SetPendingLimits(NULL, 1, 1);
     testCond(s != NATS_OK);
 
-    test("Settings, invalid args, negative msgs: ");
-    s = natsSubscription_SetPendingLimits(sub, -1, 1);
+    test("Settings, invalid args, zero msgs: ");
+    s = natsSubscription_SetPendingLimits(sub, 0, 1);
     testCond(s != NATS_OK);
 
-    test("Settings, invalid args, negative bytes: ");
-    s = natsSubscription_SetPendingLimits(sub, 1, -1);
+    test("Settings, invalid args, zero bytes: ");
+    s = natsSubscription_SetPendingLimits(sub, 1, 0);
     testCond(s != NATS_OK);
 
     test("Check pending limits, NULL sub: ");
@@ -6821,6 +6823,22 @@ test_PendingLimitsDeliveredAndDropped(void)
     test("Check pending limits, msgsLibytesLimitmit NULL is OK: ");
     s = natsSubscription_GetPendingLimits(sub, &msgsLimit, NULL);
     testCond((s == NATS_OK) && (msgsLimit == NATS_OPTS_DEFAULT_MAX_PENDING_MSGS));
+
+    test("Set negative value for msgs OK: ");
+    s = natsSubscription_SetPendingLimits(sub, -1, 100);
+    testCond(s == NATS_OK);
+
+    test("Set negative value for bytes OK: ");
+    s = natsSubscription_SetPendingLimits(sub, 100, -1);
+    testCond(s == NATS_OK);
+
+    test("Set negative values OK: ");
+    s = natsSubscription_SetPendingLimits(sub, -10, -10);
+    testCond(s == NATS_OK);
+
+    test("Get pending with negative values returned OK: ");
+    s = natsSubscription_GetPendingLimits(sub, &msgsLimit, &bytesLimit);
+    testCond((s == NATS_OK) && (msgsLimit == -10) && (bytesLimit == -10));
 
     msgsLimit = 0;
     bytesLimit = 0;
@@ -6874,7 +6892,7 @@ test_PendingLimitsDeliveredAndDropped(void)
              && (bytes == msgs * 5));
 
     test("Check dropped: NULL sub: ");
-    s = natsSubscription_GetDropped(NULL, &msgs);
+    s = natsSubscription_GetDropped(NULL, &dropped);
     testCond(s != NATS_OK);
 
     test("Check dropped, NULL msgs: ");
@@ -6883,11 +6901,11 @@ test_PendingLimitsDeliveredAndDropped(void)
 
     msgs = 0;
     test("Check dropped: ");
-    s = natsSubscription_GetDropped(sub, &msgs);
-    testCond((s == NATS_OK) && (msgs == sent - total));
+    s = natsSubscription_GetDropped(sub, &dropped);
+    testCond((s == NATS_OK) && (dropped == (int64_t)(sent - total)));
 
     test("Check delivered: NULL sub: ");
-    s = natsSubscription_GetDelivered(NULL, &msgs);
+    s = natsSubscription_GetDelivered(NULL, &delivered);
     testCond(s != NATS_OK);
 
     test("Check delivered: NULL msgs: ");
@@ -6896,8 +6914,8 @@ test_PendingLimitsDeliveredAndDropped(void)
 
     msgs = 0;
     test("Check delivered: ");
-    s = natsSubscription_GetDelivered(sub, &msgs);
-    testCond((s == NATS_OK) && (msgs == 1));
+    s = natsSubscription_GetDelivered(sub, &delivered);
+    testCond((s == NATS_OK) && (delivered == 1));
 
     test("Check get stats pending: ");
     s = natsSubscription_GetStats(sub, &msgs, &bytes, NULL, NULL, NULL, NULL);
@@ -6910,12 +6928,12 @@ test_PendingLimitsDeliveredAndDropped(void)
              && (bytes >= (total - 1) * 5) && (bytes <= total * 5));
 
     test("Check get stats delivered: ");
-    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, &msgs, NULL);
-    testCond((s == NATS_OK) && (msgs == 1));
+    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, &delivered, NULL);
+    testCond((s == NATS_OK) && (delivered == 1));
 
     test("Check get stats dropped: ");
-    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, NULL, &msgs);
-    testCond((s == NATS_OK) && (msgs == sent - total));
+    s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, NULL, &dropped);
+    testCond((s == NATS_OK) && (dropped == (int64_t) (sent - total)));
 
     test("Check get stats all NULL: ");
     s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, NULL, NULL);
@@ -6948,11 +6966,11 @@ test_PendingLimitsDeliveredAndDropped(void)
     testCond(s != NATS_OK);
 
     test("GetDelivered on closed sub: ");
-    s = natsSubscription_GetDelivered(sub, &msgs);
+    s = natsSubscription_GetDelivered(sub, &delivered);
     testCond(s != NATS_OK);
 
     test("GetDropped on closed sub: ");
-    s = natsSubscription_GetDropped(sub, &msgs);
+    s = natsSubscription_GetDropped(sub, &dropped);
     testCond(s != NATS_OK);
 
     test("Check get stats on closed sub: ");
@@ -6975,10 +6993,12 @@ test_PendingLimitsWithSyncSub(void)
     natsSubscription    *sub      = NULL;
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
-    int64_t             msgsLimit = 0;
-    int64_t             bytesLimit= 0;
-    int64_t             msgs      = 0;
-    int64_t             bytes     = 0;
+    int                 msgsLimit = 0;
+    int                 bytesLimit= 0;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
+    int64_t             dropped   = 0;
+    int64_t             delivered = 0;
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
     CHECK_SERVER_STARTED(serverPid);
@@ -7011,8 +7031,8 @@ test_PendingLimitsWithSyncSub(void)
 
     msgs = 0;
     test("Check dropped: ");
-    s = natsSubscription_GetDropped(sub, &msgs);
-    testCond((s == NATS_OK) && (msgs == 1));
+    s = natsSubscription_GetDropped(sub, &dropped);
+    testCond((s == NATS_OK) && (dropped == 1));
 
     test("Can publish small: ");
     s = natsConnection_PublishString(nc, "foo", "abc");
@@ -7028,8 +7048,8 @@ test_PendingLimitsWithSyncSub(void)
 
     msgs = 0;
     test("Check delivered: ");
-    s = natsSubscription_GetDelivered(sub, &msgs);
-    testCond((s == NATS_OK) && (msgs == 1));
+    s = natsSubscription_GetDelivered(sub, &delivered);
+    testCond((s == NATS_OK) && (delivered == 1));
 
     natsMsg_Destroy(msg);
     natsSubscription_Destroy(sub);
@@ -7046,8 +7066,8 @@ test_AsyncSubscriptionPending(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
-    int64_t             msgs      = 0;
-    int64_t             bytes     = 0;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
     int                 mlen      = 10;
     int                 totalSize = total * mlen;
     uint64_t            queuedMsgs= 0;
@@ -7156,11 +7176,12 @@ test_AsyncSubscriptionPendingDrain(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
-    int64_t             msgs      = 0;
-    int64_t             bytes     = 0;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
     int                 mlen      = 10;
     int                 totalSize = total * mlen;
     uint64_t            queuedMsgs= 0;
+    int64_t             delivered = 0;
     int                 i;
     struct threadArg    arg;
 
@@ -7192,13 +7213,13 @@ test_AsyncSubscriptionPendingDrain(void)
     msgs = 0;
     for (i=0; (s == NATS_OK) && (i<500); i++)
     {
-        s = natsSubscription_GetDelivered(sub, &msgs);
-        if ((s == NATS_OK) && (msgs == total))
+        s = natsSubscription_GetDelivered(sub, &delivered);
+        if ((s == NATS_OK) && (delivered == (int64_t) total))
             break;
 
         nats_Sleep(10);
     }
-    testCond((s == NATS_OK) && (msgs == total));
+    testCond((s == NATS_OK) && (delivered == (int64_t) total));
 
     test("Check pending: ");
     s = natsSubscription_GetPending(sub, &msgs, &bytes);
@@ -7207,7 +7228,7 @@ test_AsyncSubscriptionPendingDrain(void)
     natsSubscription_Unsubscribe(sub);
 
     test("Check Delivered on closed sub: ");
-    s = natsSubscription_GetDelivered(sub, &msgs);
+    s = natsSubscription_GetDelivered(sub, &delivered);
     testCond(s != NATS_OK);
 
     natsSubscription_Destroy(sub);
@@ -7226,8 +7247,8 @@ test_SyncSubscriptionPending(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
-    int64_t             msgs      = 0;
-    int64_t             bytes     = 0;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
     int                 mlen      = 10;
     int                 totalSize = total * mlen;
     uint64_t            queuedMsgs= 0;
@@ -7317,8 +7338,9 @@ test_SyncSubscriptionPendingDrain(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
-    int64_t             msgs      = 0;
-    int64_t             bytes     = 0;
+    int                 msgs      = 0;
+    int                 bytes     = 0;
+    int64_t             delivered = 0;
     int                 i;
 
     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
@@ -7348,15 +7370,15 @@ test_SyncSubscriptionPendingDrain(void)
         }
         while (s == NATS_OK);
 
-        s = natsSubscription_GetDelivered(sub, &msgs);
-        if ((s == NATS_OK) && (msgs == total))
+        s = natsSubscription_GetDelivered(sub, &delivered);
+        if ((s == NATS_OK) && (delivered == (int64_t) total))
             break;
 
         nats_Sleep(100);
         i++;
     }
     while ((s == NATS_OK) && (i < 50));
-    testCond((s == NATS_OK) && (msgs == total));
+    testCond((s == NATS_OK) && (delivered == (int64_t) total));
 
     test("Check pending: ");
     s = natsSubscription_GetPending(sub, &msgs, &bytes);
@@ -7365,7 +7387,7 @@ test_SyncSubscriptionPendingDrain(void)
     natsSubscription_Unsubscribe(sub);
 
     test("Check Delivered on closed sub: ");
-    s = natsSubscription_GetDelivered(sub, &msgs);
+    s = natsSubscription_GetDelivered(sub, &delivered);
     testCond(s != NATS_OK);
 
     natsSubscription_Destroy(sub);

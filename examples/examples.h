@@ -47,7 +47,8 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
 {
     natsStatus  s = NATS_OK;
     uint64_t    inMsgs, inBytes, outMsgs, outBytes, reconnected;
-    int64_t     pending, delivered, dropped = 0;
+    int         pending = 0;
+    int64_t     delivered, dropped = 0;
 
     s = natsConnection_GetStats(conn, stats);
     if (s == NATS_OK)
@@ -83,7 +84,7 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
         if (mode & STATS_COUNT)
         {
             printf("Delivered: %9" PRId64 " - ", delivered);
-            printf("Pending: %5" PRId64 " - ", pending);
+            printf("Pending: %5d - ", pending);
             printf("Dropped: %5" PRId64 " - ", dropped);
         }
         printf("Reconnected: %3" PRIu64 "\n", reconnected);

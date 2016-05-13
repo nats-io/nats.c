@@ -6894,8 +6894,8 @@ test_PendingLimitsDeliveredAndDropped(void)
     test("Check pending values: ");
     s = natsSubscription_GetPending(sub, &msgs, &bytes);
     testCond((s == NATS_OK)
-             && (msgs == total - 1)
-             && (bytes == msgs * 5));
+             && ((msgs == total) || (msgs == total - 1))
+             && ((bytes == total * 5) || (bytes == (total - 1) * 5)));
 
     test("Check dropped: NULL sub: ");
     s = natsSubscription_GetDropped(NULL, &dropped);
@@ -6908,7 +6908,9 @@ test_PendingLimitsDeliveredAndDropped(void)
     msgs = 0;
     test("Check dropped: ");
     s = natsSubscription_GetDropped(sub, &dropped);
-    testCond((s == NATS_OK) && (dropped == (int64_t)(sent - total)));
+    testCond((s == NATS_OK)
+            && ((dropped == (int64_t)(sent - total))
+                || (dropped == (int64_t)(sent - total - 1))));
 
     test("Check delivered: NULL sub: ");
     s = natsSubscription_GetDelivered(NULL, &delivered);
@@ -6925,7 +6927,9 @@ test_PendingLimitsDeliveredAndDropped(void)
 
     test("Check get stats pending: ");
     s = natsSubscription_GetStats(sub, &msgs, &bytes, NULL, NULL, NULL, NULL);
-    testCond((s == NATS_OK) && (msgs == total - 1) && (bytes == msgs * 5));
+    testCond((s == NATS_OK)
+              && ((msgs == total) || (msgs == total - 1))
+              && ((bytes == total * 5) || (bytes == (total - 1) * 5)));
 
     test("Check get stats max pending: ");
     s = natsSubscription_GetStats(sub, NULL, NULL, &msgs, &bytes, NULL, NULL);
@@ -6939,7 +6943,9 @@ test_PendingLimitsDeliveredAndDropped(void)
 
     test("Check get stats dropped: ");
     s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, NULL, &dropped);
-    testCond((s == NATS_OK) && (dropped == (int64_t) (sent - total)));
+    testCond((s == NATS_OK)
+             && ((dropped == (int64_t) (sent - total))
+                 || (dropped == (int64_t) (sent - total - 1))));
 
     test("Check get stats all NULL: ");
     s = natsSubscription_GetStats(sub, NULL, NULL, NULL, NULL, NULL, NULL);

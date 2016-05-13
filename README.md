@@ -5,7 +5,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 
 [![License MIT](https://img.shields.io/npm/l/express.svg)](http://opensource.org/licenses/MIT)
 [![Build Status](https://travis-ci.org/nats-io/cnats.svg?branch=master)](http://travis-ci.org/nats-io/cnats)
-[![Release](https://img.shields.io/badge/release-v1.2.10-blue.svg?style=flat)](https://github.com/nats-io/cnats/releases/tag/v1.2.10)
+[![Release](https://img.shields.io/badge/release-v1.3.6-blue.svg?style=flat)](https://github.com/nats-io/cnats/releases/tag/v1.3.6)
 [![Documentation](https://img.shields.io/badge/doc-Doxygen-brightgreen.svg?style=flat)](http://nats-io.github.io/cnats)
 
 ## Build

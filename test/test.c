@@ -6321,6 +6321,7 @@ test_ClientAsyncAutoUnsub(void)
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
+    int                 checks;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
@@ -6344,13 +6345,18 @@ test_ClientAsyncAutoUnsub(void)
     if (s == NATS_OK)
         s = natsConnection_Flush(nc);
 
-    nats_Sleep(10);
+    // Wait for the subscription to become invalid
+    checks = 0;
+    while (natsSubscription_IsValid(sub)
+           && (checks++ < 10))
+    {
+        nats_Sleep(100);
+    }
+    test("IsValid should be false: ");
+    testCond((sub != NULL) && !natsSubscription_IsValid(sub));
 
     test("Received no more than max: ");
     testCond(arg.sum == 10);
-
-    test("IsValid should be false: ");
-    testCond((sub != NULL) && !natsSubscription_IsValid(sub));
 
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
@@ -7598,6 +7604,7 @@ test_AsyncSubscriberOnClose(void)
     natsSubscription    *sub2     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int                 seen      = 0;
+    int                 checks    = 0;
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
@@ -7620,11 +7627,22 @@ test_AsyncSubscriberOnClose(void)
 
     if (s == NATS_OK)
         s = natsConnection_Flush(nc);
-    if (s == NATS_OK)
+
+    // Wait to receive the first message
+    test("Wait for first message: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && (arg.sum != 1))
     {
-        nats_Sleep(10);
-        natsConnection_Close(nc);
+        natsMutex_Unlock(arg.m);
+        nats_Sleep(100);
+        natsMutex_Lock(arg.m);
+        if (checks++ > 10)
+            s = NATS_ILLEGAL_STATE;
     }
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    natsConnection_Close(nc);
 
     // Release callbacks
     natsMutex_Lock(arg.m);
@@ -7700,6 +7718,10 @@ test_NoDelay(void)
         testCond(true);
         return;
     }
+
+#ifdef _WIN32
+    count = 300;
+#endif
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)

@@ -169,8 +169,8 @@ typedef struct __natsMsgList
 {
     natsMsg     *head;
     natsMsg     *tail;
-    int64_t     msgs;
-    int64_t     bytes;
+    int         msgs;
+    int         bytes;
 
 } natsMsgList;
 
@@ -216,7 +216,7 @@ struct __natsSubscription
 
     // Temporarily voids the use of the signalTimer when the message list
     // count reaches a certain threshold.
-    int64_t                     signalLimit;
+    int                         signalLimit;
 
     // This is > 0 when the delivery thread (or NextMsg) goes into a
     // condition wait.
@@ -252,10 +252,10 @@ struct __natsSubscription
     void                        *msgCbClosure;
 
     // Pending limits, etc..
-    int64_t                     msgsMax;
-    int64_t                     bytesMax;
-    int64_t                     msgsLimit;
-    int64_t                     bytesLimit;
+    int                         msgsMax;
+    int                         bytesMax;
+    int                         msgsLimit;
+    int                         bytesLimit;
     int64_t                     dropped;
 
 };

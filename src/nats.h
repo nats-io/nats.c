@@ -1549,7 +1549,7 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
  * @param bytesLimit the limit in bytes that the subscription can hold.
  */
 NATS_EXTERN natsStatus
-natsSubscription_SetPendingLimits(natsSubscription *sub, int64_t msgLimit, int64_t bytesLimit);
+natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytesLimit);
 
 /** \brief Returns the current limit for pending messages and bytes.
  *
@@ -1571,7 +1571,7 @@ natsSubscription_SetPendingLimits(natsSubscription *sub, int64_t msgLimit, int64
  * size of pending messages for this subscription.
  */
 NATS_EXTERN natsStatus
-natsSubscription_GetPendingLimits(natsSubscription *sub, int64_t *msgLimit, int64_t *bytesLimit);
+natsSubscription_GetPendingLimits(natsSubscription *sub, int *msgLimit, int *bytesLimit);
 
 /** \brief Returns the number of pending messages and bytes.
  *
@@ -1588,7 +1588,7 @@ natsSubscription_GetPendingLimits(natsSubscription *sub, int64_t *msgLimit, int6
  * pending messages.
  */
 NATS_EXTERN natsStatus
-natsSubscription_GetPending(natsSubscription *sub, int64_t *msgs, int64_t *bytes);
+natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes);
 
 /** \brief Returns the number of delivered messages.
  *
@@ -1632,7 +1632,7 @@ natsSubscription_GetDropped(natsSubscription *sub, int64_t *msgs);
  * number of bytes pending seen so far.
  */
 NATS_EXTERN natsStatus
-natsSubscription_GetMaxPending(natsSubscription *sub, int64_t *msgs, int64_t *bytes);
+natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes);
 
 /** \brief Clears the statistics regarding the maximum pending values.
  *
@@ -1671,10 +1671,10 @@ natsSubscription_ClearMaxPending(natsSubscription *sub);
  */
 NATS_EXTERN natsStatus
 natsSubscription_GetStats(natsSubscription *sub,
-                          int64_t *pendingMsgs,
-                          int64_t *pendingBytes,
-                          int64_t *maxPendingMsgs,
-                          int64_t *maxPendingBytes,
+                          int     *pendingMsgs,
+                          int     *pendingBytes,
+                          int     *maxPendingMsgs,
+                          int     *maxPendingBytes,
                           int64_t *deliveredMsgs,
                           int64_t *droppedMsgs);
 

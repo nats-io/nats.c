@@ -61,19 +61,15 @@ int main(int argc, char **argv)
                                      natsLibevent_Write,
                                      natsLibevent_Detach);
 
-    // This is setting the maximum number of pending messages allowed in
-    // the library for each subscriber. For max performance, we set it
-    // here to the expected total number of messages. You can remove, or
-    // set it to a low number to see the effect of messages being dropped
-    // by the client library.
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxPendingMsgs(opts, (int) total);
-
     if (s == NATS_OK)
         s = natsConnection_Connect(&conn, opts);
 
     if (s == NATS_OK)
         s = natsConnection_Subscribe(&sub, conn, subj, onMsg, NULL);
+
+    // For maximum performance, set no limit on the number of pending messages.
+    if (s == NATS_OK)
+        s = natsSubscription_SetPendingLimits(sub, -1, -1);
 
     // Run the event loop.
     // This call will return when the connection is closed (either after

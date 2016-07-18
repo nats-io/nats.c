@@ -220,7 +220,7 @@ natsBuf_Consume(natsBuffer *buf, int n)
 {
     int remaining;
 
-    assert(n >= buf->len);
+    assert(n <= buf->len);
 
     remaining = buf->len - n;
     if (remaining > 0)

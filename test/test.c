@@ -369,7 +369,7 @@ static void test_natsBuffer(void)
              && (natsBuf_Len(buf) == 0)
              && (natsBuf_Capacity(buf) == 5));
 
-    test("Check that changes are reflected in backend")
+    test("Check that changes are reflected in backend: ")
     IFOK(s, natsBuf_Append(buf, "abcd", 4));
     testCond((s == NATS_OK)
             && (natsBuf_Len(buf) == 4)

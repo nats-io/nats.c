@@ -43,8 +43,6 @@ _freeSubscription(natsSubscription *sub)
     NATS_FREE(sub->subject);
     NATS_FREE(sub->queue);
 
-    natsTimer_Destroy(sub->signalTimer);
-
     if (sub->deliverMsgsThread != NULL)
     {
         natsThread_Detach(sub->deliverMsgsThread);
@@ -106,12 +104,12 @@ natsSub_deliverMsgs(void *arg)
     {
         natsSub_Lock(sub);
 
-        sub->inWait++;
-
         while ((sub->msgList.msgs == 0) && !(sub->closed))
+        {
+            sub->inWait++;
             natsCondition_Wait(sub->cond, sub->mu);
-
-        sub->inWait--;
+            sub->inWait--;
+        }
 
         if (sub->closed)
         {
@@ -163,65 +161,10 @@ natsSub_deliverMsgs(void *arg)
     natsSub_release(sub);
 }
 
-static void
-_signalMsgAvailable(natsTimer *timer, void *closure)
-{
-    natsSubscription *sub = (natsSubscription*) closure;
-
-    // See if we can get the lock
-    if (!natsMutex_TryLock(sub->mu))
-    {
-        // This variable is not protected by any lock, but used only
-        // here, so we are fine. This is check that if we failed too
-        // many times, then we will wait for the lock so that we
-        // reduce the risk of the list getting full too quickly.
-        if (++(sub->signalFailCount) == 10)
-        {
-            // Reset our counter.
-            sub->signalFailCount = 0;
-
-            // Now wait to grab the lock.
-            natsSub_Lock(sub);
-        }
-        else
-        {
-            // We did not get the lock, will try later.
-            return;
-        }
-    }
-
-    // We have the lock.
-
-    if (sub->msgList.msgs == 0)
-    {
-        // There was no message, reset our interval to a higher value.
-        sub->signalTimerInterval = 10000;
-        natsTimer_Reset(sub->signalTimer, sub->signalTimerInterval);
-    }
-    else if (sub->inWait > 0)
-    {
-        // Signal the waiters
-        natsCondition_Broadcast(sub->cond);
-    }
-
-    natsSub_Unlock(sub);
-}
-
-static void
-_signalTimerStopped(natsTimer *timer, void *closure)
-{
-    natsSubscription *sub = (natsSubscription*) closure;
-
-    natsSub_release(sub);
-}
-
 void
 natsSub_close(natsSubscription *sub, bool connectionClosed)
 {
     natsSub_Lock(sub);
-
-    if (sub->signalTimer != NULL)
-        natsTimer_Stop(sub->signalTimer);
 
     sub->closed = true;
     sub->connClosed = connectionClosed;
@@ -232,8 +175,7 @@ natsSub_close(natsSubscription *sub, bool connectionClosed)
 
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
-               const char *queueGroup, natsMsgHandler cb, void *cbClosure,
-               bool noDelay)
+               const char *queueGroup, natsMsgHandler cb, void *cbClosure)
 {
     natsStatus          s = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -255,10 +197,8 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     sub->conn           = nc;
     sub->msgCb          = cb;
     sub->msgCbClosure   = cbClosure;
-    sub->noDelay        = noDelay;
     sub->msgsLimit      = nc->opts->maxPendingMsgs;
     sub->bytesLimit     = sub->msgsLimit * 1024;
-    sub->signalLimit    = (int) (sub->msgsLimit * 0.75);
 
     if (sub->bytesLimit <= 0)
         return nats_setError(NATS_INVALID_ARG, "Invalid bytes limit of %d", sub->bytesLimit);
@@ -275,23 +215,6 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     }
     if (s == NATS_OK)
         s = natsCondition_Create(&(sub->cond));
-    if ((s == NATS_OK) && !(sub->noDelay))
-    {
-        // Set the interval to any value, really, it will get reset to
-        // a smaller value when the delivery thread should be signaled.
-        sub->signalTimerInterval = 10000;
-
-        // Let's not rely on the created timer acquiring the lock that
-        // would make it safe to retain only on success.
-        _retain(sub);
-
-        s = natsTimer_Create(&(sub->signalTimer),
-                             _signalMsgAvailable,
-                             _signalTimerStopped,
-                             sub->signalTimerInterval, (void*) sub);
-        if (s != NATS_OK)
-            _release(sub);
-    }
     if ((s == NATS_OK) && (cb != NULL))
     {
         // Let's not rely on the created thread acquiring the lock that
@@ -324,7 +247,7 @@ natsStatus
 natsConnection_Subscribe(natsSubscription **sub, natsConnection *nc, const char *subject,
                          natsMsgHandler cb, void *cbClosure)
 {
-    return natsConn_subscribe(sub, nc, subject, NULL, cb, cbClosure, false);
+    return natsConn_subscribe(sub, nc, subject, NULL, cb, cbClosure);
 }
 
 /*
@@ -335,7 +258,7 @@ natsConnection_SubscribeSync(natsSubscription **sub, natsConnection *nc, const c
 {
     natsStatus s;
 
-    s = natsConn_subscribe(sub, nc, subject, NULL, NULL, NULL, false);
+    s = natsConn_subscribe(sub, nc, subject, NULL, NULL, NULL);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -356,8 +279,7 @@ natsConnection_QueueSubscribe(natsSubscription **sub, natsConnection *nc,
     if ((queueGroup == NULL) || (strlen(queueGroup) == 0) || (cb == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = natsConn_subscribe(sub, nc, subject, queueGroup, cb, cbClosure,
-                           false);
+    s = natsConn_subscribe(sub, nc, subject, queueGroup, cb, cbClosure);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -374,8 +296,7 @@ natsConnection_QueueSubscribeSync(natsSubscription **sub, natsConnection *nc,
     if ((queueGroup == NULL) || (strlen(queueGroup) == 0))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = natsConn_subscribe(sub, nc, subject, queueGroup, NULL, NULL,
-                           false);
+    s = natsConn_subscribe(sub, nc, subject, queueGroup, NULL, NULL);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -386,23 +307,14 @@ natsConnection_QueueSubscribeSync(natsSubscription **sub, natsConnection *nc,
  * this delay has a negative impact. In such case, call this function
  * to have the subscriber be notified immediately each time a message
  * arrives.
+ *
+ * DEPRECATED
  */
 natsStatus
 natsSubscription_NoDeliveryDelay(natsSubscription *sub)
 {
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
-
-    natsSub_Lock(sub);
-
-    if (!(sub->noDelay))
-    {
-        sub->noDelay = true;
-
-        natsTimer_Stop(sub->signalTimer);
-    }
-
-    natsSub_Unlock(sub);
 
     return NATS_OK;
 }

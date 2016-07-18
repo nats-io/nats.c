@@ -1821,17 +1821,8 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
         sub->msgList.tail = msg;
 
-        if ((sub->noDelay)
-            || (sub->msgList.msgs >= sub->signalLimit))
-        {
-            if (sub->inWait > 0)
-                natsCondition_Broadcast(sub->cond);
-        }
-        else if (sub->signalTimerInterval != 1)
-        {
-            sub->signalTimerInterval = 1;
-            natsTimer_Reset(sub->signalTimer, 1);
-        }
+        if (sub->inWait > 0)
+            natsCondition_Broadcast(sub->cond);
     }
 
     natsSub_Unlock(sub);
@@ -1952,7 +1943,7 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub, bo
 natsStatus
 natsConn_subscribe(natsSubscription **newSub,
                    natsConnection *nc, const char *subj, const char *queue,
-                   natsMsgHandler cb, void *cbClosure, bool noDelay)
+                   natsMsgHandler cb, void *cbClosure)
 {
     natsStatus          s    = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -1972,7 +1963,7 @@ natsConn_subscribe(natsSubscription **newSub,
         return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
-    s = natsSub_create(&sub, nc, subj, queue, cb, cbClosure, noDelay);
+    s = natsSub_create(&sub, nc, subj, queue, cb, cbClosure);
     if (s == NATS_OK)
     {
         sub->sid = ++(nc->ssid);

@@ -61,7 +61,7 @@ natsConn_processPong(natsConnection *nc);
 natsStatus
 natsConn_subscribe(natsSubscription **newSub,
                    natsConnection *nc, const char *subj, const char *queue,
-                   natsMsgHandler cb, void *cbClosure, bool noDelay);
+                   natsMsgHandler cb, void *cbClosure);
 
 natsStatus
 natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max);

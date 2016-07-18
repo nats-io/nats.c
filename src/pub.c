@@ -256,7 +256,7 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
 
     s = natsInbox_init(inbox, sizeof(inbox));
     if (s == NATS_OK)
-        s = natsConn_subscribe(&sub, nc, inbox, NULL, NULL, NULL, true);
+        s = natsConn_subscribe(&sub, nc, inbox, NULL, NULL, NULL);
     if (s == NATS_OK)
         s = natsSubscription_AutoUnsubscribe(sub, 1);
     if (s == NATS_OK)

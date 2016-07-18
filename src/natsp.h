@@ -196,27 +196,8 @@ struct __natsSubscription
     // True if msgList.count is over pendingMax
     bool                        slowConsumer;
 
-    // If 'true', the connection will notify the deliveryThread when a
-    // message arrives (if the delivery thread is in wait).
-    bool                        noDelay;
-
     // Condition variable used to wait for message delivery.
     natsCondition               *cond;
-
-    // When 'noDelay' is false, a timer is used to check for the need
-    // to notify the deliveryMsg thread.
-    natsTimer                   *signalTimer;
-
-    // Interval of the above timer.
-    int64_t                     signalTimerInterval;
-
-    // Indicates the number of time the signal timer failed to try to
-    // acquire the lock (after which it will call Lock()).
-    int                         signalFailCount;
-
-    // Temporarily voids the use of the signalTimer when the message list
-    // count reaches a certain threshold.
-    int                         signalLimit;
 
     // This is > 0 when the delivery thread (or NextMsg) goes into a
     // condition wait.

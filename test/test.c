@@ -6862,6 +6862,8 @@ test_PendingLimitsDeliveredAndDropped(void)
     {
         s = natsConnection_PublishString(nc, "foo", "hello");
     }
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
 
     // Make sure the callback blocks before checking for slow consumer
     natsMutex_Lock(arg.m);
@@ -7699,86 +7701,6 @@ test_NextMsgCallOnAsyncSub(void)
     natsSubscription_Destroy(sub);
 
     natsConnection_Destroy(nc);
-
-    _stopServer(serverPid);
-}
-
-static void
-test_NoDelay(void)
-{
-    natsStatus          s;
-    natsConnection      *nc       = NULL;
-    natsSubscription    *sub      = NULL;
-    natsMsg             *msg      = NULL;
-    natsPid             serverPid = NATS_INVALID_PID;
-    struct threadArg    arg;
-    int                 i;
-    int64_t             start;
-    int64_t             withDelay;
-    int64_t             withNoDelay;
-    int                 count = 3000;
-
-    if (valgrind)
-    {
-        test("Skipped when running with valgrind: ");
-        testCond(true);
-        return;
-    }
-
-#ifdef _WIN32
-    count = 300;
-#endif
-
-    s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
-
-    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
-    CHECK_SERVER_STARTED(serverPid);
-
-    arg.control = 4;
-    arg.string  = "reply";
-
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
-
-    test("With delay: ");
-    start = nats_Now();
-    for (i=0; (s == NATS_OK) && (i<count); i++)
-    {
-        s = natsConnection_Request(&msg, nc, "foo", "help", 4, 1000);
-        if (s == NATS_OK)
-            natsMsg_Destroy(msg);
-    }
-    withDelay = nats_Now() - start;
-
-    natsMutex_Lock(arg.m);
-    testCond((s == NATS_OK) && (arg.status == NATS_OK));
-    natsMutex_Unlock(arg.m);
-
-    if (s == NATS_OK)
-        s = natsSubscription_NoDeliveryDelay(sub);
-
-    test("With no delay faster for req-reply: ");
-    start = nats_Now();
-    for (i=0; (s == NATS_OK) && (i<count); i++)
-    {
-        s = natsConnection_Request(&msg, nc, "foo", "help", 4, 1000);
-        if (s == NATS_OK)
-            natsMsg_Destroy(msg);
-    }
-    withNoDelay = nats_Now() - start;
-
-    natsMutex_Lock(arg.m);
-    testCond((s == NATS_OK) && (arg.status == NATS_OK) && (withNoDelay < withDelay));
-    natsMutex_Unlock(arg.m);
-
-    natsSubscription_Destroy(sub);
-
-    natsConnection_Destroy(nc);
-
-    _destroyDefaultThreadArgs(&arg);
 
     _stopServer(serverPid);
 }
@@ -9701,7 +9623,6 @@ static testInfo allTests[] =
     {"AsyncSubscriberStarvation",       test_AsyncSubscriberStarvation},
     {"AsyncSubscriberOnClose",          test_AsyncSubscriberOnClose},
     {"NextMsgCallOnAsyncSub",           test_NextMsgCallOnAsyncSub},
-    {"NoDelay",                         test_NoDelay},
     {"GetLastError",                    test_GetLastError},
     {"StaleConnection",                 test_StaleConnection},
     {"ServerErrorClosesConnection",     test_ServerErrorClosesConnection},

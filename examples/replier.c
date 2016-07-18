@@ -75,8 +75,6 @@ int main(int argc, char **argv)
         s = natsSubscription_SetPendingLimits(sub, -1, -1);
 
     if (s == NATS_OK)
-        s = natsSubscription_NoDeliveryDelay(sub);
-    if (s == NATS_OK)
         s = natsSubscription_AutoUnsubscribe(sub, (int) total);
 
     if (s == NATS_OK)

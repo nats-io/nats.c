@@ -1468,6 +1468,8 @@ natsConnection_QueueSubscribeSync(natsSubscription **sub, natsConnection *nc,
  * arrives.
  *
  * @param sub the pointer to the #natsSubscription object.
+ *
+ * \deprecated No longer needed. Will be removed in the future.
  */
 NATS_EXTERN natsStatus
 natsSubscription_NoDeliveryDelay(natsSubscription *sub);

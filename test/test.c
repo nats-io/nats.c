@@ -3642,6 +3642,163 @@ test_ParserSplitMsg(void)
 }
 
 static void
+_dummyMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
+                void *closure)
+{
+    // do nothing
+
+    natsMsg_Destroy(msg);
+}
+
+static void
+test_LibMsgDelivery(void)
+{
+    natsStatus          s;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsOptions         *opts     = NULL;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *s1       = NULL;
+    natsSubscription    *s2       = NULL;
+    natsSubscription    *s3       = NULL;
+    natsSubscription    *s4       = NULL;
+    natsSubscription    *s5       = NULL;
+    natsMsgDlvWorker    *lmd1     = NULL;
+    natsMsgDlvWorker    *lmd2     = NULL;
+    natsMsgDlvWorker    *lmd3     = NULL;
+    natsMsgDlvWorker    *lmd4     = NULL;
+    natsMsgDlvWorker    *lmd5     = NULL;
+    natsMsgDlvWorker    **pwks    = NULL;
+    int                 psize     = 0;
+    int                 pmaxSize  = 0;
+    int                 pidx      = 0;
+
+    // First, close the library and re-open, to reset things
+    nats_Close();
+
+    nats_Sleep(100);
+
+    nats_Open(-1);
+
+    // Check some pre-conditions that need to be met for the test to work.
+    test("Check initial values: ")
+    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
+    testCond((pmaxSize == 2) && (psize == 0) && (pidx == 0));
+
+    test("Check pool size not negative: ")
+    s = nats_SetMessageDeliveryPoolSize(-1);
+    testCond(s != NATS_OK);
+
+    test("Check pool size not zero: ")
+    s = nats_SetMessageDeliveryPoolSize(0);
+    testCond(s != NATS_OK);
+
+    // Reset stack since we know the above generated errors.
+    nats_clearLastError();
+
+    test("Check pool size decreased no error: ")
+    s = nats_SetMessageDeliveryPoolSize(1);
+    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
+    testCond((s == NATS_OK) && (pmaxSize == 2) && (psize == 0));
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        natsOptions_UseGlobalMessageDelivery(opts, true);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&s1, nc, "foo", _dummyMsgHandler, NULL);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(s1->mu);
+        lmd1 = s1->libDlvWorker;
+        natsMutex_Unlock(s1->mu);
+    }
+    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
+    test("Check 1st sub assigned 1st worker: ")
+    testCond((s == NATS_OK) && (psize == 1) && (lmd1 != NULL)
+             && (pidx == 1) && (pwks != NULL) && (lmd1 == pwks[0]));
+
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&s2, nc, "foo", _dummyMsgHandler, NULL);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(s2->mu);
+        lmd2 = s2->libDlvWorker;
+        natsMutex_Unlock(s2->mu);
+    }
+    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
+    test("Check 2nd sub assigned 2nd worker: ")
+    testCond((s == NATS_OK) && (psize == 2) && (lmd2 != lmd1)
+             && (pidx == 0) && (pwks != NULL) && (lmd2 == pwks[1]));
+
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&s3, nc, "foo", _dummyMsgHandler, NULL);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(s3->mu);
+        lmd3 = s3->libDlvWorker;
+        natsMutex_Unlock(s3->mu);
+    }
+    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
+    test("Check 3rd sub assigned 1st worker: ")
+    testCond((s == NATS_OK) && (psize == 2) && (lmd3 == lmd1)
+             && (pidx == 1) && (pwks != NULL) && (lmd3 == pwks[0]));
+
+    // Bump the pool size to 4
+    if (s == NATS_OK)
+        s = nats_SetMessageDeliveryPoolSize(4);
+    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
+    test("Check increase of pool size: ");
+    testCond((s == NATS_OK) && (psize == 2) && (pidx == 1)
+             && (pmaxSize == 4) && (pwks != NULL));
+
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&s4, nc, "foo", _dummyMsgHandler, NULL);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(s4->mu);
+        lmd4 = s4->libDlvWorker;
+        natsMutex_Unlock(s4->mu);
+    }
+    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
+    test("Check 4th sub assigned 2nd worker: ")
+    testCond((s == NATS_OK) && (psize == 2) && (lmd4 == lmd2)
+             && (pidx == 2) && (pwks != NULL) && (lmd4 == pwks[1]));
+
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&s5, nc, "foo", _dummyMsgHandler, NULL);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(s5->mu);
+        lmd5 = s5->libDlvWorker;
+        natsMutex_Unlock(s5->mu);
+    }
+    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
+    test("Check 5th sub assigned 3rd worker: ")
+    testCond((s == NATS_OK) && (psize == 3) && (lmd5 != lmd2)
+             && (pidx == 3) && (pwks != NULL) && (lmd5 == pwks[2]));
+
+    natsSubscription_Destroy(s5);
+    natsSubscription_Destroy(s4);
+    natsSubscription_Destroy(s3);
+    natsSubscription_Destroy(s2);
+    natsSubscription_Destroy(s1);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+    _stopServer(serverPid);
+
+    // Close the library and re-open, to reset things
+    nats_Close();
+
+    nats_Sleep(100);
+
+    nats_Open(-1);
+}
+
+static void
 test_DefaultConnection(void)
 {
     natsStatus          s;
@@ -3928,15 +4085,6 @@ test_ServerStopDisconnectedCB(void)
     natsConnection_Destroy(nc);
 
     _destroyDefaultThreadArgs(&arg);
-}
-
-static void
-_dummyMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
-                void *closure)
-{
-    // do nothing
-
-    natsMsg_Destroy(msg);
 }
 
 static void
@@ -9553,6 +9701,7 @@ static testInfo allTests[] =
     {"ParserOK",                        test_ParserOK},
     {"ParserSouldFail",                 test_ParserShouldFail},
     {"ParserSplitMsg",                  test_ParserSplitMsg},
+    {"LibMsgDelivery",                  test_LibMsgDelivery},
 
     // Public API Tests
 

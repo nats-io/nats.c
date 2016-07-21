@@ -26,6 +26,12 @@ void natsSub_Unlock(natsSubscription *sub)   { natsMutex_Unlock(sub->mu); }
 
 #endif // DEV_MODE
 
+#define SUB_DLV_WORKER_LOCK(s)      if ((s)->libDlvWorker != NULL) \
+                                        natsMutex_Lock((s)->libDlvWorker->lock)
+
+#define SUB_DLV_WORKER_UNLOCK(s)    if ((s)->libDlvWorker != NULL) \
+                                        natsMutex_Unlock((s)->libDlvWorker->lock)
+
 static void
 _freeSubscription(natsSubscription *sub)
 {
@@ -164,11 +170,20 @@ natsSub_deliverMsgs(void *arg)
 void
 natsSub_close(natsSubscription *sub, bool connectionClosed)
 {
+    natsMsgDlvWorker *ldw = NULL;
+
     natsSub_Lock(sub);
 
-    sub->closed = true;
-    sub->connClosed = connectionClosed;
-    natsCondition_Broadcast(sub->cond);
+    if (!(sub->closed))
+    {
+        sub->closed = true;
+        sub->connClosed = connectionClosed;
+
+        if (sub->libDlvWorker != NULL)
+            natsLib_msgDeliveryDone(sub);
+        else
+            natsCondition_Broadcast(sub->cond);
+    }
 
     natsSub_Unlock(sub);
 }
@@ -215,7 +230,7 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     }
     if (s == NATS_OK)
         s = natsCondition_Create(&(sub->cond));
-    if ((s == NATS_OK) && (cb != NULL))
+    if ((s == NATS_OK) && (cb != NULL) && !(nc->opts->libMsgDelivery))
     {
         // Let's not rely on the created thread acquiring the lock that
         // would make it safe to retain only on success.
@@ -526,11 +541,15 @@ natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     if (msgs != NULL)
         *msgs = sub->msgList.msgs;
 
     if (bytes != NULL)
         *bytes = sub->msgList.bytes;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -555,8 +574,12 @@ natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytes
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     sub->msgsLimit = msgLimit;
     sub->bytesLimit = bytesLimit;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -577,11 +600,15 @@ natsSubscription_GetPendingLimits(natsSubscription *sub, int *msgLimit, int *byt
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     if (msgLimit != NULL)
         *msgLimit = sub->msgsLimit;
 
     if (bytesLimit != NULL)
         *bytesLimit = sub->bytesLimit;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -602,7 +629,11 @@ natsSubscription_GetDelivered(natsSubscription *sub, int64_t *msgs)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     *msgs = (int64_t) sub->delivered;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -623,7 +654,11 @@ natsSubscription_GetDropped(natsSubscription *sub, int64_t *msgs)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     *msgs = sub->dropped;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -644,11 +679,15 @@ natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     if (msgs != NULL)
         *msgs = sub->msgsMax;
 
     if (bytes != NULL)
         *bytes = sub->bytesMax;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -669,8 +708,12 @@ natsSubscription_ClearMaxPending(natsSubscription *sub)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     sub->msgsMax = 0;
     sub->bytesMax = 0;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -697,6 +740,8 @@ natsSubscription_GetStats(natsSubscription *sub,
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     if (pendingMsgs != NULL)
         *pendingMsgs = sub->msgList.msgs;
 
@@ -714,6 +759,8 @@ natsSubscription_GetStats(natsSubscription *sub,
 
     if (droppedMsgs != NULL)
         *droppedMsgs = sub->dropped;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 

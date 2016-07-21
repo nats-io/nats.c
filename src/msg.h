@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2016 Apcera Inc. All rights reserved.
 
 #ifndef MSG_H_
 #define MSG_H_
@@ -19,6 +19,9 @@ struct __natsMsg
     const char          *reply;
     const char          *data;
     int                 dataLen;
+
+    // subscription (needed when delivery done by connection)
+    struct __natsSubscription *sub;
 
     // Must be last field!
     struct __natsMsg    *next;

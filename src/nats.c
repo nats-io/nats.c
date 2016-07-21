@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2016 Apcera Inc. All rights reserved.
 
 #include "natsp.h"
 
@@ -12,6 +12,8 @@
 #include "timer.h"
 #include "util.h"
 #include "asynccb.h"
+#include "conn.h"
+#include "sub.h"
 
 #define WAIT_LIB_INITIALIZED \
         natsMutex_Lock(gLib.lock); \
@@ -65,6 +67,16 @@ typedef struct __natsGCList
 
 } natsGCList;
 
+typedef struct __natsLibDlvWorkers
+{
+    natsMutex           *lock;
+    int                 idx;
+    int                 size;
+    int                 maxSize;
+    natsMsgDlvWorker    **workers;
+
+} natsLibDlvWorkers;
+
 typedef struct __natsLib
 {
     // Leave these fields before 'refs'
@@ -80,9 +92,11 @@ typedef struct __natsLib
 
     bool            initializing;
     bool            initAborted;
+    bool            libHandlingMsgDeliveryByDefault;
 
-    natsLibTimers   timers;
-    natsLibAsyncCbs asyncCbs;
+    natsLibTimers       timers;
+    natsLibAsyncCbs     asyncCbs;
+    natsLibDlvWorkers   dlvWorkers;
 
     natsCondition   *cond;
 
@@ -234,11 +248,37 @@ _freeGC(void)
 }
 
 static void
+_freeDlvWorker(natsMsgDlvWorker *worker)
+{
+    natsThread_Destroy(worker->thread);
+    natsCondition_Destroy(worker->cond);
+    natsMutex_Destroy(worker->lock);
+    NATS_FREE(worker);
+}
+
+static void
+_freeDlvWorkers(void)
+{
+    int i;
+    natsLibDlvWorkers *workers = &(gLib.dlvWorkers);
+
+    for (i=0; i<workers->size; i++)
+        _freeDlvWorker(workers->workers[i]);
+
+    NATS_FREE(workers->workers);
+    natsMutex_Destroy(workers->lock);
+    workers->idx     = 0;
+    workers->size    = 0;
+    workers->workers = NULL;
+}
+
+static void
 _freeLib(void)
 {
     _freeTimers();
     _freeAsyncCbs();
     _freeGC();
+    _freeDlvWorkers();
     natsNUID_free();
 
     natsCondition_Destroy(gLib.cond);
@@ -793,6 +833,15 @@ natsGC_collect(natsGCItem *item)
 static void
 _libTearDown(void)
 {
+    int i;
+
+    for (i=0; i<gLib.dlvWorkers.size; i++)
+    {
+        natsMsgDlvWorker *worker = gLib.dlvWorkers.workers[i];
+        if (worker->thread != NULL)
+            natsThread_Join(worker->thread);
+    }
+
     if (gLib.timers.thread != NULL)
         natsThread_Join(gLib.timers.thread);
 
@@ -879,6 +928,17 @@ nats_Open(int64_t lockSpinCount)
         s = natsNUID_init();
 
     if (s == NATS_OK)
+        s = natsMutex_Create(&(gLib.dlvWorkers.lock));
+    if (s == NATS_OK)
+    {
+        gLib.libHandlingMsgDeliveryByDefault = (getenv("NATS_DEFAULT_TO_LIB_MSG_DELIVERY") != NULL ? true : false);
+        gLib.dlvWorkers.maxSize = 2;
+        gLib.dlvWorkers.workers = NATS_CALLOC(gLib.dlvWorkers.maxSize, sizeof(natsMsgDlvWorker*));
+        if (gLib.dlvWorkers.workers == NULL)
+            s = NATS_NO_MEMORY;
+    }
+
+    if (s == NATS_OK)
         gLib.initialized = true;
 
     // In case of success or error, broadcast so that lib's threads
@@ -962,6 +1022,8 @@ natsInbox_Destroy(natsInbox *inbox)
 void
 nats_Close(void)
 {
+    int i;
+
     // This is to protect against a call to nats_Close() while there
     // was no prior call to nats_Open(), either directly or indirectly.
     if (!nats_InitOnce(&gInitOnce, _doInitOnce))
@@ -991,6 +1053,17 @@ nats_Close(void)
     gLib.gc.shutdown = true;
     natsCondition_Signal(gLib.gc.cond);
     natsMutex_Unlock(gLib.gc.lock);
+
+    natsMutex_Lock(gLib.dlvWorkers.lock);
+    for (i=0; i<gLib.dlvWorkers.size; i++)
+    {
+        natsMsgDlvWorker *worker = gLib.dlvWorkers.workers[i];
+        natsMutex_Lock(worker->lock);
+        worker->shutdown = true;
+        natsCondition_Signal(worker->cond);
+        natsMutex_Unlock(worker->lock);
+    }
+    natsMutex_Unlock(gLib.dlvWorkers.lock);
 
     natsMutex_Unlock(gLib.lock);
 
@@ -1351,4 +1424,238 @@ nats_sslInit(void)
     natsMutex_Unlock(gLib.lock);
 
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+static void
+_deliverMsgs(void *arg)
+{
+    natsMsgDlvWorker    *dlv = (natsMsgDlvWorker*) arg;
+    natsConnection      *nc;
+    natsSubscription    *sub;
+    natsMsgHandler      mcb;
+    void                *mcbClosure;
+    uint64_t            delivered;
+    uint64_t            max;
+    natsMsg             *msg;
+
+    while (true)
+    {
+        natsMutex_Lock(dlv->lock);
+
+        while (((msg = dlv->msgList.head) == NULL) && !dlv->shutdown)
+        {
+            dlv->inWait = true;
+            natsCondition_Wait(dlv->cond, dlv->lock);
+            dlv->inWait = false;
+        }
+
+        // Break out only when list is empty
+        if ((msg == NULL) && dlv->shutdown)
+        {
+            natsMutex_Unlock(dlv->lock);
+            break;
+        }
+
+        // Remove message from list now...
+        msg = dlv->msgList.head;
+        dlv->msgList.head = msg->next;
+        if (dlv->msgList.tail == msg)
+            dlv->msgList.tail = NULL;
+        msg->next = NULL;
+
+        // Get subscription reference from message
+        sub = msg->sub;
+        nc = sub->conn;
+
+        // Update stats before checking closed state
+        sub->msgList.msgs--;
+        sub->msgList.bytes -= msg->dataLen;
+
+        // Closed, so need to skip
+        if (sub->closed)
+        {
+            natsMutex_Unlock(dlv->lock);
+            // That's an indication that this is the last message
+            // and we need to release the subscription.
+            if (msg->subject[0] == '\0')
+                natsSub_release(sub);
+            natsMsg_Destroy(msg);
+            continue;
+        }
+
+        // Capture these under lock.
+        delivered = ++(sub->delivered);
+        max = sub->max;
+        mcb = sub->msgCb;
+        mcbClosure = sub->msgCbClosure;
+
+        natsMutex_Unlock(dlv->lock);
+
+        if ((max == 0) || (delivered <= max))
+        {
+           (*mcb)(nc, sub, msg, mcbClosure);
+        }
+
+        // Don't do 'else' because we need to remove when we have hit
+        // the max (after the callback returns).
+        if ((max > 0) && (delivered >= max))
+        {
+            // If we have hit the max for delivered msgs, remove sub.
+            natsConn_removeSubscription(nc, sub, true);
+        }
+    }
+
+    natsLib_Release();
+}
+
+natsStatus
+nats_SetMessageDeliveryPoolSize(int max)
+{
+    natsStatus          s = NATS_OK;
+    natsLibDlvWorkers   *workers;
+
+    // Ensure the library is loaded
+    s = nats_Open(-1);
+    if (s != NATS_OK)
+        return s;
+
+    workers = &gLib.dlvWorkers;
+
+    natsMutex_Lock(workers->lock);
+
+    if (max <= 0)
+    {
+        natsMutex_Unlock(workers->lock);
+        return nats_setError(NATS_ERR, "Pool size cannot be negative or zero", "");
+    }
+
+    // Do not error on max < workers->maxSize in case we allow shrinking
+    // the pool in the future.
+    if (max > workers->maxSize)
+    {
+        natsMsgDlvWorker **newArray = NATS_CALLOC(max, sizeof(natsMsgDlvWorker*));
+        if (newArray == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        if (s == NATS_OK)
+        {
+            int i;
+            for (i=0; i<workers->size; i++)
+                newArray[i] = workers->workers[i];
+
+            NATS_FREE(workers->workers);
+            workers->workers = newArray;
+            workers->maxSize = max;
+        }
+    }
+
+    natsMutex_Unlock(workers->lock);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsLib_msgDeliveryDone(natsSubscription *sub)
+{
+    natsStatus          s;
+    natsMsg             *endMsg = NULL;
+    natsMsgDlvWorker    *worker = (sub->libDlvWorker);
+
+    // Create a "end" message and post it to the delivery worker
+    s = natsMsg_create(&endMsg, NULL, 0, NULL, 0, NULL, 0);
+    if (s == NATS_OK)
+    {
+        natsMsgList *l;
+
+        natsMutex_Lock(worker->lock);
+
+        endMsg->sub = sub;
+        sub->msgList.msgs++;
+
+        l = &(worker->msgList);
+        if (l->tail != NULL)
+            l->tail->next = endMsg;
+        if (l->head == NULL)
+            l->head = endMsg;
+        l->tail = endMsg;
+
+        if (worker->inWait)
+            natsCondition_Signal(worker->cond);
+
+        natsMutex_Unlock(worker->lock);
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+
+natsStatus
+natsLib_msgDeliveryAssignWorker(natsSubscription *sub)
+{
+    natsStatus          s = NATS_OK;
+    natsLibDlvWorkers   *workers = &(gLib.dlvWorkers);
+    natsMsgDlvWorker    *worker = NULL;
+
+    natsMutex_Lock(workers->lock);
+
+    if (workers->maxSize == 0)
+    {
+        natsMutex_Unlock(workers->lock);
+        return nats_setError(NATS_FAILED_TO_INITIALIZE, "Message delivery thread pool size is 0!", "");
+    }
+
+    worker = workers->workers[workers->idx];
+    if (worker == NULL)
+    {
+        worker = NATS_CALLOC(1, sizeof(natsMsgDlvWorker));
+        if (worker == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        if (s == NATS_OK)
+            s = natsMutex_Create(&worker->lock);
+        if (s == NATS_OK)
+            s = natsCondition_Create(&worker->cond);
+        if (s == NATS_OK)
+        {
+            natsLib_Retain();
+            s = natsThread_Create(&worker->thread, _deliverMsgs, (void*) worker);
+            if (s != NATS_OK)
+                natsLib_Release();
+        }
+        if (s == NATS_OK)
+        {
+            workers->workers[workers->idx] = worker;
+            workers->size++;
+        }
+        else
+        {
+            _freeDlvWorker(worker);
+        }
+    }
+    if (s == NATS_OK)
+    {
+        sub->libDlvWorker = worker;
+        if (++(workers->idx) == workers->maxSize)
+            workers->idx = 0;
+    }
+
+    natsMutex_Unlock(workers->lock);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+bool
+natsLib_isLibHandlingMsgDeliveryByDefault()
+{
+    return gLib.libHandlingMsgDeliveryByDefault;
+}
+
+void
+natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWorker ***workersArray)
+{
+    natsLibDlvWorkers *workers = &gLib.dlvWorkers;
+
+    natsMutex_Lock(workers->lock);
+    *maxSize = workers->maxSize;
+    *size = workers->size;
+    *idx = workers->idx;
+    *workersArray = workers->workers;
+    natsMutex_Unlock(workers->lock);
 }

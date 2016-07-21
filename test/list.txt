@@ -28,6 +28,7 @@ ParserErr
 ParserOK
 ParserSouldFail
 ParserSplitMsg
+LibMsgDelivery
 DefaultConnection
 UseDefaultURLIfNoServerSpecified
 ConnectToWithMultipleURLs

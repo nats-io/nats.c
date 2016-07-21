@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2016 Apcera Inc. All rights reserved.
 
 #ifndef NATS_H_
 #define NATS_H_
@@ -375,6 +375,37 @@ nats_GetLastErrorStack(char *buffer, size_t bufLen);
  */
 NATS_EXTERN void
 nats_PrintLastErrorStack(FILE *file);
+
+/** \brief Sets the maximum size of the global message delivery thread pool.
+ *
+ * Normally, each asynchronous subscriber that is created has its own
+ * message delivery thread. The advantage is that it reduces lock
+ * contentions, therefore improving performance.<br>
+ * However, if an application creates many subscribers, this is not scaling
+ * well since the process would use too many threads.
+ *
+ * The library has a thread pool that can perform message delivery. If
+ * a connection is created with the proper option set
+ * (#natsOptions_UseGlobalMessageDelivery), then this thread pool
+ * will be responsible for delivering the messages. The thread pool is
+ * lazily initialized, that is, no thread is used as long as no subscriber
+ * (requiring global message delivery) is created.
+ *
+ * Each subscriber will be attached to a given worker on the pool so that
+ * message delivery order is guaranteed.
+ *
+ * This call allows you to set the maximum size of the pool.
+ *
+ * \note At this time, a pool does not shrink, but the caller will not get
+ * an error when calling this function with a size smaller than the current
+ * size.
+ *
+ * @see natsOptions_UseGlobalMessageDelivery()
+ *
+ * @param max the maximum size of the pool.
+ */
+NATS_EXTERN natsStatus
+nats_SetMessageDeliveryPoolSize(int max);
 
 /** \brief Tear down the library.
  *
@@ -866,6 +897,30 @@ natsOptions_SetEventLoop(natsOptions *opts,
                          natsEvLoop_ReadAddRemove   readCb,
                          natsEvLoop_WriteAddRemove  writeCb,
                          natsEvLoop_Detach          detachCb);
+
+/** \brief Switch on/off the use of a central message delivery thread pool.
+ *
+ * Normally, each asynchronous subscriber that is created has its own
+ * message delivery thread. The advantage is that it reduces lock
+ * contentions, therefore improving performance.<br>
+ * However, if an application creates many subscribers, this is not scaling
+ * well since the process would use too many threads.
+ *
+ * When a connection is created from a `nats_Options` that has enabled
+ * global message delivery, asynchronous subscribers from this connection
+ * will use a shared thread pool responsible for message delivery.
+ *
+ * \note The message order per subscription is still guaranteed.
+ *
+ * @see nats_SetMessageDeliveryPoolSize()
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param global if `true`, uses the global message delivery thread pool,
+ * otherwise, each asynchronous subscriber will create their own message
+ * delivery thread.
+ */
+NATS_EXTERN natsStatus
+natsOptions_UseGlobalMessageDelivery(natsOptions *opts, bool global);
 
 /** \brief Destroys a #natsOptions object.
  *

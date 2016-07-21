@@ -790,6 +790,21 @@ natsOptions_SetEventLoop(natsOptions *opts,
     return NATS_OK;
 }
 
+natsStatus
+natsOptions_UseGlobalMessageDelivery(natsOptions *opts, bool global)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    // Sets if the subscriptions created from the connection will
+    // create their own delivery thread or use the one(s) from
+    // the library.
+    opts->libMsgDelivery = global;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
 static void
 _freeOptions(natsOptions *opts)
 {
@@ -807,8 +822,15 @@ _freeOptions(natsOptions *opts)
 natsStatus
 natsOptions_Create(natsOptions **newOpts)
 {
-    natsOptions *opts = (natsOptions*) NATS_CALLOC(1, sizeof(natsOptions));
+    natsStatus  s;
+    natsOptions *opts = NULL;
 
+    // Ensure the library is loaded
+    s = nats_Open(-1);
+    if (s != NATS_OK)
+        return s;
+
+    opts = (natsOptions*) NATS_CALLOC(1, sizeof(natsOptions));
     if (opts == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
@@ -826,6 +848,7 @@ natsOptions_Create(natsOptions **newOpts)
     opts->maxPingsOut    = NATS_OPTS_DEFAULT_MAX_PING_OUT;
     opts->maxPendingMsgs = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
     opts->timeout        = NATS_OPTS_DEFAULT_TIMEOUT;
+    opts->libMsgDelivery = natsLib_isLibHandlingMsgDeliveryByDefault();
 
     *newOpts = opts;
 

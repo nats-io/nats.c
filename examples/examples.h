@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2016 Apcera Inc. All rights reserved.
 
 
 #ifndef EXAMPLES_H_
@@ -272,6 +272,10 @@ parseArgs(int argc, char **argv, const char *usage)
                 printUsageAndExit(argv[0], usage);
 
             txt = argv[++i];
+        }
+        else if (strcasecmp(argv[i], "-gd") == 0)
+        {
+            s = natsOptions_UseGlobalMessageDelivery(opts, true);
         }
         else
         {

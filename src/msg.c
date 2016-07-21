@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2016 Apcera Inc. All rights reserved.
 
 #include "natsp.h"
 
@@ -99,6 +99,7 @@ natsMsg_create(natsMsg **newMsg,
     // about updating this initialization code.
     memset(&(msg->gc), 0, sizeof(natsGCItem));
 
+    msg->sub  = NULL;
     msg->next = NULL;
 
     ptr = (char*) (((char*) &(msg->next)) + sizeof(msg->next));

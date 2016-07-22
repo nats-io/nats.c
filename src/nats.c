@@ -134,8 +134,10 @@ _finalCleanup(void)
         ERR_remove_thread_state(0);
         sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
 #endif
+        natsThreadLocal_DestroyKey(gLib.sslTLKey);
     }
 
+    natsThreadLocal_DestroyKey(gLib.sslTLKey);
     natsMutex_Destroy(gLib.lock);
     gLib.lock = NULL;
 }
@@ -277,9 +279,14 @@ natsLib_Release(void)
 static void
 _doInitOnce(void)
 {
+    natsStatus s;
+
     memset(&gLib, 0, sizeof(natsLib));
 
-    if (natsMutex_Create(&(gLib.lock)) != NATS_OK)
+    s = natsMutex_Create(&(gLib.lock));
+    if (s == NATS_OK)
+        s = natsThreadLocal_CreateKey(&(gLib.errTLKey), _destroyErrTL);
+    if (s != NATS_OK)
     {
         fprintf(stderr, "FATAL ERROR: Unable to initialize library!\n");
         fflush(stderr);
@@ -868,8 +875,6 @@ nats_Open(int64_t lockSpinCount)
         if (s == NATS_OK)
             gLib.refs++;
     }
-    if (s == NATS_OK)
-        s = natsThreadLocal_CreateKey(&(gLib.errTLKey), _destroyErrTL);
     if (s == NATS_OK)
         s = natsNUID_init();
 

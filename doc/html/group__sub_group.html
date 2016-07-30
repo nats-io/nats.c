@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.3.6</span>
+   &#160;<span id="projectnumber">1.4.1-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -174,10 +174,11 @@ Functions</h2></td></tr>
 <p>By default, messages that arrive are not immediately delivered. This generally improves performance. However, in case of request-reply, this delay has a negative impact. In such case, call this function to have the subscriber be notified immediately each time a message arrives.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
+    <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object.</td></tr>
   </table>
   </dd>
 </dl>
+<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000001">Deprecated:</a></b></dt><dd>No longer needed. Will be removed in the future. </dd></dl>
 
 </div>
 </div>
@@ -303,7 +304,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Returns the number of queued messages in the client for this subscription.</p>
-<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000001">Deprecated:</a></b></dt><dd>Use <a class="el" href="group__sub_group.html#gaca6262e2ef842caa701a9f233db72707" title="Returns the number of pending messages and bytes. ">natsSubscription_GetPending</a> instead.</dd></dl>
+<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000002">Deprecated:</a></b></dt><dd>Use <a class="el" href="group__sub_group.html#gaca6262e2ef842caa701a9f233db72707" title="Returns the number of pending messages and bytes. ">natsSubscription_GetPending</a> instead.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>

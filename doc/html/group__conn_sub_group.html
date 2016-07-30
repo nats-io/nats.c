@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.3.6</span>
+   &#160;<span id="projectnumber">1.4.1-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -112,12 +112,18 @@ Functions</h2></td></tr>
 <tr class="memitem:gaefab965b5645798d47f9244f2b3fe3fb"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_sub_group.html#gaefab965b5645798d47f9244f2b3fe3fb">natsConnection_Subscribe</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> **sub, <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char *subject, <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe">natsMsgHandler</a> cb, void *cbClosure)</td></tr>
 <tr class="memdesc:gaefab965b5645798d47f9244f2b3fe3fb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates an asynchronous subscription.  <a href="#gaefab965b5645798d47f9244f2b3fe3fb">More...</a><br /></td></tr>
 <tr class="separator:gaefab965b5645798d47f9244f2b3fe3fb"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gacb2c83b58b7909715424cbc327fdd404"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_sub_group.html#gacb2c83b58b7909715424cbc327fdd404">natsConnection_SubscribeTimeout</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> **sub, <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char *subject, int64_t timeout, <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe">natsMsgHandler</a> cb, void *cbClosure)</td></tr>
+<tr class="memdesc:gacb2c83b58b7909715424cbc327fdd404"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates an asynchronous subscription with a timeout.  <a href="#gacb2c83b58b7909715424cbc327fdd404">More...</a><br /></td></tr>
+<tr class="separator:gacb2c83b58b7909715424cbc327fdd404"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga17574d5165f7e285462e3d3b2709edf4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_sub_group.html#ga17574d5165f7e285462e3d3b2709edf4">natsConnection_SubscribeSync</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> **sub, <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char *subject)</td></tr>
 <tr class="memdesc:ga17574d5165f7e285462e3d3b2709edf4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates a synchronous subcription.  <a href="#ga17574d5165f7e285462e3d3b2709edf4">More...</a><br /></td></tr>
 <tr class="separator:ga17574d5165f7e285462e3d3b2709edf4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga3c9fee2775130786ef62f1cbeb191a48"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_sub_group.html#ga3c9fee2775130786ef62f1cbeb191a48">natsConnection_QueueSubscribe</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> **sub, <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char *subject, const char *queueGroup, <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe">natsMsgHandler</a> cb, void *cbClosure)</td></tr>
 <tr class="memdesc:ga3c9fee2775130786ef62f1cbeb191a48"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates an asynchronous queue subscriber.  <a href="#ga3c9fee2775130786ef62f1cbeb191a48">More...</a><br /></td></tr>
 <tr class="separator:ga3c9fee2775130786ef62f1cbeb191a48"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga96fa115fd5b2ef7658884da80714b91c"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_sub_group.html#ga96fa115fd5b2ef7658884da80714b91c">natsConnection_QueueSubscribeTimeout</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> **sub, <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char *subject, const char *queueGroup, int64_t timeout, <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe">natsMsgHandler</a> cb, void *cbClosure)</td></tr>
+<tr class="memdesc:ga96fa115fd5b2ef7658884da80714b91c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates an asynchronous queue subscriber with a timeout.  <a href="#ga96fa115fd5b2ef7658884da80714b91c">More...</a><br /></td></tr>
+<tr class="separator:ga96fa115fd5b2ef7658884da80714b91c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga68630ea7c4bbdc7f8cd62058b41fb476"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_sub_group.html#ga68630ea7c4bbdc7f8cd62058b41fb476">natsConnection_QueueSubscribeSync</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> **sub, <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char *subject, const char *queueGroup)</td></tr>
 <tr class="memdesc:ga68630ea7c4bbdc7f8cd62058b41fb476"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates a synchronous queue subscriber.  <a href="#ga68630ea7c4bbdc7f8cd62058b41fb476">More...</a><br /></td></tr>
 <tr class="separator:ga68630ea7c4bbdc7f8cd62058b41fb476"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -172,6 +178,72 @@ Functions</h2></td></tr>
     <tr><td class="paramname">sub</td><td>the location where to store the pointer to the newly created <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">subject</td><td>the subject this subscription is created for. </td></tr>
+    <tr><td class="paramname">cb</td><td>the <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe" title="Callback used to deliver messages to the application. ">natsMsgHandler</a> callback. </td></tr>
+    <tr><td class="paramname">cbClosure</td><td>a pointer to an user defined object (can be <code>NULL</code>). See the <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe" title="Callback used to deliver messages to the application. ">natsMsgHandler</a> prototype. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="gacb2c83b58b7909715424cbc327fdd404"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsConnection_SubscribeTimeout </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> **&#160;</td>
+          <td class="paramname"><em>sub</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *&#160;</td>
+          <td class="paramname"><em>nc</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>subject</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>timeout</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe">natsMsgHandler</a>&#160;</td>
+          <td class="paramname"><em>cb</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>cbClosure</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Expresses interest in the given subject. The subject can have wildcards (see <a class="el" href="group__wildcards_group.html">Wildcards</a>). Messages will be delivered to the associated <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe" title="Callback used to deliver messages to the application. ">natsMsgHandler</a>.</p>
+<p>If no message is received by the given timeout (in milliseconds), the message handler is invoked with a <code>NULL</code> message.<br />
+ You can then destroy the subscription in the callback, or simply return, in which case, the message handler will fire again when a message is received or the subscription times-out again.</p>
+<dl class="section note"><dt>Note</dt><dd>Receiving a message reset the timeout. Until all pending messages are processed, no timeout will occur. The timeout starts when the message handler for the last pending message returns.</dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd>If you re-use message handler code between subscriptions with and without timeouts, keep in mind that the message passed in the message handler may be <code>NULL</code>.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">sub</td><td>the location where to store the pointer to the newly created <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
+    <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
+    <tr><td class="paramname">subject</td><td>the subject this subscription is created for. </td></tr>
+    <tr><td class="paramname">timeout</td><td>the interval (in milliseconds) after which, if no message is received, the message handler is invoked with a <code>NULL</code> message. </td></tr>
     <tr><td class="paramname">cb</td><td>the <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe" title="Callback used to deliver messages to the application. ">natsMsgHandler</a> callback. </td></tr>
     <tr><td class="paramname">cbClosure</td><td>a pointer to an user defined object (can be <code>NULL</code>). See the <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe" title="Callback used to deliver messages to the application. ">natsMsgHandler</a> prototype. </td></tr>
   </table>
@@ -275,6 +347,79 @@ Functions</h2></td></tr>
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">subject</td><td>the subject this subscription is created for. </td></tr>
     <tr><td class="paramname">queueGroup</td><td>the name of the group. </td></tr>
+    <tr><td class="paramname">cb</td><td>the <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe" title="Callback used to deliver messages to the application. ">natsMsgHandler</a> callback. </td></tr>
+    <tr><td class="paramname">cbClosure</td><td>a pointer to an user defined object (can be <code>NULL</code>). See the <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe" title="Callback used to deliver messages to the application. ">natsMsgHandler</a> prototype. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga96fa115fd5b2ef7658884da80714b91c"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsConnection_QueueSubscribeTimeout </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> **&#160;</td>
+          <td class="paramname"><em>sub</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *&#160;</td>
+          <td class="paramname"><em>nc</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>subject</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>queueGroup</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>timeout</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe">natsMsgHandler</a>&#160;</td>
+          <td class="paramname"><em>cb</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>cbClosure</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Creates an asynchronous queue subscriber on the given subject. All subscribers with the same queue name will form the queue group and only one member of the group will be selected to receive any given message asynchronously.</p>
+<p>If no message is received by the given timeout (in milliseconds), the message handler is invoked with a <code>NULL</code> message.<br />
+ You can then destroy the subscription in the callback, or simply return, in which case, the message handler will fire again when a message is received or the subscription times-out again.</p>
+<dl class="section note"><dt>Note</dt><dd>Receiving a message reset the timeout. Until all pending messages are processed, no timeout will occur. The timeout starts when the message handler for the last pending message returns.</dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd>If you re-use message handler code between subscriptions with and without timeouts, keep in mind that the message passed in the message handler may be <code>NULL</code>.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">sub</td><td>the location where to store the pointer to the newly created <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
+    <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
+    <tr><td class="paramname">subject</td><td>the subject this subscription is created for. </td></tr>
+    <tr><td class="paramname">queueGroup</td><td>the name of the group. </td></tr>
+    <tr><td class="paramname">timeout</td><td>the interval (in milliseconds) after which, if no message is received, the message handler is invoked with a <code>NULL</code> message. </td></tr>
     <tr><td class="paramname">cb</td><td>the <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe" title="Callback used to deliver messages to the application. ">natsMsgHandler</a> callback. </td></tr>
     <tr><td class="paramname">cbClosure</td><td>a pointer to an user defined object (can be <code>NULL</code>). See the <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe" title="Callback used to deliver messages to the application. ">natsMsgHandler</a> prototype. </td></tr>
   </table>

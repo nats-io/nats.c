@@ -1970,7 +1970,7 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub, bo
 natsStatus
 natsConn_subscribe(natsSubscription **newSub,
                    natsConnection *nc, const char *subj, const char *queue,
-                   natsMsgHandler cb, void *cbClosure)
+                   int64_t timeout, natsMsgHandler cb, void *cbClosure)
 {
     natsStatus          s    = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -1990,18 +1990,11 @@ natsConn_subscribe(natsSubscription **newSub,
         return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
-    s = natsSub_create(&sub, nc, subj, queue, cb, cbClosure);
+    s = natsSub_create(&sub, nc, subj, queue, timeout, cb, cbClosure);
     if (s == NATS_OK)
     {
         sub->sid = ++(nc->ssid);
         s = natsConn_addSubcription(nc, sub);
-    }
-    if ((s == NATS_OK) && (cb != NULL) && nc->opts->libMsgDelivery)
-    {
-        natsSub_retain(sub);
-        s = natsLib_msgDeliveryAssignWorker(sub);
-        if (s != NATS_OK)
-            natsSub_release(sub);
     }
 
     if (s == NATS_OK)

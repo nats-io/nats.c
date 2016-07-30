@@ -5506,6 +5506,170 @@ test_SimplePublishNoData(void)
 }
 
 static void
+test_InvalidSubsArgs(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsSubscription    *sub = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    // ASYNC Subscription
+
+    test("Test async subscriber, invalid connection: ")
+    s = natsConnection_Subscribe(&sub, NULL, "foo", _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async subscriber, invalid subject: ")
+    s = natsConnection_Subscribe(&sub, nc, NULL, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async subscriber, invalid subject (empty string): ")
+    s = natsConnection_Subscribe(&sub, nc, "", _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async subscriber, invalid cb: ")
+    s = natsConnection_Subscribe(&sub, nc, "foo", NULL, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber, invalid connection: ")
+    s = natsConnection_QueueSubscribe(&sub, NULL, "foo", "group", _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    // Async Subscription Timeout
+
+    test("Test async subscriber timeout, invalid connection: ")
+    s = natsConnection_SubscribeTimeout(&sub, NULL, "foo", 100, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async subscriber timeout, invalid subject: ")
+    s = natsConnection_SubscribeTimeout(&sub, nc, NULL, 100, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async subscriber timeout, invalid subject (empty string): ")
+    s = natsConnection_SubscribeTimeout(&sub, nc, "", 100, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async subscriber timeout, invalid cb: ")
+    s = natsConnection_SubscribeTimeout(&sub, nc, "foo", 100, NULL, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async subscriber timeout, invalid timeout (<0): ")
+    s = natsConnection_SubscribeTimeout(&sub, nc, "foo", -100, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async subscriber timeout, invalid timeout (0): ")
+    s = natsConnection_SubscribeTimeout(&sub, nc, "foo", 0, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    // ASYNC Queue Subscription
+
+    test("Test async queue subscriber timeout, invalid connection: ")
+    s = natsConnection_QueueSubscribe(&sub, NULL, "foo", "group", _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber, invalid subject: ")
+    s = natsConnection_QueueSubscribe(&sub, nc, NULL, "group", _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber, invalid subject (empty string): ")
+    s = natsConnection_QueueSubscribe(&sub, nc, "", "group", _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber, invalid group name: ")
+    s = natsConnection_QueueSubscribe(&sub, nc, "foo", NULL, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber, invalid group name (empty): ")
+    s = natsConnection_QueueSubscribe(&sub, nc, "foo", "", _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber, invalid cb: ")
+    s = natsConnection_QueueSubscribe(&sub, nc, "foo", "group", NULL, NULL);
+    testCond(s != NATS_OK);
+
+    // ASYNC Queue Subscription Timeout
+
+    test("Test async queue subscriber timeout, invalid connection: ")
+    s = natsConnection_QueueSubscribeTimeout(&sub, NULL, "foo", "group", 100, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber timeout, invalid subject: ")
+    s = natsConnection_QueueSubscribeTimeout(&sub, nc, NULL, "group", 100, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber timeout, invalid subject (empty string): ")
+    s = natsConnection_QueueSubscribeTimeout(&sub, nc, "", "group", 100, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber timeout, invalid group name: ")
+    s = natsConnection_QueueSubscribeTimeout(&sub, nc, "foo", NULL, 100, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber timeout, invalid group name (empty): ")
+    s = natsConnection_QueueSubscribeTimeout(&sub, nc, "foo", "", 100, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber timeout, invalid cb: ")
+    s = natsConnection_QueueSubscribeTimeout(&sub, nc, "foo", "group", 100, NULL, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber timeout, invalid timeout (<0): ")
+    s = natsConnection_QueueSubscribeTimeout(&sub, nc, "foo", "group", -100, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test async queue subscriber timeout, invalid timeout (0): ")
+    s = natsConnection_QueueSubscribeTimeout(&sub, nc, "foo", "group", 0, _recvTestString, NULL);
+    testCond(s != NATS_OK);
+
+    // SYNC Subscription
+
+    test("Test sync subscriber, invalid connection: ")
+    s = natsConnection_SubscribeSync(&sub, NULL, "foo");
+    testCond(s != NATS_OK);
+
+    test("Test sync subscriber, invalid subject: ")
+    s = natsConnection_SubscribeSync(&sub, nc, NULL);
+    testCond(s != NATS_OK);
+
+    test("Test sync subscriber, invalid subject (empty string): ")
+    s = natsConnection_SubscribeSync(&sub, nc, "");
+    testCond(s != NATS_OK);
+
+    // SYNC Queue Subscription
+
+    test("Test sync queue subscriber, invalid connection: ")
+    s = natsConnection_QueueSubscribeSync(&sub, NULL, "foo", "group");
+    testCond(s != NATS_OK);
+
+    test("Test sync queue subscriber, invalid subject: ")
+    s = natsConnection_QueueSubscribeSync(&sub, nc, NULL, "group");
+    testCond(s != NATS_OK);
+
+    test("Test sync queue subscriber, invalid subject (empty string): ")
+    s = natsConnection_QueueSubscribeSync(&sub, nc, "", "group");
+    testCond(s != NATS_OK);
+
+    test("Test sync queue subscriber, invalid group name: ")
+    s = natsConnection_QueueSubscribeSync(&sub, nc, "foo", NULL);
+    testCond(s != NATS_OK);
+
+    test("Test sync queue subscriber, invalid group name (empty): ")
+    s = natsConnection_QueueSubscribeSync(&sub, nc, "foo", "");
+    testCond(s != NATS_OK);
+
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_AsyncSubscribe(void)
 {
     natsStatus          s;
@@ -5549,6 +5713,202 @@ test_AsyncSubscribe(void)
     _destroyDefaultThreadArgs(&arg);
 
     _stopServer(serverPid);
+}
+
+typedef struct __asyncTimeoutInfo
+{
+    struct threadArg    *arg;
+    int64_t             timeout;
+    int64_t             timeAfterFirstMsg;
+    int64_t             timeSecondMsg;
+    int64_t             timeFirstTimeout;
+    int64_t             timeSecondTimeout;
+
+} _asyncTimeoutInfo;
+
+static void
+_asyncTimeoutCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+   _asyncTimeoutInfo *ai = (_asyncTimeoutInfo*) closure;
+
+   natsMutex_Lock(ai->arg->m);
+   if (msg != NULL)
+   {
+       ai->arg->sum++;
+       switch (ai->arg->sum)
+       {
+           case 1:
+           {
+               // Release lock for sleep...
+               natsMutex_Unlock(ai->arg->m);
+
+               // Sleep for 1.5x the timeout value
+               nats_Sleep(ai->timeout+ai->timeout/2);
+
+               natsMutex_Lock(ai->arg->m);
+               ai->timeAfterFirstMsg = nats_Now();
+               break;
+           }
+           case 2: ai->timeSecondMsg = nats_Now(); break;
+           case 3:
+           {
+               ai->arg->done = true;
+               natsSubscription_Destroy(sub);
+               natsCondition_Signal(ai->arg->c);
+               break;
+           }
+           default:
+           {
+               ai->arg->status = NATS_ERR;
+               break;
+           }
+       }
+       natsMsg_Destroy(msg);
+   }
+   else
+   {
+       ai->arg->timerFired++;
+       switch (ai->arg->timerFired)
+       {
+           case 1:
+           {
+               ai->timeFirstTimeout = nats_Now();
+               // Notify the main thread to send the second message
+               // after waiting 1/2 of the timeout period.
+               natsCondition_Signal(ai->arg->c);
+               break;
+           }
+           case 2:
+           {
+               ai->timeSecondTimeout = nats_Now();
+               // Signal that we timed-out for the 2nd time.
+               ai->arg->timerStopped = 1;
+               natsCondition_Signal(ai->arg->c);
+               break;
+           }
+           default:
+           {
+               ai->arg->status = NATS_ERR;
+               break;
+           }
+       }
+    }
+    natsMutex_Unlock(ai->arg->m);
+}
+
+static void
+test_AsyncSubscribeTimeout(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsOptions         *opts     = NULL;
+    struct threadArg    arg;
+    bool                useLibDlv = false;
+    int                 i;
+    char                testText[128];
+    int64_t             timeout   = 100;
+    _asyncTimeoutInfo   ai;
+
+    for (i=0; i<4; i++)
+    {
+        memset(&ai, 0, sizeof(_asyncTimeoutInfo));
+        memset(&arg, 0, sizeof(struct threadArg));
+
+        s = natsOptions_Create(&opts);
+        if (s == NATS_OK)
+            s = natsOptions_UseGlobalMessageDelivery(opts, useLibDlv);
+        if (s == NATS_OK)
+            s = _createDefaultThreadArgsForCbTests(&arg);
+        if ( s != NATS_OK)
+            FAIL("Unable to setup test!");
+
+        ai.arg = &arg;
+        ai.timeout = timeout;
+        arg.status = NATS_OK;
+
+        serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+        CHECK_SERVER_STARTED(serverPid);
+
+        snprintf(testText, sizeof(testText), "Test async %ssubscriber timeout%s: ",
+                 ((i == 1 || i == 3) ? "queue " : ""),
+                 (i > 1 ? " (lib msg delivery)" : ""));
+        test(testText);
+        s = natsConnection_Connect(&nc, opts);
+        if (s == NATS_OK)
+        {
+            if (i == 0 || i == 2)
+                s = natsConnection_SubscribeTimeout(&sub, nc, "foo", timeout,
+                                                    _asyncTimeoutCb, (void*) &ai);
+            else
+                s = natsConnection_QueueSubscribeTimeout(&sub, nc, "foo", "group",
+                                                         timeout, _asyncTimeoutCb, (void*) &ai);
+        }
+        if (s == NATS_OK)
+            s = natsConnection_PublishString(nc, "foo", "msg1");
+
+        // Wait to be notified that sub timed-out 2 times
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && (arg.timerFired != 1))
+            s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+        natsMutex_Unlock(arg.m);
+
+        // Wait half the timeout
+        nats_Sleep(timeout/2);
+
+        // Send the second message. This should reset the timeout timer.
+        if (s == NATS_OK)
+            s = natsConnection_PublishString(nc, "foo", "msg2");
+        if (s == NATS_OK)
+            s = natsConnection_Flush(nc);
+
+        // Wait for 2nd timeout
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && (arg.timerStopped == 0))
+            s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+        natsMutex_Unlock(arg.m);
+
+        // Send two more messages, only one should be received since the
+        // subscription will be unsubscribed/closed when receiving the
+        // first.
+        if (s == NATS_OK)
+            s = natsConnection_PublishString(nc, "foo", "msg3");
+        if (s == NATS_OK)
+            s = natsConnection_PublishString(nc, "foo", "msg4");
+        if (s == NATS_OK)
+            s = natsConnection_Flush(nc);
+
+        // Wait for end of test
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && !arg.done)
+            s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+        natsMutex_Unlock(arg.m);
+
+        // Wait more than the timeout time to see if extra timeout callbacks
+        // incorrectly fire
+        nats_Sleep(timeout+timeout/2);
+
+        // Check for success
+        natsMutex_Lock(arg.m);
+        testCond((s == NATS_OK) && (arg.status == NATS_OK)
+                    && (arg.sum == 3) && (arg.timerFired == 2)
+                    && (ai.timeFirstTimeout >= ai.timeAfterFirstMsg + timeout - 20)
+                    && (ai.timeFirstTimeout <= ai.timeAfterFirstMsg + timeout + 20)
+                    && (ai.timeSecondTimeout >= ai.timeSecondMsg + timeout - 20)
+                    && (ai.timeSecondTimeout <= ai.timeSecondMsg + timeout + 20))
+        natsMutex_Unlock(arg.m);
+
+        natsConnection_Destroy(nc);
+        natsOptions_Destroy(opts);
+
+        _destroyDefaultThreadArgs(&arg);
+
+        _stopServer(serverPid);
+
+        if (i >= 1)
+            useLibDlv = true;
+    }
 }
 
 static void
@@ -9736,7 +10096,9 @@ static testInfo allTests[] =
     {"MultipleClose",                   test_MultipleClose},
     {"SimplePublish",                   test_SimplePublish},
     {"SimplePublishNoData",             test_SimplePublishNoData},
+    {"InvalidSubsArgs",                 test_InvalidSubsArgs},
     {"AsyncSubscribe",                  test_AsyncSubscribe},
+    {"AsyncSubscribeTimeout",           test_AsyncSubscribeTimeout},
     {"SyncSubscribe",                   test_SyncSubscribe},
     {"PubSubWithReply",                 test_PubSubWithReply},
     {"Flush",                           test_Flush},

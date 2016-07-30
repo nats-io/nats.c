@@ -1437,11 +1437,12 @@ _deliverMsgs(void *arg)
     uint64_t            delivered;
     uint64_t            max;
     natsMsg             *msg;
+    bool                timerNeedReset = false;
+
+    natsMutex_Lock(dlv->lock);
 
     while (true)
     {
-        natsMutex_Lock(dlv->lock);
-
         while (((msg = dlv->msgList.head) == NULL) && !dlv->shutdown)
         {
             dlv->inWait = true;
@@ -1452,12 +1453,10 @@ _deliverMsgs(void *arg)
         // Break out only when list is empty
         if ((msg == NULL) && dlv->shutdown)
         {
-            natsMutex_Unlock(dlv->lock);
             break;
         }
 
         // Remove message from list now...
-        msg = dlv->msgList.head;
         dlv->msgList.head = msg->next;
         if (dlv->msgList.tail == msg)
             dlv->msgList.tail = NULL;
@@ -1465,35 +1464,88 @@ _deliverMsgs(void *arg)
 
         // Get subscription reference from message
         sub = msg->sub;
+
+        // Capture these under lock
         nc = sub->conn;
+        mcb = sub->msgCb;
+        mcbClosure = sub->msgCbClosure;
+        max = sub->max;
+
+        // Is this a control message?
+        if (msg->subject[0] == '\0')
+        {
+            // We need to release this lock...
+            natsMutex_Unlock(dlv->lock);
+
+            // Release the message
+            natsMsg_Destroy(msg);
+
+            if (sub->closed)
+            {
+                // Subscription closed, just release
+                natsSub_release(sub);
+
+                // Grab the lock, we go back to beginning of loop.
+                natsMutex_Lock(dlv->lock);
+            }
+            else if (sub->timedOut)
+            {
+                // Invoke the callback with a NULL message.
+                (*mcb)(nc, sub, NULL, mcbClosure);
+
+                // Grab the lock
+                natsMutex_Lock(dlv->lock);
+
+                // Reset the timedOut boolean to allow for the
+                // subscription to timeout again, and reset the
+                // timer to fire again starting from now.
+                sub->timedOut = false;
+                natsTimer_Reset(sub->timeoutTimer, sub->timeout);
+            }
+
+            // Go back to top of loop.
+            continue;
+        }
 
         // Update stats before checking closed state
         sub->msgList.msgs--;
         sub->msgList.bytes -= msg->dataLen;
 
-        // Closed, so need to skip
+        // Need to check for closed subscription again here.
+        // The subscription could have been unsubscribed from a callback
+        // but there were already pending messages. The control message
+        // is queued up. Until it is processed, we need to simply
+        // discard the message and continue.
         if (sub->closed)
         {
-            natsMutex_Unlock(dlv->lock);
-            // That's an indication that this is the last message
-            // and we need to release the subscription.
-            if (msg->subject[0] == '\0')
-                natsSub_release(sub);
             natsMsg_Destroy(msg);
             continue;
         }
 
-        // Capture these under lock.
         delivered = ++(sub->delivered);
-        max = sub->max;
-        mcb = sub->msgCb;
-        mcbClosure = sub->msgCbClosure;
+
+        // Is this a subscription that can timeout?
+        if (sub->timeout != 0)
+        {
+            // Prevent the timer to post a timeout control message
+            sub->timeoutSuspended = true;
+
+            // If we are dealing with the last pending message for this sub,
+            // we will reset the timer after the user callback returns.
+            if (sub->msgList.msgs == 0)
+                timerNeedReset = true;
+        }
 
         natsMutex_Unlock(dlv->lock);
 
         if ((max == 0) || (delivered <= max))
         {
            (*mcb)(nc, sub, msg, mcbClosure);
+        }
+        else
+        {
+            // We need to destroy the message since the user can't do it
+            natsMsg_Destroy(msg);
         }
 
         // Don't do 'else' because we need to remove when we have hit
@@ -1503,7 +1555,27 @@ _deliverMsgs(void *arg)
             // If we have hit the max for delivered msgs, remove sub.
             natsConn_removeSubscription(nc, sub, true);
         }
+
+        natsMutex_Lock(dlv->lock);
+
+        // Check if timer need to be reset for subscriptions that can timeout.
+        if ((sub->timeout != 0) && timerNeedReset)
+        {
+            timerNeedReset = false;
+
+            // Do this only on timer reset instead of after each return
+            // from callback. The reason is that if there are still pending
+            // messages for this subscription (this is the case otherwise
+            // timerNeedReset would be false), we should prevent
+            // the subscription to timeout anyway.
+            sub->timeoutSuspended = false;
+
+            // Reset the timer to fire in `timeout` from now.
+            natsTimer_Reset(sub->timeoutTimer, sub->timeout);
+        }
     }
+
+    natsMutex_Unlock(dlv->lock);
 
     natsLib_Release();
 }
@@ -1553,30 +1625,30 @@ nats_SetMessageDeliveryPoolSize(int max)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// Post a control message to the worker's queue.
 natsStatus
-natsLib_msgDeliveryDone(natsSubscription *sub)
+natsLib_msgDeliveryPostControlMsg(natsSubscription *sub)
 {
     natsStatus          s;
-    natsMsg             *endMsg = NULL;
+    natsMsg             *controlMsg = NULL;
     natsMsgDlvWorker    *worker = (sub->libDlvWorker);
 
     // Create a "end" message and post it to the delivery worker
-    s = natsMsg_create(&endMsg, NULL, 0, NULL, 0, NULL, 0);
+    s = natsMsg_create(&controlMsg, NULL, 0, NULL, 0, NULL, 0);
     if (s == NATS_OK)
     {
         natsMsgList *l;
 
         natsMutex_Lock(worker->lock);
 
-        endMsg->sub = sub;
-        sub->msgList.msgs++;
+        controlMsg->sub = sub;
 
         l = &(worker->msgList);
         if (l->tail != NULL)
-            l->tail->next = endMsg;
+            l->tail->next = controlMsg;
         if (l->head == NULL)
-            l->head = endMsg;
-        l->tail = endMsg;
+            l->head = controlMsg;
+        l->tail = controlMsg;
 
         if (worker->inWait)
             natsCondition_Signal(worker->cond);
@@ -1585,7 +1657,6 @@ natsLib_msgDeliveryDone(natsSubscription *sub)
     }
     return NATS_UPDATE_ERR_STACK(s);
 }
-
 
 natsStatus
 natsLib_msgDeliveryAssignWorker(natsSubscription *sub)

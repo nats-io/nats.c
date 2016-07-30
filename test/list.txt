@@ -58,7 +58,9 @@ ConnectedServer
 MultipleClose
 SimplePublish
 SimplePublishNoData
+InvalidSubsArgs
 AsyncSubscribe
+AsyncSubscribeTimeout
 SyncSubscribe
 PubSubWithReply
 Flush

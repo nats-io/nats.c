@@ -249,6 +249,11 @@ struct __natsSubscription
     natsMsgHandler              msgCb;
     void                        *msgCbClosure;
 
+    int64_t                     timeout;
+    natsTimer                   *timeoutTimer;
+    bool                        timedOut;
+    bool                        timeoutSuspended;
+
     // Pending limits, etc..
     int                         msgsMax;
     int                         bytesMax;
@@ -394,7 +399,7 @@ natsStatus
 natsInbox_init(char *inbox, int inboxLen);
 
 natsStatus
-natsLib_msgDeliveryDone(natsSubscription *sub);
+natsLib_msgDeliveryPostControlMsg(natsSubscription *sub);
 
 natsStatus
 natsLib_msgDeliveryAssignWorker(natsSubscription *sub);

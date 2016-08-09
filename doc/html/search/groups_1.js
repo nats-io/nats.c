@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['functions',['Functions',['../group__func_group.html',1,'']]]
+  ['environment_20variables',['Environment Variables',['../group__env_variables_group.html',1,'']]]
 ];

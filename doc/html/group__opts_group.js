@@ -25,5 +25,6 @@ var group__opts_group =
     [ "natsOptions_SetDisconnectedCB", "group__opts_group.html#gadc8dc0cedd91bda71d544f3dedc4a039", null ],
     [ "natsOptions_SetReconnectedCB", "group__opts_group.html#ga26a48c8529fffa5f5d1a61c030979980", null ],
     [ "natsOptions_SetEventLoop", "group__opts_group.html#gab09491bad908dedcb323c780280733ff", null ],
+    [ "natsOptions_UseGlobalMessageDelivery", "group__opts_group.html#gabf060c92648b50c069f0abe7cbb06f1c", null ],
     [ "natsOptions_Destroy", "group__opts_group.html#ga93d8068cd6fff53b7f8e1c403db45eb9", null ]
 ];

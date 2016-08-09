@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2016 Apcera Inc. All rights reserved.
 
 #ifndef NATS_H_
 #define NATS_H_
@@ -375,6 +375,38 @@ nats_GetLastErrorStack(char *buffer, size_t bufLen);
  */
 NATS_EXTERN void
 nats_PrintLastErrorStack(FILE *file);
+
+/** \brief Sets the maximum size of the global message delivery thread pool.
+ *
+ * Normally, each asynchronous subscriber that is created has its own
+ * message delivery thread. The advantage is that it reduces lock
+ * contentions, therefore improving performance.<br>
+ * However, if an application creates many subscribers, this is not scaling
+ * well since the process would use too many threads.
+ *
+ * The library has a thread pool that can perform message delivery. If
+ * a connection is created with the proper option set
+ * (#natsOptions_UseGlobalMessageDelivery), then this thread pool
+ * will be responsible for delivering the messages. The thread pool is
+ * lazily initialized, that is, no thread is used as long as no subscriber
+ * (requiring global message delivery) is created.
+ *
+ * Each subscriber will be attached to a given worker on the pool so that
+ * message delivery order is guaranteed.
+ *
+ * This call allows you to set the maximum size of the pool.
+ *
+ * \note At this time, a pool does not shrink, but the caller will not get
+ * an error when calling this function with a size smaller than the current
+ * size.
+ *
+ * @see natsOptions_UseGlobalMessageDelivery()
+ * @see \ref envVariablesGroup
+ *
+ * @param max the maximum size of the pool.
+ */
+NATS_EXTERN natsStatus
+nats_SetMessageDeliveryPoolSize(int max);
 
 /** \brief Tear down the library.
  *
@@ -866,6 +898,31 @@ natsOptions_SetEventLoop(natsOptions *opts,
                          natsEvLoop_ReadAddRemove   readCb,
                          natsEvLoop_WriteAddRemove  writeCb,
                          natsEvLoop_Detach          detachCb);
+
+/** \brief Switch on/off the use of a central message delivery thread pool.
+ *
+ * Normally, each asynchronous subscriber that is created has its own
+ * message delivery thread. The advantage is that it reduces lock
+ * contentions, therefore improving performance.<br>
+ * However, if an application creates many subscribers, this is not scaling
+ * well since the process would use too many threads.
+ *
+ * When a connection is created from a `nats_Options` that has enabled
+ * global message delivery, asynchronous subscribers from this connection
+ * will use a shared thread pool responsible for message delivery.
+ *
+ * \note The message order per subscription is still guaranteed.
+ *
+ * @see nats_SetMessageDeliveryPoolSize()
+ * @see \ref envVariablesGroup
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param global if `true`, uses the global message delivery thread pool,
+ * otherwise, each asynchronous subscriber will create their own message
+ * delivery thread.
+ */
+NATS_EXTERN natsStatus
+natsOptions_UseGlobalMessageDelivery(natsOptions *opts, bool global);
 
 /** \brief Destroys a #natsOptions object.
  *
@@ -1398,6 +1455,41 @@ natsConnection_Subscribe(natsSubscription **sub, natsConnection *nc,
                          const char *subject, natsMsgHandler cb,
                          void *cbClosure);
 
+/** \brief Creates an asynchronous subscription with a timeout.
+ *
+ * Expresses interest in the given subject. The subject can have wildcards
+ * (see \ref wildcardsGroup). Messages will be delivered to the associated
+ * #natsMsgHandler.
+ *
+ * If no message is received by the given timeout (in milliseconds), the
+ * message handler is invoked with a `NULL` message.<br>
+ * You can then destroy the subscription in the callback, or simply
+ * return, in which case, the message handler will fire again when a
+ * message is received or the subscription times-out again.
+ *
+ * \note Receiving a message reset the timeout. Until all pending messages
+ * are processed, no timeout will occur. The timeout starts when the
+ * message handler for the last pending message returns.
+ *
+ * \warning If you re-use message handler code between subscriptions with
+ * and without timeouts, keep in mind that the message passed in the
+ * message handler may be `NULL`.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param nc the pointer to the #natsConnection object.
+ * @param subject the subject this subscription is created for.
+ * @param timeout the interval (in milliseconds) after which, if no message
+ * is received, the message handler is invoked with a `NULL` message.
+ * @param cb the #natsMsgHandler callback.
+ * @param cbClosure a pointer to an user defined object (can be `NULL`). See
+ * the #natsMsgHandler prototype.
+ */
+NATS_EXTERN natsStatus
+natsConnection_SubscribeTimeout(natsSubscription **sub, natsConnection *nc,
+                                const char *subject, int64_t timeout,
+                                natsMsgHandler cb, void *cbClosure);
+
 /** \brief Creates a synchronous subcription.
  *
  * Similar to #natsConnection_Subscribe, but creates a synchronous subscription
@@ -1433,6 +1525,43 @@ NATS_EXTERN natsStatus
 natsConnection_QueueSubscribe(natsSubscription **sub, natsConnection *nc,
                               const char *subject, const char *queueGroup,
                               natsMsgHandler cb, void *cbClosure);
+
+/** \brief Creates an asynchronous queue subscriber with a timeout.
+ *
+ * Creates an asynchronous queue subscriber on the given subject.
+ * All subscribers with the same queue name will form the queue group and
+ * only one member of the group will be selected to receive any given
+ * message asynchronously.
+ *
+ * If no message is received by the given timeout (in milliseconds), the
+ * message handler is invoked with a `NULL` message.<br>
+ * You can then destroy the subscription in the callback, or simply
+ * return, in which case, the message handler will fire again when a
+ * message is received or the subscription times-out again.
+ *
+ * \note Receiving a message reset the timeout. Until all pending messages
+ * are processed, no timeout will occur. The timeout starts when the
+ * message handler for the last pending message returns.
+ *
+ * \warning If you re-use message handler code between subscriptions with
+ * and without timeouts, keep in mind that the message passed in the
+ * message handler may be `NULL`.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param nc the pointer to the #natsConnection object.
+ * @param subject the subject this subscription is created for.
+ * @param queueGroup the name of the group.
+ * @param timeout the interval (in milliseconds) after which, if no message
+ * is received, the message handler is invoked with a `NULL` message.
+ * @param cb the #natsMsgHandler callback.
+ * @param cbClosure a pointer to an user defined object (can be `NULL`). See
+ * the #natsMsgHandler prototype.
+ */
+NATS_EXTERN natsStatus
+natsConnection_QueueSubscribeTimeout(natsSubscription **sub, natsConnection *nc,
+                   const char *subject, const char *queueGroup,
+                   int64_t timeout, natsMsgHandler cb, void *cbClosure);
 
 /** \brief Creates a synchronous queue subscriber.
  *
@@ -1727,6 +1856,17 @@ natsSubscription_Destroy(natsSubscription *sub);
  *  but not on:
  *  - `foo` (only one element, needs at least two)
  *  - `bar.baz` (does not start with `foo`).
+ ** @} */
+
+/**  \defgroup envVariablesGroup Environment Variables
+ *  @{
+ *  You will find here the environment variables that change the default behavior
+ *  of the NATS C Client library.
+ * <br><br>
+ * Name | Effect
+ * -----|:-----:
+ * <b>`NATS_DEFAULT_TO_LIB_MSG_DELIVERY`</b> | On #nats_Open, the library looks for this environment variable. If set (to any value), the library will default to using a global thread pool to perform message delivery. See #natsOptions_UseGlobalMessageDelivery and #nats_SetMessageDeliveryPoolSize.
+ *
  ** @} */
 
 

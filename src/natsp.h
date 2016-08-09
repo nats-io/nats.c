@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2016 Apcera Inc. All rights reserved.
 
 #ifndef NATSP_H_
 #define NATSP_H_
@@ -163,6 +163,8 @@ struct __natsOptions
     void                    *evLoop;
     natsEvLoopCallbacks     evCbs;
 
+    bool                    libMsgDelivery;
+
 };
 
 typedef struct __natsMsgList
@@ -173,6 +175,17 @@ typedef struct __natsMsgList
     int         bytes;
 
 } natsMsgList;
+
+typedef struct __natsMsgDlvWorker
+{
+    natsMutex       *lock;
+    natsCondition   *cond;
+    natsThread      *thread;
+    bool            inWait;
+    bool            shutdown;
+    natsMsgList     msgList;
+
+} natsMsgDlvWorker;
 
 struct __natsSubscription
 {
@@ -228,9 +241,18 @@ struct __natsSubscription
     // Delivery thread (for async subscription).
     natsThread                  *deliverMsgsThread;
 
+    // If message delivery is done by the library instead, this is the
+    // reference to the worker handling this subscription.
+    natsMsgDlvWorker            *libDlvWorker;
+
     // Message callback and closure (for async subscription).
     natsMsgHandler              msgCb;
     void                        *msgCbClosure;
+
+    int64_t                     timeout;
+    natsTimer                   *timeoutTimer;
+    bool                        timedOut;
+    bool                        timeoutSuspended;
 
     // Pending limits, etc..
     int                         msgsMax;
@@ -375,6 +397,18 @@ nats_sslInit(void);
 
 natsStatus
 natsInbox_init(char *inbox, int inboxLen);
+
+natsStatus
+natsLib_msgDeliveryPostControlMsg(natsSubscription *sub);
+
+natsStatus
+natsLib_msgDeliveryAssignWorker(natsSubscription *sub);
+
+bool
+natsLib_isLibHandlingMsgDeliveryByDefault(void);
+
+void
+natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWorker ***workersArray);
 
 //
 // Threads

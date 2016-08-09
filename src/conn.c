@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2016 Apcera Inc. All rights reserved.
 
 #include "natsp.h"
 
@@ -1762,6 +1762,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     natsStatus       s    = NATS_OK;
     natsSubscription *sub = NULL;
     natsMsg          *msg = NULL;
+    natsMsgDlvWorker *ldw = NULL;
 
     natsConn_Lock(nc);
 
@@ -1785,7 +1786,10 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         return s;
     }
 
-    natsSub_Lock(sub);
+    if ((ldw = sub->libDlvWorker) != NULL)
+        natsMutex_Lock(ldw->lock);
+    else
+        natsSub_Lock(sub);
 
     sub->msgList.msgs++;
     sub->msgList.bytes += bufLen;
@@ -1805,6 +1809,8 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     }
     else
     {
+        natsMsgList *list = NULL;
+
         if (sub->msgList.msgs > sub->msgsMax)
             sub->msgsMax = sub->msgList.msgs;
 
@@ -1813,19 +1819,40 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
         sub->slowConsumer = false;
 
-        if (sub->msgList.head == NULL)
-            sub->msgList.head = msg;
+        if (ldw != NULL)
+        {
+            msg->sub = sub;
+            list = &ldw->msgList;
+        }
+        else
+        {
+            list = &sub->msgList;
+        }
 
-        if (sub->msgList.tail != NULL)
-            sub->msgList.tail->next = msg;
+        if (list->head == NULL)
+            list->head = msg;
 
-        sub->msgList.tail = msg;
+        if (list->tail != NULL)
+            list->tail->next = msg;
 
-        if (sub->inWait > 0)
-            natsCondition_Broadcast(sub->cond);
+        list->tail = msg;
+
+        if (ldw != NULL)
+        {
+            if (ldw->inWait)
+                natsCondition_Broadcast(ldw->cond);
+        }
+        else
+        {
+            if (sub->inWait > 0)
+                natsCondition_Broadcast(sub->cond);
+        }
     }
 
-    natsSub_Unlock(sub);
+    if (ldw != NULL)
+        natsMutex_Unlock(ldw->lock);
+    else
+        natsSub_Unlock(sub);
 
     natsConn_Unlock(nc);
 
@@ -1943,7 +1970,7 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub, bo
 natsStatus
 natsConn_subscribe(natsSubscription **newSub,
                    natsConnection *nc, const char *subj, const char *queue,
-                   natsMsgHandler cb, void *cbClosure)
+                   int64_t timeout, natsMsgHandler cb, void *cbClosure)
 {
     natsStatus          s    = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -1963,7 +1990,7 @@ natsConn_subscribe(natsSubscription **newSub,
         return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
-    s = natsSub_create(&sub, nc, subj, queue, cb, cbClosure);
+    s = natsSub_create(&sub, nc, subj, queue, timeout, cb, cbClosure);
     if (s == NATS_OK)
     {
         sub->sid = ++(nc->ssid);

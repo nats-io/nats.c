@@ -25,7 +25,7 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "deprecated.html",
-"group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e"
+"group__sub_group.html#gafe31911d8372db401d33856465421710"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

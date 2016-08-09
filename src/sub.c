@@ -26,6 +26,12 @@ void natsSub_Unlock(natsSubscription *sub)   { natsMutex_Unlock(sub->mu); }
 
 #endif // DEV_MODE
 
+#define SUB_DLV_WORKER_LOCK(s)      if ((s)->libDlvWorker != NULL) \
+                                        natsMutex_Lock((s)->libDlvWorker->lock)
+
+#define SUB_DLV_WORKER_UNLOCK(s)    if ((s)->libDlvWorker != NULL) \
+                                        natsMutex_Unlock((s)->libDlvWorker->lock)
+
 static void
 _freeSubscription(natsSubscription *sub)
 {
@@ -48,6 +54,7 @@ _freeSubscription(natsSubscription *sub)
         natsThread_Detach(sub->deliverMsgsThread);
         natsThread_Destroy(sub->deliverMsgsThread);
     }
+    natsTimer_Destroy(sub->timeoutTimer);
     natsCondition_Destroy(sub->cond);
     natsMutex_Destroy(sub->mu);
 
@@ -95,19 +102,29 @@ natsSub_deliverMsgs(void *arg)
     uint64_t            delivered;
     uint64_t            max;
     natsMsg             *msg;
+    int64_t             timeout;
+    natsStatus          s = NATS_OK;
 
     // This just servers as a barrier for the creation of this thread.
     natsConn_Lock(nc);
     natsConn_Unlock(nc);
 
+    natsSub_Lock(sub);
+    timeout = sub->timeout;
+    natsSub_Unlock(sub);
+
     while (true)
     {
         natsSub_Lock(sub);
 
-        while ((sub->msgList.msgs == 0) && !(sub->closed))
+        s = NATS_OK;
+        while (((msg = sub->msgList.head) == NULL) && !(sub->closed) && (s != NATS_TIMEOUT))
         {
             sub->inWait++;
-            natsCondition_Wait(sub->cond, sub->mu);
+            if (timeout != 0)
+                s = natsCondition_TimedWait(sub->cond, sub->mu, timeout);
+            else
+                natsCondition_Wait(sub->cond, sub->mu);
             sub->inWait--;
         }
 
@@ -117,12 +134,13 @@ natsSub_deliverMsgs(void *arg)
             break;
         }
 
-        msg = sub->msgList.head;
-
-        // Should not happen, but reported by code analysis otherwise.
+        // Will happen with timeout subscription
         if (msg == NULL)
         {
             natsSub_Unlock(sub);
+            // If subscription timed-out, invoke callback with NULL message.
+            if (s == NATS_TIMEOUT)
+                (*mcb)(nc, sub, NULL, mcbClosure);
             continue;
         }
 
@@ -147,6 +165,11 @@ natsSub_deliverMsgs(void *arg)
         {
            (*mcb)(nc, sub, msg, mcbClosure);
         }
+        else
+        {
+            // We need to destroy the message since the user can't do it
+            natsMsg_Destroy(msg);
+        }
 
         // Don't do 'else' because we need to remove when we have hit
         // the max (after the callback returns).
@@ -164,18 +187,79 @@ natsSub_deliverMsgs(void *arg)
 void
 natsSub_close(natsSubscription *sub, bool connectionClosed)
 {
+    natsMsgDlvWorker *ldw = NULL;
+
     natsSub_Lock(sub);
 
-    sub->closed = true;
-    sub->connClosed = connectionClosed;
-    natsCondition_Broadcast(sub->cond);
+    SUB_DLV_WORKER_LOCK(sub);
+
+    if (!(sub->closed))
+    {
+        sub->closed = true;
+        sub->connClosed = connectionClosed;
+
+        if (sub->libDlvWorker != NULL)
+        {
+            // If this is a subscription with timeout, stop the timer.
+            if (sub->timeout != 0)
+                natsTimer_Stop(sub->timeoutTimer);
+
+            // Post a control message to wake-up the worker which will
+            // ensure that all pending messages for this subscription
+            // are removed and the subscription will ultimately be
+            // released in the worker thread.
+            natsLib_msgDeliveryPostControlMsg(sub);
+        }
+        else
+            natsCondition_Broadcast(sub->cond);
+    }
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 }
 
+static void
+_asyncTimeoutCb(natsTimer *timer, void* closure)
+{
+    natsSubscription *sub = (natsSubscription*) closure;
+
+    // Should not happen, but in case
+    if (sub->libDlvWorker == NULL)
+        return;
+
+    SUB_DLV_WORKER_LOCK(sub);
+
+    // If the subscription is closed, or if we are prevented from posting
+    // a "timeout" control message, do nothing.
+    if (!sub->closed && !sub->timedOut && !sub->timeoutSuspended)
+    {
+        // Prevent from scheduling another control message while we are not
+        // done with previous one.
+        sub->timedOut = true;
+
+        // Set the timer to a very high value, it will be reset from the
+        // worker thread.
+        natsTimer_Reset(sub->timeoutTimer, 60*60*1000);
+
+        // Post a control message to the worker thread.
+        natsLib_msgDeliveryPostControlMsg(sub);
+    }
+
+    SUB_DLV_WORKER_UNLOCK(sub);
+}
+
+static void
+_asyncTimeoutStopCb(natsTimer *timer, void* closure)
+{
+    natsSubscription *sub = (natsSubscription*) closure;
+
+    natsSub_release(sub);
+}
+
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
-               const char *queueGroup, natsMsgHandler cb, void *cbClosure)
+               const char *queueGroup, int64_t timeout, natsMsgHandler cb, void *cbClosure)
 {
     natsStatus          s = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -195,6 +279,7 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
 
     sub->refs           = 1;
     sub->conn           = nc;
+    sub->timeout        = timeout;
     sub->msgCb          = cb;
     sub->msgCbClosure   = cbClosure;
     sub->msgsLimit      = nc->opts->maxPendingMsgs;
@@ -217,16 +302,34 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
         s = natsCondition_Create(&(sub->cond));
     if ((s == NATS_OK) && (cb != NULL))
     {
-        // Let's not rely on the created thread acquiring the lock that
-        // would make it safe to retain only on success.
-        _retain(sub);
+        if (!(nc->opts->libMsgDelivery))
+        {
+            // Let's not rely on the created thread acquiring the lock that
+            // would make it safe to retain only on success.
+            _retain(sub);
 
-        // If we have an async callback, start up a sub specific
-        // thread to deliver the messages.
-        s = natsThread_Create(&(sub->deliverMsgsThread), natsSub_deliverMsgs,
-                              (void*) sub);
-        if (s != NATS_OK)
-            _release(sub);
+            // If we have an async callback, start up a sub specific
+            // thread to deliver the messages.
+            s = natsThread_Create(&(sub->deliverMsgsThread), natsSub_deliverMsgs,
+                                  (void*) sub);
+            if (s != NATS_OK)
+                _release(sub);
+        }
+        else
+        {
+            _retain(sub);
+            s = natsLib_msgDeliveryAssignWorker(sub);
+            if ((s == NATS_OK) && (timeout > 0))
+            {
+                _retain(sub);
+                s = natsTimer_Create(&sub->timeoutTimer, _asyncTimeoutCb,
+                                     _asyncTimeoutStopCb, timeout, (void*) sub);
+                if (s != NATS_OK)
+                    _release(sub);
+            }
+            if (s != NATS_OK)
+                _release(sub);
+        }
     }
 
     if (s == NATS_OK)
@@ -247,8 +350,37 @@ natsStatus
 natsConnection_Subscribe(natsSubscription **sub, natsConnection *nc, const char *subject,
                          natsMsgHandler cb, void *cbClosure)
 {
-    return natsConn_subscribe(sub, nc, subject, NULL, cb, cbClosure);
+    natsStatus s;
+
+    if (cb == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = natsConn_subscribe(sub, nc, subject, NULL, 0, cb, cbClosure);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
+
+/*
+ * Similar to natsConnection_Subscribe() except that a timeout is given.
+ * If the subscription has not receive any message for the given timeout,
+ * the callback is invoked with a `NULL` message. The subscription can
+ * then be destroyed, if not, the callback will be invoked again when
+ * a message is received or the subscription times-out again.
+ */
+natsStatus
+natsConnection_SubscribeTimeout(natsSubscription **sub, natsConnection *nc, const char *subject,
+                                int64_t timeout, natsMsgHandler cb, void *cbClosure)
+{
+    natsStatus s;
+
+    if ((cb == NULL) || (timeout <= 0))
+            return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = natsConn_subscribe(sub, nc, subject, NULL, timeout, cb, cbClosure);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 
 /*
  * natsSubscribeSync is syntactic sugar for natsSubscribe(&sub, nc, subject, NULL).
@@ -258,7 +390,7 @@ natsConnection_SubscribeSync(natsSubscription **sub, natsConnection *nc, const c
 {
     natsStatus s;
 
-    s = natsConn_subscribe(sub, nc, subject, NULL, NULL, NULL);
+    s = natsConn_subscribe(sub, nc, subject, NULL, 0, NULL, NULL);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -279,7 +411,32 @@ natsConnection_QueueSubscribe(natsSubscription **sub, natsConnection *nc,
     if ((queueGroup == NULL) || (strlen(queueGroup) == 0) || (cb == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = natsConn_subscribe(sub, nc, subject, queueGroup, cb, cbClosure);
+    s = natsConn_subscribe(sub, nc, subject, queueGroup, 0, cb, cbClosure);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+/*
+ * Similar to natsConnection_QueueSubscribe() except that a timeout is given.
+ * If the subscription has not receive any message for the given timeout,
+ * the callback is invoked with a `NULL` message. The subscription can
+ * then be destroyed, if not, the callback will be invoked again when
+ * a message is received or the subscription times-out again.
+ */
+natsStatus
+natsConnection_QueueSubscribeTimeout(natsSubscription **sub, natsConnection *nc,
+                   const char *subject, const char *queueGroup,
+                   int64_t timeout, natsMsgHandler cb, void *cbClosure)
+{
+    natsStatus s;
+
+    if ((queueGroup == NULL) || (strlen(queueGroup) == 0) || (cb == NULL)
+            || (timeout <= 0))
+    {
+        return nats_setDefaultError(NATS_INVALID_ARG);
+    }
+
+    s = natsConn_subscribe(sub, nc, subject, queueGroup, timeout, cb, cbClosure);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -296,7 +453,7 @@ natsConnection_QueueSubscribeSync(natsSubscription **sub, natsConnection *nc,
     if ((queueGroup == NULL) || (strlen(queueGroup) == 0))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = natsConn_subscribe(sub, nc, subject, queueGroup, NULL, NULL);
+    s = natsConn_subscribe(sub, nc, subject, queueGroup, 0, NULL, NULL);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -526,11 +683,15 @@ natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     if (msgs != NULL)
         *msgs = sub->msgList.msgs;
 
     if (bytes != NULL)
         *bytes = sub->msgList.bytes;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -555,8 +716,12 @@ natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytes
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     sub->msgsLimit = msgLimit;
     sub->bytesLimit = bytesLimit;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -577,11 +742,15 @@ natsSubscription_GetPendingLimits(natsSubscription *sub, int *msgLimit, int *byt
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     if (msgLimit != NULL)
         *msgLimit = sub->msgsLimit;
 
     if (bytesLimit != NULL)
         *bytesLimit = sub->bytesLimit;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -602,7 +771,11 @@ natsSubscription_GetDelivered(natsSubscription *sub, int64_t *msgs)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     *msgs = (int64_t) sub->delivered;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -623,7 +796,11 @@ natsSubscription_GetDropped(natsSubscription *sub, int64_t *msgs)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     *msgs = sub->dropped;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -644,11 +821,15 @@ natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     if (msgs != NULL)
         *msgs = sub->msgsMax;
 
     if (bytes != NULL)
         *bytes = sub->bytesMax;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -669,8 +850,12 @@ natsSubscription_ClearMaxPending(natsSubscription *sub)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     sub->msgsMax = 0;
     sub->bytesMax = 0;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -697,6 +882,8 @@ natsSubscription_GetStats(natsSubscription *sub,
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
+    SUB_DLV_WORKER_LOCK(sub);
+
     if (pendingMsgs != NULL)
         *pendingMsgs = sub->msgList.msgs;
 
@@ -714,6 +901,8 @@ natsSubscription_GetStats(natsSubscription *sub,
 
     if (droppedMsgs != NULL)
         *droppedMsgs = sub->dropped;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 

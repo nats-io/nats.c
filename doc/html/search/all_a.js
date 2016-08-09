@@ -1,8 +1,4 @@
 var searchData=
 [
-  ['subscribing',['Subscribing',['../group__conn_sub_group.html',1,'']]],
-  ['statistics',['Statistics',['../group__stats_group.html',1,'']]],
-  ['status_2eh',['status.h',['../status_8h.html',1,'']]],
-  ['status',['Status',['../group__status_group.html',1,'']]],
-  ['subscription',['Subscription',['../group__sub_group.html',1,'']]]
+  ['reconnecting',['RECONNECTING',['../status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a1d5843fca4a8464bd4e24c90725352c0',1,'status.h']]]
 ];

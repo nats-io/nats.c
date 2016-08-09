@@ -4,6 +4,7 @@
 #include "examples.h"
 
 static const char *usage = ""\
+"-gd            use global message delivery thread pool\n" \
 "-count         number of expected messages\n";
 
 static void

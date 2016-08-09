@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2016 Apcera Inc. All rights reserved.
 
 
 #ifndef EXAMPLES_H_
@@ -35,6 +35,7 @@ volatile int64_t dropped = 0;
 int64_t          start   = 0;
 volatile int64_t elapsed = 0;
 bool             print   = false;
+int64_t          timeout = 10000; // 10 seconds.
 
 natsOptions      *opts   = NULL;
 
@@ -252,7 +253,8 @@ parseArgs(int argc, char **argv, const char *usage)
 
             subj = argv[++i];
         }
-        else if (strcasecmp(argv[i], "-name") == 0)
+        else if ((strcasecmp(argv[i], "-name") == 0) ||
+                 (strcasecmp(argv[i], "-queue") == 0))
         {
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
@@ -272,6 +274,17 @@ parseArgs(int argc, char **argv, const char *usage)
                 printUsageAndExit(argv[0], usage);
 
             txt = argv[++i];
+        }
+        else if (strcasecmp(argv[i], "-timeout") == 0)
+        {
+            if (i + 1 == argc)
+                printUsageAndExit(argv[0], usage);
+
+            timeout = atol(argv[++i]);
+        }
+        else if (strcasecmp(argv[i], "-gd") == 0)
+        {
+            s = natsOptions_UseGlobalMessageDelivery(opts, true);
         }
         else
         {

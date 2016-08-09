@@ -1,8 +1,9 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2016 Apcera Inc. All rights reserved.
 
 #include "examples.h"
 
 static const char *usage = "" \
+"-gd            use global message delivery thread pool\n" \
 "-sync          receive synchronously (default is asynchronous)\n" \
 "-count         number of expected requests\n";
 

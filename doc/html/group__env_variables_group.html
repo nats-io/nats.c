@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Type" content="text/xhtml;charset=UTF-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.8.11"/>
-<title>NATS C Client: NATS C client.</title>
+<title>NATS C Client: Environment Variables</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -48,9 +48,9 @@ var searchBox = new SearchBox("searchBox", "search",false,'Search');
 </script>
   <div id="navrow1" class="tabs">
     <ul class="tablist">
-      <li class="current"><a href="index.html"><span>Main&#160;Page</span></a></li>
+      <li><a href="index.html"><span>Main&#160;Page</span></a></li>
       <li><a href="pages.html"><span>Related&#160;Pages</span></a></li>
-      <li><a href="modules.html"><span>Modules</span></a></li>
+      <li class="current"><a href="modules.html"><span>Modules</span></a></li>
       <li><a href="files.html"><span>Files</span></a></li>
       <li>
         <div id="MSearchBox" class="MSearchBoxInactive">
@@ -82,7 +82,7 @@ var searchBox = new SearchBox("searchBox", "search",false,'Search');
   </div>
 </div>
 <script type="text/javascript">
-$(document).ready(function(){initNavTree('index.html','');});
+$(document).ready(function(){initNavTree('group__env_variables_group.html','');});
 </script>
 <div id="doc-content">
 <!-- window showing the filter options -->
@@ -101,24 +101,18 @@ $(document).ready(function(){initNavTree('index.html','');});
 
 <div class="header">
   <div class="headertitle">
-<div class="title">NATS C client. </div>  </div>
+<div class="title">Environment Variables</div>  </div>
 </div><!--header-->
 <div class="contents">
-<div class="textblock"><h1><a class="anchor" id="intro_sec"></a>
-Introduction</h1>
-<p>The NATS C Client is part of NATS, an open-source cloud-native messaging system, and is supported by <a href="http://www.apcera.com">Apcera</a>. This client, written in C, follows the go client closely, but diverges in some places.</p>
-<h1><a class="anchor" id="install_sec"></a>
-Installation</h1>
-<p>Instructions to build and install the NATS C Client can be found at the <a href="https://github.com/nats-io/cnats">NATS C Client GitHub page</a></p>
-<h1><a class="anchor" id="other_doc_section"></a>
-Other Documentation</h1>
-<p>This documentation focuses on the NATS C Client API; for additional information, refer to the following:</p>
-<ul>
-<li><a href="http://nats.io/documentation">General Documentation for nats.io</a></li>
-<li><a href="https://github.com/nats-io/cnats">NATS C Client found on GitHub</a></li>
-<li><a href="https://github.com/nats-io/gnatsd">The NATS Server (gnatsd) found on GitHub</a> </li>
-</ul>
-</div></div><!-- contents -->
+<p>You will find here the environment variables that change the default behavior of the NATS C Client library. <br />
+<br />
+ </p><table class="doxtable">
+<tr>
+<th>Name </th><th align="center">Effect  </th></tr>
+<tr>
+<td><b><code>NATS_DEFAULT_TO_LIB_MSG_DELIVERY</code></b> </td><td align="center">On <a class="el" href="group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d" title="Initializes the library. ">nats_Open</a>, the library looks for this environment variable. If set (to any value), the library will default to using a global thread pool to perform message delivery. See <a class="el" href="group__opts_group.html#gabf060c92648b50c069f0abe7cbb06f1c" title="Switch on/off the use of a central message delivery thread pool. ">natsOptions_UseGlobalMessageDelivery</a> and <a class="el" href="group__library_group.html#gab21e94ce7a7d226611ea2c05914cf19d" title="Sets the maximum size of the global message delivery thread pool. ">nats_SetMessageDeliveryPoolSize</a>. </td></tr>
+</table>
+</div><!-- contents -->
 </div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.8.10-->
 <!-- start footer part -->

@@ -10,7 +10,7 @@
 #include "timer.h"
 #include "url.h"
 #include "opts.h"
-#include "util.h"
+#include "../src/util.h"
 #include "hash.h"
 #include "conn.h"
 #include "sub.h"
@@ -1159,43 +1159,6 @@ test_natsTimer(void)
     _destroyDefaultThreadArgs(&tArg);
 }
 
-
-#define RANDOM_ITER         (10000)
-#define RANDOM_ARRAY_SIZE   (10)
-
-static void
-test_natsRandomize(void)
-{
-    int *array = (int*) calloc(RANDOM_ARRAY_SIZE, sizeof(int));
-    int i, j;
-    int sameTotal = 0;
-    int same;
-
-    if (array == NULL)
-        FAIL("@@ Unable to setup test!");
-
-    test("Randomization of array: ");
-    for (i = 0; i < RANDOM_ITER; i++)
-    {
-        for (j = 0; j < RANDOM_ARRAY_SIZE; j++)
-            array[j] = j;
-
-        nats_Randomize(array, RANDOM_ARRAY_SIZE);
-
-        same = 0;
-        for (j = 0; j < RANDOM_ARRAY_SIZE; j++)
-        {
-            if (array[j] == j)
-                same++;
-        }
-        if (same == RANDOM_ARRAY_SIZE)
-            sameTotal++;
-    }
-    testCond(sameTotal <= (RANDOM_ITER * 0.1));
-
-    free(array);
-}
-
 static void
 test_natsUrl(void)
 {
@@ -1580,9 +1543,12 @@ test_natsHash(void)
     s = natsHash_Create(&hash, -2);
     testCond((s != NATS_OK) && (hash == NULL));
 
+    nats_clearLastError();
+
     test("Create hash ok: ");
-    s = natsHash_Create(&hash, 8);
-    testCond((s == NATS_OK) && (hash != NULL) && (hash->used == 0));
+    s = natsHash_Create(&hash, 7);
+    testCond((s == NATS_OK) && (hash != NULL) && (hash->used == 0)
+             && (hash->numBkts == 8));
 
     test("Set: ");
     s = natsHash_Set(hash, 1234, (void*) t1, &oldval);
@@ -1810,9 +1776,12 @@ test_natsStrHash(void)
     s = natsStrHash_Create(&hash, -2);
     testCond((s != NATS_OK) && (hash == NULL));
 
+    nats_clearLastError();
+
     test("Create hash ok: ");
-    s = natsStrHash_Create(&hash, 8);
-    testCond((s == NATS_OK) && (hash != NULL) && (hash->used == 0));
+    s = natsStrHash_Create(&hash, 7);
+    testCond((s == NATS_OK) && (hash != NULL) && (hash->used == 0)
+             && (hash->numBkts == 8));
 
     test("Set: ");
     s = natsStrHash_Set(hash, (char*) "1234", false, (void*) t1, &oldval);
@@ -2038,7 +2007,10 @@ test_natsOptions(void)
              && (opts->timeout == 2 * 1000)
              && (opts->pingInterval == 2 * 60 *1000)
              && (opts->maxPingsOut == 2)
-             && (opts->maxPendingMsgs == 65536));
+             && (opts->maxPendingMsgs == 65536)
+             && (opts->user == NULL)
+             && (opts->password == NULL)
+             && (opts->token == NULL));
 
     test("Add URL: ");
     s = natsOptions_SetURL(opts, "test");
@@ -2247,12 +2219,32 @@ test_natsOptions(void)
     s = natsOptions_SetReconnectedCB(opts, NULL, NULL);
     testCond((s == NATS_OK) && (opts->reconnectedCb == NULL));
 
+    test("Set UserInfo: ");
+    s = natsOptions_SetUserInfo(opts, "ivan", "pwd");
+    testCond((s == NATS_OK)
+                && (strcmp(opts->user, "ivan") == 0)
+                && (strcmp(opts->password, "pwd") == 0));
+
+    test("Remove UserInfo: ");
+    s = natsOptions_SetUserInfo(opts, NULL, NULL);
+    testCond((s == NATS_OK) && (opts->user == NULL) && (opts->password == NULL));
+
+    test("Set Token: ");
+    s = natsOptions_SetToken(opts, "token");
+    testCond((s == NATS_OK) && (strcmp(opts->token, "token") == 0));
+
+    test("Remove Token: ");
+    s = natsOptions_SetToken(opts, NULL);
+    testCond((s == NATS_OK) && (opts->token == NULL));
+
     // Prepare some values for the clone check
     s = natsOptions_SetURL(opts, "url");
     IFOK(s, natsOptions_SetServers(opts, servers, 3));
     IFOK(s, natsOptions_SetName(opts, "name"));
     IFOK(s, natsOptions_SetPingInterval(opts, 3000));
     IFOK(s, natsOptions_SetErrorHandler(opts, _dummyErrHandler, NULL));
+    IFOK(s, natsOptions_SetUserInfo(opts, "ivan", "pwd"));
+    IFOK(s, natsOptions_SetToken(opts, "token"));
     if (s != NATS_OK)
         FAIL("Unable to test natsOptions_clone() because of failure while setting");
 
@@ -2268,7 +2260,10 @@ test_natsOptions(void)
              || (cloned->url == NULL)
              || (strcmp(cloned->url, "url") != 0)
              || (cloned->servers == NULL)
-             || (cloned->serversCount != 3))
+             || (cloned->serversCount != 3)
+             || (strcmp(cloned->user, "ivan") != 0)
+             || (strcmp(cloned->password, "pwd") != 0)
+             || (strcmp(cloned->token, "token") != 0))
     {
         s = NATS_ERR;
     }
@@ -2317,6 +2312,323 @@ test_natsSock_ReadLine(void)
     test("Next call should trigger recv, which is expected to fail: ");
     s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
     testCond(s != NATS_OK);
+}
+
+static void
+test_natsJSON(void)
+{
+    natsStatus  s;
+    nats_JSON   *json = NULL;
+    char        buf[256];
+    int         i;
+    int         intVal = 0;
+    int64_t     longVal = 0;
+    char        *strVal = NULL;
+    bool        boolVal = false;
+    long double doubleVal = 0;
+    char        **arrVal = NULL;
+    int         arrCount = 0;
+    const char  *wrong[] = {
+            "{",
+            "}",
+            "{start quote missing\":0}",
+            "{\"end quote missing: 0}",
+            "{\"test\":start quote missing\"}",
+            "{\"test\":\"end quote missing}",
+            "{\"test\":1.2x}",
+            "{\"test\":tRUE}",
+            "{\"test\":true,}",
+            "{\"test\":true}, xxx}"
+    };
+    const char  *good[] = {
+            " {}",
+            " { }",
+            " { } ",
+            "{ \"test\":1.2}",
+            "{ \"test\" :1.2}",
+            "{ \"test\" : 1.2}",
+            "{ \"test\" : 1.2 }",
+            "{ \"test\" : 1.2,\"test2\":1}",
+            "{ \"test\" : 1.2, \"test2\":1}",
+            "{ \"test\":0}",
+            "{ \"test\" :0}",
+            "{ \"test\" : 0}",
+            "{ \"test\" : 0 }",
+            "{ \"test\" : 0,\"test2\":1}",
+            "{ \"test\" : 0, \"test2\":1}",
+            "{ \"test\":true}",
+            "{ \"test\": true}",
+            "{ \"test\": true }",
+            "{ \"test\":true,\"test2\":1}",
+            "{ \"test\": true,\"test2\":1}",
+            "{ \"test\": true ,\"test2\":1}",
+            "{ \"test\":false}",
+            "{ \"test\": false}",
+            "{ \"test\": false }",
+            "{ \"test\":false,\"test2\":1}",
+            "{ \"test\": false,\"test2\":1}",
+            "{ \"test\": false ,\"test2\":1}",
+            "{ \"test\":\"abc\"}",
+            "{ \"test\": \"abc\"}",
+            "{ \"test\": \"abc\" }",
+            "{ \"test\":\"abc\",\"test2\":1}",
+            "{ \"test\": \"abc\",\"test2\":1}",
+            "{ \"test\": \"abc\" ,\"test2\":1}",
+            "{ \"test\": \"a\\\"b\\\"c\" }",
+            "{ \"test\": [\"a\", \"b\", \"c\"]}",
+            "{ \"test\": [\"a\\\"b\\\"c\"]}",
+            "{ \"test\": [\"abc,def\"]}",
+            "{ \"test\": {\"inner\":\"not \\\"supported\\\", at this time\"}}",
+            "{ \"test\":[\"a\", \"b\", \"c\", 1]}"
+    };
+
+    for (i=0; i<(int)(sizeof(wrong)/sizeof(char*)); i++)
+    {
+        snprintf(buf, sizeof(buf), "Negative test %d: ", (i+1));
+        test(buf);
+        s = nats_JSONParse(&json, wrong[i], -1);
+        testCond((s != NATS_OK) && (json == NULL));
+        json = NULL;
+    }
+    nats_clearLastError();
+
+    for (i=0; i<(int)(sizeof(good)/sizeof(char*)); i++)
+    {
+        snprintf(buf, sizeof(buf), "Positive test %d: ", (i+1));
+        test(buf);
+        s = nats_JSONParse(&json, good[i], -1);
+        testCond((s == NATS_OK) && (json != NULL));
+        nats_JSONDestroy(json);
+        json = NULL;
+    }
+    nats_clearLastError();
+
+    // Check values
+    test("Empty string: ");
+    s = nats_JSONParse(&json, "{}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_INT, (void**)&intVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 0)
+                && (intVal == 0));
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Single field, string: ");
+    s = nats_JSONParse(&json, "{\"test\":\"abc\"}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_STR, (void**)&strVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (strcmp(strVal, "abc") == 0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    free(strVal);
+    strVal = NULL;
+
+    test("Single field, int: ");
+    s = nats_JSONParse(&json, "{\"test\":1234}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_INT, (void**)&intVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (intVal == 1234));
+    nats_JSONDestroy(json);
+    json = NULL;
+    intVal = 0;
+
+    test("Single field, long: ");
+    s = nats_JSONParse(&json, "{\"test\":1234}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_LONG, (void**)&longVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (longVal == 1234));
+    nats_JSONDestroy(json);
+    json = NULL;
+    longVal = 0;
+
+    test("Single field, double: ");
+    s = nats_JSONParse(&json, "{\"test\":1234.5}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == 1234.5));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, bool: ");
+    s = nats_JSONParse(&json, "{\"test\":true}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_BOOL, (void**)&boolVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && boolVal);
+    nats_JSONDestroy(json);
+    json = NULL;
+    boolVal = false;
+
+    test("Single field, string array: ");
+    s = nats_JSONParse(&json, "{\"test\":[\"a\",\"b\",\"c\"]}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetArrayValue(json, "test", TYPE_STR,
+                                   (void***)&arrVal, &arrCount);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrCount == 3)
+                && (strcmp(arrVal[0], "a") == 0)
+                && (strcmp(arrVal[1], "b") == 0)
+                && (strcmp(arrVal[2], "c") == 0))
+    nats_JSONDestroy(json);
+    json = NULL;
+    for (i=0; i<arrCount; i++)
+        free(arrVal[i]);
+    free(arrVal);
+    arrVal = NULL;
+    arrCount = 0;
+
+    test("All field types: ");
+    s = nats_JSONParse(&json, "{\"bool\":true,\"str\":\"abc\",\"int\":123,\"long\":456,\"double\":123.5,\"array\":[\"a\"]}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "bool", TYPE_BOOL, (void**)&boolVal);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "str", TYPE_STR, (void**)&strVal);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "int", TYPE_INT, (void**)&intVal);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "long", TYPE_LONG, (void**)&longVal);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "double", TYPE_DOUBLE, (void**)&doubleVal);
+    if (s == NATS_OK)
+        s = nats_JSONGetArrayValue(json, "array", TYPE_STR, (void***)&arrVal, &arrCount);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 6)
+                && boolVal
+                && (strcmp(strVal, "abc") == 0)
+                && (intVal == 123)
+                && (longVal == 456)
+                && (doubleVal == 123.5)
+                && (arrCount == 1)
+                && (strcmp(arrVal[0], "a") == 0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    free(strVal);
+    strVal = NULL;
+    boolVal = false;
+    intVal = 0;
+    longVal = 0;
+    doubleVal = 0;
+    for (i=0; i<arrCount; i++)
+        free(arrVal[i]);
+    free(arrVal);
+    arrVal = NULL;
+    arrCount = 0;
+
+    test("Ask for wrong type: ");
+    s = nats_JSONParse(&json, "{\"test\":true}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_INT, (void**)&intVal);
+    testCond((s != NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (intVal == 0));
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Ask for wrong type (array): ");
+    s = nats_JSONParse(&json, "{\"test\":[\"a\", \"b\"]}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetArrayValue(json, "test", TYPE_INT, (void***)&arrVal, &arrCount);
+    testCond((s != NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrCount == 0)
+                && (arrVal == NULL));
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Ask for unknown type: ");
+    s = nats_JSONParse(&json, "{\"test\":true}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", 9999, (void**)&intVal);
+    testCond((s != NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (intVal == 0));
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Ask for unknown type (array): ");
+    s = nats_JSONParse(&json, "{\"test\":true}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetArrayValue(json, "test", 9999, (void***)&arrVal, &arrCount);
+    testCond((s != NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrCount == 0)
+                && (arrVal == NULL));
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Check no error and no change to vars for unknown fields: ");
+    {
+        const char *initStr = "test";
+        const char *initStrArr[] = {"a", "b"};
+
+        strVal = (char*) initStr;
+        boolVal = true;
+        intVal = 123;
+        longVal = 456;
+        doubleVal = 789;
+        arrVal = (char**)initStrArr;
+        arrCount = 2;
+        s = nats_JSONParse(&json, "{\"test\":true}", -1);
+        if (s == NATS_OK)
+            s = nats_JSONGetValue(json, "str", TYPE_STR, (void**)&strVal);
+        if (s == NATS_OK)
+            s = nats_JSONGetValue(json, "int", TYPE_INT, (void**)&intVal);
+        if (s == NATS_OK)
+            s = nats_JSONGetValue(json, "long", TYPE_LONG, (void**)&longVal);
+        if (s == NATS_OK)
+            s = nats_JSONGetValue(json, "bool", TYPE_BOOL, (void**)&boolVal);
+        if (s == NATS_OK)
+            s = nats_JSONGetValue(json, "bool", TYPE_DOUBLE, (void**)&doubleVal);
+        if (s == NATS_OK)
+            s = nats_JSONGetArrayValue(json, "array", TYPE_STR, (void***)&arrVal, &arrCount);
+        testCond((s == NATS_OK)
+                    && (strcmp(strVal, initStr) == 0)
+                    && boolVal
+                    && (intVal == 123)
+                    && (longVal == 456)
+                    && (doubleVal == 789)
+                    && (arrCount == 2)
+                    && (strcmp(arrVal[0], "a") == 0)
+                    && (strcmp(arrVal[1], "b") == 0));
+        nats_JSONDestroy(json);
+        json = NULL;
+    }
 }
 
 natsStatus
@@ -3638,6 +3950,264 @@ test_ParserSplitMsg(void)
              && (nc->ps->msgBuf == NULL)
              && (nc->ps->state == OP_START));
 
+    natsConnection_Destroy(nc);
+}
+
+static natsStatus
+_checkPool(natsConnection *nc, char **expectedURLs, int expectedURLsCount)
+{
+    int     i;
+    natsSrv *srv;
+    char    buf[256];
+    char    *url;
+
+    // Check both pool and urls map
+    if (nc->srvPool->size != expectedURLsCount)
+        return NATS_ERR;
+
+    if (natsStrHash_Count(nc->srvPool->urls) != expectedURLsCount)
+        return NATS_ERR;
+
+    for (i=0; i<expectedURLsCount; i++)
+    {
+        url = expectedURLs[i];
+        if (nc->opts->noRandomize)
+        {
+            srv = nc->srvPool->srvrs[i];
+            snprintf(buf, sizeof(buf), "%s:%d", srv->url->host, srv->url->port);
+            if (strcmp(buf, url) != 0)
+                return NATS_ERR;
+        }
+        else
+        {
+            if (natsStrHash_Get(nc->srvPool->urls, url) == NULL)
+                return NATS_ERR;
+        }
+    }
+
+    return NATS_OK;
+}
+
+static void
+test_AsyncINFO(void)
+{
+    natsConnection  *nc = NULL;
+    natsOptions     *opts = NULL;
+    natsStatus      s;
+    char            buf[2048];
+    int             i;
+    const char      *good[] = {"INFO {}\r\n", "INFO  {}\r\n", "INFO {} \r\n",
+                               "INFO { \"server_id\": \"test\"  }   \r\n",
+                               "INFO {\"connect_urls\":[]}\r\n"};
+    const char      *wrong[] = {"IxNFO {}\r\n", "INxFO {}\r\n", "INFxO {}\r\n",
+                                "INFOx {}\r\n", "INFO{}\r\n", "INFO {}"};
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsConn_create(&nc, opts);
+    if (s == NATS_OK)
+        s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "INFO {}\r\n");
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_I));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf+1, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_IN));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf+2, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_INF));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf+3, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_INFO));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf+4, 1);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_INFO_SPC));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf+5, (int)strlen(buf)-5);
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+    // All at once
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+    // Server pool was setup in natsConn_create()
+
+    // Partials requiring argBuf
+    snprintf(buf, sizeof(buf), "INFO {\"server_id\":\"%s\", \"host\":\"%s\", \"port\": %d, " \
+            "\"auth_required\":%s, \"tls_required\": %s, \"max_payload\":%d}\r\n",
+            "test", "localhost", 4222, "true", "true", 2*1024*1024);
+
+    PARSER_START_TEST;
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf, 9);
+    testCond((s == NATS_OK)
+                && (nc->ps->state == INFO_ARG)
+                && (nc->ps->argBuf != NULL));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf+9, 2);
+    testCond((s == NATS_OK)
+                && (nc->ps->state == INFO_ARG)
+                && (nc->ps->argBuf != NULL));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf+11, (int)strlen(buf)-11);
+    testCond((s == NATS_OK)
+                && (nc->ps->state == OP_START)
+                && (nc->ps->argBuf == NULL));
+
+    test("Check INFO is correct: ");
+    testCond((s == NATS_OK)
+                && (strcmp(nc->info.id, "test") == 0)
+                && (strcmp(nc->info.host, "localhost") == 0)
+                && (nc->info.port == 4222)
+                && nc->info.authRequired
+                && nc->info.tlsRequired
+                && (nc->info.maxPayload == 2*1024*1024));
+
+    // Destroy parser, it will be recreated in the loops.
+    natsParser_Destroy(nc->ps);
+    nc->ps = NULL;
+
+    // Good INFOs
+    for (i=0; i<(int) (sizeof(good)/sizeof(char*)); i++)
+    {
+        snprintf(buf, sizeof(buf), "Test with good INFO proto number %d: ", (i+1));
+        test(buf);
+        s = natsParser_Create(&(nc->ps));
+        if (s == NATS_OK)
+            s = natsParser_Parse(nc, (char*) good[i], (int)strlen(good[i]));
+        testCond((s == NATS_OK)
+                    && (nc->ps->state == OP_START)
+                    && (nc->ps->argBuf == NULL));
+        natsParser_Destroy(nc->ps);
+        nc->ps = NULL;
+    }
+
+    // Wrong INFOs
+    for (i=0; i<(int) (sizeof(wrong)/sizeof(char*)); i++)
+    {
+        snprintf(buf, sizeof(buf), "Test with wrong INFO proto number %d: ", (i+1));
+        test(buf);
+        s = natsParser_Create(&(nc->ps));
+        if (s == NATS_OK)
+            s = natsParser_Parse(nc, (char*) wrong[i], (int)strlen(wrong[i]));
+        testCond(!((s == NATS_OK) && (nc->ps->state == OP_START)));
+        natsParser_Destroy(nc->ps);
+        nc->ps = NULL;
+    }
+    nats_clearLastError();
+
+    // Now test the decoding of "connect_urls"
+
+    for (i=0; i<2; i++)
+    {
+        // Destroy, we create a new one
+        natsConnection_Destroy(nc);
+
+        // No randomize for now
+        snprintf(buf, sizeof(buf), "Test with noRandomize as %s: ", (i == 0 ? "true" : "false"));
+        test(buf);
+        s = natsOptions_Create(&opts);
+        if (s == NATS_OK)
+        {
+            opts->noRandomize = (i == 0 ? true : false);
+            s = natsConn_create(&nc, opts);
+        }
+        if (s == NATS_OK)
+            s = natsParser_Create(&(nc->ps));
+        if (s != NATS_OK)
+            FAIL("Unable to setup test");
+        testCond(s == NATS_OK);
+
+        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"localhost:5222\"]}\r\n");
+        PARSER_START_TEST;
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        if (s == NATS_OK)
+        {
+            // Pool now should contain localhost:4222 (the default URL) and localhost:5222
+            const char *urls[] = {"localhost:4222", "localhost:5222"};
+
+            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        }
+        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+        // Make sure that if client receives the same, it is not added again.
+        PARSER_START_TEST;
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        if (s == NATS_OK)
+        {
+            // Pool should still contain localhost:4222 (the default URL) and localhost:5222
+            const char *urls[] = {"localhost:4222", "localhost:5222"};
+
+            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        }
+        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+        // Receive a new URL
+        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"localhost:6222\"]}\r\n");
+        PARSER_START_TEST;
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        if (s == NATS_OK)
+        {
+            // Pool now should contain localhost:4222 (the default URL) localhost:5222 and localhost:6222
+            const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222"};
+
+            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        }
+        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+        // Receive more than 1 URL at once
+        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"localhost:7222\", \"localhost:8222\"]}\r\n");
+        PARSER_START_TEST;
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        if (s == NATS_OK)
+        {
+            // Pool now should contain localhost:4222 (the default URL) localhost:5222, localhost:6222
+            // localhost:7222 and localhost:8222
+            const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222", "localhost:8222"};
+
+            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        }
+        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+    }
+
+    // Finally, check that the pool should be randomized.
+    if (s == NATS_OK)
+    {
+        const char  *allUrls[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222", "localhost:8222"};
+        int         same = 0;
+        char        url[256];
+        natsSrv     *srv;
+
+        test("Pool correct size: ");
+        if (nc->srvPool->size != (int)(sizeof(allUrls)/sizeof(char*)))
+            s = NATS_ERR;
+        testCond(s == NATS_OK);
+
+        test("Pool should be randomized: ")
+        for (i = 0; (s == NATS_OK) && (i < nc->srvPool->size); i++)
+        {
+            srv = nc->srvPool->srvrs[i];
+            snprintf(url, sizeof(url), "%s:%d", srv->url->host, srv->url->port);
+            if (strcmp(url, (char*) allUrls[i]) == 0)
+                same++;
+        }
+        testCond((s == NATS_OK) && (same != (int)(sizeof(allUrls)/sizeof(char*))));
+    }
     natsConnection_Destroy(nc);
 }
 
@@ -5287,6 +5857,7 @@ test_Auth(void)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
+    natsOptions         *opts     = NULL;
 
     test("Server with auth on, client without should fail: ");
 
@@ -5305,6 +5876,32 @@ test_Auth(void)
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
+    nc = NULL;
+
+    // Use Options
+    test("Connect using SetUserInfo: ");
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://localhost:8232");
+    if (s == NATS_OK)
+        s = natsOptions_SetUserInfo(opts, "ivan", "foo");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    // Verify that credentials in URL take precedence.
+    test("URL takes precedence: ");
+    s = natsOptions_SetURL(opts, "nats://ivan:foo@localhost:8232");
+    if (s == NATS_OK)
+        s = natsOptions_SetUserInfo(opts, "foo", "bar");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
 
     _stopServer(serverPid);
 }
@@ -5357,6 +5954,7 @@ test_AuthToken(void)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
+    natsOptions         *opts     = NULL;
 
     serverPid = _startServer("nats://localhost:8232", "-auth testSecret -p 8232", false);
     CHECK_SERVER_STARTED(serverPid);
@@ -5372,6 +5970,32 @@ test_AuthToken(void)
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
+    nc = NULL;
+
+    // Use Options
+    test("Connect using SetUserInfo: ");
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://localhost:8232");
+    if (s == NATS_OK)
+        s = natsOptions_SetToken(opts, "testSecret");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    // Verify that token in URL take precedence.
+    test("URL takes precedence: ");
+    s = natsOptions_SetURL(opts, "nats://testSecret@localhost:8232");
+    if (s == NATS_OK)
+        s = natsOptions_SetToken(opts, "badtoken");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
 
     _stopServer(serverPid);
 }
@@ -10040,7 +10664,6 @@ static testInfo allTests[] =
     {"natsThread",                      test_natsThread},
     {"natsCondition",                   test_natsCondition},
     {"natsTimer",                       test_natsTimer},
-    {"natsRandomize",                   test_natsRandomize},
     {"natsUrl",                         test_natsUrl},
     {"natsCreateStringFromBuffer",      test_natsCreateStringFromBuffer},
     {"natsHash",                        test_natsHash},
@@ -10049,6 +10672,7 @@ static testInfo allTests[] =
     {"natsInbox",                       test_natsInbox},
     {"natsOptions",                     test_natsOptions},
     {"natsSock_ReadLine",               test_natsSock_ReadLine},
+    {"natsJSON",                        test_natsJSON},
 
     // Package Level Tests
 
@@ -10062,6 +10686,7 @@ static testInfo allTests[] =
     {"ParserSouldFail",                 test_ParserShouldFail},
     {"ParserSplitMsg",                  test_ParserSplitMsg},
     {"LibMsgDelivery",                  test_LibMsgDelivery},
+    {"AsyncINFO",                       test_AsyncINFO},
 
     // Public API Tests
 

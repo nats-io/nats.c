@@ -140,6 +140,56 @@ natsOptions_SetName(natsOptions *opts, const char *name)
     return s;
 }
 
+natsStatus
+natsOptions_SetUserInfo(natsOptions *opts, const char *user, const char *password)
+{
+    natsStatus  s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    NATS_FREE(opts->user);
+    opts->user= NULL;
+    NATS_FREE(opts->password);
+    opts->password = NULL;
+    if (user != NULL)
+    {
+        opts->user = NATS_STRDUP(user);
+        if (opts->user== NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    if ((s == NATS_OK) && (password != NULL))
+    {
+        opts->password = NATS_STRDUP(password);
+        if (opts->password == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return s;
+}
+
+natsStatus
+natsOptions_SetToken(natsOptions *opts, const char *token)
+{
+    natsStatus  s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    NATS_FREE(opts->token);
+    opts->token= NULL;
+    if (token != NULL)
+    {
+        opts->token = NATS_STRDUP(token);
+        if (opts->token == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return s;
+}
+
 static void
 natsSSLCtx_release(natsSSLCtx *ctx)
 {
@@ -814,6 +864,9 @@ _freeOptions(natsOptions *opts)
     NATS_FREE(opts->url);
     NATS_FREE(opts->name);
     _freeServers(opts);
+    NATS_FREE(opts->user);
+    NATS_FREE(opts->password);
+    NATS_FREE(opts->token);
     natsMutex_Destroy(opts->mu);
     natsSSLCtx_release(opts->sslCtx);
     NATS_FREE(opts);
@@ -883,6 +936,9 @@ natsOptions_clone(natsOptions *opts)
     cloned->servers = NULL;
     cloned->url     = NULL;
     cloned->sslCtx  = NULL;
+    cloned->user    = NULL;
+    cloned->password= NULL;
+    cloned->token   = NULL;
 
     // Also, set the number of servers count to 0, until we update
     // it (if necessary) when calling SetServers.
@@ -898,6 +954,12 @@ natsOptions_clone(natsOptions *opts)
         s = natsOptions_SetServers(cloned,
                                    (const char**)opts->servers,
                                    opts->serversCount);
+
+    if ((s == NATS_OK) && (opts->user != NULL))
+        s = natsOptions_SetUserInfo(cloned, opts->user, opts->password);
+
+    if ((s == NATS_OK) && (opts->token != NULL))
+        s = natsOptions_SetToken(cloned, opts->token);
 
     if ((s == NATS_OK) && (opts->sslCtx != NULL))
         cloned->sslCtx = natsSSLCtx_retain(opts->sslCtx);

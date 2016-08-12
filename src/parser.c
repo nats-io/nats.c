@@ -203,6 +203,10 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
                     case '-':
                         nc->ps->state = OP_MINUS;
                         break;
+                    case 'I':
+                    case 'i':
+                        nc->ps->state = OP_I;
+                        break;
                     default:
                         goto parseErr;
                 }
@@ -627,6 +631,115 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
                 }
                 break;
             }
+            case OP_I:
+            {
+                switch (b)
+                {
+                    case 'N':
+                    case 'n':
+                        nc->ps->state = OP_IN;
+                        break;
+                    default:
+                        goto parseErr;
+                }
+                break;
+            }
+            case OP_IN:
+            {
+                switch (b)
+                {
+                    case 'F':
+                    case 'f':
+                        nc->ps->state = OP_INF;
+                        break;
+                    default:
+                        goto parseErr;
+                }
+                break;
+            }
+            case OP_INF:
+            {
+                switch (b)
+                {
+                    case 'O':
+                    case 'o':
+                        nc->ps->state = OP_INFO;
+                        break;
+                    default:
+                        goto parseErr;
+                }
+                break;
+            }
+            case OP_INFO:
+            {
+                switch (b)
+                {
+                    case ' ':
+                    case '\t':
+                        nc->ps->state = OP_INFO_SPC;
+                        break;
+                    default:
+                        goto parseErr;
+                }
+                break;
+            }
+            case OP_INFO_SPC:
+            {
+                switch (b)
+                {
+                    case ' ':
+                    case 't':
+                        continue;
+                    default:
+                        nc->ps->state = INFO_ARG;
+                        nc->ps->afterSpace = i;
+                        break;
+                }
+                break;
+            }
+            case INFO_ARG:
+            {
+                switch (b)
+                {
+                    case '\r':
+                        nc->ps->drop = 1;
+                        break;
+                    case '\n':
+                    {
+                        char    *start = NULL;
+                        int     len    = 0;
+
+                        if (nc->ps->argBuf != NULL)
+                        {
+                            start = natsBuf_Data(nc->ps->argBuf);
+                            len   = natsBuf_Len(nc->ps->argBuf);
+                        }
+                        else
+                        {
+                            start = buf + nc->ps->afterSpace;
+                            len   = (i - nc->ps->drop) - nc->ps->afterSpace;
+                        }
+                        natsConn_processAsyncINFO(nc, start, len);
+                        nc->ps->drop        = 0;
+                        nc->ps->afterSpace  = i+1;
+                        nc->ps->state       = OP_START;
+
+                        if (nc->ps->argBuf != NULL)
+                        {
+                            natsBuf_Destroy(nc->ps->argBuf);
+                            nc->ps->argBuf = NULL;
+                        }
+                        break;
+                    }
+                    default:
+                    {
+                        if (nc->ps->argBuf != NULL)
+                            s = natsBuf_AppendByte(nc->ps->argBuf, b);
+                        break;
+                    }
+                }
+                break;
+            }
             default:
                 goto parseErr;
         }
@@ -634,7 +747,9 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
 
     // Check for split buffer scenarios
     if ((s == NATS_OK)
-        && ((nc->ps->state == MSG_ARG) || (nc->ps->state == MINUS_ERR_ARG))
+        && ((nc->ps->state == MSG_ARG)
+                || (nc->ps->state == MINUS_ERR_ARG)
+                || (nc->ps->state == INFO_ARG))
         && (nc->ps->argBuf == NULL))
     {
         s = natsBuf_InitWithBackend(&(nc->ps->argBufRec),

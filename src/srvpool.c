@@ -4,7 +4,6 @@
 
 #include "mem.h"
 #include "url.h"
-#include "util.h"
 
 static void
 _freeSrv(natsSrv *srv)
@@ -107,11 +106,104 @@ natsSrvPool_Destroy(natsSrvPool *pool)
         srv = pool->srvrs[i];
         _freeSrv(srv);
     }
+    natsStrHash_Destroy(pool->urls);
+    pool->urls = NULL;
 
     NATS_FREE(pool->srvrs);
     pool->srvrs = NULL;
     pool->size  = 0;
     NATS_FREE(pool);
+}
+
+static natsStatus
+_addURLToPool(natsSrvPool *pool, char *sURL)
+{
+    natsStatus  s;
+    natsSrv     *srv = NULL;
+    bool        addedToMap = false;
+    char        bareURL[256];
+
+    s = _createSrv(&srv, sURL);
+    if (s != NATS_OK)
+        return s;
+
+    // In the map, we need to add an URL that is just host:port
+    snprintf(bareURL, sizeof(bareURL), "%s:%d", srv->url->host, srv->url->port);
+    s = natsStrHash_Set(pool->urls, bareURL, true, (void*)1, NULL);
+    if (s == NATS_OK)
+    {
+        addedToMap = true;
+        if (pool->size + 1 > pool->cap)
+        {
+            natsSrv **newArray  = NULL;
+            int     newCap      = 2 * pool->cap;
+
+            newArray = (natsSrv**) NATS_REALLOC(pool->srvrs, newCap * sizeof(char*));
+            if (newArray == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+
+            if (s == NATS_OK)
+            {
+                pool->cap = newCap;
+                pool->srvrs = newArray;
+            }
+        }
+        if (s == NATS_OK)
+            pool->srvrs[pool->size++] = srv;
+    }
+    if (s != NATS_OK)
+    {
+        if (addedToMap)
+            natsStrHash_Remove(pool->urls, sURL);
+
+        _freeSrv(srv);
+    }
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static void
+_shufflePool(natsSrvPool *pool)
+{
+    int     i, j;
+    natsSrv *tmp;
+
+    if (pool->size <= 1)
+        return;
+
+    srand((unsigned int) nats_NowInNanoSeconds());
+
+    for (i = 0; i < pool->size; i++)
+    {
+        j = rand() % (i + 1);
+        tmp = pool->srvrs[i];
+        pool->srvrs[i] = pool->srvrs[j];
+        pool->srvrs[j] = tmp;
+    }
+}
+
+natsStatus
+natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuffle)
+{
+    natsStatus  s       = NATS_OK;
+    bool        updated = false;
+    char        url[256];
+    int         i;
+
+    for (i=0; (s == NATS_OK) && (i<urlCount); i++)
+    {
+        if (natsStrHash_Get(pool->urls, urls[i]) == NULL)
+        {
+            snprintf(url, sizeof(url), "nats://%s", urls[i]);
+            s = _addURLToPool(pool, url);
+            if (s == NATS_OK)
+                updated = true;
+        }
+    }
+    if (updated && doShuffle)
+        _shufflePool(pool);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 // Create the server pool using the options given.
@@ -122,10 +214,9 @@ natsStatus
 natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
 {
     natsStatus  s        = NATS_OK;
-    int         *indexes = NULL;
     natsSrvPool *pool    = NULL;
-    natsSrv     *srv     = NULL;
     int         poolSize;
+    int         i;
 
     poolSize  = (opts->url != NULL ? 1 : 0);
     poolSize += opts->serversCount;
@@ -144,59 +235,37 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
         NATS_FREE(pool);
         return nats_setDefaultError(NATS_NO_MEMORY);
     }
+    // Set the current capacity. The array of urls may have to grow in
+    // the future.
+    pool->cap = poolSize;
 
-    if (opts->url != NULL)
+    // Map that helps find out if an URL is already known.
+    s = natsStrHash_Create(&(pool->urls), poolSize);
+
+    if ((s == NATS_OK) && (opts->url != NULL))
+        s = _addURLToPool(pool, opts->url);
+
+    // Add URLs from Options' Servers
+    for (i=0; (s == NATS_OK) && (i < opts->serversCount); i++)
+        s = _addURLToPool(pool, opts->servers[i]);
+
+    if (s == NATS_OK)
     {
-        s = _createSrv(&srv, opts->url);
-        if (s == NATS_OK)
-        {
-            pool->srvrs[0] = srv;
-            pool->size++;
-        }
-    }
-
-    if ((s == NATS_OK) && (opts->serversCount > 0))
-    {
-        indexes = (int*) NATS_CALLOC(opts->serversCount, sizeof(int));
-        if (indexes == NULL)
-            return nats_setDefaultError(NATS_NO_MEMORY);
-    }
-
-    if ((s == NATS_OK) && (opts->serversCount > 0))
-    {
-        int     i;
-        char    *url;
-
-        for (i = 0; i < opts->serversCount; i++)
-            indexes[i] = i;
-
+        // Randomize if allowed to
         if (!(opts->noRandomize))
-            nats_Randomize(indexes, opts->serversCount);
+            _shufflePool(pool);
 
-        for (i = 0; (s == NATS_OK) && (i < opts->serversCount); i++)
+        if (pool->size == 0)
         {
-            url = opts->servers[indexes[i]];
-
-            s = _createSrv(&srv, url);
-            if (s == NATS_OK)
-                pool->srvrs[pool->size++] = srv;
+            // Place default URL if pool is empty.
+            s = _addURLToPool(pool, (char*) NATS_DEFAULT_URL);
         }
-    }
-
-    if ((s == NATS_OK) && (pool->size == 0))
-    {
-        // Place default URL if pool is empty.
-        s = _createSrv(&srv, (char*) NATS_DEFAULT_URL);
-        if (s == NATS_OK)
-            pool->srvrs[pool->size++] = srv;
     }
 
     if (s == NATS_OK)
         *newPool = pool;
     else
         natsSrvPool_Destroy(pool);
-
-    NATS_FREE(indexes);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

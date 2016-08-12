@@ -35,6 +35,8 @@ var nats_8h =
     [ "natsOptions_Create", "group__opts_group.html#ga61d4a0cf2fbf7d13cc910e5a00c575be", null ],
     [ "natsOptions_SetURL", "group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5", null ],
     [ "natsOptions_SetServers", "group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf", null ],
+    [ "natsOptions_SetUserInfo", "group__opts_group.html#ga5b99da7dd74aac3be962f323c3863d9e", null ],
+    [ "natsOptions_SetToken", "group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193", null ],
     [ "natsOptions_SetNoRandomize", "group__opts_group.html#gaabf8763b931dcf389c83fd95d760a413", null ],
     [ "natsOptions_SetTimeout", "group__opts_group.html#ga17cd7fe41176cd98aca1184fa9352ad9", null ],
     [ "natsOptions_SetName", "group__opts_group.html#ga1c529d347be0fe2eec17c7f4698e283e", null ],

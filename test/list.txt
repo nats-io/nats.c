@@ -10,7 +10,6 @@ natsMutex
 natsThread
 natsCondition
 natsTimer
-natsRandomize
 natsUrl
 natsCreateStringFromBuffer
 natsHash
@@ -19,6 +18,7 @@ natsStrHash
 natsInbox
 natsOptions
 natsSock_ReadLine
+natsJSON
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize
@@ -29,6 +29,7 @@ ParserOK
 ParserSouldFail
 ParserSplitMsg
 LibMsgDelivery
+AsyncINFO
 DefaultConnection
 UseDefaultURLIfNoServerSpecified
 ConnectToWithMultipleURLs

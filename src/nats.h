@@ -531,6 +531,10 @@ natsOptions_Create(natsOptions **newOpts);
  * - nats://user\@localhost:4222
  * - nats://user:password\@localhost:4222
  *
+ * @see natsOptions_SetServers
+ * @see natsOptions_SetUserInfo
+ * @see natsOptions_SetToken
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param url the string representing the URL the connection should use
  * to connect to the server.
@@ -553,12 +557,71 @@ natsOptions_SetURL(natsOptions *opts, const char *url);
  * Note that if you call #natsOptions_SetURL() too, the actual list will contain
  * the one from #natsOptions_SetURL() and the ones specified in this call.
  *
+ * @see natsOptions_SetURL
+ * @see natsOptions_SetUserInfo
+ * @see natsOptions_SetToken
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param servers the array of strings representing the server URLs.
  * @param serversCount the size of the array.
  */
 NATS_EXTERN natsStatus
 natsOptions_SetServers(natsOptions *opts, const char** servers, int serversCount);
+
+/** \brief Sets the user name/password to use when not specified in the URL.
+ *
+ * Credentials are usually provided through the URL in the form:
+ * <c>nats://foo:bar\@localhost:4222</c>.<br>
+ * Until now, you could specify URLs in two ways, with #natsOptions_SetServers
+ * or #natsConnection_ConnectTo. The client library would connect (or reconnect)
+ * only to this given list of URLs, so if any of the server in the list required
+ * authentication, you were responsible for providing the appropriate credentials
+ * in the URLs.<br>
+ * <br>
+ * However, with cluster auto-discovery, the client library asynchronously receives
+ * URLs of servers in the cluster. These URLs do not contain any embedded credentials.
+ * <br>
+ * You need to use this function (or #natsOptions_SetToken) to instruct the client
+ * library to use those credentials when connecting to a server that requires
+ * authentication and for which there is no embedded credentials in the URL.
+ *
+ * @see natsOptions_SetToken
+ * @see natsOptions_SetURL
+ * @see natsOptions_SetServers
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param user the user name to send to the server during connect.
+ * @param password the password to send to the server during connect.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetUserInfo(natsOptions *opts, const char *user, const char *password);
+
+/** \brief Sets the token to use when not specified in the URL.
+ *
+ * Tokens are usually provided through the URL in the form:
+ * <c>nats://mytoken\@localhost:4222</c>.<br>
+ * Until now, you could specify URLs in two ways, with #natsOptions_SetServers
+ * or #natsConnection_ConnectTo. The client library would connect (or reconnect)
+ * only to this given list of URLs, so if any of the server in the list required
+ * authentication, you were responsible for providing the appropriate token
+ * in the URLs.<br>
+ * <br>
+ * However, with cluster auto-discovery, the client library asynchronously receives
+ * URLs of servers in the cluster. These URLs do not contain any embedded tokens.
+ * <br>
+ * You need to use this function (or #natsOptions_SetUserInfo) to instruct the client
+ * library to use this token when connecting to a server that requires
+ * authentication and for which there is no embedded token in the URL.
+ *
+ * @see natsOptions_SetUserInfo
+ * @see natsOptions_SetURL
+ * @see natsOptions_SetServers
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param token the token to send to the server during connect.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetToken(natsOptions *opts, const char *token);
 
 /** \brief Indicate if the servers list should be randomized.
  *

@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.4.1-beta</span>
+   &#160;<span id="projectnumber">1.4.2-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -118,6 +118,12 @@ Functions</h2></td></tr>
 <tr class="memitem:gacb7e964ae54b74d972d72e118b7b8bdf"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf">natsOptions_SetServers</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char **servers, int serversCount)</td></tr>
 <tr class="memdesc:gacb7e964ae54b74d972d72e118b7b8bdf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Set the list of servers to try to (re)connect to.  <a href="#gacb7e964ae54b74d972d72e118b7b8bdf">More...</a><br /></td></tr>
 <tr class="separator:gacb7e964ae54b74d972d72e118b7b8bdf"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga5b99da7dd74aac3be962f323c3863d9e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga5b99da7dd74aac3be962f323c3863d9e">natsOptions_SetUserInfo</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *user, const char *password)</td></tr>
+<tr class="memdesc:ga5b99da7dd74aac3be962f323c3863d9e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the user name/password to use when not specified in the URL.  <a href="#ga5b99da7dd74aac3be962f323c3863d9e">More...</a><br /></td></tr>
+<tr class="separator:ga5b99da7dd74aac3be962f323c3863d9e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gad58a5b9dabadeebda30e952ff7b39193"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193">natsOptions_SetToken</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *token)</td></tr>
+<tr class="memdesc:gad58a5b9dabadeebda30e952ff7b39193"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the token to use when not specified in the URL.  <a href="#gad58a5b9dabadeebda30e952ff7b39193">More...</a><br /></td></tr>
+<tr class="separator:gad58a5b9dabadeebda30e952ff7b39193"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaabf8763b931dcf389c83fd95d760a413"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gaabf8763b931dcf389c83fd95d760a413">natsOptions_SetNoRandomize</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool noRandomize)</td></tr>
 <tr class="memdesc:gaabf8763b931dcf389c83fd95d760a413"><td class="mdescLeft">&#160;</td><td class="mdescRight">Indicate if the servers list should be randomized.  <a href="#gaabf8763b931dcf389c83fd95d760a413">More...</a><br /></td></tr>
 <tr class="separator:gaabf8763b931dcf389c83fd95d760a413"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -252,6 +258,11 @@ Functions</h2></td></tr>
 <li>nats://user@localhost:4222</li>
 <li>nats://user:password@localhost:4222</li>
 </ul>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf" title="Set the list of servers to try to (re)connect to. ">natsOptions_SetServers</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#ga5b99da7dd74aac3be962f323c3863d9e" title="Sets the user name/password to use when not specified in the URL. ">natsOptions_SetUserInfo</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193" title="Sets the token to use when not specified in the URL. ">natsOptions_SetToken</a></dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
@@ -292,11 +303,109 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>This specifies a list of servers to try to connect (or reconnect) to. Note that if you call <a class="el" href="group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5" title="Sets the URL to connect to. ">natsOptions_SetURL()</a> too, the actual list will contain the one from <a class="el" href="group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5" title="Sets the URL to connect to. ">natsOptions_SetURL()</a> and the ones specified in this call.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5" title="Sets the URL to connect to. ">natsOptions_SetURL</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#ga5b99da7dd74aac3be962f323c3863d9e" title="Sets the user name/password to use when not specified in the URL. ">natsOptions_SetUserInfo</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193" title="Sets the token to use when not specified in the URL. ">natsOptions_SetToken</a></dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
     <tr><td class="paramname">servers</td><td>the array of strings representing the server URLs. </td></tr>
     <tr><td class="paramname">serversCount</td><td>the size of the array. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga5b99da7dd74aac3be962f323c3863d9e"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetUserInfo </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>user</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>password</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Credentials are usually provided through the URL in the form: <code>nats://foo:bar@localhost:4222</code>.<br />
+ Until now, you could specify URLs in two ways, with <a class="el" href="group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf" title="Set the list of servers to try to (re)connect to. ">natsOptions_SetServers</a> or <a class="el" href="group__conn_mgt_group.html#gafb83c8d7970ba68be0e6c40c38cdfde4" title="Connects to a NATS Server using any of the URL from the given list. ">natsConnection_ConnectTo</a>. The client library would connect (or reconnect) only to this given list of URLs, so if any of the server in the list required authentication, you were responsible for providing the appropriate credentials in the URLs.<br />
+ <br />
+ However, with cluster auto-discovery, the client library asynchronously receives URLs of servers in the cluster. These URLs do not contain any embedded credentials. <br />
+ You need to use this function (or <a class="el" href="group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193" title="Sets the token to use when not specified in the URL. ">natsOptions_SetToken</a>) to instruct the client library to use those credentials when connecting to a server that requires authentication and for which there is no embedded credentials in the URL.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193" title="Sets the token to use when not specified in the URL. ">natsOptions_SetToken</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5" title="Sets the URL to connect to. ">natsOptions_SetURL</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf" title="Set the list of servers to try to (re)connect to. ">natsOptions_SetServers</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">user</td><td>the user name to send to the server during connect. </td></tr>
+    <tr><td class="paramname">password</td><td>the password to send to the server during connect. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="gad58a5b9dabadeebda30e952ff7b39193"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetToken </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>token</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Tokens are usually provided through the URL in the form: <code>nats://mytoken@localhost:4222</code>.<br />
+ Until now, you could specify URLs in two ways, with <a class="el" href="group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf" title="Set the list of servers to try to (re)connect to. ">natsOptions_SetServers</a> or <a class="el" href="group__conn_mgt_group.html#gafb83c8d7970ba68be0e6c40c38cdfde4" title="Connects to a NATS Server using any of the URL from the given list. ">natsConnection_ConnectTo</a>. The client library would connect (or reconnect) only to this given list of URLs, so if any of the server in the list required authentication, you were responsible for providing the appropriate token in the URLs.<br />
+ <br />
+ However, with cluster auto-discovery, the client library asynchronously receives URLs of servers in the cluster. These URLs do not contain any embedded tokens. <br />
+ You need to use this function (or <a class="el" href="group__opts_group.html#ga5b99da7dd74aac3be962f323c3863d9e" title="Sets the user name/password to use when not specified in the URL. ">natsOptions_SetUserInfo</a>) to instruct the client library to use this token when connecting to a server that requires authentication and for which there is no embedded token in the URL.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga5b99da7dd74aac3be962f323c3863d9e" title="Sets the user name/password to use when not specified in the URL. ">natsOptions_SetUserInfo</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5" title="Sets the URL to connect to. ">natsOptions_SetURL</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf" title="Set the list of servers to try to (re)connect to. ">natsOptions_SetServers</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">token</td><td>the token to send to the server during connect. </td></tr>
   </table>
   </dd>
 </dl>

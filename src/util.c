@@ -457,7 +457,7 @@ nats_JSONParse(nats_JSON **newJSON, const char *jsonStr, int jsonLen)
     nats_JSONField  *field    = NULL;
     nats_JSONField  *oldField = NULL;
     char            *ptr;
-    char            *fieldName;
+    char            *fieldName = NULL;
     int             state;
     bool            gotEnd    = false;
 
@@ -745,7 +745,6 @@ nats_JSONGetArrayValue(nats_JSON *json, const char *fieldName, int fieldType, vo
     natsStatus      s        = NATS_OK;
     nats_JSONField  *field   = NULL;
     void            **values = NULL;
-    int             size;
 
     field = (nats_JSONField*) natsStrHash_Get(json->fields, (char*) fieldName);
     // If unknown field, just ignore

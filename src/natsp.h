@@ -99,6 +99,8 @@ typedef struct __natsServerInfo
     bool        authRequired;
     bool        tlsRequired;
     int64_t     maxPayload;
+    char        **connectURLs;
+    int         connectURLsCount;
 
 } natsServerInfo;
 
@@ -141,6 +143,10 @@ struct __natsOptions
     int                     maxReconnect;
     int64_t                 reconnectWait;
     int                     reconnectBufSize;
+
+    char                    *user;
+    char                    *password;
+    char                    *token;
 
     natsConnectionHandler   closedCb;
     void                    *closedCbClosure;

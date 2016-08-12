@@ -4,6 +4,7 @@
 #define SRVPOOL_H_
 
 #include "status.h"
+#include "hash.h"
 
 // Tracks individual backend servers.
 typedef struct __natsSrv
@@ -18,7 +19,9 @@ typedef struct __natsSrv
 typedef struct __natsSrvPool
 {
     natsSrv     **srvrs;
+    natsStrHash *urls;
     int         size;
+    int         cap;
 
 } natsSrvPool;
 
@@ -49,6 +52,11 @@ natsSrvPool_GetCurrentServer(natsSrvPool *pool, const natsUrl *url, int *index);
 // as number of reconnect attempts under MaxReconnect.
 natsSrv*
 natsSrvPool_GetNextServer(natsSrvPool *pool, struct __natsOptions *opts, const natsUrl *ncUrl);
+
+// Go through the list of the given URLs and add them to the pool if not already
+// present. If `doShuffle` is true, shuffles the pool if new URLs were added.
+natsStatus
+natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuffle);
 
 // Destroy the pool, freeing up all memory used.
 void

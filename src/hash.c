@@ -26,10 +26,19 @@ natsHash_Create(natsHash **newHash, int initialSize)
 {
     natsHash    *hash = NULL;
 
-    if ((initialSize == 0) || ((initialSize & (initialSize - 1)) != 0))
+    if (initialSize <= 0)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if ((initialSize & (initialSize - 1)) != 0)
     {
         // Size of buckets must be power of 2
-        return nats_setDefaultError(NATS_INVALID_ARG);
+        initialSize--;
+        initialSize |= initialSize >> 1;
+        initialSize |= initialSize >> 2;
+        initialSize |= initialSize >> 4;
+        initialSize |= initialSize >> 8;
+        initialSize |= initialSize >> 16;
+        initialSize++;
     }
 
     hash = (natsHash*) NATS_CALLOC(1, sizeof(natsHash));
@@ -366,10 +375,19 @@ natsStrHash_Create(natsStrHash **newHash, int initialSize)
 {
     natsStrHash *hash = NULL;
 
-    if ((initialSize == 0) || ((initialSize & (initialSize - 1)) != 0))
+    if (initialSize <= 0)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if ((initialSize & (initialSize - 1)) != 0)
     {
         // Size of buckets must be power of 2
-        return nats_setDefaultError(NATS_INVALID_ARG);
+        initialSize--;
+        initialSize |= initialSize >> 1;
+        initialSize |= initialSize >> 2;
+        initialSize |= initialSize >> 4;
+        initialSize |= initialSize >> 8;
+        initialSize |= initialSize >> 16;
+        initialSize++;
     }
 
     hash = (natsStrHash*) NATS_CALLOC(1, sizeof(natsStrHash));

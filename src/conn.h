@@ -69,4 +69,7 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max);
 void
 natsConn_removeSubscription(natsConnection *nc, natsSubscription *sub, bool needsLock);
 
+void
+natsConn_processAsyncINFO(natsConnection *nc, char *buf, int len);
+
 #endif /* CONN_H_ */

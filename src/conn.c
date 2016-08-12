@@ -45,6 +45,15 @@ void natsConn_Unlock(natsConnection *nc) { natsMutex_Unlock(nc->mu); }
 
 #endif // DEV_MODE
 
+
+// CLIENT_PROTO_ZERO is the original client protocol from 2009.
+// http://nats.io/documentation/internals/nats-protocol/
+#define CLIENT_PROTO_ZERO   (0)
+
+// CLIENT_PROTO_INFO signals a client can receive more then the original INFO block.
+// This can be used to update clients on other cluster members, etc.
+#define CLIENT_PROTO_INFO   (1)
+
 /*
  * Forward declarations:
  */
@@ -124,9 +133,15 @@ _joinThreads(struct threadsToJoin *ttj)
 static void
 _clearServerInfo(natsServerInfo *si)
 {
+    int i;
+
     NATS_FREE(si->id);
     NATS_FREE(si->host);
     NATS_FREE(si->version);
+
+    for (i=0; i<si->connectURLsCount; i++)
+        NATS_FREE(si->connectURLs[i]);
+    NATS_FREE(si->connectURLs);
 
     memset(si, 0, sizeof(natsServerInfo));
 }
@@ -424,120 +439,49 @@ _readOp(natsConnection *nc, natsControl *control)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-#define TYPE_STR    (0)
-#define TYPE_BOOL   (1)
-#define TYPE_INT    (2)
-#define TYPE_LONG   (3)
-
+// _processInfo is used to parse the info messages sent
+// from the server.
+// This function may update the server pool.
 static natsStatus
-_parseInfo(char **str, const char *field, int fieldType, void **addr)
-{
-    natsStatus  s    = NATS_OK;
-    char        *ptr = NULL;
-    char        *end = NULL;
-    char        *val = NULL;
-
-    ptr = nats_strcasestr(*str, field);
-    if (ptr == NULL)
-        return NATS_OK;
-
-    ptr += strlen(field);
-    ptr += 2;
-    if (fieldType == TYPE_STR)
-        ptr += 1;
-
-    if (fieldType == TYPE_STR)
-    {
-        end = strchr(ptr, '\"');
-    }
-    else
-    {
-        end = strchr(ptr, ',');
-        if (end == NULL)
-            end = strchr(ptr, '}');
-    }
-
-    if (end == NULL)
-        return nats_setError(NATS_PROTOCOL_ERROR,
-                             "Invalid protocol: field=%s type=%d ptr=%s",
-                             field, fieldType, ptr);
-
-    *str = (end + 1);
-    *end = '\0';
-
-    if (fieldType == TYPE_STR)
-    {
-        val = NATS_STRDUP(ptr);
-        if (val == NULL)
-            nats_setDefaultError(NATS_NO_MEMORY);
-
-        (*(char**)addr) = val;
-    }
-    else if (fieldType == TYPE_BOOL)
-    {
-        if (strcasecmp(ptr, "true") == 0)
-            (*(bool*)addr) = true;
-        else
-            (*(bool*)addr) = false;
-    }
-    else if ((fieldType == TYPE_INT)
-             || (fieldType == TYPE_LONG))
-    {
-        char            *tail = NULL;
-        long long int   lval  = 0;
-
-        errno = 0;
-
-        lval = strtoll(ptr, &tail, 10);
-        if ((errno != 0) || (tail[0] != '\0'))
-            return nats_setError(NATS_PROTOCOL_ERROR,
-                                 "Invalid protocol: field=%s type=%d ptr=%s",
-                                 field, fieldType, ptr);
-
-        if (fieldType == TYPE_INT)
-            (*(int*)addr) = (int) lval;
-        else
-            (*(int64_t*)addr) = (int64_t) lval;
-    }
-    else
-    {
-        abort();
-    }
-
-    return NATS_OK;
-}
-
-static natsStatus
-_processInfo(natsConnection *nc, char *info)
+_processInfo(natsConnection *nc, char *info, int len)
 {
     natsStatus  s     = NATS_OK;
-    char        *copy = NULL;
-    char        *ptr  = NULL;
+    nats_JSON   *json = NULL;
 
     if (info == NULL)
         return NATS_OK;
 
     _clearServerInfo(&(nc->info));
 
-    copy = NATS_STRDUP(info);
-    if (copy == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
+    s = nats_JSONParse(&json, info, len);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
 
-    ptr = copy;
-
-    s = _parseInfo(&ptr, "server_id", TYPE_STR, (void**) &(nc->info.id));
     if (s == NATS_OK)
-        s = _parseInfo(&ptr, "version", TYPE_STR, (void**) &(nc->info.version));
+        s = nats_JSONGetValue(json, "server_id", TYPE_STR,
+                              (void**) &(nc->info.id));
     if (s == NATS_OK)
-        s = _parseInfo(&ptr, "host", TYPE_STR, (void**) &(nc->info.host));
+        s = nats_JSONGetValue(json, "version", TYPE_STR,
+                              (void**) &(nc->info.version));
     if (s == NATS_OK)
-        s = _parseInfo(&ptr, "port", TYPE_INT, (void**) &(nc->info.port));
+        s = nats_JSONGetValue(json, "host", TYPE_STR,
+                              (void**) &(nc->info.host));
     if (s == NATS_OK)
-        s = _parseInfo(&ptr, "auth_required", TYPE_BOOL, (void**) &(nc->info.authRequired));
+        s = nats_JSONGetValue(json, "port", TYPE_INT,
+                              (void**) &(nc->info.port));
     if (s == NATS_OK)
-        s = _parseInfo(&ptr, "tls_required", TYPE_BOOL, (void**) &(nc->info.tlsRequired));
+        s = nats_JSONGetValue(json, "auth_required", TYPE_BOOL,
+                              (void**) &(nc->info.authRequired));
     if (s == NATS_OK)
-        s = _parseInfo(&ptr, "max_payload", TYPE_LONG, (void**) &(nc->info.maxPayload));
+        s = nats_JSONGetValue(json, "tls_required", TYPE_BOOL,
+                              (void**) &(nc->info.tlsRequired));
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "max_payload", TYPE_LONG,
+                             (void**) &(nc->info.maxPayload));
+    if (s == NATS_OK)
+        s = nats_JSONGetArrayValue(json, "connect_urls", TYPE_STR,
+                                   (void***) &(nc->info.connectURLs),
+                                   &(nc->info.connectURLsCount));
 
 #if 0
     fprintf(stderr, "Id=%s Version=%s Host=%s Port=%d Auth=%s SSL=%s Payload=%d\n",
@@ -547,8 +491,31 @@ _processInfo(natsConnection *nc, char *info)
             (int) nc->info.maxPayload);
 #endif
 
-    NATS_FREE(copy);
+    if (s == NATS_OK)
+        s = natsSrvPool_addNewURLs(nc->srvPool,
+                                   nc->info.connectURLs,
+                                   nc->info.connectURLsCount,
+                                   !nc->opts->noRandomize);
+
+    if (s != NATS_OK)
+        s = nats_setError(NATS_PROTOCOL_ERROR,
+                          "Invalid protocol: %s", nats_GetLastError(NULL));
+
+    nats_JSONDestroy(json);
+
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+// natsConn_processAsyncINFO does the same than processInfo, but is called
+// from the parser. Calls processInfo under connection's lock
+// protection.
+void
+natsConn_processAsyncINFO(natsConnection *nc, char *buf, int len)
+{
+    natsConn_Lock(nc);
+    // Ignore errors, we will simply not update the server pool...
+    (void) _processInfo(nc, buf, len);
+    natsConn_Unlock(nc);
 }
 
 // makeTLSConn will wrap an existing Conn using TLS
@@ -686,7 +653,7 @@ _processExpectedInfo(natsConnection *nc)
                           _INFO_OP_);
     }
     if (s == NATS_OK)
-        s = _processInfo(nc, control.args);
+        s = _processInfo(nc, control.args, -1);
     if (s == NATS_OK)
         s = _checkForSecure(nc);
 
@@ -714,12 +681,19 @@ _connectProto(natsConnection *nc, char **proto)
         token = user;
         user  = NULL;
     }
+    if ((user == NULL) && (token == NULL))
+    {
+        // Take from options (possibly all NULL)
+        user  = nc->opts->user;
+        pwd   = nc->opts->password;
+        token = nc->opts->token;
+    }
     if (opts->name != NULL)
         name = opts->name;
 
     res = nats_asprintf(proto,
                         "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s%s%s%s\"tls_required\":%s," \
-                        "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\"}%s",
+                        "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\",\"protocol\":%d}%s",
                         nats_GetBoolStr(opts->verbose),
                         nats_GetBoolStr(opts->pedantic),
                         (user != NULL ? "\"user\":\"" : ""),
@@ -733,7 +707,9 @@ _connectProto(natsConnection *nc, char **proto)
                         (token != NULL ? "\"," : ""),
                         nats_GetBoolStr(opts->secure),
                         (name != NULL ? name : ""),
-                        CString, NATS_VERSION_STRING, _CRLF_);
+                        CString, NATS_VERSION_STRING,
+                        CLIENT_PROTO_INFO,
+                        _CRLF_);
     if (res < 0)
         return NATS_NO_MEMORY;
 
@@ -1241,6 +1217,7 @@ _connect(natsConnection *nc)
     natsStatus  retSts= NATS_OK;
     natsSrvPool *pool = NULL;
     int         i;
+    int         poolSize;
 
     natsConn_Lock(nc);
 
@@ -1249,7 +1226,11 @@ _connect(natsConnection *nc)
     // Create actual socket connection
     // For first connect we walk all servers in the pool and try
     // to connect immediately.
-    for (i = 0; i < natsSrvPool_GetSize(pool); i++)
+
+    // Get the size of the pool. The pool may change inside the loop
+    // iteration due to INFO protocol.
+    poolSize = natsSrvPool_GetSize(pool);
+    for (i = 0; i < poolSize; i++)
     {
         nc->url = natsSrvPool_GetSrvUrl(pool,i);
 
@@ -1277,6 +1258,9 @@ _connect(natsConnection *nc)
 
                 nc->url = NULL;
             }
+            // Refresh our view of pool length since it may have been
+            // modified when processing the INFO protocol.
+            poolSize = natsSrvPool_GetSize(pool);
         }
         else
         {

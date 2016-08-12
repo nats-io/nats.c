@@ -35,6 +35,12 @@ typedef enum
     OP_PO,
     OP_PON,
     OP_PONG,
+    OP_I,
+    OP_IN,
+    OP_INF,
+    OP_INFO,
+    OP_INFO_SPC,
+    INFO_ARG
 
 } natsOp;
 

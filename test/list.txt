@@ -17,6 +17,7 @@ natsHashing
 natsStrHash
 natsInbox
 natsOptions
+natsSock_ConnectTcp
 natsSock_ReadLine
 natsJSON
 ReconnectServerStats

@@ -2860,6 +2860,24 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
 }
 #endif
 
+static void
+test_natsSock_ConnectTcp(void)
+{
+    natsPid     serverPid = NATS_INVALID_PID;
+
+    test("Check connect tcp: ");
+    serverPid = _startServer("nats://localhost:4222", "-p 4222", true);
+    testCond(serverPid != NATS_INVALID_PID);
+    _stopServer(serverPid);
+    serverPid = NATS_INVALID_PID;
+
+    test("Check connect tcp (force server to listen to IPv4): ");
+    serverPid = _startServer("nats://localhost:4222", "-a 127.0.0.1 -p 4222", true);
+    testCond(serverPid != NATS_INVALID_PID);
+    _stopServer(serverPid);
+    serverPid = NATS_INVALID_PID;
+}
+
 static natsOptions*
 _createReconnectOptions(void)
 {
@@ -10671,6 +10689,7 @@ static testInfo allTests[] =
     {"natsStrHash",                     test_natsStrHash},
     {"natsInbox",                       test_natsInbox},
     {"natsOptions",                     test_natsOptions},
+    {"natsSock_ConnectTcp",             test_natsSock_ConnectTcp},
     {"natsSock_ReadLine",               test_natsSock_ReadLine},
     {"natsJSON",                        test_natsJSON},
 

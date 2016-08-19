@@ -4336,6 +4336,42 @@ test_AsyncINFO(void)
             s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
         }
         testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+        // Receive a duplicate (LOCALHOST)
+        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"LOCALHOST:7222\"]}\r\n");
+        PARSER_START_TEST;
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        if (s == NATS_OK)
+        {
+            const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222", "localhost:8222"};
+
+            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        }
+        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+        // Receive a duplicate (IPv4 address)
+        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"127.0.0.1:7222\"]}\r\n");
+        PARSER_START_TEST;
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        if (s == NATS_OK)
+        {
+            const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222", "localhost:8222"};
+
+            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        }
+        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+        // Receive a duplicate (IPv6 address)
+        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"[::1]:7222\"]}\r\n");
+        PARSER_START_TEST;
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        if (s == NATS_OK)
+        {
+            const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222", "localhost:8222"};
+
+            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        }
+        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
     }
 
     // Finally, check that the pool should be randomized.

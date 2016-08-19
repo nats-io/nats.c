@@ -269,3 +269,41 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
 
     return NATS_UPDATE_ERR_STACK(s);
 }
+
+natsStatus
+natsSrvPool_GetServers(natsSrvPool *pool, char ***servers, int *count)
+{
+    natsStatus  s       = NATS_OK;
+    char        **srvrs = NULL;
+    int         i;
+
+    if (pool->size == 0)
+    {
+        *servers = NULL;
+        *count   = 0;
+        return NATS_OK;
+    }
+
+    srvrs = (char **) NATS_CALLOC(pool->size, sizeof(char*));
+    if (srvrs == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    for (i=0; ((s == NATS_OK) && (i<pool->size)); i++)
+    {
+        srvrs[i] = NATS_STRDUP(pool->srvrs[i]->url->fullUrl);
+        if (srvrs[i] == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    if (s == NATS_OK)
+    {
+        *servers = srvrs;
+        *count   = pool->size;
+    }
+    else
+    {
+        for (i=0; i<pool->size; i++)
+            NATS_FREE(srvrs[i]);
+        NATS_FREE(srvrs);
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}

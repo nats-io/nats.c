@@ -58,6 +58,10 @@ natsSrvPool_GetNextServer(natsSrvPool *pool, struct __natsOptions *opts, const n
 natsStatus
 natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuffle);
 
+// Returns an array of servers (as a copy). User is responsible to free the memory.
+natsStatus
+natsSrvPool_GetServers(natsSrvPool *pool, char ***servers, int *count);
+
 // Destroy the pool, freeing up all memory used.
 void
 natsSrvPool_Destroy(natsSrvPool *pool);

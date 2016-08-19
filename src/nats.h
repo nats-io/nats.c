@@ -1347,6 +1347,23 @@ natsConnection_GetConnectedUrl(natsConnection *nc, char *buffer, size_t bufferSi
 NATS_EXTERN natsStatus
 natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t bufferSize);
 
+/** \brief Returns the list of server URLs known to this connection.
+ *
+ * Returns the list of known servers, including additional servers
+ * discovered after a connection has been established (with servers
+ * version 0.9.2 and above).
+ *
+ * \note The user is responsible for freeing the memory of the returned array.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param servers the location where to store the pointer to the array
+ * of server URLs.
+ * @param count the location where to store the number of elements of the
+ * returned array.
+ */
+NATS_EXTERN natsStatus
+natsConnection_GetServers(natsConnection *nc, char ***servers, int *count);
+
 /** \brief Gets the last connection error.
  *
  * Returns the last known error as a 'natsStatus' and the location to the

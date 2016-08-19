@@ -63,6 +63,7 @@ var searchData=
   ['natsmsg_5fgetsubject',['natsMsg_GetSubject',['../group__msg_group.html#gad4597240ee8061b4dbec88576b5e1bed',1,'nats.h']]],
   ['natsoptions_5fcreate',['natsOptions_Create',['../group__opts_group.html#ga61d4a0cf2fbf7d13cc910e5a00c575be',1,'nats.h']]],
   ['natsoptions_5fdestroy',['natsOptions_Destroy',['../group__opts_group.html#ga93d8068cd6fff53b7f8e1c403db45eb9',1,'nats.h']]],
+  ['natsoptions_5fipresolutionorder',['natsOptions_IPResolutionOrder',['../group__opts_group.html#ga7ca713c7532eff4d41a492e95b8822cf',1,'nats.h']]],
   ['natsoptions_5floadcatrustedcertificates',['natsOptions_LoadCATrustedCertificates',['../group__opts_group.html#ga2cd6563694a439b3949a31fd81103099',1,'nats.h']]],
   ['natsoptions_5floadcertificateschain',['natsOptions_LoadCertificatesChain',['../group__opts_group.html#ga36943e2ba53d05407cdabc4e7e96484b',1,'nats.h']]],
   ['natsoptions_5fsetallowreconnect',['natsOptions_SetAllowReconnect',['../group__opts_group.html#ga3d1d3cb2f2a0e23d27dd60e96d1cc91b',1,'nats.h']]],

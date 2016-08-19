@@ -1000,11 +1000,11 @@ natsOptions_UseGlobalMessageDelivery(natsOptions *opts, bool global);
  * 64 | try IPv6 first, if it fails try IPv4
  * 4 | use only IPv4
  * 6 | use only IPv6
- * 0 | no specific order
+ * 0 | any family, no specific order
  *
  * \note If this option is not set, or you specify `0` for the order, the
- * library will use the first IP for which a successful connection can be
- * made, based on the DNS configuration.
+ * library will use the first IP (based on the DNS configuration) for which
+ * a successful connection can be made.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param order a string representing the order for the IP resolution.

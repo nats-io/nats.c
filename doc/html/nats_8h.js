@@ -60,6 +60,7 @@ var nats_8h =
     [ "natsOptions_SetReconnectedCB", "group__opts_group.html#ga26a48c8529fffa5f5d1a61c030979980", null ],
     [ "natsOptions_SetEventLoop", "group__opts_group.html#gab09491bad908dedcb323c780280733ff", null ],
     [ "natsOptions_UseGlobalMessageDelivery", "group__opts_group.html#gabf060c92648b50c069f0abe7cbb06f1c", null ],
+    [ "natsOptions_IPResolutionOrder", "group__opts_group.html#ga7ca713c7532eff4d41a492e95b8822cf", null ],
     [ "natsOptions_Destroy", "group__opts_group.html#ga93d8068cd6fff53b7f8e1c403db45eb9", null ],
     [ "natsInbox_Create", "group__inbox_group.html#ga3d59c517d5aa0827b22e66a308a8fe6e", null ],
     [ "natsInbox_Destroy", "group__inbox_group.html#gac3db6bd01235144886cb0ee5cf444048", null ],

@@ -50,6 +50,5 @@ typedef size_t          natsRecvLen;
 
 #define nats_asprintf       asprintf
 #define nats_strcasestr     strcasestr
-#define nats_strcasecmp     strcasecmp
 
 #endif /* N_UNIX_H_ */

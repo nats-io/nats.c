@@ -189,12 +189,51 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuf
     bool        updated = false;
     char        url[256];
     int         i;
+    char        *sport;
+    int         portPos;
+    bool        found;
+    bool        isLH;
 
     for (i=0; (s == NATS_OK) && (i<urlCount); i++)
     {
-        if (natsStrHash_Get(pool->urls, urls[i]) == NULL)
+        isLH  = false;
+        found = false;
+
+        // Consider localhost:<port>, 127.0.0.1:<port> and [::1]:<port>
+        // all the same.
+        sport = strrchr(urls[i], ':');
+        portPos = (int) (sport - urls[i]);
+        if (((nats_strcasestr(urls[i], "localhost") == urls[i]) && (portPos == 9))
+                || (strncmp(urls[i], "127.0.0.1", portPos) == 0)
+                || (strncmp(urls[i], "[::1]", portPos) == 0))
         {
-            snprintf(url, sizeof(url), "nats://%s", urls[i]);
+            isLH = ((urls[i][0] == 'l') || (urls[i][0] == 'L'));
+
+            snprintf(url, sizeof(url), "localhost%s", sport);
+            found = (natsStrHash_Get(pool->urls, url) != NULL);
+            if (!found)
+            {
+                snprintf(url, sizeof(url), "127.0.0.1%s", sport);
+                found = (natsStrHash_Get(pool->urls, url) != NULL);
+            }
+            if (!found)
+            {
+                snprintf(url, sizeof(url), "[::1]%s", sport);
+                found = (natsStrHash_Get(pool->urls, url) != NULL);
+            }
+        }
+        else
+        {
+            found = (natsStrHash_Get(pool->urls, urls[i]) != NULL);
+        }
+
+        if (!found)
+        {
+            // Make sure that localhost URL is always stored in lower case.
+            if (isLH)
+                snprintf(url, sizeof(url), "nats://localhost%s", sport);
+            else
+                snprintf(url, sizeof(url), "nats://%s", urls[i]);
             s = _addURLToPool(pool, url);
             if (s == NATS_OK)
                 updated = true;

@@ -10041,6 +10041,71 @@ test_PingReconnect(void)
 }
 
 static void
+test_GetServers(void)
+{
+    natsStatus          s;
+    natsConnection      *conn = NULL;
+    natsPid             s1Pid = NATS_INVALID_PID;
+    natsPid             s2Pid = NATS_INVALID_PID;
+    natsPid             s3Pid = NATS_INVALID_PID;
+    char                **servers = NULL;
+    int                 count     = 0;
+
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a localhost -p 4222 -cluster nats-route://localhost:5222 -DV", true);
+    CHECK_SERVER_STARTED(s1Pid);
+
+    s2Pid = _startServer("nats://127.0.0.1:4223", "-a localhost -p 4223 -cluster nats-route://localhost:5223 -routes nats-route://localhost:5222", true);
+    if (s2Pid == NATS_INVALID_PID)
+    {
+        _stopServer(s1Pid);
+        CHECK_SERVER_STARTED(s2Pid);
+    }
+
+    s3Pid = _startServer("nats://127.0.0.1:4224", "-a localhost -p 4224 -cluster nats-route://localhost:5224 -routes nats-route://localhost:5222", true);
+    if (s2Pid == NATS_INVALID_PID)
+    {
+        _stopServer(s1Pid);
+        _stopServer(s2Pid);
+        CHECK_SERVER_STARTED(s3Pid);
+    }
+
+    test("Get Servers: ");
+    s = natsConnection_ConnectTo(&conn, "nats://127.0.0.1:4222");
+    if (s == NATS_OK)
+        s = natsConnection_GetServers(conn, &servers, &count);
+    if (s == NATS_OK)
+    {
+        int i;
+
+        // Be tolerant that if we were to connect to an older
+        // server, we would just get 1 url back.
+        if ((count != 1) && (count != 3))
+            s = nats_setError(NATS_ERR, "Unexpected number of servers: %d instead of 1 or 3", count);
+
+        for (i=0; (s == NATS_OK) && (i < count); i++)
+        {
+            if ((strcmp(servers[i], "nats://127.0.0.1:4222") != 0)
+                    && (strcmp(servers[i], "nats://localhost:4223") != 0)
+                    && (strcmp(servers[i], "nats://localhost:4224") != 0))
+            {
+                s = nats_setError(NATS_ERR, "Unexpected server URL: %s", servers[i]);
+            }
+        }
+
+        for (i=0; i<count; i++)
+            free(servers[i]);
+        free(servers);
+    }
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(conn);
+
+    _stopServer(s3Pid);
+    _stopServer(s2Pid);
+    _stopServer(s1Pid);
+}
+
+static void
 test_Version(void)
 {
     const char *str = NULL;
@@ -11100,7 +11165,8 @@ static testInfo allTests[] =
     {"ProperFalloutAfterMaxAttempts",   test_ProperFalloutAfterMaxAttempts},
     {"ProperFalloutMaxAttemptsAuth",    test_ProperFalloutAfterMaxAttemptsWithAuthMismatch},
     {"TimeoutOnNoServer",               test_TimeoutOnNoServer},
-    {"PingReconnect",                   test_PingReconnect}
+    {"PingReconnect",                   test_PingReconnect},
+    {"GetServers",                      test_GetServers}
 };
 
 static int  maxTests = (int) (sizeof(allTests)/sizeof(testInfo));

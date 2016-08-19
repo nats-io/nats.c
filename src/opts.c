@@ -855,6 +855,22 @@ natsOptions_UseGlobalMessageDelivery(natsOptions *opts, bool global)
     return NATS_OK;
 }
 
+natsStatus
+natsOptions_IPResolutionOrder(natsOptions *opts, int order)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, ((order != 0)
+                                    && (order != 4)
+                                    && (order != 6)
+                                    && (order != 46)
+                                    && (order != 64)));
+
+    opts->orderIP = order;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
 static void
 _freeOptions(natsOptions *opts)
 {

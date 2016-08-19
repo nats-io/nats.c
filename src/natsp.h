@@ -171,6 +171,8 @@ struct __natsOptions
 
     bool                    libMsgDelivery;
 
+    int                     orderIP; // possible values: 0,4,6,46,64
+
 };
 
 typedef struct __natsMsgList
@@ -308,6 +310,8 @@ typedef struct __natsSockCtx
 
     // This is true when we are using an external event loop (such as libuv).
     bool            useEventLoop;
+
+    int             orderIP; // possible values: 0,4,6,46,64
 
 } natsSockCtx;
 

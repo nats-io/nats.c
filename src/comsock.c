@@ -12,6 +12,10 @@
 #include "comsock.h"
 #include "mem.h"
 
+#define WAIT_FOR_READ       (0)
+#define WAIT_FOR_WRITE      (1)
+#define WAIT_FOR_CONNECT    (2)
+
 static void
 _closeFd(natsSock fd)
 {
@@ -90,7 +94,7 @@ natsSock_DestroyFDSet(fd_set *fdSet)
 }
 
 natsStatus
-natsSock_WaitReady(bool forWrite, natsSockCtx *ctx)
+natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
 {
     struct timeval  *timeout = NULL;
     int             res;
@@ -104,11 +108,20 @@ natsSock_WaitReady(bool forWrite, natsSockCtx *ctx)
     if (deadline != NULL)
         timeout = natsDeadline_GetTimeout(deadline);
 
-    res = select((int) (sock + 1),
-                 (forWrite ? NULL : fdSet),
-                 (forWrite ? fdSet : NULL),
-                 NULL,
-                 timeout);
+    switch (waitMode)
+    {
+        case WAIT_FOR_READ:     res = select((int) (sock + 1), fdSet, NULL, NULL, timeout); break;
+        case WAIT_FOR_WRITE:    res = select((int) (sock + 1), NULL, fdSet, NULL, timeout); break;
+        case WAIT_FOR_CONNECT:
+#ifdef _WIN32
+                                // On Windows, we will know if the non-blocking connect has failed
+                                // by using the exception set, not the write.
+                                res = select((int) (sock + 1), NULL, fdSet, fdSet, timeout); break;
+#else
+                                res = select((int) (sock + 1), NULL, fdSet, NULL, timeout); break;
+#endif
+        default: abort();
+    }
 
     if (res == NATS_SOCK_ERROR)
         return nats_setError(NATS_IO_ERROR, "select error: %d", res);
@@ -119,8 +132,10 @@ natsSock_WaitReady(bool forWrite, natsSockCtx *ctx)
     return NATS_OK;
 }
 
+#define MAX_HOST_NAME   (256)
+
 natsStatus
-natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port)
+natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
 {
     natsStatus      s    = NATS_OK;
     int             res;
@@ -131,21 +146,44 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port)
     bool            waitForConnect = false;
     bool            error = false;
     int             i;
+    int             max = 2;
+    char            hosta[MAX_HOST_NAME];
+    int             hostLen;
+    char            *host;
 
-    if (host == NULL)
+    if (phost == NULL)
         return nats_setError(NATS_ADDRESS_MISSING, "%s", "No host specified");
+
+    hostLen = (int) strlen(phost);
+    if ((hostLen == 0) || ((hostLen == 1) && phost[0] == '['))
+        return nats_setError(NATS_INVALID_ARG, "Invalid host name: %s", phost);
+
+    if (phost[0] == '[')
+    {
+        snprintf(hosta, sizeof(hosta), "%.*s", hostLen - 2, phost + 1);
+        host = (char*) hosta;
+    }
+    else
+        host = (char*) phost;
 
     snprintf(sport, sizeof(sport), "%d", port);
 
-    for (i=0; i<2; i++)
+    if ((ctx->orderIP == 4) || (ctx->orderIP == 6))
+        max = 1;
+
+    for (i=0; i<max; i++)
     {
         memset(&hints,0,sizeof(hints));
         hints.ai_socktype = SOCK_STREAM;
 
-        // Start with IPv6, if it fails, try IPv4.
-        // TODO: Should this be some kind of option that would dictate the order?
-        //       This would be beneficial performance wise.
-        hints.ai_family = (i == 0 ? AF_INET6 : AF_INET);
+        switch (ctx->orderIP)
+        {
+            case  4: hints.ai_family = AF_INET; break;
+            case  6: hints.ai_family = AF_INET6; break;
+            case 46: hints.ai_family = (i == 0 ? AF_INET : AF_INET6); break;
+            case 64: hints.ai_family = (i == 0 ? AF_INET6 : AF_INET); break;
+            default: hints.ai_family = AF_UNSPEC;
+        }
 
         s = NATS_OK;
         if ((res = getaddrinfo(host, sport, &hints, &servinfo)) != 0)
@@ -167,23 +205,17 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port)
 
             res = connect(ctx->fd, p->ai_addr, (natsSockLen) p->ai_addrlen);
             if ((res == NATS_SOCK_ERROR)
-                && (NATS_SOCK_GET_ERROR != NATS_SOCK_CONNECT_IN_PROGRESS))
+                && (NATS_SOCK_GET_ERROR == NATS_SOCK_CONNECT_IN_PROGRESS))
             {
-                error = true;
-            }
-            else if (res == NATS_SOCK_ERROR)
-            {
-                waitForConnect = true;
-            }
-
-            if (!error)
-            {
-                if (waitForConnect
-                    && ((natsSock_WaitReady(true, ctx) != NATS_OK)
-                        || !natsSock_IsConnected(ctx->fd)))
+                if ((natsSock_WaitReady(WAIT_FOR_CONNECT, ctx) != NATS_OK)
+                    || !natsSock_IsConnected(ctx->fd))
                 {
                     error = true;
                 }
+            }
+            else if (res == NATS_SOCK_ERROR)
+            {
+                error = true;
             }
 
             if (error)
@@ -194,6 +226,8 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port)
             }
 
             s = natsSock_SetCommonTcpOptions(ctx->fd);
+            if (s == NATS_OK)
+                break;
         }
 
         if (s == NATS_OK)
@@ -207,6 +241,9 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port)
 
         if (s == NATS_OK)
         {
+            // Clear the error stack in case we got errors in the loop until
+            // being able to successfully connect.
+            nats_clearLastError();
             break;
         }
         else
@@ -359,7 +396,7 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
 
             // For non-blocking sockets, if the read would block, we need to
             // wait up to the deadline.
-            s = natsSock_WaitReady(false, ctx);
+            s = natsSock_WaitReady(WAIT_FOR_READ, ctx);
             if (s != NATS_OK)
                 return NATS_UPDATE_ERR_STACK(s);
 
@@ -434,7 +471,7 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
 
             // For non-blocking sockets, if the write would block, we need to
             // wait up to the deadline.
-            s = natsSock_WaitReady(true, ctx);
+            s = natsSock_WaitReady(WAIT_FOR_WRITE, ctx);
             if (s != NATS_OK)
                 return NATS_UPDATE_ERR_STACK(s);
 

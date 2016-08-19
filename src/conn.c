@@ -361,6 +361,9 @@ _createConn(natsConnection *nc)
     // the PONG to our initial PING. See _processConnInit().
     natsDeadline_Init(&(nc->sockCtx.deadline), nc->opts->timeout);
 
+    // Set the IP resolution order
+    nc->sockCtx.orderIP = nc->opts->orderIP;
+
     s = natsSock_ConnectTcp(&(nc->sockCtx), nc->url->host, nc->url->port);
     if (s == NATS_OK)
     {

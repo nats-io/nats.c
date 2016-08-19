@@ -987,6 +987,31 @@ natsOptions_SetEventLoop(natsOptions *opts,
 NATS_EXTERN natsStatus
 natsOptions_UseGlobalMessageDelivery(natsOptions *opts, bool global);
 
+/** \brief Dictates the order in which host name are resolved during connect.
+ *
+ * The library would previously favor IPv6 addresses during the connect process.
+ * <br>
+ * You can now change the order, or even exclude a family of addresses, using
+ * this option. Here is the list of possible values:
+ * <br>
+ * Value | Meaning
+ * ------|--------
+ * 46 | try IPv4 first, if it fails try IPv6
+ * 64 | try IPv6 first, if it fails try IPv4
+ * 4 | use only IPv4
+ * 6 | use only IPv6
+ * 0 | no specific order
+ *
+ * \note If this option is not set, or you specify `0` for the order, the
+ * library will use the first IP for which a successful connection can be
+ * made, based on the DNS configuration.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param order a string representing the order for the IP resolution.
+ */
+NATS_EXTERN natsStatus
+natsOptions_IPResolutionOrder(natsOptions *opts, int order);
+
 /** \brief Destroys a #natsOptions object.
  *
  * Destroys the natsOptions object, freeing used memory. See the note in

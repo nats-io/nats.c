@@ -1173,6 +1173,8 @@ test_natsUrl(void)
     s = natsUrl_Create(&u, NULL);
     testCond((s != NATS_OK) && (u == NULL));
 
+    nats_clearLastError();
+
     test("localhost:4222 ");
     s = natsUrl_Create(&u, "localhost:4222");
     testCond((s == NATS_OK)
@@ -1181,6 +1183,7 @@ test_natsUrl(void)
               && (u->username == NULL)
               && (u->password == NULL));
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp:// ");
     s = natsUrl_Create(&u, "tcp://");
@@ -1190,6 +1193,7 @@ test_natsUrl(void)
               && (u->username == NULL)
               && (u->password == NULL));
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://: ");
     s = natsUrl_Create(&u, "tcp://:");
@@ -1200,6 +1204,7 @@ test_natsUrl(void)
               && (u->password == NULL)
               && (u->port == 0));
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://localhost ");
     s = natsUrl_Create(&u, "tcp://localhost");
@@ -1211,6 +1216,7 @@ test_natsUrl(void)
               && (u->password == NULL)
               && (u->port == 0))
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://localhost ");
     s = natsUrl_Create(&u, "tcp://localhost");
@@ -1222,6 +1228,7 @@ test_natsUrl(void)
               && (u->password == NULL)
               && (u->port == 0))
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://localhost:4222 ");
     s = natsUrl_Create(&u, "tcp://localhost:4222");
@@ -1233,6 +1240,7 @@ test_natsUrl(void)
               && (u->password == NULL)
               && (u->port == 4222))
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://ivan:localhost:4222 ");
     s = natsUrl_Create(&u, "tcp://ivan:localhost:4222");
@@ -1244,6 +1252,7 @@ test_natsUrl(void)
               && (u->password == NULL)
               && (u->port == 4222));
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://ivan:pwd:localhost:4222 ");
     s = natsUrl_Create(&u, "tcp://ivan:pwd:localhost:4222");
@@ -1255,6 +1264,7 @@ test_natsUrl(void)
               && (u->password == NULL)
               && (u->port == 4222));
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://ivan@localhost:4222 ");
     s = natsUrl_Create(&u, "tcp://ivan@localhost:4222");
@@ -1267,6 +1277,7 @@ test_natsUrl(void)
               && (u->password == NULL)
               && (u->port == 4222));
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://ivan:pwd@localhost:4222 ");
     s = natsUrl_Create(&u, "tcp://ivan:pwd@localhost:4222");
@@ -1280,6 +1291,7 @@ test_natsUrl(void)
               && (strcmp(u->password, "pwd") == 0)
               && (u->port == 4222));
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://@localhost:4222 ");
     s = natsUrl_Create(&u, "tcp://@localhost:4222");
@@ -1291,6 +1303,7 @@ test_natsUrl(void)
               && (u->password == NULL)
               && (u->port == 4222));
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://@@localhost:4222 ");
     s = natsUrl_Create(&u, "tcp://@@localhost:4222");
@@ -1303,6 +1316,7 @@ test_natsUrl(void)
               && (u->password == NULL)
               && (u->port == 4222));
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://a:b:c@localhost:4222 ");
     s = natsUrl_Create(&u, "tcp://a:b:c@localhost:4222");
@@ -1316,6 +1330,7 @@ test_natsUrl(void)
               && (strcmp(u->password, "b:c") == 0)
               && (u->port == 4222));
     natsUrl_Destroy(u);
+    u = NULL;
 
     test("tcp://::a:b:c@localhost:4222 ");
     s = natsUrl_Create(&u, "tcp://::a:b:c@localhost:4222");
@@ -1328,6 +1343,46 @@ test_natsUrl(void)
               && (strcmp(u->password, ":a:b:c") == 0)
               && (u->port == 4222));
     natsUrl_Destroy(u);
+    u = NULL;
+
+    test("tcp://[::1]:4222 ");
+    s = natsUrl_Create(&u, "tcp://[::1]:4222");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "[::1]") == 0)
+              && (u->username == NULL)
+              && (u->password == NULL)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("tcp://a:b@[::1]:4222 ");
+    s = natsUrl_Create(&u, "tcp://a:b@[::1]:4222");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "[::1]") == 0)
+              && (u->username != NULL)
+              && (strcmp(u->username, "a") == 0)
+              && (u->password != NULL)
+              && (strcmp(u->password, "b") == 0)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("tcp://a@[::1]:4222 ");
+    s = natsUrl_Create(&u, "tcp://a@[::1]:4222");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "[::1]") == 0)
+              && (u->username != NULL)
+              && (strcmp(u->username, "a") == 0)
+              && (u->password == NULL)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
 }
 
 static void
@@ -2010,7 +2065,8 @@ test_natsOptions(void)
              && (opts->maxPendingMsgs == 65536)
              && (opts->user == NULL)
              && (opts->password == NULL)
-             && (opts->token == NULL));
+             && (opts->token == NULL)
+             && (opts->orderIP == 0));
 
     test("Add URL: ");
     s = natsOptions_SetURL(opts, "test");
@@ -2237,6 +2293,28 @@ test_natsOptions(void)
     s = natsOptions_SetToken(opts, NULL);
     testCond((s == NATS_OK) && (opts->token == NULL));
 
+    test("IP order invalid values: ");
+    s = natsOptions_IPResolutionOrder(opts, -1);
+    if (s != NATS_OK)
+        s = natsOptions_IPResolutionOrder(opts, 1);
+    if (s != NATS_OK)
+        s = natsOptions_IPResolutionOrder(opts, 466);
+    if (s != NATS_OK)
+        s = natsOptions_IPResolutionOrder(opts, 644);
+    testCond(s != NATS_OK);
+
+    test("IP order valid values: ");
+    s = natsOptions_IPResolutionOrder(opts, 0);
+    if ((s == NATS_OK) && (opts->orderIP == 0))
+        s = natsOptions_IPResolutionOrder(opts, 4);
+    if ((s == NATS_OK) && (opts->orderIP == 4))
+        s = natsOptions_IPResolutionOrder(opts, 6);
+    if ((s == NATS_OK) && (opts->orderIP == 6))
+        s = natsOptions_IPResolutionOrder(opts, 46);
+    if ((s == NATS_OK) && (opts->orderIP == 46))
+        s = natsOptions_IPResolutionOrder(opts, 64);
+    testCond((s == NATS_OK) && (opts->orderIP == 64));
+
     // Prepare some values for the clone check
     s = natsOptions_SetURL(opts, "url");
     IFOK(s, natsOptions_SetServers(opts, servers, 3));
@@ -2245,6 +2323,7 @@ test_natsOptions(void)
     IFOK(s, natsOptions_SetErrorHandler(opts, _dummyErrHandler, NULL));
     IFOK(s, natsOptions_SetUserInfo(opts, "ivan", "pwd"));
     IFOK(s, natsOptions_SetToken(opts, "token"));
+    IFOK(s, natsOptions_IPResolutionOrder(opts, 46));
     if (s != NATS_OK)
         FAIL("Unable to test natsOptions_clone() because of failure while setting");
 
@@ -2263,7 +2342,8 @@ test_natsOptions(void)
              || (cloned->serversCount != 3)
              || (strcmp(cloned->user, "ivan") != 0)
              || (strcmp(cloned->password, "pwd") != 0)
-             || (strcmp(cloned->token, "token") != 0))
+             || (strcmp(cloned->token, "token") != 0)
+             || (cloned->orderIP != 46))
     {
         s = NATS_ERR;
     }
@@ -2632,7 +2712,7 @@ test_natsJSON(void)
 }
 
 natsStatus
-_checkStart(const char *url)
+_checkStart(const char *url, int orderIP, int maxAttempts)
 {
     natsStatus      s        = NATS_OK;
     natsUrl         *nUrl    = NULL;
@@ -2642,6 +2722,7 @@ _checkStart(const char *url)
 
     memset(&ctx, 0, sizeof(natsSockCtx));
     ctx.fdSet = &fdSet;
+    ctx.orderIP = orderIP;
 
     FD_ZERO(ctx.fdSet);
     natsDeadline_Init(&(ctx.deadline), 2000);
@@ -2651,7 +2732,7 @@ _checkStart(const char *url)
     {
         while (((s = natsSock_ConnectTcp(&ctx,
                                          nUrl->host, nUrl->port)) != NATS_OK)
-               && (attempts++ < 10))
+               && (attempts++ < maxAttempts))
         {
             nats_Sleep(200);
         }
@@ -2772,7 +2853,7 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
 
     free(exeAndCmdLine);
 
-    if (checkStart && (_checkStart(url) != NATS_OK))
+    if (checkStart && (_checkStart(url, 46, 10) != NATS_OK))
     {
         _stopServer(pid);
         return NATS_INVALID_PID;
@@ -2849,7 +2930,7 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
         exit(1);
     }
     else if (checkStart
-             && (_checkStart(url) != NATS_OK))
+             && (_checkStart(url, 46, 10) != NATS_OK))
     {
         _stopServer(pid);
         return NATS_INVALID_PID;
@@ -2859,6 +2940,60 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
     return pid;
 }
 #endif
+
+
+
+static void
+test_natsSock_IPOrder(void)
+{
+    natsStatus  s;
+    natsPid     serverPid;
+
+    test("Server listen to IPv4: ");
+    serverPid = _startServer("", "-a 127.0.0.1 -p 4222", false);
+    s = _checkStart("nats://localhost:4222", 4, 5);
+    if (s == NATS_OK)
+        s = _checkStart("nats://localhost:4222", 46, 5);
+    if (s == NATS_OK)
+        s = _checkStart("nats://localhost:4222", 64, 5);
+    if (s == NATS_OK)
+        s = _checkStart("nats://localhost:4222", 0, 5);
+    if (s == NATS_OK)
+    {
+        // This one should fail.
+        s = _checkStart("nats://localhost:4222", 6, 5);
+        if (s == NATS_OK)
+            s = NATS_ERR;
+        else
+            s = NATS_OK;
+    }
+    testCond(s == NATS_OK);
+    _stopServer(serverPid);
+    serverPid = NATS_INVALID_PID;
+
+    test("Server listen to IPv6: ");
+    serverPid = _startServer("", "-a :: -p 4222", false);
+    s = _checkStart("nats://localhost:4222", 6, 5);
+    if (s == NATS_OK)
+        s = _checkStart("nats://localhost:4222", 46, 5);
+    if (s == NATS_OK)
+        s = _checkStart("nats://localhost:4222", 64, 5);
+    if (s == NATS_OK)
+        s = _checkStart("nats://localhost:4222", 0, 5);
+    if (s == NATS_OK)
+    {
+        // This one should fail, but the server when listening
+        // to [::] is actually accepting IPv4 connections,
+        // so be tolerant of that.
+        s = _checkStart("nats://localhost:4222", 4, 5);
+        if (s == NATS_OK)
+            fprintf(stderr, ">>>> IPv4 to [::] should have failed, but server accepted it\n");
+        else
+            s = NATS_OK;
+    }
+    testCond(s == NATS_OK);
+    _stopServer(serverPid);
+}
 
 static void
 test_natsSock_ConnectTcp(void)
@@ -4422,6 +4557,170 @@ test_DefaultConnection(void)
 }
 
 static void
+test_IPResolutionOrder(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsOptions         *opts     = NULL;
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://localhost:4222");
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, 2000);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Server listens to IPv4: ");
+    serverPid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222", true);
+    CHECK_SERVER_STARTED(serverPid);
+    testCond(serverPid != NATS_INVALID_PID);
+
+    test("Order: 4: ");
+    s = natsOptions_IPResolutionOrder(opts, 4);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+    {
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Order: 46: ");
+    s = natsOptions_IPResolutionOrder(opts, 46);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+    {
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+    testCond(s == NATS_OK);
+
+
+    test("Order: 64: ");
+    s = natsOptions_IPResolutionOrder(opts, 64);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+    {
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Order: 0: ");
+    s = natsOptions_IPResolutionOrder(opts, 0);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+    {
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Order: 6: ");
+    s = natsOptions_IPResolutionOrder(opts, 6);
+    if (s == NATS_OK)
+    {
+        s = natsConnection_Connect(&nc, opts);
+        if (s == NATS_OK)
+        {
+            // Should not have connected
+            natsConnection_Destroy(nc);
+            nc = NULL;
+            s = NATS_ERR;
+        }
+        else
+        {
+            s = NATS_OK;
+        }
+    }
+    testCond(s == NATS_OK);
+
+    _stopServer(serverPid);
+    serverPid = NATS_INVALID_PID;
+
+    test("Server listens to IPv6: ");
+    serverPid = _startServer("nats://[::1]:4222", "-a :: -p 4222", true);
+    CHECK_SERVER_STARTED(serverPid);
+    testCond(serverPid != NATS_INVALID_PID);
+
+    test("Order: 6: ");
+    s = natsOptions_IPResolutionOrder(opts, 6);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+    {
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Order: 46: ");
+    s = natsOptions_IPResolutionOrder(opts, 46);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+    {
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Order: 64: ");
+    s = natsOptions_IPResolutionOrder(opts, 64);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+    {
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Order: 0: ");
+    s = natsOptions_IPResolutionOrder(opts, 0);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+    {
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Order: 4: ");
+    s = natsOptions_IPResolutionOrder(opts, 4);
+    if (s == NATS_OK)
+    {
+        s = natsConnection_Connect(&nc, opts);
+        // This should fail, but server listening to
+        // [::] still accepts IPv4 connections, so be
+        // tolerant of that.
+        if (s == NATS_OK)
+        {
+            fprintf(stderr, ">>>> Server listening on [::] accepted an IPv4 connection");
+            natsConnection_Destroy(nc);
+            nc = NULL;
+        }
+        else
+        {
+            s = NATS_OK;
+        }
+    }
+    testCond(s == NATS_OK);
+
+    _stopServer(serverPid);
+    serverPid = NATS_INVALID_PID;
+
+    natsOptions_Destroy(opts);
+}
+
+static void
 test_UseDefaultURLIfNoServerSpecified(void)
 {
     natsStatus          s;
@@ -5678,14 +5977,14 @@ _startMockupServer(natsSock *serverSock, const char *host, const char *port)
 
     memset(&hints,0,sizeof(hints));
 
-    hints.ai_family   = AF_INET6;
+    hints.ai_family   = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags    = AI_PASSIVE;
 
     if ((res = getaddrinfo(host, port, &hints, &servinfo)) != 0)
     {
-         hints.ai_family = AF_INET;
+         hints.ai_family = AF_INET6;
 
          if ((res = getaddrinfo(host, port, &hints, &servinfo)) != 0)
              s = NATS_SYS_ERROR;
@@ -10690,6 +10989,7 @@ static testInfo allTests[] =
     {"natsInbox",                       test_natsInbox},
     {"natsOptions",                     test_natsOptions},
     {"natsSock_ConnectTcp",             test_natsSock_ConnectTcp},
+    {"natsSock_IPOrder",                test_natsSock_IPOrder},
     {"natsSock_ReadLine",               test_natsSock_ReadLine},
     {"natsJSON",                        test_natsJSON},
 
@@ -10710,6 +11010,7 @@ static testInfo allTests[] =
     // Public API Tests
 
     {"DefaultConnection",               test_DefaultConnection},
+    {"IPResolutionOrder",               test_IPResolutionOrder},
     {"UseDefaultURLIfNoServerSpecified",test_UseDefaultURLIfNoServerSpecified},
     {"ConnectToWithMultipleURLs",       test_ConnectToWithMultipleURLs},
     {"ConnectionWithNULLOptions",       test_ConnectionWithNullOptions},

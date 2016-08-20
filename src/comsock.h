@@ -6,6 +6,15 @@
 #include "natsp.h"
 
 natsStatus
+natsSock_Init(natsSockCtx *ctx);
+
+void
+natsSock_Clear(natsSockCtx *ctx);
+
+natsStatus
+natsSock_WaitReady(int waitMode, natsSockCtx *ctx);
+
+natsStatus
 natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port);
 
 natsStatus

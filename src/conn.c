@@ -165,7 +165,7 @@ _freeConn(natsConnection *nc)
     natsThread_Destroy(nc->flusherThread);
     natsHash_Destroy(nc->subs);
     natsOptions_Destroy(nc->opts);
-    natsSock_DestroyFDSet(nc->sockCtx.fdSet);
+    natsSock_Clear(&nc->sockCtx);
     if (nc->sockCtx.ssl != NULL)
         SSL_free(nc->sockCtx.ssl);
     NATS_FREE(nc->el.buffer);
@@ -2147,7 +2147,7 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     if (s == NATS_OK)
         s = natsHash_Create(&(nc->subs), 8);
     if (s == NATS_OK)
-        s =  natsSock_CreateFDSet(&(nc->sockCtx.fdSet));
+        s = natsSock_Init(&nc->sockCtx);
     if (s == NATS_OK)
     {
         s = natsBuf_Create(&(nc->scratch), DEFAULT_SCRATCH_SIZE);

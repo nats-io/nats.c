@@ -12,10 +12,6 @@
 #include "comsock.h"
 #include "mem.h"
 
-#define WAIT_FOR_READ       (0)
-#define WAIT_FOR_WRITE      (1)
-#define WAIT_FOR_CONNECT    (2)
-
 static void
 _closeFd(natsSock fd)
 {
@@ -91,45 +87,6 @@ natsSock_DestroyFDSet(fd_set *fdSet)
         return;
 
     NATS_FREE(fdSet);
-}
-
-natsStatus
-natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
-{
-    struct timeval  *timeout = NULL;
-    int             res;
-    fd_set          *fdSet = ctx->fdSet;
-    natsSock        sock = ctx->fd;
-    natsDeadline    *deadline = &(ctx->deadline);
-
-    FD_ZERO(fdSet);
-    FD_SET(sock, fdSet);
-
-    if (deadline != NULL)
-        timeout = natsDeadline_GetTimeout(deadline);
-
-    switch (waitMode)
-    {
-        case WAIT_FOR_READ:     res = select((int) (sock + 1), fdSet, NULL, NULL, timeout); break;
-        case WAIT_FOR_WRITE:    res = select((int) (sock + 1), NULL, fdSet, NULL, timeout); break;
-        case WAIT_FOR_CONNECT:
-#ifdef _WIN32
-                                // On Windows, we will know if the non-blocking connect has failed
-                                // by using the exception set, not the write.
-                                res = select((int) (sock + 1), NULL, fdSet, fdSet, timeout); break;
-#else
-                                res = select((int) (sock + 1), NULL, fdSet, NULL, timeout); break;
-#endif
-        default: abort();
-    }
-
-    if (res == NATS_SOCK_ERROR)
-        return nats_setError(NATS_IO_ERROR, "select error: %d", res);
-
-    if ((res == 0) || !FD_ISSET(sock, fdSet))
-        return nats_setDefaultError(NATS_TIMEOUT);
-
-    return NATS_OK;
 }
 
 #define MAX_HOST_NAME   (256)

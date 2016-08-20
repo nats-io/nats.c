@@ -79,6 +79,10 @@
 static const char *inboxPrefix = "_INBOX.";
 #define NATS_INBOX_PRE_LEN (7)
 
+#define WAIT_FOR_READ       (0)
+#define WAIT_FOR_WRITE      (1)
+#define WAIT_FOR_CONNECT    (2)
+
 extern int64_t gLockSpinCount;
 
 typedef void (*natsInitOnceCb)(void);
@@ -304,6 +308,9 @@ typedef struct __natsSockCtx
     // then we will use two different fd sets, and also probably pass deadlines
     // individually as opposed to use one at the connection level.
     fd_set          *fdSet;
+#ifdef _WIN32
+    fd_set          *errSet;
+#endif
     natsDeadline    deadline;
 
     SSL             *ssl;

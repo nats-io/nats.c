@@ -3045,6 +3045,24 @@ _createReconnectOptions(void)
 }
 
 static void
+_reconnectedCb(natsConnection *nc, void *closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+    int64_t             now  = nats_Now();
+
+    natsMutex_Lock(arg->m);
+    arg->reconnected = true;
+    arg->reconnects++;
+    if (arg->control == 9)
+    {
+        if (arg->reconnects <= 4)
+            arg->reconnectedAt[arg->reconnects-1] = now;
+    }
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+static void
 test_ReconnectServerStats(void)
 {
     natsStatus      s;
@@ -3052,17 +3070,22 @@ test_ReconnectServerStats(void)
     natsOptions     *opts     = NULL;
     natsSrv         *srv      = NULL;
     natsPid         serverPid = NATS_INVALID_PID;
+    struct threadArg args;
 
     test("Reconnect Server Stats: ");
 
-    opts = _createReconnectOptions();
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
     if (opts == NULL)
         FAIL("Unable to create reconnect options!");
 
     serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
     CHECK_SERVER_STARTED(serverPid);
 
-    s = natsConnection_Connect(&nc, opts);
+    s = natsOptions_SetDisconnectedCB(opts, _reconnectedCb, &args);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
     if (s == NATS_OK)
         s = natsConnection_Flush(nc);
 
@@ -3074,7 +3097,13 @@ test_ReconnectServerStats(void)
         serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
         CHECK_SERVER_STARTED(serverPid);
 
-        s = natsConnection_FlushTimeout(nc, 5000);
+        natsMutex_Lock(args.m);
+        while ((s == NATS_OK) && !args.reconnected)
+            s = natsCondition_TimedWait(args.c, args.m, 5000);
+        natsMutex_Unlock(args.m);
+
+        if (s == NATS_OK)
+            s = natsConnection_FlushTimeout(nc, 5000);
     }
 
     if (s == NATS_OK)
@@ -3090,6 +3119,8 @@ test_ReconnectServerStats(void)
     natsOptions_Destroy(opts);
 
     _stopServer(serverPid);
+
+    _destroyDefaultThreadArgs(&args);
 }
 
 static void
@@ -3105,24 +3136,6 @@ _disconnectedCb(natsConnection *nc, void *closure)
     {
         if (arg->disconnects <= 5)
             arg->disconnectedAt[arg->disconnects-2] = now;
-    }
-    natsCondition_Broadcast(arg->c);
-    natsMutex_Unlock(arg->m);
-}
-
-static void
-_reconnectedCb(natsConnection *nc, void *closure)
-{
-    struct threadArg    *arg = (struct threadArg*) closure;
-    int64_t             now  = nats_Now();
-
-    natsMutex_Lock(arg->m);
-    arg->reconnected = true;
-    arg->reconnects++;
-    if (arg->control == 9)
-    {
-        if (arg->reconnects <= 4)
-            arg->reconnectedAt[arg->reconnects-1] = now;
     }
     natsCondition_Broadcast(arg->c);
     natsMutex_Unlock(arg->m);

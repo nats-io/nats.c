@@ -8252,6 +8252,13 @@ test_SlowAsyncSubscriber(void)
     natsSubscription_Destroy(sub);
 
     natsCondition_Signal(arg.c);
+    arg.msgReceived = false;
+    natsMutex_Unlock(arg.m);
+
+    // Let the callback finish
+    natsMutex_Lock(arg.m);
+    while (!arg.msgReceived)
+        natsCondition_TimedWait(arg.c, arg.m, 5000);
     natsMutex_Unlock(arg.m);
 
     natsOptions_Destroy(opts);

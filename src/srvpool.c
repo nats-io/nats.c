@@ -281,9 +281,6 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
     // Map that helps find out if an URL is already known.
     s = natsStrHash_Create(&(pool->urls), poolSize);
 
-    if ((s == NATS_OK) && (opts->url != NULL))
-        s = _addURLToPool(pool, opts->url);
-
     // Add URLs from Options' Servers
     for (i=0; (s == NATS_OK) && (i < opts->serversCount); i++)
         s = _addURLToPool(pool, opts->servers[i]);
@@ -293,12 +290,27 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
         // Randomize if allowed to
         if (!(opts->noRandomize))
             _shufflePool(pool);
+    }
 
-        if (pool->size == 0)
+    // Normally, if this one is set, Options.Servers should not be,
+    // but we always allowed that, so continue to do so.
+    if ((s == NATS_OK) && (opts->url != NULL))
+    {
+        // Add to the end of the array
+        s = _addURLToPool(pool, opts->url);
+        if ((s == NATS_OK) && (pool->size > 1))
         {
-            // Place default URL if pool is empty.
-            s = _addURLToPool(pool, (char*) NATS_DEFAULT_URL);
+            // Then swap it with first to guarantee that Options.Url is tried first.
+            natsSrv *opstUrl = pool->srvrs[pool->size-1];
+
+            pool->srvrs[pool->size-1] = pool->srvrs[0];
+            pool->srvrs[0] = opstUrl;
         }
+    }
+    else if ((s == NATS_OK) && (pool->size == 0))
+    {
+        // Place default URL if pool is empty.
+        s = _addURLToPool(pool, (char*) NATS_DEFAULT_URL);
     }
 
     if (s == NATS_OK)

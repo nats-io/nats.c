@@ -3407,6 +3407,41 @@ test_ServersRandomize(void)
             }
     }
     testCond(s == NATS_OK);
+    natsConn_release(nc);
+    nc = NULL;
+
+    // Although the original intent was that if Opts.Url is
+    // set, Opts.Servers is not (and vice versa), the behavior
+    // is that Opts.Url is always first, even when randomization
+    // is enabled. So make sure that this is still the case.
+    test("If Options.URL is set, it should be first: ")
+    s = natsOptions_SetNoRandomize(opts, false);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConn_create(&nc, natsOptions_clone(opts));
+    if (s == NATS_OK)
+    {
+        int same = 0;
+        // In theory, this could happen...
+        for (int i=0; i<serversCount; i++)
+        {
+            if (strcmp(testServers[i],
+                       nc->srvPool->srvrs[i+1]->url->fullUrl) == 0)
+            {
+                same++;
+            }
+        }
+        if (same == serversCount)
+            s = NATS_ERR;
+    }
+    if ((s == NATS_OK)
+            && strcmp(nc->srvPool->srvrs[0]->url->fullUrl,
+                      NATS_DEFAULT_URL) != 0)
+    {
+        s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
 
     natsConn_release(nc);
     natsOptions_Destroy(opts);

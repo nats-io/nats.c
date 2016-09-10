@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.4.4</span>
+   &#160;<span id="projectnumber">1.4.5</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -615,6 +615,8 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Returns the list of known servers, including additional servers discovered after a connection has been established (with servers version 0.9.2 and above).</p>
+<p>No credential information is included in any of the server URLs returned by this call.<br />
+ If you want to use any of these URLs to connect to a server that requires authentication, you will need to use <a class="el" href="group__opts_group.html#ga5b99da7dd74aac3be962f323c3863d9e" title="Sets the user name/password to use when not specified in the URL. ">natsOptions_SetUserInfo</a> or <a class="el" href="group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193" title="Sets the token to use when not specified in the URL. ">natsOptions_SetToken</a>.</p>
 <dl class="section note"><dt>Note</dt><dd>The user is responsible for freeing the memory of the returned array.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">

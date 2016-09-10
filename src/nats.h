@@ -1353,6 +1353,12 @@ natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t buf
  * discovered after a connection has been established (with servers
  * version 0.9.2 and above).
  *
+ * No credential information is included in any of the server URLs
+ * returned by this call.<br>
+ * If you want to use any of these URLs to connect to a server that
+ * requires authentication, you will need to use #natsOptions_SetUserInfo
+ * or #natsOptions_SetToken.
+ *
  * \note The user is responsible for freeing the memory of the returned array.
  *
  * @param nc the pointer to the #natsConnection object.

@@ -326,6 +326,7 @@ natsSrvPool_GetServers(natsSrvPool *pool, char ***servers, int *count)
 {
     natsStatus  s       = NATS_OK;
     char        **srvrs = NULL;
+    natsUrl     *url;
     int         i;
 
     if (pool->size == 0)
@@ -341,8 +342,8 @@ natsSrvPool_GetServers(natsSrvPool *pool, char ***servers, int *count)
 
     for (i=0; ((s == NATS_OK) && (i<pool->size)); i++)
     {
-        srvrs[i] = NATS_STRDUP(pool->srvrs[i]->url->fullUrl);
-        if (srvrs[i] == NULL)
+        url = pool->srvrs[i]->url;
+        if (nats_asprintf(&(srvrs[i]), "nats://%s:%d", url->host, url->port) == -1)
             s = nats_setDefaultError(NATS_NO_MEMORY);
     }
     if (s == NATS_OK)

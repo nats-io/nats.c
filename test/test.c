@@ -10140,7 +10140,7 @@ test_GetServers(void)
     char                **servers = NULL;
     int                 count     = 0;
 
-    s1Pid = _startServer("nats://127.0.0.1:4222", "-a localhost -p 4222 -cluster nats-route://localhost:5222 -DV", true);
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a localhost -p 4222 -cluster nats-route://localhost:5222", true);
     CHECK_SERVER_STARTED(s1Pid);
 
     s2Pid = _startServer("nats://127.0.0.1:4223", "-a localhost -p 4223 -cluster nats-route://localhost:5223 -routes nats-route://localhost:5222", true);
@@ -10188,9 +10188,33 @@ test_GetServers(void)
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(conn);
+    conn = NULL;
 
     _stopServer(s3Pid);
     _stopServer(s2Pid);
+    _stopServer(s1Pid);
+
+    s1Pid = NATS_INVALID_PID;
+    s1Pid = _startServer("nats://ivan:password@127.0.0.1:4222", "-a localhost -p 4222 -user ivan -pass password", true);
+    CHECK_SERVER_STARTED(s1Pid);
+
+    test("Get Servers does not return credentials: ");
+    s = natsConnection_ConnectTo(&conn, "nats://ivan:password@127.0.0.1:4222");
+    if (s == NATS_OK)
+        s = natsConnection_GetServers(conn, &servers, &count);
+    if (s == NATS_OK)
+    {
+        if (count != 1)
+            s = nats_setError(NATS_ERR, "Unexpected number of servers: %d instead of 1", count);
+        else if (strcmp(servers[0], "nats://127.0.0.1:4222") != 0)
+            s = nats_setError(NATS_ERR, "Unexpected server URL: %s", servers[0]);
+
+        free(servers[0]);
+        free(servers);
+    }
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(conn);
     _stopServer(s1Pid);
 }
 

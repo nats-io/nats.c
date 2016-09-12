@@ -18,6 +18,7 @@ option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
 option(NATS_BUILD_WITH_TLS_CLIENT_METHOD "Use TLS_client_method()" OFF)
 option(NATS_BUILD_LIBUV_EXAMPLE "Compile libuv example" OFF)
 option(NATS_BUILD_LIBEVENT_EXAMPLE "Compile libevent example" OFF)
+option(NATS_BUILD_WITHOUT_CLOCK_MONOTONIC "Compile without respecting CLOCK_MONOTONIC" OFF)
 
 if(NATS_BUILD_WITH_TLS)
 find_package(OpenSSL REQUIRED)
@@ -84,6 +85,9 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_CODE_COVERAGE} ${NATS_COMMON_C_FLAGS}
 
 add_definitions(-D${NATS_OS})
 add_definitions(-D_REENTRANT)
+if(NATS_BUILD_WITHOUT_CLOCK_MONOTONIC)
+add_definitions(-DNATS_NO_CLOCK_MONOTONIC)
+endif(NATS_BUILD_WITHOUT_CLOCK_MONOTONIC)
 if(NATS_BUILD_WITH_TLS)
 add_definitions(-DNATS_HAS_TLS)
 if(NATS_BUILD_WITH_TLS_CLIENT_METHOD)

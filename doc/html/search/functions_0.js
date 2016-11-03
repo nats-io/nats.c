@@ -21,6 +21,7 @@ var searchData=
   ['natsconnection_5fflushtimeout',['natsConnection_FlushTimeout',['../group__conn_mgt_group.html#ga85915ef0c8b87993be1b076099d6a7c1',1,'nats.h']]],
   ['natsconnection_5fgetconnectedserverid',['natsConnection_GetConnectedServerId',['../group__conn_mgt_group.html#ga48cee9ea1cdc9fc2770de2f9f0fd1ccf',1,'nats.h']]],
   ['natsconnection_5fgetconnectedurl',['natsConnection_GetConnectedUrl',['../group__conn_mgt_group.html#gaf623280407c43ade02285005f0642e6d',1,'nats.h']]],
+  ['natsconnection_5fgetdiscoveredservers',['natsConnection_GetDiscoveredServers',['../group__conn_mgt_group.html#gad25c77be0873495412c90a73fe450708',1,'nats.h']]],
   ['natsconnection_5fgetlasterror',['natsConnection_GetLastError',['../group__conn_mgt_group.html#gab6cfa9cb6857ae10f096a94f5e244e63',1,'nats.h']]],
   ['natsconnection_5fgetmaxpayload',['natsConnection_GetMaxPayload',['../group__conn_mgt_group.html#ga68e7149f7ff1cc4989b3f795fa7e76d9',1,'nats.h']]],
   ['natsconnection_5fgetservers',['natsConnection_GetServers',['../group__conn_mgt_group.html#gaf4ee7262e35e44c40ad5dfe9240db76b',1,'nats.h']]],

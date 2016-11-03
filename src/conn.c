@@ -2545,7 +2545,24 @@ natsConnection_GetServers(natsConnection *nc, char ***servers, int *count)
 
     natsConn_Lock(nc);
 
-    s = natsSrvPool_GetServers(nc->srvPool, servers, count);
+    s = natsSrvPool_GetServers(nc->srvPool, false, servers, count);
+
+    natsConn_Unlock(nc);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_GetDiscoveredServers(natsConnection *nc, char ***servers, int *count)
+{
+    natsStatus  s       = NATS_OK;
+
+    if ((nc == NULL) || (servers == NULL) || (count == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+
+    s = natsSrvPool_GetServers(nc->srvPool, true, servers, count);
 
     natsConn_Unlock(nc);
 

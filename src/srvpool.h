@@ -11,6 +11,7 @@ typedef struct __natsSrv
 {
     natsUrl     *url;
     bool        didConnect;
+    bool        isImplicit;
     int         reconnects;
     int64_t     lastAttempt;
 
@@ -60,7 +61,7 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuf
 
 // Returns an array of servers (as a copy). User is responsible to free the memory.
 natsStatus
-natsSrvPool_GetServers(natsSrvPool *pool, char ***servers, int *count);
+natsSrvPool_GetServers(natsSrvPool *pool, bool implicitOnly, char ***servers, int *count);
 
 // Destroy the pool, freeing up all memory used.
 void

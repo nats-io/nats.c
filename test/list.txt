@@ -120,3 +120,4 @@ ProperFalloutMaxAttemptsAuth
 TimeoutOnNoServer
 PingReconnect
 GetServers
+GetDiscoveredServers

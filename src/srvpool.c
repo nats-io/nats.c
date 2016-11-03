@@ -16,13 +16,15 @@ _freeSrv(natsSrv *srv)
 }
 
 static natsStatus
-_createSrv(natsSrv **newSrv, char *url)
+_createSrv(natsSrv **newSrv, char *url, bool implicit)
 {
     natsStatus  s = NATS_OK;
     natsSrv     *srv = (natsSrv*) NATS_CALLOC(1, sizeof(natsSrv));
 
     if (srv == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
+
+    srv->isImplicit = implicit;
 
     s = natsUrl_Create(&(srv->url), url);
     if (s == NATS_OK)
@@ -116,14 +118,14 @@ natsSrvPool_Destroy(natsSrvPool *pool)
 }
 
 static natsStatus
-_addURLToPool(natsSrvPool *pool, char *sURL)
+_addURLToPool(natsSrvPool *pool, char *sURL, bool implicit)
 {
     natsStatus  s;
     natsSrv     *srv = NULL;
     bool        addedToMap = false;
     char        bareURL[256];
 
-    s = _createSrv(&srv, sURL);
+    s = _createSrv(&srv, sURL, implicit);
     if (s != NATS_OK)
         return s;
 
@@ -234,7 +236,7 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuf
                 snprintf(url, sizeof(url), "nats://localhost%s", sport);
             else
                 snprintf(url, sizeof(url), "nats://%s", urls[i]);
-            s = _addURLToPool(pool, url);
+            s = _addURLToPool(pool, url, true);
             if (s == NATS_OK)
                 updated = true;
         }
@@ -283,7 +285,7 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
 
     // Add URLs from Options' Servers
     for (i=0; (s == NATS_OK) && (i < opts->serversCount); i++)
-        s = _addURLToPool(pool, opts->servers[i]);
+        s = _addURLToPool(pool, opts->servers[i], false);
 
     if (s == NATS_OK)
     {
@@ -297,7 +299,7 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
     if ((s == NATS_OK) && (opts->url != NULL))
     {
         // Add to the end of the array
-        s = _addURLToPool(pool, opts->url);
+        s = _addURLToPool(pool, opts->url, false);
         if ((s == NATS_OK) && (pool->size > 1))
         {
             // Then swap it with first to guarantee that Options.Url is tried first.
@@ -310,7 +312,7 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
     else if ((s == NATS_OK) && (pool->size == 0))
     {
         // Place default URL if pool is empty.
-        s = _addURLToPool(pool, (char*) NATS_DEFAULT_URL);
+        s = _addURLToPool(pool, (char*) NATS_DEFAULT_URL, false);
     }
 
     if (s == NATS_OK)
@@ -322,12 +324,14 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
 }
 
 natsStatus
-natsSrvPool_GetServers(natsSrvPool *pool, char ***servers, int *count)
+natsSrvPool_GetServers(natsSrvPool *pool, bool implicitOnly, char ***servers, int *count)
 {
     natsStatus  s       = NATS_OK;
     char        **srvrs = NULL;
+    natsSrv     *srv;
     natsUrl     *url;
     int         i;
+    int         discovered = 0;
 
     if (pool->size == 0)
     {
@@ -342,18 +346,23 @@ natsSrvPool_GetServers(natsSrvPool *pool, char ***servers, int *count)
 
     for (i=0; ((s == NATS_OK) && (i<pool->size)); i++)
     {
-        url = pool->srvrs[i]->url;
-        if (nats_asprintf(&(srvrs[i]), "nats://%s:%d", url->host, url->port) == -1)
+        srv = pool->srvrs[i];
+        if (implicitOnly && !srv->isImplicit)
+            continue;
+        url = srv->url;
+        if (nats_asprintf(&(srvrs[discovered]), "nats://%s:%d", url->host, url->port) == -1)
             s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+            discovered++;
     }
     if (s == NATS_OK)
     {
         *servers = srvrs;
-        *count   = pool->size;
+        *count   = discovered;
     }
     else
     {
-        for (i=0; i<pool->size; i++)
+        for (i=0; i<discovered; i++)
             NATS_FREE(srvrs[i]);
         NATS_FREE(srvrs);
     }

@@ -1370,6 +1370,29 @@ natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t buf
 NATS_EXTERN natsStatus
 natsConnection_GetServers(natsConnection *nc, char ***servers, int *count);
 
+/** \brief Returns the list of discovered server URLs.
+ *
+ * Unlike #natsConnection_GetServers, this function only returns
+ * the list of servers that have been discovered after the a connection
+ * has been established (with servers version 0.9.2 and above).
+ *
+ * No credential information is included in any of the server URLs
+ * returned by this call.<br>
+ * If you want to use any of these URLs to connect to a server that
+ * requires authentication, you will need to use #natsOptions_SetUserInfo
+ * or #natsOptions_SetToken.
+ *
+ * \note The user is responsible for freeing the memory of the returned array.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param servers the location where to store the pointer to the array
+ * of server URLs.
+ * @param count the location where to store the number of elements of the
+ * returned array.
+ */
+NATS_EXTERN natsStatus
+natsConnection_GetDiscoveredServers(natsConnection *nc, char ***servers, int *count);
+
 /** \brief Gets the last connection error.
  *
  * Returns the last known error as a 'natsStatus' and the location to the

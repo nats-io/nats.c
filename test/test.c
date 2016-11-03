@@ -10219,6 +10219,58 @@ test_GetServers(void)
 }
 
 static void
+test_GetDiscoveredServers(void)
+{
+    natsStatus          s;
+    natsConnection      *conn = NULL;
+    natsPid             s1Pid = NATS_INVALID_PID;
+    natsPid             s2Pid = NATS_INVALID_PID;
+    char                **servers = NULL;
+    int                 count     = 0;
+
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a localhost -p 4222 -cluster nats-route://localhost:5222", true);
+    CHECK_SERVER_STARTED(s1Pid);
+
+    s2Pid = _startServer("nats://127.0.0.1:4223", "-a localhost -p 4223 -cluster nats-route://localhost:5223 -routes nats-route://localhost:5222", true);
+    if (s2Pid == NATS_INVALID_PID)
+    {
+        _stopServer(s1Pid);
+        CHECK_SERVER_STARTED(s2Pid);
+    }
+
+    test("GetDiscoveredServers: ");
+    s = natsConnection_ConnectTo(&conn, "nats://127.0.0.1:4222");
+    if (s == NATS_OK)
+        s = natsConnection_GetDiscoveredServers(conn, &servers, &count);
+    if (s == NATS_OK)
+    {
+        int i;
+
+        // Be tolerant that if we were to connect to an older
+        // server, we would get nothing
+        if (count > 1)
+            s = nats_setError(NATS_ERR, "Unexpected number of servers: %d instead of 1 or 0", count);
+
+        for (i=0; (s == NATS_OK) && (i < count); i++)
+        {
+            if (strcmp(servers[i], "nats://localhost:4223") != 0)
+                s = nats_setError(NATS_ERR, "Unexpected server URL: %s", servers[i]);
+        }
+
+        for (i=0; i<count; i++)
+            free(servers[i]);
+        free(servers);
+    }
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(conn);
+    conn = NULL;
+
+    _stopServer(s2Pid);
+    _stopServer(s1Pid);
+}
+
+static void
 test_Version(void)
 {
     const char *str = NULL;
@@ -11255,7 +11307,8 @@ static testInfo allTests[] =
     {"ProperFalloutMaxAttemptsAuth",    test_ProperFalloutAfterMaxAttemptsWithAuthMismatch},
     {"TimeoutOnNoServer",               test_TimeoutOnNoServer},
     {"PingReconnect",                   test_PingReconnect},
-    {"GetServers",                      test_GetServers}
+    {"GetServers",                      test_GetServers},
+    {"GetDiscoveredServers",            test_GetDiscoveredServers}
 };
 
 static int  maxTests = (int) (sizeof(allTests)/sizeof(testInfo));

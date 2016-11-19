@@ -42,7 +42,10 @@ typedef int                 natsRecvLen;
 #define NATS_SOCK_GET_ERROR             WSAGetLastError()
 
 // Windows doesn't have those..
-#define snprintf    _snprintf
+// snprintf support is introduced starting MSVC 14.0 (_MSC_VER 1900: Visual Studio 2015)
+#if _MSC_VER < 1900
+#define snprintf _snprintf
+#endif
 #define strcasecmp  _stricmp
 
 int

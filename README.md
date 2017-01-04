@@ -445,15 +445,6 @@ asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure
 ```
 This is the same for all other callbacks used in the C NATS library.
 
-Usually, delivey of messages is somehow delayed in favor of a better throughput. However, there are cases where the introduction of this delay will be detrimental to performance, for instance with the request-reply pattern. To counter this, you can use the following API:
-```c
-natsSubscription_NoDelay(natsSubscription *sub);
-```
-This will instruct the library to notify the delivery thread (for async subscribers) or the `natSubscription_NextMsg()` call (for sync subscribers) immediately when a message is available.
-
-Check `examples/replier.c` for a demonstration of the usage of this call.
-
-
 ## Clustered Usage
 
 ```c

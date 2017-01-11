@@ -571,7 +571,7 @@ _makeTLSConn(natsConnection *nc)
                               NATS_SSL_ERR_REASON_STRING);
         }
     }
-    if (s == NATS_OK)
+    if ((s == NATS_OK) && !nc->opts->sslCtx->skipVerify)
     {
         X509 *cert = SSL_get_peer_certificate(ssl);
 

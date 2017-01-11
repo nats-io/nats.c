@@ -114,6 +114,7 @@ typedef struct __natsSSLCtx
     int         refs;
     SSL_CTX     *ctx;
     char        *expectedHostname;
+    bool        skipVerify;
 
 } natsSSLCtx;
 

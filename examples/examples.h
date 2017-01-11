@@ -120,6 +120,7 @@ printUsageAndExit(const char *progName, const char *usage)
 "-tlskey        client private key file (PEM format only)\n" \
 "-tlsciphers    ciphers suite\n"
 "-tlshost       server certificate's expected hostname\n" \
+"-tlsskip       skip server certificate verification\n" \
 "-subj          subject (default is 'foo')\n" \
                 "%s\n",
                 progName, usage);
@@ -241,6 +242,10 @@ parseArgs(int argc, char **argv, const char *usage)
                 printUsageAndExit(argv[0], usage);
 
             s = natsOptions_SetExpectedHostname(opts, argv[++i]);
+        }
+        else if (strcasecmp(argv[i], "-tlsskip") == 0)
+        {
+            s = natsOptions_SkipServerVerification(opts, true);
         }
         else if (strcasecmp(argv[i], "-sync") == 0)
         {

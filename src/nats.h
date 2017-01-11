@@ -736,6 +736,17 @@ natsOptions_SetCiphers(natsOptions *opts, const char *ciphers);
 NATS_EXTERN natsStatus
 natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
 
+/** \brief Switch server certificate verification.
+ *
+ * By default, the server certificate is verified. This option allows
+ * to disable the server certificate verification.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param skip set it to false to disable server certificate verification.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
+
 /** \brief Sets the verbose mode.
  *
  * Sets the verbose mode. If `true`, sends are echoed by the server with

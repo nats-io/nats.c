@@ -286,7 +286,7 @@ natsConnection_PublishString(nc, "foo.bar.baz", "got it?");
 All subscriptions with the same queue name will form a queue group. Each message will be delivered to only one subscriber per queue group, using queue sematics. You can have as many queue groups as you wish. Normal subscribers will continue to work as expected.
 
 ```c
-ncConnection_QueueSubscribe(&sub, nc, "foo", "job_workers", onMsg, NULL);
+natsConnection_QueueSubscribe(&sub, nc, "foo", "job_workers", onMsg, NULL);
 ```
 
 ## TLS
@@ -298,6 +298,31 @@ An SSL/TLS connection is configured through the use of `natsOptions`. Depending 
 Even with full security (client verifying server certificate, and server requiring client certificates), the setup involves only a few calls.
 
 ```c
+// Here is the minimum to create a TLS/SSL connection:
+
+// Create an options object.
+natsOptions_Create(&opts);
+
+// Set the secure flag.
+natsOptions_SetSecure(opts, true);
+
+// You may not need this, but suppose that the server certificate
+// is self-signed and you would normally provide the root CA, but
+// don't want to. You can disable the server certificate verification
+// like this:
+natsOptions_SkipServerVerification(opts, true);
+
+// Connect now...
+natsConnection_Connect(&nc, opts);
+
+// That's it! On success you will have a secure connection with the server!
+
+(...)
+
+// This example shows what it takes to have a full SSL configuration,
+// including server expected's hostname, root CA, client certificates
+// and specific ciphers to use.
+
 // Create an options object.
 natsOptions_Create(&opts);
 

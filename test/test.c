@@ -10887,6 +10887,72 @@ test_SSLVerifyHostname(void)
 }
 
 static void
+test_SSLSkipServerVerification(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    args;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if (opts == NULL)
+        FAIL("Unable to create reconnect options!");
+
+    serverPid = _startServer("nats://localhost:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check that connect fails due to server verification: ");
+    s = natsOptions_SetURL(opts, "nats://localhost:4443");
+    if (s == NATS_OK)
+        s = natsOptions_SetSecure(opts, true);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_SSL_ERROR);
+
+    test("Check that connect succeeds with server verification disabled: ");
+    s = natsOptions_SkipServerVerification(opts, true);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Check reconnects OK: ");
+    _stopServer(serverPid);
+
+    nats_Sleep(100);
+
+    serverPid = _startServer("nats://localhost:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    natsMutex_Lock(args.m);
+    while ((s == NATS_OK) && !(args.reconnected))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "test");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    testCond(s == NATS_OK)
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
+static void
 test_SSLCiphers(void)
 {
 #if defined(NATS_HAS_TLS)
@@ -11291,6 +11357,7 @@ static testInfo allTests[] =
     {"SSLBasic",                        test_SSLBasic},
     {"SSLVerify",                       test_SSLVerify},
     {"SSLVerifyHostname",               test_SSLVerifyHostname},
+    {"SSLSkipServerVerification",       test_SSLSkipServerVerification},
     {"SSLCiphers",                      test_SSLCiphers},
     {"SSLMultithreads",                 test_SSLMultithreads},
     {"SSLConnectVerboseOption",         test_SSLConnectVerboseOption},

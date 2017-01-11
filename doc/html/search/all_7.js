@@ -137,6 +137,7 @@ var searchData=
   ['natsoptions_5fseturl',['natsOptions_SetURL',['../group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5',1,'nats.h']]],
   ['natsoptions_5fsetuserinfo',['natsOptions_SetUserInfo',['../group__opts_group.html#ga5b99da7dd74aac3be962f323c3863d9e',1,'nats.h']]],
   ['natsoptions_5fsetverbose',['natsOptions_SetVerbose',['../group__opts_group.html#gaa16bfd09ef318af18c27a0e199681b69',1,'nats.h']]],
+  ['natsoptions_5fskipserververification',['natsOptions_SkipServerVerification',['../group__opts_group.html#ga6f804ec44adc299989fe623570679da3',1,'nats.h']]],
   ['natsoptions_5fuseglobalmessagedelivery',['natsOptions_UseGlobalMessageDelivery',['../group__opts_group.html#gabf060c92648b50c069f0abe7cbb06f1c',1,'nats.h']]],
   ['natssock',['natsSock',['../nats_8h.html#af798865ac824e5959987de0fe8d07383',1,'nats.h']]],
   ['natsstatistics',['natsStatistics',['../group__types_group.html#ga57a4b8c7109e2773878655722ce028aa',1,'nats.h']]],

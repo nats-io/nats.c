@@ -335,6 +335,10 @@ _verifyCb(int preverifyOk, X509_STORE_CTX* ctx)
     ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     nc = (natsConnection*) SSL_get_ex_data(ssl, 0);
 
+    // Should we skip serve certificate verification?
+    if (nc->opts->sslCtx->skipVerify)
+        return 1;
+
     // If the depth is greater than the limit (when not set, the limit is
     // 100), then report as an error.
     if (depth > 100)
@@ -359,6 +363,7 @@ _verifyCb(int preverifyOk, X509_STORE_CTX* ctx)
     }
 
     if (preverifyOk
+        && (depth == 0) // Verify hostname only for the server certificate.
         && (natsSSLCtx_getExpectedHostname(nc->opts->sslCtx) != NULL))
     {
         if (!_hostnameMatchesCertificate(
@@ -612,6 +617,22 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname)
     return s;
 }
 
+natsStatus
+natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
+{
+    natsStatus s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    s = _getSSLCtx(opts);
+    if (s == NATS_OK)
+        opts->sslCtx->skipVerify = skip;
+
+    UNLOCK_OPTS(opts);
+
+    return s;
+}
+
 #else
 
 natsStatus
@@ -642,6 +663,12 @@ natsOptions_SetCiphers(natsOptions *opts, const char *ciphers)
 
 natsStatus
 natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
+natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
 {
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }

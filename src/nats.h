@@ -738,11 +738,13 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
 
 /** \brief Switch server certificate verification.
  *
- * By default, the server certificate is verified. This option allows
- * to disable the server certificate verification.
+ * By default, the server certificate is verified. You can disable the verification
+ * by passing <c>true</c> to this function.
+ *
+ * \warning This is fine for tests but use with caution since this is not secure.
  *
  * @param opts the pointer to the #natsOptions object.
- * @param skip set it to false to disable server certificate verification.
+ * @param skip set it to <c>true</c> to disable - or skip - server certificate verification.
  */
 NATS_EXTERN natsStatus
 natsOptions_SkipServerVerification(natsOptions *opts, bool skip);

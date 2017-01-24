@@ -41,6 +41,8 @@ typedef int                 natsRecvLen;
 #define NATS_SOCK_ERROR                 (SOCKET_ERROR)
 #define NATS_SOCK_GET_ERROR             WSAGetLastError()
 
+#define __NATS_FUNCTION__ __FUNCTION__
+
 // Windows doesn't have those..
 // snprintf support is introduced starting MSVC 14.0 (_MSC_VER 1900: Visual Studio 2015)
 #if _MSC_VER < 1900

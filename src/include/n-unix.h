@@ -48,6 +48,8 @@ typedef size_t          natsRecvLen;
 #define NATS_SOCK_ERROR                 (-1)
 #define NATS_SOCK_GET_ERROR             (errno)
 
+#define __NATS_FUNCTION__ __func__
+
 #define nats_asprintf       asprintf
 #define nats_strcasestr     strcasestr
 

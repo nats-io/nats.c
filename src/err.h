@@ -11,12 +11,12 @@
 
 #define nats_setDefaultError(e) nats_setError((e), "%s", natsStatus_GetText(e))
 
-#define nats_setError(e, f, ...) nats_setErrorReal(__FILE__, __FUNCTION__, __LINE__, (e), (f), __VA_ARGS__)
+#define nats_setError(e, f, ...) nats_setErrorReal(__FILE__, __func__, __LINE__, (e), (f), __VA_ARGS__)
 
 natsStatus
 nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStatus errSts, const void *errTxtFmt, ...);
 
-#define NATS_UPDATE_ERR_STACK(s) (s == NATS_OK ? s : nats_updateErrStack(s, __FUNCTION__))
+#define NATS_UPDATE_ERR_STACK(s) (s == NATS_OK ? s : nats_updateErrStack(s, __func__))
 
 natsStatus
 nats_updateErrStack(natsStatus err, const char *func);

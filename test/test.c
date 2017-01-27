@@ -4153,7 +4153,7 @@ test_ParserSplitMsg(void)
 }
 
 static natsStatus
-_checkPool(natsConnection *nc, char **expectedURLs, int expectedURLsCount)
+_checkPool(natsConnection *nc, bool inThatOrder, char **expectedURLs, int expectedURLsCount)
 {
     int     i;
     natsSrv *srv;
@@ -4170,21 +4170,50 @@ _checkPool(natsConnection *nc, char **expectedURLs, int expectedURLsCount)
     for (i=0; i<expectedURLsCount; i++)
     {
         url = expectedURLs[i];
-        if (nc->opts->noRandomize)
+        if (inThatOrder)
         {
             srv = nc->srvPool->srvrs[i];
             snprintf(buf, sizeof(buf), "%s:%d", srv->url->host, srv->url->port);
             if (strcmp(buf, url) != 0)
+            {
+                printf("@@IK: here: expected:%s got:%s\n", url, buf);
                 return NATS_ERR;
+            }
         }
         else
         {
             if (natsStrHash_Get(nc->srvPool->urls, url) == NULL)
+            {
+                printf("@@IK: url:%s not found!\n", url);
                 return NATS_ERR;
+            }
         }
     }
 
     return NATS_OK;
+}
+
+static natsStatus
+checkPoolOrderDidNotChange(natsConnection *nc, char **urlsAfterPoolSetup, int initialPoolSize)
+{
+    natsStatus  s;
+    int         i;
+    char        **currentPool = NULL;
+    int         currentPoolSize = 0;
+
+    s = natsConnection_GetServers(nc, &currentPool, &currentPoolSize);
+    for (i= 0; (s == NATS_OK) && (i < initialPoolSize); i++)
+    {
+        if (strcmp(urlsAfterPoolSetup[i], currentPool[i]))
+            s = NATS_ERR;
+    }
+    if (currentPool != NULL)
+    {
+        for (i=0; i<currentPoolSize; i++)
+            free(currentPool[i]);
+        free(currentPool);
+    }
+    return s;
 }
 
 static void
@@ -4200,6 +4229,9 @@ test_AsyncINFO(void)
                                "INFO {\"connect_urls\":[]}\r\n"};
     const char      *wrong[] = {"IxNFO {}\r\n", "INxFO {}\r\n", "INFxO {}\r\n",
                                 "INFOx {}\r\n", "INFO{}\r\n", "INFO {}"};
+    const char      *allURLs[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222",
+                                  "localhost:8222", "localhost:9222", "localhost:10222", "localhost:11222"};
+
 
     s = natsOptions_Create(&opts);
     if (s == NATS_OK)
@@ -4316,6 +4348,7 @@ test_AsyncINFO(void)
     {
         // Destroy, we create a new one
         natsConnection_Destroy(nc);
+        nc = NULL;
 
         // No randomize for now
         snprintf(buf, sizeof(buf), "Test with noRandomize as %s: ", (i == 0 ? "true" : "false"));
@@ -4340,7 +4373,7 @@ test_AsyncINFO(void)
             // Pool now should contain localhost:4222 (the default URL) and localhost:5222
             const char *urls[] = {"localhost:4222", "localhost:5222"};
 
-            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+            s = _checkPool(nc, true, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
         }
         testCond((s == NATS_OK) && (nc->ps->state == OP_START));
 
@@ -4352,7 +4385,7 @@ test_AsyncINFO(void)
             // Pool should still contain localhost:4222 (the default URL) and localhost:5222
             const char *urls[] = {"localhost:4222", "localhost:5222"};
 
-            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+            s = _checkPool(nc, true, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
         }
         testCond((s == NATS_OK) && (nc->ps->state == OP_START));
 
@@ -4365,21 +4398,20 @@ test_AsyncINFO(void)
             // Pool now should contain localhost:4222 (the default URL) localhost:5222 and localhost:6222
             const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222"};
 
-            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+            s = _checkPool(nc, true, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
         }
         testCond((s == NATS_OK) && (nc->ps->state == OP_START));
 
-        // Receive more than 1 URL at once
-        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"localhost:7222\", \"localhost:8222\"]}\r\n");
+        // Receive more than 1 URL at once. User more than 2 to increase the chance
+        // that those are randomized (when randomization is allowed).
+        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"localhost:7222\", \"localhost:8222\", "\
+                "\"localhost:9222\", \"localhost:10222\", \"localhost:11222\"]}\r\n");
         PARSER_START_TEST;
         s = natsParser_Parse(nc, buf, (int)strlen(buf));
         if (s == NATS_OK)
         {
-            // Pool now should contain localhost:4222 (the default URL) localhost:5222, localhost:6222
-            // localhost:7222 and localhost:8222
-            const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222", "localhost:8222"};
-
-            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+            // Pool now should contain all urls in allURLs
+            s = _checkPool(nc, (i == 0 ? true : false), (char**)allURLs, (int)(sizeof(allURLs)/sizeof(char*)));
         }
         testCond((s == NATS_OK) && (nc->ps->state == OP_START));
 
@@ -4389,9 +4421,8 @@ test_AsyncINFO(void)
         s = natsParser_Parse(nc, buf, (int)strlen(buf));
         if (s == NATS_OK)
         {
-            const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222", "localhost:8222"};
-
-            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+            // Pool now should contain all urls in allURLs
+            s = _checkPool(nc, (i == 0 ? true : false), (char**)allURLs, (int)(sizeof(allURLs)/sizeof(char*)));
         }
         testCond((s == NATS_OK) && (nc->ps->state == OP_START));
 
@@ -4401,9 +4432,8 @@ test_AsyncINFO(void)
         s = natsParser_Parse(nc, buf, (int)strlen(buf));
         if (s == NATS_OK)
         {
-            const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222", "localhost:8222"};
-
-            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+            // Pool now should contain all urls in allURLs
+            s = _checkPool(nc, (i == 0 ? true : false), (char**)allURLs, (int)(sizeof(allURLs)/sizeof(char*)));
         }
         testCond((s == NATS_OK) && (nc->ps->state == OP_START));
 
@@ -4413,9 +4443,8 @@ test_AsyncINFO(void)
         s = natsParser_Parse(nc, buf, (int)strlen(buf));
         if (s == NATS_OK)
         {
-            const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222", "localhost:8222"};
-
-            s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+            // Pool now should contain all urls in allURLs
+            s = _checkPool(nc, (i == 0 ? true : false), (char**)allURLs, (int)(sizeof(allURLs)/sizeof(char*)));
         }
         testCond((s == NATS_OK) && (nc->ps->state == OP_START));
     }
@@ -4423,13 +4452,12 @@ test_AsyncINFO(void)
     // Finally, check that the pool should be randomized.
     if (s == NATS_OK)
     {
-        const char  *allUrls[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222", "localhost:8222"};
         int         same = 0;
         char        url[256];
         natsSrv     *srv;
 
         test("Pool correct size: ");
-        if (nc->srvPool->size != (int)(sizeof(allUrls)/sizeof(char*)))
+        if (nc->srvPool->size != (int)(sizeof(allURLs)/sizeof(char*)))
             s = NATS_ERR;
         testCond(s == NATS_OK);
 
@@ -4438,12 +4466,64 @@ test_AsyncINFO(void)
         {
             srv = nc->srvPool->srvrs[i];
             snprintf(url, sizeof(url), "%s:%d", srv->url->host, srv->url->port);
-            if (strcmp(url, (char*) allUrls[i]) == 0)
+            if (strcmp(url, (char*) allURLs[i]) == 0)
                 same++;
         }
-        testCond((s == NATS_OK) && (same != (int)(sizeof(allUrls)/sizeof(char*))));
+        testCond((s == NATS_OK) && (same != (int)(sizeof(allURLs)/sizeof(char*))));
     }
     natsConnection_Destroy(nc);
+    nc = NULL;
+
+    // Check that pool may be randomized on setup, but new URLs are always
+    // added at end of pool.
+    if (s == NATS_OK)
+    {
+        int  initialPoolSize = 0;
+        char **urlsAfterPoolSetup = NULL;
+        const char *newURLs[] = {
+                "localhost:6222",
+                "localhost:7222",
+                "localhost:8222\", \"localhost:9222",
+                "localhost:10222\", \"localhost:11222\", \"localhost:12222,",
+        };
+
+        s = natsOptions_Create(&opts);
+        if (s == NATS_OK)
+            s = natsOptions_SetNoRandomize(opts, false);
+        if (s == NATS_OK)
+            s = natsOptions_SetServers(opts, testServers, sizeof(testServers)/sizeof(char*));
+        if (s == NATS_OK)
+            s = natsConn_create(&nc, opts);
+        if (s == NATS_OK)
+            s = natsParser_Create(&(nc->ps));
+        // Capture the pool sequence after randomization
+        s = natsConnection_GetServers(nc, &urlsAfterPoolSetup, &initialPoolSize);
+        if (s != NATS_OK)
+            FAIL("Unable to setup test");
+
+        // Add new urls
+        for (i=0; i<(int)(sizeof(newURLs)/sizeof(char*)); i++)
+        {
+            snprintf(buf, sizeof(buf), "INFO {\"connect_urls\":[\"%s\"]}\r\n", newURLs[i]);
+            PARSER_START_TEST;
+            s = natsParser_Parse(nc, buf, (int)strlen(buf));
+            if (s == NATS_OK)
+            {
+                // Check that pool order does not change up to the new addition(s).
+                s = checkPoolOrderDidNotChange(nc, urlsAfterPoolSetup, initialPoolSize);
+            }
+            testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+        }
+
+        if (urlsAfterPoolSetup != NULL)
+        {
+            for (i=0; i<initialPoolSize; i++)
+                free(urlsAfterPoolSetup[i]);
+            free(urlsAfterPoolSetup);
+        }
+
+        natsConnection_Destroy(nc);
+    }
 }
 
 static void

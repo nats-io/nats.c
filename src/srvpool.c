@@ -188,13 +188,27 @@ natsStatus
 natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuffle)
 {
     natsStatus  s       = NATS_OK;
-    bool        updated = false;
     char        url[256];
     int         i;
     char        *sport;
     int         portPos;
     bool        found;
     bool        isLH;
+
+    // If we can shuffle, we shuffle the given array, not the entire pool
+    if (urlCount > 0 && doShuffle)
+    {
+        int     j;
+        char    *tmp;
+
+        for (i = 0; i < urlCount; i++)
+        {
+            j = rand() % (i + 1);
+            tmp = urls[i];
+            urls[i] = urls[j];
+            urls[j] = tmp;
+        }
+    }
 
     for (i=0; (s == NATS_OK) && (i<urlCount); i++)
     {
@@ -237,12 +251,8 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuf
             else
                 snprintf(url, sizeof(url), "nats://%s", urls[i]);
             s = _addURLToPool(pool, url, true);
-            if (s == NATS_OK)
-                updated = true;
         }
     }
-    if (updated && doShuffle)
-        _shufflePool(pool);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

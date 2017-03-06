@@ -189,6 +189,9 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, // DLL module handle
         case DLL_THREAD_DETACH:
         case DLL_PROCESS_DETACH:
         {
+            if (!(gLib.wasOpenedOnce))
+                break;
+
             _cleanupThreadLocals();
 
             if (fdwReason == DLL_PROCESS_DETACH)

@@ -29,6 +29,12 @@ if [ $res -ne 0 ]; then
   exit $res
 fi
 
+echo "Test app using dynamic library does not crash if no NATS call is made"
+test/dylib/nonats
+res=$?
+if [ $res -ne 0 ]; then
+  exit $res
+fi
 ctest --timeout 60 --output-on-failure $4
 res=$?
 if [ $res -ne 0 ]; then

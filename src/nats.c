@@ -1178,6 +1178,7 @@ _updateStack(natsTLError *errTL, const char *funcName, natsStatus errSts,
 
     idx = errTL->framesCount;
     if ((idx >= 0)
+        && (idx < MAX_FRAMES)
         && (strcmp(errTL->func[idx], funcName) == 0))
     {
         return;

@@ -21,8 +21,6 @@
             natsCondition_Wait(gLib.cond, gLib.lock); \
         natsMutex_Unlock(gLib.lock)
 
-#define MAX_FRAMES (50)
-
 typedef struct natsTLError
 {
     natsStatus  sts;
@@ -1338,7 +1336,7 @@ nats_GetLastErrorStack(char *buffer, size_t bufLen)
 
     if ((max != errTL->framesCount) && (len > 0))
     {
-        n = snprintf(buffer + offset, len, "%d more...",
+        n = snprintf(buffer + offset, len, "\n%d more...",
                      errTL->framesCount - max);
         // On Windows, n will be < 0 if len is not big enough.
         if (n < 0)

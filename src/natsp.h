@@ -83,6 +83,8 @@ static const char *inboxPrefix = "_INBOX.";
 #define WAIT_FOR_WRITE      (1)
 #define WAIT_FOR_CONNECT    (2)
 
+#define MAX_FRAMES (50)
+
 extern int64_t gLockSpinCount;
 
 typedef void (*natsInitOnceCb)(void);

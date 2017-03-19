@@ -2711,6 +2711,60 @@ test_natsJSON(void)
     }
 }
 
+static void
+test_natsErrStackMoreThanMaxFrames(void)
+{
+    int             i;
+    const int       total = MAX_FRAMES+10;
+    char            funcName[MAX_FRAMES+10][64];
+    char            result[(MAX_FRAMES+10)*100];
+    natsStatus      s = NATS_OK;
+
+    test("Check natsUpdateErrStack called more than MAX_FRAMES: ");
+    // When a stack trace is formed, it goes from the most recent
+    // function called to the oldest. We are going to call more than
+    // MAX_FRAMES with function names being numbers from total down
+    // to 0. We expect not to crash and have at least from total to
+    // total-MAX_FRAMES.
+    for (i=total-1;i>=0;i--)
+    {
+        snprintf(funcName[i], sizeof(funcName[i]), "%d", (i+1));
+        nats_updateErrStack(NATS_ERR, funcName[i]);
+    }
+    s = nats_GetLastErrorStack(result, sizeof(result));
+    if (s == NATS_OK)
+    {
+        char *ptr = result;
+        int   funcID;
+        char  expected[64];
+
+        snprintf(expected, sizeof(expected), "%d more...", total-MAX_FRAMES);
+
+        for (i=total;i>total-MAX_FRAMES;i--)
+        {
+            if (sscanf(ptr, "%d", &funcID) != 1)
+            {
+                s = NATS_ERR;
+                break;
+            }
+            if (funcID != i)
+            {
+                s = NATS_ERR;
+                break;
+            }
+            if (funcID > 10)
+                ptr += 3;
+            else
+                ptr +=2;
+        }
+        // The last should be something like: xx more...
+        // where xx is total-MAX_FRAMES
+        if ((s == NATS_OK) && (strcmp(ptr, expected) != 0))
+            s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+}
+
 natsStatus
 _checkStart(const char *url, int orderIP, int maxAttempts)
 {
@@ -11344,6 +11398,7 @@ static testInfo allTests[] =
     {"natsSock_IPOrder",                test_natsSock_IPOrder},
     {"natsSock_ReadLine",               test_natsSock_ReadLine},
     {"natsJSON",                        test_natsJSON},
+    {"natsErrStackMoreThanMaxFrames",   test_natsErrStackMoreThanMaxFrames},
 
     // Package Level Tests
 

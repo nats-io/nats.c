@@ -21,6 +21,7 @@ natsSock_ConnectTcp
 natsSock_IPOrder
 natsSock_ReadLine
 natsJSON
+natsUpdateErrStack
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize

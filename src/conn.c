@@ -2413,6 +2413,10 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
             // If we are here, it is possible that we timed-out, or some other
             // error occurred. Make sure the request is no longer in the list.
             _removePongFromList(nc, pong);
+
+            // Set the error. If we don't do that, and flush is called in a loop,
+            // the stack would be growing with Flush/FlushTimeout.
+            s = nats_setDefaultError(s);
         }
 
         // We are done with the pong

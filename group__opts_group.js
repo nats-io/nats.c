@@ -13,6 +13,7 @@ var group__opts_group =
     [ "natsOptions_LoadCertificatesChain", "group__opts_group.html#ga36943e2ba53d05407cdabc4e7e96484b", null ],
     [ "natsOptions_SetCiphers", "group__opts_group.html#ga5698f020e8eb3e7440eb073fe08ef62c", null ],
     [ "natsOptions_SetExpectedHostname", "group__opts_group.html#ga0ba43ba9930df385e4781b12be9f2851", null ],
+    [ "natsOptions_SkipServerVerification", "group__opts_group.html#ga6f804ec44adc299989fe623570679da3", null ],
     [ "natsOptions_SetVerbose", "group__opts_group.html#gaa16bfd09ef318af18c27a0e199681b69", null ],
     [ "natsOptions_SetPedantic", "group__opts_group.html#ga26f166af20de98bec67bc6cc916f769e", null ],
     [ "natsOptions_SetPingInterval", "group__opts_group.html#gae68fb615835364c0809555e8dc93f57e", null ],

@@ -484,7 +484,7 @@ natsOptions_SetServers(opts, servers, 3);
 
 // We could also set the amount to sleep between each reconnect attempt (expressed in
 // milliseconds), and the number of reconnect attempts.
-natsOptions_SetMaxReconnects(opts, 5);
+natsOptions_SetMaxReconnect(opts, 5);
 natsOptions_SetReconnectWait(opts, 2000);
 
 // We could also disable the randomization of the server pool

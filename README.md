@@ -1,6 +1,8 @@
 # NATS - C Client 
 A C client for the [NATS messaging system](https://nats.io).
 
+Go [here](http://nats-io.github.io/cnats) for the online documentation.
+
 This NATS Client implementation is heavily based on the [NATS GO Client](https://github.com/nats-io/nats). There is support for Mac OS/X, Linux and Windows (although we don't have specific platform support matrix).
 
 [![License MIT](https://img.shields.io/badge/License-MIT-blue.svg)](http://opensource.org/licenses/MIT)

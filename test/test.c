@@ -3311,6 +3311,26 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
 }
 
 static void
+_closedCb(natsConnection *nc, void *closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    arg->closed = true;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+_waitForConnClosed(struct threadArg *arg)
+{
+    natsMutex_Lock(arg->m);
+    while (!arg->closed)
+        natsCondition_TimedWait(arg->c, arg->m, 2000);
+    natsMutex_Unlock(arg->m);
+}
+
+static void
 test_ParseStateReconnectFunctionality(void)
 {
     natsStatus          s;
@@ -3332,7 +3352,8 @@ test_ParseStateReconnectFunctionality(void)
         opts = _createReconnectOptions();
 
     if ((opts == NULL)
-        || (natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg) != NATS_OK))
+        || (natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg) != NATS_OK)
+        || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK))
     {
         FAIL("Unable to create reconnect options!");
     }
@@ -3393,6 +3414,8 @@ test_ParseStateReconnectFunctionality(void)
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
+
+    _waitForConnClosed(&arg);
 
     _destroyDefaultThreadArgs(&arg);
 
@@ -4523,7 +4546,14 @@ test_AsyncINFO(void)
             if (strcmp(url, (char*) allURLs[i]) == 0)
                 same++;
         }
-        testCond((s == NATS_OK) && (same != (int)(sizeof(allURLs)/sizeof(char*))));
+        // It is possible that pool is not randomized,
+        // so don't fail for that.
+        testCond((s == NATS_OK));
+        if (same == (int)(sizeof(allURLs)/sizeof(char*)))
+        {
+            printf("Pool was not randomized!!!\n");
+            fflush(stdout);
+        }
     }
     natsConnection_Destroy(nc);
     nc = NULL;
@@ -5045,17 +5075,6 @@ test_ConnectionStatus(void)
 }
 
 static void
-_closedCb(natsConnection *nc, void *closure)
-{
-    struct threadArg    *arg = (struct threadArg*) closure;
-
-    natsMutex_Lock(arg->m);
-    arg->closed = true;
-    natsCondition_Broadcast(arg->c);
-    natsMutex_Unlock(arg->m);
-}
-
-static void
 test_ConnClosedCB(void)
 {
     natsStatus          s;
@@ -5532,7 +5551,8 @@ test_BasicReconnectFunctionality(void)
         opts = _createReconnectOptions();
 
     if ((opts == NULL)
-        || (natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg) != NATS_OK))
+        || (natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg) != NATS_OK)
+        || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK))
     {
         FAIL("Unable to create reconnect options!");
     }
@@ -5588,8 +5608,7 @@ test_BasicReconnectFunctionality(void)
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
 
-    if (valgrind)
-        nats_Sleep(1000);
+    _waitForConnClosed(&arg);
 
     _destroyDefaultThreadArgs(&arg);
 
@@ -5634,7 +5653,8 @@ test_ExtendedReconnectFunctionality(void)
 
     if ((opts == NULL)
         || (natsOptions_SetReconnectedCB(opts, _reconnectedCb, &arg) != NATS_OK)
-        || (natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg) != NATS_OK))
+        || (natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg) != NATS_OK)
+        || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK))
     {
         FAIL("Unable to create reconnect options!");
     }
@@ -5669,7 +5689,7 @@ test_ExtendedReconnectFunctionality(void)
     if (s == NATS_OK)
         s = natsConnection_Subscribe(&sub3, nc, "bar", _recvTestString, &arg);
 
-    // Unsubscribe foobar while disconnected
+    // Unsubscribe foo and bar while disconnected
     if (s == NATS_OK)
         s = natsSubscription_Unsubscribe(sub2);
 
@@ -5729,6 +5749,8 @@ test_ExtendedReconnectFunctionality(void)
     natsSubscription_Destroy(sub4);;
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
+
+    _waitForConnClosed(&arg);
 
     _destroyDefaultThreadArgs(&arg);
 
@@ -9633,6 +9655,10 @@ test_BasicClusterReconnect(void)
         s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectWait(opts, 100);
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -9684,8 +9710,7 @@ test_BasicClusterReconnect(void)
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
-    if (valgrind)
-        nats_Sleep(1000);
+    _waitForConnClosed(&arg);
 
     _destroyDefaultThreadArgs(&arg);
 
@@ -10165,15 +10190,19 @@ test_TimeoutOnNoServer(void)
     test("Wait for closed: ");
     natsMutex_Lock(arg.m);
     while ((s == NATS_OK) && !arg.closed)
-        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000 + serversCount*50);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.closed);
 
     timedWait = nats_Now() - startWait;
 
-    // Use 500ms as variable time delta
+    // The client will try to reconnect to serversCount servers.
+    // It will do that for MaxReconnects==10 times.
+    // For a server that has been already tried, it should sleep
+    // ReconnectWait==100ms. When a server is not running, the connect
+    // failure on UNIXes should be fast, still account for that.
     test("Check wait time for closed cb: ");
-    testCond(timedWait <= ((opts->maxReconnect * opts->reconnectWait) + 500));
+    testCond(timedWait <= ((opts->maxReconnect * opts->reconnectWait) + serversCount*opts->maxReconnect*50));
 
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);

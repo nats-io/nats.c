@@ -21,7 +21,7 @@ file(GLOB PS_SOURCES "${NATS_PLATFORM_INCLUDE}/*.c")
 add_library(nats SHARED ${SOURCES} ${PS_SOURCES})
 target_link_libraries(nats ${NATS_OPENSSL_LIBS} ${NATS_EXTRA_LIB})
 add_library(nats_static STATIC ${SOURCES} ${PS_SOURCES})
-target_link_libraries(nats_static ${NATS_OPENSSL_LIBS} ${NATS_EXTRA_LIB})
+target_link_libraries(nats_static ${NATS_OPENSSL_LIBS})
 
 # --------------------------------------
 # Install the libraries and header files

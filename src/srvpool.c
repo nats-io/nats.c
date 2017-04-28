@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
 
 #include "natsp.h"
 
@@ -185,7 +185,7 @@ _shufflePool(natsSrvPool *pool)
 }
 
 natsStatus
-natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuffle)
+natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuffle, bool *added)
 {
     natsStatus  s       = NATS_OK;
     char        url[256];
@@ -194,6 +194,8 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuf
     int         portPos;
     bool        found;
     bool        isLH;
+
+    *added = false;
 
     // If we can shuffle, we shuffle the given array, not the entire pool
     if (urlCount > 0 && doShuffle)
@@ -251,6 +253,8 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuf
             else
                 snprintf(url, sizeof(url), "nats://%s", urls[i]);
             s = _addURLToPool(pool, url, true);
+            if (s == NATS_OK)
+                *added = true;
         }
     }
 

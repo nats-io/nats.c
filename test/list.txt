@@ -21,7 +21,7 @@ natsSock_ConnectTcp
 natsSock_IPOrder
 natsSock_ReadLine
 natsJSON
-natsUpdateErrStack
+natsErrStackMoreThanMaxFrames
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize
@@ -123,3 +123,4 @@ TimeoutOnNoServer
 PingReconnect
 GetServers
 GetDiscoveredServers
+DiscoveredServersCb

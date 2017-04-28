@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
 
 #include "natsp.h"
 
@@ -836,6 +836,21 @@ natsOptions_SetReconnectedCB(natsOptions *opts,
 
     opts->reconnectedCb = reconnectedCb;
     opts->reconnectedCbClosure = closure;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_SetDiscoveredServersCB(natsOptions *opts,
+                                   natsConnectionHandler discoveredServersCb,
+                                   void *closure)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->discoveredServersCb = discoveredServersCb;
+    opts->discoveredServersClosure = closure;
 
     UNLOCK_OPTS(opts);
 

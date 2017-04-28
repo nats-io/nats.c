@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
 
 #ifndef ASYNCCB_H_
 #define ASYNCCB_H_
@@ -10,7 +10,8 @@ typedef enum
     ASYNC_CLOSED          = 0,
     ASYNC_DISCONNECTED,
     ASYNC_RECONNECTED,
-    ASYNC_ERROR
+    ASYNC_ERROR,
+    ASYNC_DISCOVERED_SERVERS
 
 } natsAsyncCbType;
 

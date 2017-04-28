@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
 
 #ifndef SRVPOOL_H_
 #define SRVPOOL_H_
@@ -57,7 +57,7 @@ natsSrvPool_GetNextServer(natsSrvPool *pool, struct __natsOptions *opts, const n
 // Go through the list of the given URLs and add them to the pool if not already
 // present. If `doShuffle` is true, shuffles the pool if new URLs were added.
 natsStatus
-natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuffle);
+natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuffle, bool *added);
 
 // Returns an array of servers (as a copy). User is responsible to free the memory.
 natsStatus

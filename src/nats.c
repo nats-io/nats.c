@@ -686,6 +686,9 @@ _asyncCbsThread(void *arg)
             case ASYNC_RECONNECTED:
                 (*(nc->opts->reconnectedCb))(nc, nc->opts->reconnectedCbClosure);
                 break;
+            case ASYNC_DISCOVERED_SERVERS:
+                (*(nc->opts->discoveredServersCb))(nc, nc->opts->discoveredServersClosure);
+                break;
             case ASYNC_ERROR:
                 (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
                 break;

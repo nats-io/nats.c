@@ -5938,6 +5938,8 @@ test_IsReconnectingAndStatus(void)
         s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
 
     // Connect, verify initial reconnecting state check, then stop the server
     if (s == NATS_OK)
@@ -5991,6 +5993,11 @@ test_IsReconnectingAndStatus(void)
 
     test("Check Status is correct: ");
     testCond(natsConnection_Status(nc) == CLOSED);
+
+    natsMutex_Lock(arg.m);
+    while (!arg.closed)
+        natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
 
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
@@ -10434,6 +10441,85 @@ test_GetDiscoveredServers(void)
 }
 
 static void
+_discoveredServersCb(natsConnection *nc, void *closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    arg->sum++;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+test_DiscoveredServersCb(void)
+{
+    natsStatus          s;
+    natsConnection      *conn = NULL;
+    natsPid             s1Pid = NATS_INVALID_PID;
+    natsPid             s2Pid = NATS_INVALID_PID;
+    natsPid             s3Pid = NATS_INVALID_PID;
+    natsOptions         *opts = NULL;
+    struct threadArg    arg;
+    int                 invoked = 0;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");
+    if (s == NATS_OK)
+        s = natsOptions_SetDiscoveredServersCB(opts, _discoveredServersCb, &arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a localhost -p 4222 -cluster nats-route://localhost:5222", true);
+    CHECK_SERVER_STARTED(s1Pid);
+
+    s2Pid = _startServer("nats://127.0.0.1:4223", "-a localhost -p 4223 -cluster nats-route://localhost:5223 -routes nats-route://localhost:5222", true);
+    if (s2Pid == NATS_INVALID_PID)
+    {
+        _stopServer(s1Pid);
+        CHECK_SERVER_STARTED(s2Pid);
+    }
+
+    test("DiscoveredServersCb not triggered on initial connect: ");
+    s = natsConnection_Connect(&conn, opts);
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && (arg.sum == 0))
+        s = natsCondition_TimedWait(arg.c, arg.m, 500);
+    invoked = arg.sum;
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_TIMEOUT) && (invoked == 0));
+    s = NATS_OK;
+
+    s3Pid = _startServer("nats://127.0.0.1:4224", "-a localhost -p 4224 -cluster nats-route://localhost:5224 -routes nats-route://localhost:5222", true);
+    if (s3Pid == NATS_INVALID_PID)
+    {
+        _stopServer(s1Pid);
+        _stopServer(s2Pid);
+        CHECK_SERVER_STARTED(s3Pid);
+    }
+
+    test("DiscoveredServersCb triggered on new server joining the cluster: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && (arg.sum == 0))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    invoked = arg.sum;
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && (invoked == 1));
+
+    natsConnection_Destroy(conn);
+    natsOptions_Destroy(opts);
+
+    _stopServer(s3Pid);
+    _stopServer(s2Pid);
+    _stopServer(s1Pid);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 test_Version(void)
 {
     const char *str = NULL;
@@ -11539,7 +11625,8 @@ static testInfo allTests[] =
     {"TimeoutOnNoServer",               test_TimeoutOnNoServer},
     {"PingReconnect",                   test_PingReconnect},
     {"GetServers",                      test_GetServers},
-    {"GetDiscoveredServers",            test_GetDiscoveredServers}
+    {"GetDiscoveredServers",            test_GetDiscoveredServers},
+    {"DiscoveredServersCb",             test_DiscoveredServersCb}
 };
 
 static int  maxTests = (int) (sizeof(allTests)/sizeof(testInfo));

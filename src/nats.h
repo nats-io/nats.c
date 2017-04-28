@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
 
 #ifndef NATS_H_
 #define NATS_H_
@@ -947,8 +947,28 @@ natsOptions_SetDisconnectedCB(natsOptions *opts,
  */
 NATS_EXTERN natsStatus
 natsOptions_SetReconnectedCB(natsOptions *opts,
-                             natsConnectionHandler reconnectedCb,
+                             natsConnectionHandler discoveredServersCb,
                              void *closure);
+
+/** \brief Sets the callback to be invoked when new servers are discovered.
+ *
+ * Specifies the callback to invoke when the client library has been notified
+ * of one or more new `NATS Servers`.
+ *
+ * \warning Invocation of this callback is asynchronous, which means that
+ * the state of the connection may have changed when this callback is
+ * invoked.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param discoveredServersCb the callback to be invoked when new servers
+ * have been discovered.
+ * @param closure a pointer to an user object that will be passed to
+ * the callback. `closure` can be `NULL`.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetDiscoveredServersCB(natsOptions *opts,
+                                   natsConnectionHandler discoveredServersCb,
+                                   void *closure);
 
 /** \brief Sets the external event loop and associated callbacks.
  *

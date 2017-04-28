@@ -496,10 +496,17 @@ _processInfo(natsConnection *nc, char *info, int len)
 #endif
 
     if (s == NATS_OK)
+    {
+        bool added = false;
+
         s = natsSrvPool_addNewURLs(nc->srvPool,
                                    nc->info.connectURLs,
                                    nc->info.connectURLsCount,
-                                   !nc->opts->noRandomize);
+                                   !nc->opts->noRandomize,
+                                   &added);
+        if ((s == NATS_OK) && added && !nc->initc && (nc->opts->discoveredServersCb != NULL))
+            natsAsyncCb_PostConnHandler(nc, ASYNC_DISCOVERED_SERVERS);
+    }
 
     if (s != NATS_OK)
         s = nats_setError(NATS_PROTOCOL_ERROR,
@@ -1251,6 +1258,7 @@ _connect(natsConnection *nc)
     int         poolSize;
 
     natsConn_Lock(nc);
+    nc->initc = true;
 
     pool = nc->srvPool;
 
@@ -1305,6 +1313,7 @@ _connect(natsConnection *nc)
         s = nats_setDefaultError(NATS_NO_SERVER);
     }
 
+    nc->initc = false;
     natsConn_Unlock(nc);
 
     return NATS_UPDATE_ERR_STACK(s);

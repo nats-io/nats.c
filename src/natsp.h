@@ -164,6 +164,9 @@ struct __natsOptions
     natsConnectionHandler   reconnectedCb;
     void                    *reconnectedCbClosure;
 
+    natsConnectionHandler   discoveredServersCb;
+    void                    *discoveredServersClosure;
+
     natsErrHandler          asyncErrCb;
     void                    *asyncErrCbClosure;
 
@@ -350,6 +353,7 @@ struct __natsConnection
     natsMutex           *subsMu;
 
     natsConnStatus      status;
+    bool                initc; // true if the connection is performing the initial connect
     natsStatus          err;
     char                errStr[256];
 

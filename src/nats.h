@@ -956,8 +956,7 @@ natsOptions_SetReconnectedCB(natsOptions *opts,
  * of one or more new `NATS Servers`.
  *
  * \warning Invocation of this callback is asynchronous, which means that
- * the state of the connection may have changed when this callback is
- * invoked.
+ * the state may have changed when this callback is invoked.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param discoveredServersCb the callback to be invoked when new servers

@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
 
 #include "natsp.h"
 
@@ -1555,7 +1555,7 @@ _deliverMsgs(void *arg)
         if ((max > 0) && (delivered >= max))
         {
             // If we have hit the max for delivered msgs, remove sub.
-            natsConn_removeSubscription(nc, sub, true);
+            natsConn_removeSubscription(nc, sub);
         }
 
         natsMutex_Lock(dlv->lock);

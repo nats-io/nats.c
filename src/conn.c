@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
 
 #include "natsp.h"
 
@@ -169,6 +169,7 @@ _freeConn(natsConnection *nc)
     if (nc->sockCtx.ssl != NULL)
         SSL_free(nc->sockCtx.ssl);
     NATS_FREE(nc->el.buffer);
+    natsMutex_Destroy(nc->subsMu);
     natsMutex_Destroy(nc->mu);
 
     NATS_FREE(nc);
@@ -751,10 +752,35 @@ _resendSubscriptions(natsConnection *nc)
     char                *proto;
     int                 res;
     int                 adjustedMax;
+    natsSubscription    **subs = NULL;
+    int                 i = 0;
+    int                 count = 0;
 
-    natsHashIter_Init(&iter, nc->subs);
-    while ((s == NATS_OK) && natsHashIter_Next(&iter, NULL, (void**) &sub))
+    // Since we are going to send protocols to the server, we don't want to
+    // be holding the subsMu lock (which is used in processMsg). So copy
+    // the subscriptions in a temporary array.
+    natsMutex_Lock(nc->subsMu);
+    if (natsHash_Count(nc->subs) > 0)
     {
+        subs = NATS_CALLOC(natsHash_Count(nc->subs), sizeof(natsSubscription*));
+        if (subs == NULL)
+            s = NATS_NO_MEMORY;
+
+        if (s == NATS_OK)
+        {
+            natsHashIter_Init(&iter, nc->subs);
+            while (natsHashIter_Next(&iter, NULL, (void**) &sub))
+            {
+                subs[count++] = sub;
+            }
+        }
+    }
+    natsMutex_Unlock(nc->subsMu);
+
+    for (i=0; (s == NATS_OK) && (i<count); i++)
+    {
+        sub = subs[i];
+
         proto = NULL;
 
         adjustedMax = 0;
@@ -793,6 +819,8 @@ _resendSubscriptions(natsConnection *nc)
         if ((s == NATS_OK) && (adjustedMax > 0))
             s = _sendUnsubProto(nc, sub->sid, adjustedMax);
     }
+
+    NATS_FREE(subs);
 
     return s;
 }
@@ -1601,6 +1629,7 @@ _removeAllSubscriptions(natsConnection *nc)
     natsHashIter     iter;
     natsSubscription *sub;
 
+    natsMutex_Lock(nc->subsMu);
     natsHashIter_Init(&iter, nc->subs);
     while (natsHashIter_Next(&iter, NULL, (void**) &sub))
     {
@@ -1610,6 +1639,7 @@ _removeAllSubscriptions(natsConnection *nc)
 
         natsSub_release(sub);
     }
+    natsMutex_Unlock(nc->subsMu);
 }
 
 
@@ -1709,17 +1739,6 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
     }
 }
 
-static void
-_processSlowConsumer(natsConnection *nc, natsSubscription *sub)
-{
-    nc->err = NATS_SLOW_CONSUMER;
-
-    if (!(sub->slowConsumer) && (nc->opts->asyncErrCb != NULL))
-        natsAsyncCb_PostErrHandler(nc, sub, NATS_SLOW_CONSUMER);
-
-    sub->slowConsumer = true;
-}
-
 static natsStatus
 _createMsg(natsMsg **newMsg, natsConnection *nc, char *buf, int bufLen)
 {
@@ -1750,8 +1769,9 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     natsSubscription *sub = NULL;
     natsMsg          *msg = NULL;
     natsMsgDlvWorker *ldw = NULL;
+    bool             sc   = false;
 
-    natsConn_Lock(nc);
+    natsMutex_Lock(nc->subsMu);
 
     nc->stats.inMsgs  += 1;
     nc->stats.inBytes += (uint64_t) bufLen;
@@ -1759,7 +1779,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     sub = natsHash_Get(nc->subs, nc->ps->ma.sid);
     if (sub == NULL)
     {
-        natsConn_Unlock(nc);
+        natsMutex_Unlock(nc->subsMu);
         return NATS_OK;
     }
 
@@ -1769,7 +1789,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     s = _createMsg(&msg, nc, buf, bufLen);
     if (s != NATS_OK)
     {
-        natsConn_Unlock(nc);
+        natsMutex_Unlock(nc->subsMu);
         return s;
     }
 
@@ -1788,11 +1808,12 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
         sub->dropped++;
 
+        sc = sub->slowConsumer;
+        sub->slowConsumer = true;
+
         // Undo stats from above.
         sub->msgList.msgs--;
         sub->msgList.bytes -= bufLen;
-
-        _processSlowConsumer(nc, sub);
     }
     else
     {
@@ -1841,7 +1862,19 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     else
         natsSub_Unlock(sub);
 
-    natsConn_Unlock(nc);
+    natsMutex_Unlock(nc->subsMu);
+
+    if (sc)
+    {
+        natsConn_Lock(nc);
+
+        nc->err = NATS_SLOW_CONSUMER;
+
+        if (nc->opts->asyncErrCb != NULL)
+            natsAsyncCb_PostErrHandler(nc, sub, NATS_SLOW_CONSUMER);
+
+        natsConn_Unlock(nc);
+    }
 
     return s;
 }
@@ -1930,12 +1963,11 @@ natsConn_addSubcription(natsConnection *nc, natsSubscription *sub)
 }
 
 void
-natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub, bool needsLock)
+natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub)
 {
     natsSubscription *sub = NULL;
 
-    if (needsLock)
-        natsConn_Lock(nc);
+    natsMutex_Lock(nc->subsMu);
 
     sub = natsHash_Remove(nc->subs, removedSub->sid);
 
@@ -1944,8 +1976,7 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub, bo
     if (sub != NULL)
         natsSub_close(sub, false);
 
-    if (needsLock)
-        natsConn_Unlock(nc);
+    natsMutex_Unlock(nc->subsMu);
 
     // If we really removed the subscription, then release it.
     if (sub != NULL)
@@ -1980,8 +2011,10 @@ natsConn_subscribe(natsSubscription **newSub,
     s = natsSub_create(&sub, nc, subj, queue, timeout, cb, cbClosure);
     if (s == NATS_OK)
     {
+        natsMutex_Lock(nc->subsMu);
         sub->sid = ++(nc->ssid);
         s = natsConn_addSubcription(nc, sub);
+        natsMutex_Unlock(nc->subsMu);
     }
 
     if (s == NATS_OK)
@@ -2030,7 +2063,7 @@ natsConn_subscribe(natsSubscription **newSub,
         // for the delivery thread to unroll.
         natsSub_close(sub, false);
 
-        natsConn_removeSubscription(nc, sub, false);
+        natsConn_removeSubscription(nc, sub);
 
         natsSub_release(sub);
     }
@@ -2054,7 +2087,9 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
         return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
+    natsMutex_Lock(nc->subsMu);
     sub = natsHash_Get(nc->subs, sub->sid);
+    natsMutex_Unlock(nc->subsMu);
     if (sub == NULL)
     {
         // Already unsubscribed
@@ -2067,7 +2102,7 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
     natsSub_Unlock(sub);
 
     if (max == 0)
-        natsConn_removeSubscription(nc, sub, false);
+        natsConn_removeSubscription(nc, sub);
 
     if (!natsConn_isReconnecting(nc))
     {
@@ -2142,6 +2177,8 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     nc->errStr[0] = '\0';
 
     s = natsMutex_Create(&(nc->mu));
+    if (s == NATS_OK)
+        s = natsMutex_Create(&(nc->subsMu));
     if (s == NATS_OK)
         s = _setupServerPool(nc);
     if (s == NATS_OK)
@@ -2478,10 +2515,14 @@ natsConnection_GetStats(natsConnection *nc, natsStatistics *stats)
     if ((nc == NULL) || (stats == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
+    // Stats are updated either under connection's mu or subsMu mutexes.
+    // Lock both to safely get them.
     natsConn_Lock(nc);
+    natsMutex_Lock(nc->subsMu);
 
     memcpy(stats, &(nc->stats), sizeof(natsStatistics));
 
+    natsMutex_Unlock(nc->subsMu);
     natsConn_Unlock(nc);
 
     return s;

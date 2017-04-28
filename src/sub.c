@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
 
 #include "natsp.h"
 
@@ -176,7 +176,7 @@ natsSub_deliverMsgs(void *arg)
         if ((max > 0) && (delivered >= max))
         {
             // If we have hit the max for delivered msgs, remove sub.
-            natsConn_removeSubscription(nc, sub, true);
+            natsConn_removeSubscription(nc, sub);
             break;
         }
     }
@@ -586,7 +586,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
     natsSub_Unlock(sub);
 
     if (removeSub)
-        natsConn_removeSubscription(nc, sub, true);
+        natsConn_removeSubscription(nc, sub);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

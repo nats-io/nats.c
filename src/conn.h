@@ -1,4 +1,4 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
 
 #ifndef CONN_H_
 #define CONN_H_
@@ -67,7 +67,7 @@ natsStatus
 natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max);
 
 void
-natsConn_removeSubscription(natsConnection *nc, natsSubscription *sub, bool needsLock);
+natsConn_removeSubscription(natsConnection *nc, natsSubscription *sub);
 
 void
 natsConn_processAsyncINFO(natsConnection *nc, char *buf, int len);

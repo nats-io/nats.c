@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
 
 #ifndef NATSP_H_
 #define NATSP_H_
@@ -347,6 +347,7 @@ struct __natsConnection
 
     int64_t             ssid;
     natsHash            *subs;
+    natsMutex           *subsMu;
 
     natsConnStatus      status;
     natsStatus          err;

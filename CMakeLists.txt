@@ -9,9 +9,6 @@ include(CTest)
 # Uncomment to have the executable moved to 'build' instead of their respective 'build/xxx' directories
 #set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 
-set(NATS_INSTALL_PREFIX ../install CACHE PATH "Install prefix")
-set(CMAKE_INSTALL_PREFIX ${NATS_INSTALL_PREFIX} CACHE INTERNAL "")
-
 option(NATS_UPDATE_VERSION "Update the version file" OFF)
 option(NATS_COVERAGE "Code coverage" OFF)
 option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)

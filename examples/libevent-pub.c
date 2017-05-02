@@ -1,6 +1,6 @@
 // Copyright 2016 Apcera Inc. All rights reserved.
 
-#include "../adapters/libevent.h"
+#include "adapters/libevent.h"
 #include "examples.h"
 
 #ifndef WIN32

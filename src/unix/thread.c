@@ -27,6 +27,8 @@ _threadStart(void *arg)
 
     NATS_FREE(c);
 
+    nats_ReleaseThreadMemory();
+
     return NULL;
 }
 

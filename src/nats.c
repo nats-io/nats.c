@@ -160,28 +160,42 @@ _cleanupThreadLocals(void)
     void *tl = NULL;
 
     tl = natsThreadLocal_Get(gLib.errTLKey);
-    if (tl != NULL)
-        _destroyErrTL(tl);
-
+	if (tl != NULL)
+	{
+		_destroyErrTL(tl);
+		natsThreadLocal_SetEx(gLib.errTLKey, NULL, false);
+	}
     tl = NULL;
 
     natsMutex_Lock(gLib.lock);
     if (gLib.sslInitialized)
     {
         tl = natsThreadLocal_Get(gLib.sslTLKey);
-        if (tl != NULL)
-            _cleanupThreadSSL(tl);
+		if (tl != NULL)
+		{
+			_cleanupThreadSSL(tl);
+			natsThreadLocal_SetEx(gLib.sslTLKey, NULL, false);
+		}
     }
     natsMutex_Unlock(gLib.lock);
 }
 
-#ifdef NATS_STATIC
 void
 nats_ReleaseThreadMemory(void)
 {
+#ifdef NATS_STATIC
 	_cleanupThreadLocals();
+#endif
 }
-#else
+void nats_ReleaseStaticLibrary(void)
+{
+#ifdef NATS_STATIC
+	nats_ReleaseThreadMemory();
+	_finalCleanup();
+#endif
+}
+
+#ifndef NATS_STATIC
 #if _WIN32
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, // DLL module handle
     DWORD fdwReason,                    // reason called
@@ -297,12 +311,6 @@ _freeLib(void)
     gLib.closed = false;
     gLib.initialized = false;
     natsMutex_Unlock(gLib.lock);
-
-
-#ifdef NATS_STATIC
-	_cleanupThreadLocals();
-	_finalCleanup();
-#endif
 }
 
 void
@@ -1082,9 +1090,10 @@ nats_Close(void)
     }
     natsMutex_Unlock(gLib.dlvWorkers.lock);
 
-    natsMutex_Unlock(gLib.lock);
+	natsMutex_Unlock(gLib.lock);
 
-    _libTearDown();
+	nats_ReleaseThreadMemory();
+	_libTearDown();
 }
 
 const char*

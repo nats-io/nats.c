@@ -131,6 +131,8 @@ int main(int argc, char **argv)
     // To silence reports of memory still in used with valgrind
     nats_Close();
     libevent_global_shutdown();
+	// This will fix reports when linking statically
+	nats_ReleaseStaticLibrary();
 
     return 0;
 }

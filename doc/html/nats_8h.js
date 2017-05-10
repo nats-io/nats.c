@@ -27,6 +27,7 @@ var nats_8h =
     [ "nats_GetLastErrorStack", "group__library_group.html#gaca24172e1b97ca01cee29ca437f5702e", null ],
     [ "nats_PrintLastErrorStack", "group__library_group.html#ga5fab3b18c4fe3630254483575f6066f4", null ],
     [ "nats_SetMessageDeliveryPoolSize", "group__library_group.html#gab21e94ce7a7d226611ea2c05914cf19d", null ],
+    [ "nats_ReleaseThreadMemory", "group__library_group.html#gafe171baefa00a85b77205116e9f3e48a", null ],
     [ "nats_Close", "group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e", null ],
     [ "natsStatus_GetText", "group__status_group.html#ga0f7a5e105311800d957ae7b28d1ab752", null ],
     [ "natsStatistics_Create", "group__stats_group.html#gafa923df029168f4991b77ffdd9e24877", null ],

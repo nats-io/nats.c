@@ -36,6 +36,7 @@ var searchData=
   ['nats_5fopen',['nats_Open',['../group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d',1,'nats.h']]],
   ['nats_5fprintlasterrorstack',['nats_PrintLastErrorStack',['../group__library_group.html#ga5fab3b18c4fe3630254483575f6066f4',1,'nats.h']]],
   ['nats_5fprotocol_5ferror',['NATS_PROTOCOL_ERROR',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a113ffbe9a1f243582c38ebd876cb736d',1,'status.h']]],
+  ['nats_5freleasethreadmemory',['nats_ReleaseThreadMemory',['../group__library_group.html#gafe171baefa00a85b77205116e9f3e48a',1,'nats.h']]],
   ['nats_5fsecure_5fconnection_5frequired',['NATS_SECURE_CONNECTION_REQUIRED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80abc76f1b31fdac4525583cc19588240dc',1,'status.h']]],
   ['nats_5fsecure_5fconnection_5fwanted',['NATS_SECURE_CONNECTION_WANTED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a0aa3d1e18a2a217149fa8b1a306c9b08',1,'status.h']]],
   ['nats_5fsetmessagedeliverypoolsize',['nats_SetMessageDeliveryPoolSize',['../group__library_group.html#gab21e94ce7a7d226611ea2c05914cf19d',1,'nats.h']]],

@@ -175,7 +175,13 @@ _cleanupThreadLocals(void)
     natsMutex_Unlock(gLib.lock);
 }
 
-
+#ifdef NATS_STATIC
+void
+nats_ReleaseThreadMemory(void)
+{
+	_cleanupThreadLocals();
+}
+#else
 #if _WIN32
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, // DLL module handle
     DWORD fdwReason,                    // reason called
@@ -216,6 +222,7 @@ __attribute__((destructor)) void natsLib_Destructor(void)
     // Do the final cleanup if possible
     _finalCleanup();
 }
+#endif
 #endif
 
 static void
@@ -290,6 +297,12 @@ _freeLib(void)
     gLib.closed = false;
     gLib.initialized = false;
     natsMutex_Unlock(gLib.lock);
+
+
+#ifdef NATS_STATIC
+	_cleanupThreadLocals();
+	_finalCleanup();
+#endif
 }
 
 void

@@ -418,6 +418,17 @@ nats_SetMessageDeliveryPoolSize(int max);
 NATS_EXTERN void
 nats_Close(void);
 
+/** \brief Per-Thread cleanup function for static library
+*
+* When linking to the static library, this should be called at the end of
+* each thread where NATS objects have been created or used.
+*
+* \note This has no effect when called from the shared library.
+* nats_Close() implicitly calls that.
+*/
+NATS_EXTERN void
+nats_ReleaseThreadMemory(void);
+
 /** @} */ // end of libraryGroup
 
 /** \defgroup statusGroup Status

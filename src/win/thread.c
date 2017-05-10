@@ -48,6 +48,8 @@ static unsigned __stdcall _threadStart(void* arg)
 
   NATS_FREE(c);
 
+  nats_ReleaseThreadMemory();
+
   return 0;
 }
 

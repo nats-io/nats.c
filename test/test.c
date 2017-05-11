@@ -6563,6 +6563,91 @@ test_AuthToken(void)
 }
 
 static void
+_errorHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
+{
+    struct threadArg *args      = (struct threadArg*) closure;
+    const char       *lastError = NULL;
+
+    natsMutex_Lock(args->m);
+    if ((err == NATS_NOT_PERMITTED)
+        && (natsConnection_GetLastError(nc, &lastError) == NATS_NOT_PERMITTED)
+        && (nats_strcasestr(lastError, PERMISSIONS_ERR) != NULL))
+    {
+        args->done = true;
+        natsCondition_Signal(args->c);
+    }
+    natsMutex_Unlock(args->m);
+}
+
+static void
+test_PermViolation(void)
+{
+    natsStatus          s;
+    natsConnection      *conn = NULL;
+    natsSubscription    *sub  = NULL;
+    natsOptions         *opts = NULL;
+    natsPid             pid   = NATS_INVALID_PID;
+    int                 i;
+    bool                cbCalled;
+    struct threadArg    args;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://ivan:pwd@127.0.0.1:8232");
+    if (s == NATS_OK)
+        s = natsOptions_SetErrorHandler(opts, _errorHandler, &args);
+    if (s != NATS_OK)
+        FAIL("Error setting up test");
+
+    pid = _startServer("nats://127.0.0.1:8232", "-c permissions.conf -a 127.0.0.1 -p 8232", false);
+    CHECK_SERVER_STARTED(pid);
+    s = _checkStart("nats://ivan:pwd@127.0.0.1:8232", 4, 10);
+    if (s != NATS_OK)
+    {
+        _stopServer(pid);
+        FAIL("Error starting server!");
+    }
+    test("Check connection created: ");
+    s = natsConnection_Connect(&conn, opts);
+    testCond(s == NATS_OK);
+
+    for (i=0; (s == NATS_OK) && (i<2); i++)
+    {
+        cbCalled = false;
+
+        test("Should get perm violation: ");
+        if (i == 0)
+            s = natsConnection_PublishString(conn, "bar", "fail");
+        else
+            s = natsConnection_Subscribe(&sub, conn, "foo", _dummyMsgHandler, NULL);
+
+        if (s == NATS_OK)
+        {
+            natsMutex_Lock(args.m);
+            while (!args.done && s == NATS_OK)
+                s = natsCondition_TimedWait(args.c, args.m, 2000);
+            cbCalled = args.done;
+            args.done = false;
+            natsMutex_Unlock(args.m);
+        }
+        testCond((s == NATS_OK) && cbCalled);
+    }
+
+    test("Connection not closed: ");
+    testCond((s == NATS_OK) && !natsConnection_IsClosed(conn));
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(conn);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(pid);
+}
+
+static void
 test_ConnectedServer(void)
 {
     natsStatus          s;
@@ -11559,6 +11644,7 @@ static testInfo allTests[] =
     {"Auth",                            test_Auth},
     {"AuthFailNoDisconnectCB",          test_AuthFailNoDisconnectCB},
     {"AuthToken",                       test_AuthToken},
+    {"PermViolation",                   test_PermViolation},
     {"ConnectedServer",                 test_ConnectedServer},
     {"MultipleClose",                   test_MultipleClose},
     {"SimplePublish",                   test_SimplePublish},

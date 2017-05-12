@@ -1,3 +1,7 @@
+if(NOT NATS_BUILD_EXAMPLES)
+  return()
+endif()
+
 # We need this directory to build the examples
 include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${PROJECT_SOURCE_DIR}/examples)

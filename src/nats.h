@@ -947,7 +947,7 @@ natsOptions_SetDisconnectedCB(natsOptions *opts,
  */
 NATS_EXTERN natsStatus
 natsOptions_SetReconnectedCB(natsOptions *opts,
-                             natsConnectionHandler discoveredServersCb,
+                             natsConnectionHandler reconnectedCb,
                              void *closure);
 
 /** \brief Sets the callback to be invoked when new servers are discovered.

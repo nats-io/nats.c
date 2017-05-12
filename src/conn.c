@@ -1894,6 +1894,19 @@ natsConn_processOK(natsConnection *nc)
     // Do nothing for now.
 }
 
+// _processPermissionViolation is called when the server signals a subject
+// permissions violation on either publish or subscribe.
+static void
+_processPermissionViolation(natsConnection *nc, char *error)
+{
+    natsConn_Lock(nc);
+    nc->err = NATS_NOT_PERMITTED;
+    snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
+    if (nc->opts->asyncErrCb != NULL)
+        natsAsyncCb_PostErrHandler(nc, NULL, NATS_NOT_PERMITTED);
+    natsConn_Unlock(nc);
+}
+
 void
 natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
 {
@@ -1908,6 +1921,10 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
     if (strcasecmp(error, STALE_CONNECTION) == 0)
     {
         _processOpError(nc, NATS_STALE_CONNECTION);
+    }
+    else if (nats_strcasestr(error, PERMISSIONS_ERR) != NULL)
+    {
+        _processPermissionViolation(nc, error);
     }
     else
     {

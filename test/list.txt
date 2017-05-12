@@ -59,6 +59,7 @@ ErrOnMaxPayloadLimit
 Auth
 AuthFailNoDisconnectCB
 AuthToken
+PermViolation
 ConnectedServer
 MultipleClose
 SimplePublish

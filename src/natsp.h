@@ -65,6 +65,7 @@
 #define _UNSUB_NO_MAX_PROTO_ "UNSUB %" PRId64 " \r\n"
 
 #define STALE_CONNECTION     "Stale Connection"
+#define PERMISSIONS_ERR      "Permissions Violation"
 
 #define _CRLF_LEN_          (2)
 #define _SPC_LEN_           (1)

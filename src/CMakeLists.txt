@@ -28,5 +28,5 @@ target_link_libraries(nats_static ${NATS_OPENSSL_LIBS})
 # --------------------------------------
 install(TARGETS nats DESTINATION lib)
 install(TARGETS nats_static DESTINATION lib)
-install(FILES nats.h status.h version.h DESTINATION include)
-install(FILES adapters/libevent.h adapters/libuv.h DESTINATION include/adapters)
+install(FILES nats.h status.h version.h DESTINATION include/nats)
+install(FILES adapters/libevent.h adapters/libuv.h DESTINATION include/nats/adapters)

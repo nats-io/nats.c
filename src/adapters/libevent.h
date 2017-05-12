@@ -50,7 +50,7 @@ natsLibevent_Init(void)
 }
 
 static void
-natsLibevent_ProcessEvent(int fd, short event, void *arg)
+natsLibevent_ProcessEvent(evutil_socket_t fd, short event, void *arg)
 {
     natsLibeventEvents *nle = (natsLibeventEvents*) arg;
 

@@ -154,14 +154,20 @@ _finalCleanup(void)
     gLib.lock = NULL;
 }
 
-static void
-_cleanupThreadLocals(void)
+void
+nats_ReleaseThreadMemory(void)
 {
     void *tl = NULL;
 
+    if (!(gLib.wasOpenedOnce))
+        return;
+
     tl = natsThreadLocal_Get(gLib.errTLKey);
     if (tl != NULL)
+    {
         _destroyErrTL(tl);
+        natsThreadLocal_SetEx(gLib.errTLKey, NULL, false);
+    }
 
     tl = NULL;
 
@@ -170,30 +176,31 @@ _cleanupThreadLocals(void)
     {
         tl = natsThreadLocal_Get(gLib.sslTLKey);
         if (tl != NULL)
+        {
             _cleanupThreadSSL(tl);
+            natsThreadLocal_SetEx(gLib.sslTLKey, NULL, false);
+        }
     }
     natsMutex_Unlock(gLib.lock);
 }
 
-
 #if _WIN32
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, // DLL module handle
-    DWORD fdwReason,                    // reason called
-    LPVOID lpvReserved)                 // reserved
+     DWORD fdwReason,                   // reason called
+     LPVOID lpvReserved)                // reserved
 {
     switch (fdwReason)
     {
-        // The thread of the attached process terminates.
+        // For applications linking dynamically NATS library,
+        // release thread-local memory for user-created threads.
+        // For portable applications, the user should manually call
+        // nats_ReleaseThreadMemory() before the thread returns so
+        // that no memory is leaked regardless if they link statically
+        // or dynamically. It is safe to call nats_ReleaseThreadMemory()
+        // twice for the same threads.
         case DLL_THREAD_DETACH:
-        case DLL_PROCESS_DETACH:
         {
-            if (!(gLib.wasOpenedOnce))
-                break;
-
-            _cleanupThreadLocals();
-
-            if (fdwReason == DLL_PROCESS_DETACH)
-                _finalCleanup();
+            nats_ReleaseThreadMemory();
             break;
         }
         default:
@@ -204,19 +211,20 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, // DLL module handle
     UNREFERENCED_PARAMETER(hinstDLL);
     UNREFERENCED_PARAMETER(lpvReserved);
 }
-#else
-__attribute__((destructor)) void natsLib_Destructor(void)
+#endif
+
+static void
+natsLib_Destructor(void)
 {
     if (!(gLib.wasOpenedOnce))
         return;
 
     // Destroy thread locals for the current thread.
-    _cleanupThreadLocals();
+    nats_ReleaseThreadMemory();
 
     // Do the final cleanup if possible
     _finalCleanup();
 }
-#endif
 
 static void
 _freeTimers(void)
@@ -335,6 +343,9 @@ _doInitOnce(void)
     }
 
     natsSys_Init();
+
+    // Setup a hook for when the process exits.
+    atexit(natsLib_Destructor);
 }
 
 static void
@@ -1071,6 +1082,7 @@ nats_Close(void)
 
     natsMutex_Unlock(gLib.lock);
 
+    nats_ReleaseThreadMemory();
     _libTearDown();
 }
 

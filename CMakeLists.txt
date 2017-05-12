@@ -15,6 +15,7 @@ option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
 option(NATS_BUILD_WITH_TLS_CLIENT_METHOD "Use TLS_client_method()" OFF)
 option(NATS_BUILD_LIBUV_EXAMPLE "Compile libuv example" OFF)
 option(NATS_BUILD_LIBEVENT_EXAMPLE "Compile libevent example" OFF)
+option(NATS_BUILD_STATIC_EXAMPLES "Static link examples" OFF)
 
 if(NATS_BUILD_WITH_TLS)
 find_package(OpenSSL REQUIRED)

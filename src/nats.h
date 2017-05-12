@@ -408,6 +408,19 @@ nats_PrintLastErrorStack(FILE *file);
 NATS_EXTERN natsStatus
 nats_SetMessageDeliveryPoolSize(int max);
 
+/** \brief Release thread-local memory possibly allocated by the library.
+ *
+ * This needs to be called on user-created threads where NATS calls are
+ * performed. This does not need to be called in threads created by
+ * the library. For instance, do not call this function in the
+ * message handler that you specify when creating a subscription.
+ *
+ * Also, you do not need to call this in an user thread (or the main)
+ * if you are calling nats_Close() there.
+ */
+NATS_EXTERN void
+nats_ReleaseThreadMemory(void);
+
 /** \brief Tear down the library.
  *
  * Releases memory used by the library.

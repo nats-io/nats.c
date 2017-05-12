@@ -10,6 +10,7 @@ var searchData=
   ['nats_5fnowinnanoseconds',['nats_NowInNanoSeconds',['../group__library_group.html#gacf5e423920d6a647df3bbf7de39d5223',1,'nats.h']]],
   ['nats_5fopen',['nats_Open',['../group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d',1,'nats.h']]],
   ['nats_5fprintlasterrorstack',['nats_PrintLastErrorStack',['../group__library_group.html#ga5fab3b18c4fe3630254483575f6066f4',1,'nats.h']]],
+  ['nats_5freleasethreadmemory',['nats_ReleaseThreadMemory',['../group__library_group.html#gafe171baefa00a85b77205116e9f3e48a',1,'nats.h']]],
   ['nats_5fsetmessagedeliverypoolsize',['nats_SetMessageDeliveryPoolSize',['../group__library_group.html#gab21e94ce7a7d226611ea2c05914cf19d',1,'nats.h']]],
   ['nats_5fsleep',['nats_Sleep',['../group__library_group.html#gad5040264cd4b1404956babf3c03a4f09',1,'nats.h']]],
   ['natsconnection_5fbuffered',['natsConnection_Buffered',['../group__conn_mgt_group.html#ga0433159e518540ff874c4026fe9cd0c5',1,'nats.h']]],

@@ -11,5 +11,6 @@ var group__library_group =
     [ "nats_GetLastErrorStack", "group__library_group.html#gaca24172e1b97ca01cee29ca437f5702e", null ],
     [ "nats_PrintLastErrorStack", "group__library_group.html#ga5fab3b18c4fe3630254483575f6066f4", null ],
     [ "nats_SetMessageDeliveryPoolSize", "group__library_group.html#gab21e94ce7a7d226611ea2c05914cf19d", null ],
+    [ "nats_ReleaseThreadMemory", "group__library_group.html#gafe171baefa00a85b77205116e9f3e48a", null ],
     [ "nats_Close", "group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e", null ]
 ];

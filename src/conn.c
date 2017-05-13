@@ -903,7 +903,6 @@ _doReconnect(void *arg)
 {
     natsStatus              s = NATS_OK;
     natsConnection          *nc = (natsConnection*) arg;
-    natsThread              *tReconnect = NULL;
     natsSrv                 *cur;
     int64_t                 elapsed;
     natsSrvPool             *pool = NULL;
@@ -1005,10 +1004,6 @@ _doReconnect(void *arg)
         if (s == NATS_OK)
             s = _flushReconnectPendingItems(nc);
 
-        // This is where we are truly connected.
-        if (s == NATS_OK)
-            nc->status = CONNECTED;
-
         if (s != NATS_OK)
         {
             // In case we were at the last iteration, this is the error
@@ -1032,14 +1027,14 @@ _doReconnect(void *arg)
             continue;
         }
 
+        // This is where we are truly connected.
+        nc->status = CONNECTED;
+
         // No more failure allowed past this point.
 
         // Clear out server stats for the server we connected to..
         cur->didConnect = true;
         cur->reconnects = 0;
-
-        tReconnect = nc->reconnectThread;
-        nc->reconnectThread = NULL;
 
         // At this point we know that we don't need the pending buffer
         // anymore. Destroy now.
@@ -1059,8 +1054,16 @@ _doReconnect(void *arg)
         // Make sure we flush everything
         (void) natsConnection_Flush(nc);
 
-        natsThread_Join(tReconnect);
-        natsThread_Destroy(tReconnect);
+        natsConn_Lock(nc);
+        // This thread will be NULL if the connection is being closed.
+        // If not, we need to detach and destroy the thread.
+        if (nc->reconnectThread != NULL)
+        {
+            natsThread_Detach(nc->reconnectThread);
+            natsThread_Destroy(nc->reconnectThread);
+            nc->reconnectThread = NULL;
+        }
+        natsConn_Unlock(nc);
 
         return;
     }
@@ -1375,7 +1378,7 @@ _processOpError(natsConnection *nc, natsStatus s)
             ls = natsThread_Create(&(nc->reconnectThread),
                                   _doReconnect, (void*) nc);
         }
-        if (ls ==  NATS_OK)
+        if (ls == NATS_OK)
         {
             natsConn_Unlock(nc);
 
@@ -1688,7 +1691,6 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
     _removeAllSubscriptions(nc);
 
     // Go ahead and make sure we have flushed the outbound buffer.
-    nc->status = CLOSED;
     if (nc->sockCtx.fdActive)
     {
         natsConn_bufferFlush(nc);

@@ -10342,6 +10342,8 @@ test_PingReconnect(void)
         s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -10375,6 +10377,12 @@ test_PingReconnect(void)
 
     test("Reconnect due to ping cycle correct: ");
     testCond(s == NATS_OK);
+
+    // Wait for connection closed before destroying arg.
+    natsMutex_Lock(arg.m);
+    while (!arg.closed)
+        natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
 
     natsOptions_Destroy(opts);
 

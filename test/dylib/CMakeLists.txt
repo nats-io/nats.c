@@ -1,4 +1,4 @@
-if(NOT NATS_BUILD_TESTS)
+if(NOT BUILD_TESTING)
   return()
 endif()  
 

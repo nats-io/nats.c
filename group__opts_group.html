@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.5.0</span>
+   &#160;<span id="projectnumber">1.6.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -190,6 +190,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga26a48c8529fffa5f5d1a61c030979980"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga26a48c8529fffa5f5d1a61c030979980">natsOptions_SetReconnectedCB</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, <a class="el" href="group__callbacks_group.html#gacdef6aff3e47953f19e35857ab8e274c">natsConnectionHandler</a> reconnectedCb, void *closure)</td></tr>
 <tr class="memdesc:ga26a48c8529fffa5f5d1a61c030979980"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the callback to be invoked when the connection has reconnected.  <a href="#ga26a48c8529fffa5f5d1a61c030979980">More...</a><br /></td></tr>
 <tr class="separator:ga26a48c8529fffa5f5d1a61c030979980"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gab5baab507c974402ab0d8c5e8227ee65"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gab5baab507c974402ab0d8c5e8227ee65">natsOptions_SetDiscoveredServersCB</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, <a class="el" href="group__callbacks_group.html#gacdef6aff3e47953f19e35857ab8e274c">natsConnectionHandler</a> discoveredServersCb, void *closure)</td></tr>
+<tr class="memdesc:gab5baab507c974402ab0d8c5e8227ee65"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the callback to be invoked when new servers are discovered.  <a href="#gab5baab507c974402ab0d8c5e8227ee65">More...</a><br /></td></tr>
+<tr class="separator:gab5baab507c974402ab0d8c5e8227ee65"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gab09491bad908dedcb323c780280733ff"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gab09491bad908dedcb323c780280733ff">natsOptions_SetEventLoop</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, void *loop, <a class="el" href="group__callbacks_group.html#gabe15a94f952bcd0198f6ac5c5187c3da">natsEvLoop_Attach</a> attachCb, <a class="el" href="group__callbacks_group.html#gaea4c125ecfb43eaf43da20e8444c2aaa">natsEvLoop_ReadAddRemove</a> readCb, <a class="el" href="group__callbacks_group.html#ga2bb5dd2d821ca5bbc0488f7e6aceed17">natsEvLoop_WriteAddRemove</a> writeCb, <a class="el" href="group__callbacks_group.html#gab63dee7f7012ba11ae20b76dbc36f2d0">natsEvLoop_Detach</a> detachCb)</td></tr>
 <tr class="memdesc:gab09491bad908dedcb323c780280733ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the external event loop and associated callbacks.  <a href="#gab09491bad908dedcb323c780280733ff">More...</a><br /></td></tr>
 <tr class="separator:gab09491bad908dedcb323c780280733ff"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1210,6 +1213,48 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
     <tr><td class="paramname">reconnectedCb</td><td>the callback to be invoked when the connection to a server has been re-established. </td></tr>
+    <tr><td class="paramname">closure</td><td>a pointer to an user object that will be passed to the callback. <code>closure</code> can be <code>NULL</code>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="gab5baab507c974402ab0d8c5e8227ee65"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetDiscoveredServersCB </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__callbacks_group.html#gacdef6aff3e47953f19e35857ab8e274c">natsConnectionHandler</a>&#160;</td>
+          <td class="paramname"><em>discoveredServersCb</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>closure</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Specifies the callback to invoke when the client library has been notified of one or more new <code>NATS Servers</code>.</p>
+<dl class="section warning"><dt>Warning</dt><dd>Invocation of this callback is asynchronous, which means that the state may have changed when this callback is invoked.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">discoveredServersCb</td><td>the callback to be invoked when new servers have been discovered. </td></tr>
     <tr><td class="paramname">closure</td><td>a pointer to an user object that will be passed to the callback. <code>closure</code> can be <code>NULL</code>. </td></tr>
   </table>
   </dd>

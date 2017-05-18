@@ -27,6 +27,7 @@ var group__opts_group =
     [ "natsOptions_SetClosedCB", "group__opts_group.html#ga44410242e73134e5bb51ef27904a9253", null ],
     [ "natsOptions_SetDisconnectedCB", "group__opts_group.html#gadc8dc0cedd91bda71d544f3dedc4a039", null ],
     [ "natsOptions_SetReconnectedCB", "group__opts_group.html#ga26a48c8529fffa5f5d1a61c030979980", null ],
+    [ "natsOptions_SetDiscoveredServersCB", "group__opts_group.html#gab5baab507c974402ab0d8c5e8227ee65", null ],
     [ "natsOptions_SetEventLoop", "group__opts_group.html#gab09491bad908dedcb323c780280733ff", null ],
     [ "natsOptions_UseGlobalMessageDelivery", "group__opts_group.html#gabf060c92648b50c069f0abe7cbb06f1c", null ],
     [ "natsOptions_IPResolutionOrder", "group__opts_group.html#ga7ca713c7532eff4d41a492e95b8822cf", null ],

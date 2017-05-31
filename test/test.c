@@ -2316,6 +2316,22 @@ test_natsOptions(void)
         s = natsOptions_IPResolutionOrder(opts, 64);
     testCond((s == NATS_OK) && (opts->orderIP == 64));
 
+    test("Set UseOldRequestStyle: ");
+    s = natsOptions_UseOldRequestStyle(opts, true);
+    testCond((s == NATS_OK) && (opts->useOldRequestStyle == true));
+
+    test("Remove UseOldRequestStyle: ");
+    s = natsOptions_UseOldRequestStyle(opts, false);
+    testCond((s == NATS_OK) && (opts->useOldRequestStyle == false));
+
+    test("Set SendAsap: ");
+    s = natsOptions_SetSendAsap(opts, true);
+    testCond((s == NATS_OK) && (opts->sendAsap == true));
+
+    test("Remove SendAsap: ");
+    s = natsOptions_SetSendAsap(opts, false);
+    testCond((s == NATS_OK) && (opts->sendAsap == false));
+
     // Prepare some values for the clone check
     s = natsOptions_SetURL(opts, "url");
     IFOK(s, natsOptions_SetServers(opts, servers, 3));

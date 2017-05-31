@@ -914,6 +914,16 @@ natsOptions_IPResolutionOrder(natsOptions *opts, int order)
 }
 
 natsStatus
+natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+    opts->sendAsap = sendAsap;
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
 natsOptions_UseOldRequestStyle(natsOptions *opts, bool useOldStype)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0);

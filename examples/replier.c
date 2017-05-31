@@ -10,8 +10,6 @@ static const char *usage = "" \
 static void
 onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    natsStatus s;
-
     if (print)
         printf("Received msg: %s - %.*s\n",
                natsMsg_GetSubject(msg),
@@ -21,10 +19,8 @@ onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
     if (start == 0)
         start = nats_Now();
 
-    s = natsConnection_PublishString(nc, natsMsg_GetReply(msg),
-                                     "here's some help");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    natsConnection_PublishString(nc, natsMsg_GetReply(msg),
+                                 "here's some help");
 
     // We should be using a mutex to protect those variables since
     // they are used from the subscription's delivery and the main
@@ -59,6 +55,11 @@ int main(int argc, char **argv)
            (async ? "a" : ""), subj);
 
     s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);
+    // Since the replier is sending one message at a time, reduce
+    // latency by making Publish calls send data right away
+    // instead of buffering them.
+    if (s == NATS_OK)
+        s = natsOptions_SetSendAsap(opts, true);
 
     if (s == NATS_OK)
         s = natsConnection_Connect(&conn, opts);

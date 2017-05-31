@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.6.0</span>
+   &#160;<span id="projectnumber">1.7.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -408,7 +408,7 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Creates a <a class="el" href="group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1" title="Unique subject often used for point-to-point communication. ">natsInbox</a> and performs a <a class="el" href="group__conn_pub_group.html#gaaaa3d75ffec2dcdc6bf905cdb1eee59e" title="Publishes data on a subject expecting replies on the given reply. ">natsConnection_PublishRequest()</a> call with the reply set to that inbox. Returns the first reply received. This is optimized for the case of multiple responses.</p>
+<p>Sends a request payload and delivers the first response message, or an error, including a timeout if no message was received properly. This is optimized for the case of multiple responses.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">replyMsg</td><td>the location where to store the pointer to the received <a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a" title="A structure holding a subject, optional reply and payload. ">natsMsg</a> reply. </td></tr>

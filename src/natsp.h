@@ -80,6 +80,9 @@
 static const char *inboxPrefix = "_INBOX.";
 #define NATS_INBOX_PRE_LEN (7)
 
+#define NATS_REQ_ID_OFFSET  (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1)
+#define NATS_MAX_REQ_ID_LEN (19)
+
 #define WAIT_FOR_READ       (0)
 #define WAIT_FOR_WRITE      (1)
 #define WAIT_FOR_CONNECT    (2)
@@ -184,6 +187,9 @@ struct __natsOptions
 
     int                     orderIP; // possible values: 0,4,6,46,64
 
+    // forces the old method of Requests that utilize
+    // a new Inbox and a new Subscription for each request
+    bool                    useOldRequestStyle;
 };
 
 typedef struct __natsMsgList
@@ -329,6 +335,16 @@ typedef struct __natsSockCtx
 
 } natsSockCtx;
 
+typedef struct __requestInfo
+{
+    natsMutex           *mu;
+    natsCondition       *cond;
+    natsMsg             *msg;
+    bool                closed;
+    bool                removed;
+
+} requestInfo;
+
 struct __natsConnection
 {
     natsMutex           *mu;
@@ -374,6 +390,13 @@ struct __natsConnection
     natsThread          *reconnectThread;
 
     natsStatistics      stats;
+
+    // New Request style
+    int64_t             reqId;
+    char                *respSub;   // The wildcard subject
+    natsSubscription    *respMux;   // A single response subscription
+    natsCondition       *respReady; // For race when initializing the wildcard subscription
+    natsStrHash         *respMap;   // Request map for the response msg
 
     struct
     {

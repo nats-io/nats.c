@@ -85,6 +85,7 @@ var searchData=
   ['natsoptions_5fsetverbose',['natsOptions_SetVerbose',['../group__opts_group.html#gaa16bfd09ef318af18c27a0e199681b69',1,'nats.h']]],
   ['natsoptions_5fskipserververification',['natsOptions_SkipServerVerification',['../group__opts_group.html#ga6f804ec44adc299989fe623570679da3',1,'nats.h']]],
   ['natsoptions_5fuseglobalmessagedelivery',['natsOptions_UseGlobalMessageDelivery',['../group__opts_group.html#gabf060c92648b50c069f0abe7cbb06f1c',1,'nats.h']]],
+  ['natsoptions_5fuseoldrequeststyle',['natsOptions_UseOldRequestStyle',['../group__opts_group.html#ga70aa85319933d78c0076cc862fa3e5a6',1,'nats.h']]],
   ['natsstatistics_5fcreate',['natsStatistics_Create',['../group__stats_group.html#gafa923df029168f4991b77ffdd9e24877',1,'nats.h']]],
   ['natsstatistics_5fdestroy',['natsStatistics_Destroy',['../group__stats_group.html#ga26a04e77af8fc160adf7c33088dcf59c',1,'nats.h']]],
   ['natsstatistics_5fgetcounts',['natsStatistics_GetCounts',['../group__stats_group.html#gabe5eaa39f967f8c95ed881c835545de1',1,'nats.h']]],

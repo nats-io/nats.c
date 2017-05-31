@@ -72,4 +72,10 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *sub);
 void
 natsConn_processAsyncINFO(natsConnection *nc, char *buf, int len);
 
+void
+natsConn_destroyRequestInfo(requestInfo *reqInfo);
+
+natsStatus
+natsConn_createRequestInfo(requestInfo **reqInfo, natsConnection *nc);
+
 #endif /* CONN_H_ */

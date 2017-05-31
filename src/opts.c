@@ -913,6 +913,16 @@ natsOptions_IPResolutionOrder(natsOptions *opts, int order)
     return NATS_OK;
 }
 
+natsStatus
+natsOptions_UseOldRequestStyle(natsOptions *opts, bool useOldStype)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+    opts->useOldRequestStyle = useOldStype;
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
 static void
 _freeOptions(natsOptions *opts)
 {

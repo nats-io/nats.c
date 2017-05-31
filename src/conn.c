@@ -169,6 +169,9 @@ _freeConn(natsConnection *nc)
     if (nc->sockCtx.ssl != NULL)
         SSL_free(nc->sockCtx.ssl);
     NATS_FREE(nc->el.buffer);
+    natsInbox_Destroy(nc->respSub);
+    natsStrHash_Destroy(nc->respMap);
+    natsCondition_Destroy(nc->respReady);
     natsMutex_Destroy(nc->subsMu);
     natsMutex_Destroy(nc->mu);
 
@@ -894,6 +897,62 @@ _clearPendingFlushRequests(natsConnection *nc)
 
     nc->pongs.incoming      = 0;
     nc->pongs.outgoingPings = 0;
+}
+
+void
+natsConn_destroyRequestInfo(requestInfo *reqInfo)
+{
+    if (reqInfo == NULL)
+        return;
+
+    natsCondition_Destroy(reqInfo->cond);
+    natsMutex_Destroy(reqInfo->mu);
+    NATS_FREE(reqInfo);
+}
+
+natsStatus
+natsConn_createRequestInfo(requestInfo **reqInfo, natsConnection *nc)
+{
+    requestInfo *req = NULL;
+    natsStatus  s    = NATS_OK;
+
+    req = (requestInfo *) NATS_CALLOC(1, sizeof(requestInfo));
+    if (req == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    if (s == NATS_OK)
+        s = natsMutex_Create(&(req->mu));
+    if (s == NATS_OK)
+        s = natsCondition_Create(&(req->cond));
+
+    if (s == NATS_OK)
+        *reqInfo = req;
+    else
+        natsConn_destroyRequestInfo(req);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+// This will clear any pending Request calls.
+// Lock is assumed to be held by the caller.
+static void
+_clearPendingRequestCalls(natsConnection *nc)
+{
+    natsStrHashIter iter;
+    requestInfo     *val = NULL;
+
+    if (nc->respMap == NULL)
+        return;
+
+    natsStrHashIter_Init(&iter, nc->respMap);
+    while (natsStrHashIter_Next(&iter, NULL, (void**)&val))
+    {
+        natsMutex_Lock(val->mu);
+        val->closed = true;
+        val->removed = true;
+        natsCondition_Signal(val->cond);
+        natsMutex_Unlock(val->mu);
+        natsStrHashIter_RemoveCurrent(&iter);
+    }
 }
 
 // Try to reconnect using the option parameters.
@@ -1665,6 +1724,7 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
     struct threadsToJoin    ttj;
     bool                    sockWasActive = false;
     bool                    detach = false;
+    natsSubscription        *sub = NULL;
 
     natsConn_lockAndRetain(nc);
 
@@ -1682,6 +1742,9 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
 
     // Kick out all calls to natsConnection_Flush[Timeout]().
     _clearPendingFlushRequests(nc);
+
+    // Kick out any queued and blocking requests.
+    _clearPendingRequestCalls(nc);
 
     if (nc->ptmr != NULL)
         natsTimer_Stop(nc->ptmr);
@@ -1722,7 +1785,13 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
     if (doCBs && (nc->opts->disconnectedCb != NULL) && sockWasActive)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
+    sub = nc->respMux;
+    nc->respMux = NULL;
+
     natsConn_Unlock(nc);
+
+    if (sub != NULL)
+        natsSub_release(sub);
 
     _joinThreads(&ttj);
 

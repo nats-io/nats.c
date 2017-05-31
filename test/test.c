@@ -76,6 +76,7 @@ struct threadArg
 
     natsSubscription *sub;
     natsOptions      *opts;
+    natsConnection   *nc;
 
 };
 
@@ -7773,6 +7774,191 @@ test_RequestNoBody(void)
 }
 
 static void
+test_OldRequest(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsSubscription    *sub      = NULL;
+    natsMsg             *msg      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if ( s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    arg.string = "I will help you";
+    arg.status = NATS_OK;
+    arg.control= 4;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_UseOldRequestStyle(opts, true);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+
+    test("Test Old Request Style: ")
+    if (s == NATS_OK)
+        s = natsConnection_RequestString(&msg, nc, "foo", "help", 50);
+
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK)
+           && !arg.msgReceived)
+    {
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    }
+    natsMutex_Unlock(arg.m);
+
+    if (s == NATS_OK)
+        s = arg.status;
+
+    testCond((s == NATS_OK)
+             && (msg != NULL)
+             && (strncmp(arg.string,
+                         natsMsg_GetData(msg),
+                         natsMsg_GetDataLength(msg)) == 0));
+
+    natsMsg_Destroy(msg);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
+static void
+_sendRequest(void *closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+    natsStatus          s;
+    natsMsg             *msg = NULL;
+
+    nats_Sleep(250);
+
+    s = natsConnection_RequestString(&msg, arg->nc, "foo", "Help!", 2000);
+    natsMutex_Lock(arg->m);
+    if ((s == NATS_OK)
+            && (msg != NULL)
+            && strncmp(arg->string,
+                       natsMsg_GetData(msg),
+                       natsMsg_GetDataLength(msg)) == 0)
+    {
+        arg->sum++;
+    }
+    else
+    {
+        arg->status = NATS_ERR;
+    }
+    natsMutex_Unlock(arg->m);
+    natsMsg_Destroy(msg);
+}
+
+static void
+test_SimultaneousRequest(void)
+{
+    natsStatus          s;
+     natsConnection      *nc       = NULL;
+     natsSubscription    *sub      = NULL;
+     natsThread          *threads[10];
+     natsPid             serverPid = NATS_INVALID_PID;
+     struct threadArg    arg;
+     int                 i;
+
+     s = _createDefaultThreadArgsForCbTests(&arg);
+     if ( s != NATS_OK)
+         FAIL("Unable to setup test!");
+
+     arg.string = "ok";
+     arg.status = NATS_OK;
+     arg.control= 4;
+
+     serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+     CHECK_SERVER_STARTED(serverPid);
+
+     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+     if (s == NATS_OK)
+     {
+         arg.nc = nc;
+         s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+     }
+
+     for (i=0; i<10; i++)
+         threads[i] = NULL;
+
+     test("Test simultaneous requests: ")
+     for (i=0; (s == NATS_OK) && (i<10); i++)
+         s = natsThread_Create(&(threads[i]), _sendRequest, (void*) &arg);
+
+     for (i=0; i<10; i++)
+     {
+         if (threads[i] != NULL)
+         {
+             natsThread_Join(threads[i]);
+             natsThread_Destroy(threads[i]);
+         }
+     }
+
+     natsMutex_Lock(arg.m);
+     if ((s != NATS_OK)
+             || ((s = arg.status) != NATS_OK)
+             || (arg.sum != 10))
+     {
+         s = NATS_ERR;
+     }
+     natsMutex_Unlock(arg.m);
+
+     testCond(s == NATS_OK);
+
+     natsSubscription_Destroy(sub);
+     natsConnection_Destroy(nc);
+
+     _destroyDefaultThreadArgs(&arg);
+
+     _stopServer(serverPid);
+}
+
+static void
+test_RequestClose(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsMsg             *msg      = NULL;
+    natsThread          *t        = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    test("Test Request is kicked out with a connection close: ")
+    if (s == NATS_OK)
+        s = natsThread_Create(&t, _closeConnWithDelay, (void*) nc);
+    if (s == NATS_OK)
+        s = natsConnection_RequestString(&msg, nc, "foo", "help", 2000);
+
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+    testCond((s == NATS_CONNECTION_CLOSED)
+             && (msg == NULL));
+
+    natsMsg_Destroy(msg);
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_FlushInCb(void)
 {
     natsStatus          s;
@@ -11671,6 +11857,9 @@ static testInfo allTests[] =
     {"RequestTimeout",                  test_RequestTimeout},
     {"Request",                         test_Request},
     {"RequestNoBody",                   test_RequestNoBody},
+    {"OldRequest",                      test_OldRequest},
+    {"SimultaneousRequests",            test_SimultaneousRequest},
+    {"RequestClose",                    test_RequestClose},
     {"FlushInCb",                       test_FlushInCb},
     {"ReleaseFlush",                    test_ReleaseFlush},
     {"FlushErrOnDisconnect",            test_FlushErrOnDisconnect},

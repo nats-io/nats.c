@@ -78,6 +78,9 @@ DoubleUnsubscribe
 RequestTimeout
 Request
 RequestNoBody
+OldRequest
+SimultaneousRequests
+RequestClose
 FlushInCb
 ReleaseFlush
 FlushErrOnDisconnect

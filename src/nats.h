@@ -1057,6 +1057,18 @@ natsOptions_UseGlobalMessageDelivery(natsOptions *opts, bool global);
 NATS_EXTERN natsStatus
 natsOptions_IPResolutionOrder(natsOptions *opts, int order);
 
+/** \brief Switches the use of old style requests.
+ *
+ * Setting `useOldStyle` to `true` forces the request calls to use the original
+ * behavior, which is to create a new inbox, a new subscription on that inbox
+ * and set auto-unsubscribe to 1.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param useOldStyle a boolean indicating if old request style should be used.
+ */
+NATS_EXTERN natsStatus
+natsOptions_UseOldRequestStyle(natsOptions *opts, bool useOldStyle);
+
 /** \brief Destroys a #natsOptions object.
  *
  * Destroys the natsOptions object, freeing used memory. See the note in
@@ -1566,8 +1578,8 @@ natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
 
 /** \brief Sends a request and waits for a reply.
  *
- * Creates a #natsInbox and performs a #natsConnection_PublishRequest() call
- * with the reply set to that inbox. Returns the first reply received.
+ * Sends a request payload and delivers the first response message,
+ * or an error, including a timeout if no message was received properly.
  * This is optimized for the case of multiple responses.
  *
  * @param replyMsg the location where to store the pointer to the received

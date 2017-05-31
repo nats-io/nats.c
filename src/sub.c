@@ -547,7 +547,9 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
 
         sub->inWait--;
 
-        if (sub->closed)
+        if (sub->connClosed)
+            s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
+        else if (sub->closed)
             s = nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
     else

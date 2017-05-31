@@ -136,7 +136,7 @@ _publishEx(natsConnection *nc, const char *subj,
 
     if (s == NATS_OK)
     {
-        if (directFlush)
+        if (directFlush || nc->opts->sendAsap)
             s = natsConn_bufferFlush(nc);
         else
             natsConn_kickFlusher(nc);

@@ -190,6 +190,10 @@ struct __natsOptions
     // forces the old method of Requests that utilize
     // a new Inbox and a new Subscription for each request
     bool                    useOldRequestStyle;
+
+    // If set to true, the Publish call will flush in place and
+    // not rely on the flusher.
+    bool                    sendAsap;
 };
 
 typedef struct __natsMsgList

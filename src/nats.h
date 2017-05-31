@@ -1057,6 +1057,36 @@ natsOptions_UseGlobalMessageDelivery(natsOptions *opts, bool global);
 NATS_EXTERN natsStatus
 natsOptions_IPResolutionOrder(natsOptions *opts, int order);
 
+/** \brief Sets if Publish calls should send data right away.
+ *
+ * For throughput performance, the client library tries by default to buffer
+ * as much data as possible before sending it over TCP.
+ *
+ * Setting this option to `true` will make Publish calls send the
+ * data right away, reducing latency, but also throughput.
+ *
+ * A good use-case would be a connection used to solely send replies.
+ * Imagine, a requestor sending a request, waiting for the reply before
+ * sending the next request.<br>
+ * The replier application will send only one reply at a time (since
+ * it will not receive the next request until the requestor receives
+ * the reply).<br>
+ * In such case, it makes sense for the reply to be sent right away.
+ *
+ * The alternative would be to call #natsConnection_Flush(),
+ * but this call requires a round-trip with the server, which is less
+ * efficient than using this option.
+ *
+ * Note that the Request() call already automatically sends the request
+ * as fast as possible, there is no need to set an option for that.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param sendAsap a boolean indicating if published data should be
+ * sent right away or be buffered.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap);
+
 /** \brief Switches the use of old style requests.
  *
  * Setting `useOldStyle` to `true` forces the request calls to use the original

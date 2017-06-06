@@ -5,6 +5,8 @@
 
 #include "natsp.h"
 
+#define RESP_INFO_POOL_MAX_SIZE (10)
+
 #ifdef DEV_MODE
 // For type safety
 
@@ -72,10 +74,22 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *sub);
 void
 natsConn_processAsyncINFO(natsConnection *nc, char *buf, int len);
 
+natsStatus
+natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox, int respInboxSize);
+
 void
-natsConn_destroyRequestInfo(requestInfo *reqInfo);
+natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock);
 
 natsStatus
-natsConn_createRequestInfo(requestInfo **reqInfo, natsConnection *nc);
+natsConn_createRespMux(natsConnection *nc, char *ginbox, natsMsgHandler cb);
+
+natsStatus
+natsConn_waitForRespMux(natsConnection *nc);
+
+natsStatus
+natsConn_initResp(natsConnection *nc, char *ginbox, int ginboxSize);
+
+void
+natsConn_destroyRespPool(natsConnection *nc);
 
 #endif /* CONN_H_ */

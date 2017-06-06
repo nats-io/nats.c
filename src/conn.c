@@ -169,6 +169,7 @@ _freeConn(natsConnection *nc)
     if (nc->sockCtx.ssl != NULL)
         SSL_free(nc->sockCtx.ssl);
     NATS_FREE(nc->el.buffer);
+    natsConn_destroyRespPool(nc);
     natsInbox_Destroy(nc->respSub);
     natsStrHash_Destroy(nc->respMap);
     natsCondition_Destroy(nc->respReady);
@@ -899,37 +900,216 @@ _clearPendingFlushRequests(natsConnection *nc)
     nc->pongs.outgoingPings = 0;
 }
 
+// Dispose of the respInfo object.
+// The boolean `needsLock` indicates if connection lock is required or not.
 void
-natsConn_destroyRequestInfo(requestInfo *reqInfo)
+natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock)
 {
-    if (reqInfo == NULL)
+    if (resp == NULL)
         return;
 
-    natsCondition_Destroy(reqInfo->cond);
-    natsMutex_Destroy(reqInfo->mu);
-    NATS_FREE(reqInfo);
+    if (!resp->pooled)
+    {
+        natsCondition_Destroy(resp->cond);
+        natsMutex_Destroy(resp->mu);
+        NATS_FREE(resp);
+    }
+    else
+    {
+        if (needsLock)
+            natsConn_Lock(nc);
+
+        resp->closed = false;
+        resp->removed = false;
+        resp->msg = NULL;
+
+        nc->respPool[nc->respPoolIdx++] = resp;
+
+        if (needsLock)
+            natsConn_Unlock(nc);
+    }
+}
+
+// Destroy the pool of respInfo objects.
+void
+natsConn_destroyRespPool(natsConnection *nc)
+{
+    int      i;
+    respInfo *info;
+
+    for (i=0; i<nc->respPoolSize; i++)
+    {
+        info = nc->respPool[i];
+        info->pooled = false;
+        natsConn_disposeRespInfo(nc, info, false);
+    }
+    NATS_FREE(nc->respPool);
+}
+
+// Creates a new respInfo object, binds it to the request's specific
+// subject (that is set in respInbox). The respInfo object is returned.
+// Connection's lock is held on entry.
+natsStatus
+natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox, int respInboxSize)
+{
+    respInfo    *resp  = NULL;
+    natsStatus  s      = NATS_OK;
+
+    if (nc->respPoolIdx > 0)
+    {
+        resp = nc->respPool[--nc->respPoolIdx];
+    }
+    else
+    {
+        resp = (respInfo *) NATS_CALLOC(1, sizeof(respInfo));
+        if (resp == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        if (s == NATS_OK)
+            s = natsMutex_Create(&(resp->mu));
+        if (s == NATS_OK)
+            s = natsCondition_Create(&(resp->cond));
+        if (s == NATS_OK)
+        {
+            if (nc->respPoolSize < RESP_INFO_POOL_MAX_SIZE)
+            {
+                resp->pooled = true;
+                nc->respPoolSize++;
+            }
+        }
+    }
+
+    if (s == NATS_OK)
+    {
+        nc->respId[nc->respIdPos] = '0' + nc->respIdVal;
+        nc->respId[nc->respIdPos + 1] = '\0';
+
+        // Build the response inbox
+        memcpy(respInbox, nc->respSub, NATS_REQ_ID_OFFSET);
+        respInbox[NATS_REQ_ID_OFFSET-1] = '.';
+        memcpy(respInbox+NATS_REQ_ID_OFFSET, nc->respId, nc->respIdPos + 2); // copy the '\0' of respId
+
+        nc->respIdVal++;
+        if (nc->respIdVal == 10)
+        {
+            nc->respIdVal = 0;
+            if (nc->respIdPos > 0)
+            {
+                bool shift = true;
+                int  i, j;
+
+                for (i=nc->respIdPos-1; i>=0; i--)
+                {
+                    if (nc->respId[i] != '9')
+                    {
+                        nc->respId[i]++;
+
+                        for (j=i+1; j<=nc->respIdPos-1; j++)
+                            nc->respId[j] = '0';
+
+                        shift = false;
+                        break;
+                    }
+                }
+                if (shift)
+                {
+                    nc->respId[0] = '1';
+
+                    for (i=1; i<=nc->respIdPos; i++)
+                        nc->respId[i] = '0';
+
+                    nc->respIdPos++;
+                }
+            }
+            else
+            {
+                nc->respId[0] = '1';
+                nc->respIdPos++;
+            }
+            if (nc->respIdPos == NATS_MAX_REQ_ID_LEN)
+                nc->respIdPos = 0;
+        }
+
+        s = natsStrHash_Set(nc->respMap, respInbox+NATS_REQ_ID_OFFSET, true,
+                            (void*) resp, NULL);
+    }
+
+    if (s == NATS_OK)
+        *newResp = resp;
+    else
+        natsConn_disposeRespInfo(nc, resp, false);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+// Initialize some of the connection's fields used for request/reply mapping.
+// Connection's lock is held on entry.
+natsStatus
+natsConn_initResp(natsConnection *nc, char *ginbox, int ginboxSize)
+{
+    natsStatus s = NATS_OK;
+
+    nc->respPool = NATS_CALLOC(RESP_INFO_POOL_MAX_SIZE, sizeof(respInfo*));
+    if (nc->respPool == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    if (s == NATS_OK)
+        s = natsCondition_Create(&nc->respReady);
+    if (s == NATS_OK)
+        s = natsStrHash_Create(&nc->respMap, 4);
+    if (s == NATS_OK)
+        s = natsInbox_Create(&nc->respSub);
+    if (s == NATS_OK)
+        snprintf(ginbox, ginboxSize, "%s.*", nc->respSub);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
-natsConn_createRequestInfo(requestInfo **reqInfo, natsConnection *nc)
+natsConn_createRespMux(natsConnection *nc, char *ginbox, natsMsgHandler cb)
 {
-    requestInfo *req = NULL;
-    natsStatus  s    = NATS_OK;
+    natsStatus          s    = NATS_OK;
+    natsSubscription    *sub = NULL;
 
-    req = (requestInfo *) NATS_CALLOC(1, sizeof(requestInfo));
-    if (req == NULL)
-        s = nats_setDefaultError(NATS_NO_MEMORY);
+    s = natsConn_subscribe(&sub, nc, ginbox, NULL, 0, cb, (void*) nc);
     if (s == NATS_OK)
-        s = natsMutex_Create(&(req->mu));
-    if (s == NATS_OK)
-        s = natsCondition_Create(&(req->cond));
+    {
+        // Between a successful creation of the subscription and
+        // the time we get the connection lock, the connection could
+        // have been closed. If that is the case, we need to
+        // release the subscription, otherwise keep track of it.
+        natsConn_Lock(nc);
+        if (natsConn_isClosed(nc))
+        {
+            natsSub_release(sub);
+            s = NATS_CONNECTION_CLOSED;
+        }
+        else
+        {
+            nc->respMux = sub;
+        }
+        // Signal possible threads waiting for the subscription
+        // to be ready.
+        natsCondition_Broadcast(nc->respReady);
+        natsConn_Unlock(nc);
+    }
+    return s;
+}
 
-    if (s == NATS_OK)
-        *reqInfo = req;
-    else
-        natsConn_destroyRequestInfo(req);
+natsStatus
+natsConn_waitForRespMux(natsConnection *nc)
+{
+    natsStatus s = NATS_OK;
 
-    return NATS_UPDATE_ERR_STACK(s);
+    natsConn_Lock(nc);
+
+    while (!natsConn_isClosed(nc) && (nc->respMux == NULL))
+        natsCondition_Wait(nc->respReady, nc->mu);
+
+    if (natsConn_isClosed(nc))
+        s = NATS_CONNECTION_CLOSED;
+
+    natsConn_Unlock(nc);
+
+    return s;
 }
 
 // This will clear any pending Request calls.
@@ -938,7 +1118,7 @@ static void
 _clearPendingRequestCalls(natsConnection *nc)
 {
     natsStrHashIter iter;
-    requestInfo     *val = NULL;
+    respInfo        *val = NULL;
 
     if (nc->respMap == NULL)
         return;

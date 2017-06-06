@@ -33,6 +33,7 @@ ParserSouldFail
 ParserSplitMsg
 LibMsgDelivery
 AsyncINFO
+RequestPool
 DefaultConnection
 IPResolutionOrder
 UseDefaultURLIfNoServerSpecified

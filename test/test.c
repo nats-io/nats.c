@@ -4628,6 +4628,68 @@ test_AsyncINFO(void)
 }
 
 static void
+_parallelRequests(void *closure)
+{
+    natsConnection      *nc = (natsConnection*) closure;
+    natsMsg             *msg;
+
+    // Expecting this to timeout. This is to force parallel
+    // requests.
+    natsConnection_RequestString(&msg, nc, "foo", "test", 500);
+}
+
+static void
+test_RequestPool(void)
+{
+    natsStatus          s;
+    natsPid             pid = NATS_INVALID_PID;
+    int                 i;
+    natsConnection      *nc = NULL;
+    natsMsg             *msg = NULL;
+    int                 numThreads = RESP_INFO_POOL_MAX_SIZE+5;
+    natsThread          *threads[RESP_INFO_POOL_MAX_SIZE+5];
+
+    pid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    // With current implementation, the pool should not
+    // increase at all.
+    test("Pool not growing: ");
+    for (i=0; (i<RESP_INFO_POOL_MAX_SIZE); i++)
+        natsConnection_RequestString(&msg, nc, "foo", "test", 1);
+    natsMutex_Lock(nc->mu);
+    testCond(nc->respPoolSize == 1);
+    natsMutex_Unlock(nc->mu);
+
+    test("Pool max size: ");
+    for (i=0; i<numThreads; i++)
+        threads[i] = NULL;
+
+    s = NATS_OK;
+    for (i=0; (s == NATS_OK) && (i<numThreads); i++)
+        s = natsThread_Create(&threads[i], _parallelRequests, (void*) nc);
+
+    for (i=0; i<numThreads; i++)
+    {
+        if (threads[i] != NULL)
+        {
+            natsThread_Join(threads[i]);
+            natsThread_Destroy(threads[i]);
+        }
+    }
+    natsMutex_Lock(nc->mu);
+    testCond((s == NATS_OK) && (nc->respPoolSize == RESP_INFO_POOL_MAX_SIZE));
+    natsMutex_Unlock(nc->mu);
+
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+}
+
+static void
 _dummyMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
                 void *closure)
 {
@@ -11823,6 +11885,7 @@ static testInfo allTests[] =
     {"ParserSplitMsg",                  test_ParserSplitMsg},
     {"LibMsgDelivery",                  test_LibMsgDelivery},
     {"AsyncINFO",                       test_AsyncINFO},
+    {"RequestPool",                     test_RequestPool},
 
     // Public API Tests
 

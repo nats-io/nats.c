@@ -81,7 +81,7 @@ static const char *inboxPrefix = "_INBOX.";
 #define NATS_INBOX_PRE_LEN (7)
 
 #define NATS_REQ_ID_OFFSET  (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1)
-#define NATS_MAX_REQ_ID_LEN (19)
+#define NATS_MAX_REQ_ID_LEN (19) // to display 2^63 number
 
 #define WAIT_FOR_READ       (0)
 #define WAIT_FOR_WRITE      (1)
@@ -339,15 +339,16 @@ typedef struct __natsSockCtx
 
 } natsSockCtx;
 
-typedef struct __requestInfo
+typedef struct __respInfo
 {
     natsMutex           *mu;
     natsCondition       *cond;
     natsMsg             *msg;
     bool                closed;
     bool                removed;
+    bool                pooled;
 
-} requestInfo;
+} respInfo;
 
 struct __natsConnection
 {
@@ -396,11 +397,16 @@ struct __natsConnection
     natsStatistics      stats;
 
     // New Request style
-    int64_t             reqId;
+    char                respId[NATS_MAX_REQ_ID_LEN+1];
+    int                 respIdPos;
+    int                 respIdVal;
     char                *respSub;   // The wildcard subject
     natsSubscription    *respMux;   // A single response subscription
     natsCondition       *respReady; // For race when initializing the wildcard subscription
     natsStrHash         *respMap;   // Request map for the response msg
+    respInfo            **respPool;
+    int                 respPoolSize;
+    int                 respPoolIdx;
 
     struct
     {

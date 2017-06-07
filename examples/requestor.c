@@ -55,6 +55,7 @@ int main(int argc, char **argv)
 
     if (s == NATS_OK)
     {
+        printStats(STATS_OUT, conn, NULL, stats);
         printPerf("Sent", total, start, elapsed);
     }
     else

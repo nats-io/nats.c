@@ -107,8 +107,6 @@ int main(int argc, char **argv)
                                                  natsMsg_GetReply(msg),
                                                  "here's some help");
             if (s == NATS_OK)
-                s = natsConnection_Flush(conn);
-            if (s == NATS_OK)
             {
                 if (start == 0)
                     start = nats_Now();
@@ -129,6 +127,7 @@ int main(int argc, char **argv)
 
     if (s == NATS_OK)
     {
+        printStats(STATS_IN|STATS_COUNT,conn, sub, stats);
         printPerf("Received", count, start, elapsed);
     }
     else

@@ -75,6 +75,7 @@ if(UNIX)
   endif(${NATS_BUILD_ARCH} MATCHES "32")
   
 elseif(WIN32)
+  set(NATS_EXTRA_LIB "Ws2_32")
   set(NATS_OS "_WIN32")
   set(NATS_PLATFORM_INCLUDE "win") 
 endif(UNIX)

@@ -29,6 +29,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <string.h>
+#include <netinet/in.h>
 
 typedef pthread_t       natsThread;
 typedef pthread_key_t   natsThreadLocal;

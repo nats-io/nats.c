@@ -6281,6 +6281,13 @@ _connectToMockupServer(void *closure)
             }
         }
     }
+    else if (control == 7)
+    {
+        natsMutex_Lock(arg->m);
+        while ((s == NATS_OK) && !(arg->done))
+            s = natsCondition_TimedWait(arg->c, arg->m, 5000);
+        natsMutex_Unlock(arg->m);
+    }
 
     natsConnection_Destroy(nc);
 
@@ -6650,10 +6657,10 @@ _errorHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *c
     natsMutex_Lock(args->m);
     if ((err == NATS_NOT_PERMITTED)
         && (natsConnection_GetLastError(nc, &lastError) == NATS_NOT_PERMITTED)
-        && (nats_strcasestr(lastError, PERMISSIONS_ERR) != NULL))
+        && (nats_strcasestr(lastError, args->string) != NULL))
     {
         args->done = true;
-        natsCondition_Signal(args->c);
+        natsCondition_Broadcast(args->c);
     }
     natsMutex_Unlock(args->m);
 }
@@ -6672,7 +6679,10 @@ test_PermViolation(void)
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s == NATS_OK)
+    {
+        args.string = PERMISSIONS_ERR;
         s = natsOptions_Create(&opts);
+    }
     if (s == NATS_OK)
         s = natsOptions_SetURL(opts, "nats://ivan:pwd@127.0.0.1:8232");
     if (s == NATS_OK)
@@ -6725,6 +6735,118 @@ test_PermViolation(void)
 
     _stopServer(pid);
 }
+
+static void
+test_AuthViolation(void)
+{
+    natsStatus          s = NATS_OK;
+    natsSock            sock = NATS_SOCK_INVALID;
+    natsThread          *t = NULL;
+    struct threadArg    arg;
+    natsSockCtx         ctx;
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&(arg.opts));
+    if (s == NATS_OK)
+        s = natsOptions_SetAllowReconnect(arg.opts, false);
+    if (s == NATS_OK)
+        s = natsOptions_SetErrorHandler(arg.opts, _errorHandler, &arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetClosedCB(arg.opts, _closedCb, &arg);
+    if (s != NATS_OK)
+        FAIL("@@ Unable to setup test!");
+
+    arg.control = 7;
+    arg.string  = AUTHORIZATION_ERR;
+
+    test("Behavior of connection on Server Error: ")
+
+    s = _startMockupServer(&sock, "localhost", "4222");
+
+    // Start the thread that will try to connect to our server...
+    if (s == NATS_OK)
+        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
+
+    if ((s == NATS_OK)
+        && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+            || (natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK)))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    if (s == NATS_OK)
+    {
+        char info[1024];
+
+        strncpy(info,
+                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":1048576}\r\n",
+                sizeof(info));
+
+        // Send INFO.
+        s = natsSock_WriteFully(&ctx, info, (int) strlen(info));
+        if (s == NATS_OK)
+        {
+            char buffer[1024];
+
+            memset(buffer, 0, sizeof(buffer));
+
+            // Read connect and ping commands sent from the client
+            s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            if (s == NATS_OK)
+                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+        }
+        // Send PONG
+        if (s == NATS_OK)
+            s = natsSock_WriteFully(&ctx,
+                                    _PONG_PROTO_, _PONG_PROTO_LEN_);
+
+        if (s == NATS_OK)
+        {
+            // Wait a tiny, and simulate an error sent by the server
+            nats_Sleep(50);
+
+            snprintf(info, sizeof(info), "-ERR '%s'\r\n", arg.string);
+            s = natsSock_WriteFully(&ctx, info, (int)strlen(info));
+        }
+    }
+    if (s == NATS_OK)
+    {
+        // Wait for the client to process the async err
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && !(arg.done))
+            s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+        natsMutex_Unlock(arg.m);
+
+        natsSock_Close(ctx.fd);
+    }
+
+    natsSock_Close(sock);
+
+    // Wait for the client to finish.
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    // Wait for closed CB
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && !arg.closed)
+            s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+        natsMutex_Unlock(arg.m);
+    }
+
+    testCond(arg.done
+             && (arg.reconnects == 0)
+             && arg.closed);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
 
 static void
 test_ConnectedServer(void)
@@ -11918,6 +12040,7 @@ static testInfo allTests[] =
     {"AuthFailNoDisconnectCB",          test_AuthFailNoDisconnectCB},
     {"AuthToken",                       test_AuthToken},
     {"PermViolation",                   test_PermViolation},
+    {"AuthViolation",                   test_AuthViolation},
     {"ConnectedServer",                 test_ConnectedServer},
     {"MultipleClose",                   test_MultipleClose},
     {"SimplePublish",                   test_SimplePublish},

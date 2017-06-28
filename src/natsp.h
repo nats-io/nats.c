@@ -66,6 +66,7 @@
 
 #define STALE_CONNECTION     "Stale Connection"
 #define PERMISSIONS_ERR      "Permissions Violation"
+#define AUTHORIZATION_ERR    "Authorization Violation"
 
 #define _CRLF_LEN_          (2)
 #define _SPC_LEN_           (1)

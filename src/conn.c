@@ -2158,6 +2158,19 @@ _processPermissionViolation(natsConnection *nc, char *error)
     natsConn_Unlock(nc);
 }
 
+// _processAuthorizationViolation is called when the server signals a user
+// authorization violation.
+static void
+_processAuthorizationViolation(natsConnection *nc, char *error)
+{
+    natsConn_Lock(nc);
+    nc->err = NATS_NOT_PERMITTED;
+    snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
+    if (nc->opts->asyncErrCb != NULL)
+        natsAsyncCb_PostErrHandler(nc, NULL, NATS_NOT_PERMITTED);
+    natsConn_Unlock(nc);
+}
+
 void
 natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
 {
@@ -2176,6 +2189,10 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
     else if (nats_strcasestr(error, PERMISSIONS_ERR) != NULL)
     {
         _processPermissionViolation(nc, error);
+    }
+    else if (nats_strcasestr(error, AUTHORIZATION_ERR) != NULL)
+    {
+        _processAuthorizationViolation(nc, error);
     }
     else
     {

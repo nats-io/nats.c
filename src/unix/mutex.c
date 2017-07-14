@@ -60,7 +60,7 @@ void
 natsMutex_Lock(natsMutex *m)
 {
     // The "rep" instruction used for spinning is not supported on ARM.
-#ifndef __arm__
+#if !defined(__arm__) && !defined(__aarch64__)
     if (gLockSpinCount > 0)
     {
         int64_t attempts = 0;

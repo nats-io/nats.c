@@ -13,7 +13,7 @@
 #define NATS_LIBUV_INCLUDE
 
 #include <uv.h>
-#include "nats/nats.h"
+#include "nats.h"
 
 #define NATS_LIBUV_ATTACH   (1)
 #define NATS_LIBUV_READ     (2)

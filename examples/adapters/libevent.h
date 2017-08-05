@@ -8,7 +8,7 @@
  */
 #include <event.h>
 #include <event2/thread.h>
-#include "nats/nats.h"
+#include "nats.h"
 
 typedef struct
 {

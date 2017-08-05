@@ -188,7 +188,7 @@ typedef natsStatus (*natsEvLoop_Attach)(
         void            **userData,
         void            *loop,
         natsConnection  *nc,
-        int             socket);
+        natsSock        socket);
 
 /** \brief Read event needs to be added or removed.
  *

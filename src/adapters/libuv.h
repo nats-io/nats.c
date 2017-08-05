@@ -1,4 +1,4 @@
-// Copyright 2016 Apcera Inc. All rights reserved.
+// Copyright 2016-2017 Apcera Inc. All rights reserved.
 
 #ifndef LIBUV_H_
 #define LIBUV_H_
@@ -13,7 +13,7 @@
 #define NATS_LIBUV_INCLUDE
 
 #include <uv.h>
-#include "nats.h"
+#include "../nats.h"
 
 #define NATS_LIBUV_ATTACH   (1)
 #define NATS_LIBUV_READ     (2)
@@ -191,7 +191,7 @@ uvAsyncAttach(natsLibuvEvents *nle)
         s = NATS_NO_MEMORY;
 
     if ((s == NATS_OK)
-        && (uv_poll_init_socket(nle->loop, nle->handle, nle->socket) != 0))
+        && (uv_poll_init(nle->loop, nle->handle, nle->socket) != 0))
     {
         s = NATS_ERR;
     }

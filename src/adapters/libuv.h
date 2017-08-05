@@ -37,7 +37,7 @@ typedef struct
     uv_poll_t       *handle;
     uv_async_t      *scheduler;
     int             events;
-    int             socket;
+    natsSock        socket;
     uv_mutex_t      *lock;
     natsLibuvEvent  *head;
     natsLibuvEvent  *tail;
@@ -316,7 +316,7 @@ uvAsyncCb(uv_async_t *handle)
  * @param socket the socket to start polling on.
  */
 natsStatus
-natsLibuv_Attach(void **userData, void *loop, natsConnection *nc, int socket)
+natsLibuv_Attach(void **userData, void *loop, natsConnection *nc, natsSock socket)
 {
     uv_loop_t       *uvLoop = (uv_loop_t*) loop;
     bool            sched   = false;

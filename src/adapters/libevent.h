@@ -80,7 +80,7 @@ keepAliveCb(evutil_socket_t fd, short flags, void * arg)
  * @param socket the socket to start polling on.
  */
 natsStatus
-natsLibevent_Attach(void **userData, void *loop, natsConnection *nc, int socket)
+natsLibevent_Attach(void **userData, void *loop, natsConnection *nc, natsSock socket)
 {
     struct event_base   *libeventLoop = (struct event_base*) loop;
     natsLibeventEvents  *nle          = (natsLibeventEvents*) (*userData);

@@ -165,9 +165,9 @@ The source code is also quite documented.
 
 Note that for simplicity, error checking is not performed here.
 ```c
-natsConnection 		*nc  = NULL;
-natsSubscription 	*sub = NULL;
-natsMsg				*msg = NULL;
+natsConnection      *nc  = NULL;
+natsSubscription    *sub = NULL;
+natsMsg             *msg = NULL;
 
 // Connects to the default NATS Server running locally
 natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
@@ -190,7 +190,7 @@ natsConnection_Publish(nc, "foo", (const void*) data, 5);
 natsConnection_Subscribe(&sub, nc, "foo", onMsg, NULL);
 
 // Simple synchronous subscriber
-natsConnection_SubscribeSync(&nc, nc, "foo");
+natsConnection_SubscribeSync(&sub, nc, "foo");
 
 // Using a synchronous subscriber, gets the first message available, waiting
 // up to 1000 milliseconds (1 second)
@@ -230,13 +230,13 @@ natsConnection_Destroy(nc);
 void
 onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-	// Prints the message, using the message getters:    
-	printf("Received msg: %s - %.*s\n",
-            natsMsg_GetSubject(msg),
-            natsMsg_GetDataLength(msg),
-            natsMsg_GetData(msg));
+    // Prints the message, using the message getters:
+    printf("Received msg: %s - %.*s\n",
+        natsMsg_GetSubject(msg),
+        natsMsg_GetDataLength(msg),
+        natsMsg_GetData(msg));
 
-	// Don't forget to destroy the message!
+    // Don't forget to destroy the message!
     natsMsg_Destroy(msg);
 }
 ```
@@ -365,11 +365,11 @@ printf("All clear!\n");
 // Same as above but with a timeout value, expressed in milliseconds.
 s = natsConnection_FlushTimeout(nc, 1000);
 if (s == NATS_OK)
-	printf("All clear!\n");
+    printf("All clear!\n");
 else if (s == NATS_TIMEOUT)
     printf("Flushed timed out!\n");
 else
-	printf("Error during flush: %d - %s\n", s, natsStatus_GetText(s));
+    printf("Error during flush: %d - %s\n", s, natsStatus_GetText(s));
 ```    
 
 Auto-unsubscribe allows a subscription to be automatically removed when the subscriber has received a given number of messages. This is used internally by the `natsConnection_Request()` call.
@@ -424,8 +424,8 @@ As we have seen, all callbacks have a `void *closure` parameter. This is useful 
 // Our object definition
 typdedef struct __Errors
 {
-	int count;
-    
+    int count;
+
 } Errors;
 
 (...)
@@ -433,28 +433,28 @@ typdedef struct __Errors
 int
 main(int argc, char **argv)
 {
-	// Declare an 'Errors' object on the stack.
-	Errors asyncErrors;
+    // Declare an 'Errors' object on the stack.
+    Errors asyncErrors;
 
-	// Initialize this object
-	memset(&asyncErrors, 0, sizeof(asyncErrors);
-    
+    // Initialize this object
+    memset(&asyncErrors, 0, sizeof(asyncErrors);
+
     // Create a natsOptions object.
     (...)
-    
+
     // Set the error callback, and pass the address of our Errors object.
     natsOptions_SetErrorHandler(opts, asyncCb, (void*) &errors);
-    
+
     // Create the connection and subscriber.
     (...)
     
     // Say that we are done subscribing, we could check the number of errors:
     if (asyncErrors.count > 1000)
     {
-    	printf("That's a lot of errors!\n");
-	}
-    
-	(...)
+        printf("That's a lot of errors!\n");
+    }
+
+    (...)
 }
 ``` 
 
@@ -463,10 +463,10 @@ The callback would use the closure this way:
 static void
 asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
-	Errors *errors = (Errors*) closure;
-    
+    Errors *errors = (Errors*) closure;
+
     printf("Async error: %d - %s\n", err, natsStatus_GetText(err));
-    
+
     errors->count++;
 }
 ```
@@ -476,7 +476,7 @@ This is the same for all other callbacks used in the C NATS library.
 
 ```c
 static char *servers[] = { "nats://localhost:1222",
-						   "nats://localhost:1223",
+                           "nats://localhost:1223",
                            "nats://localhost:1224"};
                            
 // Setup options to include all servers in the cluster.
@@ -503,10 +503,10 @@ static void
 reconnectedCb(natsConnection *nc, void *closure)
 {
     // Define a buffer to receive the url
-	char buffer[64];
-    
+    char buffer[64];
+
     buffer[0] = '\0';
-    
+
     natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
     printf("Got reconnected to: %s\n", buffer);
 }

@@ -422,7 +422,7 @@ natsOptions_Destroy(nc);
 As we have seen, all callbacks have a `void *closure` parameter. This is useful when the callback needs to perform some work and need a reference to some object. When setting up the callback, you can specify a pointer to that object.
 ```c
 // Our object definition
-typdedef struct __Errors
+typedef struct __Errors
 {
     int count;
 
@@ -443,7 +443,7 @@ main(int argc, char **argv)
     (...)
 
     // Set the error callback, and pass the address of our Errors object.
-    natsOptions_SetErrorHandler(opts, asyncCb, (void*) &errors);
+    natsOptions_SetErrorHandler(opts, asyncCb, (void*) &asyncErrors);
 
     // Create the connection and subscriber.
     (...)
@@ -572,7 +572,7 @@ See examples in the `examples` directory for complete usage.
 
 (The MIT License)
 
-Copyright (c) 2015 Apcera Inc.
+Copyright (c) 2015-2017 Apcera Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to

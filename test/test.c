@@ -6978,6 +6978,64 @@ test_SimplePublishNoData(void)
 }
 
 static void
+test_PublishMsg(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        arg.string = "hello!";
+        arg.status = NATS_OK;
+    }
+    if ( s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    serverPid = _startServer(NATS_DEFAULT_URL, NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Test simple publishMsg: ")
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, &arg);
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    if (s == NATS_OK)
+    {
+        const char  data[] = {104, 101, 108, 108, 111, 33};
+        natsMsg     *msg   = NULL;
+
+        s = natsMsg_Create(&msg, "foo", NULL, data, sizeof(data));
+        if (s == NATS_OK)
+            s = natsConnection_PublishMsg(nc, msg);
+
+        natsMsg_Destroy(msg);
+    }
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && !arg.msgReceived)
+            s = natsCondition_TimedWait(arg.c, arg.m, 1500);
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 test_InvalidSubsArgs(void)
 {
     natsStatus          s;
@@ -12045,6 +12103,7 @@ static testInfo allTests[] =
     {"MultipleClose",                   test_MultipleClose},
     {"SimplePublish",                   test_SimplePublish},
     {"SimplePublishNoData",             test_SimplePublishNoData},
+    {"PublishMsg",                      test_PublishMsg},
     {"InvalidSubsArgs",                 test_InvalidSubsArgs},
     {"AsyncSubscribe",                  test_AsyncSubscribe},
     {"AsyncSubscribeTimeout",           test_AsyncSubscribeTimeout},

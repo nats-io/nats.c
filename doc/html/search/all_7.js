@@ -82,7 +82,7 @@ var searchData=
   ['natsconnectionhandler',['natsConnectionHandler',['../group__callbacks_group.html#gacdef6aff3e47953f19e35857ab8e274c',1,'nats.h']]],
   ['natsconnstatus',['natsConnStatus',['../status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51',1,'status.h']]],
   ['natserrhandler',['natsErrHandler',['../group__callbacks_group.html#ga9e511dffa471dfb971b7dd2b12329626',1,'nats.h']]],
-  ['natsevloop_5fattach',['natsEvLoop_Attach',['../group__callbacks_group.html#gabe15a94f952bcd0198f6ac5c5187c3da',1,'nats.h']]],
+  ['natsevloop_5fattach',['natsEvLoop_Attach',['../group__callbacks_group.html#ga245eab0a01a485e40fba267f84ec037f',1,'nats.h']]],
   ['natsevloop_5fdetach',['natsEvLoop_Detach',['../group__callbacks_group.html#gab63dee7f7012ba11ae20b76dbc36f2d0',1,'nats.h']]],
   ['natsevloop_5freadaddremove',['natsEvLoop_ReadAddRemove',['../group__callbacks_group.html#gaea4c125ecfb43eaf43da20e8444c2aaa',1,'nats.h']]],
   ['natsevloop_5fwriteaddremove',['natsEvLoop_WriteAddRemove',['../group__callbacks_group.html#ga2bb5dd2d821ca5bbc0488f7e6aceed17',1,'nats.h']]],

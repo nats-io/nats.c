@@ -31,5 +31,7 @@ var group__opts_group =
     [ "natsOptions_SetEventLoop", "group__opts_group.html#gab09491bad908dedcb323c780280733ff", null ],
     [ "natsOptions_UseGlobalMessageDelivery", "group__opts_group.html#gabf060c92648b50c069f0abe7cbb06f1c", null ],
     [ "natsOptions_IPResolutionOrder", "group__opts_group.html#ga7ca713c7532eff4d41a492e95b8822cf", null ],
+    [ "natsOptions_SetSendAsap", "group__opts_group.html#ga8f06568cc3319a5a0eef9f80282034ca", null ],
+    [ "natsOptions_UseOldRequestStyle", "group__opts_group.html#ga70aa85319933d78c0076cc862fa3e5a6", null ],
     [ "natsOptions_Destroy", "group__opts_group.html#ga93d8068cd6fff53b7f8e1c403db45eb9", null ]
 ];

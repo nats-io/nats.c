@@ -1491,28 +1491,31 @@ _deliverMsgs(void *arg)
         // Is this a control message?
         if (msg->subject[0] == '\0')
         {
+            bool closed   = sub->closed;
+            bool timedOut = sub->timedOut;
+
             // We need to release this lock...
             natsMutex_Unlock(dlv->lock);
 
             // Release the message
             natsMsg_Destroy(msg);
 
-            if (sub->closed)
+            if (closed)
             {
                 // Subscription closed, just release
                 natsSub_release(sub);
-
-                // Grab the lock, we go back to beginning of loop.
-                natsMutex_Lock(dlv->lock);
             }
-            else if (sub->timedOut)
+            else if (timedOut)
             {
                 // Invoke the callback with a NULL message.
                 (*mcb)(nc, sub, NULL, mcbClosure);
+            }
 
-                // Grab the lock
-                natsMutex_Lock(dlv->lock);
+            // Grab the lock, we go back to beginning of loop.
+            natsMutex_Lock(dlv->lock);
 
+            if (timedOut)
+            {
                 // Reset the timedOut boolean to allow for the
                 // subscription to timeout again, and reset the
                 // timer to fire again starting from now.

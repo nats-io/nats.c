@@ -185,6 +185,16 @@ natsSub_deliverMsgs(void *arg)
 }
 
 void
+natsSub_setMax(natsSubscription *sub, uint64_t max)
+{
+    natsSub_Lock(sub);
+    SUB_DLV_WORKER_LOCK(sub);
+    sub->max = max;
+    SUB_DLV_WORKER_UNLOCK(sub);
+    natsSub_Unlock(sub);
+}
+
+void
 natsSub_close(natsSubscription *sub, bool connectionClosed)
 {
     natsMsgDlvWorker *ldw = NULL;

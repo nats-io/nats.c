@@ -134,6 +134,7 @@ endif()
 
 add_subdirectory(src)
 add_subdirectory(examples)
+add_subdirectory(examples/getstarted)
 add_subdirectory(test)
 add_subdirectory(test/dylib)
 #----------------------------

@@ -161,6 +161,13 @@ Go [here](http://nats-io.github.io/cnats) for the online documentation.
 
 The source code is also quite documented.
 
+## Getting Started
+
+The `examples/getstarted` directory has a set of simple examples that are fully functional, yet very simple.
+The goal is to demonstrate how easy to use the API is.
+
+A more complex set of examples are in `examples/` directory and can also be used to benchmark the client library.
+
 ## Basic Usage
 
 Note that for simplicity, error checking is not performed here.

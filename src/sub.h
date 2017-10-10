@@ -29,6 +29,9 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
                const char *queueGroup, int64_t timeout, natsMsgHandler cb, void *cbClosure);
 
 void
+natsSub_setMax(natsSubscription *sub, uint64_t max);
+
+void
 natsSub_close(natsSubscription *sub, bool connectionClosed);
 
 #endif /* SUB_H_ */

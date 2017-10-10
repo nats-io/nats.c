@@ -2391,12 +2391,10 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
         return NATS_OK;
     }
 
-    natsSub_Lock(sub);
-    sub->max = max;
-    natsSub_Unlock(sub);
-
     if (max == 0)
         natsConn_removeSubscription(nc, sub);
+    else
+        natsSub_setMax(sub, max);
 
     if (!natsConn_isReconnecting(nc))
     {

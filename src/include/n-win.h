@@ -50,6 +50,8 @@ typedef int                 natsRecvLen;
 #endif
 #define strcasecmp  _stricmp
 
+#define nats_vsnprintf(b, sb, f, a) vsnprintf_s((b), (sb), (_TRUNCATE), (f), (a))
+
 int
 nats_asprintf(char **newStr, const char *fmt, ...);
 

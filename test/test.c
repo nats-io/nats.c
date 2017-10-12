@@ -2729,6 +2729,45 @@ test_natsJSON(void)
 }
 
 static void
+test_natsErrWithLongText(void)
+{
+    natsStatus  s;
+    char        errTxt[300];
+    const char  *output = NULL;
+    int         i;
+
+    nats_clearLastError();
+    for (i=0; i<(int) sizeof(errTxt)-1; i++)
+        errTxt[i] = 'A';
+    errTxt[i-1] = '\0';
+
+    test("nats_setError with long text: ");
+    s = nats_setError(NATS_ERR, "This is the error: %s", errTxt);
+    if (s == NATS_ERR)
+        output = nats_GetLastError(&s);
+    if (output != NULL)
+    {
+        int pos = ((int) strlen(output))-1;
+
+        // End of text should contain `...` to indicate that it was truncated.
+        for (i=0; i<3; i++)
+        {
+            if (output[pos--] != '.')
+            {
+                s = NATS_ILLEGAL_STATE;
+                break;
+            }
+        }
+    }
+    else
+    {
+        s = NATS_ILLEGAL_STATE;
+    }
+    testCond(s == NATS_ERR);
+    nats_clearLastError();
+}
+
+static void
 test_natsErrStackMoreThanMaxFrames(void)
 {
     int             i;
@@ -11827,6 +11866,7 @@ _sslMT(void *closure)
     char                subj[64];
     int                 i;
     const char          *msgPayload = "this is a test payload";
+    int                 count = 50;
 
     natsMutex_Lock(args->m);
     snprintf(subj, sizeof(subj), "foo.%d", ++(args->sum));
@@ -11834,7 +11874,10 @@ _sslMT(void *closure)
         s = natsCondition_TimedWait(args->c, args->m, 2000);
     natsMutex_Unlock(args->m);
 
-    for (i=0; (s == NATS_OK) && (i < 100); i++)
+    if (valgrind)
+        count = 10;
+
+    for (i=0; (s == NATS_OK) && (i < count); i++)
     {
         s = natsConnection_Connect(&nc, args->opts);
         if (s == NATS_OK)
@@ -12050,6 +12093,7 @@ static testInfo allTests[] =
     {"natsSock_IPOrder",                test_natsSock_IPOrder},
     {"natsSock_ReadLine",               test_natsSock_ReadLine},
     {"natsJSON",                        test_natsJSON},
+    {"natsErrWithLongText",             test_natsErrWithLongText},
     {"natsErrStackMoreThanMaxFrames",   test_natsErrStackMoreThanMaxFrames},
 
     // Package Level Tests

@@ -21,6 +21,7 @@ natsSock_ConnectTcp
 natsSock_IPOrder
 natsSock_ReadLine
 natsJSON
+natsErrWithLongText
 natsErrStackMoreThanMaxFrames
 ReconnectServerStats
 ParseStateReconnectFunctionality

@@ -1223,14 +1223,24 @@ nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStat
     errTL->sts = errSts;
     errTL->framesCount = -1;
 
+    tmp[0] = '\0';
+
     va_start(ap, errTxtFmt);
-    n = vsnprintf(tmp, sizeof(tmp), errTxtFmt, ap);
+    nats_vsnprintf(tmp, sizeof(tmp), errTxtFmt, ap);
     va_end(ap);
 
-    if (n > 0)
+    if (strlen(tmp) > 0)
     {
-        snprintf(errTL->text, sizeof(errTL->text), "(%s:%d): %s",
-                 _getErrorShortFileName(fileName), line, tmp);
+        n = snprintf(errTL->text, sizeof(errTL->text), "(%s:%d): %s",
+                     _getErrorShortFileName(fileName), line, tmp);
+        if ((n < 0) || (n >= (int) sizeof(errTL->text)))
+        {
+            int pos = ((int) strlen(errTL->text)) - 1;
+            int i;
+
+            for (i=0; i<3; i++)
+                errTL->text[pos--] = '.';
+        }
     }
 
     _updateStack(errTL, funcName, errSts, true);

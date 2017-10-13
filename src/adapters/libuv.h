@@ -3,6 +3,10 @@
 #ifndef LIBUV_H_
 #define LIBUV_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** \cond
  *
  */
@@ -468,5 +472,9 @@ natsLibuv_Detach(void *userData)
 }
 
 /** @} */ // end of libuvFunctions
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* LIBUV_H_ */

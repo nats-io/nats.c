@@ -3,6 +3,10 @@
 #ifndef NATS_H_
 #define NATS_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -33,10 +37,6 @@
 #else
   #define NATS_EXTERN
   typedef int         natsSock;
-#endif
-
-#ifdef __cplusplus
-extern "C" {
 #endif
 
 /*! \mainpage %NATS C client.

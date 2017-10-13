@@ -3,6 +3,10 @@
 #ifndef LIBEVENT_H_
 #define LIBEVENT_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** \cond
  *
  */
@@ -216,5 +220,9 @@ natsLibevent_Detach(void *userData)
 }
 
 /** @} */ // end of libeventFunctions
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* LIBEVENT_H_ */

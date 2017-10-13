@@ -7,6 +7,7 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <locale.h>
 
 #include "mem.h"
 #include "timer.h"
@@ -95,6 +96,8 @@ typedef struct __natsLib
     natsLibTimers       timers;
     natsLibAsyncCbs     asyncCbs;
     natsLibDlvWorkers   dlvWorkers;
+
+    natsLocale      locale;
 
     natsCondition   *cond;
 
@@ -282,6 +285,18 @@ _freeDlvWorkers(void)
 }
 
 static void
+_freeLocale(void)
+{
+    if (gLib.locale == NULL)
+        return;
+
+#ifdef _WIN32
+    _free_locale(gLib.locale);
+#endif
+    gLib.locale = NULL;
+}
+
+static void
 _freeLib(void)
 {
     _freeTimers();
@@ -289,6 +304,7 @@ _freeLib(void)
     _freeGC();
     _freeDlvWorkers();
     natsNUID_free();
+    _freeLocale();
 
     natsCondition_Destroy(gLib.cond);
 
@@ -894,6 +910,7 @@ nats_Open(int64_t lockSpinCount)
     gLib.initAborted = false;
 
 #if defined(_WIN32)
+    gLib.locale = _create_locale(LC_ALL, "C");
 #else
     signal(SIGPIPE, SIG_IGN);
 #endif
@@ -1759,4 +1776,10 @@ natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWork
     *idx = workers->idx;
     *workersArray = workers->workers;
     natsMutex_Unlock(workers->lock);
+}
+
+natsLocale
+natsLib_getLocale()
+{
+    return gLib.locale;
 }

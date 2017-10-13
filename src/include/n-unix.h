@@ -38,6 +38,7 @@ typedef pthread_cond_t  natsCondition;
 typedef pthread_once_t  natsInitOnceType;
 typedef socklen_t       natsSockLen;
 typedef size_t          natsRecvLen;
+typedef void*           natsLocale;
 
 #define NATS_ONCE_STATIC_INIT   PTHREAD_ONCE_INIT
 
@@ -54,5 +55,6 @@ typedef size_t          natsRecvLen;
 #define nats_asprintf       asprintf
 #define nats_strcasestr     strcasestr
 #define nats_vsnprintf      vsnprintf
+#define nats_strtold        strtold
 
 #endif /* N_UNIX_H_ */

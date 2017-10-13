@@ -275,7 +275,7 @@ _jsonGetNum(char **ptr, long double *val)
 
     errno = 0;
 
-    lval = strtold(*ptr, &tail);
+    lval = nats_strtold(*ptr, &tail);
     if (errno != 0)
         return nats_setError(NATS_INVALID_ARG,
                              "error parsing numeric: %d", errno);

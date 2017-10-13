@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <locale.h>
 
 #include "buf.h"
 #include "timer.h"
@@ -12266,6 +12267,13 @@ int main(int argc, char **argv)
     {
         printf("@@ Usage: %s [start] [end] (0 .. %d)\n", argv[0], (maxTests - 1));
         return 1;
+    }
+
+    envStr = getenv("NATS_TEST_SET_LOCALE");
+    if ((envStr != NULL) && (envStr[0] != '\0'))
+    {
+        const char * localeSet = setlocale(LC_ALL, envStr);
+        printf("Locale was set to %s, setting it to %s\n", localeSet, envStr);
     }
 
     envStr = getenv("NATS_TEST_VALGRIND");

@@ -29,6 +29,7 @@ typedef CONDITION_VARIABLE  natsCondition;
 typedef INIT_ONCE           natsInitOnceType;
 typedef int                 natsSockLen;
 typedef int                 natsRecvLen;
+typedef _locale_t           natsLocale;
 
 #define NATS_ONCE_TYPE          INIT_ONCE
 #define NATS_ONCE_STATIC_INIT   INIT_ONCE_STATIC_INIT
@@ -51,6 +52,7 @@ typedef int                 natsRecvLen;
 #define strcasecmp  _stricmp
 
 #define nats_vsnprintf(b, sb, f, a) vsnprintf_s((b), (sb), (_TRUNCATE), (f), (a))
+#define nats_strtold(p, t)          _strtold_l((p), (t), (natsLib_getLocale()))
 
 int
 nats_asprintf(char **newStr, const char *fmt, ...);

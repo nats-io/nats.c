@@ -1,7 +1,8 @@
 # NATS - C Client 
 A C client for the [NATS messaging system](https://nats.io).
 
-Go [here](http://nats-io.github.io/cnats) for the online documentation.
+Go [here](http://nats-io.github.io/cnats) for the online documentation,
+and check the [frequently asked questions](#FAQ).
 
 This NATS Client implementation is heavily based on the [NATS GO Client](https://github.com/nats-io/nats). There is support for Mac OS/X, Linux and Windows (although we don't have specific platform support matrix).
 
@@ -573,6 +574,222 @@ For `natsConnection_Request()`, use the `natsConnection_PublishRequest()` instea
 For others, asynchronous version of these calls should be made available.
 
 See examples in the `examples` directory for complete usage.
+
+## FAQ
+
+Here are some of the frequently asked questions:
+
+<b>Where do I start?</b>
+
+There are several resources that will help you get started using the NATS C Client library.
+<br>
+The `examples/getstarted` directory contains very basic programs that use
+the library for simple functions such as sending a message or setting up a subscription.
+<br>
+The `examples` directory itself contains more elaborated examples that include error
+handling and more advanced APIs. You will also find examples to that show the use
+of the NATS C Client library and external event loops.
+
+<b>What about support for platform XYZ?</b>
+
+We support platforms that are available to us for development and testing. This is currently
+limited to Linux, macOS and Windows. Even then, there may be OS versions that you may have
+problem building with and we will gladly accept PRs to fix the build process as long as it
+does not break the ones we support!
+
+<b>How do I build?</b>
+
+We use cmake since it allows cross-platforms builds. This works for us. You are free to
+create your own makefile or Windows solution. If you want to use cmake, follow these
+[instructions](https://github.com/nats-io/cnats#build).
+
+<b>I have found a bug in your library, what do I do?</b>
+
+Please report an issue [here](https://github.com/nats-io/cnats/issues/new). Give us as much
+as possible information on how you can reproduce this. If you have a fix for it, you can
+also open a PR.
+
+<b>Is the library thread-safe?</b>
+
+All calls use internal locking where needed. As a user, you would need to do your own locking
+if you were to share the same callback with different subscribers (since the callback would
+be invoked from different threads for each subscriber).<br>
+Note that this is true for any kind of callback that exist in the NATS C library, such as
+connection or error handlers, etc.. if you specify the same callback you take the risk that
+the code in that callback may be executed from different internal threads.
+
+<b>How do I send binary data?</b>
+
+NATS is a text protocol with message payload being a byte array. The server never interprets
+the content of a message.
+
+The natsConnection_Publish() API accepts a pointer to memory and the user provides how many
+bytes from that location need to be sent. The natsConnection_PublishString() is added for
+convenience if you want to send strings, but it is really equivalent to calling natsConnection_Publish()
+with `strlen` for the number of bytes.
+
+<b>Is the data sent in place or from a different thread?</b>
+
+For throughput reasons (and to mimic the Go client this library is based on), the client library
+uses a buffer for all socket writes. This buffer is flushed in the thread where the publish occurs
+if the buffer is full. The buffer size is not configurable at the moment. You can query how
+much data is in that buffer using the natsConnection_Buffered() function.
+
+When a publish call does not fill the buffer, the call returns without any data actually sent
+to the server. A dedicated thread (the flusher thread) will flush this buffer automatically. This
+helps with throughput since the number of system calls are reduced and the number of bytes
+sent at once is higher, however, it can add latency for request/reply situations where one
+wants to send one message at a time. To that effect, natsConnection_Request() call does flush
+the buffer in place and does not rely on the flusher thread.
+
+The option natsOptions_SetSendAsap() can be used to force all publish calls from the connection
+created with this option to flush the socket buffer at every call and not add delay by relying
+on the flusher thread.
+
+<b>The publish call did not return an error, is the message guaranteed to be sent to a subscriber?</b>
+
+No! It is not even guaranteed that the server got that message. As described above, the message
+could simply be in connection's buffer, even if each publish call is flushing the socket buffer,
+after that, the call returns. There is no feedback from the server that it has actually processed
+that message. The server could have crashed after reading from the socket.
+
+Regardless if the server has gotten the message or not, there is a total decoupling between
+publishing and subscribing. If the publisher needs to know that its message has bee received
+and processed by the subscribing application, request/reply pattern should be used. Check
+natsConnection_Request() and natsConnection_PublishRequest() for more details.
+
+<b>Do I need to call natsConnection_Flush() everywhere?</b>
+
+This function is not merely flushing the socket buffer, instead it sends a `PING` protocol
+message to the server and gets a `PONG` back in a synchronous way.
+
+As previously described, if you want to flush the socket buffer to reduce latency in all
+publish calls, you should create the connection with the "send asap" option.
+
+The natsConnection_Flush() API is often used to ensure that the server has processed one of the
+protocol messages.
+
+For instance, creating a subscription is asynchronous. When the call returns, you may
+get an error if the connection was previously closed, but you would not get an error if your
+connection user has no permission to create this subscription for instance.
+
+Instead, the server sends an error message that is asynchronously received by the client library.
+Calling natsConnection_Flush() on the same connection that created the subscription ensures
+that the server has processed the subscription and if there was an error has sent that error back
+before the `PONG`. It is then possible to check the natsConnection_GetLastError()
+to figure out if the subscription was successfully registered or not.
+
+<b>How is data and protocols received from the server?</b>
+
+When you create a connection, a library thread is created to read protocols (including messages)
+from the socket. You do not have to do anything in that regard. When data is read from the socket
+it will be turned into protocols or messages and distributed to appropriate callbacks.
+
+<b>Lot of things are asynchronous, how do I know if there is an error?</b>
+
+You should set error callbacks to be notified when asynchronous errors occur. These can be
+set through the use of natsOptions. Check natsOptions_SetErrorHandler() for instance. If you
+register an error callback for a connection, should an error occurs, your registered error handler
+will be invoked.
+
+<b>Are messages from an asynchronous subscription dispatched in parallel?</b>
+
+When you create an asynchronous subscription, the library will create a thread that is responsible
+to dispatch messages for that subscription. Messages for a given subscription are dispatched
+sequentially. That is, your callback is invoked with one message at a time, and only after the
+callback returns that the library invokes it again with the next pending message.
+
+So there is a thread per connection draining data from the socket, and then messages are passed
+to the matching subscription thread that is then responsible to dispatch them.
+
+If you plan to have many subscriptions and to reduce the number of threads used by the library,
+you should look at using a library level thread pool that will take care of messages dispatching.
+See nats_SetMessageDeliveryPoolSize(). A subscription will make use of the library pool if the
+connection it was created from had the natsOptions_UseGlobalMessageDelivery() option set to true.
+
+Even when using the global pool, messages from a given subscription are always dispatched
+sequentially and from the same thread.
+
+<b>What is the SLOW CONSUMER error that I see in the server?</b>
+
+The server when sending data to a client (or route) connection sets a write deadline. That is,
+if the socket write blocks for that amount of time, it will simply close the connection.
+
+This error occurs when the client (or other server) is not reading data fast enough from the
+socket. As we have seen earlier, a client connection creates a thread whose job is to read
+data from the socket, parse it and move protocol or messages to appropriate handlers.
+
+So this is not really symptomatic of a message handler  processing messages too slowly,
+instead it is probably the result of resources issues (not enough CPU cycles to read from the
+socket, or not reading fast enough) or internal locking contention that prevents the thread
+reading from the socket to read data fast enough because it is blocked trying to acquire some
+lock.
+
+<b>What is the SLOW CONSUMER error in the client then?</b>
+
+This error, in contrast with the error reported by the server, has to do with the disptaching
+of messages to the user callback. As explained, messages are moved from the connection's
+thread reading from the socket to the subscription's thread responsible for dispatching.
+
+The subscription's internal queue as a default limited size. When the connection's thread
+cannot add a message to that queue because it is full, it will drop the message and if
+an error handler has been set, a message will be posted there.
+
+For instance, having a message handler that takes too much time processing a message is
+likely to cause a slow consumer client error if the incoming message rate is high and/or
+the subscription pending limits are not big enough.
+
+The natsSubscription_SetPendingLimits() API can be used to set the subscription's internal
+queue limits. Values of `-1` for count and/or size means that the corresponding metric will
+not be checked. Setting both to `-1` mean that the client library will queued all incoming
+messages, regardless at which speed they are dispatched, which could cause your application
+to use lots of memory.
+
+<b>What happens if the server is restarted or there is a disconnect?</b>
+
+By default, the library will try to reconnect. Reconnection options can be set to either
+disable reconnect logic entirely, or set the number of attempts and delay between attempts.
+See natsOptions_SetAllowReconnect(), natsOptions_SetMaxReconnect(), etc... for more information.
+
+If you have not set natsOptions_SetNoRadomize() to true, then the list of given URLs are randomized
+when the connection is created. When a disconnect occurs, the next URL is tried. If that fails,
+the library moves to the next. When all have been tried, the loop restart from the first until
+they have all been tried the max reconnect attempts defined through options. The library
+will pause for as long as defined in the options when trying to reconnect to a server it was
+previously connected to.
+
+If you connect to a server that has the connect URL advertise enabled (default for servers 0.9.2+),
+when servers are added to the cluster of NATS Servers, the server will send URLs of this
+new server to its clients. This augments the "pool" or URLs that the connection may have been
+created with and allows the library to reconnect to servers that have been added to the cluster.
+
+While the library is disconnected from the server, all publish or new subscription calls are
+buffered in memory. This buffer as a default size but can be configured. When this buffer is
+full, further publish or new subscription calls will report failures.<br>
+When the client library has reconnected to the server, the pending buffer will
+be flushed to the server.
+
+If your application needs to know if a disconnect occurs, or when the library has reconnected,
+you should again set some callbacks to be notified of such events. Use natsOptions_SetDisconnectedCB(),
+natsOptions_SetReconnectedCB() and natsOptions_SetClosedCB(). Note that the later is a final
+event for a connection. When this callback is invoked, the connection is no longer valid, that
+is, you will no longer receive or be able to send data with this connection.
+
+<b>Do I need to free NATS objects?</b>
+
+All objects that you create and that have a `_Destroy()` API should indeed be destroyed
+if you want to not leak memory.One that is important and often missed is `natsMsg_Destroy()` that
+needs to be called in the message handler once you are done processing the message. The
+message has been created by the library and given to you in the message handler, but you are
+responsible for calling `natsMsg_Destroy()`.
+
+<b>What is nats_ReleaseThreadMemory() doing?</b>
+
+The NATS C library may store objects using local thread storage. Threads that are created and
+handled by the library are automatically cleaned-up, however, if the user creates a thread
+and invokes some NATS APIs, there is a possibility that the library stored something in that
+thread local storage. When the thread exits, the user should call this function so that
+the library can destroy objects that it may have stored.
 
 
 ## License

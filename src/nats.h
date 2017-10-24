@@ -53,6 +53,10 @@ extern "C" {
  * Instructions to build and install the %NATS C Client can be
  * found at the [NATS C Client GitHub page](https://github.com/nats-io/cnats)
  *
+ * \section faq_sec Frequently Asked Questions
+ *
+ * Some of the frequently asked questions can be found [here](https://github.com/nats-io/cnats#FAQ)
+ *
  * \section other_doc_section Other Documentation
  *
  * This documentation focuses on the %NATS C Client API; for additional
@@ -1833,7 +1837,7 @@ natsSubscription_NoDeliveryDelay(natsSubscription *sub);
  * return the next message that was pending in the client, and #NATS_TIMEOUT
  * otherwise.
  *
- * @param nextMsg the location where to store the pointer to the next availabe
+ * @param nextMsg the location where to store the pointer to the next available
  * message.
  * @param sub the pointer to the #natsSubscription object.
  * @param timeout time, in milliseconds, after which this call will return

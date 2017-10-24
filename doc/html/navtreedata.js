@@ -4,6 +4,7 @@ var NAVTREE =
     [ "NATS C client.", "index.html", [
       [ "Introduction", "index.html#intro_sec", null ],
       [ "Installation", "index.html#install_sec", null ],
+      [ "Frequently Asked Questions", "index.html#faq_sec", null ],
       [ "Other Documentation", "index.html#other_doc_section", null ]
     ] ],
     [ "Deprecated List", "deprecated.html", null ],
@@ -25,7 +26,7 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "deprecated.html",
-"group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1"
+"group__sub_group.html#ga38f1e41fc7619101fc4aa52014dd5428"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

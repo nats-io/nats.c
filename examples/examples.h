@@ -46,10 +46,15 @@ static natsStatus
 printStats(int mode, natsConnection *conn, natsSubscription *sub,
            natsStatistics *stats)
 {
-    natsStatus  s = NATS_OK;
-    uint64_t    inMsgs, inBytes, outMsgs, outBytes, reconnected;
-    int         pending = 0;
-    int64_t     delivered, dropped = 0;
+    natsStatus  s           = NATS_OK;
+    uint64_t    inMsgs      = 0;
+    uint64_t    inBytes     = 0;
+    uint64_t    outMsgs     = 0;
+    uint64_t    outBytes    = 0;
+    uint64_t    reconnected = 0;
+    int         pending     = 0;
+    int64_t     delivered   = 0;
+    int64_t     dropped     = 0;
 
     s = natsConnection_GetStats(conn, stats);
     if (s == NATS_OK)

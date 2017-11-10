@@ -194,10 +194,14 @@ uvAsyncAttach(natsLibuvEvents *nle)
     if (nle->handle == NULL)
         s = NATS_NO_MEMORY;
 
-    if ((s == NATS_OK)
-        && (uv_poll_init(nle->loop, nle->handle, nle->socket) != 0))
+    if (s == NATS_OK)
     {
-        s = NATS_ERR;
+#if UV_VERSION_MAJOR <= 1
+        if (uv_poll_init_socket(nle->loop, nle->handle, nle->socket) != 0)
+#else
+        if (uv_poll_init(nle->loop, nle->handle, nle->socket) != 0)
+#endif
+            s = NATS_ERR;
     }
 
     if ((s == NATS_OK)

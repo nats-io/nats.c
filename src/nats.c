@@ -284,6 +284,19 @@ _freeDlvWorkers(void)
     workers->workers = NULL;
 }
 
+static natsStatus
+_createLocale(void)
+{
+#ifdef _WIN32
+    gLib.locale = _create_locale(LC_ALL, "C");
+#else
+    gLib.locale = newlocale(LC_ALL_MASK, "C", (locale_t) 0);
+    if (gLib.locale == (locale_t) 0)
+        return NATS_NO_MEMORY;
+#endif
+    return NATS_OK;
+}
+
 static void
 _freeLocale(void)
 {
@@ -292,6 +305,8 @@ _freeLocale(void)
 
 #ifdef _WIN32
     _free_locale(gLib.locale);
+#else
+    freelocale(gLib.locale);
 #endif
     gLib.locale = NULL;
 }
@@ -909,9 +924,7 @@ nats_Open(int64_t lockSpinCount)
     gLib.initializing = true;
     gLib.initAborted = false;
 
-#if defined(_WIN32)
-    gLib.locale = _create_locale(LC_ALL, "C");
-#else
+#if !defined(_WIN32)
     signal(SIGPIPE, SIG_IGN);
 #endif
 
@@ -923,7 +936,9 @@ nats_Open(int64_t lockSpinCount)
     if (lockSpinCount >= 0)
         gLockSpinCount = lockSpinCount;
 
-    s = natsCondition_Create(&(gLib.cond));
+    s = _createLocale();
+    if (s == NATS_OK)
+        s = natsCondition_Create(&(gLib.cond));
 
     if (s == NATS_OK)
         s = natsMutex_Create(&(gLib.timers.lock));

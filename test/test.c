@@ -24,6 +24,7 @@ static int fails = 0;
 
 static bool keepServerOutput    = false;
 static bool valgrind            = false;
+static bool runOnTravis         = false;
 
 static const char *natsServerExe = "gnatsd";
 
@@ -3080,28 +3081,31 @@ test_natsSock_IPOrder(void)
     _stopServer(serverPid);
     serverPid = NATS_INVALID_PID;
 
-    test("Server listen to IPv6: ");
-    serverPid = _startServer("", "-a :: -p 4222", false);
-    s = _checkStart("nats://localhost:4222", 6, 5);
-    if (s == NATS_OK)
-        s = _checkStart("nats://localhost:4222", 46, 5);
-    if (s == NATS_OK)
-        s = _checkStart("nats://localhost:4222", 64, 5);
-    if (s == NATS_OK)
-        s = _checkStart("nats://localhost:4222", 0, 5);
-    if (s == NATS_OK)
+    if (!runOnTravis)
     {
-        // This one should fail, but the server when listening
-        // to [::] is actually accepting IPv4 connections,
-        // so be tolerant of that.
-        s = _checkStart("nats://localhost:4222", 4, 5);
+        test("Server listen to IPv6: ");
+        serverPid = _startServer("", "-a :: -p 4222", false);
+        s = _checkStart("nats://localhost:4222", 6, 5);
         if (s == NATS_OK)
-            fprintf(stderr, ">>>> IPv4 to [::] should have failed, but server accepted it\n");
-        else
-            s = NATS_OK;
+            s = _checkStart("nats://localhost:4222", 46, 5);
+        if (s == NATS_OK)
+            s = _checkStart("nats://localhost:4222", 64, 5);
+        if (s == NATS_OK)
+            s = _checkStart("nats://localhost:4222", 0, 5);
+        if (s == NATS_OK)
+        {
+            // This one should fail, but the server when listening
+            // to [::] is actually accepting IPv4 connections,
+            // so be tolerant of that.
+            s = _checkStart("nats://localhost:4222", 4, 5);
+            if (s == NATS_OK)
+                fprintf(stderr, ">>>> IPv4 to [::] should have failed, but server accepted it\n");
+            else
+                s = NATS_OK;
+        }
+        testCond(s == NATS_OK);
+        _stopServer(serverPid);
     }
-    testCond(s == NATS_OK);
-    _stopServer(serverPid);
 }
 
 static void
@@ -5009,78 +5013,81 @@ test_IPResolutionOrder(void)
     _stopServer(serverPid);
     serverPid = NATS_INVALID_PID;
 
-    test("Server listens to IPv6: ");
-    serverPid = _startServer("nats://[::1]:4222", "-a :: -p 4222", true);
-    CHECK_SERVER_STARTED(serverPid);
-    testCond(serverPid != NATS_INVALID_PID);
-
-    test("Order: 6: ");
-    s = natsOptions_IPResolutionOrder(opts, 6);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
+    if (!runOnTravis)
     {
-        natsConnection_Destroy(nc);
-        nc = NULL;
-    }
-    testCond(s == NATS_OK);
+        test("Server listens to IPv6: ");
+        serverPid = _startServer("nats://[::1]:4222", "-a :: -p 4222", true);
+        CHECK_SERVER_STARTED(serverPid);
+        testCond(serverPid != NATS_INVALID_PID);
 
-    test("Order: 46: ");
-    s = natsOptions_IPResolutionOrder(opts, 46);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-    {
-        natsConnection_Destroy(nc);
-        nc = NULL;
-    }
-    testCond(s == NATS_OK);
-
-    test("Order: 64: ");
-    s = natsOptions_IPResolutionOrder(opts, 64);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-    {
-        natsConnection_Destroy(nc);
-        nc = NULL;
-    }
-    testCond(s == NATS_OK);
-
-    test("Order: 0: ");
-    s = natsOptions_IPResolutionOrder(opts, 0);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-    {
-        natsConnection_Destroy(nc);
-        nc = NULL;
-    }
-    testCond(s == NATS_OK);
-
-    test("Order: 4: ");
-    s = natsOptions_IPResolutionOrder(opts, 4);
-    if (s == NATS_OK)
-    {
-        s = natsConnection_Connect(&nc, opts);
-        // This should fail, but server listening to
-        // [::] still accepts IPv4 connections, so be
-        // tolerant of that.
+        test("Order: 6: ");
+        s = natsOptions_IPResolutionOrder(opts, 6);
+        if (s == NATS_OK)
+            s = natsConnection_Connect(&nc, opts);
         if (s == NATS_OK)
         {
-            fprintf(stderr, ">>>> Server listening on [::] accepted an IPv4 connection");
             natsConnection_Destroy(nc);
             nc = NULL;
         }
-        else
-        {
-            s = NATS_OK;
-        }
-    }
-    testCond(s == NATS_OK);
+        testCond(s == NATS_OK);
 
-    _stopServer(serverPid);
-    serverPid = NATS_INVALID_PID;
+        test("Order: 46: ");
+        s = natsOptions_IPResolutionOrder(opts, 46);
+        if (s == NATS_OK)
+            s = natsConnection_Connect(&nc, opts);
+        if (s == NATS_OK)
+        {
+            natsConnection_Destroy(nc);
+            nc = NULL;
+        }
+        testCond(s == NATS_OK);
+
+        test("Order: 64: ");
+        s = natsOptions_IPResolutionOrder(opts, 64);
+        if (s == NATS_OK)
+            s = natsConnection_Connect(&nc, opts);
+        if (s == NATS_OK)
+        {
+            natsConnection_Destroy(nc);
+            nc = NULL;
+        }
+        testCond(s == NATS_OK);
+
+        test("Order: 0: ");
+        s = natsOptions_IPResolutionOrder(opts, 0);
+        if (s == NATS_OK)
+            s = natsConnection_Connect(&nc, opts);
+        if (s == NATS_OK)
+        {
+            natsConnection_Destroy(nc);
+            nc = NULL;
+        }
+        testCond(s == NATS_OK);
+
+        test("Order: 4: ");
+        s = natsOptions_IPResolutionOrder(opts, 4);
+        if (s == NATS_OK)
+        {
+            s = natsConnection_Connect(&nc, opts);
+            // This should fail, but server listening to
+            // [::] still accepts IPv4 connections, so be
+            // tolerant of that.
+            if (s == NATS_OK)
+            {
+                fprintf(stderr, ">>>> Server listening on [::] accepted an IPv4 connection");
+                natsConnection_Destroy(nc);
+                nc = NULL;
+            }
+            else
+            {
+                s = NATS_OK;
+            }
+        }
+        testCond(s == NATS_OK);
+
+        _stopServer(serverPid);
+        serverPid = NATS_INVALID_PID;
+    }
 
     natsOptions_Destroy(opts);
 }
@@ -12268,6 +12275,10 @@ int main(int argc, char **argv)
         printf("@@ Usage: %s [start] [end] (0 .. %d)\n", argv[0], (maxTests - 1));
         return 1;
     }
+
+    envStr = getenv("NATS_TEST_TRAVIS");
+    if ((envStr != NULL) && (envStr[0] != '\0'))
+        runOnTravis = true;
 
     envStr = getenv("NATS_TEST_SET_LOCALE");
     if ((envStr != NULL) && (envStr[0] != '\0'))

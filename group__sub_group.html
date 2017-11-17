@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.7.2</span>
+   &#160;<span id="projectnumber">1.7.4</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
   </td>
@@ -214,7 +214,7 @@ Functions</h2></td></tr>
 <p>Return the next message available to a synchronous subscriber or block until one is available. A timeout (expressed in milliseconds) can be used to return when no message has been delivered. If the value is zero, then this call will not wait and return the next message that was pending in the client, and <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> otherwise.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">nextMsg</td><td>the location where to store the pointer to the next availabe message. </td></tr>
+    <tr><td class="paramname">nextMsg</td><td>the location where to store the pointer to the next available message. </td></tr>
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
     <tr><td class="paramname">timeout</td><td>time, in milliseconds, after which this call will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no message is available. </td></tr>
   </table>

@@ -35,7 +35,7 @@ res=$?
 if [ $res -ne 0 ]; then
   exit $res
 fi
-ctest --timeout 60 --output-on-failure $4
+env NATS_TEST_TRAVIS=yes ctest --timeout 60 --output-on-failure $4
 res=$?
 if [ $res -ne 0 ]; then
   exit $res

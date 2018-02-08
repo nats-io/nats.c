@@ -1,4 +1,5 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
+// Copyright 2018 Synadia Communications Inc. All rights reserved.
 
 #include "natsp.h"
 
@@ -5925,7 +5926,7 @@ test_QueueSubsOnReconnect(void)
 
     for (int i=0; (s == NATS_OK) && (i < 10); i++)
     {
-        char seq[10];
+        char seq[20];
 
         snprintf(seq, sizeof(seq), "%d", i);
         s = natsConnection_PublishString(nc, "foo.bar", seq);
@@ -5966,7 +5967,7 @@ test_QueueSubsOnReconnect(void)
 
     for (int i=0; (s == NATS_OK) && (i < 10); i++)
     {
-        char seq[10];
+        char seq[20];
 
         snprintf(seq, sizeof(seq), "%d", i);
         s = natsConnection_PublishString(nc, "foo.bar", seq);

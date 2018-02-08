@@ -81,7 +81,7 @@ elseif(WIN32)
 endif(UNIX)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_CODE_COVERAGE} ${NATS_COMMON_C_FLAGS} ${NATS_USE_PTHREAD} ${NATS_WARNINGS}")
-
+add_definitions(-D_GNU_SOURCE)
 add_definitions(-D${NATS_OS})
 add_definitions(-D_REENTRANT)
 if(NATS_BUILD_WITH_TLS)

@@ -1,5 +1,5 @@
-// Copyright 2015-2016 Apcera Inc. All rights reserved.
-
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
+// Copyright 2018 Synadia Communications Inc. All rights reserved.
 
 #ifndef EXAMPLES_H_
 #define EXAMPLES_H_
@@ -12,9 +12,6 @@
 #define strcasecmp  _stricmp
 #define strdup      _strdup
 #else
-#ifndef NATS_LIBUV_INCLUDE
-extern char *strdup(const char *s);
-#endif
 #include <strings.h>
 #endif
 

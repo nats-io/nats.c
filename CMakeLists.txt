@@ -82,6 +82,13 @@ endif(UNIX)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_CODE_COVERAGE} ${NATS_COMMON_C_FLAGS} ${NATS_USE_PTHREAD} ${NATS_WARNINGS}")
 
+if(UNIX)
+if(APPLE)
+add_definitions(-DNATS_USE_X_LOCALE)
+else(APPLE)
+add_definitions(-D_GNU_SOURCE)
+endif(APPLE)
+endif(UNIX)
 add_definitions(-D${NATS_OS})
 add_definitions(-D_REENTRANT)
 if(NATS_BUILD_WITH_TLS)

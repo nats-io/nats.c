@@ -1,4 +1,5 @@
-// Copyright 2015 Apcera Inc. All rights reserved.
+// Copyright 2015-2017 Apcera Inc. All rights reserved.
+// Copyright 2018 Synadia Communications Inc. All rights reserved.
 
 #ifndef N_UNIX_H_
 #define N_UNIX_H_
@@ -30,7 +31,11 @@
 #include <errno.h>
 #include <string.h>
 #include <netinet/in.h>
+#if defined(NATS_USE_X_LOCALE)
 #include <xlocale.h>
+#else
+#include <locale.h>
+#endif
 
 typedef pthread_t       natsThread;
 typedef pthread_key_t   natsThreadLocal;

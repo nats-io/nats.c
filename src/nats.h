@@ -255,6 +255,8 @@ typedef natsStatus (*natsEvLoop_Detach)(
  * spin count. However, you can call this explicitly before creating the very
  * first connection in order for your chosen spin count to take effect.
  *
+ * \warning You must not call #nats_Open and #nats_Close concurrently.
+ *
  * @param lockSpinCount The number of times the library will spin trying to
  * lock a mutex object.
  */
@@ -431,6 +433,8 @@ nats_ReleaseThreadMemory(void);
  *
  * \note For this to take effect, all NATS objects that you have created
  * must first be destroyed.
+ *
+ * \warning You must not call #nats_Open and #nats_Close concurrently.
  */
 NATS_EXTERN void
 nats_Close(void);

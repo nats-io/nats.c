@@ -132,3 +132,4 @@ PingReconnect
 GetServers
 GetDiscoveredServers
 DiscoveredServersCb
+INFOAfterFirstPONGisProcessedOK

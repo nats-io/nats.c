@@ -1344,14 +1344,50 @@ _sendProto(natsConnection *nc, const char* proto, int protoLen)
     return s;
 }
 
+// reads a protocol one byte at a time.
+static natsStatus
+_readProto(natsConnection *nc, natsBuffer **proto)
+{
+	natsStatus	s 			= NATS_OK;
+	char		protoEnd	= '\n';
+	int			i			= 0;
+	natsBuffer	*buf		= NULL;
+	char		oneChar[1];
+
+	s = natsBuf_Create(&buf, 10);
+	if (s != NATS_OK)
+		return s;
+
+	for (;;)
+	{
+		s = natsSock_Read(&(nc->sockCtx), oneChar, 1, NULL);
+		if (s == NATS_CONNECTION_CLOSED)
+		    break;
+		s = natsBuf_AppendByte(buf, oneChar[0]);
+		if (s != NATS_OK)
+		{
+			natsBuf_Destroy(buf);
+			return s;
+		}
+		if (oneChar[0] == protoEnd)
+		    break;
+	}
+	s = natsBuf_AppendByte(buf, '\0');
+	if (s != NATS_OK)
+	{
+	    natsBuf_Destroy(buf);
+	    return s;
+	}
+	*proto = buf;
+	return NATS_OK;
+}
+
 static natsStatus
 _sendConnect(natsConnection *nc)
 {
     natsStatus  s       = NATS_OK;
     char        *cProto = NULL;
-    char        buffer[DEFAULT_BUF_SIZE];
-
-    buffer[0] = '\0';
+    natsBuffer	*proto  = NULL;
 
     // Create the CONNECT protocol
     s = _connectProto(nc, &cProto);
@@ -1372,31 +1408,38 @@ _sendConnect(natsConnection *nc)
 
     // Now read the response from the server.
     if (s == NATS_OK)
-        s = natsSock_ReadLine(&(nc->sockCtx), buffer, sizeof(buffer));
+        s = _readProto(nc, &proto);
 
     // If Verbose is set, we expect +OK first.
     if ((s == NATS_OK) && nc->opts->verbose)
     {
         // Check protocol is as expected
-        if (strncmp(buffer, _OK_OP_, _OK_OP_LEN_) != 0)
+        if (strncmp(natsBuf_Data(proto), _OK_OP_, _OK_OP_LEN_) != 0)
         {
             s = nats_setError(NATS_PROTOCOL_ERROR,
                               "Expected '%s', got '%s'",
-                              _OK_OP_, buffer);
+                              _OK_OP_, natsBuf_Data(proto));
         }
+        natsBuf_Destroy(proto);
+        proto = NULL;
 
         // Read the rest now...
         if (s == NATS_OK)
-            s = natsSock_ReadLine(&(nc->sockCtx), buffer, sizeof(buffer));
+            s = _readProto(nc, &proto);
     }
 
     // We except the PONG protocol
-    if ((s == NATS_OK) && (strncmp(buffer, _PONG_OP_, _PONG_OP_LEN_) != 0))
+    if ((s == NATS_OK) && (strncmp(natsBuf_Data(proto), _PONG_OP_, _PONG_OP_LEN_) != 0))
     {
         // But it could be something else, like -ERR
 
-        if (strncmp(buffer, _ERR_OP_, _ERR_OP_LEN_) == 0)
+        if (strncmp(natsBuf_Data(proto), _ERR_OP_, _ERR_OP_LEN_) == 0)
         {
+            char buffer[1024];
+
+            buffer[0] = '\0';
+            snprintf(buffer, sizeof(buffer), "%s", natsBuf_Data(proto));
+
             // Remove -ERR, trim spaces and quotes.
             nats_NormalizeErr(buffer);
 
@@ -1413,14 +1456,16 @@ _sendConnect(natsConnection *nc)
         {
             s = nats_setError(NATS_PROTOCOL_ERROR,
                               "Expected '%s', got '%s'",
-                              _PONG_OP_, buffer);
+                              _PONG_OP_, natsBuf_Data(proto));
         }
     }
+    // Destroy proto (ok if proto is NULL).
+    natsBuf_Destroy(proto);
 
     if (s == NATS_OK)
         nc->status = CONNECTED;
 
-    free(cProto);
+    NATS_FREE(cProto);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

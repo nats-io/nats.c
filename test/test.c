@@ -80,6 +80,7 @@ struct threadArg
     natsSubscription *sub;
     natsOptions      *opts;
     natsConnection   *nc;
+    natsSock         sock;
 
 };
 
@@ -11105,6 +11106,152 @@ test_DiscoveredServersCb(void)
 }
 
 static void
+_serverSendsINFOAfterPONG(void *closure)
+{
+    struct threadArg    *arg    = (struct threadArg*) closure;
+    natsStatus          s       = NATS_OK;
+    natsSock            sock    = NATS_SOCK_INVALID;
+    natsSockCtx         ctx;
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    // We will hand run a fake server that will send an INFO protocol
+    // right after sending the initial PONG.
+
+    s = _startMockupServer(&sock, "127.0.0.1", "4222");
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg->m);
+        arg->sock = sock;
+        natsCondition_Signal(arg->c);
+        natsMutex_Unlock(arg->m);
+    }
+    if ((s == NATS_OK)
+            && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+                    || (natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK)))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    if (s == NATS_OK)
+    {
+        const char* info = "INFO {}\r\n";
+
+        s = natsSock_WriteFully(&ctx, info, (int) strlen(info));
+    }
+    if (s == NATS_OK)
+    {
+        char buffer[1024];
+
+        memset(buffer, 0, sizeof(buffer));
+
+        // Read connect and ping commands sent from the client
+        s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+        if (s == NATS_OK)
+            s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+    }
+    // Send PONG + INFO
+    if (s == NATS_OK)
+    {
+        char buffer[1024];
+
+        snprintf(buffer, sizeof(buffer), "PONG\r\nINFO {\"connect_urls\":[\"127.0.0.1:4222\",\"me:1\"]}\r\n");
+
+        s = natsSock_WriteFully(&ctx, buffer, strlen(buffer));
+    }
+    // Wait for client to disconnect
+    natsMutex_Lock(arg->m);
+    while (!arg->closed)
+        natsCondition_Wait(arg->c, arg->m);
+    natsMutex_Unlock(arg->m);
+
+    natsSock_Close(ctx.fd);
+    natsSock_Close(sock);
+
+    arg->status = s;
+}
+
+static void
+test_ReceiveINFORightAfterFirstPONG(void)
+{
+    natsStatus          s       = NATS_OK;
+    natsThread          *t      = NULL;
+    natsConnection      *nc     = NULL;
+    natsSock            srvSock = NATS_SOCK_INVALID;
+    struct threadArg arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Verify that INFO right after PONG is ok: ");
+
+    s = natsThread_Create(&t, _serverSendsINFOAfterPONG, (void*) &arg);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        natsCondition_Wait(arg.c, arg.m);
+        srvSock = arg.sock;
+        natsMutex_Unlock(arg.m);
+    }
+    if (s == NATS_OK)
+    {
+        // Give a chance for the server to be in accept()
+        nats_Sleep(250);
+        s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4222");
+    }
+    if (s == NATS_OK)
+    {
+        int     i, j;
+        char    **servers    = NULL;
+        int     serversCount = 0;
+        bool    ok           = false;
+
+        for (i = 0; i < 100; i++)
+        {
+            s = natsConnection_GetDiscoveredServers(nc, &servers, &serversCount);
+            if (s != NATS_OK)
+                break;
+
+            ok = ((serversCount == 1)
+                    && (strcmp(servers[0], "nats://me:1") == 0));
+
+            for (j = 0; j < serversCount; j++)
+                free(servers[j]);
+            free(servers);
+
+            if (ok)
+                break;
+
+            nats_Sleep(15);
+            s = NATS_ERR;
+        }
+        natsConnection_Close(nc);
+    }
+
+    // Indicate that we are done
+    natsMutex_Lock(arg.m);
+    arg.closed = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    if (t != NULL)
+    {
+        // Close socket socket if we have failed in case server
+        // is waiting on us to connect.
+        if (s != NATS_OK)
+            natsSock_Close(srvSock);
+
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    testCond((s == NATS_OK) && (arg.status == NATS_OK));
+
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 test_Version(void)
 {
     const char *str = NULL;
@@ -12223,7 +12370,8 @@ static testInfo allTests[] =
     {"PingReconnect",                   test_PingReconnect},
     {"GetServers",                      test_GetServers},
     {"GetDiscoveredServers",            test_GetDiscoveredServers},
-    {"DiscoveredServersCb",             test_DiscoveredServersCb}
+    {"DiscoveredServersCb",             test_DiscoveredServersCb},
+    {"INFOAfterFirstPONGisProcessedOK", test_ReceiveINFORightAfterFirstPONG}
 };
 
 static int  maxTests = (int) (sizeof(allTests)/sizeof(testInfo));

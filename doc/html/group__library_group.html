@@ -35,7 +35,7 @@
    <div id="projectname">NATS C Client
    &#160;<span id="projectnumber">1.7.4</span>
    </div>
-   <div id="projectbrief">The nats.io C Client, Supported by Apcera</div>
+   <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
  </tr>
  </tbody>
@@ -167,6 +167,7 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 <p>This initializes the library.</p>
 <p>It is invoked automatically when creating a connection, using a default spin count. However, you can call this explicitly before creating the very first connection in order for your chosen spin count to take effect.</p>
+<dl class="section warning"><dt>Warning</dt><dd>You must not call <a class="el" href="group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d" title="Initializes the library. ">nats_Open</a> and <a class="el" href="group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e" title="Tear down the library. ">nats_Close</a> concurrently.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">lockSpinCount</td><td>The number of times the library will spin trying to lock a mutex object. </td></tr>
@@ -438,7 +439,8 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Releases memory used by the library.</p>
-<dl class="section note"><dt>Note</dt><dd>For this to take effect, all NATS objects that you have created must first be destroyed. </dd></dl>
+<dl class="section note"><dt>Note</dt><dd>For this to take effect, all NATS objects that you have created must first be destroyed.</dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd>You must not call <a class="el" href="group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d" title="Initializes the library. ">nats_Open</a> and <a class="el" href="group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e" title="Tear down the library. ">nats_Close</a> concurrently. </dd></dl>
 
 </div>
 </div>
@@ -448,7 +450,7 @@ Functions</h2></td></tr>
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="footer">NATS.IO Supported By Apcera
+    <li class="footer">NATS.IO Supported By Synadia Communications Inc.
     <a href="http://www.nats.io">
     </a></li>
   </ul>

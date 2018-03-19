@@ -80,7 +80,6 @@ struct threadArg
     natsSubscription *sub;
     natsOptions      *opts;
     natsConnection   *nc;
-    natsSock         sock;
 
 };
 
@@ -11119,13 +11118,13 @@ _serverSendsINFOAfterPONG(void *closure)
     // right after sending the initial PONG.
 
     s = _startMockupServer(&sock, "127.0.0.1", "4222");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg->m);
-        arg->sock = sock;
-        natsCondition_Signal(arg->c);
-        natsMutex_Unlock(arg->m);
-    }
+
+    natsMutex_Lock(arg->m);
+    arg->status = s;
+    arg->done = true;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+
     if ((s == NATS_OK)
             && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
                     || (natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK)))
@@ -11156,18 +11155,18 @@ _serverSendsINFOAfterPONG(void *closure)
 
         snprintf(buffer, sizeof(buffer), "PONG\r\nINFO {\"connect_urls\":[\"127.0.0.1:4222\",\"me:1\"]}\r\n");
 
-        s = natsSock_WriteFully(&ctx, buffer, strlen(buffer));
+        s = natsSock_WriteFully(&ctx, buffer, (int) strlen(buffer));
     }
-    // Wait for client to disconnect
+
+    // Wait for a signal from the client thread.
     natsMutex_Lock(arg->m);
     while (!arg->closed)
         natsCondition_Wait(arg->c, arg->m);
+    arg->status = s;
     natsMutex_Unlock(arg->m);
 
     natsSock_Close(ctx.fd);
     natsSock_Close(sock);
-
-    arg->status = s;
 }
 
 static void
@@ -11176,10 +11175,16 @@ test_ReceiveINFORightAfterFirstPONG(void)
     natsStatus          s       = NATS_OK;
     natsThread          *t      = NULL;
     natsConnection      *nc     = NULL;
-    natsSock            srvSock = NATS_SOCK_INVALID;
+    natsOptions         *opts   = NULL;
     struct threadArg arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");
+    if (s == NATS_OK)
+        s = natsOptions_SetAllowReconnect(opts, false);
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -11189,16 +11194,13 @@ test_ReceiveINFORightAfterFirstPONG(void)
     if (s == NATS_OK)
     {
         natsMutex_Lock(arg.m);
-        natsCondition_Wait(arg.c, arg.m);
-        srvSock = arg.sock;
+        while (!arg.done)
+            natsCondition_Wait(arg.c, arg.m);
+        s = arg.status;
         natsMutex_Unlock(arg.m);
     }
     if (s == NATS_OK)
-    {
-        // Give a chance for the server to be in accept()
-        nats_Sleep(250);
-        s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4222");
-    }
+        s = natsConnection_Connect(&nc, opts);
     if (s == NATS_OK)
     {
         int     i, j;
@@ -11225,29 +11227,26 @@ test_ReceiveINFORightAfterFirstPONG(void)
             nats_Sleep(15);
             s = NATS_ERR;
         }
-        natsConnection_Close(nc);
     }
-
-    // Indicate that we are done
-    natsMutex_Lock(arg.m);
-    arg.closed = true;
-    natsCondition_Signal(arg.c);
-    natsMutex_Unlock(arg.m);
-
     if (t != NULL)
     {
-        // Close socket socket if we have failed in case server
-        // is waiting on us to connect.
-        if (s != NATS_OK)
-            natsSock_Close(srvSock);
+        natsMutex_Lock(arg.m);
+        arg.closed = true;
+        natsCondition_Signal(arg.c);
+        natsMutex_Unlock(arg.m);
 
         natsThread_Join(t);
         natsThread_Destroy(t);
-    }
 
-    testCond((s == NATS_OK) && (arg.status == NATS_OK));
+        natsMutex_Lock(arg.m);
+        if ((s == NATS_OK) && (arg.status != NATS_OK))
+            s = arg.status;
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
 }
 

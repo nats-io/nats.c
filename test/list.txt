@@ -46,6 +46,7 @@ CloseDisconnectedCB
 ServerStopDisconnectedCB
 ClosedConnections
 ConnectVerboseOption
+ReconnectThreadLeak
 ReconnectTotalTime
 ReconnectDisallowedFlags
 ReconnectAllowedFlags

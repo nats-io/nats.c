@@ -1158,6 +1158,7 @@ _doReconnect(void *arg)
     natsSrvPool             *pool = NULL;
     int64_t                 sleepTime;
     struct threadsToJoin    ttj;
+    natsThread              *rt = NULL;
 
     natsConn_Lock(nc);
 
@@ -1298,22 +1299,27 @@ _doReconnect(void *arg)
         if (nc->opts->reconnectedCb != NULL)
             natsAsyncCb_PostConnHandler(nc, ASYNC_RECONNECTED);
 
+        nc->inReconnect--;
+        if (nc->reconnectThread != NULL)
+        {
+            rt = nc->reconnectThread;
+            nc->reconnectThread = NULL;
+        }
+
         // Release lock here, we will return below.
         natsConn_Unlock(nc);
 
         // Make sure we flush everything
         (void) natsConnection_Flush(nc);
 
-        natsConn_Lock(nc);
-        // This thread will be NULL if the connection is being closed.
-        // If not, we need to detach and destroy the thread.
-        if (nc->reconnectThread != NULL)
+        // Release to compensate for the retain in processOpError.
+        natsConn_release(nc);
+
+        if (rt != NULL)
         {
-            natsThread_Detach(nc->reconnectThread);
-            natsThread_Destroy(nc->reconnectThread);
-            nc->reconnectThread = NULL;
+            natsThread_Detach(rt);
+            natsThread_Destroy(rt);
         }
-        natsConn_Unlock(nc);
 
         return;
     }
@@ -1322,9 +1328,13 @@ _doReconnect(void *arg)
     if (nc->err == NATS_OK)
         nc->err = NATS_NO_SERVER;
 
+    nc->inReconnect--;
     natsConn_Unlock(nc);
 
     _close(nc, CLOSED, true);
+
+    // Release to compensate for the retain in processOpError.
+    natsConn_release(nc);
 }
 
 // Notifies the flusher thread that there is pending data to send to the
@@ -1624,7 +1634,7 @@ _processOpError(natsConnection *nc, natsStatus s)
 {
     natsConn_Lock(nc);
 
-    if (_isConnecting(nc) || natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
+    if (_isConnecting(nc) || natsConn_isClosed(nc) || (nc->inReconnect > 0))
     {
         natsConn_Unlock(nc);
 
@@ -1675,6 +1685,10 @@ _processOpError(natsConnection *nc, natsStatus s)
         }
         if (ls == NATS_OK)
         {
+            // We created the reconnect thread successfully, so retain
+            // the connection.
+            _retain(nc);
+            nc->inReconnect++;
             natsConn_Unlock(nc);
 
             return;

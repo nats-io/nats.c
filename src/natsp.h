@@ -405,6 +405,7 @@ struct __natsConnection
     bool                flusherStop;
 
     natsThread          *reconnectThread;
+    int                 inReconnect;
 
     natsStatistics      stats;
 

@@ -5477,6 +5477,68 @@ test_ConnectVerboseOption(void)
 }
 
 static void
+test_ReconnectThreadLeak(void)
+{
+    natsStatus          s;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsConnection      *nc       = NULL;
+    int                 i;
+    struct threadArg    arg;
+
+    serverPid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+
+    opts = _createReconnectOptions();
+    if ((opts == NULL)
+            || (natsOptions_SetURL(opts, "nats://127.0.0.1:4222") != NATS_OK)
+            || (natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg) != NATS_OK)
+            || (natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg) != NATS_OK)
+            || (natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg) != NATS_OK))
+    {
+        FAIL("Unable to setup test");
+    }
+
+    test("Connect ok: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    for (i=0; (s == NATS_OK) && (i<10); i++)
+    {
+        natsMutex_Lock(nc->mu);
+        natsSock_Shutdown(nc->sockCtx.fd);
+        natsMutex_Unlock(nc->mu);
+
+        test("Waiting for disconnect: ");
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && (!arg.disconnected))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        arg.disconnected = false;
+        natsMutex_Unlock(arg.m);
+        testCond(s == NATS_OK);
+
+        test("Waiting for reconnect: ");
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && (!arg.reconnected))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        arg.reconnected = false;
+        natsMutex_Unlock(arg.m);
+        testCond(s == NATS_OK);
+    }
+
+    natsConnection_Close(nc);
+    _waitForConnClosed(&arg);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_ReconnectTotalTime(void)
 {
     natsStatus  s;
@@ -12289,6 +12351,7 @@ static testInfo allTests[] =
     {"ServerStopDisconnectedCB",        test_ServerStopDisconnectedCB},
     {"ClosedConnections",               test_ClosedConnections},
     {"ConnectVerboseOption",            test_ConnectVerboseOption},
+    {"ReconnectThreadLeak",             test_ReconnectThreadLeak},
     {"ReconnectTotalTime",              test_ReconnectTotalTime},
     {"ReconnectDisallowedFlags",        test_ReconnectDisallowedFlags},
     {"ReconnectAllowedFlags",           test_ReconnectAllowedFlags},

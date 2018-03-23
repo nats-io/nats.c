@@ -35,6 +35,7 @@ res=$?
 if [ $res -ne 0 ]; then
   exit $res
 fi
+export NATS_TEST_SERVER_VERSION="$(gnatsd -v)"
 env NATS_TEST_TRAVIS=yes ctest --timeout 60 --output-on-failure $4
 res=$?
 if [ $res -ne 0 ]; then

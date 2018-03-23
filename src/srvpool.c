@@ -196,78 +196,127 @@ _shufflePool(natsSrvPool *pool)
 }
 
 natsStatus
-natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuffle, bool *added)
+natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, int urlCount, bool *added)
 {
     natsStatus  s       = NATS_OK;
     char        url[256];
-    int         i;
+    int         i, j;
     char        *sport;
     int         portPos;
     bool        found;
     bool        isLH;
+    natsStrHash *tmp = NULL;
+    natsSrv     *srv = NULL;
+
+    // Note about pool randomization: when the pool was first created,
+    // it was randomized (if allowed). We keep the order the same (removing
+    // implicit servers that are no longer sent to us). New URLs are sent
+    // to us in no specific order so don't need extra randomization.
 
     *added = false;
 
-    // If we can shuffle, we shuffle the given array, not the entire pool
-    if (urlCount > 0 && doShuffle)
-    {
-        int     j;
-        char    *tmp;
-
-        for (i = 0; i < urlCount; i++)
-        {
-            j = rand() % (i + 1);
-            tmp = urls[i];
-            urls[i] = urls[j];
-            urls[j] = tmp;
-        }
-    }
+    // Transform what we got to a map for easy lookups
+    s = natsStrHash_Create(&tmp, urlCount);
+    if (s != NATS_OK)
+        return  NATS_UPDATE_ERR_STACK(s);
 
     for (i=0; (s == NATS_OK) && (i<urlCount); i++)
     {
-        isLH  = false;
-        found = false;
+        s = natsStrHash_Set(tmp, urls[i], false, (void*)1, NULL);
+    }
 
-        // Consider localhost:<port>, 127.0.0.1:<port> and [::1]:<port>
-        // all the same.
-        sport = strrchr(urls[i], ':');
-        portPos = (int) (sport - urls[i]);
-        if (((nats_strcasestr(urls[i], "localhost") == urls[i]) && (portPos == 9))
-                || (strncmp(urls[i], "127.0.0.1", portPos) == 0)
-                || (strncmp(urls[i], "[::1]", portPos) == 0))
+    // Walk the pool and removed the implicit servers that are no longer in the
+    // given array/map
+    for (i=0; i<pool->size; i++)
+    {
+        void *inInfo= NULL;
+
+        srv = pool->srvrs[i];
+        snprintf(url, sizeof(url), "%s:%d", srv->url->host, srv->url->port);
+        // Check if this URL is in the INFO protocol
+        inInfo = natsStrHash_Get(tmp, url);
+        // Remove from the temp map so that at the end we are left with only
+        // new (or restarted) servers that need to be added to the pool.
+        natsStrHash_Remove(tmp, url);
+        // Keep servers that were set through Options, but also the one that
+        // we are currently connected to (even if it is a discovered server).
+        if (!(srv->isImplicit) || (srv->url == curUrl))
         {
-            isLH = ((urls[i][0] == 'l') || (urls[i][0] == 'L'));
-
-            snprintf(url, sizeof(url), "localhost%s", sport);
-            found = (natsStrHash_Get(pool->urls, url) != NULL);
-            if (!found)
-            {
-                snprintf(url, sizeof(url), "127.0.0.1%s", sport);
-                found = (natsStrHash_Get(pool->urls, url) != NULL);
-            }
-            if (!found)
-            {
-                snprintf(url, sizeof(url), "[::1]%s", sport);
-                found = (natsStrHash_Get(pool->urls, url) != NULL);
-            }
+            continue;
         }
-        else
+        if (!inInfo)
         {
-            found = (natsStrHash_Get(pool->urls, urls[i]) != NULL);
-        }
+            // Remove from server pool. Keep current order.
 
-        if (!found)
-        {
-            // Make sure that localhost URL is always stored in lower case.
-            if (isLH)
-                snprintf(url, sizeof(url), "nats://localhost%s", sport);
-            else
-                snprintf(url, sizeof(url), "nats://%s", urls[i]);
-            s = _addURLToPool(pool, url, true);
-            if (s == NATS_OK)
-                *added = true;
+            // Shift left servers past current to the current's position
+            for (j = i; j < pool->size - 1; j++)
+            {
+                pool->srvrs[j] = pool->srvrs[j+1];
+            }
+            _freeSrv(srv);
+            pool->size--;
+            i--;
         }
     }
+
+    // If there are any left in the tmp map, these are new (or restarted) servers
+    // and need to be added to the pool.
+    if (s == NATS_OK)
+    {
+        natsStrHashIter iter;
+        char            *curl = NULL;
+
+        natsStrHashIter_Init(&iter, tmp);
+        while ((s == NATS_OK) && natsStrHashIter_Next(&iter, &curl, NULL))
+        {
+            // Before adding, check if this is a new (as in never seen) URL.
+            // This is used to figure out if we invoke the DiscoveredServersCB
+
+            isLH  = false;
+            found = false;
+
+            // Consider localhost:<port>, 127.0.0.1:<port> and [::1]:<port>
+            // all the same.
+            sport = strrchr(curl, ':');
+            portPos = (int) (sport - curl);
+            if (((nats_strcasestr(curl, "localhost") == curl) && (portPos == 9))
+                    || (strncmp(curl, "127.0.0.1", portPos) == 0)
+                    || (strncmp(curl, "[::1]", portPos) == 0))
+            {
+                isLH = ((curl[0] == 'l') || (curl[0] == 'L'));
+
+                snprintf(url, sizeof(url), "localhost%s", sport);
+                found = (natsStrHash_Get(pool->urls, url) != NULL);
+                if (!found)
+                {
+                    snprintf(url, sizeof(url), "127.0.0.1%s", sport);
+                    found = (natsStrHash_Get(pool->urls, url) != NULL);
+                }
+                if (!found)
+                {
+                    snprintf(url, sizeof(url), "[::1]%s", sport);
+                    found = (natsStrHash_Get(pool->urls, url) != NULL);
+                }
+            }
+            else
+            {
+                found = (natsStrHash_Get(pool->urls, curl) != NULL);
+            }
+
+            snprintf(url, sizeof(url), "nats://%s", curl);
+            if (!found)
+            {
+                // Make sure that localhost URL is always stored in lower case.
+                if (isLH)
+                    snprintf(url, sizeof(url), "nats://localhost%s", sport);
+
+                *added = true;
+            }
+            s = _addURLToPool(pool, url, true);
+        }
+    }
+
+    natsStrHash_Destroy(tmp);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

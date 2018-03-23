@@ -66,9 +66,9 @@ natsSrv*
 natsSrvPool_GetNextServer(natsSrvPool *pool, struct __natsOptions *opts, const natsUrl *ncUrl);
 
 // Go through the list of the given URLs and add them to the pool if not already
-// present. If `doShuffle` is true, shuffles the pool if new URLs were added.
+// present.
 natsStatus
-natsSrvPool_addNewURLs(natsSrvPool *pool, char **urls, int urlCount, bool doShuffle, bool *added);
+natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, int urlCount, bool *added);
 
 // Returns an array of servers (as a copy). User is responsible to free the memory.
 natsStatus

@@ -16,7 +16,6 @@ addons:
     - valgrind
     - libssl-dev
     - unzip
-#    - libc6-dev-i386
 
 before_install:
   - bash install_gnatsd.sh

@@ -38,6 +38,7 @@ static bool valgrind            = false;
 static bool runOnTravis         = false;
 
 static const char *natsServerExe = "gnatsd";
+static const char *serverVersion = NULL;
 
 #define test(s)         { printf("#%02d ", ++tests); printf("%s", (s)); fflush(stdout); }
 #ifdef _WIN32
@@ -54,13 +55,13 @@ static const char *natsServerExe = "gnatsd";
 
 #define CHECK_SERVER_STARTED(p) if ((p) == NATS_INVALID_PID) FAIL("Unable to start or verify that the server was started!")
 
-static const char *testServers[] = {"nats://localhost:1222",
-                                    "nats://localhost:1223",
-                                    "nats://localhost:1224",
-                                    "nats://localhost:1225",
-                                    "nats://localhost:1226",
-                                    "nats://localhost:1227",
-                                    "nats://localhost:1228"};
+static const char *testServers[] = {"nats://127.0.0.1:1222",
+                                    "nats://127.0.0.1:1223",
+                                    "nats://127.0.0.1:1224",
+                                    "nats://127.0.0.1:1225",
+                                    "nats://127.0.0.1:1226",
+                                    "nats://127.0.0.1:1227",
+                                    "nats://127.0.0.1:1228"};
 
 struct threadArg
 {
@@ -3399,6 +3400,7 @@ _waitForConnClosed(struct threadArg *arg)
     natsMutex_Lock(arg->m);
     while (!arg->closed)
         natsCondition_TimedWait(arg->c, arg->m, 2000);
+    arg->closed = false;
     natsMutex_Unlock(arg->m);
 }
 
@@ -4302,44 +4304,50 @@ test_ParserSplitMsg(void)
 }
 
 static natsStatus
-_checkPool(natsConnection *nc, bool inThatOrder, char **expectedURLs, int expectedURLsCount)
+_checkPool(natsConnection *nc, char **expectedURLs, int expectedURLsCount)
 {
-    int     i;
+    int     i, j, attempts;
     natsSrv *srv;
-    char    buf[256];
     char    *url;
+    char    buf[64];
+    bool    ok;
 
-    // Check both pool and urls map
+    natsMutex_Lock(nc->mu);
     if (nc->srvPool->size != expectedURLsCount)
-        return NATS_ERR;
-
-    if (natsStrHash_Count(nc->srvPool->urls) != expectedURLsCount)
-        return NATS_ERR;
-
-    for (i=0; i<expectedURLsCount; i++)
     {
-        url = expectedURLs[i];
-        if (inThatOrder)
-        {
-            srv = nc->srvPool->srvrs[i];
-            snprintf(buf, sizeof(buf), "%s:%d", srv->url->host, srv->url->port);
-            if (strcmp(buf, url) != 0)
-            {
-                printf("@@IK: here: expected:%s got:%s\n", url, buf);
-                return NATS_ERR;
-            }
-        }
-        else
-        {
-            if (natsStrHash_Get(nc->srvPool->urls, url) == NULL)
-            {
-                printf("@@IK: url:%s not found!\n", url);
-                return NATS_ERR;
-            }
-        }
+        printf("Expected pool size to be %d, got %d\n", expectedURLsCount, nc->srvPool->size);
+        natsMutex_Unlock(nc->mu);
+        return NATS_ERR;
     }
-
-    return NATS_OK;
+    for (attempts=0; attempts<20; attempts++)
+    {
+        for (i=0; i<expectedURLsCount; i++)
+        {
+            url = expectedURLs[i];
+            ok = false;
+            for (j=0; j<nc->srvPool->size; j++)
+            {
+                srv = nc->srvPool->srvrs[j];
+                snprintf(buf, sizeof(buf), "%s:%d", srv->url->host, srv->url->port);
+                if (strcmp(buf, url))
+                {
+                    ok = true;
+                    break;
+                }
+            }
+            if (!ok)
+            {
+                natsMutex_Unlock(nc->mu);
+                nats_Sleep(100);
+                natsMutex_Lock(nc->mu);
+                continue;
+            }
+        }
+        natsMutex_Unlock(nc->mu);
+        return NATS_OK;
+    }
+    natsMutex_Unlock(nc->mu);
+    return NATS_ERR;
 }
 
 static natsStatus
@@ -4493,140 +4501,55 @@ test_AsyncINFO(void)
 
     // Now test the decoding of "connect_urls"
 
-    for (i=0; i<2; i++)
-    {
-        // Destroy, we create a new one
-        natsConnection_Destroy(nc);
-        nc = NULL;
+    // Destroy, we create a new one
+    natsConnection_Destroy(nc);
+    nc = NULL;
 
-        // No randomize for now
-        snprintf(buf, sizeof(buf), "Test with noRandomize as %s: ", (i == 0 ? "true" : "false"));
-        test(buf);
-        s = natsOptions_Create(&opts);
-        if (s == NATS_OK)
-        {
-            opts->noRandomize = (i == 0 ? true : false);
-            s = natsConn_create(&nc, opts);
-        }
-        if (s == NATS_OK)
-            s = natsParser_Create(&(nc->ps));
-        if (s != NATS_OK)
-            FAIL("Unable to setup test");
-        testCond(s == NATS_OK);
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsConn_create(&nc, opts);
+    if (s == NATS_OK)
+        s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
 
-        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"localhost:5222\"]}\r\n");
-        PARSER_START_TEST;
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        if (s == NATS_OK)
-        {
-            // Pool now should contain localhost:4222 (the default URL) and localhost:5222
-            const char *urls[] = {"localhost:4222", "localhost:5222"};
-
-            s = _checkPool(nc, true, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
-        }
-        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
-
-        // Make sure that if client receives the same, it is not added again.
-        PARSER_START_TEST;
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        if (s == NATS_OK)
-        {
-            // Pool should still contain localhost:4222 (the default URL) and localhost:5222
-            const char *urls[] = {"localhost:4222", "localhost:5222"};
-
-            s = _checkPool(nc, true, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
-        }
-        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
-
-        // Receive a new URL
-        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"localhost:6222\"]}\r\n");
-        PARSER_START_TEST;
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        if (s == NATS_OK)
-        {
-            // Pool now should contain localhost:4222 (the default URL) localhost:5222 and localhost:6222
-            const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222"};
-
-            s = _checkPool(nc, true, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
-        }
-        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
-
-        // Receive more than 1 URL at once. User more than 2 to increase the chance
-        // that those are randomized (when randomization is allowed).
-        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"localhost:7222\", \"localhost:8222\", "\
-                "\"localhost:9222\", \"localhost:10222\", \"localhost:11222\"]}\r\n");
-        PARSER_START_TEST;
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        if (s == NATS_OK)
-        {
-            // Pool now should contain all urls in allURLs
-            s = _checkPool(nc, (i == 0 ? true : false), (char**)allURLs, (int)(sizeof(allURLs)/sizeof(char*)));
-        }
-        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
-
-        // Receive a duplicate (LOCALHOST)
-        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"LOCALHOST:7222\"]}\r\n");
-        PARSER_START_TEST;
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        if (s == NATS_OK)
-        {
-            // Pool now should contain all urls in allURLs
-            s = _checkPool(nc, (i == 0 ? true : false), (char**)allURLs, (int)(sizeof(allURLs)/sizeof(char*)));
-        }
-        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
-
-        // Receive a duplicate (IPv4 address)
-        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"127.0.0.1:7222\"]}\r\n");
-        PARSER_START_TEST;
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        if (s == NATS_OK)
-        {
-            // Pool now should contain all urls in allURLs
-            s = _checkPool(nc, (i == 0 ? true : false), (char**)allURLs, (int)(sizeof(allURLs)/sizeof(char*)));
-        }
-        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
-
-        // Receive a duplicate (IPv6 address)
-        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"[::1]:7222\"]}\r\n");
-        PARSER_START_TEST;
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        if (s == NATS_OK)
-        {
-            // Pool now should contain all urls in allURLs
-            s = _checkPool(nc, (i == 0 ? true : false), (char**)allURLs, (int)(sizeof(allURLs)/sizeof(char*)));
-        }
-        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
-    }
-
-    // Finally, check that the pool should be randomized.
+    snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"localhost:4222\",\"localhost:5222\"]}\r\n");
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
     if (s == NATS_OK)
     {
-        int         same = 0;
-        char        url[256];
-        natsSrv     *srv;
+        // Pool now should contain localhost:4222 (the default URL) and localhost:5222
+        const char *urls[] = {"localhost:4222", "localhost:5222"};
 
-        test("Pool correct size: ");
-        if (nc->srvPool->size != (int)(sizeof(allURLs)/sizeof(char*)))
-            s = NATS_ERR;
-        testCond(s == NATS_OK);
-
-        test("Pool should be randomized: ")
-        for (i = 0; (s == NATS_OK) && (i < nc->srvPool->size); i++)
-        {
-            srv = nc->srvPool->srvrs[i];
-            snprintf(url, sizeof(url), "%s:%d", srv->url->host, srv->url->port);
-            if (strcmp(url, (char*) allURLs[i]) == 0)
-                same++;
-        }
-        // It is possible that pool is not randomized,
-        // so don't fail for that.
-        testCond((s == NATS_OK));
-        if (same == (int)(sizeof(allURLs)/sizeof(char*)))
-        {
-            printf("Pool was not randomized!!!\n");
-            fflush(stdout);
-        }
+        s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
     }
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+    // Make sure that if client receives the same, it is not added again.
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    if (s == NATS_OK)
+    {
+        // Pool should still contain localhost:4222 (the default URL) and localhost:5222
+        const char *urls[] = {"localhost:4222", "localhost:5222"};
+
+        s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+    }
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
+    // Receive a new URL
+    snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"localhost:4222\",\"localhost:5222\",\"localhost:6222\"]}\r\n");
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    if (s == NATS_OK)
+    {
+        // Pool now should contain localhost:4222 (the default URL) localhost:5222 and localhost:6222
+        const char *urls[] = {"localhost:4222", "localhost:5222", "localhost:6222"};
+
+        s = _checkPool(nc, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+    }
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+
     natsConnection_Destroy(nc);
     nc = NULL;
 
@@ -10157,10 +10080,8 @@ test_AuthServers(void)
 
     serverPid2 = _startServer("nats://localhost:1224", "-p 1224 --user ivan --pass foo", false);
     if (serverPid2 == NATS_INVALID_PID)
-    {
         _stopServer(serverPid1);
-        FAIL("Unable to start or verify that the server was started!");
-    }
+    CHECK_SERVER_STARTED(serverPid2);
 
     nats_Sleep(500);
 
@@ -10224,18 +10145,16 @@ test_AuthFailToReconnect(void)
 
     serverPid2 = _startServer("nats://localhost:22223", "-p 22223 --user ivan --pass foo", false);
     if (serverPid2 == NATS_INVALID_PID)
-    {
         _stopServer(serverPid1);
-        FAIL("Unable to start or verify that the server was started!");
-    }
+    CHECK_SERVER_STARTED(serverPid2);
 
     serverPid3 = _startServer("nats://localhost:22224", "-p 22224", false);
     if (serverPid3 == NATS_INVALID_PID)
     {
         _stopServer(serverPid1);
         _stopServer(serverPid2);
-        FAIL("Unable to start or verify that the server was started!");
     }
+    CHECK_SERVER_STARTED(serverPid3);
 
     nats_Sleep(1000);
 
@@ -10324,10 +10243,8 @@ test_BasicClusterReconnect(void)
 
     serverPid2 = _startServer("nats://localhost:1224", "-p 1224", true);
     if (serverPid2 == NATS_INVALID_PID)
-    {
         _stopServer(serverPid1);
-        FAIL("Unable to start or verify that the server was started!");
-    }
+    CHECK_SERVER_STARTED(serverPid2);
 
     s = natsConnection_Connect(&nc, opts);
 
@@ -10737,7 +10654,9 @@ test_ProperFalloutAfterMaxAttemptsWithAuthMismatch(void)
     CHECK_SERVER_STARTED(serverPid);
 
     serverPid2 = _startServer("nats://localhost:1223", "-p 1223 -user ivan -pass secret", true);
-    CHECK_SERVER_STARTED(serverPid);
+    if (serverPid == NATS_INVALID_PID)
+        _stopServer(serverPid);
+    CHECK_SERVER_STARTED(serverPid2);
 
     s = natsConnection_Connect(&nc, opts);
 
@@ -10825,7 +10744,7 @@ test_TimeoutOnNoServer(void)
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
 
-    serverPid = _startServer("nats://localhost:1222", "-p 1222", true);
+    serverPid = _startServer("nats://127.0.0.1:1222", "-p 1222", true);
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_Connect(&nc, opts);
@@ -10967,23 +10886,21 @@ test_GetServers(void)
     char                **servers = NULL;
     int                 count     = 0;
 
-    s1Pid = _startServer("nats://127.0.0.1:4222", "-a localhost -p 4222 -cluster nats-route://localhost:5222", true);
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:5222", true);
     CHECK_SERVER_STARTED(s1Pid);
 
-    s2Pid = _startServer("nats://127.0.0.1:4223", "-a localhost -p 4223 -cluster nats-route://localhost:5223 -routes nats-route://localhost:5222", true);
+    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://127.0.0.1:5223 -routes nats://127.0.0.1:5222", true);
     if (s2Pid == NATS_INVALID_PID)
-    {
         _stopServer(s1Pid);
-        CHECK_SERVER_STARTED(s2Pid);
-    }
+    CHECK_SERVER_STARTED(s2Pid);
 
-    s3Pid = _startServer("nats://127.0.0.1:4224", "-a localhost -p 4224 -cluster nats-route://localhost:5224 -routes nats-route://localhost:5222", true);
-    if (s2Pid == NATS_INVALID_PID)
+    s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats://127.0.0.1:5224 -routes nats://127.0.0.1:5222", true);
+    if (s3Pid == NATS_INVALID_PID)
     {
         _stopServer(s1Pid);
         _stopServer(s2Pid);
-        CHECK_SERVER_STARTED(s3Pid);
     }
+    CHECK_SERVER_STARTED(s3Pid);
 
     test("Get Servers: ");
     s = natsConnection_ConnectTo(&conn, "nats://127.0.0.1:4222");
@@ -11001,8 +10918,8 @@ test_GetServers(void)
         for (i=0; (s == NATS_OK) && (i < count); i++)
         {
             if ((strcmp(servers[i], "nats://127.0.0.1:4222") != 0)
-                    && (strcmp(servers[i], "nats://localhost:4223") != 0)
-                    && (strcmp(servers[i], "nats://localhost:4224") != 0))
+                    && (strcmp(servers[i], "nats://127.0.0.1:4223") != 0)
+                    && (strcmp(servers[i], "nats://127.0.0.1:4224") != 0))
             {
                 s = nats_setError(NATS_ERR, "Unexpected server URL: %s", servers[i]);
             }
@@ -11022,7 +10939,7 @@ test_GetServers(void)
     _stopServer(s1Pid);
 
     s1Pid = NATS_INVALID_PID;
-    s1Pid = _startServer("nats://ivan:password@127.0.0.1:4222", "-a localhost -p 4222 -user ivan -pass password", true);
+    s1Pid = _startServer("nats://ivan:password@127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -user ivan -pass password", true);
     CHECK_SERVER_STARTED(s1Pid);
 
     test("Get Servers does not return credentials: ");
@@ -11055,15 +10972,13 @@ test_GetDiscoveredServers(void)
     char                **servers = NULL;
     int                 count     = 0;
 
-    s1Pid = _startServer("nats://127.0.0.1:4222", "-a localhost -p 4222 -cluster nats-route://localhost:5222", true);
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:5222", true);
     CHECK_SERVER_STARTED(s1Pid);
 
-    s2Pid = _startServer("nats://127.0.0.1:4223", "-a localhost -p 4223 -cluster nats-route://localhost:5223 -routes nats-route://localhost:5222", true);
+    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://127.0.0.1:5223 -routes nats://127.0.0.1:5222", true);
     if (s2Pid == NATS_INVALID_PID)
-    {
         _stopServer(s1Pid);
-        CHECK_SERVER_STARTED(s2Pid);
-    }
+    CHECK_SERVER_STARTED(s2Pid);
 
     test("GetDiscoveredServers: ");
     s = natsConnection_ConnectTo(&conn, "nats://127.0.0.1:4222");
@@ -11080,7 +10995,7 @@ test_GetDiscoveredServers(void)
 
         for (i=0; (s == NATS_OK) && (i < count); i++)
         {
-            if (strcmp(servers[i], "nats://localhost:4223") != 0)
+            if (strcmp(servers[i], "nats://127.0.0.1:4223") != 0)
                 s = nats_setError(NATS_ERR, "Unexpected server URL: %s", servers[i]);
         }
 
@@ -11135,10 +11050,8 @@ test_DiscoveredServersCb(void)
 
     s2Pid = _startServer("nats://127.0.0.1:4223", "-a localhost -p 4223 -cluster nats-route://localhost:5223 -routes nats-route://localhost:5222", true);
     if (s2Pid == NATS_INVALID_PID)
-    {
         _stopServer(s1Pid);
-        CHECK_SERVER_STARTED(s2Pid);
-    }
+    CHECK_SERVER_STARTED(s2Pid);
 
     test("DiscoveredServersCb not triggered on initial connect: ");
     s = natsConnection_Connect(&conn, opts);
@@ -11155,8 +11068,8 @@ test_DiscoveredServersCb(void)
     {
         _stopServer(s1Pid);
         _stopServer(s2Pid);
-        CHECK_SERVER_STARTED(s3Pid);
     }
+    CHECK_SERVER_STARTED(s3Pid);
 
     test("DiscoveredServersCb triggered on new server joining the cluster: ");
     natsMutex_Lock(arg.m);
@@ -11319,6 +11232,312 @@ test_ReceiveINFORightAfterFirstPONG(void)
 
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static bool
+serverVersionAtLeast(int major, int minor, int update)
+{
+    int ma, mi, up;
+    char *version;
+
+    if (serverVersion == NULL)
+        return false;
+
+    version = strstr(serverVersion, "version ");
+    if (version == NULL)
+        return false;
+
+    version += 8;
+    sscanf(version, "%d.%d.%d", &ma, &mi, &up);
+    if ((ma > major) || ((ma == major) && (mi > minor)) || ((ma == major) && (mi == minor) && (up >= update)))
+        return true;
+
+    return false;
+}
+
+static void
+test_ServerPoolUpdatedOnClusterUpdate(void)
+{
+    natsStatus          s;
+    natsConnection      *conn = NULL;
+    natsPid             s1Pid = NATS_INVALID_PID;
+    natsPid             s2Pid = NATS_INVALID_PID;
+    natsPid             s3Pid = NATS_INVALID_PID;
+    natsOptions         *opts = NULL;
+    struct threadArg    arg;
+    int                 invoked = 0;
+    bool                restartS2 = false;
+
+    if (!serverVersionAtLeast(1,0,7))
+    {
+        char txt[200];
+
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 1.0.7, got %s: ", serverVersion);
+        test(txt);
+        testCond(true);
+        return;
+    }
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if ((opts == NULL)
+            || (natsOptions_SetURL(opts, "nats://127.0.0.1:4222") != NATS_OK)
+            || (natsOptions_SetDiscoveredServersCB(opts, _discoveredServersCb, &arg))
+            || (natsOptions_SetReconnectedCB(opts, _reconnectedCb, &arg) != NATS_OK)
+            || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK))
+    {
+        FAIL("Unable to create reconnect options!");
+    }
+
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:6222 -routes nats://127.0.0.1:6223,nats://127.0.0.1:6224", true);
+    CHECK_SERVER_STARTED(s1Pid);
+
+    test("Connect ok: ");
+    s = natsConnection_Connect(&conn, opts);
+    testCond(s == NATS_OK);
+
+    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://localhost:6223 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6224", true);
+    if (s2Pid == NATS_INVALID_PID)
+        _stopServer(s1Pid);
+    CHECK_SERVER_STARTED(s2Pid);
+
+    test("DiscoveredServersCb triggered: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && (arg.sum == 0))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    invoked = arg.sum;
+    arg.sum = 0;
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && (invoked == 1));
+
+    if (s == NATS_OK)
+    {
+        const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223"};
+
+        test("Check pool: ");
+        s = _checkPool(conn, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        testCond(s == NATS_OK);
+    }
+
+    if (s == NATS_OK)
+    {
+        s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats://127.0.0.1:6224 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223", true);
+        if (s3Pid == NATS_INVALID_PID)
+        {
+            _stopServer(s1Pid);
+            _stopServer(s2Pid);
+        }
+        CHECK_SERVER_STARTED(s3Pid);
+    }
+
+    if (s == NATS_OK)
+    {
+        test("DiscoveredServersCb triggered: ");
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && (arg.sum == 0))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        invoked = arg.sum;
+        arg.sum = 0;
+        natsMutex_Unlock(arg.m);
+        testCond((s == NATS_OK) && (invoked == 1));
+    }
+
+    if (s == NATS_OK)
+    {
+        const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223", "127.0.0.1:4224"};
+        test("Check pool: ");
+        s = _checkPool(conn, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        testCond(s == NATS_OK);
+    }
+
+    if (s == NATS_OK)
+    {
+        // Stop s1. Since this was passed to the Connect() call, this one should
+        // still be present.
+        _stopServer(s1Pid);
+        s1Pid = NATS_INVALID_PID;
+
+        test("Wait for reconnect: ");
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && !arg.reconnected)
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        arg.reconnected = false;
+        natsMutex_Unlock(arg.m);
+        testCond(s == NATS_OK);
+    }
+
+    if (s == NATS_OK)
+    {
+        const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223", "127.0.0.1:4224"};
+
+        test("Check pool: ");
+        s = _checkPool(conn, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        testCond(s == NATS_OK);
+    }
+
+    if (s == NATS_OK)
+    {
+        const char *urls[] = {"127.0.0.1:4222", ""};
+        int port = 0;
+
+        // Check the server we reconnected to.
+        natsMutex_Lock(conn->mu);
+        port = conn->url->port;
+        natsMutex_Unlock(conn->mu);
+
+        if (port == 4223)
+        {
+            urls[1] = "127.0.0.1:4224";
+            _stopServer(s2Pid);
+            s2Pid = NATS_INVALID_PID;
+            restartS2 = true;
+        }
+        else
+        {
+            urls[1] = "127.0.0.1:4223";
+            _stopServer(s3Pid);
+            s3Pid = NATS_INVALID_PID;
+        }
+
+        test("Wait for reconnect: ");
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && !arg.reconnected)
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        arg.reconnected = false;
+        natsMutex_Unlock(arg.m);
+        testCond(s == NATS_OK);
+
+        // The implicit server that we just shutdown should have been removed from the pool
+        if (s == NATS_OK)
+        {
+            test("Check pool: ");
+            s = _checkPool(conn, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+            testCond(s == NATS_OK);
+        }
+    }
+    if (s == NATS_OK)
+    {
+        const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223", "127.0.0.1:4224"};
+
+        if (restartS2)
+        {
+            s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://localhost:6223 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6224", true);
+            if (s2Pid == NATS_INVALID_PID)
+                _stopServer(s3Pid);
+            CHECK_SERVER_STARTED(s2Pid);
+        }
+        else
+        {
+            s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats://127.0.0.1:6224 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223", true);
+            if (s3Pid == NATS_INVALID_PID)
+                _stopServer(s2Pid);
+            CHECK_SERVER_STARTED(s3Pid);
+        }
+        // Since this is not a "new" server, the DiscoveredServersCB won't be invoked.
+
+        // Checking the pool may fail for a while.
+        test("Check pool: ");
+        s = _checkPool(conn, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        testCond(s == NATS_OK);
+    }
+
+    natsConnection_Close(conn);
+    _waitForConnClosed(&arg);
+    natsConnection_Destroy(conn);
+    conn = NULL;
+
+    // Restart s1
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:6222 -routes nats://127.0.0.1:6223,nats://127.0.0.1:6224", true);
+    if (s1Pid == NATS_INVALID_PID)
+    {
+        _stopServer(s2Pid);
+        _stopServer(s3Pid);
+    }
+    CHECK_SERVER_STARTED(s1Pid);
+
+    // We should have all 3 servers running now...
+    test("Connect ok: ");
+    s = natsConnection_Connect(&conn, opts);
+    testCond(s == NATS_OK);
+
+    if (s == NATS_OK)
+    {
+        int     i;
+        natsSrv *srvrs[3];
+
+        test("Server pool size should be 3: ");
+        natsMutex_Lock(conn->mu);
+        s = (conn->srvPool->size == 3 ? NATS_OK : NATS_ERR);
+        natsMutex_Unlock(conn->mu);
+        testCond(s == NATS_OK);
+
+        if (s == NATS_OK)
+        {
+            // Save references to servers from pool
+            natsMutex_Lock(conn->mu);
+            for (i=0; i<3; i++)
+                srvrs[i] = conn->srvPool->srvrs[i];
+            natsMutex_Unlock(conn->mu);
+        }
+
+        for (i=0; (s == NATS_OK) && (i<9); i++)
+        {
+            natsMutex_Lock(conn->mu);
+            natsSock_Shutdown(conn->sockCtx.fd);
+            natsMutex_Unlock(conn->mu);
+
+            test("Wait for reconnect: ");
+            natsMutex_Lock(arg.m);
+            while ((s == NATS_OK) && !arg.reconnected)
+                s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+            arg.reconnected = false;
+            natsMutex_Unlock(arg.m);
+            testCond(s == NATS_OK);
+        }
+
+        if (s == NATS_OK)
+        {
+            int j;
+
+            natsMutex_Lock(conn->mu);
+            test("Server pool size should be 3: ");
+            s = (conn->srvPool->size == 3 ? NATS_OK : NATS_ERR);
+            natsMutex_Unlock(conn->mu);
+            testCond(s == NATS_OK);
+
+            test("Servers in pool have not been replaced: ");
+            natsMutex_Lock(conn->mu);
+            for (i=0; (s == NATS_OK) && (i<3); i++)
+            {
+                natsSrv *srv = conn->srvPool->srvrs[i];
+
+                s = NATS_ERR;
+                for (j=0; j<3; j++)
+                {
+                    if (srvrs[j] == srv)
+                    {
+                        s = NATS_OK;
+                        break;
+                    }
+                }
+            }
+            natsMutex_Unlock(conn->mu);
+            testCond(s == NATS_OK);
+        }
+
+        natsConnection_Close(conn);
+        _waitForConnClosed(&arg);
+    }
+
+    natsConnection_Destroy(conn);
+    natsOptions_Destroy(opts);
+
+    _stopServer(s3Pid);
+    _stopServer(s2Pid);
+    _stopServer(s1Pid);
+
     _destroyDefaultThreadArgs(&arg);
 }
 
@@ -12443,7 +12662,9 @@ static testInfo allTests[] =
     {"GetServers",                      test_GetServers},
     {"GetDiscoveredServers",            test_GetDiscoveredServers},
     {"DiscoveredServersCb",             test_DiscoveredServersCb},
-    {"INFOAfterFirstPONGisProcessedOK", test_ReceiveINFORightAfterFirstPONG}
+    {"INFOAfterFirstPONGisProcessedOK", test_ReceiveINFORightAfterFirstPONG},
+    {"ServerPoolUpdatedOnClusterUpdate",test_ServerPoolUpdatedOnClusterUpdate}
+
 };
 
 static int  maxTests = (int) (sizeof(allTests)/sizeof(testInfo));
@@ -12527,6 +12748,13 @@ int main(int argc, char **argv)
     {
         natsServerExe = envStr;
         printf("Test using server executable: %s\n", natsServerExe);
+    }
+
+    envStr = getenv("NATS_TEST_SERVER_VERSION");
+    if ((envStr != NULL) && (envStr[0] != '\0'))
+    {
+        serverVersion = envStr;
+        printf("Test server version: %s\n", serverVersion);
     }
 
     if (nats_Open(-1) != NATS_OK)

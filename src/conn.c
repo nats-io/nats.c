@@ -510,14 +510,18 @@ _processInfo(natsConnection *nc, char *info, int len)
             (int) nc->info.maxPayload);
 #endif
 
-    if (s == NATS_OK)
+    // The array could be empty/not present on initial connect,
+    // if advertise is disabled on that server, or servers that
+    // did not include themselves in the async INFO protocol.
+    // If empty, do not remove the implicit servers from the pool.
+    if ((s == NATS_OK) && (nc->info.connectURLsCount > 0))
     {
         bool added = false;
 
         s = natsSrvPool_addNewURLs(nc->srvPool,
+                                   nc->url,
                                    nc->info.connectURLs,
                                    nc->info.connectURLsCount,
-                                   !nc->opts->noRandomize,
                                    &added);
         if ((s == NATS_OK) && added && !nc->initc && (nc->opts->discoveredServersCb != NULL))
             natsAsyncCb_PostConnHandler(nc, ASYNC_DISCOVERED_SERVERS);

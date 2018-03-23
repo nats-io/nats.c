@@ -134,3 +134,4 @@ GetServers
 GetDiscoveredServers
 DiscoveredServersCb
 INFOAfterFirstPONGisProcessedOK
+ServerPoolUpdatedOnClusterUpdate

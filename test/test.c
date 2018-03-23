@@ -4668,6 +4668,82 @@ test_RequestPool(void)
 }
 
 static void
+test_NoFlusherIfSendAsap(void)
+{
+    natsStatus          s;
+    natsPid             pid = NATS_INVALID_PID;
+    natsConnection      *nc = NULL;
+    natsOptions         *opts = NULL;
+    natsSubscription    *sub = NULL;
+    struct threadArg    arg;
+    int                 i;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if ((opts == NULL)
+            || (natsOptions_SetURL(opts, "nats://127.0.0.1:4222") != NATS_OK)
+            || (natsOptions_SetSendAsap(opts, true) != NATS_OK)
+            || (natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg)))
+    {
+        FAIL("Failed to setup test");
+    }
+    arg.string = "test";
+    arg.control = 1;
+
+    pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222", true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect/subscribe ok: ");
+    s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    testCond(s == NATS_OK);
+
+    for (i=0; (s == NATS_OK) && (i<2); i++)
+    {
+        if (s == NATS_OK)
+        {
+            test("Send ok: ");
+            s = natsConnection_PublishString(nc, "foo", "test");
+            natsMutex_Lock(arg.m);
+            while ((s == NATS_OK) && !arg.msgReceived)
+                s = natsCondition_TimedWait(arg.c, arg.m, 1500);
+            natsMutex_Unlock(arg.m);
+            testCond(s == NATS_OK);
+        }
+
+        if (s == NATS_OK)
+        {
+            test("Flusher does not exist: ");
+            natsMutex_Lock(nc->mu);
+            s = (nc->flusherThread == NULL ? NATS_OK : NATS_ERR);
+            natsMutex_Unlock(nc->mu);
+            testCond(s == NATS_OK);
+        }
+        if (i == 0)
+        {
+            _stopServer(pid);
+            pid = NATS_INVALID_PID;
+            pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222", true);
+            CHECK_SERVER_STARTED(pid);
+        }
+    }
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Close(nc);
+    _waitForConnClosed(&arg);
+    natsConnection_Destroy(nc);
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(pid);
+}
+
+static void
 _dummyMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
                 void *closure)
 {
@@ -12584,6 +12660,7 @@ static testInfo allTests[] =
     {"LibMsgDelivery",                  test_LibMsgDelivery},
     {"AsyncINFO",                       test_AsyncINFO},
     {"RequestPool",                     test_RequestPool},
+    {"NoFlusherIfSendAsapOption",       test_NoFlusherIfSendAsap},
 
     // Public API Tests
 

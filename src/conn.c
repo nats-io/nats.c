@@ -1341,31 +1341,23 @@ _doReconnect(void *arg)
     natsConn_release(nc);
 }
 
-// Notifies the flusher thread that there is pending data to send to the
-// server.
-void
-natsConn_kickFlusher(natsConnection *nc)
+// If the connection has the option `sendAsap`, flushes the buffer
+// directly, otherwise, notifies the flusher thread that there is
+// pending data to send to the server.
+natsStatus
+natsConn_flushOrKickFlusher(natsConnection *nc)
 {
-    if (!(nc->flusherSignaled) && (nc->bw != NULL))
+    natsStatus s = NATS_OK;
+
+    if (nc->opts->sendAsap)
+    {
+        s = natsConn_bufferFlush(nc);
+    }
+    else if (!(nc->flusherSignaled) && (nc->bw != NULL))
     {
         nc->flusherSignaled = true;
         natsCondition_Signal(nc->flusherCond);
     }
-}
-
-static natsStatus
-_sendProto(natsConnection *nc, const char* proto, int protoLen)
-{
-    natsStatus  s;
-
-    natsConn_Lock(nc);
-
-    s = natsConn_bufferWrite(nc, proto, protoLen);
-    if (s == NATS_OK)
-        natsConn_kickFlusher(nc);
-
-    natsConn_Unlock(nc);
-
     return s;
 }
 
@@ -1914,7 +1906,8 @@ _spinUpSocketWatchers(natsConnection *nc)
             _release(nc);
     }
 
-    if (s == NATS_OK)
+    // Don't start flusher thread if connection was created with SendAsap option.
+    if ((s == NATS_OK) && !(nc->opts->sendAsap))
     {
         _retain(nc);
 
@@ -2281,7 +2274,12 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
 void
 natsConn_processPing(natsConnection *nc)
 {
-    _sendProto(nc, _PONG_PROTO_, _PONG_PROTO_LEN_);
+    natsConn_Lock(nc);
+
+    if (natsConn_bufferWrite(nc, _PONG_PROTO_, _PONG_PROTO_LEN_) == NATS_OK)
+        natsConn_flushOrKickFlusher(nc);
+
+    natsConn_Unlock(nc);
 }
 
 void
@@ -2405,7 +2403,7 @@ natsConn_subscribe(natsSubscription **newSub,
             {
                 s = natsConn_bufferWriteString(nc, proto);
                 if (s == NATS_OK)
-                    natsConn_kickFlusher(nc);
+                    s = natsConn_flushOrKickFlusher(nc);
 
                 // We should not return a failure if we get an issue
                 // with the buffer write (except if it is no memory).
@@ -2476,7 +2474,7 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
         // so that we can suppress here.
         s = _sendUnsubProto(nc, sub->sid, max);
         if (s == NATS_OK)
-            natsConn_kickFlusher(nc);
+            s = natsConn_flushOrKickFlusher(nc);
 
         // We should not return a failure if we get an issue
         // with the buffer write (except if it is no memory).

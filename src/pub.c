@@ -148,10 +148,10 @@ _publishEx(natsConnection *nc, const char *subj,
 
     if (s == NATS_OK)
     {
-        if (directFlush || nc->opts->sendAsap)
+        if (directFlush)
             s = natsConn_bufferFlush(nc);
         else
-            natsConn_kickFlusher(nc);
+            s = natsConn_flushOrKickFlusher(nc);
     }
 
     if (s == NATS_OK)

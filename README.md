@@ -156,7 +156,7 @@ To generate the documentation, go to the `doc` directory and type the following 
 doxygen DoxyFile.NATS.Client
 ```
 
-The generated documenation will be located in the `html` directory. To see the documentation, point your browser to the file `index.html` in that directory.
+The generated documentation will be located in the `html` directory. To see the documentation, point your browser to the file `index.html` in that directory.
 
 Go [here](http://nats-io.github.io/cnats) for the online documentation.
 
@@ -524,7 +524,7 @@ reconnectedCb(natsConnection *nc, void *closure)
 
 For each connection, the `NATS` library creates a thread reading data from the socket. Publishing data results in the data being appended to a buffer, which is 'flushed' from a timer callback or in place when the buffer reaches a certain size. Flushing means that we write to the socket (and the socket is in blocking-mode).
 
-If you have multiple connections running in your process, the number of threads will increase (because each connection uses a thread for receiving data from the socket). If this becomes an issue, or if you are already using an event notification library, you can instruct the `NATS` library to use that event library instead of using a thread to do the reads, and directly writting to the socket when data is published.
+If you have multiple connections running in your process, the number of threads will increase (because each connection uses a thread for receiving data from the socket). If this becomes an issue, or if you are already using an event notification library, you can instruct the `NATS` library to use that event library instead of using a thread to do the reads, and directly writing to the socket when data is published.
 
 This works by setting the event loop and various callbacks through the `natsOptions_SetEventLoop()` API. Depending of the event loop you are using, you then have extra API calls to make. The API is in the `adapters` directory and is documented.
 
@@ -617,6 +617,23 @@ be invoked from different threads for each subscriber).<br>
 Note that this is true for any kind of callback that exist in the NATS C library, such as
 connection or error handlers, etc.. if you specify the same callback you take the risk that
 the code in that callback may be executed from different internal threads.
+
+<b>What is the threading model of the library?</b>
+
+The library uses some threads to handle internal timers or dispatch asynchronous errors
+for instance. Here is a list of threads created as a result of the user creating NATS
+objects:
+
+- Each connection has a thread to read data from the socket. If you use an external
+event loop, this thread is not created.
+
+- Each connection has a thread responsible for flushing its outgoing buffer. If you create
+the connection with the `natsOptions_SetSendAsap()` option, this thread is not created since
+any outgoing data is flushed right away.
+
+- Each asynchronous subscription has a thread used to dispatch messages to the user callback.
+If you use `nats_SetMessageDeliveryPoolSize()`, a global thread pool (of the
+size given as a parameter to that function) is used instead of a per-async-subscription thread.
 
 <b>How do I send binary data?</b>
 

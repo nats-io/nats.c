@@ -53,8 +53,8 @@ natsConn_isClosed(natsConnection *nc);
 bool
 natsConn_isReconnecting(natsConnection *nc);
 
-void
-natsConn_kickFlusher(natsConnection *nc);
+natsStatus
+natsConn_flushOrKickFlusher(natsConnection *nc);
 
 natsStatus
 natsConn_processMsg(natsConnection *nc, char *buf, int bufLen);

@@ -36,6 +36,7 @@ ParserSplitMsg
 LibMsgDelivery
 AsyncINFO
 RequestPool
+NoFlusherIfSendAsapOption
 DefaultConnection
 IPResolutionOrder
 UseDefaultURLIfNoServerSpecified

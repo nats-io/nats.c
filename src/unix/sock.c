@@ -19,7 +19,7 @@ void
 natsSys_Init(void)
 {
     // Would do anything that needs to be initialized when
-    // the libary loads, specific to unix.
+    // the library loads, specific to unix.
 }
 
 natsStatus

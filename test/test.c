@@ -10596,7 +10596,7 @@ test_ProperReconnectDelay(void)
     natsConnection_Destroy(nc);
 
     // Now that the connection is destroyed, the callback will be invoked.
-    // Make sure that we wait until then before destorying 'arg'.
+    // Make sure that we wait until then before destroying 'arg'.
     natsMutex_Lock(arg.m);
     s = NATS_OK;
     while ((s == NATS_OK) && !arg.closed)

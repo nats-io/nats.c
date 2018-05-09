@@ -424,7 +424,7 @@ natsConnection_Connect(&nc, opts);
 
 // Destroy the options object to free memory. The object was cloned by the connection,
 // so the options can be safely destroyed.
-natsOptions_Destroy(nc);
+natsOptions_Destroy(opts);
 ```
 
 As we have seen, all callbacks have a `void *closure` parameter. This is useful when the callback needs to perform some work and need a reference to some object. When setting up the callback, you can specify a pointer to that object.

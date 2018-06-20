@@ -6575,7 +6575,7 @@ test_ErrOnMaxPayloadLimit(void)
         char info[1024];
 
         snprintf(info, sizeof(info),
-                 "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":%d}\r\n",
+                 "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":%d}\r\n",
                  expectedMaxPayLoad);
 
         // Send INFO.
@@ -6900,7 +6900,7 @@ test_AuthViolation(void)
         char info[1024];
 
         strncpy(info,
-                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":1048576}\r\n",
+                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 
         // Send INFO.
@@ -8423,7 +8423,7 @@ test_ReleaseFlush(void)
         char info[1024];
 
         strncpy(info,
-                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":1048576}\r\n",
+                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 
         // Send INFO.
@@ -8505,7 +8505,7 @@ test_FlushErrOnDisconnect(void)
         char info[1024];
 
         strncpy(info,
-                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":1048576}\r\n",
+                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 
         // Send INFO.
@@ -11841,7 +11841,7 @@ test_StaleConnection(void)
             char info[1024];
 
             strncpy(info,
-                    "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":1048576}\r\n",
+                    "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                     sizeof(info));
 
             // Send INFO.
@@ -11972,7 +11972,7 @@ test_ServerErrorClosesConnection(void)
         char info[1024];
 
         strncpy(info,
-                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"ssl_required\":false,\"max_payload\":1048576}\r\n",
+                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 
         // Send INFO.

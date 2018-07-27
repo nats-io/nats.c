@@ -2082,7 +2082,8 @@ test_natsOptions(void)
              && (opts->password == NULL)
              && (opts->token == NULL)
              && (opts->orderIP == 0)
-             && !opts->noEcho)
+             && !opts->noEcho
+             && !opts->retryOnFailedConnect)
 
     test("Add URL: ");
     s = natsOptions_SetURL(opts, "test");
@@ -2178,6 +2179,14 @@ test_natsOptions(void)
     test("Remove NoEcho: ");
     s = natsOptions_SetNoEcho(opts, false);
     testCond((s == NATS_OK) && (opts->noEcho == false));
+
+    test("Set RetryOnFailedConnect: ");
+    s = natsOptions_SetRetryOnFailedConnect(opts, true);
+    testCond((s == NATS_OK) && (opts->retryOnFailedConnect == true));
+
+    test("Remove RetryOnFailedConnect: ");
+    s = natsOptions_SetRetryOnFailedConnect(opts, false);
+    testCond((s == NATS_OK) && (opts->retryOnFailedConnect == false));
 
     test("Set Secure: ");
     s = natsOptions_SetSecure(opts, true);
@@ -2365,6 +2374,7 @@ test_natsOptions(void)
     IFOK(s, natsOptions_SetToken(opts, "token"));
     IFOK(s, natsOptions_IPResolutionOrder(opts, 46));
     IFOK(s, natsOptions_SetNoEcho(opts, true));
+    IFOK(s, natsOptions_SetRetryOnFailedConnect(opts, true));
     if (s != NATS_OK)
         FAIL("Unable to test natsOptions_clone() because of failure while setting");
 
@@ -2385,7 +2395,8 @@ test_natsOptions(void)
              || (strcmp(cloned->password, "pwd") != 0)
              || (strcmp(cloned->token, "token") != 0)
              || (cloned->orderIP != 46)
-             || (!cloned->noEcho))
+             || (!cloned->noEcho)
+             || (!cloned->retryOnFailedConnect))
     {
         s = NATS_ERR;
     }
@@ -6287,6 +6298,83 @@ test_ReconnectBufSize(void)
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
 
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
+_startServerForRetryOnConnect(void *closure)
+{
+    struct threadArg *arg = (struct threadArg*) closure;
+    natsPid           pid = NATS_INVALID_PID;
+
+    // Delay start a bit...
+    nats_Sleep(300);
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    natsMutex_Lock(arg->m);
+    while (!arg->done)
+        natsCondition_Wait(arg->c, arg->m);
+    natsMutex_Unlock(arg->m);
+
+    _stopServer(pid);
+}
+
+static void
+test_RetryOnFailedConnect(void)
+{
+    natsStatus          s;
+    natsConnection      *nc   = NULL;
+    natsOptions         *opts = NULL;
+    int64_t             start = 0;
+    int64_t             end   = 0;
+    natsThread          *t    = NULL;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetRetryOnFailedConnect(opts, true);
+    if (s == NATS_OK)
+        s = natsOptions_SetMaxReconnect(opts, 10);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectWait(opts, 100);
+    if (s != NATS_OK)
+    {
+        natsOptions_Destroy(opts);
+        _destroyDefaultThreadArgs(&arg);
+        FAIL("Unable to setup test");
+    }
+
+    start = nats_Now();
+    test("Connect failed: ");
+    s = natsConnection_Connect(&nc, opts);
+    end = nats_Now();
+    testCond(s == NATS_NO_SERVER);
+
+    test("Retried: ")
+    testCond((((end-start) >= 300) && ((end-start) <= 1500)));
+
+    test("Connects ok: ");
+    s = natsOptions_SetMaxReconnect(opts, 20);
+    if (s == NATS_OK)
+        s = natsThread_Create(&t, _startServerForRetryOnConnect, (void*) &arg);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
     _destroyDefaultThreadArgs(&arg);
 }
 
@@ -12875,6 +12963,7 @@ static testInfo allTests[] =
     {"IsClosed",                        test_IsClosed},
     {"IsReconnectingAndStatus",         test_IsReconnectingAndStatus},
     {"ReconnectBufSize",                test_ReconnectBufSize},
+    {"RetryOnFailedConnect",            test_RetryOnFailedConnect},
 
     {"ErrOnConnectAndDeadlock",         test_ErrOnConnectAndDeadlock},
     {"ErrOnMaxPayloadLimit",            test_ErrOnMaxPayloadLimit},

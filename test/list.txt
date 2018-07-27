@@ -59,6 +59,7 @@ QueueSubsOnReconnect
 IsClosed
 IsReconnectingAndStatus
 ReconnectBufSize
+RetryOnFailedConnect
 ErrOnConnectAndDeadlock
 ErrOnMaxPayloadLimit
 Auth

@@ -212,6 +212,10 @@ struct __natsOptions
     // that are sent on this connection if we also have matching subscriptions.
     // Note this is supported on servers >= version 1.2. Proto 1 or greater.
     bool                    noEcho;
+
+    // If set to true, in case of failed connect, tries again using
+    // reconnect options values.
+    bool                    retryOnFailedConnect;
 };
 
 typedef struct __natsMsgList

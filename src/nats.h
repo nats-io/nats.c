@@ -1132,12 +1132,27 @@ natsOptions_UseOldRequestStyle(natsOptions *opts, bool useOldStyle);
  * #natsConnection_Connect() with the option set to `true` to server below
  * this version will return the `NATS_NO_SERVER_SUPPORT` error.
  *
- * @param opts the pointer to the #natsOptions object;
+ * @param opts the pointer to the #natsOptions object.
  * @param noEcho a boolean indicating if sent messages can be delivered back
  * to this connection or not.
  */
 NATS_EXTERN natsStatus
 natsOptions_SetNoEcho(natsOptions *opts, bool noEcho);
+
+/** \brief Sets if connection attempt should be retried same as reconnect.
+ *
+ * If set to true and connection cannot be established right away, the
+ * library will attempt to connect based on the reconnect attempts
+ * and delay settings.
+ *
+ * @see natsOptions_SetMaxReconnect()
+ * @see natsOptions_SetReconnectWait()
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param retry a boolean indicating if a failed connect should be retried.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetRetryOnFailedConnect(natsOptions *opts, bool retry);
 
 /** \brief Destroys a #natsOptions object.
  *

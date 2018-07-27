@@ -1567,58 +1567,73 @@ _connect(natsConnection *nc)
     natsStatus  s     = NATS_OK;
     natsStatus  retSts= NATS_OK;
     natsSrvPool *pool = NULL;
-    int         i;
-    int         poolSize;
+    bool        done  = false;
+    int         i = 0;
+    int         l = 0;
+    int         max = 0;
+    int64_t     wtime = 0;
+    bool        retry = false;
 
     natsConn_Lock(nc);
     nc->initc = true;
 
     pool = nc->srvPool;
 
-    // Create actual socket connection
-    // For first connect we walk all servers in the pool and try
-    // to connect immediately.
-
-    // Get the size of the pool. The pool may change inside the loop
-    // iteration due to INFO protocol.
-    poolSize = natsSrvPool_GetSize(pool);
-    for (i = 0; i < poolSize; i++)
+    if (nc->opts->retryOnFailedConnect)
     {
-        nc->url = natsSrvPool_GetSrvUrl(pool,i);
+        retry = true;
+        max   = nc->opts->maxReconnect;
+        wtime = nc->opts->reconnectWait;
+    }
 
-        s = _createConn(nc);
-        if (s == NATS_OK)
+    for (;;)
+    {
+        // The pool may change inside the loop iteration due to INFO protocol.
+        for (i = 0; i < natsSrvPool_GetSize(pool); i++)
         {
-            s = _processConnInit(nc);
+            nc->url = natsSrvPool_GetSrvUrl(pool,i);
 
+            s = _createConn(nc);
             if (s == NATS_OK)
             {
-                natsSrvPool_SetSrvDidConnect(pool, i, true);
-                natsSrvPool_SetSrvReconnects(pool, i, 0);
-                retSts = NATS_OK;
-                break;
+                s = _processConnInit(nc);
+
+                if (s == NATS_OK)
+                {
+                    natsSrvPool_SetSrvDidConnect(pool, i, true);
+                    natsSrvPool_SetSrvReconnects(pool, i, 0);
+                    retSts = NATS_OK;
+                    retry = false;
+                    break;
+                }
+                else
+                {
+                    retSts = s;
+
+                    natsConn_Unlock(nc);
+
+                    _close(nc, DISCONNECTED, false);
+
+                    natsConn_Lock(nc);
+
+                    nc->url = NULL;
+                }
             }
             else
             {
-                retSts = s;
-
-                natsConn_Unlock(nc);
-
-                _close(nc, DISCONNECTED, false);
-
-                natsConn_Lock(nc);
-
-                nc->url = NULL;
+                if (s == NATS_IO_ERROR)
+                    retSts = NATS_OK;
             }
-            // Refresh our view of pool length since it may have been
-            // modified when processing the INFO protocol.
-            poolSize = natsSrvPool_GetSize(pool);
         }
-        else
-        {
-            if (s == NATS_IO_ERROR)
-                retSts = NATS_OK;
-        }
+        if (!retry)
+            break;
+
+        l++;
+        if ((max > 0) && (l == max))
+            break;
+
+        if (wtime > 0)
+            nats_Sleep(wtime);
     }
 
     if ((retSts == NATS_OK) && (nc->status != CONNECTED))

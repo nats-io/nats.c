@@ -945,6 +945,16 @@ natsOptions_SetNoEcho(natsOptions *opts, bool noEcho)
 }
 
 natsStatus
+natsOptions_SetRetryOnFailedConnect(natsOptions *opts, bool retry)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+    opts->retryOnFailedConnect = retry;
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
 natsOptions_UseOldRequestStyle(natsOptions *opts, bool useOldStype)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0);

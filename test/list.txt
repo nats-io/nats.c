@@ -115,6 +115,8 @@ NextMsgCallOnAsyncSub
 GetLastError
 StaleConnection
 ServerErrorClosesConnection
+NoEcho
+NoEchoOldServer
 SSLBasic
 SSLVerify
 SSLVerifyHostname

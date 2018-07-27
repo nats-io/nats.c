@@ -81,6 +81,7 @@ var searchData=
   ['natsoptions_5fsetmaxpingsout',['natsOptions_SetMaxPingsOut',['../group__opts_group.html#gaaff89c3f41627f4b2929dbc9b82d265b',1,'nats.h']]],
   ['natsoptions_5fsetmaxreconnect',['natsOptions_SetMaxReconnect',['../group__opts_group.html#gab54cd2719c0b64eebd6c7b83dd2908a0',1,'nats.h']]],
   ['natsoptions_5fsetname',['natsOptions_SetName',['../group__opts_group.html#ga1c529d347be0fe2eec17c7f4698e283e',1,'nats.h']]],
+  ['natsoptions_5fsetnoecho',['natsOptions_SetNoEcho',['../group__opts_group.html#ga4f694b87039cedaa65cd25656b14d1a3',1,'nats.h']]],
   ['natsoptions_5fsetnorandomize',['natsOptions_SetNoRandomize',['../group__opts_group.html#gaabf8763b931dcf389c83fd95d760a413',1,'nats.h']]],
   ['natsoptions_5fsetpedantic',['natsOptions_SetPedantic',['../group__opts_group.html#ga26f166af20de98bec67bc6cc916f769e',1,'nats.h']]],
   ['natsoptions_5fsetpinginterval',['natsOptions_SetPingInterval',['../group__opts_group.html#gae68fb615835364c0809555e8dc93f57e',1,'nats.h']]],

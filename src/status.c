@@ -57,7 +57,9 @@ static const char *statusText[] = {
     "Initialization Failed",
     "Not Initialized",
 
-    "SSL Error"
+    "SSL Error",
+
+    "Not Supported By Server"
 };
 
 const char*

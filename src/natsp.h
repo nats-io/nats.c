@@ -123,6 +123,7 @@ typedef struct __natsServerInfo
     int64_t     maxPayload;
     char        **connectURLs;
     int         connectURLsCount;
+    int         proto;
 
 } natsServerInfo;
 
@@ -206,6 +207,11 @@ struct __natsOptions
     // If set to true, the Publish call will flush in place and
     // not rely on the flusher.
     bool                    sendAsap;
+
+    // NoEcho configures whether the server will echo back messages
+    // that are sent on this connection if we also have matching subscriptions.
+    // Note this is supported on servers >= version 1.2. Proto 1 or greater.
+    bool                    noEcho;
 };
 
 typedef struct __natsMsgList

@@ -94,8 +94,10 @@ typedef enum
     NATS_FAILED_TO_INITIALIZE,          ///< The library failed to initialize.
     NATS_NOT_INITIALIZED,               ///< The library is not yet initialized.
 
-    NATS_SSL_ERROR                      ///< An SSL error occurred when trying to establish a
+    NATS_SSL_ERROR,                     ///< An SSL error occurred when trying to establish a
                                         ///  connection.
+
+    NATS_NO_SERVER_SUPPORT              ///< The server does not support this action.
 
 } natsStatus;
 

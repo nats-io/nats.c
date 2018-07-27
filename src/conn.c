@@ -501,13 +501,17 @@ _processInfo(natsConnection *nc, char *info, int len)
         s = nats_JSONGetArrayValue(json, "connect_urls", TYPE_STR,
                                    (void***) &(nc->info.connectURLs),
                                    &(nc->info.connectURLsCount));
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "proto", TYPE_INT,
+                              (void**) &(nc->info.proto));
 
 #if 0
-    fprintf(stderr, "Id=%s Version=%s Host=%s Port=%d Auth=%s SSL=%s Payload=%d\n",
+    fprintf(stderr, "Id=%s Version=%s Host=%s Port=%d Auth=%s SSL=%s Payload=%d Proto=%d\n",
             nc->info.id, nc->info.version, nc->info.host, nc->info.port,
             nats_GetBoolStr(nc->info.authRequired),
             nats_GetBoolStr(nc->info.tlsRequired),
-            (int) nc->info.maxPayload);
+            (int) nc->info.maxPayload,
+            nc->info.proto);
 #endif
 
     // The array could be empty/not present on initial connect,
@@ -702,6 +706,10 @@ _connectProto(natsConnection *nc, char **proto)
     const char  *name = NULL;
     int         res;
 
+    // Check if NoEcho is set and we have a server that supports it.
+    if (opts->noEcho && (nc->info.proto < 1))
+        return NATS_NO_SERVER_SUPPORT;
+
     if (nc->url->username != NULL)
         user = nc->url->username;
     if (nc->url->password != NULL)
@@ -714,16 +722,16 @@ _connectProto(natsConnection *nc, char **proto)
     if ((user == NULL) && (token == NULL))
     {
         // Take from options (possibly all NULL)
-        user  = nc->opts->user;
-        pwd   = nc->opts->password;
-        token = nc->opts->token;
+        user  = opts->user;
+        pwd   = opts->password;
+        token = opts->token;
     }
     if (opts->name != NULL)
         name = opts->name;
 
     res = nats_asprintf(proto,
                         "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s%s%s%s\"tls_required\":%s," \
-                        "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\",\"protocol\":%d}%s",
+                        "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\",\"protocol\":%d,\"echo\":%s}%s",
                         nats_GetBoolStr(opts->verbose),
                         nats_GetBoolStr(opts->pedantic),
                         (user != NULL ? "\"user\":\"" : ""),
@@ -739,6 +747,7 @@ _connectProto(natsConnection *nc, char **proto)
                         (name != NULL ? name : ""),
                         CString, NATS_VERSION_STRING,
                         CLIENT_PROTO_INFO,
+                        nats_GetBoolStr(!opts->noEcho),
                         _CRLF_);
     if (res < 0)
         return NATS_NO_MEMORY;

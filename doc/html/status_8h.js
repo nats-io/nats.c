@@ -37,6 +37,7 @@ var status_8h =
       [ "NATS_TIMEOUT", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed", null ],
       [ "NATS_FAILED_TO_INITIALIZE", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a7cb64f52c8d91d6ade3db6bc82a96c42", null ],
       [ "NATS_NOT_INITIALIZED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae47047f2fac5f2f2a434fc501e5c3d4e", null ],
-      [ "NATS_SSL_ERROR", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a892183c32b4929388bb75dc62230ddf3", null ]
+      [ "NATS_SSL_ERROR", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a892183c32b4929388bb75dc62230ddf3", null ],
+      [ "NATS_NO_SERVER_SUPPORT", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a4e298931ba0698a72e397b1b57c885", null ]
     ] ]
 ];

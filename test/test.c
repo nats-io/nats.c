@@ -2081,7 +2081,8 @@ test_natsOptions(void)
              && (opts->user == NULL)
              && (opts->password == NULL)
              && (opts->token == NULL)
-             && (opts->orderIP == 0));
+             && (opts->orderIP == 0)
+             && !opts->noEcho)
 
     test("Add URL: ");
     s = natsOptions_SetURL(opts, "test");
@@ -2169,6 +2170,14 @@ test_natsOptions(void)
     test("Remove Verbose: ");
     s = natsOptions_SetVerbose(opts, false);
     testCond((s == NATS_OK) && (opts->verbose == false));
+
+    test("Set NoEcho: ");
+    s = natsOptions_SetNoEcho(opts, true);
+    testCond((s == NATS_OK) && (opts->noEcho == true));
+
+    test("Remove NoEcho: ");
+    s = natsOptions_SetNoEcho(opts, false);
+    testCond((s == NATS_OK) && (opts->noEcho == false));
 
     test("Set Secure: ");
     s = natsOptions_SetSecure(opts, true);
@@ -2355,6 +2364,7 @@ test_natsOptions(void)
     IFOK(s, natsOptions_SetUserInfo(opts, "ivan", "pwd"));
     IFOK(s, natsOptions_SetToken(opts, "token"));
     IFOK(s, natsOptions_IPResolutionOrder(opts, 46));
+    IFOK(s, natsOptions_SetNoEcho(opts, true));
     if (s != NATS_OK)
         FAIL("Unable to test natsOptions_clone() because of failure while setting");
 
@@ -2374,7 +2384,8 @@ test_natsOptions(void)
              || (strcmp(cloned->user, "ivan") != 0)
              || (strcmp(cloned->password, "pwd") != 0)
              || (strcmp(cloned->token, "token") != 0)
-             || (cloned->orderIP != 46))
+             || (cloned->orderIP != 46)
+             || (!cloned->noEcho))
     {
         s = NATS_ERR;
     }
@@ -12039,6 +12050,184 @@ test_ServerErrorClosesConnection(void)
 }
 
 static void
+test_NoEcho(void)
+{
+    natsStatus          s;
+    natsOptions         *opts = NULL;
+    natsConnection      *conn = NULL;
+    natsSubscription    *sub  = NULL;
+    natsPid             pid   = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");
+    if (s == NATS_OK)
+        s = natsOptions_SetNoEcho(opts, true);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    arg.control = 0;
+    arg.string = "test";
+    test("Setup: ");
+    s = natsConnection_Connect(&conn, opts);
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&sub, conn, "foo", _recvTestString, (void*)&arg);
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(conn, "foo", arg.string);
+    if (s == NATS_OK)
+        s = natsConnection_Flush(conn);
+    // repeat
+    if (s == NATS_OK)
+        s = natsConnection_Flush(conn);
+    testCond(s == NATS_OK);
+
+    test("NoEcho: ");
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+            s = natsCondition_TimedWait(arg.c, arg.m, 500);
+        natsMutex_Unlock(arg.m);
+    }
+    // Message should not be received.
+    testCond(s == NATS_TIMEOUT);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(conn);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(pid);
+}
+
+static void
+_startOldServerForNoEcho(void *closure)
+{
+    natsStatus          s = NATS_OK;
+    natsSock            sock = NATS_SOCK_INVALID;
+    natsThread          *t = NULL;
+    struct threadArg    *arg = (struct threadArg*) closure;
+    natsSockCtx         ctx;
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    s = _startMockupServer(&sock, "localhost", "4222");
+    natsMutex_Lock(arg->m);
+    arg->status = s;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+
+    if (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+            || (natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    if (s == NATS_OK)
+    {
+        char info[1024];
+
+        strncpy(info,
+                "INFO {\"server_id\":\"22\",\"version\":\"1.1.0\",\"go\":\"go1.10.2\",\"port\":4222,\"max_payload\":1048576}\r\n",
+                sizeof(info));
+
+        // Send INFO.
+        s = natsSock_WriteFully(&ctx, info, (int) strlen(info));
+        if (s == NATS_OK)
+        {
+            char buffer[1024];
+
+            memset(buffer, 0, sizeof(buffer));
+
+            // Read connect and ping commands sent from the client
+            s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            if (s == NATS_OK)
+                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+        }
+        // Send PONG
+        if (s == NATS_OK)
+            s = natsSock_WriteFully(&ctx,
+                                    _PONG_PROTO_, _PONG_PROTO_LEN_);
+
+        if (s == NATS_OK)
+        {
+            // Wait for client to tell us it is done
+            natsMutex_Lock(arg->m);
+            while ((s != NATS_TIMEOUT) && !(arg->done))
+                s = natsCondition_TimedWait(arg->c, arg->m, 5000);
+            natsMutex_Unlock(arg->m);
+        }
+        natsSock_Close(ctx.fd);
+    }
+
+    natsSock_Close(sock);
+}
+
+static void
+test_NoEchoOldServer(void)
+{
+    natsStatus          s;
+    natsConnection      *conn = NULL;
+    natsOptions         *opts = NULL;
+    natsThread          *t    = NULL;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetNoEcho(opts, true);
+    if (s == NATS_OK)
+    {
+        // Set this to error, the mock server should set it to OK
+        // if it can start successfully.
+        arg.status = NATS_ERR;
+        s = natsThread_Create(&t, _startOldServerForNoEcho, (void*) &arg);
+    }
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+    if (s != NATS_OK)
+    {
+        if (t != NULL)
+        {
+            natsThread_Join(t);
+            natsThread_Destroy(t);
+        }
+        natsOptions_Destroy(opts);
+        _destroyDefaultThreadArgs(&arg);
+        FAIL("Unable to setup test");
+    }
+
+    test("NoEcho with old server: ");
+    s = natsConnection_Connect(&conn, opts);
+    testCond(s == NATS_NO_SERVER_SUPPORT);
+
+    // Notify mock server we are done
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsOptions_Destroy(opts);
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 test_SSLBasic(void)
 {
 #if defined(NATS_HAS_TLS)
@@ -12744,6 +12933,8 @@ static testInfo allTests[] =
     {"GetLastError",                    test_GetLastError},
     {"StaleConnection",                 test_StaleConnection},
     {"ServerErrorClosesConnection",     test_ServerErrorClosesConnection},
+    {"NoEcho",                          test_NoEcho},
+    {"NoEchoOldServer",                 test_NoEchoOldServer},
     {"SSLBasic",                        test_SSLBasic},
     {"SSLVerify",                       test_SSLVerify},
     {"SSLVerifyHostname",               test_SSLVerifyHostname},

@@ -935,6 +935,16 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap)
 }
 
 natsStatus
+natsOptions_SetNoEcho(natsOptions *opts, bool noEcho)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+    opts->noEcho = noEcho;
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
 natsOptions_UseOldRequestStyle(natsOptions *opts, bool useOldStype)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0);

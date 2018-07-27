@@ -1118,6 +1118,27 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap);
 NATS_EXTERN natsStatus
 natsOptions_UseOldRequestStyle(natsOptions *opts, bool useOldStyle);
 
+/** \brief Sets if connection receives its own messages.
+ *
+ * This configures whether the server will echo back messages
+ * that are sent on this connection if there is also matching subscriptions.
+ *
+ * Set this to `true` to prevent the server from sending back messages
+ * produced by this connection. The default is false, that is, messages
+ * originating from this connection will be sent by the server if the
+ * connection has matching subscriptions.
+ *
+ * \note This is supported on servers >= version 1.2.0. Calling
+ * #natsConnection_Connect() with the option set to `true` to server below
+ * this version will return the `NATS_NO_SERVER_SUPPORT` error.
+ *
+ * @param opts the pointer to the #natsOptions object;
+ * @param noEcho a boolean indicating if sent messages can be delivered back
+ * to this connection or not.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetNoEcho(natsOptions *opts, bool noEcho);
+
 /** \brief Destroys a #natsOptions object.
  *
  * Destroys the natsOptions object, freeing used memory. See the note in

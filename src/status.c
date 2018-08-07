@@ -59,7 +59,9 @@ static const char *statusText[] = {
 
     "SSL Error",
 
-    "Not Supported By Server"
+    "Not Supported By Server",
+
+    "Not Yet Connected",
 };
 
 const char*

@@ -77,6 +77,10 @@ _processConnInit(natsConnection *nc);
 static void
 _close(natsConnection *nc, natsConnStatus status, bool doCBs);
 
+static bool
+_processOpError(natsConnection *nc, natsStatus s, bool initialConnect);
+
+
 /*
  * ----------------------------------------
  */
@@ -394,12 +398,19 @@ _createConn(natsConnection *nc)
         }
     }
 
-    if (s == NATS_OK)
+    // Need to create the buffer even on failure in case we allow
+    // retry on failed connect
+    if ((s == NATS_OK) || nc->opts->retryOnFailedConnect)
     {
+        natsStatus ls = NATS_OK;
+
         if (nc->bw == NULL)
-            s = natsBuf_Create(&(nc->bw), DEFAULT_BUF_SIZE);
+            ls = natsBuf_Create(&(nc->bw), DEFAULT_BUF_SIZE);
         else
             natsBuf_Reset(nc->bw);
+
+        if (s == NATS_OK)
+            s = ls;
     }
 
     if (s != NATS_OK)
@@ -1193,7 +1204,8 @@ _doReconnect(void *arg)
     pool = nc->srvPool;
 
     // Perform appropriate callback if needed for a disconnect.
-    if (nc->opts->disconnectedCb != NULL)
+    // (do not do this if we are here on initial connect failure)
+    if (!nc->initc && (nc->opts->disconnectedCb != NULL))
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
     // Note that the pool's size may decrement after the call to
@@ -1306,11 +1318,24 @@ _doReconnect(void *arg)
         nc->pending     = NULL;
         nc->usePending  = false;
 
-        // Call reconnectedCB if appropriate. Since we are in a separate
-        // thread, we could invoke the callback directly, however, we
-        // still post it so all callbacks from a connection are serialized.
-        if (nc->opts->reconnectedCb != NULL)
-            natsAsyncCb_PostConnHandler(nc, ASYNC_RECONNECTED);
+        // Normally only set in _connect() but we need in case we allow
+        // reconnect logic on initial connect failure.
+        if (nc->initc)
+        {
+            // This was the initial connect. Set this to false.
+            nc->initc = false;
+            // Invoke the callback.
+            if (nc->opts->connectedCb != NULL)
+                natsAsyncCb_PostConnHandler(nc, ASYNC_CONNECTED);
+        }
+        else
+        {
+            // Call reconnectedCB if appropriate. Since we are in a separate
+            // thread, we could invoke the callback directly, however, we
+            // still post it so all callbacks from a connection are serialized.
+            if (nc->opts->reconnectedCb != NULL)
+                natsAsyncCb_PostConnHandler(nc, ASYNC_RECONNECTED);
+        }
 
         nc->inReconnect--;
         if (nc->reconnectThread != NULL)
@@ -1579,7 +1604,7 @@ _connect(natsConnection *nc)
 
     pool = nc->srvPool;
 
-    if (nc->opts->retryOnFailedConnect)
+    if ((nc->opts->retryOnFailedConnect) && (nc->opts->connectedCb == NULL))
     {
         retry = true;
         max   = nc->opts->maxReconnect;
@@ -1629,17 +1654,31 @@ _connect(natsConnection *nc)
             break;
 
         l++;
-        if ((max > 0) && (l == max))
+        if ((max > 0) && (l > max))
             break;
 
         if (wtime > 0)
             nats_Sleep(wtime);
     }
 
-    if ((retSts == NATS_OK) && (nc->status != CONNECTED))
+    // If not connected and retry asynchronously on failed connect
+    if ((nc->status != CONNECTED)
+            && nc->opts->retryOnFailedConnect
+            && (nc->opts->connectedCb != NULL))
     {
-        s = nats_setDefaultError(NATS_NO_SERVER);
+        natsConn_Unlock(nc);
+
+        if (_processOpError(nc, retSts, true))
+        {
+            nats_clearLastError();
+            return NATS_NOT_YET_CONNECTED;
+        }
+
+        natsConn_Lock(nc);
     }
+
+    if ((retSts == NATS_OK) && (nc->status != CONNECTED))
+        s = nats_setDefaultError(NATS_NO_SERVER);
 
     nc->initc = false;
     natsConn_Unlock(nc);
@@ -1649,20 +1688,24 @@ _connect(natsConnection *nc)
 
 // _processOpError handles errors from reading or parsing the protocol.
 // The lock should not be held entering this function.
-static void
-_processOpError(natsConnection *nc, natsStatus s)
+static bool
+_processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
 {
     natsConn_Lock(nc);
 
-    if (_isConnecting(nc) || natsConn_isClosed(nc) || (nc->inReconnect > 0))
+    if (!initialConnect)
     {
-        natsConn_Unlock(nc);
+        if (_isConnecting(nc) || natsConn_isClosed(nc) || (nc->inReconnect > 0))
+        {
+            natsConn_Unlock(nc);
 
-        return;
+            return false;
+        }
     }
 
     // Do reconnect only if allowed and we were actually connected
-    if (nc->opts->allowReconnect && (nc->status == CONNECTED))
+    // or if we are retrying on initial failed connect.
+    if (initialConnect || (nc->opts->allowReconnect && (nc->status == CONNECTED)))
     {
         natsStatus ls = NATS_OK;
 
@@ -1711,7 +1754,7 @@ _processOpError(natsConnection *nc, natsStatus s)
             nc->inReconnect++;
             natsConn_Unlock(nc);
 
-            return;
+            return true;
         }
     }
 
@@ -1723,6 +1766,8 @@ _processOpError(natsConnection *nc, natsStatus s)
     natsConn_Unlock(nc);
 
     _close(nc, CLOSED, true);
+
+    return false;
 }
 
 static void
@@ -1768,7 +1813,7 @@ _readLoop(void  *arg)
             s = natsParser_Parse(nc, buffer, n);
 
         if (s != NATS_OK)
-            _processOpError(nc, s);
+            _processOpError(nc, s, false);
 
         natsConn_Lock(nc);
     }
@@ -1894,7 +1939,7 @@ _processPingTimer(natsTimer *timer, void *arg)
     if (++(nc->pout) > nc->opts->maxPingsOut)
     {
         natsConn_Unlock(nc);
-        _processOpError(nc, NATS_STALE_CONNECTION);
+        _processOpError(nc, NATS_STALE_CONNECTION, false);
         return;
     }
 
@@ -2275,7 +2320,7 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
 
     if (strcasecmp(error, STALE_CONNECTION) == 0)
     {
-        _processOpError(nc, NATS_STALE_CONNECTION);
+        _processOpError(nc, NATS_STALE_CONNECTION, false);
     }
     else if (nats_strcasestr(error, PERMISSIONS_ERR) != NULL)
     {
@@ -2614,7 +2659,7 @@ natsConnection_Connect(natsConnection **newConn, natsOptions *options)
     if (s == NATS_OK)
         s = _connect(nc);
 
-    if (s == NATS_OK)
+    if ((s == NATS_OK) || (s == NATS_NOT_YET_CONNECTED))
         *newConn = nc;
     else
         natsConn_release(nc);
@@ -3099,7 +3144,7 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
         s = natsParser_Parse(nc, buffer, n);
 
     if (s != NATS_OK)
-        _processOpError(nc, s);
+        _processOpError(nc, s, false);
 
     natsConn_release(nc);
 }
@@ -3148,7 +3193,7 @@ natsConnection_ProcessWriteEvent(natsConnection *nc)
     natsConn_Unlock(nc);
 
     if (s != NATS_OK)
-        _processOpError(nc, s);
+        _processOpError(nc, s, false);
 
     (void) NATS_UPDATE_ERR_STACK(s);
 }

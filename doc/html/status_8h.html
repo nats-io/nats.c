@@ -166,7 +166,8 @@ Enumerations</h2></td></tr>
 <br />
 &#160;&#160;<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae47047f2fac5f2f2a434fc501e5c3d4e">NATS_NOT_INITIALIZED</a>, 
 <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a892183c32b4929388bb75dc62230ddf3">NATS_SSL_ERROR</a>, 
-<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a4e298931ba0698a72e397b1b57c885">NATS_NO_SERVER_SUPPORT</a>
+<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a4e298931ba0698a72e397b1b57c885">NATS_NO_SERVER_SUPPORT</a>, 
+<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a49a1ea653ce112b3c53eedebcd60811d">NATS_NOT_YET_CONNECTED</a>
 <br />
  }<tr class="memdesc:a36c934157b663b7b5fb5d6609c897c80"><td class="mdescLeft">&#160;</td><td class="mdescRight">Status returned by most of the APIs.  <a href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">More...</a><br /></td></tr>
 </td></tr>
@@ -304,6 +305,9 @@ Enumerations</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a class="anchor" id="a36c934157b663b7b5fb5d6609c897c80a8a4e298931ba0698a72e397b1b57c885"></a>NATS_NO_SERVER_SUPPORT&#160;</td><td class="fielddoc">
 <p>The server does not support this action. </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="a36c934157b663b7b5fb5d6609c897c80a49a1ea653ce112b3c53eedebcd60811d"></a>NATS_NOT_YET_CONNECTED&#160;</td><td class="fielddoc">
+<p>A connection could not be immediately established and <a class="el" href="group__opts_group.html#ga20946800d024b7089e73d63454d1c19f" title="Indicates if initial connect failure should be retried or not. ">natsOptions_SetRetryOnFailedConnect()</a> specified a connected callback. The connect is retried asynchronously. </p>
 </td></tr>
 </table>
 

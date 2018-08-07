@@ -184,6 +184,9 @@ struct __natsOptions
     natsConnectionHandler   discoveredServersCb;
     void                    *discoveredServersClosure;
 
+    natsConnectionHandler   connectedCb;
+    void                    *connectedCbClosure;
+
     natsErrHandler          asyncErrCb;
     void                    *asyncErrCbClosure;
 

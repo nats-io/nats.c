@@ -97,7 +97,11 @@ typedef enum
     NATS_SSL_ERROR,                     ///< An SSL error occurred when trying to establish a
                                         ///  connection.
 
-    NATS_NO_SERVER_SUPPORT              ///< The server does not support this action.
+    NATS_NO_SERVER_SUPPORT,             ///< The server does not support this action.
+
+    NATS_NOT_YET_CONNECTED,             ///< A connection could not be immediately established and
+                                        ///  #natsOptions_SetRetryOnFailedConnect() specified
+                                        ///  a connected callback. The connect is retried asynchronously.
 
 } natsStatus;
 

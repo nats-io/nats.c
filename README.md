@@ -480,6 +480,42 @@ asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure
 ```
 This is the same for all other callbacks used in the C NATS library.
 
+The library can automaticall reconnect to a NATS Server if the connection breaks.
+However, the initial connect itself would fail if no server is available at the
+time of the connect. An option has been added to make the connect behaves as
+the reconnect, using the reconnect attempts and wait:
+```c
+    s = natsOptions_SetMaxReconnect(opts, 5);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectWait(opts, 1000);
+
+    // Instruct the library to block the connect call for that
+    // long until it can get a connection or fails.
+    if (s == NATS_OK)
+        s = natsOptions_SetRetryOnFailedConnect(opts, true, NULL, NULL);
+
+    // If the server is not running, this will block for about 5 seconds.
+    s = natsConnection_Connect(&conn, opts);
+```
+
+You can make the connect asynchronous (if it can't connect immediately) by
+passing a connection handler:
+```c
+    s = natsOptions_SetMaxReconnect(opts, 5);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectWait(opts, 1000);
+    if (s == NATS_OK)
+        s = natsOptions_SetRetryOnFailedConnect(opts, true, connectedCB, NULL);
+
+    // Start the connect. If no server is running, it should return NATS_NOT_YET_CONNECTED.
+    s = natsConnection_Connect(&conn, opts);
+    printf("natsConnection_Connect call returned: %s\n", natsStatus_GetText(s));
+
+    // Connection can be used to create subscription and publish messages (as
+    // long as the reconnect buffer is not full).
+```
+Check the example `examples/connect.c` for more use cases.
+
 ## Clustered Usage
 
 ```c

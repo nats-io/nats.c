@@ -88,7 +88,7 @@ var searchData=
   ['natsoptions_5fsetreconnectbufsize',['natsOptions_SetReconnectBufSize',['../group__opts_group.html#gaa0d4b7ece8477cb9879f0dafff3456a5',1,'nats.h']]],
   ['natsoptions_5fsetreconnectedcb',['natsOptions_SetReconnectedCB',['../group__opts_group.html#ga26a48c8529fffa5f5d1a61c030979980',1,'nats.h']]],
   ['natsoptions_5fsetreconnectwait',['natsOptions_SetReconnectWait',['../group__opts_group.html#ga2730f4e16e318a2ef8de98dbf6ede807',1,'nats.h']]],
-  ['natsoptions_5fsetretryonfailedconnect',['natsOptions_SetRetryOnFailedConnect',['../group__opts_group.html#ga6a859b607569a13817832b324af195d0',1,'nats.h']]],
+  ['natsoptions_5fsetretryonfailedconnect',['natsOptions_SetRetryOnFailedConnect',['../group__opts_group.html#ga20946800d024b7089e73d63454d1c19f',1,'nats.h']]],
   ['natsoptions_5fsetsecure',['natsOptions_SetSecure',['../group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba',1,'nats.h']]],
   ['natsoptions_5fsetsendasap',['natsOptions_SetSendAsap',['../group__opts_group.html#ga8f06568cc3319a5a0eef9f80282034ca',1,'nats.h']]],
   ['natsoptions_5fsetservers',['natsOptions_SetServers',['../group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf',1,'nats.h']]],

@@ -945,10 +945,21 @@ natsOptions_SetNoEcho(natsOptions *opts, bool noEcho)
 }
 
 natsStatus
-natsOptions_SetRetryOnFailedConnect(natsOptions *opts, bool retry)
+natsOptions_SetRetryOnFailedConnect(natsOptions *opts, bool retry,
+        natsConnectionHandler connectedCb, void *closure)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0);
     opts->retryOnFailedConnect = retry;
+    if (!retry)
+    {
+        opts->connectedCb = NULL;
+        opts->connectedCbClosure = NULL;
+    }
+    else
+    {
+        opts->connectedCb = connectedCb;
+        opts->connectedCbClosure = closure;
+    }
     UNLOCK_OPTS(opts);
 
     return NATS_OK;

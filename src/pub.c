@@ -56,7 +56,10 @@ _publishEx(natsConnection *nc, const char *subj,
     natsConn_Lock(nc);
 
     // Pro-actively reject dataLen over the threshold set by server.
-    if ((int64_t) dataLen > nc->info.maxPayload)
+    // But we can't make that check until we have been first connected
+    // in case the initial connect failed and option to retry on
+    // failed connect has been set.
+    if (!nc->initc && ((int64_t) dataLen > nc->info.maxPayload))
     {
         natsConn_Unlock(nc);
 

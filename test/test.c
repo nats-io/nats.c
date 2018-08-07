@@ -77,6 +77,7 @@ struct threadArg
     natsStrHash     *inboxes;
     natsStatus      status;
     const char*     string;
+    bool            connected;
     bool            disconnected;
     int64_t         disconnectedAt[4];
     int64_t         disconnects;
@@ -2181,12 +2182,20 @@ test_natsOptions(void)
     testCond((s == NATS_OK) && (opts->noEcho == false));
 
     test("Set RetryOnFailedConnect: ");
-    s = natsOptions_SetRetryOnFailedConnect(opts, true);
-    testCond((s == NATS_OK) && (opts->retryOnFailedConnect == true));
+    s = natsOptions_SetRetryOnFailedConnect(opts, true, _dummyConnHandler, (void*)1);
+    testCond((s == NATS_OK)
+            && (opts->retryOnFailedConnect == true)
+            && (opts->connectedCb == _dummyConnHandler)
+            && (opts->connectedCbClosure == (void*) 1));
 
     test("Remove RetryOnFailedConnect: ");
-    s = natsOptions_SetRetryOnFailedConnect(opts, false);
-    testCond((s == NATS_OK) && (opts->retryOnFailedConnect == false));
+    // If `retry` is false, connect CB and closure are ignored and should
+    // be internally set to NULL.
+    s = natsOptions_SetRetryOnFailedConnect(opts, false, _dummyConnHandler, (void*)1);
+    testCond((s == NATS_OK)
+            && (opts->retryOnFailedConnect == false)
+            && (opts->connectedCb == NULL)
+            && (opts->connectedCbClosure == NULL));
 
     test("Set Secure: ");
     s = natsOptions_SetSecure(opts, true);
@@ -2374,7 +2383,7 @@ test_natsOptions(void)
     IFOK(s, natsOptions_SetToken(opts, "token"));
     IFOK(s, natsOptions_IPResolutionOrder(opts, 46));
     IFOK(s, natsOptions_SetNoEcho(opts, true));
-    IFOK(s, natsOptions_SetRetryOnFailedConnect(opts, true));
+    IFOK(s, natsOptions_SetRetryOnFailedConnect(opts, true, _dummyConnHandler, NULL));
     if (s != NATS_OK)
         FAIL("Unable to test natsOptions_clone() because of failure while setting");
 
@@ -2396,7 +2405,8 @@ test_natsOptions(void)
              || (strcmp(cloned->token, "token") != 0)
              || (cloned->orderIP != 46)
              || (!cloned->noEcho)
-             || (!cloned->retryOnFailedConnect))
+             || (!cloned->retryOnFailedConnect)
+             || (cloned->connectedCb != _dummyConnHandler))
     {
         s = NATS_ERR;
     }
@@ -5585,6 +5595,7 @@ test_ReconnectDisallowedFlags(void)
     serverPid = _startServer("nats://localhost:22222", "-p 22222", true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Connect: ");
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s == NATS_OK)
         s = natsOptions_Create(&opts);
@@ -5596,18 +5607,16 @@ test_ReconnectDisallowedFlags(void)
         s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
 
     _stopServer(serverPid);
 
     test("Test connection closed CB invoked: ");
-
     natsMutex_Lock(arg.m);
-    s = NATS_OK;
-    while ((s == NATS_OK) && !arg.closed)
-        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    while ((s != NATS_TIMEOUT) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
-
-    testCond((s == NATS_OK) && arg.closed);
+    testCond(s == NATS_OK);
 
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
@@ -6322,6 +6331,17 @@ _startServerForRetryOnConnect(void *closure)
 }
 
 static void
+_connectedCb(natsConnection *nc, void* closure)
+{
+    struct threadArg *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    arg->connected = true;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+static void
 test_RetryOnFailedConnect(void)
 {
     natsStatus          s;
@@ -6330,13 +6350,14 @@ test_RetryOnFailedConnect(void)
     int64_t             start = 0;
     int64_t             end   = 0;
     natsThread          *t    = NULL;
+    natsSubscription    *sub  = NULL;
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s == NATS_OK)
         s = natsOptions_Create(&opts);
     if (s == NATS_OK)
-        s = natsOptions_SetRetryOnFailedConnect(opts, true);
+        s = natsOptions_SetRetryOnFailedConnect(opts, true, NULL, NULL);
     if (s == NATS_OK)
         s = natsOptions_SetMaxReconnect(opts, 10);
     if (s == NATS_OK)
@@ -6365,6 +6386,9 @@ test_RetryOnFailedConnect(void)
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK);
 
+    // close to avoid reconnect when shutting down server.
+    natsConnection_Close(nc);
+
     natsMutex_Lock(arg.m);
     arg.done = true;
     natsCondition_Signal(arg.c);
@@ -6372,9 +6396,75 @@ test_RetryOnFailedConnect(void)
 
     natsThread_Join(t);
     natsThread_Destroy(t);
+    t = NULL;
 
-    natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
+    nc = NULL;
+
+    // Try with async connect
+    test("Connect does not block: ");
+    s = natsOptions_SetRetryOnFailedConnect(opts, true, _connectedCb, (void*)&arg);
+    // Set disconnected/reconnected to make sure that these are not
+    // invoked as part of async connect.
+    if (s == NATS_OK)
+        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetMaxReconnect(opts, -1);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond((s == NATS_NOT_YET_CONNECTED) && (nc != NULL));
+    nats_clearLastError();
+
+    test("Subscription ok: ");
+    arg.control = 99;
+    s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*)&arg);
+    testCond(s == NATS_OK);
+
+    test("Publish ok: ");
+    s = natsConnection_Publish(nc, "foo", (const void*) "hello", 5);
+    testCond(s == NATS_OK);
+
+    // Start server
+    arg.done = false;
+    s = natsThread_Create(&t, _startServerForRetryOnConnect, (void*) &arg);
+
+    test("Connected: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.connected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("No disconnected and reconnected callbacks: ");
+    natsMutex_Lock(arg.m);
+    s = ((arg.disconnected || arg.reconnected) ? NATS_ERR : NATS_OK);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Message received: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    // Close nc to avoid reconnect when shutting down server
+    natsConnection_Close(nc);
+
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Broadcast(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
     _destroyDefaultThreadArgs(&arg);
 }
 

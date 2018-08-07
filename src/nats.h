@@ -1139,20 +1139,62 @@ natsOptions_UseOldRequestStyle(natsOptions *opts, bool useOldStyle);
 NATS_EXTERN natsStatus
 natsOptions_SetNoEcho(natsOptions *opts, bool noEcho);
 
-/** \brief Sets if connection attempt should be retried same as reconnect.
+/** \brief Indicates if initial connect failure should be retried or not.
  *
- * If set to true and connection cannot be established right away, the
+ * By default, #natsConnection_Connect() attempts to connect to a server
+ * specified in provided list of servers. If it cannot connect and the list has been
+ * fully tried, the function returns an error.
+ *
+ * This option is used to changed this default behavior.
+ *
+ * If `retry` is set to `true` and connection cannot be established right away, the
  * library will attempt to connect based on the reconnect attempts
  * and delay settings.
  *
+ * \note The connect retry logic uses reconnect settings even if #natsOptions_SetAllowReconnect()
+ * has been set to false. In other words, a failed connect may be retried even though
+ * a reconnect will not be allowed should the connection to the server be lost
+ * after initial connect.
+ *
+ * The behavior will then depend on the value of the `connectedCb` parameter:
+ *
+ * * If `NULL`, then the call blocks until it can connect
+ * or exhausts the reconnect attempts.
+ *
+ * * If not `NULL`, and no connection can be immediately
+ * established, the #natsConnection_Connect() calls returns #NATS_NOT_YET_CONNECTED
+ * to indicate that no connection is currently established, but will
+ * try asynchronously to connect using the reconnect attempts/delay settings. If
+ * the connection is later established, the specified callback will be
+ * invoked. If no connection can be made and the retry attempts are exhausted,
+ * the callback registered with #natsOptions_SetClosedCB(), if any, will be
+ * invoked.
+ *
+ * \note If #natsConnection_Connect() returns `NATS_OK` (that is, a connection to
+ * a `NATS Server` was established in that call), then the `connectedCb` callback
+ * will not be invoked.
+ *
+ * If `retry` is set to false, #natsConnection_Connect() behaves as originally
+ * designed, that is, returns an error and no connection object if failing to connect
+ * to any server in the list.
+ *
+ * \note The `connectedCb` parameter is ignored and set to `NULL` in the options object
+ * when `retry` is set to `false`.
+ *
  * @see natsOptions_SetMaxReconnect()
  * @see natsOptions_SetReconnectWait()
+ * @see natsOptions_SetClosedCB()
  *
  * @param opts the pointer to the #natsOptions object.
  * @param retry a boolean indicating if a failed connect should be retried.
+ * @param connectedCb if `retry` is true and this is not `NULL`, then the
+ * connect may be asynchronous and this callback will be invoked if the connect
+ * succeeds.
+ * @param closure a pointer to an user object that will be passed to the callback. `closure` can be `NULL`.
  */
 NATS_EXTERN natsStatus
-natsOptions_SetRetryOnFailedConnect(natsOptions *opts, bool retry);
+natsOptions_SetRetryOnFailedConnect(natsOptions *opts, bool retry,
+        natsConnectionHandler connectedCb, void* closure);
 
 /** \brief Destroys a #natsOptions object.
  *

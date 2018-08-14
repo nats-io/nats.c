@@ -38,6 +38,7 @@ AsyncINFO
 RequestPool
 NoFlusherIfSendAsapOption
 DefaultConnection
+SimplifiedURLs
 IPResolutionOrder
 UseDefaultURLIfNoServerSpecified
 ConnectToWithMultipleURLs

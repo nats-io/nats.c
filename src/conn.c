@@ -668,7 +668,10 @@ _checkForSecure(natsConnection *nc)
     if (nc->opts->secure && !nc->info.tlsRequired)
         s = nats_setDefaultError(NATS_SECURE_CONNECTION_WANTED);
     else if (nc->info.tlsRequired && !nc->opts->secure)
-        s = nats_setDefaultError(NATS_SECURE_CONNECTION_REQUIRED);
+    {
+        // Switch to Secure since server needs TLS.
+        s = natsOptions_SetSecure(nc->opts, true);
+    }
 
     if ((s == NATS_OK) && nc->opts->secure)
         s = _makeTLSConn(nc);

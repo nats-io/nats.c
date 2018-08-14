@@ -55,7 +55,10 @@ _parseHostAndPort(natsUrl *url, char *host, bool uInfo)
     }
     else
     {
-        url->host = NATS_STRDUP(host);
+        if (*host == '\0')
+            url->host = NATS_STRDUP("localhost");
+        else
+            url->host = NATS_STRDUP(host);
         if (url->host == NULL)
             s = nats_setDefaultError(NATS_NO_MEMORY);
     }
@@ -81,23 +84,79 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
     if (url == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    url->fullUrl = NATS_STRDUP(urlStr);
-    if (url->fullUrl == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
+    copy = NATS_STRDUP(urlStr);
+    if (copy == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
 
+    // Add scheme if missing.
+    if ((s == NATS_OK) && (strstr(copy, "://") == NULL))
+    {
+        char *str = NULL;
+
+        if (nats_asprintf(&str, "nats://%s", copy) == -1)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+        {
+            NATS_FREE(copy);
+            copy = str;
+        }
+    }
+    // Add default host/port if missing.
     if (s == NATS_OK)
     {
-        copy = NATS_STRDUP(urlStr);
-        if (copy == NULL)
-            return nats_setDefaultError(NATS_NO_MEMORY);
+        char *start = NULL;
+
+        // Now that we know that there is a scheme, move past it.
+        start = strstr(copy, "://");
+        start += 3;
+
+        // If we are at then end, will add "localhost:4222".
+        if (*start != '\0')
+        {
+            // First, search for end of IPv6 address (if applicable)
+            ptr = strrchr(start, ']');
+            if (ptr == NULL)
+                ptr = start;
+
+            // From that point, search for the last ':' character
+            ptr = strrchr(ptr, ':');
+        }
+        if ((*start == '\0') || (ptr == NULL) || (*(ptr+1) == '\0'))
+        {
+            char        *str = NULL;
+            int         res  = 0;
+            const char  *fmt = NULL;
+
+            if (*start == '\0')
+                fmt = "%slocalhost:%s";
+            else if (ptr != NULL)
+                fmt = "%s%s";
+            else
+                fmt = "%s:%s";
+
+            res = nats_asprintf(&str, fmt, copy, DEFAULT_PORT_STRING);
+            if (res == -1)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+            else
+            {
+                NATS_FREE(copy);
+                copy = str;
+            }
+        }
     }
 
-    // This is based on the results of the Go parsing.
-    // If '//' is not present, there is no error, but
-    // no host, user, password is returned.
+    // Keep a copy of the full URL.
+    if (s == NATS_OK)
+    {
+        url->fullUrl = NATS_STRDUP(copy);
+        if (url->fullUrl == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    // At this point, we are guaranteed to have '://' in the string
     if ((s == NATS_OK)
-        && ((ptr = strstr(copy, "//")) != NULL)
-        && (*(ptr += 2) != '\0'))
+            && ((ptr = strstr(copy, "://")) != NULL)
+            && (*(ptr += 3) != '\0'))
     {
         // If '@' is present, everything after is the host
         // everything before is username/password combo.

@@ -1186,18 +1186,80 @@ test_natsUrl(void)
     testCond((s != NATS_OK) && (u == NULL));
 
     test("EMPTY: ");
-    s = natsUrl_Create(&u, NULL);
+    s = natsUrl_Create(&u, "");
     testCond((s != NATS_OK) && (u == NULL));
 
     nats_clearLastError();
 
-    test("localhost:4222 ");
-    s = natsUrl_Create(&u, "localhost:4222");
+    test("tcp://localhost:4222 ");
+    s = natsUrl_Create(&u, "tcp://localhost:4222");
+    testCond((s == NATS_OK)
+            && (u != NULL)
+            && (u->host != NULL)
+            && (strcmp(u->host, "localhost") == 0)
+            && (u->username == NULL)
+            && (u->password == NULL)
+            && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("tcp://localhost ");
+    s = natsUrl_Create(&u, "tcp://localhost");
     testCond((s == NATS_OK)
               && (u != NULL)
-              && (u->host == NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "localhost") == 0)
               && (u->username == NULL)
-              && (u->password == NULL));
+              && (u->password == NULL)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("localhost ");
+    s = natsUrl_Create(&u, "localhost");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "localhost") == 0)
+              && (u->username == NULL)
+              && (u->password == NULL)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("tcp://[::1]:4222 ");
+    s = natsUrl_Create(&u, "tcp://[::1]:4222");
+    testCond((s == NATS_OK)
+            && (u != NULL)
+            && (u->host != NULL)
+            && (strcmp(u->host, "[::1]") == 0)
+            && (u->username == NULL)
+            && (u->password == NULL)
+            && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("tcp://[::1]: ");
+    s = natsUrl_Create(&u, "tcp://[::1]:");
+    testCond((s == NATS_OK)
+            && (u != NULL)
+            && (u->host != NULL)
+            && (strcmp(u->host, "[::1]") == 0)
+            && (u->username == NULL)
+            && (u->password == NULL)
+            && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("tcp://[::1] ");
+    s = natsUrl_Create(&u, "tcp://[::1]");
+    testCond((s == NATS_OK)
+            && (u != NULL)
+            && (u->host != NULL)
+            && (strcmp(u->host, "[::1]") == 0)
+            && (u->username == NULL)
+            && (u->password == NULL)
+            && (u->port == 4222));
     natsUrl_Destroy(u);
     u = NULL;
 
@@ -1205,9 +1267,11 @@ test_natsUrl(void)
     s = natsUrl_Create(&u, "tcp://");
     testCond((s == NATS_OK)
               && (u != NULL)
-              && (u->host == NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "localhost") == 0)
               && (u->username == NULL)
-              && (u->password == NULL));
+              && (u->password == NULL)
+              && (u->port == 4222));
     natsUrl_Destroy(u);
     u = NULL;
 
@@ -1215,46 +1279,11 @@ test_natsUrl(void)
     s = natsUrl_Create(&u, "tcp://:");
     testCond((s == NATS_OK)
               && (u != NULL)
-              && (u->host == NULL)
-              && (u->username == NULL)
-              && (u->password == NULL)
-              && (u->port == 0));
-    natsUrl_Destroy(u);
-    u = NULL;
-
-    test("tcp://localhost ");
-    s = natsUrl_Create(&u, "tcp://localhost");
-    testCond((s == NATS_OK)
-              && (u != NULL)
               && (u->host != NULL)
               && (strcmp(u->host, "localhost") == 0)
               && (u->username == NULL)
               && (u->password == NULL)
-              && (u->port == 0))
-    natsUrl_Destroy(u);
-    u = NULL;
-
-    test("tcp://localhost ");
-    s = natsUrl_Create(&u, "tcp://localhost");
-    testCond((s == NATS_OK)
-              && (u != NULL)
-              && (u->host != NULL)
-              && (strcmp(u->host, "localhost") == 0)
-              && (u->username == NULL)
-              && (u->password == NULL)
-              && (u->port == 0))
-    natsUrl_Destroy(u);
-    u = NULL;
-
-    test("tcp://localhost:4222 ");
-    s = natsUrl_Create(&u, "tcp://localhost:4222");
-    testCond((s == NATS_OK)
-              && (u != NULL)
-              && (u->host != NULL)
-              && (strcmp(u->host, "localhost") == 0)
-              && (u->username == NULL)
-              && (u->password == NULL)
-              && (u->port == 4222))
+              && (u->port == 4222));
     natsUrl_Destroy(u);
     u = NULL;
 
@@ -1357,18 +1386,6 @@ test_natsUrl(void)
               && (u->username == NULL)
               && (u->password != NULL)
               && (strcmp(u->password, ":a:b:c") == 0)
-              && (u->port == 4222));
-    natsUrl_Destroy(u);
-    u = NULL;
-
-    test("tcp://[::1]:4222 ");
-    s = natsUrl_Create(&u, "tcp://[::1]:4222");
-    testCond((s == NATS_OK)
-              && (u != NULL)
-              && (u->host != NULL)
-              && (strcmp(u->host, "[::1]") == 0)
-              && (u->username == NULL)
-              && (u->password == NULL)
               && (u->port == 4222));
     natsUrl_Destroy(u);
     u = NULL;
@@ -4968,6 +4985,68 @@ test_DefaultConnection(void)
 }
 
 static void
+test_SimplifiedURLs(void)
+{
+    natsStatus          s         = NATS_OK;
+    natsConnection      *nc       = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsOptions         *opts     = NULL;
+    const char          *urls[] = {
+        "nats://127.0.0.1:4222",
+        "nats://127.0.0.1:",
+        "nats://127.0.0.1",
+        "127.0.0.1:",
+        "127.0.0.1"
+    };
+    int                 urlsCount = sizeof(urls) / sizeof(char *);
+    int                 i;
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Test simplified URLs to non TLS server: ");
+    for (i=0; ((s == NATS_OK) && (i<urlsCount)); i++)
+    {
+        s = natsConnection_ConnectTo(&nc, urls[i]);
+        if (s == NATS_OK)
+        {
+            natsConnection_Destroy(nc);
+            nc = NULL;
+        }
+    }
+    testCond(s == NATS_OK);
+
+    _stopServer(serverPid);
+    serverPid = NATS_INVALID_PID;
+
+#if defined(NATS_HAS_TLS)
+    serverPid = _startServer("nats://127.0.0.1:4222", "-c tls_default_port.conf -DV", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SkipServerVerification(opts, true);
+
+    test("Test simplified URLs to TLS server: ");
+    for (i=0; ((s == NATS_OK) && (i<urlsCount)); i++)
+    {
+        s = natsOptions_SetURL(opts, urls[i]);
+        if (s == NATS_OK)
+            s = natsConnection_Connect(&nc, opts);
+        if (s == NATS_OK)
+        {
+            natsConnection_Destroy(nc);
+            nc = NULL;
+        }
+    }
+    testCond(s == NATS_OK);
+
+    natsOptions_Destroy(opts);
+    _stopServer(serverPid);
+#endif
+}
+
+static void
 test_IPResolutionOrder(void)
 {
     natsStatus          s;
@@ -6362,6 +6441,12 @@ test_RetryOnFailedConnect(void)
         s = natsOptions_SetMaxReconnect(opts, 10);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
+#ifdef _WIN32
+    // Windows takes the full timeout to report connect failure, so reduce
+    // timeout here.
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, 100);
+#endif
     if (s != NATS_OK)
     {
         natsOptions_Destroy(opts);
@@ -6376,7 +6461,11 @@ test_RetryOnFailedConnect(void)
     testCond(s == NATS_NO_SERVER);
 
     test("Retried: ")
+#ifdef _WIN32
+    testCond((((end-start) >= 1000) && ((end-start) <= 2500)));
+#else
     testCond((((end-start) >= 300) && ((end-start) <= 1500)));
+#endif
 
     test("Connects ok: ");
     s = natsOptions_SetMaxReconnect(opts, 20);
@@ -12424,16 +12513,22 @@ test_SSLBasic(void)
     serverPid = _startServer("nats://localhost:4443", "-config tls.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
-    test("Check that connect fails if no SSL options: ");
+    test("Check that connect switches to TLS automatically: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
+    // For this test skip server verification
     if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+        s = natsOptions_SkipServerVerification(opts, true);
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
-    testCond(s == NATS_SECURE_CONNECTION_REQUIRED);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
 
     test("Check connects OK with SSL options: ");
     s = natsOptions_SetSecure(opts, true);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
 
     // For test purposes, we provide the CA trusted certs
     if (s == NATS_OK)
@@ -13032,6 +13127,7 @@ static testInfo allTests[] =
     // Public API Tests
 
     {"DefaultConnection",               test_DefaultConnection},
+    {"SimplifiedURLs",                  test_SimplifiedURLs},
     {"IPResolutionOrder",               test_IPResolutionOrder},
     {"UseDefaultURLIfNoServerSpecified",test_UseDefaultURLIfNoServerSpecified},
     {"ConnectToWithMultipleURLs",       test_ConnectToWithMultipleURLs},

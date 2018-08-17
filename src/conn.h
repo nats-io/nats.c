@@ -112,4 +112,9 @@ natsConn_initResp(natsConnection *nc, char *ginbox, int ginboxSize);
 void
 natsConn_destroyRespPool(natsConnection *nc);
 
+natsStatus
+natsConn_publish(natsConnection *nc, const char *subj,
+         const char *reply, const void *data, int dataLen,
+         bool directFlush);
+
 #endif /* CONN_H_ */

@@ -24,6 +24,7 @@ int main(int argc, char **argv)
     natsOptions     *opts  = NULL;
     int64_t         last   = 0;
     natsStatus      s;
+    int             dataLen=0;
 
     opts = parseArgs(argc, argv, usage);
 
@@ -37,16 +38,9 @@ int main(int argc, char **argv)
     if (s == NATS_OK)
         start = nats_Now();
 
+    dataLen = (int) strlen(txt);
     for (count = 0; (s == NATS_OK) && (count < total); count++)
-    {
-        s = natsConnection_PublishString(conn, subj, txt);
-
-        if (nats_Now() - last >= 1000)
-        {
-            s = printStats(STATS_OUT, conn, NULL, stats);
-            last = nats_Now();
-        }
-    }
+        s = natsConnection_Publish(conn, subj, (const void*) txt, dataLen);
 
     if (s == NATS_OK)
         s = natsConnection_FlushTimeout(conn, 1000);

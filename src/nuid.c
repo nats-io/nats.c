@@ -227,7 +227,7 @@ _nextNUID(natsNUID *nuid, char *buffer, int bufferLen)
 
     // Check bufferLen is big enough
     if (bufferLen <= totalLen)
-        return NATS_INSUFFICIENT_BUFFER;
+        return nats_setError(NATS_INSUFFICIENT_BUFFER, "Buffer should be at least %d bytes, it is only %d bytes", totalLen, bufferLen);
 
     // Increment and capture.
     nuid->seq += nuid->inc;

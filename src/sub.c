@@ -117,8 +117,10 @@ natsSub_deliverMsgs(void *arg)
     natsStatus          s = NATS_OK;
     bool                draining = false;
     bool                rmSub    = false;
+    natsOnCompleteCB    onCompleteCB = NULL;
+    void                *onCompleteCBClosure = NULL;
 
-    // This just servers as a barrier for the creation of this thread.
+    // This just serves as a barrier for the creation of this thread.
     natsConn_Lock(nc);
     natsConn_Unlock(nc);
 
@@ -202,6 +204,14 @@ natsSub_deliverMsgs(void *arg)
     if (rmSub)
         natsConn_removeSubscription(nc, sub);
 
+    natsSub_Lock(sub);
+    onCompleteCB        = sub->onCompleteCB;
+    onCompleteCBClosure = sub->onCompleteCBClosure;
+    natsSub_Unlock(sub);
+
+    if (onCompleteCB != NULL)
+        (*onCompleteCB)(onCompleteCBClosure);
+
     natsSub_release(sub);
 }
 
@@ -212,6 +222,15 @@ natsSub_setMax(natsSubscription *sub, uint64_t max)
     SUB_DLV_WORKER_LOCK(sub);
     sub->max = max;
     SUB_DLV_WORKER_UNLOCK(sub);
+    natsSub_Unlock(sub);
+}
+
+void
+natsSub_setOnCompleteCB(natsSubscription *sub, natsOnCompleteCB cb, void *closure)
+{
+    natsSub_Lock(sub);
+    sub->onCompleteCB = cb;
+    sub->onCompleteCBClosure = closure;
     natsSub_Unlock(sub);
 }
 

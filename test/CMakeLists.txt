@@ -5,8 +5,12 @@ endif()
 # We need this to build the test program
 include_directories(${PROJECT_SOURCE_DIR}/src)
 if(NATS_BUILD_WITH_TLS)
-include_directories(${OPENSSL_INCLUDE_DIR})
+  include_directories(${OPENSSL_INCLUDE_DIR})
 endif(NATS_BUILD_WITH_TLS)
+if(NATS_BUILD_STREAMING)
+  include_directories(${PROJECT_SOURCE_DIR}/pbuf/include)
+  include_directories(${PROJECT_SOURCE_DIR}/src/stan)
+endif(NATS_BUILD_STREAMING)
 
 # Build the test program
 add_executable(testsuite test.c)

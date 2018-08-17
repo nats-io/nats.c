@@ -188,6 +188,7 @@ _freeConn(natsConnection *nc)
     natsInbox_Destroy(nc->respSub);
     natsStrHash_Destroy(nc->respMap);
     natsCondition_Destroy(nc->respReady);
+    natsCondition_Destroy(nc->reconnectCond);
     natsMutex_Destroy(nc->subsMu);
     natsTimer_Destroy(nc->drainTimer);
     natsMutex_Destroy(nc->mu);
@@ -1250,14 +1251,16 @@ _doReconnect(void *arg)
         if (((elapsed = nats_Now() - cur->lastAttempt)) < nc->opts->reconnectWait)
             sleepTime = (nc->opts->reconnectWait - elapsed);
 
-        natsConn_Unlock(nc);
-
         if (sleepTime > 0)
-            nats_Sleep(sleepTime);
+        {
+            natsCondition_TimedWait(nc->reconnectCond, nc->mu, sleepTime);
+        }
         else
+        {
+            natsConn_Unlock(nc);
             natsThread_Yield();
-
-        natsConn_Lock(nc);
+            natsConn_Lock(nc);
+        }
 
         // Check if we have been closed first.
         if (natsConn_isClosed(nc))
@@ -2087,6 +2090,9 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
     if (nc->ptmr != NULL)
         natsTimer_Stop(nc->ptmr);
 
+    // Unblock reconnect thread block'ed in sleep of reconnectWait interval
+    natsCondition_Broadcast(nc->reconnectCond);
+
     // Remove all subscriptions. This will kick out the delivery threads,
     // and unblock NextMsg() calls.
     _removeAllSubscriptions(nc);
@@ -2691,6 +2697,8 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
         s = natsCondition_Create(&(nc->flusherCond));
     if (s == NATS_OK)
         s = natsCondition_Create(&(nc->pongs.cond));
+    if (s == NATS_OK)
+        s = natsCondition_Create(&(nc->reconnectCond));
 
     if (s == NATS_OK)
         *newConn = nc;

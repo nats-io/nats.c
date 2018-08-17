@@ -46,6 +46,9 @@ void
 natsSub_drain(natsSubscription *sub);
 
 void
+natsSub_setOnCompleteCB(natsSubscription *sub, natsOnCompleteCB cb, void *closure);
+
+void
 natsSub_close(natsSubscription *sub, bool connectionClosed);
 
 #endif /* SUB_H_ */

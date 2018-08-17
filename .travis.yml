@@ -3,6 +3,7 @@ language: c
 cache:
   directories:
   - $HOME/gnatsd
+  - $HOME/nats-streaming-server
 
 sudo: false
 
@@ -18,10 +19,10 @@ addons:
     - unzip
 
 before_install:
-  - bash install_gnatsd.sh
+  - bash install_servers.sh
 
 before_script:
-  - export PATH=$HOME/gnatsd:$PATH
+  - export PATH=$HOME/gnatsd:$HOME/nats-streaming-server:$PATH
   - mkdir build && cd build
 
 env:

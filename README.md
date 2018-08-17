@@ -388,6 +388,30 @@ natsConnection_Subscribe(&sub, nc, "foo", onMsg, NULL);
 natsSubscription_AutoUnsubscribe(sub, 100);
 ```
 
+Subscriptions can be drained. This ensures that the interest is removed from the server but that all messages that were internally queued are processed.
+
+```c
+// This call does not block.
+natsSubscription_Drain(sub);
+
+// If you want to wait for the drain to complete, call this
+// and specify a timeout. Zero or negative to wait for ever.
+natsSubscription_WaitForDrainCompletion(sub, 0);
+```
+
+Connections can be drained. This process will first put all registered subscriptions in drain mode and prevent any new subscription from being created. When all subscriptions are drained, the publish calls are drained (by the mean of a connection flush) and new publish calls will fail at this point. Then the connection is closed.
+
+```c
+// Use default timeout of 30 seconds.
+// But this call does not block. Use natsOptions_SetClosedCB() to be notified
+// that the connection is closed.
+natsConnection_Drain(nc);
+
+// To specify a timeout for the operation to complete, after which the connection
+// is forcefully closed. Here is an exampel of a timeout of 10 seconds (10,000 ms).
+natsConnection_DrainTimeout(nc, 10000);
+```
+
 You can have multiple connections in your application, mixing subscribers and publishers.
 ```c
 // Create a connection 'nc1' to host1

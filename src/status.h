@@ -25,7 +25,9 @@ typedef enum
     CONNECTING,       ///< The connection is in the process or connecting
     CONNECTED,        ///< The connection is connected
     CLOSED,           ///< The connection is closed
-    RECONNECTING      ///< The connection is in the process or reconnecting
+    RECONNECTING,     ///< The connection is in the process or reconnecting
+    DRAINING_SUBS,    ///< The connection is draining subscriptions
+    DRAINING_PUBS,    ///< The connection is draining publishers
 
 } natsConnStatus;
 
@@ -102,6 +104,9 @@ typedef enum
     NATS_NOT_YET_CONNECTED,             ///< A connection could not be immediately established and
                                         ///  #natsOptions_SetRetryOnFailedConnect() specified
                                         ///  a connected callback. The connect is retried asynchronously.
+
+    NATS_DRAINING,                      ///< A connection and/or subscription entered the draining mode.
+                                        ///  Some operations will fail when in that mode.
 
 } natsStatus;
 

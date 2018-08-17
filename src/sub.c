@@ -115,6 +115,7 @@ natsSub_deliverMsgs(void *arg)
     natsMsg             *msg;
     int64_t             timeout;
     natsStatus          s = NATS_OK;
+    int                 msgLen;
 
     // This just servers as a barrier for the creation of this thread.
     natsConn_Lock(nc);
@@ -124,9 +125,21 @@ natsSub_deliverMsgs(void *arg)
     timeout = sub->timeout;
     natsSub_Unlock(sub);
 
+    // Used to account for adjustments to sub.pBytes when we wrap back around.
+    msgLen = -1;
+
     while (true)
     {
         natsSub_Lock(sub);
+
+        // Do accounting for last msg delivered here so we only lock once
+        // and drain state trips after callback has returned.
+        if (msgLen >= 0)
+        {
+            sub->msgList.msgs--;
+            sub->msgList.bytes -= msgLen;
+            msgLen = -1;
+        }
 
         s = NATS_OK;
         while (((msg = sub->msgList.head) == NULL) && !(sub->closed) && (s != NATS_TIMEOUT))
@@ -162,8 +175,7 @@ natsSub_deliverMsgs(void *arg)
         if (sub->msgList.tail == msg)
             sub->msgList.tail = NULL;
 
-        sub->msgList.msgs--;
-        sub->msgList.bytes -= msg->dataLen;
+        msgLen = msg->dataLen;
 
         msg->next = NULL;
 
@@ -614,8 +626,8 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static natsStatus
-_unsubscribe(natsSubscription *sub, int max)
+natsStatus
+natsSub_unsubscribe(natsSubscription *sub, int max, bool drain, bool checkDrainStatus)
 {
     natsStatus      s   = NATS_OK;
     natsConnection  *nc = NULL;
@@ -629,6 +641,8 @@ _unsubscribe(natsSubscription *sub, int max)
         s = NATS_CONNECTION_CLOSED;
     else if (sub->closed)
         s = NATS_INVALID_SUBSCRIPTION;
+    else if (drain && sub->draining)
+        s = NATS_DRAINING;
 
     if (s != NATS_OK)
     {
@@ -636,41 +650,79 @@ _unsubscribe(natsSubscription *sub, int max)
         return nats_setDefaultError(s);
     }
 
+    sub->draining = drain;
     nc = sub->conn;
     _retain(sub);
 
     natsSub_Unlock(sub);
 
-    s = natsConn_unsubscribe(nc, sub, max);
+    if (checkDrainStatus && natsConnection_IsDraining(nc))
+        s = nats_setDefaultError(NATS_DRAINING);
+    else
+        s = natsConn_unsubscribe(nc, sub, max, drain);
 
     natsSub_release(sub);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-/*
- * Removes interest on the subject. Asynchronous subscription may still have
- * a callback in progress, in that case, the subscription will still be valid
- * until the callback returns.
- */
 natsStatus
 natsSubscription_Unsubscribe(natsSubscription *sub)
 {
-    natsStatus s = _unsubscribe(sub, 0);
+    natsStatus s = natsSub_unsubscribe(sub, 0, false, true);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-/*
- * This call issues an automatic natsSubscription_Unsubscribe that is
- * processed by the server when 'max' messages have been received.
- * This can be useful when sending a request to an unknown number
- * of subscribers.
- */
 natsStatus
 natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max)
 {
-    natsStatus s = _unsubscribe(sub, max);
+    natsStatus s = natsSub_unsubscribe(sub, max, false, true);
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsSubscription_Drain(natsSubscription *sub)
+{
+    natsStatus s = natsSub_unsubscribe(sub, 0, true, true);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsSubscription_WaitForDrainCompletion(natsSubscription *sub, int64_t timeout)
+{
+    natsStatus  s        = NATS_OK;
+    int64_t     deadline = 0;
+
+    if (sub == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsSub_Lock(sub);
+    if (!sub->draining)
+    {
+        natsSub_Unlock(sub);
+        return nats_setError(NATS_ILLEGAL_STATE, "%s", "Subscription not in draining mode");
+    }
+    sub->refs++;
+    natsSub_Unlock(sub);
+
+    if (timeout > 0)
+        deadline = nats_Now() + timeout;
+
+    while (natsSubscription_IsValid(sub))
+    {
+        nats_Sleep(100);
+        if (deadline > 0 && (nats_Now() >= deadline))
+        {
+            s = nats_setError(NATS_TIMEOUT,
+                    "The subscription's drain took more than the timeout of %" PRId64 "ms",
+                    timeout);
+            break;
+        }
+    }
+
+    natsSub_release(sub);
+
+    return s;
 }
 
 /*

@@ -55,10 +55,20 @@ _publishEx(natsConnection *nc, const char *subj,
 
     natsConn_Lock(nc);
 
-    // Pro-actively reject dataLen over the threshold set by server.
-    // But we can't make that check until we have been first connected
-    // in case the initial connect failed and option to retry on
-    // failed connect has been set.
+    if (natsConn_isClosed(nc))
+    {
+        natsConn_Unlock(nc);
+
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    }
+
+    if (natsConn_isDrainingPubs(nc))
+    {
+        natsConn_Unlock(nc);
+
+        return nats_setDefaultError(NATS_DRAINING);
+    }
+
     if (!nc->initc && ((int64_t) dataLen > nc->info.maxPayload))
     {
         natsConn_Unlock(nc);
@@ -66,17 +76,11 @@ _publishEx(natsConnection *nc, const char *subj,
         return nats_setError(NATS_MAX_PAYLOAD,
                              "Payload %d greater than maximum allowed: %" PRId64,
                              dataLen, nc->info.maxPayload);
-
-    }
-
-    if ((s == NATS_OK) && natsConn_isClosed(nc))
-    {
-        s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
     // Check if we are reconnecting, and if so check if
     // we have exceeded our reconnect outbound buffer limits.
-    if ((s == NATS_OK) && natsConn_isReconnecting(nc))
+    if (natsConn_isReconnecting(nc))
     {
         // Flush to underlying buffer.
         natsConn_bufferFlush(nc);
@@ -89,40 +93,37 @@ _publishEx(natsConnection *nc, const char *subj,
         }
     }
 
-    if (s == NATS_OK)
+    if (dataLen > 0)
     {
-        if (dataLen > 0)
-        {
-            int l;
+        int l;
 
-            for (l = dataLen; l > 0; l /= 10)
-            {
-                i -= 1;
-                b[i] = digits[l%10];
-            }
-        }
-        else
+        for (l = dataLen; l > 0; l /= 10)
         {
             i -= 1;
-            b[i] = digits[0];
+            b[i] = digits[l%10];
         }
+    }
+    else
+    {
+        i -= 1;
+        b[i] = digits[0];
+    }
 
-        sizeSize = (bSize - i);
+    sizeSize = (bSize - i);
 
-        msgHdSize = _PUB_P_LEN_
-                    + subjLen + 1
-                    + (replyLen > 0 ? replyLen + 1 : 0)
-                    + sizeSize + _CRLF_LEN_;
+    msgHdSize = _PUB_P_LEN_
+                + subjLen + 1
+                + (replyLen > 0 ? replyLen + 1 : 0)
+                + sizeSize + _CRLF_LEN_;
 
-        natsBuf_RewindTo(nc->scratch, _PUB_P_LEN_);
+    natsBuf_RewindTo(nc->scratch, _PUB_P_LEN_);
 
-        if (natsBuf_Capacity(nc->scratch) < msgHdSize)
-        {
-            // Although natsBuf_Append() would make sure that the buffer
-            // grows, it is better to make sure that the buffer is big
-            // enough for the pre-calculated size. We make it even a bit bigger.
-            s = natsBuf_Expand(nc->scratch, (int) ((float)msgHdSize * 1.1));
-        }
+    if (natsBuf_Capacity(nc->scratch) < msgHdSize)
+    {
+        // Although natsBuf_Append() would make sure that the buffer
+        // grows, it is better to make sure that the buffer is big
+        // enough for the pre-calculated size. We make it even a bit bigger.
+        s = natsBuf_Expand(nc->scratch, (int) ((float)msgHdSize * 1.1));
     }
 
     if (s == NATS_OK)

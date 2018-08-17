@@ -1511,6 +1511,7 @@ _deliverMsgs(void *arg)
     uint64_t            max;
     natsMsg             *msg;
     bool                timerNeedReset = false;
+    int                 msgLen = 0;
 
     natsMutex_Lock(dlv->lock);
 
@@ -1583,9 +1584,9 @@ _deliverMsgs(void *arg)
             continue;
         }
 
-        // Update stats before checking closed state
-        sub->msgList.msgs--;
-        sub->msgList.bytes -= msg->dataLen;
+        // Keep track of message len but decrement only after
+        // callback is invoked (for the Drain feature).
+        msgLen = msg->dataLen;
 
         // Need to check for closed subscription again here.
         // The subscription could have been unsubscribed from a callback
@@ -1594,6 +1595,9 @@ _deliverMsgs(void *arg)
         // discard the message and continue.
         if (sub->closed)
         {
+            sub->msgList.msgs--;
+            sub->msgList.bytes -= msgLen;
+
             natsMsg_Destroy(msg);
             continue;
         }
@@ -1608,7 +1612,7 @@ _deliverMsgs(void *arg)
 
             // If we are dealing with the last pending message for this sub,
             // we will reset the timer after the user callback returns.
-            if (sub->msgList.msgs == 0)
+            if (sub->msgList.msgs-1 == 0)
                 timerNeedReset = true;
         }
 
@@ -1633,6 +1637,10 @@ _deliverMsgs(void *arg)
         }
 
         natsMutex_Lock(dlv->lock);
+
+        // Update the stats now
+        sub->msgList.msgs--;
+        sub->msgList.bytes -= msgLen;
 
         // Check if timer need to be reset for subscriptions that can timeout.
         if ((sub->timeout != 0) && timerNeedReset)

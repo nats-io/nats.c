@@ -85,6 +85,14 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect);
  * ----------------------------------------
  */
 
+typedef struct __drainSubInfo
+{
+    natsConnection      *nc;
+    natsSubscription    *sub;
+    natsThread          *thread;
+
+} drainSubInfo;
+
 struct threadsToJoin
 {
     natsThread  *readLoop;
@@ -189,6 +197,7 @@ _freeConn(natsConnection *nc)
     natsStrHash_Destroy(nc->respMap);
     natsCondition_Destroy(nc->respReady);
     natsMutex_Destroy(nc->subsMu);
+    natsThread_Destroy(nc->drainThread);
     natsMutex_Destroy(nc->mu);
 
     NATS_FREE(nc);
@@ -442,6 +451,12 @@ _isConnecting(natsConnection *nc)
     return nc->status == CONNECTING;
 }
 
+static bool
+_isConnected(natsConnection *nc)
+{
+    return ((nc->status == CONNECTED) || natsConn_isDraining(nc));
+}
+
 bool
 natsConn_isClosed(natsConnection *nc)
 {
@@ -452,6 +467,18 @@ bool
 natsConn_isReconnecting(natsConnection *nc)
 {
     return (nc->status == RECONNECTING);
+}
+
+bool
+natsConn_isDraining(natsConnection *nc)
+{
+    return ((nc->status == DRAINING_SUBS) || (nc->status == DRAINING_PUBS));
+}
+
+bool
+natsConn_isDrainingPubs(natsConnection *nc)
+{
+    return nc->status == DRAINING_PUBS;
 }
 
 static natsStatus
@@ -1867,7 +1894,7 @@ _flusher(void *arg)
 
         nc->flusherSignaled = false;
 
-        if (natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
+        if (!_isConnected(nc) || natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
         {
             natsConn_Unlock(nc);
             break;
@@ -2446,6 +2473,13 @@ natsConn_subscribe(natsSubscription **newSub,
         return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
+    if (natsConn_isDraining(nc))
+    {
+        natsConn_Unlock(nc);
+
+        return nats_setDefaultError(NATS_DRAINING);
+    }
+
     s = natsSub_create(&sub, nc, subj, queue, timeout, cb, cbClosure);
     if (s == NATS_OK)
     {
@@ -2511,9 +2545,61 @@ natsConn_subscribe(natsSubscription **newSub,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// checkDrained will watch for a subscription to be fully drained
+// and then remove it.
+static void
+_checkDrained(void *closure)
+{
+    drainSubInfo        *dsi = (drainSubInfo*) closure;
+    natsConnection      *nc  = dsi->nc;
+    natsSubscription    *sub = dsi->sub;
+    bool                closed;
+    int                 pMsgs;
+
+    // We will need to destroy this thread, which reference we get
+    // in dsi->thread which is set after the thread is created but
+    // under connection lock. So we would need to lock/unlock the
+    // connection to ensure that this is valid. Since we are calling
+    // Flush() which requires that, we don't need to explicitly
+    // lock/unlock.
+
+    // This allows us to know that whatever we have in the client pending
+    // is correct and the server will not send additional information.
+    natsConnection_Flush(nc);
+
+    // Once we are here we just wait for Pending to reach 0 or
+    // any other state to exit this thread.
+    for (;;)
+    {
+        // check connection is still valid.
+        if (natsConnection_IsClosed(nc))
+            break;
+
+        // Check subscription state
+        natsSub_Lock(sub);
+        closed = sub->closed;
+        pMsgs  = sub->msgList.msgs;
+        natsSub_Unlock(sub);
+
+        if (closed || pMsgs == 0)
+        {
+            natsConn_removeSubscription(nc, sub);
+            break;
+        }
+
+        nats_Sleep(100);
+    }
+
+    natsSub_release(dsi->sub);
+    natsConn_release(dsi->nc);
+
+    natsThread_Destroy(dsi->thread);
+    NATS_FREE(dsi);
+}
+
 // Performs the low level unsubscribe to the server.
 natsStatus
-natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
+natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max, bool drainMode)
 {
     natsStatus      s = NATS_OK;
 
@@ -2535,12 +2621,41 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
         return NATS_OK;
     }
 
-    if (max == 0)
-        natsConn_removeSubscription(nc, sub);
-    else
+    if (max > 0)
         natsSub_setMax(sub, max);
+    else if (!drainMode)
+        natsConn_removeSubscription(nc, sub);
 
-    if (!natsConn_isReconnecting(nc))
+    if (drainMode)
+    {
+        drainSubInfo *dsi = (drainSubInfo*) NATS_CALLOC(1, sizeof(drainSubInfo));
+
+        if (dsi == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        if (s == NATS_OK)
+        {
+            nc->refs++;
+            natsSub_retain(sub);
+
+            dsi->nc  = nc;
+            dsi->sub = sub;
+
+            s = natsThread_Create(&dsi->thread, _checkDrained, (void*) dsi);
+            if (s == NATS_OK)
+            {
+                natsThread_Detach(dsi->thread);
+            }
+            else
+            {
+                NATS_FREE(dsi);
+                natsSub_release(sub);
+                nc->refs--;
+            }
+        }
+    }
+
+    if ((s == NATS_OK) && !natsConn_isReconnecting(nc))
     {
         // We will send these for all subs when we reconnect
         // so that we can suppress here.
@@ -2793,6 +2908,23 @@ natsConnection_IsReconnecting(natsConnection *nc)
     return reconnecting;
 }
 
+bool
+natsConnection_IsDraining(natsConnection *nc)
+{
+    bool draining;
+
+    if (nc == NULL)
+        return false;
+
+    natsConn_Lock(nc);
+
+    draining = natsConn_isDraining(nc);
+
+    natsConn_Unlock(nc);
+
+    return draining;
+}
+
 // Returns the current state of the connection.
 natsConnStatus
 natsConnection_Status(natsConnection *nc)
@@ -2905,6 +3037,162 @@ natsStatus
 natsConnection_Flush(natsConnection *nc)
 {
     natsStatus s = natsConnection_FlushTimeout(nc, 60000);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static void
+_pushDrainErr(natsConnection *nc, natsStatus s, const char *errTxt)
+{
+    natsConn_Lock(nc);
+    nc->err = s;
+    snprintf(nc->errStr, sizeof(nc->errStr), "%s: %d (%s)", errTxt, s, natsStatus_GetText(s));
+    if (nc->opts->asyncErrCb != NULL)
+        natsAsyncCb_PostErrHandler(nc, NULL, s);
+    natsConn_Unlock(nc);
+}
+
+static void
+_drainConnection(void *closure)
+{
+    natsStatus          s   = NATS_OK;
+    natsConnection      *nc = (natsConnection*) closure;
+    natsSubscription    **subs = NULL;
+    natsSubscription    *sub;
+    natsHashIter        iter;
+    int                 numSubs = 0;
+    int                 i;
+    int64_t             drainWait;
+    int64_t             deadline;
+    bool                allGone;
+
+    // Snapshot subs list
+    natsConn_Lock(nc);
+
+    drainWait = nc->drainTimeout;
+
+    natsMutex_Lock(nc->subsMu);
+    // Create array to contain them all
+    subs = NATS_CALLOC(natsHash_Count(nc->subs), sizeof(natsSubscription*));
+    if (subs == NULL)
+        s = NATS_NO_MEMORY;
+    if (s == NATS_OK)
+    {
+        natsHashIter_Init(&iter, nc->subs);
+        while (natsHashIter_Next(&iter, NULL, (void**)&sub))
+        {
+            natsSub_retain(sub);
+            subs[numSubs++] = sub;
+        }
+    }
+    natsMutex_Unlock(nc->subsMu);
+
+    natsConn_Unlock(nc);
+
+    if (s != NATS_OK)
+    {
+        _pushDrainErr(nc, s, "Drain error building subscriptions array");
+        natsConn_release(nc);
+        return;
+    }
+
+    // Do subs first
+    for (i=0; i<numSubs; i++)
+    {
+        sub = subs[i];
+        s = natsSub_unsubscribe(sub, 0, true, false);
+        // Notify but continue
+        if (s != NATS_OK)
+            _pushDrainErr(nc, s, "Draining of subscription failed");
+        natsSub_release(sub);
+    }
+
+    NATS_FREE(subs);
+
+    // Wait for the subscriptions to drop to zero.
+    allGone = false;
+    if (drainWait > 0)
+        deadline = nats_Now() + drainWait;
+    while (!allGone && ((drainWait <= 0) || (nats_Now() < deadline)))
+    {
+        natsConn_Lock(nc);
+        natsMutex_Lock(nc->subsMu);
+        allGone = natsConn_isClosed(nc) || (natsHash_Count(nc->subs) == 0);
+        natsMutex_Unlock(nc->subsMu);
+        natsConn_Unlock(nc);
+
+        if (!allGone)
+            nats_Sleep(10);
+    }
+
+    // Check if we timed out.
+    if (!allGone)
+        _pushDrainErr(nc, NATS_TIMEOUT, "Drain operation failed");
+
+    // Flip state
+    natsConn_Lock(nc);
+    nc->status = DRAINING_PUBS;
+    natsConn_Unlock(nc);
+
+    // Do publish drain via Flush() call.
+    s = natsConnection_Flush(nc);
+    if (s != NATS_OK)
+        _pushDrainErr(nc, s, "Drain flush failed");
+
+    // Move to closed state.
+    natsConnection_Close(nc);
+
+    // Release now.
+    natsConn_release(nc);
+}
+
+static natsStatus
+_drain(natsConnection *nc, int64_t timeout)
+{
+    natsStatus  s = NATS_OK;
+
+    if (nc == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+    if (natsConn_isClosed(nc))
+        s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    else if (_isConnecting(nc) || natsConn_isReconnecting(nc))
+        s = nats_setError(NATS_ILLEGAL_STATE, "%s", "Illegal to call Drain while the connection is reconnecting");
+    else if (natsConn_isDraining(nc))
+        s = nats_setDefaultError(NATS_DRAINING);
+
+    if (s == NATS_OK)
+    {
+        nc->refs++;
+        s = natsThread_Create(&nc->drainThread, _drainConnection, (void*) nc);
+        if (s == NATS_OK)
+        {
+            // Need to detach the thread since we are not going to join it.
+            natsThread_Detach(nc->drainThread);
+            nc->status = DRAINING_SUBS;
+            nc->drainTimeout = timeout;
+        }
+        else
+        {
+            nc->refs--;
+        }
+    }
+    natsConn_Unlock(nc);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_Drain(natsConnection *nc)
+{
+    natsStatus s = _drain(nc, DEFAULT_DRAIN_TIMEOUT);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_DrainTimeout(natsConnection *nc, int64_t timeout)
+{
+    natsStatus s = _drain(nc, timeout);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

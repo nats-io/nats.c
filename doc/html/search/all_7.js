@@ -8,6 +8,7 @@ var searchData=
   ['nats_5fconnection_5fclosed',['NATS_CONNECTION_CLOSED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a476d7bcf9a593b749e435f20a9156eff',1,'status.h']]],
   ['nats_5fconnection_5fdisconnected',['NATS_CONNECTION_DISCONNECTED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80abef517217119e8446a8e3382e1f37eb3',1,'status.h']]],
   ['nats_5fdefault_5furl',['NATS_DEFAULT_URL',['../nats_8h.html#a911c54900b46b968205871cd9f68d36c',1,'nats.h']]],
+  ['nats_5fdraining',['NATS_DRAINING',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a07fdbda44f43cef9866a75b25053c2ae',1,'status.h']]],
   ['nats_5ferr',['NATS_ERR',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a40a08ae6ae17deaf390b1d0d7550791c',1,'status.h']]],
   ['nats_5fextern',['NATS_EXTERN',['../nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad',1,'nats.h']]],
   ['nats_5ffailed_5fto_5finitialize',['NATS_FAILED_TO_INITIALIZE',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a7cb64f52c8d91d6ade3db6bc82a96c42',1,'status.h']]],
@@ -54,6 +55,8 @@ var searchData=
   ['natsconnection_5fconnect',['natsConnection_Connect',['../group__conn_mgt_group.html#ga740be1ba16a8570eb98ef6755ebf52ce',1,'nats.h']]],
   ['natsconnection_5fconnectto',['natsConnection_ConnectTo',['../group__conn_mgt_group.html#gafb83c8d7970ba68be0e6c40c38cdfde4',1,'nats.h']]],
   ['natsconnection_5fdestroy',['natsConnection_Destroy',['../group__conn_mgt_group.html#gafda2f702276fb0ac301efac10df09495',1,'nats.h']]],
+  ['natsconnection_5fdrain',['natsConnection_Drain',['../group__conn_mgt_group.html#ga59bdc4ad9fea2053f5d3841f6b83f88b',1,'nats.h']]],
+  ['natsconnection_5fdraintimeout',['natsConnection_DrainTimeout',['../group__conn_mgt_group.html#gae06fe6f5933f216d6d93645a122a7dd4',1,'nats.h']]],
   ['natsconnection_5fflush',['natsConnection_Flush',['../group__conn_mgt_group.html#ga1c98f8d89bb8e20ea8621e860a90267f',1,'nats.h']]],
   ['natsconnection_5fflushtimeout',['natsConnection_FlushTimeout',['../group__conn_mgt_group.html#ga85915ef0c8b87993be1b076099d6a7c1',1,'nats.h']]],
   ['natsconnection_5fgetconnectedserverid',['natsConnection_GetConnectedServerId',['../group__conn_mgt_group.html#ga48cee9ea1cdc9fc2770de2f9f0fd1ccf',1,'nats.h']]],
@@ -64,6 +67,7 @@ var searchData=
   ['natsconnection_5fgetservers',['natsConnection_GetServers',['../group__conn_mgt_group.html#gaf4ee7262e35e44c40ad5dfe9240db76b',1,'nats.h']]],
   ['natsconnection_5fgetstats',['natsConnection_GetStats',['../group__conn_mgt_group.html#ga68821a8ae1176096b5afef7fdc7947ec',1,'nats.h']]],
   ['natsconnection_5fisclosed',['natsConnection_IsClosed',['../group__conn_mgt_group.html#ga530f0f1c75c58a81aae1a59f15b46d9f',1,'nats.h']]],
+  ['natsconnection_5fisdraining',['natsConnection_IsDraining',['../group__conn_mgt_group.html#ga15a0f8aa9a6f621535d01593a4c8edd5',1,'nats.h']]],
   ['natsconnection_5fisreconnecting',['natsConnection_IsReconnecting',['../group__conn_mgt_group.html#ga5aa349fc3895dde772671b324b07a688',1,'nats.h']]],
   ['natsconnection_5fprocessreadevent',['natsConnection_ProcessReadEvent',['../group__conn_mgt_group.html#gaa89c06e30e19ff361125bfc9114d89a8',1,'nats.h']]],
   ['natsconnection_5fprocesswriteevent',['natsConnection_ProcessWriteEvent',['../group__conn_mgt_group.html#gad81b603b84c0180aefc6d5ebad7f2a47',1,'nats.h']]],
@@ -158,6 +162,7 @@ var searchData=
   ['natssubscription_5fautounsubscribe',['natsSubscription_AutoUnsubscribe',['../group__sub_group.html#ga09f285de2746a6e27fc66efd60bd3116',1,'nats.h']]],
   ['natssubscription_5fclearmaxpending',['natsSubscription_ClearMaxPending',['../group__sub_group.html#gafe31911d8372db401d33856465421710',1,'nats.h']]],
   ['natssubscription_5fdestroy',['natsSubscription_Destroy',['../group__sub_group.html#ga50a95dd96e9b714201679a015d62832f',1,'nats.h']]],
+  ['natssubscription_5fdrain',['natsSubscription_Drain',['../group__sub_group.html#ga26c9736289d326fb7d6df7e2a0df72ab',1,'nats.h']]],
   ['natssubscription_5fgetdelivered',['natsSubscription_GetDelivered',['../group__sub_group.html#ga476b7276d0b7f9946834d2bb2423e955',1,'nats.h']]],
   ['natssubscription_5fgetdropped',['natsSubscription_GetDropped',['../group__sub_group.html#ga24f1636869e26661ce62c9c9f4d80823',1,'nats.h']]],
   ['natssubscription_5fgetmaxpending',['natsSubscription_GetMaxPending',['../group__sub_group.html#ga0abc5d9afbc6b0c9c5adaf533904c968',1,'nats.h']]],
@@ -169,5 +174,6 @@ var searchData=
   ['natssubscription_5fnodeliverydelay',['natsSubscription_NoDeliveryDelay',['../group__sub_group.html#ga38f1e41fc7619101fc4aa52014dd5428',1,'nats.h']]],
   ['natssubscription_5fqueuedmsgs',['natsSubscription_QueuedMsgs',['../group__sub_group.html#ga8a37b2d5290da3aecc05483d79e7e254',1,'nats.h']]],
   ['natssubscription_5fsetpendinglimits',['natsSubscription_SetPendingLimits',['../group__sub_group.html#ga68a7cea89e75c529a7dd3bb77303dda4',1,'nats.h']]],
-  ['natssubscription_5funsubscribe',['natsSubscription_Unsubscribe',['../group__sub_group.html#gaee87f8be0e6c2a4693ba2cea070583ba',1,'nats.h']]]
+  ['natssubscription_5funsubscribe',['natsSubscription_Unsubscribe',['../group__sub_group.html#gaee87f8be0e6c2a4693ba2cea070583ba',1,'nats.h']]],
+  ['natssubscription_5fwaitfordraincompletion',['natsSubscription_WaitForDrainCompletion',['../group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d',1,'nats.h']]]
 ];

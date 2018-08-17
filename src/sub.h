@@ -39,6 +39,9 @@ natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
                const char *queueGroup, int64_t timeout, natsMsgHandler cb, void *cbClosure);
 
+natsStatus
+natsSub_unsubscribe(natsSubscription *sub, int max, bool drain, bool checkDrainStatus);
+
 void
 natsSub_setMax(natsSubscription *sub, uint64_t max);
 

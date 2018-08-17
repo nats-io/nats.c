@@ -101,6 +101,8 @@ static const char *inboxPrefix = "_INBOX.";
 
 #define DEFAULT_PORT_STRING "4222"
 
+#define DEFAULT_DRAIN_TIMEOUT   30000 // 30 seconds
+
 #define MAX_FRAMES (50)
 
 extern int64_t gLockSpinCount;
@@ -275,6 +277,9 @@ struct __natsSubscription
     // The subscriber is closed (or closing).
     bool                        closed;
 
+    // Indicates if this subscription is in drained mode.
+    bool                        draining;
+
     // If true, the subscription is closed, but because the connection
     // was closed, not because of subscription (auto-)unsubscribe.
     bool                        connClosed;
@@ -423,6 +428,9 @@ struct __natsConnection
     int                 inReconnect;
 
     natsStatistics      stats;
+
+    natsThread          *drainThread;
+    int64_t             drainTimeout;
 
     // New Request style
     char                respId[NATS_MAX_REQ_ID_LEN+1];

@@ -62,6 +62,8 @@ static const char *statusText[] = {
     "Not Supported By Server",
 
     "Not Yet Connected",
+
+    "Draining in progress",
 };
 
 const char*

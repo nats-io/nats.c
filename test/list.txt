@@ -119,6 +119,8 @@ StaleConnection
 ServerErrorClosesConnection
 NoEcho
 NoEchoOldServer
+DrainSub
+DrainConn
 SSLBasic
 SSLVerify
 SSLVerifyHostname

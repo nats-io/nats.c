@@ -1425,6 +1425,15 @@ natsConnection_IsClosed(natsConnection *nc);
 NATS_EXTERN bool
 natsConnection_IsReconnecting(natsConnection *nc);
 
+/** \brief Test if connection is draining.
+ *
+ * Tests if connection is draining.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ */
+bool
+natsConnection_IsDraining(natsConnection *nc);
+
 /** \brief Returns the current state of the connection.
  *
  * Returns the current state of the connection.
@@ -1591,6 +1600,47 @@ natsConnection_GetDiscoveredServers(natsConnection *nc, char ***servers, int *co
  */
 NATS_EXTERN natsStatus
 natsConnection_GetLastError(natsConnection *nc, const char **lastError);
+
+/** \brief Drains the connection with default timeout.
+ *
+ * Drain will put a connection into a drain state. All subscriptions will
+ * immediately be put into a drain state. Upon completion, the publishers
+ * will be drained and can not publish any additional messages. Upon draining
+ * of the publishers, the connection will be closed. Use the #natsOptions_SetClosedCB()
+ * option to know when the connection has moved from draining to closed.
+ *
+ * This call uses a default drain timeout of 30 seconds.
+ *
+ * \warning This function does not block waiting for the draining operation
+ * to complete.
+ *
+ * @see natsOptions_SetClosedCB
+ * @see natsConnection_DrainTimeout
+ *
+ * @param nc the pointer to the #natsConnection object.
+ */
+NATS_EXTERN natsStatus
+natsConnection_Drain(natsConnection *nc);
+
+/** \brief Drains the connection with given timeout.
+ *
+ * Identical to #natsConnection_Drain but the timeout can be specified here.
+ *
+ * The value is expressed in milliseconds. Zero or negative value means
+ * that the operation will not timeout.
+ *
+ * \warning This function does not block waiting for the draining operation
+ * to complete.
+ *
+ * @see natsOptions_SetClosedCB
+ * @see natsConnection_Drain
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param timeout the allowed time for a drain operation to complete, expressed
+ * in milliseconds.
+ */
+NATS_EXTERN natsStatus
+natsConnection_DrainTimeout(natsConnection *nc, int64_t timeout);
 
 /** \brief Closes the connection.
  *
@@ -2137,6 +2187,38 @@ natsSubscription_GetStats(natsSubscription *sub,
  */
 NATS_EXTERN bool
 natsSubscription_IsValid(natsSubscription *sub);
+
+/** \brief Drains the subscription with a default timeout.
+ *
+ * Drain will remove interest but continue callbacks until all messages
+ * have been processed.
+ *
+ * \warning This function does not block waiting for the operation
+ * to complete. To synchronously wait, see #natsSubscription_WaitForDrainCompletion
+ *
+ * @see natsSubscription_WaitForDrainCompletion
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_Drain(natsSubscription *sub);
+
+/** \brief Blocks until the drain operation completes.
+ *
+ * This function blocks until the subscription is fully drained.
+ * Returns no error if the subscription is drained or closed, otherwise
+ * returns the error indicating why the wait returned before completion
+ * or if the subscription was not in drained mode.
+ *
+ * The timeout is expressed in milliseconds. Zero or negative value
+ * means that the call will not timeout.
+ *
+ * @param sub the pointer to the #natsSubscription object
+ * @param timeout how long to wait for the operation to complete, expressed in
+ * milliseconds.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_WaitForDrainCompletion(natsSubscription *sub, int64_t timeout);
 
 /** \brief Destroys the subscription.
  *

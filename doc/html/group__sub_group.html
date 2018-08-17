@@ -151,6 +151,12 @@ Functions</h2></td></tr>
 <tr class="memitem:ga5e6454bbc7a90b9694112d45bd8de903"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga5e6454bbc7a90b9694112d45bd8de903">natsSubscription_IsValid</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub)</td></tr>
 <tr class="memdesc:ga5e6454bbc7a90b9694112d45bd8de903"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks the validity of the subscription.  <a href="#ga5e6454bbc7a90b9694112d45bd8de903">More...</a><br /></td></tr>
 <tr class="separator:ga5e6454bbc7a90b9694112d45bd8de903"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga26c9736289d326fb7d6df7e2a0df72ab"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga26c9736289d326fb7d6df7e2a0df72ab">natsSubscription_Drain</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub)</td></tr>
+<tr class="memdesc:ga26c9736289d326fb7d6df7e2a0df72ab"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drains the subscription with a default timeout.  <a href="#ga26c9736289d326fb7d6df7e2a0df72ab">More...</a><br /></td></tr>
+<tr class="separator:ga26c9736289d326fb7d6df7e2a0df72ab"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga0408c9b6e4ad4078ac0267656ace222d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d">natsSubscription_WaitForDrainCompletion</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int64_t timeout)</td></tr>
+<tr class="memdesc:ga0408c9b6e4ad4078ac0267656ace222d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Blocks until the drain operation completes.  <a href="#ga0408c9b6e4ad4078ac0267656ace222d">More...</a><br /></td></tr>
+<tr class="separator:ga0408c9b6e4ad4078ac0267656ace222d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga50a95dd96e9b714201679a015d62832f"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga50a95dd96e9b714201679a015d62832f">natsSubscription_Destroy</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub)</td></tr>
 <tr class="memdesc:ga50a95dd96e9b714201679a015d62832f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys the subscription.  <a href="#ga50a95dd96e9b714201679a015d62832f">More...</a><br /></td></tr>
 <tr class="separator:ga50a95dd96e9b714201679a015d62832f"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -679,6 +685,66 @@ Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga26c9736289d326fb7d6df7e2a0df72ab"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsSubscription_Drain </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *&#160;</td>
+          <td class="paramname"><em>sub</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Drain will remove interest but continue callbacks until all messages have been processed.</p>
+<dl class="section warning"><dt>Warning</dt><dd>This function does not block waiting for the operation to complete. To synchronously wait, see <a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a></dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga0408c9b6e4ad4078ac0267656ace222d"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsSubscription_WaitForDrainCompletion </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *&#160;</td>
+          <td class="paramname"><em>sub</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>timeout</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This function blocks until the subscription is fully drained. Returns no error if the subscription is drained or closed, otherwise returns the error indicating why the wait returned before completion or if the subscription was not in drained mode.</p>
+<p>The timeout is expressed in milliseconds. Zero or negative value means that the call will not timeout.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object </td></tr>
+    <tr><td class="paramname">timeout</td><td>how long to wait for the operation to complete, expressed in milliseconds. </td></tr>
   </table>
   </dd>
 </dl>

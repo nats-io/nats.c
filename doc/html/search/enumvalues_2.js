@@ -4,6 +4,7 @@ var searchData=
   ['nats_5fconnection_5fauth_5ffailed',['NATS_CONNECTION_AUTH_FAILED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a473ea6cfa03490838fafee8730b48a2a',1,'status.h']]],
   ['nats_5fconnection_5fclosed',['NATS_CONNECTION_CLOSED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a476d7bcf9a593b749e435f20a9156eff',1,'status.h']]],
   ['nats_5fconnection_5fdisconnected',['NATS_CONNECTION_DISCONNECTED',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80abef517217119e8446a8e3382e1f37eb3',1,'status.h']]],
+  ['nats_5fdraining',['NATS_DRAINING',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a07fdbda44f43cef9866a75b25053c2ae',1,'status.h']]],
   ['nats_5ferr',['NATS_ERR',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a40a08ae6ae17deaf390b1d0d7550791c',1,'status.h']]],
   ['nats_5ffailed_5fto_5finitialize',['NATS_FAILED_TO_INITIALIZE',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a7cb64f52c8d91d6ade3db6bc82a96c42',1,'status.h']]],
   ['nats_5fillegal_5fstate',['NATS_ILLEGAL_STATE',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9bb78b4f245d2870040d25c450febd4b',1,'status.h']]],

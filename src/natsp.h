@@ -280,6 +280,11 @@ struct __natsSubscription
     // Indicates if this subscription is in drained mode.
     bool                        draining;
 
+    // Same than draining but for the global delivery situation.
+    // This boolean will be switched off when processed, as opposed
+    // to draining that once set does not get reset.
+    bool                        libDlvDraining;
+
     // If true, the subscription is closed, but because the connection
     // was closed, not because of subscription (auto-)unsubscribe.
     bool                        connClosed;

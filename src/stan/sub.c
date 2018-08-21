@@ -349,10 +349,15 @@ stanConn_subscribe(stanSubscription **newSub, stanConnection *sc,
         if (s == NATS_OK)
         {
             natsSubscription_SetPendingLimits(sub->inboxSub, -1, -1);
-            natsSub_setOnCompleteCB(sub->inboxSub, _releaseStanSubCB, (void*) sub);
             // Retain both sub and sc
             sub->refs++;
             stanConn_retain(sc);
+            s = natsSub_setOnCompleteCB(sub->inboxSub, _releaseStanSubCB, (void*) sub);
+            if (s != NATS_OK)
+            {
+                sub->refs--;
+                stanConn_release(sc);
+            }
         }
         if (s == NATS_OK)
         {

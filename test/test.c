@@ -15212,7 +15212,7 @@ test_StanPingsUnblockPubCalls(void)
     if (s == NATS_OK)
         s = stanConnOptions_SetMaxPubAcksInflight(opts, 1, 1.0);
     if (s == NATS_OK)
-        s = stanConnOptions_SetPings(opts, -100, 5);
+        s = stanConnOptions_SetPings(opts, -250, 5);
     if (s == NATS_OK)
     {
         arg.string = STAN_ERR_MAX_PINGS;

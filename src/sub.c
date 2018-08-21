@@ -225,13 +225,22 @@ natsSub_setMax(natsSubscription *sub, uint64_t max)
     natsSub_Unlock(sub);
 }
 
-void
+natsStatus
 natsSub_setOnCompleteCB(natsSubscription *sub, natsOnCompleteCB cb, void *closure)
 {
+    natsStatus s = NATS_OK;
+
     natsSub_Lock(sub);
-    sub->onCompleteCB = cb;
-    sub->onCompleteCBClosure = closure;
+    if (sub->closed)
+        s = nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
+    else
+    {
+        sub->onCompleteCB = cb;
+        sub->onCompleteCBClosure = closure;
+    }
     natsSub_Unlock(sub);
+
+    return s;
 }
 
 void

@@ -45,7 +45,7 @@ natsSub_setMax(natsSubscription *sub, uint64_t max);
 void
 natsSub_drain(natsSubscription *sub);
 
-void
+natsStatus
 natsSub_setOnCompleteCB(natsSubscription *sub, natsOnCompleteCB cb, void *closure);
 
 void

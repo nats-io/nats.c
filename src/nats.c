@@ -1706,7 +1706,7 @@ _deliverMsgs(void *arg)
         natsMutex_Lock(dlv->lock);
 
         // Check if timer need to be reset for subscriptions that can timeout.
-        if ((sub->timeout != 0) && timerNeedReset)
+        if (!sub->closed && (sub->timeout != 0) && timerNeedReset)
         {
             timerNeedReset = false;
 

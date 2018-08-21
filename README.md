@@ -941,8 +941,7 @@ stanConnection_Connect(&sc, cluster, clientID, NULL);
 stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
 
 // Simple Async Subscriber
-char guid[STAN_GUID_BUF_LEN];
-stanConnection_PublishAsync(sc, guid, (int) sizeof(guid), "foo", (const void*) "hello", 5, _pubAckHandler, NULL);
+stanConnection_PublishAsync(sc, "foo", (const void*) "hello", 5, _pubAckHandler, NULL);
 
 // Simple Subscription without options (default to non durable, receive new only)
 stanConnection_Subscribe(&sub, sc, "foo", onMsg, NULL, NULL);
@@ -1232,15 +1231,16 @@ _pubAckHandler(const char *guid, const char *error, void *closure)
 
 (...)
 
-char guid[STAN_GUID_BUF_LEN];
-
-s = stanConnection_PublishAsync(sc, guid, (int) sizeof(guid), "foo", (const void*) "hello", 5, _pubAckHandler, NULL);
+s = stanConnection_PublishAsync(sc, "foo", (const void*) "hello", 5, _pubAckHandler, NULL);
 if (s != NULL)
 {
     printf("Error on publish: %d - %s\n", s, natsStatus_GetText(s));
     nats_PrintLastErrorStack(stderr);
 }
 ```
+If you want to correlate the published message with the guid in the acknowledgment handler, you should pass
+a unique closure as the last argument of the `stanConnection_PublishAsync()` call. Check the `examples/stan/pub-async.c`
+file for an example on how to do so.
 
 ### Message Acknowledgments and Redelivery
 
@@ -1305,7 +1305,7 @@ for (i = 1; i < 1000; i++)
 {
     // If the server is unable to keep up with the publisher, the number of outstanding acks will eventually
     // reach the max and this call will block
-    stanConnection_PublishAsync(sc, guid, (int) sizeof(guid), "foo", (const void*) "hello", 5, _pubAckHandler, NULL);
+    stanConnection_PublishAsync(sc, "foo", (const void*) "hello", 5, _pubAckHandler, NULL);
 }
 ```
 

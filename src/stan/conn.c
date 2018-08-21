@@ -333,8 +333,10 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
         if (s == NATS_OK)
         {
             natsSubscription_SetPendingLimits(sc->hbSubscription, -1, -1);
-            natsSub_setOnCompleteCB(sc->hbSubscription, _releaseStanConnCB, (void*) sc);
             sc->refs++;
+            s = natsSub_setOnCompleteCB(sc->hbSubscription, _releaseStanConnCB, (void*) sc);
+            if (s != NATS_OK)
+                sc->refs--;
         }
     }
     // Prepare a subscription on ping responses
@@ -345,11 +347,14 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
             s = natsConnection_Subscribe(&pingSub, sc->nc, pingInbox, _processPingResponse, (void*) sc);
         if (s == NATS_OK)
         {
-            natsSubscription_SetPendingLimits(pingSub, -1, -1);
-            natsSub_setOnCompleteCB(pingSub, _releaseStanConnCB, (void*) sc);
-            sc->refs++;
             // Mark this as needing a destroy if we end up not using PINGs.
             unsubPingSub = true;
+
+            natsSubscription_SetPendingLimits(pingSub, -1, -1);
+            sc->refs++;
+            s = natsSub_setOnCompleteCB(pingSub, _releaseStanConnCB, (void*) sc);
+            if (s != NATS_OK)
+                sc->refs--;
         }
     }
 
@@ -492,8 +497,10 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
         if (s == NATS_OK)
         {
             natsSubscription_SetPendingLimits(sc->ackSubscription, -1, -1);
-            natsSub_setOnCompleteCB(sc->ackSubscription, _releaseStanConnCB, (void*) sc);
             sc->refs++;
+            s = natsSub_setOnCompleteCB(sc->ackSubscription, _releaseStanConnCB, (void*) sc);
+            if (s != NATS_OK)
+                sc->refs--;
         }
     }
 

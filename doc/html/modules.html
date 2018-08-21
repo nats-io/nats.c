@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Type" content="text/xhtml;charset=UTF-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.8.11"/>
-<title>NATS C Client: Modules</title>
+<title>NATS C Client with Streaming support: Modules</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -32,8 +32,8 @@
  <tbody>
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
-   <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.8.0</span>
+   <div id="projectname">NATS C Client with Streaming support
+   &#160;<span id="projectnumber">1.8.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -113,13 +113,21 @@ $(document).ready(function(){initNavTree('modules.html','');});
 <tr id="row_2_1_" class="even"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__status_group.html" target="_self">Status</a></td><td class="desc"></td></tr>
 <tr id="row_2_2_"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__stats_group.html" target="_self">Statistics</a></td><td class="desc"></td></tr>
 <tr id="row_2_3_" class="even"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__opts_group.html" target="_self">Options</a></td><td class="desc"></td></tr>
-<tr id="row_2_4_"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__inbox_group.html" target="_self">Inboxes</a></td><td class="desc"></td></tr>
-<tr id="row_2_5_" class="even"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__msg_group.html" target="_self">Message</a></td><td class="desc"></td></tr>
-<tr id="row_2_6_"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><span id="arr_2_6_" class="arrow" onclick="toggleFolder('2_6_')">&#9660;</span><a class="el" href="group__conn_group.html" target="_self">Connection</a></td><td class="desc"></td></tr>
-<tr id="row_2_6_0_" class="even"><td class="entry"><span style="width:48px;display:inline-block;">&#160;</span><a class="el" href="group__conn_mgt_group.html" target="_self">Management</a></td><td class="desc"></td></tr>
-<tr id="row_2_6_1_"><td class="entry"><span style="width:48px;display:inline-block;">&#160;</span><a class="el" href="group__conn_pub_group.html" target="_self">Publishing</a></td><td class="desc"></td></tr>
-<tr id="row_2_6_2_" class="even"><td class="entry"><span style="width:48px;display:inline-block;">&#160;</span><a class="el" href="group__conn_sub_group.html" target="_self">Subscribing</a></td><td class="desc"></td></tr>
-<tr id="row_2_7_"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__sub_group.html" target="_self">Subscription</a></td><td class="desc"></td></tr>
+<tr id="row_2_4_"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__stan_conn_opts_group.html" target="_self">Streaming Connection Options</a></td><td class="desc"></td></tr>
+<tr id="row_2_5_" class="even"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__stan_sub_opts_group.html" target="_self">Streaming Subscription Options</a></td><td class="desc"></td></tr>
+<tr id="row_2_6_"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__inbox_group.html" target="_self">Inboxes</a></td><td class="desc"></td></tr>
+<tr id="row_2_7_" class="even"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__msg_group.html" target="_self">Message</a></td><td class="desc"></td></tr>
+<tr id="row_2_8_"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__stan_msg_group.html" target="_self">Streaming Message</a></td><td class="desc"></td></tr>
+<tr id="row_2_9_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><span id="arr_2_9_" class="arrow" onclick="toggleFolder('2_9_')">&#9660;</span><a class="el" href="group__conn_group.html" target="_self">Connection</a></td><td class="desc"></td></tr>
+<tr id="row_2_9_0_"><td class="entry"><span style="width:48px;display:inline-block;">&#160;</span><a class="el" href="group__conn_mgt_group.html" target="_self">Management</a></td><td class="desc"></td></tr>
+<tr id="row_2_9_1_" class="even"><td class="entry"><span style="width:48px;display:inline-block;">&#160;</span><a class="el" href="group__conn_pub_group.html" target="_self">Publishing</a></td><td class="desc"></td></tr>
+<tr id="row_2_9_2_"><td class="entry"><span style="width:48px;display:inline-block;">&#160;</span><a class="el" href="group__conn_sub_group.html" target="_self">Subscribing</a></td><td class="desc"></td></tr>
+<tr id="row_2_10_" class="even"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__sub_group.html" target="_self">Subscription</a></td><td class="desc"></td></tr>
+<tr id="row_2_11_"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><span id="arr_2_11_" class="arrow" onclick="toggleFolder('2_11_')">&#9660;</span><a class="el" href="group__stan_conn_group.html" target="_self">Streaming Connection</a></td><td class="desc"></td></tr>
+<tr id="row_2_11_0_" class="even"><td class="entry"><span style="width:48px;display:inline-block;">&#160;</span><a class="el" href="group__stan_conn_mgt_group.html" target="_self">Management</a></td><td class="desc"></td></tr>
+<tr id="row_2_11_1_"><td class="entry"><span style="width:48px;display:inline-block;">&#160;</span><a class="el" href="group__stan_conn_pub_group.html" target="_self">Publishing</a></td><td class="desc"></td></tr>
+<tr id="row_2_11_2_" class="even"><td class="entry"><span style="width:48px;display:inline-block;">&#160;</span><a class="el" href="group__stan_conn_sub_group.html" target="_self">Subscribing</a></td><td class="desc"></td></tr>
+<tr id="row_2_12_"><td class="entry"><span style="width:32px;display:inline-block;">&#160;</span><a class="el" href="group__stan_sub_group.html" target="_self">Streaming Subscription</a></td><td class="desc"></td></tr>
 <tr id="row_3_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__wildcards_group.html" target="_self">Wildcards</a></td><td class="desc"></td></tr>
 <tr id="row_4_"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__env_variables_group.html" target="_self">Environment Variables</a></td><td class="desc"></td></tr>
 <tr id="row_5_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__libevent_functions.html" target="_self">Libevent Adapter</a></td><td class="desc"></td></tr>

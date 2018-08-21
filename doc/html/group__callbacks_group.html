@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Type" content="text/xhtml;charset=UTF-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.8.11"/>
-<title>NATS C Client: Callbacks</title>
+<title>NATS C Client with Streaming support: Callbacks</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -32,8 +32,8 @@
  <tbody>
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
-   <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.8.0</span>
+   <div id="projectname">NATS C Client with Streaming support
+   &#160;<span id="projectnumber">1.8.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -130,6 +130,15 @@ Typedefs</h2></td></tr>
 <tr class="memitem:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gab63dee7f7012ba11ae20b76dbc36f2d0">natsEvLoop_Detach</a>) (void *userData)</td></tr>
 <tr class="memdesc:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Detach from the event loop.  <a href="#gab63dee7f7012ba11ae20b76dbc36f2d0">More...</a><br /></td></tr>
 <tr class="separator:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gad5d6a685731b3bf635995b7375af4d18"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gad5d6a685731b3bf635995b7375af4d18">stanPubAckHandler</a>) (const char *guid, const char *error, void *closure)</td></tr>
+<tr class="memdesc:gad5d6a685731b3bf635995b7375af4d18"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify of an asynchronous publish result.  <a href="#gad5d6a685731b3bf635995b7375af4d18">More...</a><br /></td></tr>
+<tr class="separator:gad5d6a685731b3bf635995b7375af4d18"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaf7456e37fa14f1834d9048d3789e9409"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gaf7456e37fa14f1834d9048d3789e9409">stanMsgHandler</a>) (<a class="el" href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c">stanConnection</a> *sc, <a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5">stanSubscription</a> *sub, const char *channel, <a class="el" href="group__types_group.html#ga2cf5db7703b42d97abe56a3e83b2a87d">stanMsg</a> *msg, void *closure)</td></tr>
+<tr class="memdesc:gaf7456e37fa14f1834d9048d3789e9409"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to deliver messages to the application.  <a href="#gaf7456e37fa14f1834d9048d3789e9409">More...</a><br /></td></tr>
+<tr class="separator:gaf7456e37fa14f1834d9048d3789e9409"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gac34092f6c698374f86ad349302bdd55c"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gac34092f6c698374f86ad349302bdd55c">stanConnectionLostHandler</a>) (<a class="el" href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c">stanConnection</a> *sc, const char *errorTxt, void *closure)</td></tr>
+<tr class="memdesc:gac34092f6c698374f86ad349302bdd55c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify the user of the permanent loss of the connection.  <a href="#gac34092f6c698374f86ad349302bdd55c">More...</a><br /></td></tr>
+<tr class="separator:gac34092f6c698374f86ad349302bdd55c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>NATS Callbacks. </p>
@@ -260,6 +269,49 @@ Typedefs</h2></td></tr>
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a class="anchor" id="gad5d6a685731b3bf635995b7375af4d18"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef void(* stanPubAckHandler) (const char *guid, const char *error, void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This is used for asynchronous publishing to provide status of the acknowledgment. The function will be passed the GUID and any error state. No error means the message was successfully received by NATS Streaming.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__stan_conn_pub_group.html#ga0c4d1e4615f8ac834f0a4021f75d39f0" title="Asynchronously publishes data on a channel. ">stanConnection_PublishAsync()</a> </dd></dl>
+
+</div>
+</div>
+<a class="anchor" id="gaf7456e37fa14f1834d9048d3789e9409"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef void(* stanMsgHandler) (<a class="el" href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c">stanConnection</a> *sc, <a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5">stanSubscription</a> *sub, const char *channel, <a class="el" href="group__types_group.html#ga2cf5db7703b42d97abe56a3e83b2a87d">stanMsg</a> *msg, void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This is the callback that one provides when creating an asynchronous subscription. The library will invoke this callback for each message arriving through the subscription's connection.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__stan_conn_sub_group.html#gae545358fdc493baf6d29429a8156781f" title="Creates a subscription. ">stanConnection_Subscribe()</a> </dd>
+<dd>
+<a class="el" href="group__stan_conn_sub_group.html#ga17d42bf9a4fa39470561a1a668e6b4a2" title="Creates a queue subscription. ">stanConnection_QueueSubscribe()</a> </dd></dl>
+
+</div>
+</div>
+<a class="anchor" id="gac34092f6c698374f86ad349302bdd55c"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef void(* stanConnectionLostHandler) (<a class="el" href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c">stanConnection</a> *sc, const char *errorTxt, void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This callback is used to notify the user that the connection to the Streaming server is permanently lost. </p>
 
 </div>
 </div>

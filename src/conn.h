@@ -77,7 +77,10 @@ natsConn_subscribe(natsSubscription **newSub,
                    int64_t timeout, natsMsgHandler cb, void *cbClosure);
 
 natsStatus
-natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max, bool drainMode);
+natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max);
+
+natsStatus
+natsConn_drainSub(natsConnection *nc, natsSubscription *sub, bool checkConnDrainStatus);
 
 bool
 natsConn_isDraining(natsConnection *nc);

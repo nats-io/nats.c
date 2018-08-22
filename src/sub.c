@@ -730,13 +730,19 @@ natsSub_drain(natsSubscription *sub)
 natsStatus
 natsSubscription_Drain(natsSubscription *sub)
 {
-    natsStatus      s;
+    natsStatus      s   = NATS_OK;
     natsConnection  *nc = NULL;
 
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsSub_Lock(sub);
+    // If not closed and draining, return OK.
+    if (!sub->closed && sub->draining)
+    {
+        natsSub_Unlock(sub);
+        return NATS_OK;
+    }
     nc = sub->conn;
     _retain(sub);
     natsSub_Unlock(sub);

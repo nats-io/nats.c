@@ -12522,6 +12522,8 @@ test_DrainSub(void)
     natsConnection      *nc = NULL;
     natsSubscription    *sub= NULL;
     natsSubscription    *sub2 = NULL;
+    natsSubscription    *sub3 = NULL;
+    natsSubscription    *sub4 = NULL;
     natsPid             pid = NATS_INVALID_PID;
     struct threadArg    arg;
 
@@ -12540,6 +12542,10 @@ test_DrainSub(void)
         s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
     if (s == NATS_OK)
         s = natsConnection_SubscribeSync(&sub2, nc, "foo");
+    if (s == NATS_OK)
+        s = natsConnection_SubscribeSync(&sub3, nc, "foo");
+    if (s == NATS_OK)
+        s = natsSubscription_AutoUnsubscribe(sub3, 2);
     testCond(s == NATS_OK);
 
     test("WaitForDrainCompletion returns invalid arg: ");
@@ -12574,9 +12580,16 @@ test_DrainSub(void)
         s = natsSubscription_Drain(sub);
     testCond(s == NATS_OK);
 
-    test("Drain sync sub: ");
+    test("Call Drain a second time is ok: ");
+    if (s == NATS_OK)
+        s = natsSubscription_Drain(sub);
+    testCond(s == NATS_OK);
+
+    test("Drain sync subs: ");
     if (s == NATS_OK)
         s = natsSubscription_Drain(sub2);
+    if (s == NATS_OK)
+        s = natsSubscription_Drain(sub3);
     testCond(s == NATS_OK);
 
     test("Call Unsubscribe fails: ");
@@ -12585,6 +12598,8 @@ test_DrainSub(void)
         s = natsSubscription_Unsubscribe(sub);
         if (s == NATS_DRAINING)
             s = natsSubscription_Unsubscribe(sub2);
+        if (s == NATS_DRAINING)
+            s = natsSubscription_Unsubscribe(sub3);
     }
     testCond(s == NATS_DRAINING);
     if (s == NATS_DRAINING)
@@ -12651,12 +12666,72 @@ test_DrainSub(void)
             natsMsg_Destroy(msg);
             msg = NULL;
         }
+        for (i=0; (s == NATS_OK) && (i<2); i++)
+        {
+            s = natsSubscription_NextMsg(&msg, sub3, 2000);
+            natsMsg_Destroy(msg);
+            msg = NULL;
+        }
     }
     testCond(s == NATS_OK);
 
     test("Wait for drain to complete: ");
     if (s == NATS_OK)
         s = natsSubscription_WaitForDrainCompletion(sub2, 1000);
+    if (s == NATS_OK)
+        s = natsSubscription_WaitForDrainCompletion(sub3, 1000);
+    testCond(s == NATS_OK);
+
+    // Repeat async test with auto-unsubscribe
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    natsMutex_Lock(arg.m);
+    arg.sum    = 0;
+    arg.closed = false;
+    natsMutex_Unlock(arg.m);
+
+    test("Async sub with auto-unsub: ");
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*)&arg);
+    if (s == NATS_OK)
+        s = natsSubscription_AutoUnsubscribe(sub, 2);
+    testCond(s == NATS_OK);
+
+    test("Send 2 messages: ");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "msg");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "msg");
+    testCond(s == NATS_OK);
+
+    test("Call Drain on subscription: ");
+    if (s == NATS_OK)
+        s = natsSubscription_Drain(sub);
+    testCond(s == NATS_OK);
+
+    test("Send 1 more message: ");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "msg");
+    testCond(s == NATS_OK);
+
+    // Unblock the callback.
+    natsMutex_Lock(arg.m);
+    arg.closed = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    test("Wait for Drain to complete: ");
+    if (s == NATS_OK)
+        s = natsSubscription_WaitForDrainCompletion(sub, -1);
+    testCond(s == NATS_OK);
+
+    // Wait a bit and make sure that we did not receive the 3rd msg
+    test("Third message not received: ");
+    nats_Sleep(100);
+    natsMutex_Lock(arg.m);
+    if ((s == NATS_OK) && (arg.sum != 2))
+        s = NATS_ERR;
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     // Close connection
@@ -12664,11 +12739,18 @@ test_DrainSub(void)
 
     test("Drain on closed conn fails: ");
     if (s == NATS_OK)
+    {
         s = natsSubscription_Drain(sub);
+        if (s == NATS_CONNECTION_CLOSED)
+            s = natsSubscription_Drain(sub2);
+        if (s == NATS_CONNECTION_CLOSED)
+            s = natsSubscription_Drain(sub3);
+    }
     testCond(s == NATS_CONNECTION_CLOSED);
 
     natsSubscription_Destroy(sub);
     natsSubscription_Destroy(sub2);
+    natsSubscription_Destroy(sub3);
     natsConnection_Destroy(nc);
 
     _destroyDefaultThreadArgs(&arg);
@@ -12718,7 +12800,7 @@ _drainConnErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, 
     if ((s == err)
             && (s == NATS_TIMEOUT)
             && (lastError != NULL)
-            && (strstr(lastError, "Drain operation failed") != NULL))
+            && (strstr(lastError, args->string) != NULL))
     {
         args->done = true;
         natsCondition_Broadcast(args->c);
@@ -12747,6 +12829,8 @@ test_DrainConn(void)
         s = natsOptions_Create(&opts);
     if (s == NATS_OK)
         s = natsOptions_SetClosedCB(opts, _closedCb, (void*)&arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetErrorHandler(opts, _drainConnErrHandler, (void*) &arg);
     if (s != NATS_OK)
     {
         _destroyDefaultThreadArgs(&arg);
@@ -12755,12 +12839,46 @@ test_DrainConn(void)
     }
 
     arg.results[0] = expected;
+    arg.string = "Drain error";
 
     pid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(pid);
 
     test("Connect: ");
     s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Drain with no sub/pub ok: ");
+    if (s == NATS_OK)
+        s = natsConnection_Drain(nc);
+    testCond(s == NATS_OK);
+
+    test("Closed CB invoked: ");
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.closed)
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        arg.closed = false;
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("No async error reported: ");
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        s = (arg.done == false ? NATS_OK : NATS_ERR);
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    test("Connect: ");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
     if (s == NATS_OK)
         s = natsConnection_ConnectTo(&nc2, "nats://127.0.0.1:4222");
     testCond(s == NATS_OK);
@@ -12788,15 +12906,10 @@ test_DrainConn(void)
     }
     testCond(s == NATS_OK);
 
-    test("Second drain fails: ");
+    test("Second drain ok: ");
     if (s == NATS_OK)
         s = natsConnection_Drain(nc);
-    testCond(s == NATS_DRAINING);
-    if (s == NATS_DRAINING)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    testCond(s == NATS_OK);
 
     test("Sub Unsubscribe fails: ")
     if (s == NATS_OK)
@@ -12877,13 +12990,12 @@ test_DrainConn(void)
     nc = NULL;
 
     natsMutex_Lock(arg.m);
-    arg.done = false;
-    arg.sum  = 0;
+    arg.done   = false;
+    arg.sum    = 0;
+    arg.string = "timeout";
     natsMutex_Unlock(arg.m);
 
     test("Drain timeout: ");
-    if (s == NATS_OK)
-        s = natsOptions_SetErrorHandler(opts, _drainConnErrHandler, (void*) &arg);
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     if (s == NATS_OK)

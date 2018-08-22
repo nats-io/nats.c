@@ -434,8 +434,8 @@ struct __natsConnection
 
     natsStatistics      stats;
 
-    natsThread          *drainThread;
-    int64_t             drainTimeout;
+    natsTimer           *drainTimer;
+    int64_t             drainDeadline;
 
     // New Request style
     char                respId[NATS_MAX_REQ_ID_LEN+1];

@@ -90,7 +90,7 @@ _stanProcessMsg(natsConnection *nc, natsSubscription *ignored, natsMsg *msg, voi
         return;
     }
 
-    s = stanMsg_create(&sMsg, pbMsg);
+    s = stanMsg_create(&sMsg, sub, pbMsg);
     if (s == NATS_OK)
     {
         stanMsgHandler  cb          = NULL;
@@ -189,6 +189,11 @@ stanSubscription_AckMsg(stanSubscription *sub, stanMsg *msg)
     {
         stanSub_Unlock(sub);
         return nats_setError(NATS_ERR, "%s", STAN_ERR_MANUAL_ACK);
+    }
+    if (msg->sub != sub)
+    {
+        stanSub_Unlock(sub);
+        return nats_setError(NATS_ILLEGAL_STATE, "%s", STAN_ERR_SUB_NOT_OWNER);
     }
 
     if (++sub->msgs == sub->opts->maxInflight)

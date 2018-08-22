@@ -182,6 +182,7 @@ struct __stanMsg
     int64_t             timestamp;
     const char          *data;
     int                 dataLen;
+    stanSubscription    *sub;
     bool                redelivered;
 
     // Must be last field!

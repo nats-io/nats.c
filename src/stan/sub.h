@@ -34,6 +34,7 @@ void stanSub_Unlock(stanSubscription *sub);
 #define STAN_ERR_UNSUBSCRIBE_REQUEST_TIMEOUT    "unsubscribe request timeout"
 #define STAN_ERR_MANUAL_ACK                     "cannot manually ack in auto-ack mode"
 #define STAN_ERR_SUB_CLOSE_NOT_SUPPORTED        "server does not support subscription close"
+#define STAN_ERR_SUB_NOT_OWNER                  "subscription is not the owner of this message"
 
 void
 stanSub_retain(stanSubscription *sub);

@@ -111,6 +111,7 @@ struct threadArg
     stanConnection   *sc;
     int              redelivered;
     const char*      channel;
+    stanMsg          *sMsg;
 #endif
 
 };
@@ -15000,7 +15001,7 @@ test_StanCheckReceivedvMsg(void)
 
 static void
 _stanManualAck(stanConnection *sc, stanSubscription *sub, const char *channel,
-        stanMsg *msg, void *closure)
+               stanMsg *msg, void *closure)
 {
     struct threadArg *args = (struct threadArg*) closure;
     natsStatus s;
@@ -15026,11 +15027,25 @@ _stanManualAck(stanConnection *sc, stanSubscription *sub, const char *channel,
 }
 
 static void
+_stanGetMsg(stanConnection *sc, stanSubscription *sub, const char *channel,
+            stanMsg *msg, void *closure)
+{
+    struct threadArg *args = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    args->sMsg = msg;
+    args->msgReceived = true;
+    natsCondition_Signal(args->c);
+    natsMutex_Unlock(args->m);
+}
+
+static void
 test_StanSubscriptionAckMsg(void)
 {
     natsStatus          s;
     stanConnection      *sc = NULL;
     stanSubscription    *sub = NULL;
+    stanSubscription    *sub2 = NULL;
     natsPid             pid = NATS_INVALID_PID;
     stanSubOptions      *opts = NULL;
     struct threadArg    args;
@@ -15059,39 +15074,88 @@ test_StanSubscriptionAckMsg(void)
     testCond(s == NATS_OK);
 
     test("Publish message: ");
-    s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
+    if (s == NATS_OK)
+        s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
     testCond(s == NATS_OK);
 
     test("Check manual ack fails: ");
-    natsMutex_Lock(args.m);
-    while ((s != NATS_TIMEOUT) && (args.sum != 1))
-        s = natsCondition_TimedWait(args.c, args.m, 2000);
-    s = args.status;
-    natsMutex_Unlock(args.m);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args.m);
+        while ((s != NATS_TIMEOUT) && (args.sum != 1))
+            s = natsCondition_TimedWait(args.c, args.m, 2000);
+        if (s == NATS_OK)
+            s = args.status;
+        natsMutex_Unlock(args.m);
+    }
     testCond(s == NATS_OK);
 
     stanSubscription_Destroy(sub);
     sub = NULL;
 
-    test("Create sub with manual ack: ");
+    natsMutex_Lock(args.m);
     args.control = 2;
-    args.sum = 0;
-    s = stanConnection_Subscribe(&sub, sc, "foo", _stanManualAck, (void*) &args, opts);
+    args.sum     = 0;
+    natsMutex_Unlock(args.m);
+
+    test("Create sub with manual ack: ");
+    if (s == NATS_OK)
+        s = stanConnection_Subscribe(&sub, sc, "foo", _stanManualAck, (void*) &args, opts);
     testCond(s == NATS_OK);
 
     test("Publish message: ");
-    s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
+    if (s == NATS_OK)
+        s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
     testCond(s == NATS_OK);
 
     test("Check manual ack ok: ");
-    natsMutex_Lock(args.m);
-    while ((s != NATS_TIMEOUT) && (args.sum != 1))
-        s = natsCondition_TimedWait(args.c, args.m, 2000);
-    s = args.status;
-    natsMutex_Unlock(args.m);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args.m);
+        while ((s != NATS_TIMEOUT) && (args.sum != 1))
+            s = natsCondition_TimedWait(args.c, args.m, 2000);
+        if (s == NATS_OK)
+            s = args.status;
+        natsMutex_Unlock(args.m);
+    }
     testCond(s == NATS_OK);
 
     stanSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Create sub and get message: ");
+    if (s == NATS_OK)
+        s = stanConnection_Subscribe(&sub, sc, "foo", _stanGetMsg, (void*) &args, NULL);
+    if (s == NATS_OK)
+        s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args.m);
+        while ((s != NATS_TIMEOUT) && !args.msgReceived)
+            s = natsCondition_TimedWait(args.c, args.m, 2000);
+        natsMutex_Unlock(args.m);
+    }
+    testCond(s == NATS_OK)
+
+    test("Create sub with manual ack: ");
+    if (s == NATS_OK)
+        s = stanConnection_Subscribe(&sub2, sc, "foo", _dummyStanMsgHandler, (void*) &args, opts);
+    testCond(s == NATS_OK);
+
+    test("Sub acking not own message fails: ");
+    if (s == NATS_OK)
+        s = stanSubscription_AckMsg(sub2, args.sMsg);
+    testCond((s == NATS_ILLEGAL_STATE)
+                && (nats_GetLastError(NULL) != NULL)
+                && (strstr(nats_GetLastError(NULL), STAN_ERR_SUB_NOT_OWNER) != NULL));
+
+    natsMutex_Lock(args.m);
+    if (args.sMsg != NULL)
+        stanMsg_Destroy(args.sMsg);
+    natsMutex_Unlock(args.m);
+
+    stanSubscription_Destroy(sub);
+    stanSubscription_Destroy(sub2);
     stanConnection_Destroy(sc);
     stanSubOptions_Destroy(opts);
 
@@ -15212,7 +15276,7 @@ test_StanPingsUnblockPubCalls(void)
     if (s == NATS_OK)
         s = stanConnOptions_SetMaxPubAcksInflight(opts, 1, 1.0);
     if (s == NATS_OK)
-        s = stanConnOptions_SetPings(opts, -250, 5);
+        s = stanConnOptions_SetPings(opts, -100, 5);
     if (s == NATS_OK)
     {
         arg.string = STAN_ERR_MAX_PINGS;
@@ -15243,7 +15307,7 @@ test_StanPingsUnblockPubCalls(void)
 
     test("Sync publish released: ");
     s = stanConnection_Publish(sc, "foo", (const void*)"hello", 5);
-    testCond(s == NATS_CONNECTION_CLOSED);
+    testCond(s != NATS_OK);
     nats_clearLastError();
     s = NATS_OK;
 

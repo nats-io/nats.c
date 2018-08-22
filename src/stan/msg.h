@@ -17,6 +17,6 @@
 #include "stanp.h"
 
 natsStatus
-stanMsg_create(stanMsg **newMsg, Pb__MsgProto *pb);
+stanMsg_create(stanMsg **newMsg, stanSubscription *sub, Pb__MsgProto *pb);
 
 #endif /* SMSG_H_ */

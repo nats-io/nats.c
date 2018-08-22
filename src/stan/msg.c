@@ -84,7 +84,7 @@ stanMsg_Destroy(stanMsg *msg)
 }
 
 natsStatus
-stanMsg_create(stanMsg **newMsg, Pb__MsgProto *pb)
+stanMsg_create(stanMsg **newMsg, stanSubscription *sub, Pb__MsgProto *pb)
 {
     stanMsg *msg        = NULL;
     char    *ptr        = NULL;
@@ -107,6 +107,7 @@ stanMsg_create(stanMsg **newMsg, Pb__MsgProto *pb)
     msg->seq         = pb->sequence;
     msg->timestamp   = pb->timestamp;
     msg->redelivered = pb->redelivered;
+    msg->sub         = sub;
     msg->next        = NULL;
 
     ptr = (char*) (((char*) &(msg->next)) + sizeof(msg->next));

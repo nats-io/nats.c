@@ -23,13 +23,13 @@
 
 static const char *digits = "0123456789";
 
-#define _publish(n, s, r, d, l) _publishEx((n), (s), (r), (d), (l), false)
+#define _publish(n, s, r, d, l) natsConn_publish((n), (s), (r), (d), (l), false)
 
 // _publish is the internal function to publish messages to a nats server.
 // Sends a protocol data message by queueing into the bufio writer
 // and kicking the flusher thread. These writes should be protected.
-static natsStatus
-_publishEx(natsConnection *nc, const char *subj,
+natsStatus
+natsConn_publish(natsConnection *nc, const char *subj,
          const char *reply, const void *data, int dataLen,
          bool directFlush)
 {
@@ -269,7 +269,7 @@ _oldRequest(natsMsg **replyMsg, natsConnection *nc, const char *subj,
     if (s == NATS_OK)
         s = natsSubscription_AutoUnsubscribe(sub, 1);
     if (s == NATS_OK)
-        s = _publishEx(nc, subj, inbox, data, dataLen, true);
+        s = natsConn_publish(nc, subj, inbox, data, dataLen, true);
     if (s == NATS_OK)
         s = natsSubscription_NextMsg(replyMsg, sub, timeout);
 
@@ -367,7 +367,7 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
 
     if (s == NATS_OK)
     {
-        s = _publishEx(nc, subj, respInbox, data, dataLen, true);
+        s = natsConn_publish(nc, subj, respInbox, data, dataLen, true);
         if (s == NATS_OK)
         {
             natsMutex_Lock(resp->mu);

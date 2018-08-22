@@ -23,6 +23,7 @@
 #define strdup      _strdup
 #else
 #include <strings.h>
+#include <signal.h>
 #endif
 
 #define STATS_IN        0x1
@@ -48,6 +49,15 @@ natsOptions      *opts   = NULL;
 
 const char       *certFile = NULL;
 const char       *keyFile  = NULL;
+
+const char  *cluster    = "test-cluster";
+const char  *clientID   = "client";
+const char  *qgroup     = NULL;
+const char  *durable    = NULL;
+bool        deliverAll  = false;
+bool        deliverLast = true;
+uint64_t    deliverSeq  = 0;
+bool        unsubscribe = false;
 
 static natsStatus
 printStats(int mode, natsConnection *conn, natsSubscription *sub,
@@ -134,6 +144,7 @@ printUsageAndExit(const char *progName, const char *usage)
 "-tlshost       server certificate's expected hostname\n" \
 "-tlsskip       skip server certificate verification\n" \
 "-subj          subject (default is 'foo')\n" \
+"-print         for consumers, print received messages (default is false)\n" \
                 "%s\n",
                 progName, usage);
 
@@ -270,6 +281,10 @@ parseArgs(int argc, char **argv, const char *usage)
 
             subj = argv[++i];
         }
+        else if (strcasecmp(argv[i], "-print") == 0)
+        {
+            print = true;
+        }
         else if ((strcasecmp(argv[i], "-name") == 0) ||
                  (strcasecmp(argv[i], "-queue") == 0))
         {
@@ -302,6 +317,53 @@ parseArgs(int argc, char **argv, const char *usage)
         else if (strcasecmp(argv[i], "-gd") == 0)
         {
             s = natsOptions_UseGlobalMessageDelivery(opts, true);
+        }
+        else if (strcasecmp(argv[i], "-c") == 0)
+        {
+            if (i + 1 == argc)
+                printUsageAndExit(argv[0], usage);
+
+            cluster = argv[++i];
+        }
+        else if (strcasecmp(argv[i], "-id") == 0)
+        {
+            if (i + 1 == argc)
+                printUsageAndExit(argv[0], usage);
+
+            clientID = argv[++i];
+        }
+        else if (strcasecmp(argv[i], "-last") == 0)
+        {
+            deliverLast = true;
+        }
+        else if (strcasecmp(argv[i], "-all") == 0)
+        {
+            deliverAll = true;
+        }
+        else if (strcasecmp(argv[i], "-seq") == 0)
+        {
+            if (i + 1 == argc)
+                printUsageAndExit(argv[0], usage);
+
+            deliverSeq = atol(argv[++i]);
+        }
+        else if (strcasecmp(argv[i], "-durable") == 0)
+        {
+            if (i + 1 == argc)
+                printUsageAndExit(argv[0], usage);
+
+            durable = argv[++i];
+        }
+        else if (strcasecmp(argv[i], "-qgroup") == 0)
+        {
+            if (i + 1 == argc)
+                printUsageAndExit(argv[0], usage);
+
+            qgroup = argv[++i];
+        }
+        else if (strcasecmp(argv[i], "-unsubscribe") == 0)
+        {
+            unsubscribe = true;
         }
         else
         {

@@ -2,8 +2,8 @@ var indexSectionsWithContent =
 {
   0: "cdefilmnoprstw",
   1: "lns",
-  2: "n",
-  3: "n",
+  2: "ns",
+  3: "ns",
   4: "n",
   5: "cdnr",
   6: "n",

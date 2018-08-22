@@ -18,13 +18,6 @@
 #include "mem.h"
 #include "opts.h"
 
-#define LOCK_AND_CHECK_OPTIONS(o, c) \
-    if (((o) == NULL) || ((c))) \
-        return nats_setDefaultError(NATS_INVALID_ARG); \
-    natsMutex_Lock((o)->mu);
-
-#define UNLOCK_OPTS(o) natsMutex_Unlock((o)->mu)
-
 natsStatus
 natsOptions_SetURL(natsOptions *opts, const char* url)
 {

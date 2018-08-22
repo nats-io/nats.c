@@ -12,6 +12,9 @@
 // limitations under the License.
 
 #include "natsp.h"
+#if defined(NATS_HAS_STREAMING)
+#include "stan/stanp.h"
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -701,6 +704,9 @@ _asyncCbsThread(void *arg)
     natsLibAsyncCbs *asyncCbs = &(gLib.asyncCbs);
     natsAsyncCbInfo *cb       = NULL;
     natsConnection  *nc       = NULL;
+#if defined(NATS_HAS_STREAMING)
+    stanConnection  *sc       = NULL;
+#endif
 
     WAIT_LIB_INITIALIZED;
 
@@ -727,6 +733,9 @@ _asyncCbsThread(void *arg)
         natsMutex_Unlock(asyncCbs->lock);
 
         nc = cb->nc;
+#if defined(NATS_HAS_STREAMING)
+        sc = cb->sc;
+#endif
 
         switch (cb->type)
         {
@@ -748,6 +757,11 @@ _asyncCbsThread(void *arg)
             case ASYNC_ERROR:
                 (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
                 break;
+#if defined(NATS_HAS_STREAMING)
+            case ASYNC_STAN_CONN_LOST:
+                (*(sc->opts->connectionLostCB))(sc, sc->connLostErrTxt, sc->opts->connectionLostCBClosure);
+                break;
+#endif
             default:
                 break;
         }
@@ -1294,6 +1308,38 @@ nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStat
     return errSts;
 }
 
+void
+nats_updateErrTxt(const char *fileName, const char *funcName, int line, const void *errTxtFmt, ...)
+{
+    natsTLError *errTL  = _getTLError();
+    char        tmp[256];
+    va_list     ap;
+    int         n;
+
+    if ((errTL == NULL) || errTL->skipUpdate)
+        return;
+
+    tmp[0] = '\0';
+
+    va_start(ap, errTxtFmt);
+    nats_vsnprintf(tmp, sizeof(tmp), errTxtFmt, ap);
+    va_end(ap);
+
+    if (strlen(tmp) > 0)
+    {
+        n = snprintf(errTL->text, sizeof(errTL->text), "(%s:%d): %s",
+                     _getErrorShortFileName(fileName), line, tmp);
+        if ((n < 0) || (n >= (int) sizeof(errTL->text)))
+        {
+            int pos = ((int) strlen(errTL->text)) - 1;
+            int i;
+
+            for (i=0; i<3; i++)
+                errTL->text[pos--] = '.';
+        }
+    }
+}
+
 natsStatus
 nats_updateErrStack(natsStatus err, const char *func)
 {
@@ -1571,6 +1617,18 @@ _deliverMsgs(void *arg)
             }
             else if (closed)
             {
+                natsOnCompleteCB cb         = NULL;
+                void             *closure   = NULL;
+
+                // Check for completion callback
+                natsSub_Lock(sub);
+                cb      = sub->onCompleteCB;
+                closure = sub->onCompleteCBClosure;
+                natsSub_Unlock(sub);
+
+                if (cb != NULL)
+                    (*cb)(closure);
+
                 // Subscription closed, just release
                 natsSub_release(sub);
             }
@@ -1648,7 +1706,7 @@ _deliverMsgs(void *arg)
         natsMutex_Lock(dlv->lock);
 
         // Check if timer need to be reset for subscriptions that can timeout.
-        if ((sub->timeout != 0) && timerNeedReset)
+        if (!sub->closed && (sub->timeout != 0) && timerNeedReset)
         {
             timerNeedReset = false;
 

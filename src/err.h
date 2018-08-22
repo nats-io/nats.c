@@ -39,4 +39,9 @@ nats_clearLastError(void);
 void
 nats_doNotUpdateErrStack(bool skipStackUpdate);
 
+#define NATS_UPDATE_ERR_TXT(f, ...) nats_updateErrTxt(__FILE__, __NATS_FUNCTION__, __LINE__, (f), __VA_ARGS__)
+
+void
+nats_updateErrTxt(const char *fileName, const char *funcName, int line, const void *errTxtFmt, ...);
+
 #endif /* ERR_H_ */

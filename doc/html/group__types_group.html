@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Type" content="text/xhtml;charset=UTF-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.8.11"/>
-<title>NATS C Client: Types</title>
+<title>NATS C Client with Streaming support: Types</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -32,8 +32,8 @@
  <tbody>
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
-   <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.8.0</span>
+   <div id="projectname">NATS C Client with Streaming support
+   &#160;<span id="projectnumber">1.8.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -127,6 +127,21 @@ Typedefs</h2></td></tr>
 <tr class="memitem:ga206c3d4d6f4f6f96fd2cae53a3df31c1"><td class="memItemLeft" align="right" valign="top">typedef char&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1">natsInbox</a></td></tr>
 <tr class="memdesc:ga206c3d4d6f4f6f96fd2cae53a3df31c1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Unique subject often used for point-to-point communication.  <a href="#ga206c3d4d6f4f6f96fd2cae53a3df31c1">More...</a><br /></td></tr>
 <tr class="separator:ga206c3d4d6f4f6f96fd2cae53a3df31c1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga9e826493769d23086cfccefe95cdf64c"><td class="memItemLeft" align="right" valign="top">typedef struct __stanConnection&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c">stanConnection</a></td></tr>
+<tr class="memdesc:ga9e826493769d23086cfccefe95cdf64c"><td class="mdescLeft">&#160;</td><td class="mdescRight">A connection to a <code>NATS Streaming Server</code>.  <a href="#ga9e826493769d23086cfccefe95cdf64c">More...</a><br /></td></tr>
+<tr class="separator:ga9e826493769d23086cfccefe95cdf64c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gae4dae869fb614536f0f027c2e2660cc5"><td class="memItemLeft" align="right" valign="top">typedef struct __stanSubscription&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5">stanSubscription</a></td></tr>
+<tr class="memdesc:gae4dae869fb614536f0f027c2e2660cc5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Interest on a given channel.  <a href="#gae4dae869fb614536f0f027c2e2660cc5">More...</a><br /></td></tr>
+<tr class="separator:gae4dae869fb614536f0f027c2e2660cc5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga2cf5db7703b42d97abe56a3e83b2a87d"><td class="memItemLeft" align="right" valign="top">typedef struct __stanMsg&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga2cf5db7703b42d97abe56a3e83b2a87d">stanMsg</a></td></tr>
+<tr class="memdesc:ga2cf5db7703b42d97abe56a3e83b2a87d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The Streaming message.  <a href="#ga2cf5db7703b42d97abe56a3e83b2a87d">More...</a><br /></td></tr>
+<tr class="separator:ga2cf5db7703b42d97abe56a3e83b2a87d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga13d64411878ba13a6ca39c915f2447c1"><td class="memItemLeft" align="right" valign="top">typedef struct __stanConnOptions&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga13d64411878ba13a6ca39c915f2447c1">stanConnOptions</a></td></tr>
+<tr class="memdesc:ga13d64411878ba13a6ca39c915f2447c1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Way to configure a <a class="el" href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c" title="A connection to a NATS Streaming Server. ">stanConnection</a>.  <a href="#ga13d64411878ba13a6ca39c915f2447c1">More...</a><br /></td></tr>
+<tr class="separator:ga13d64411878ba13a6ca39c915f2447c1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga023712711f5c289663fc2223e83686d3"><td class="memItemLeft" align="right" valign="top">typedef struct __stanSubOptions&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga023712711f5c289663fc2223e83686d3">stanSubOptions</a></td></tr>
+<tr class="memdesc:ga023712711f5c289663fc2223e83686d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Way to configure a <a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5" title="Interest on a given channel. ">stanSubscription</a>.  <a href="#ga023712711f5c289663fc2223e83686d3">More...</a><br /></td></tr>
+<tr class="separator:ga023712711f5c289663fc2223e83686d3"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>NATS Types. </p>
@@ -206,6 +221,71 @@ Typedefs</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>This can be used as the reply for a request. Inboxes are meant to be unique so that replies can be sent to a specific subscriber. That being said, inboxes can be shared across multiple subscribers if desired. </p>
+
+</div>
+</div>
+<a class="anchor" id="ga9e826493769d23086cfccefe95cdf64c"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct __stanConnection <a class="el" href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c">stanConnection</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>A <a class="el" href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c" title="A connection to a NATS Streaming Server. ">stanConnection</a> represents a connection to a <code>NATS Streaming Server</code>. </p>
+
+</div>
+</div>
+<a class="anchor" id="gae4dae869fb614536f0f027c2e2660cc5"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct __stanSubscription <a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5">stanSubscription</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>A <a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5" title="Interest on a given channel. ">stanSubscription</a> represents interest in a given channel. </p>
+
+</div>
+</div>
+<a class="anchor" id="ga2cf5db7703b42d97abe56a3e83b2a87d"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct __stanMsg <a class="el" href="group__types_group.html#ga2cf5db7703b42d97abe56a3e83b2a87d">stanMsg</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p><a class="el" href="group__types_group.html#ga2cf5db7703b42d97abe56a3e83b2a87d" title="The Streaming message. ">stanMsg</a> is the object passed to the subscriptions' message callbacks. </p>
+
+</div>
+</div>
+<a class="anchor" id="ga13d64411878ba13a6ca39c915f2447c1"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct __stanConnOptions <a class="el" href="group__types_group.html#ga13d64411878ba13a6ca39c915f2447c1">stanConnOptions</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Options can be used to create a customized <a class="el" href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c" title="A connection to a NATS Streaming Server. ">stanConnection</a>. </p>
+
+</div>
+</div>
+<a class="anchor" id="ga023712711f5c289663fc2223e83686d3"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct __stanSubOptions <a class="el" href="group__types_group.html#ga023712711f5c289663fc2223e83686d3">stanSubOptions</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Options can be used to create a customized <a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5" title="Interest on a given channel. ">stanSubscription</a>. </p>
 
 </div>
 </div>

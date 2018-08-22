@@ -136,6 +136,38 @@ typedef struct __natsOptions        natsOptions;
  */
 typedef char                        natsInbox;
 
+#if defined(NATS_HAS_STREAMING)
+/** \brief A connection to a `NATS Streaming Server`.
+ *
+ * A #stanConnection represents a connection to a `NATS Streaming Server`.
+ */
+typedef struct __stanConnection     stanConnection;
+
+/** \brief Interest on a given channel.
+ *
+ * A #stanSubscription represents interest in a given channel.
+ */
+typedef struct __stanSubscription   stanSubscription;
+
+/** \brief The Streaming message.
+ *
+ * #stanMsg is the object passed to the subscriptions' message callbacks.
+ */
+typedef struct __stanMsg            stanMsg;
+
+/** \brief Way to configure a #stanConnection.
+ *
+ * Options can be used to create a customized #stanConnection.
+ */
+typedef struct __stanConnOptions    stanConnOptions;
+
+/** \brief Way to configure a #stanSubscription.
+ *
+ * Options can be used to create a customized #stanSubscription.
+ */
+typedef struct __stanSubOptions     stanSubOptions;
+#endif
+
 /** @} */ // end of typesGroup
 
 //
@@ -240,6 +272,40 @@ typedef natsStatus (*natsEvLoop_WriteAddRemove)(
  */
 typedef natsStatus (*natsEvLoop_Detach)(
         void            *userData);
+
+
+#if defined(NATS_HAS_STREAMING)
+/** \brief Callback used to notify of an asynchronous publish result.
+ *
+ * This is used for asynchronous publishing to provide status of the acknowledgment.
+ * The function will be passed the GUID and any error state. No error means the
+ * message was successfully received by NATS Streaming.
+ *
+ * @see stanConnection_PublishAsync()
+ */
+typedef void (*stanPubAckHandler)(const char *guid, const char *error, void *closure);
+
+/** \brief Callback used to deliver messages to the application.
+ *
+ * This is the callback that one provides when creating an asynchronous
+ * subscription. The library will invoke this callback for each message
+ * arriving through the subscription's connection.
+ *
+ * @see stanConnection_Subscribe()
+ * @see stanConnection_QueueSubscribe()
+ */
+typedef void (*stanMsgHandler)(
+        stanConnection *sc, stanSubscription *sub, const char *channel, stanMsg *msg, void *closure);
+
+/** \brief Callback used to notify the user of the permanent loss of the connection.
+ *
+ * This callback is used to notify the user that the connection to the Streaming
+ * server is permanently lost.
+ *
+ */
+typedef void (*stanConnectionLostHandler)(
+        stanConnection *sc, const char* errorTxt, void *closure);
+#endif
 
 /** @} */ // end of callbacksGroup
 
@@ -1208,6 +1274,357 @@ natsOptions_Destroy(natsOptions *opts);
 
 /** @} */ // end of optsGroup
 
+#if defined(NATS_HAS_STREAMING)
+/** \defgroup stanConnOptsGroup Streaming Connection Options
+ *
+ *   NATS Streaming Connection Options.
+ *   @{
+ */
+
+/** \brief Creates a #stanConnOptions object.
+ *
+ * Creates a #stanConnOptions object. This object is used when one wants to set
+ * specific options prior to connecting to the `NATS Streaning Server`.
+ *
+ * After making the appropriate `stanConnOptions_SetXXX()` calls, this object is passed
+ * to the #stanConnection_Connect() call, which will clone this object. After
+ * #stanConnection_Connect() returns, modifications to the options object
+ * will not affect the connection.
+ *
+ * The default options set in this call are:
+ * url: `nats://localhost:4222`
+ * connection wait: 2 seconds
+ * publish ack wait: 30 seconds
+ * discovery prefix: `_STAN.discovery`
+ * maximum publish acks inflight and percentage: 16384, 50%
+ * ping interval: 5 seconds
+ * max ping out without response: 3
+ *
+ * \note The object needs to be destroyed when no longer needed.
+ *
+ * @see stanConnection_Connect()
+ * @see stanConnOptions_Destroy()
+ *
+ * @param newOpts the location where store the pointer to the newly created
+ * #stanConnOptions object.
+ */
+NATS_EXTERN natsStatus
+stanConnOptions_Create(stanConnOptions **newOpts);
+
+/** \brief Sets the URL to connect to.
+ *
+ * Sets the URL of the `NATS Streaming Server` the client should try to connect to.
+ * The URL can contain optional user name and password.
+ *
+ * Some valid URLS:
+ *
+ * - nats://localhost:4222
+ * - nats://user\@localhost:4222
+ * - nats://user:password\@localhost:4222
+ *
+ * @param opts the pointer to the #stanConnOptions object.
+ * @param url the string representing the URL the connection should use
+ * to connect to the server.
+ *
+ */
+NATS_EXTERN natsStatus
+stanConnOptions_SetURL(stanConnOptions *opts, const char *url);
+
+/** \brief Sets the NATS Options to use to create the connection.
+ *
+ * The Streaming client connects to the NATS Streaming Server through
+ * a regular NATS Connection (#natsConnection). To configure this connection
+ * create a #natsOptions and configure it as needed, then call this function.
+ *
+ * This function clones the passed options, so after this call, any
+ * changes to the given #natsOptions will not affect the #stanConnOptions.
+ *
+ * @param opts the pointer to the #stanConnOptions object.
+ * @param nOpts the pointer to the #natsOptions object to use to create
+ * the connection to the server.
+ */
+NATS_EXTERN natsStatus
+stanConnOptions_SetNATSOptions(stanConnOptions *opts, natsOptions *nOpts);
+
+/** \brief Sets the timeout for establishing a connection.
+ *
+ * Value expressed in milliseconds.
+ *
+ * Default is 2000 milliseconds (2 seconds).
+ *
+ * @param opts the pointer to the #stanConnOptions object.
+ * @param wait how long to wait for a response from the streaming server.
+ */
+NATS_EXTERN natsStatus
+stanConnOptions_SetConnectionWait(stanConnOptions *opts, int64_t wait);
+
+/** \brief Sets the timeout for waiting for an ACK for a published message.
+ *
+ * Value expressed in milliseconds.
+ *
+ * Default is 30000 milliseconds (30 seconds).
+ *
+ * @param opts the pointer to the #stanConnOptions object.
+ * @param wait how long to wait for a response from the streaming server.
+ */
+NATS_EXTERN natsStatus
+stanConnOptions_SetPubAckWait(stanConnOptions *opts, int64_t wait);
+
+/** \brief Sets the subject prefix the library sends the connect request to.
+ *
+ * Default is `_STAN.discovery`
+ *
+ * @param opts the pointer to the #stanConnOptions object.
+ * @param prefix the subject prefix the library sends the connect request to.
+ */
+NATS_EXTERN natsStatus
+stanConnOptions_SetDiscoveryPrefix(stanConnOptions *opts, const char *prefix);
+
+
+/** \brief Sets the maximum number of published messages without outstanding ACKs from the server.
+ *
+ * A connection will block #stanConnection_Publish() or #stanConnection_PublishAsync calls
+ * if the number of outstanding published messages has reached this number.
+ *
+ * When the connection receives ACKs, the number of outstanding messages will decrease.
+ * If the number falls between `maxPubAcksInflight * percentage`, then the blocked publish
+ * calls will be released.
+ *
+ * @param opts the pointer to the #stanConnOptions object.
+ * @param maxPubAcksInflight the maximum number of published messages without ACKs from the server.
+ * @param percentage the percentage (expressed as a float between ]0.0 and 1.0]) of the maxPubAcksInflight
+ * number below which a blocked publish call is released.
+ */
+NATS_EXTERN natsStatus
+stanConnOptions_SetMaxPubAcksInflight(stanConnOptions *opts, int maxPubAcksInflight, float percentage);
+
+/** \brief Sets the ping interval and max out values.
+ *
+ * Value expressed in number of seconds.
+ *
+ * Default is 5 seconds and 3 missed PONGs.
+ *
+ * The interval needs to be at least 1 and represents the number of seconds.
+ * The maxOut needs to be at least 2, since the count of sent PINGs increase
+ * whenever a PING is sent and reset to 0 when a response is received.
+ * Setting to 1 would cause the library to close the connection right away.
+ *
+ * @param opts the pointer to the #stanConnOptions object.
+ * @param interval the number of seconds between each PING.
+ * @param maxOut the maximum number of PINGs without receiving a PONG back.
+ */
+NATS_EXTERN natsStatus
+stanConnOptions_SetPings(stanConnOptions *opts, int interval, int maxOut);
+
+/** \brief Sets the connection lost handler.
+ *
+ * This callback will be invoked should the client permanently lose
+ * contact with the server (or another client replaces it while being
+ * disconnected). The callback will not be invoked on normal #stanConnection_Close().
+ *
+ * @param opts the pointer to the #stanConnOptions object.
+ * @param handler the handler to be invoked when the connection to the streaming server is lost.
+ * @param closure the closure the library will pass to the callback.
+ */
+NATS_EXTERN natsStatus
+stanConnOptions_SetConnectionLostHandler(stanConnOptions *opts, stanConnectionLostHandler handler, void *closure);
+
+/** \brief Destroys a #stanConnOptions object.
+ *
+ * Destroys the #stanConnOptions object, freeing used memory. See the note in
+ * the #stanConnOptions_Create() call.
+ *
+ * @param opts the pointer to the #stanConnOptions object to destroy.
+ */
+NATS_EXTERN void
+stanConnOptions_Destroy(stanConnOptions *opts);
+
+/** @} */ // end of stanConnOptsGroup
+
+/** \defgroup stanSubOptsGroup Streaming Subscription Options
+ *
+ *   NATS Streaming Subscription Options.
+ *   @{
+ */
+
+/** \brief Creates a #stanSubOptions object.
+ *
+ * Creates a #stanSubOptions object. This object is used when one wants to set
+ * specific options prior to create a subscription.
+ *
+ * After making the appropriate `stanSubOptions_SetXXX()` calls, this object is passed
+ * to the #stanConnection_Subscribe() or #stanConnection_QueueSubscribe() call, which
+ * will clone this object. It means that modifications to the options object will not
+ * affect the created subscription.
+ *
+ * The default options set in this call are:
+ * ackWait: 30000 milliseconds (30 seconds)
+ * maxIinflight: 1024
+ * start position: new only
+ *
+ * \note The object needs to be destroyed when no longer needed.
+ *
+ * @see stanConnection_Subscribe()
+ * @see stanConnection_QueueSubscribe()
+ * @see stanSubOptions_Destroy()
+ *
+ * @param newOpts the location where store the pointer to the newly created
+ * #stanSubOptions object.
+ */
+NATS_EXTERN natsStatus
+stanSubOptions_Create(stanSubOptions **newOpts);
+
+/** \brief Sets the Durable Name for this subscription.
+ *
+ * If a durable name is set, this subscription will be durable. It means that
+ * if the application stops and re-create the same subscription with the
+ * same connection client ID and durable name (or simply durable name for
+ * queue subscriptions), then the server will resume (re)delivery of messages
+ * from the last known position in the steam for that durable.
+ *
+ * It means that the start position, if provided, is used only when the durable
+ * subscription is first created, then is ignored by the server for the rest
+ * of the durable subscription lifetime.
+ *
+ * \note Durable names should be alphanumeric and not contain the character `:`.
+ *
+ * @param opts the pointer to the #stanSubOptions object.
+ * @param durableName the string representing the name of the durable subscription.
+ *
+ */
+NATS_EXTERN natsStatus
+stanSubOptions_SetDurableName(stanSubOptions *opts, const char *durableName);
+
+/** \brief Sets the timeout for waiting for an ACK from the cluster's point of view for delivered messages.
+ *
+ * Value expressed in milliseconds.
+ *
+ * Default is 30000 milliseconds (30 seconds).
+ *
+ * If the server does not receive an acknowledgment from the subscription for
+ * a delivered message after this amount of time, the server will re-deliver
+ * the unacknowledged message.
+ *
+ * @param opts the pointer to the #stanSubOptions object.
+ * @param wait how long the server will wait for an acknowledgment from the subscription.
+ */
+NATS_EXTERN natsStatus
+stanSubOptions_SetAckWait(stanSubOptions *opts, int64_t wait);
+
+/** \brief Sets the the maximum number of messages the cluster will send without an ACK.
+ *
+ * Default is 1024.
+ *
+ * If a subscription receives messages but does not acknowledge them, the server will
+ * stop sending new messages when it reaches this number. Unacknowledged messages are
+ * re-delivered regardless of that setting.
+ *
+ * @param opts the pointer to the #stanSubOptions object.
+ * @param maxInflight the maximum number of messages the subscription will receive without sending back ACKs.
+ */
+NATS_EXTERN natsStatus
+stanSubOptions_SetMaxInflight(stanSubOptions *opts, int maxInflight);
+
+/** \brief Sets the desired start position based on the given sequence number.
+ *
+ * This allows the subscription to start at a specific sequence number in
+ * the channel's message log.
+ *
+ * If the sequence is smaller than the first available message in the
+ * message log (old messages dropped due to channel limits),
+ * the subscription will be created with the first available sequence.
+ *
+ * Conversely, if the given sequence is higher than the currently
+ * last sequence number, the subscription will receive only new published messages.
+ *
+ * @param opts the pointer to the #stanSubOptions object.
+ * @param seq the starting sequence.
+ */
+NATS_EXTERN natsStatus
+stanSubOptions_StartAtSequence(stanSubOptions *opts, uint64_t seq);
+
+/** \brief Sets the desired start position based on the given time.
+ *
+ * When the subscription is created, the server will send messages starting
+ * with the message which timestamp is at least the given time. The time
+ * is expressed in number of milliseconds since the EPOCH, as given by
+ * nats_Now() for instance.
+ *
+ * If the time is in the past and the most recent message's timestamp is older
+ * than the given time, or if the time is in the future, the subscription
+ * will receive only new messages.
+ *
+ * @param opts the pointer to the #stanSubOptions object.
+ * @param time the start time, expressed in milliseconds since the EPOCH.
+ */
+NATS_EXTERN natsStatus
+stanSubOptions_StartAtTime(stanSubOptions *opts, int64_t time);
+
+/** \brief Sets the desired start position based on the given delta.
+ *
+ * When the subscription is created, the server will send messages starting
+ * with the message which timestamp is at least now minus `delta`. In other words,
+ * this means start receiving messages that were sent n milliseconds ago.
+ *
+ * The delta is expressed in milliseconds.
+ *
+ * @param opts the pointer to the #stanSubOptions object.
+ * @param delta he historical time delta (from now) from which to start receiving messages.
+ */
+NATS_EXTERN natsStatus
+stanSubOptions_StartAtTimeDelta(stanSubOptions *opts, int64_t delta);
+
+/** \brief The subscription should start with the last message in the channel.
+ *
+ * When the subscription is created, the server will start sending messages
+ * starting with the last message currently in the channel message's log.
+ * The subscription will then receive any new published message.
+ *
+ * @param opts the pointer to the #stanSubOptions object.
+ */
+NATS_EXTERN natsStatus
+stanSubOptions_StartWithLastReceived(stanSubOptions *opts);
+
+/** \brief The subscription should start with the first message in the channel.
+ *
+ * When the subscription is created, the server will start sending messages
+ * starting with the first message currently in the channel message's log.
+ *
+ * @param opts the pointer to the #stanSubOptions object.
+ */
+NATS_EXTERN natsStatus
+stanSubOptions_DeliverAllAvailable(stanSubOptions *opts);
+
+/** \brief Sets the subscription's acknowledgment mode.
+ *
+ * By default, a subscription will automatically send a message acknowledgment
+ * after the #stanMsgHandler callback returns.
+ *
+ * In order to control when the acknowledgment is sent, set the acknowledgment
+ * mode to `manual` and call #stanSubscription_AckMsg().
+ *
+ * @see #stanSubscription_AckMsg()
+ *
+ * @param opts the pointer to the #stanSubOptions object.
+ * @param manual a boolean indicating if the subscription should auto-acknowledge
+ * or if the user will.
+ */
+NATS_EXTERN natsStatus
+stanSubOptions_SetManualAckMode(stanSubOptions *opts, bool manual);
+
+/** \brief Destroys a #stanSubOptions object.
+ *
+ * Destroys the #stanSubOptions object, freeing used memory. See the note in
+ * the #stanSubOptions_Create() call.
+ *
+ * @param opts the pointer to the #stanSubOptions object to destroy.
+ */
+NATS_EXTERN void
+stanSubOptions_Destroy(stanSubOptions *opts);
+
+/** @} */ // end of stanSubOptsGroup
+#endif
+
 /** \defgroup inboxGroup Inboxes
  *
  *   NATS Inboxes.
@@ -1328,6 +1745,81 @@ NATS_EXTERN void
 natsMsg_Destroy(natsMsg *msg);
 
 /** @} */ // end of msgGroup
+
+#if defined(NATS_HAS_STREAMING)
+/** \defgroup stanMsgGroup Streaming Message
+ *
+ *  NATS Streaming Message.
+ *  @{
+ */
+
+/** \brief Returns the message's sequence number.
+ *
+ * Returns the message's sequence number (as assigned by the cluster).
+ *
+ * @param msg the pointer to the #stanMsg object.
+ */
+NATS_EXTERN uint64_t
+stanMsg_GetSequence(stanMsg *msg);
+
+/** \brief Returns the message's timestamp.
+ *
+ * Returns the message's timestamp (as assigned by the cluster).
+ *
+ * @param msg the pointer to the #stanMsg object.
+ */
+NATS_EXTERN int64_t
+stanMsg_GetTimestamp(stanMsg *msg);
+
+/** \brief Returns the message's redelivered flag.
+ *
+ * Returns the message's redelivered flag. This can help detect if this
+ * message is a possible duplicate (due to redelivery and at-least-once
+ * semantic).
+ *
+ * @param msg the pointer to the #stanMsg object.
+ */
+NATS_EXTERN bool
+stanMsg_IsRedelivered(stanMsg *msg);
+
+/** \brief Returns the message payload.
+ *
+ * Returns the message payload, possibly `NULL`.
+ *
+ * Note that although the data sent and received from the server is not `NULL`
+ * terminated, the NATS C Client does add a `NULL` byte to the received payload.
+ * If you expect the received data to be a "string", then this conveniently
+ * allows you to call #stanMsg_GetData() without having to copy the returned
+ * data to a buffer to add the `NULL` byte at the end.
+ *
+ * \warning The string belongs to the message and must not be freed.
+ * Copy it if needed.
+ *
+ * @param msg the pointer to the #stanMsg object.
+ */
+NATS_EXTERN const char*
+stanMsg_GetData(stanMsg *msg);
+
+/** \brief Returns the message length.
+ *
+ * Returns the message's payload length, possibly 0.
+ *
+ * @param msg the pointer to the #stanMsg object.
+ */
+NATS_EXTERN int
+stanMsg_GetDataLength(stanMsg *msg);
+
+/** \brief Destroys the message object.
+ *
+ * Destroys the message, freeing memory.
+ *
+ * @param msg the pointer to the #stanMsg object to destroy.
+ */
+NATS_EXTERN void
+stanMsg_Destroy(stanMsg *msg);
+
+/** @} */ // end of stanMsgGroup
+#endif
 
 /** \defgroup connGroup Connection
  *
@@ -2231,6 +2723,228 @@ NATS_EXTERN void
 natsSubscription_Destroy(natsSubscription *sub);
 
 /** @} */ // end of subGroup
+
+#if defined(NATS_HAS_STREAMING)
+/** \defgroup stanConnGroup Streaming Connection
+ *
+ * NATS Streaming Connection
+ * @{
+ */
+
+/** \defgroup stanConnMgtGroup Management
+ *
+ *  Functions related to connection management.
+ *  @{
+ */
+
+/** \brief Connects to a `NATS Streaming Server` using the provided options.
+ *
+ * Attempts to connect to a `NATS Streaming Server`.
+ *
+ * This call is cloning the #stanConnOptions object, if given. Once this call returns,
+ * changes made to the `options` will not have an effect to this connection.
+ * The `options` can however be changed prior to be passed to another
+ * #stanConnection_Connect() call if desired.
+ *
+ * @see #stanConnOptions
+ * @see #stanConnection_Destroy()
+ *
+ * @param sc the location where to store the pointer to the newly created
+ * #natsConnection object.
+ * @param clusterID the name of the cluster this connection is for.
+ * @param clientID the client ID for this connection. Only one connection
+ * with this ID will be accepted by the server. Use only a-zA-Z0-9_- characters.
+ * @param options the options to use for this connection (can be `NULL`).
+ */
+NATS_EXTERN natsStatus
+stanConnection_Connect(stanConnection **sc, const char *clusterID, const char *clientID,
+                       stanConnOptions *options);
+
+/** \brief Closes the connection.
+ *
+ * Closes the connection to the server. This call will release all blocking
+ * calls. The connection object is still usable until the call to
+ * #stanConnection_Destroy().
+ *
+ * @param sc the pointer to the #stanConnection object.
+ */
+NATS_EXTERN natsStatus
+stanConnection_Close(stanConnection *sc);
+
+/** \brief Destroys the connection object.
+ *
+ * Destroys the connection object, freeing up memory.
+ * If not already done, this call first closes the connection to the server.
+ *
+ * @param sc the pointer to the #stanConnection object.
+ */
+NATS_EXTERN natsStatus
+stanConnection_Destroy(stanConnection *sc);
+
+/** @} */ // end of stanConnMgtGroup
+
+/** \defgroup stanConnPubGroup Publishing
+ *
+ *  Publishing functions
+ *  @{
+ */
+
+/** \brief Publishes data on a channel.
+ *
+ * Publishes the data argument to the given channel. The data argument is left
+ * untouched and needs to be correctly interpreted on the receiver.
+ *
+ * @param sc the pointer to the #stanConnection object.
+ * @param channel the channel name the data is sent to.
+ * @param data the data to be sent, can be `NULL`.
+ * @param dataLen the length of the data to be sent.
+ */
+NATS_EXTERN natsStatus
+stanConnection_Publish(stanConnection *sc, const char *channel,
+                       const void *data, int dataLen);
+
+/** \brief Asynchronously publishes data on a channel.
+ *
+ * Publishes the data argument to the given channel. The data argument is left
+ * untouched and needs to be correctly interpreted on the receiver.
+ *
+ * This function does not wait for an acknowledgment back from the server.
+ * Instead, the library will invoke the provided callback when that acknowledgment
+ * comes.
+ *
+ * In order to correlate the acknowledgment with the published message, you
+ * can use the `ahClosure` since this will be passed to the #stanPubAckHandler
+ * on every invocation. In other words, you should use a unique closure for
+ * each published message.
+ *
+ * @param sc the pointer to the #natsConnection object.
+ * @param channel the channel name the data is sent to.
+ * @param data the data to be sent, can be `NULL`.
+ * @param dataLen the length of the data to be sent.
+ * @param ah the publish acknowledgment callback. If `NULL` the user will not
+ * be notified of the publish result.
+ * @param ahClosure the closure the library will pass to the `ah` callback if
+ * one has been set.
+ */
+NATS_EXTERN natsStatus
+stanConnection_PublishAsync(stanConnection *sc, const char *channel,
+                            const void *data, int dataLen,
+                            stanPubAckHandler ah, void *ahClosure);
+
+/** @} */ // end of stanConnPubGroup
+
+/** \defgroup stanConnSubGroup Subscribing
+ *
+ *  Subscribing functions.
+ *  @{
+ */
+
+/** \brief Creates a subscription.
+ *
+ * Expresses interest in the given subject. The subject can NOT have wildcards.
+ * Messages will be delivered to the associated #stanMsgHandler.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param sc the pointer to the #natsConnection object.
+ * @param channel the channel this subscription is created for.
+ * @param cb the #stanMsgHandler callback.
+ * @param cbClosure a pointer to an user defined object (can be `NULL`). See
+ * the #stanMsgHandler prototype.
+ * @param options the optional to further configure the subscription.
+ */
+NATS_EXTERN natsStatus
+stanConnection_Subscribe(stanSubscription **sub, stanConnection *sc,
+                         const char *channel, stanMsgHandler cb,
+                         void *cbClosure, stanSubOptions *options);
+
+/** \brief Creates a queue subscription.
+ *
+ * Creates a queue subscriber on the given channel.
+ * All subscribers with the same queue name will form the queue group and
+ * only one member of the group will be selected to receive any given
+ * message asynchronously.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param sc the pointer to the #natsConnection object.
+ * @param channel the channel name this subscription is created for.
+ * @param queueGroup the name of the group.
+ * @param cb the #natsMsgHandler callback.
+ * @param cbClosure a pointer to an user defined object (can be `NULL`). See
+ * the #natsMsgHandler prototype.
+ * @param options the optional options to further configure this queue subscription.
+ */
+NATS_EXTERN natsStatus
+stanConnection_QueueSubscribe(stanSubscription **sub, stanConnection *sc,
+                              const char *channel, const char *queueGroup,
+                              stanMsgHandler cb, void *cbClosure, stanSubOptions *options);
+
+/** @} */ // end of stanConnSubGroup
+
+/** @} */ // end of stanConnGroup
+
+/** \defgroup stanSubGroup Streaming Subscription
+ *
+ *  NATS Streaming Subscriptions.
+ *  @{
+ */
+
+/** \brief Acknowledge a message.
+ *
+ * If the subscription is created with manual acknowledgment mode (see #stanSubOptions_SetManualAckMode)
+ * then it is the user responsibility to acknowledge received messages when
+ * appropriate.
+ *
+ * @param sub the pointer to the #stanSubscription object.
+ * @param msg the message to acknowledge.
+ */
+NATS_EXTERN natsStatus
+stanSubscription_AckMsg(stanSubscription *sub, stanMsg *msg);
+
+/** \brief Permanently remove a subscription.
+ *
+ * Removes interest on the channel. The subscription may still have
+ * a callback in progress, in that case, the subscription will still be valid
+ * until the callback returns.
+ *
+ * For non-durable subscriptions, #stanSubscription_Unsubscribe and #stanSubscription_Close
+ * have the same effect.
+ *
+ * For durable subscriptions, calling this function causes the server
+ * to remove the durable subscription (instead of simply suspending it).
+ * It means that once this call is made, calling #stanConnection_Subscribe() with
+ * the same durable name creates a brand new durable subscription, instead
+ * of simply resuming delivery.
+ *
+ * @param sub the pointer to the #stanSubscription object.
+ */
+NATS_EXTERN natsStatus
+stanSubscription_Unsubscribe(stanSubscription *sub);
+
+/** \brief Closes the subscription.
+ *
+ * Similar to #stanSubscription_Unsubscribe() except that durable interest
+ * is not removed in the server. The durable subscription can therefore be
+ * resumed.
+ *
+ * @param sub the pointer to the #stanSubscription object.
+ */
+NATS_EXTERN natsStatus
+stanSubscription_Close(stanSubscription *sub);
+
+/** \brief Destroys the subscription.
+ *
+ * Destroys the subscription object, freeing up memory.
+ * If not already done, this call will removes interest on the subject.
+ *
+ * @param sub the pointer to the #stanSubscription object to destroy.
+ */
+NATS_EXTERN void
+stanSubscription_Destroy(stanSubscription *sub);
+
+/** @} */ // end of stanSubGroup
+#endif
 
 /** @} */ // end of funcGroup
 

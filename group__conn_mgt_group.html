@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Type" content="text/xhtml;charset=UTF-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.8.11"/>
-<title>NATS C Client: Management</title>
+<title>NATS C Client with Streaming support: Management</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -32,8 +32,8 @@
  <tbody>
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
-   <div id="projectname">NATS C Client
-   &#160;<span id="projectnumber">1.7.6</span>
+   <div id="projectname">NATS C Client with Streaming support
+   &#160;<span id="projectnumber">1.8.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -127,6 +127,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga5aa349fc3895dde772671b324b07a688"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#ga5aa349fc3895dde772671b324b07a688">natsConnection_IsReconnecting</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
 <tr class="memdesc:ga5aa349fc3895dde772671b324b07a688"><td class="mdescLeft">&#160;</td><td class="mdescRight">Test if connection is reconnecting.  <a href="#ga5aa349fc3895dde772671b324b07a688">More...</a><br /></td></tr>
 <tr class="separator:ga5aa349fc3895dde772671b324b07a688"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga15a0f8aa9a6f621535d01593a4c8edd5"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#ga15a0f8aa9a6f621535d01593a4c8edd5">natsConnection_IsDraining</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
+<tr class="memdesc:ga15a0f8aa9a6f621535d01593a4c8edd5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Test if connection is draining.  <a href="#ga15a0f8aa9a6f621535d01593a4c8edd5">More...</a><br /></td></tr>
+<tr class="separator:ga15a0f8aa9a6f621535d01593a4c8edd5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga33fa209522e5e0226b5b7c7d720a3b98"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51">natsConnStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#ga33fa209522e5e0226b5b7c7d720a3b98">natsConnection_Status</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
 <tr class="memdesc:ga33fa209522e5e0226b5b7c7d720a3b98"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the current state of the connection.  <a href="#ga33fa209522e5e0226b5b7c7d720a3b98">More...</a><br /></td></tr>
 <tr class="separator:ga33fa209522e5e0226b5b7c7d720a3b98"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -160,6 +163,12 @@ Functions</h2></td></tr>
 <tr class="memitem:gab6cfa9cb6857ae10f096a94f5e244e63"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#gab6cfa9cb6857ae10f096a94f5e244e63">natsConnection_GetLastError</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char **lastError)</td></tr>
 <tr class="memdesc:gab6cfa9cb6857ae10f096a94f5e244e63"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gets the last connection error.  <a href="#gab6cfa9cb6857ae10f096a94f5e244e63">More...</a><br /></td></tr>
 <tr class="separator:gab6cfa9cb6857ae10f096a94f5e244e63"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga59bdc4ad9fea2053f5d3841f6b83f88b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#ga59bdc4ad9fea2053f5d3841f6b83f88b">natsConnection_Drain</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
+<tr class="memdesc:ga59bdc4ad9fea2053f5d3841f6b83f88b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drains the connection with default timeout.  <a href="#ga59bdc4ad9fea2053f5d3841f6b83f88b">More...</a><br /></td></tr>
+<tr class="separator:ga59bdc4ad9fea2053f5d3841f6b83f88b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gae06fe6f5933f216d6d93645a122a7dd4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#gae06fe6f5933f216d6d93645a122a7dd4">natsConnection_DrainTimeout</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, int64_t timeout)</td></tr>
+<tr class="memdesc:gae06fe6f5933f216d6d93645a122a7dd4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drains the connection with given timeout.  <a href="#gae06fe6f5933f216d6d93645a122a7dd4">More...</a><br /></td></tr>
+<tr class="separator:gae06fe6f5933f216d6d93645a122a7dd4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga19e204d27a232e2d4334301fc002b2ed"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#ga19e204d27a232e2d4334301fc002b2ed">natsConnection_Close</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
 <tr class="memdesc:ga19e204d27a232e2d4334301fc002b2ed"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the connection.  <a href="#ga19e204d27a232e2d4334301fc002b2ed">More...</a><br /></td></tr>
 <tr class="separator:ga19e204d27a232e2d4334301fc002b2ed"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -331,6 +340,29 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Tests if connection is reconnecting.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga15a0f8aa9a6f621535d01593a4c8edd5"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool natsConnection_IsDraining </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *&#160;</td>
+          <td class="paramname"><em>nc</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Tests if connection is draining.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
@@ -705,6 +737,73 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">lastError</td><td>the location where the pointer to the connection's last error string is copied. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga59bdc4ad9fea2053f5d3841f6b83f88b"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsConnection_Drain </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *&#160;</td>
+          <td class="paramname"><em>nc</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Drain will put a connection into a drain state. All subscriptions will immediately be put into a drain state. Upon completion, the publishers will be drained and can not publish any additional messages. Upon draining of the publishers, the connection will be closed. Use the <a class="el" href="group__opts_group.html#ga44410242e73134e5bb51ef27904a9253" title="Sets the callback to be invoked when a connection to a server is permanently lost. ">natsOptions_SetClosedCB()</a> option to know when the connection has moved from draining to closed.</p>
+<p>This call uses a default drain timeout of 30 seconds.</p>
+<dl class="section warning"><dt>Warning</dt><dd>This function does not block waiting for the draining operation to complete.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga44410242e73134e5bb51ef27904a9253" title="Sets the callback to be invoked when a connection to a server is permanently lost. ">natsOptions_SetClosedCB</a> </dd>
+<dd>
+<a class="el" href="group__conn_mgt_group.html#gae06fe6f5933f216d6d93645a122a7dd4" title="Drains the connection with given timeout. ">natsConnection_DrainTimeout</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="gae06fe6f5933f216d6d93645a122a7dd4"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsConnection_DrainTimeout </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *&#160;</td>
+          <td class="paramname"><em>nc</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>timeout</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Identical to <a class="el" href="group__conn_mgt_group.html#ga59bdc4ad9fea2053f5d3841f6b83f88b" title="Drains the connection with default timeout. ">natsConnection_Drain</a> but the timeout can be specified here.</p>
+<p>The value is expressed in milliseconds. Zero or negative value means that the operation will not timeout.</p>
+<dl class="section warning"><dt>Warning</dt><dd>This function does not block waiting for the draining operation to complete.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga44410242e73134e5bb51ef27904a9253" title="Sets the callback to be invoked when a connection to a server is permanently lost. ">natsOptions_SetClosedCB</a> </dd>
+<dd>
+<a class="el" href="group__conn_mgt_group.html#ga59bdc4ad9fea2053f5d3841f6b83f88b" title="Drains the connection with default timeout. ">natsConnection_Drain</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
+    <tr><td class="paramname">timeout</td><td>the allowed time for a drain operation to complete, expressed in milliseconds. </td></tr>
   </table>
   </dd>
 </dl>

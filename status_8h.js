@@ -5,7 +5,9 @@ var status_8h =
       [ "CONNECTING", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a06b876bcf37a32fed1dbadf4273827bf", null ],
       [ "CONNECTED", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a7a691a2430ec26878897b5fbc9c22a4c", null ],
       [ "CLOSED", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a929f0327e17604ce9713b2a6117bd603", null ],
-      [ "RECONNECTING", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a1d5843fca4a8464bd4e24c90725352c0", null ]
+      [ "RECONNECTING", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a1d5843fca4a8464bd4e24c90725352c0", null ],
+      [ "DRAINING_SUBS", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a99eeb21948b2d1fb98bcad33a87fc322", null ],
+      [ "DRAINING_PUBS", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a4695d39612939404418c91ce1fb1ef35", null ]
     ] ],
     [ "natsStatus", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80", [
       [ "NATS_OK", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9cee6c417868ecaa69f99ff4f6576990", null ],
@@ -37,6 +39,9 @@ var status_8h =
       [ "NATS_TIMEOUT", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed", null ],
       [ "NATS_FAILED_TO_INITIALIZE", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a7cb64f52c8d91d6ade3db6bc82a96c42", null ],
       [ "NATS_NOT_INITIALIZED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae47047f2fac5f2f2a434fc501e5c3d4e", null ],
-      [ "NATS_SSL_ERROR", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a892183c32b4929388bb75dc62230ddf3", null ]
+      [ "NATS_SSL_ERROR", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a892183c32b4929388bb75dc62230ddf3", null ],
+      [ "NATS_NO_SERVER_SUPPORT", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a4e298931ba0698a72e397b1b57c885", null ],
+      [ "NATS_NOT_YET_CONNECTED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a49a1ea653ce112b3c53eedebcd60811d", null ],
+      [ "NATS_DRAINING", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a07fdbda44f43cef9866a75b25053c2ae", null ]
     ] ]
 ];

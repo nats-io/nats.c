@@ -14,5 +14,7 @@ var group__sub_group =
     [ "natsSubscription_ClearMaxPending", "group__sub_group.html#gafe31911d8372db401d33856465421710", null ],
     [ "natsSubscription_GetStats", "group__sub_group.html#ga12b60cdb3aca7329edebc480ae86bfab", null ],
     [ "natsSubscription_IsValid", "group__sub_group.html#ga5e6454bbc7a90b9694112d45bd8de903", null ],
+    [ "natsSubscription_Drain", "group__sub_group.html#ga26c9736289d326fb7d6df7e2a0df72ab", null ],
+    [ "natsSubscription_WaitForDrainCompletion", "group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d", null ],
     [ "natsSubscription_Destroy", "group__sub_group.html#ga50a95dd96e9b714201679a015d62832f", null ]
 ];

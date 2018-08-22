@@ -1,6 +1,6 @@
 var NAVTREE =
 [
-  [ "NATS C Client", "index.html", [
+  [ "NATS C Client with Streaming support", "index.html", [
     [ "NATS C client.", "index.html", [
       [ "Introduction", "index.html#intro_sec", null ],
       [ "Installation", "index.html#install_sec", null ],
@@ -12,7 +12,7 @@ var NAVTREE =
     [ "Files", null, [
       [ "File List", "files.html", "files" ],
       [ "File Members", "globals.html", [
-        [ "All", "globals.html", null ],
+        [ "All", "globals.html", "globals_dup" ],
         [ "Functions", "globals_func.html", null ],
         [ "Typedefs", "globals_type.html", null ],
         [ "Enumerations", "globals_enum.html", null ],
@@ -26,7 +26,7 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "deprecated.html",
-"group__sub_group.html#ga38f1e41fc7619101fc4aa52014dd5428"
+"group__opts_group.html#gae68fb615835364c0809555e8dc93f57e"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

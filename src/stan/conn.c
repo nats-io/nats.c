@@ -292,6 +292,7 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
 
     if (s == NATS_OK)
     {
+        sc->nc->closeLock = true;
         sc->pubAckMaxInflightThreshold = (int) ((float) sc->opts->maxPubAcksInflight * sc->opts->maxPubAcksInFlightPercentage);
         if (sc->pubAckMaxInflightThreshold <= 0)
             sc->pubAckMaxInflightThreshold = 1;
@@ -511,8 +512,10 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
         *newConn = sc;
     else
     {
-        if (sc->nc != NULL)
+        if (sc->nc != NULL) {
+            sc->nc->closeLock = false;
             natsConnection_Close(sc->nc);
+        }
         stanConn_release(sc);
     }
 
@@ -628,6 +631,7 @@ stanConnClose(stanConnection *sc, bool sendProto)
         }
     }
 
+    nc->closeLock = false;
     natsConnection_Close(nc);
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -656,6 +660,13 @@ stanConnection_Destroy(stanConnection *sc)
     s = stanConnClose(sc, true);
     stanConn_release(sc);
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+stanConnection_GetNATSConnection(stanConnection *sc, natsConnection **nc)
+{
+    *nc = sc->nc;
+    return NATS_OK;
 }
 
 natsStatus

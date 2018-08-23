@@ -2666,6 +2666,7 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     nc->refs        = 1;
     nc->sockCtx.fd  = NATS_SOCK_INVALID;
     nc->opts        = options;
+    nc->closeLock   = false;
 
     if (nc->opts->maxPingsOut == 0)
         nc->opts->maxPingsOut = NATS_OPTS_DEFAULT_MAX_PING_OUT;
@@ -3365,7 +3366,7 @@ natsConnection_GetLastError(natsConnection *nc, const char **lastError)
 void
 natsConnection_Close(natsConnection *nc)
 {
-    if (nc == NULL)
+    if (nc == NULL || nc->closeLock)
         return;
 
     nats_doNotUpdateErrStack(true);

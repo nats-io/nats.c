@@ -450,6 +450,8 @@ struct __natsConnection
     int                 inReconnect;
     natsCondition       *reconnectCond;
 
+    bool                closeLock;
+
     natsStatistics      stats;
 
     natsTimer           *drainTimer;

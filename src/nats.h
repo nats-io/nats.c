@@ -2781,6 +2781,20 @@ stanConnection_Close(stanConnection *sc);
 NATS_EXTERN natsStatus
 stanConnection_Destroy(stanConnection *sc);
 
+/** \brief Obtain the NATS streaming connection's underlying NATS connection.
+ *
+ * Obtain a NATS connection from a NATS streaming connection.  The NATS
+ * connection can be used to perform regular NATS operations, but it is owned
+ * and managed by the NATS streaming connection.  It must not be closed, and
+ * will be closed by the NATS streaming connection when that is closed.
+ *
+ * @param sc the pointer to the #stanConnection object.
+ * @param nc the location where to store the pointer to the #natsConnection
+ * object.
+ */
+NATS_EXTERN natsStatus
+stanConnection_GetNATSConnection(stanConnection *sc, natsConnection **nc);
+
 /** @} */ // end of stanConnMgtGroup
 
 /** \defgroup stanConnPubGroup Publishing

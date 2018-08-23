@@ -16,6 +16,7 @@
 #include "pub.h"
 
 #include "../asynccb.h"
+#include "../conn.h"
 #include "../sub.h"
 
 // Client send connID in ConnectRequest and PubMsg, and server
@@ -25,8 +26,19 @@
 
 #ifdef DEV_MODE
 // For type safety
+
+static void _retain(stanConnection *sc)  { sc->refs++; }
+static void _release(stanConnection *sc) { sc->refs--; }
+
 void stanConn_Lock(stanConnection *nc)   { natsMutex_Lock(nc->mu);   }
 void stanConn_Unlock(stanConnection *nc) { natsMutex_Unlock(nc->mu); }
+
+#else
+// We know what we are doing :-)
+
+#define _retain(c)  ((c)->refs++)
+#define _release(c) ((c)->refs--)
+
 #endif // DEV_MODE
 
 bool testAllowMillisecInPings = false;
@@ -40,7 +52,7 @@ _freeConn(stanConnection *sc)
     natsSubscription_Destroy(sc->hbSubscription);
     natsSubscription_Destroy(sc->ackSubscription);
     natsSubscription_Destroy(sc->pingSub);
-    natsConnection_Destroy(sc->nc);
+    natsConn_destroy(sc->nc);
     natsInbox_Destroy(sc->hbInbox);
     natsStrHash_Destroy(sc->pubAckMap);
     natsCondition_Destroy(sc->pubAckCond);
@@ -292,6 +304,10 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
 
     if (s == NATS_OK)
     {
+        natsConn_Lock(sc->nc);
+        sc->nc->stanOwned = true;
+        natsConn_Unlock(sc->nc);
+
         sc->pubAckMaxInflightThreshold = (int) ((float) sc->opts->maxPubAcksInflight * sc->opts->maxPubAcksInFlightPercentage);
         if (sc->pubAckMaxInflightThreshold <= 0)
             sc->pubAckMaxInflightThreshold = 1;
@@ -512,13 +528,56 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
     else
     {
         if (sc->nc != NULL)
-            natsConnection_Close(sc->nc);
+            natsConn_close(sc->nc);
+
         stanConn_release(sc);
     }
 
     NATS_FREE(pingInbox);
 
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+stanConnection_GetNATSConnection(stanConnection *sc, natsConnection **nc)
+{
+    natsConnection *snc = NULL;
+
+    if ((sc == NULL) || (nc == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    stanConn_Lock(sc);
+    if (sc->closed)
+    {
+        stanConn_Unlock(sc);
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    }
+    snc = sc->nc;
+    // For the first, retain the stan connection
+    if (sc->ncRefs++ == 0)
+        _retain(sc);
+    stanConn_Unlock(sc);
+
+    *nc = snc;
+    return NATS_OK;
+}
+
+void
+stanConnection_ReleaseNATSConnection(stanConnection *sc)
+{
+    bool doRelease = false;
+
+    if (sc == NULL)
+        return;
+
+    stanConn_Lock(sc);
+    // Make sure this does not go below zero
+    if (sc->ncRefs > 0)
+        doRelease = (--sc->ncRefs == 0);
+    stanConn_Unlock(sc);
+
+    if (doRelease)
+        stanConn_release(sc);
 }
 
 natsStatus
@@ -628,7 +687,7 @@ stanConnClose(stanConnection *sc, bool sendProto)
         }
     }
 
-    natsConnection_Close(nc);
+    natsConn_close(sc->nc);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

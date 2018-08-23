@@ -455,6 +455,10 @@ struct __natsConnection
     natsTimer           *drainTimer;
     int64_t             drainDeadline;
 
+    // Set to true when owned by a Streaming connection,
+    // which will prevent user from calling Close and/or Destroy.
+    bool                stanOwned;
+
     // New Request style
     char                respId[NATS_MAX_REQ_ID_LEN+1];
     int                 respIdPos;

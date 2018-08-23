@@ -3363,7 +3363,7 @@ natsConnection_GetLastError(natsConnection *nc, const char **lastError)
 }
 
 void
-natsConnection_Close(natsConnection *nc)
+natsConn_close(natsConnection *nc)
 {
     if (nc == NULL)
         return;
@@ -3376,7 +3376,23 @@ natsConnection_Close(natsConnection *nc)
 }
 
 void
-natsConnection_Destroy(natsConnection *nc)
+natsConnection_Close(natsConnection *nc)
+{
+    bool stanOwned;
+
+    if (nc == NULL)
+        return;
+
+    natsConn_Lock(nc);
+    stanOwned = nc->stanOwned;
+    natsConn_Unlock(nc);
+
+    if (!stanOwned)
+        natsConn_close(nc);
+}
+
+void
+natsConn_destroy(natsConnection *nc)
 {
     if (nc == NULL)
         return;
@@ -3388,6 +3404,22 @@ natsConnection_Destroy(natsConnection *nc)
     nats_doNotUpdateErrStack(false);
 
     natsConn_release(nc);
+}
+
+void
+natsConnection_Destroy(natsConnection *nc)
+{
+    bool stanOwned;
+
+    if (nc == NULL)
+        return;
+
+    natsConn_Lock(nc);
+    stanOwned = nc->stanOwned;
+    natsConn_Unlock(nc);
+
+    if (!stanOwned)
+        natsConn_destroy(nc);
 }
 
 void

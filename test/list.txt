@@ -162,3 +162,4 @@ StanCheckReceivedMsg
 StanSubscriptionAckMsg
 StanPings
 StanPingsUnblockPublishCalls
+StanGetNATSConnection

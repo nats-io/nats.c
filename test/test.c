@@ -15390,6 +15390,22 @@ test_StanGetNATSConnection(void)
         s = natsConnection_PublishString(nc, "foo", "hello");
     testCond(s == NATS_OK);
 
+    test("Invalid to drain: ");
+    if (s == NATS_OK)
+    {
+        s = natsConnection_Drain(nc);
+        if (s == NATS_ILLEGAL_STATE)
+            s = natsConnection_DrainTimeout(nc, 1000);
+        if ((s == NATS_ILLEGAL_STATE)
+                && (nats_GetLastError(NULL) != NULL)
+                && (strstr(nats_GetLastError(NULL), "owned") != NULL))
+        {
+            s = NATS_OK;
+            nats_clearLastError();
+        }
+    }
+    testCond(s == NATS_OK);
+
     test("Closing NATS Conn has no effect: ");
     if (s == NATS_OK)
     {

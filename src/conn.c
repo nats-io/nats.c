@@ -3097,6 +3097,8 @@ _drain(natsConnection *nc, int64_t timeout)
     natsConn_Lock(nc);
     if (natsConn_isClosed(nc))
         s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    else if (nc->stanOwned)
+        s = nats_setError(NATS_ILLEGAL_STATE, "%s", "Illegal to call Drain for connection owned by a streaming connection");
     else if (_isConnecting(nc) || natsConn_isReconnecting(nc))
         s = nats_setError(NATS_ILLEGAL_STATE, "%s", "Illegal to call Drain while the connection is reconnecting");
     else if (natsConn_isDraining(nc))

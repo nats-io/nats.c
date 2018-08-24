@@ -2770,11 +2770,12 @@ stanConnection_Connect(stanConnection **sc, const char *clusterID, const char *c
  * and managed by the NATS streaming connection. It cannot be closed,
  * which will happen when the NATS streaming connection is closed.
  *
- * \warning The returned connection cannot be closed, nor destroyed, calling
- * #natsConnection_Close() and #natsConnection_Destroy() will have no effect.
- * Instead, for each call to this function, the user must call
+ * \note For each call to this function, the user must call
  * #stanConnection_ReleaseNATSConnection() when access to the NATS Connection
  * is no longer needed.
+ *
+ * \warning The returned connection cannot be closed, drained nor destroyed.
+ * Calling corresponding functions will have no effect or return #NATS_ILLEGAL_STATE.
  *
  * @see stanConnection_ReleaseNATSConnection()
  *

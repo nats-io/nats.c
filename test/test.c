@@ -14469,7 +14469,7 @@ test_StanPublishMaxAcksInflight(void)
     testCond(s == NATS_OK);
 
     test("Close unblock: ");
-    natsConnection_Close(nc);
+    natsConn_close(nc);
     nc = NULL;
     stanConnection_Destroy(sc1);
     natsThread_Join(t);
@@ -14504,7 +14504,7 @@ test_StanPublishMaxAcksInflight(void)
     testCond(s == NATS_OK);
 
     test("Close unblock: ");
-    natsConnection_Close(nc);
+    natsConn_close(nc);
     nc = NULL;
     stanConnection_Destroy(sc2);
     for (i = 0; i<10; i++)
@@ -14527,7 +14527,14 @@ test_StanPublishMaxAcksInflight(void)
 
 static void
 _dummyStanMsgHandler(stanConnection *sc, stanSubscription *sub, const char *channel,
-        stanMsg *msg, void* closure)
+                     stanMsg *msg, void* closure)
+{
+    stanMsg_Destroy(msg);
+}
+
+static void
+_stanMsgHandlerBumpSum(stanConnection *sc, stanSubscription *sub, const char *channel,
+                      stanMsg *msg, void* closure)
 {
     struct threadArg *args = (struct threadArg*) closure;
 
@@ -14716,7 +14723,7 @@ test_StanDurableSubscription(void)
     if (s == NATS_OK)
         s = stanSubOptions_DeliverAllAvailable(opts);
     if (s == NATS_OK)
-        s = stanConnection_Subscribe(&dur, sc, "foo", _dummyStanMsgHandler, &args, opts);
+        s = stanConnection_Subscribe(&dur, sc, "foo", _stanMsgHandlerBumpSum, &args, opts);
     testCond(s == NATS_OK);
 
     test("Check 3 messages received: ");
@@ -14750,7 +14757,7 @@ test_StanDurableSubscription(void)
     test("Recreate durable with start seq 1: ");
     s = stanSubOptions_StartAtSequence(opts, 1);
     if (s == NATS_OK)
-        s = stanConnection_Subscribe(&dur, sc, "foo", _dummyStanMsgHandler, &args, opts);
+        s = stanConnection_Subscribe(&dur, sc, "foo", _stanMsgHandlerBumpSum, &args, opts);
     testCond(s == NATS_OK);
 
     test("Check 5 messages total are received: ");
@@ -14798,9 +14805,9 @@ test_StanBasicQueueSubscription(void)
     }
 
     test("Basic queue subscibe: ");
-    s = stanConnection_QueueSubscribe(&qsub1, sc, "foo", "bar", _dummyStanMsgHandler, &args, NULL);
+    s = stanConnection_QueueSubscribe(&qsub1, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, NULL);
     if (s == NATS_OK)
-        s = stanConnection_QueueSubscribe(&qsub2, sc, "foo", "bar", _dummyStanMsgHandler, &args, NULL);
+        s = stanConnection_QueueSubscribe(&qsub2, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, NULL);
     testCond(s == NATS_OK);
 
     // Test that durable and non durable queue subscribers with
@@ -14810,7 +14817,7 @@ test_StanBasicQueueSubscription(void)
     if (s == NATS_OK)
         stanSubOptions_SetDurableName(opts, "durable-queue-sub");
     if (s == NATS_OK)
-        s = stanConnection_QueueSubscribe(&qsub3, sc, "foo", "bar", _dummyStanMsgHandler, &args, opts);
+        s = stanConnection_QueueSubscribe(&qsub3, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, opts);
     testCond(s == NATS_OK);
 
     test("Check published message ok: ");
@@ -14872,7 +14879,7 @@ test_StanDurableQueueSubscription(void)
     if (s == NATS_OK)
         s = stanSubOptions_DeliverAllAvailable(opts);
     if (s == NATS_OK)
-        s = stanConnection_QueueSubscribe(&dur, sc, "foo", "bar", _dummyStanMsgHandler, &args, opts);
+        s = stanConnection_QueueSubscribe(&dur, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, opts);
     testCond(s == NATS_OK);
 
     test("Check 3 messages received: ");
@@ -14906,7 +14913,7 @@ test_StanDurableQueueSubscription(void)
     test("Recreate durable with start seq 1: ");
     s = stanSubOptions_StartAtSequence(opts, 1);
     if (s == NATS_OK)
-        s = stanConnection_QueueSubscribe(&dur, sc, "foo", "bar", _dummyStanMsgHandler, &args, opts);
+        s = stanConnection_QueueSubscribe(&dur, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, opts);
     testCond(s == NATS_OK);
 
     test("Check 5 messages total are received: ");
@@ -15139,7 +15146,7 @@ test_StanSubscriptionAckMsg(void)
 
     test("Create sub with manual ack: ");
     if (s == NATS_OK)
-        s = stanConnection_Subscribe(&sub2, sc, "foo", _dummyStanMsgHandler, (void*) &args, opts);
+        s = stanConnection_Subscribe(&sub2, sc, "foo", _dummyStanMsgHandler, NULL, opts);
     testCond(s == NATS_OK);
 
     test("Sub acking not own message fails: ");
@@ -15343,6 +15350,141 @@ test_StanPingsUnblockPubCalls(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
+static void
+test_StanGetNATSConnection(void)
+{
+    natsStatus          s;
+    natsPid             pid     = NATS_INVALID_PID;
+    stanConnection      *sc     = NULL;
+    stanSubscription    *ssub   = NULL;
+    natsConnection      *nc     = NULL;
+    natsConnection      *nc2    = NULL;
+    natsSubscription    *nsub   = NULL;
+    struct threadArg    args;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    pid = _startStreamingServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect: ");
+    s = stanConnection_Connect(&sc, clusterName, clientName, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create sub: ");
+    if (s == NATS_OK)
+        stanConnection_Subscribe(&ssub, sc, "foo", _stanMsgHandlerBumpSum, (void*) &args, NULL);
+    testCond(s == NATS_OK);
+
+    test("Get NATS Connection: ");
+    if (s == NATS_OK)
+        s = stanConnection_GetNATSConnection(sc, &nc);
+    testCond((s == NATS_OK) && (nc != NULL));
+
+    test("Create sub & pub with NATS OK: ");
+    if (s == NATS_OK)
+        s = natsConnection_Subscribe(&nsub, nc, "foo", _dummyMsgHandler, NULL);
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "hello");
+    testCond(s == NATS_OK);
+
+    test("Invalid to drain: ");
+    if (s == NATS_OK)
+    {
+        s = natsConnection_Drain(nc);
+        if (s == NATS_ILLEGAL_STATE)
+            s = natsConnection_DrainTimeout(nc, 1000);
+        if ((s == NATS_ILLEGAL_STATE)
+                && (nats_GetLastError(NULL) != NULL)
+                && (strstr(nats_GetLastError(NULL), "owned") != NULL))
+        {
+            s = NATS_OK;
+            nats_clearLastError();
+        }
+    }
+    testCond(s == NATS_OK);
+
+    test("Closing NATS Conn has no effect: ");
+    if (s == NATS_OK)
+    {
+        natsConnection_Close(nc);
+        s = stanConnection_Publish(sc, "foo", (const void*)"hello", 5);
+    }
+    testCond(s == NATS_OK);
+
+    test("Destroying NATS Conn has no effect: ");
+    if (s == NATS_OK)
+    {
+        natsConnection_Destroy(nc);
+        s = stanConnection_Publish(sc, "foo", (const void*)"hello", 5);
+    }
+    testCond(s == NATS_OK);
+
+    test("Calling release more than get does not crash: ");
+    if (s == NATS_OK)
+    {
+        stanConnection_ReleaseNATSConnection(sc);
+        stanConnection_ReleaseNATSConnection(sc);
+        s = stanConnection_Publish(sc, "foo", (const void*)"hello", 5);
+    }
+    testCond(s == NATS_OK);
+
+    test("Should have received 3 messages: ");
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args.m);
+        while ((s != NATS_TIMEOUT) && (args.sum != 3))
+            s = natsCondition_TimedWait(args.c, args.m, 2000);
+        natsMutex_Unlock(args.m);
+    }
+    testCond(s == NATS_OK);
+
+    nc2 = NULL;
+    test("Invalid arg (sc == NULL): ");
+    if (s == NATS_OK)
+        s = stanConnection_GetNATSConnection(NULL, &nc2);
+    testCond((s == NATS_INVALID_ARG) && (nc2 == NULL));
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Invalid arg (nc == NULL): ");
+    if (s == NATS_OK)
+        s = stanConnection_GetNATSConnection(sc, NULL);
+    testCond((s == NATS_INVALID_ARG) && (nc2 == NULL));
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("GetNATSConnection on closed connection fails: ");
+    if (s == NATS_OK)
+        s = stanConnection_Close(sc);
+    if (s == NATS_OK)
+        s = stanConnection_GetNATSConnection(sc, &nc2);
+    testCond(s == NATS_CONNECTION_CLOSED);
+    if (s == NATS_CONNECTION_CLOSED)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    natsSubscription_Destroy(nsub);
+    stanSubscription_Destroy(ssub);
+    // Valgrind will tell us if the NATS connection/STAN connection
+    // were properly released.
+    stanConnection_Destroy(sc);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(pid);
+}
+
 #endif
 
 typedef void (*testFunc)(void);
@@ -15534,6 +15676,7 @@ static testInfo allTests[] =
     {"StanSubscriptionAckMsg",          test_StanSubscriptionAckMsg},
     {"StanPings",                       test_StanPings},
     {"StanPingsUnblockPublishCalls",    test_StanPingsUnblockPubCalls},
+    {"StanGetNATSConnection",           test_StanGetNATSConnection},
 
 #endif
 

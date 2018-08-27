@@ -117,4 +117,10 @@ natsConn_publish(natsConnection *nc, const char *subj,
          const char *reply, const void *data, int dataLen,
          bool directFlush);
 
+void
+natsConn_close(natsConnection *nc);
+
+void
+natsConn_destroy(natsConnection *nc);
+
 #endif /* CONN_H_ */

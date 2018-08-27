@@ -165,6 +165,8 @@ var nats_8h =
     [ "natsSubscription_WaitForDrainCompletion", "group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d", null ],
     [ "natsSubscription_Destroy", "group__sub_group.html#ga50a95dd96e9b714201679a015d62832f", null ],
     [ "stanConnection_Connect", "group__stan_conn_mgt_group.html#ga35e0e6e5e3b7f3818a3ac3600efb8f8f", null ],
+    [ "stanConnection_GetNATSConnection", "group__stan_conn_mgt_group.html#ga166ec494a55c9b1f9ebafd2294e05ff6", null ],
+    [ "stanConnection_ReleaseNATSConnection", "group__stan_conn_mgt_group.html#ga2e56a93825e1214a5ab688860e2a8ce6", null ],
     [ "stanConnection_Close", "group__stan_conn_mgt_group.html#ga4952a7f65a53fdb5ca1c26b1a1656f1d", null ],
     [ "stanConnection_Destroy", "group__stan_conn_mgt_group.html#gaea095eec18fdf04e06de16711f8b1a04", null ],
     [ "stanConnection_Publish", "group__stan_conn_pub_group.html#ga24f3f7f709b15fe53e1edaeead08fc7d", null ],

@@ -169,6 +169,15 @@ struct __stanConnection
     char                *connLostErrTxt;
 
     bool                closed;
+
+    // This is used when user calls stanConnection_GetNATSConnection().
+    // User is supposed to call stanConnection_ReleaseNATSConnection()
+    // when done with it. When ncRefs == 1, the stan connection is
+    // retained, when ncRefs == 0, it is released.
+    // We could simply retain on each Get call and release on Release,
+    // but this offers a bit more protection against mismatch between
+    // Get() and Release() calls.
+    int                 ncRefs;
 };
 
 struct __stanMsg

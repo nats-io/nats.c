@@ -2760,6 +2760,58 @@ NATS_EXTERN natsStatus
 stanConnection_Connect(stanConnection **sc, const char *clusterID, const char *clientID,
                        stanConnOptions *options);
 
+/** \brief Returns the underlying NATS Connection.
+ *
+ * This can be used if the application needs to do non streaming messaging
+ * but does not want to create a separate NATS Connection.
+ *
+ * Obtain a NATS connection from a NATS streaming connection. The NATS
+ * connection can be used to perform regular NATS operations, but it is owned
+ * and managed by the NATS streaming connection. It cannot be closed,
+ * which will happen when the NATS streaming connection is closed.
+ *
+ * \note For each call to this function, the user must call
+ * #stanConnection_ReleaseNATSConnection() when access to the NATS Connection
+ * is no longer needed.
+ *
+ * \warning The returned connection cannot be closed, drained nor destroyed.
+ * Calling corresponding functions will have no effect or return #NATS_ILLEGAL_STATE.
+ *
+ * @see stanConnection_ReleaseNATSConnection()
+ *
+ * @param sc the pointer to the #stanConnection object.
+ * @param nc the location where to store the pointer of the #natsConnection object.
+ */
+NATS_EXTERN natsStatus
+stanConnection_GetNATSConnection(stanConnection *sc, natsConnection **nc);
+
+/** \brief Releases the NATS Connection.
+ *
+ * This should be paired with the #stanConnection_GetNATSConnection() call.
+ * That is, after getting a reference to the underlying NATS Connection and
+ * once that connection is no longer needed, calling this function will
+ * allow resources to be properly released when the streaming connection is destroyed.
+ *
+ * You would normally call #stanConnection_GetNATSConnection() and this function
+ * only once.
+ *
+ * After the last #stanConnection_ReleaseNATSConnection() call is made, you
+ * must no longer use the NATS Connection because if #stanConnection_Destroy()
+ * is called, that could make the pointer to the NATS Connection invalid.
+ *
+ * \note If the streaming connection is closed/destroyed before the last
+ * call to #stanConnection_ReleaseNATSConnection, the pointer to the NATS
+ * connection will still be valid, although all calls will fail since the
+ * connection is now closed. Calling this function will release the streaming
+ * object allowing memory to be freed.
+ *
+ * @see stanConnection_GetNATSConnection
+ *
+ * @param sc the pointer to the #stanConnection object.
+ */
+NATS_EXTERN void
+stanConnection_ReleaseNATSConnection(stanConnection *sc);
+
 /** \brief Closes the connection.
  *
  * Closes the connection to the server. This call will release all blocking

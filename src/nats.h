@@ -2788,9 +2788,9 @@ stanConnection_GetNATSConnection(stanConnection *sc, natsConnection **nc);
 /** \brief Releases the NATS Connection.
  *
  * This should be paired with the #stanConnection_GetNATSConnection() call.
- * That is, once you get a reference to the NATS Connection and are done with
- * it, call this function to release the reference and allow proper resource
- * release when the streaming connection is destroyed.
+ * That is, after getting a reference to the underlying NATS Connection and
+ * once that connection is no longer needed, calling this function will
+ * allow resources to be properly released when the streaming connection is destroyed.
  *
  * You would normally call #stanConnection_GetNATSConnection() and this function
  * only once.
@@ -2801,7 +2801,7 @@ stanConnection_GetNATSConnection(stanConnection *sc, natsConnection **nc);
  *
  * \note If the streaming connection is closed/destroyed before the last
  * call to #stanConnection_ReleaseNATSConnection, the pointer to the NATS
- * connection will still be valid, although all calls you fail since the
+ * connection will still be valid, although all calls will fail since the
  * connection is now closed. Calling this function will release the streaming
  * object allowing memory to be freed.
  *

@@ -2572,7 +2572,9 @@ test_natsJSON(void)
             "{ \"test\": {\"inner\":\"not \\\"supported\\\", at this time\"}}",
             "{ \"test\":[\"a\", \"b\", \"c\", 1]}",
             "{ \"test\": \"a\\\"b\\\"c\"}",
-            "{ \"test\": \"\\\"\\\\/\b\f\n\r\t\u016A\"}",
+            "{ \"test\": \"\\\"\\\\/\b\f\n\r\t\\uabcd\"}",
+            "{ \"test\": \"\\ua12f\"}",
+            "{ \"test\": \"\\uA01F\"}",
     };
 
     for (i=0; i<(int)(sizeof(wrong)/sizeof(char*)); i++)
@@ -3975,7 +3977,7 @@ test_ParserErr(void)
     if (s == NATS_OK)
     {
         nc->usePending = true;
-        nc->status = CLOSED;
+        nc->status = NATS_CONN_STATUS_CLOSED;
     }
     if (s != NATS_OK)
         FAIL("Unable to setup test");
@@ -5416,13 +5418,13 @@ test_ConnectionStatus(void)
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
     test("Test connection status should be CONNECTED: ");
     testCond((s == NATS_OK)
-             && (natsConnection_Status(nc) == CONNECTED));
+             && (natsConnection_Status(nc) == NATS_CONN_STATUS_CONNECTED));
 
     if (s == NATS_OK)
     {
         natsConnection_Close(nc);
         test("Test connection status should be CLOSED: ");
-        testCond(natsConnection_Status(nc) == CLOSED);
+        testCond(natsConnection_Status(nc) == NATS_CONN_STATUS_CLOSED);
     }
 
     natsConnection_Destroy(nc);
@@ -6366,7 +6368,7 @@ test_IsReconnectingAndStatus(void)
     testCond((s == NATS_OK) && !natsConnection_IsReconnecting(nc));
 
     test("Check status: ");
-    testCond((s == NATS_OK) && (natsConnection_Status(nc) == CONNECTED));
+    testCond((s == NATS_OK) && (natsConnection_Status(nc) == NATS_CONN_STATUS_CONNECTED));
 
     _stopServer(serverPid);
     serverPid = NATS_INVALID_PID;
@@ -6383,7 +6385,7 @@ test_IsReconnectingAndStatus(void)
     testCond(natsConnection_IsReconnecting(nc));
 
     test("Check Status is correct: ");
-    testCond(natsConnection_Status(nc) == RECONNECTING);
+    testCond(natsConnection_Status(nc) == NATS_CONN_STATUS_RECONNECTING);
 
     serverPid = _startServer("nats://127.0.0.1:22222", "-p 22222", true);
     CHECK_SERVER_STARTED(serverPid);
@@ -6400,7 +6402,7 @@ test_IsReconnectingAndStatus(void)
     testCond(!natsConnection_IsReconnecting(nc));
 
     test("Check Status is correct: ");
-    testCond(natsConnection_Status(nc) == CONNECTED);
+    testCond(natsConnection_Status(nc) == NATS_CONN_STATUS_CONNECTED);
 
     // Close the connection, reconnecting should still be false
     natsConnection_Close(nc);
@@ -6409,7 +6411,7 @@ test_IsReconnectingAndStatus(void)
     testCond(!natsConnection_IsReconnecting(nc));
 
     test("Check Status is correct: ");
-    testCond(natsConnection_Status(nc) == CLOSED);
+    testCond(natsConnection_Status(nc) == NATS_CONN_STATUS_CLOSED);
 
     natsMutex_Lock(arg.m);
     while (!arg.closed)
@@ -7426,7 +7428,7 @@ test_MultipleClose(void)
         natsThread_Destroy(threads[i]);
     }
     testCond((s == NATS_OK)
-             && (nc->status == CLOSED)
+             && (nc->status == NATS_CONN_STATUS_CLOSED)
              && (nc->refs == 1));
 
     natsConnection_Destroy(nc);
@@ -10977,7 +10979,7 @@ test_ProperReconnectDelay(void)
     natsMutex_Unlock(arg.m);
 
     test("Should still be reconnecting: ");
-    testCond(natsConnection_Status(nc) == RECONNECTING);
+    testCond(natsConnection_Status(nc) == NATS_CONN_STATUS_RECONNECTING);
 
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);

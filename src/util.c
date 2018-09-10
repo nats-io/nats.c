@@ -260,12 +260,51 @@ _jsonGetStr(char **ptr, char **value)
 {
     char *p = *ptr;
 
-    do
+    while ((*p != '\0') && (*p != '"'))
     {
-        while ((*p != '\0') && (*p != '"'))
-            p += 1;
+        if ((*p == '\\') && (*(p + 1) != '\0'))
+        {
+            p++;
+            // based on what http://www.json.org/ says a string should be
+            switch (*p)
+            {
+                case '"':
+                case '\\':
+                case '/':
+                case 'b':
+                case 'n':
+                case 'r':
+                case 't':
+                    break;
+                case 'u':
+                {
+                    int i;
+
+                    // Needs to be 4 hex. A hex is a digit or AF, af
+                    p++;
+                    for (i=0; i<4; i++)
+                    {
+                        // digit range
+                        if (((*p >= '0') && (*p <= '9'))
+                                || ((*p >= 'A') && (*p <= 'F'))
+                                || ((*p >= 'a') && (*p <= 'f')))
+                        {
+                            p++;
+                        }
+                        else
+                        {
+                            return nats_setError(NATS_INVALID_ARG, "%s", "error parsing string: invalid unicode character");
+                        }
+                    }
+                    p--;
+                    break;
+                }
+                default:
+                    return nats_setError(NATS_INVALID_ARG, "%s", "error parsing string: invalid control character");
+            }
+        }
+        p++;
     }
-    while ((*p != '\0') && (*p == '"') && (*(p - 1) == '\\') && (p += 1));
 
     if (*p != '\0')
     {

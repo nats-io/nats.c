@@ -2522,7 +2522,14 @@ test_natsJSON(void)
             "{\"test\":1.2x}",
             "{\"test\":tRUE}",
             "{\"test\":true,}",
-            "{\"test\":true}, xxx}"
+            "{\"test\":true}, xxx}",
+            "{\"test\": \"abc\\error here\"}",
+            "{\"test\": \"abc\\u123\"}",
+            "{\"test\": \"abc\\u123g\"}",
+            "{\"test\": \"abc\\u 23f\"}",
+            "{\"test\": \"abc\\""",
+            "{\"test\": \"abc\\u1234",
+            "{\"test\": \"abc\\uabc",
     };
     const char  *good[] = {
             " {}",
@@ -2563,7 +2570,11 @@ test_natsJSON(void)
             "{ \"test\": [\"a\\\"b\\\"c\"]}",
             "{ \"test\": [\"abc,def\"]}",
             "{ \"test\": {\"inner\":\"not \\\"supported\\\", at this time\"}}",
-            "{ \"test\":[\"a\", \"b\", \"c\", 1]}"
+            "{ \"test\":[\"a\", \"b\", \"c\", 1]}",
+            "{ \"test\": \"a\\\"b\\\"c\"}",
+            "{ \"test\": \"\\\"\\\\/\b\f\n\r\t\uabcd\"}",
+            "{ \"test\": \"\ua12f\"}",
+            "{ \"test\": \"\uA01F\"}",
     };
 
     for (i=0; i<(int)(sizeof(wrong)/sizeof(char*)); i++)

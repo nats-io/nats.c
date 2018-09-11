@@ -16,6 +16,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 - [Building](#building)
 - [Documentation](#documentation)
 - [NATS Client](#nats-client)
+    * [Important Changes](#important-changes)
 	* [Getting Started](#getting-started)
 	* [Basic Usage](#basic-usage)
 	* [Wildcard Subscriptions](#wildcard-subscriptions)
@@ -218,6 +219,20 @@ Go [here](http://nats-io.github.io/cnats) for the online documentation.
 The source code is also quite documented.
 
 # NATS Client
+
+## Important Changes
+
+This section lists important changes such as deprecation notices, etc...
+
+### Version `1.8.0`
+
+* The `natsConnStatus` enum values have been prefixed with `NATS_CONN_STATUS_`. If your application is
+not using referencing any original value, such as `CONNECTED` or `CLOSED`, etc.. then there is nothing
+that you need to do. If you do, you have two options:
+	* Replace all references from the orignal values to the new value (adding the prefix)
+	* Compile the library with the option to use the original values (no prefix). Edit the CMake cache
+and turn on the option `NATS_BUILD_NO_PREFIX_CONNSTS`. This can be done this way from the build directory:
+`cmake .. -DNATS_BUILD_NO_PREFIX_CONNSTS=ON`
 
 ## Getting Started
 

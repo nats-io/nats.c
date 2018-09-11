@@ -19,6 +19,7 @@ option(NATS_BUILD_LIBUV_EXAMPLE "Build libuv examples" OFF)
 option(NATS_BUILD_LIBEVENT_EXAMPLE "Build libevent examples" OFF)
 option(NATS_BUILD_STATIC_EXAMPLES "Statically link examples" OFF)
 option(NATS_BUILD_STREAMING "Build NATS Streaming" ON)
+option(NATS_BUILD_NO_PREFIX_CONNSTS "No prefix for connection status enum" OFF)
 
 if(NATS_BUILD_WITH_TLS)
   find_package(OpenSSL REQUIRED)
@@ -34,6 +35,10 @@ if(NATS_BUILD_STREAMING)
   set(NATS_DOC_INCLUDE_STREAMING "NATS_HAS_STREAMING")
   set(NATS_DOC_PROJECT_NAME "NATS C Client with Streaming support")
 endif(NATS_BUILD_STREAMING)
+
+if(NATS_BUILD_NO_PREFIX_CONNSTS)
+  add_definitions(-DNATS_CONN_STATUS_NO_PREFIX)
+endif(NATS_BUILD_NO_PREFIX_CONNSTS)
 
 # Platform specific settings
 if(UNIX)

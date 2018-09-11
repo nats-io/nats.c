@@ -2572,9 +2572,9 @@ test_natsJSON(void)
             "{ \"test\": {\"inner\":\"not \\\"supported\\\", at this time\"}}",
             "{ \"test\":[\"a\", \"b\", \"c\", 1]}",
             "{ \"test\": \"a\\\"b\\\"c\"}",
-            "{ \"test\": \"\\\"\\\\/\b\f\n\r\t\uabcd\"}",
-            "{ \"test\": \"\ua12f\"}",
-            "{ \"test\": \"\uA01F\"}",
+            "{ \"test\": \"\\\"\\\\/\b\f\n\r\t\\uabcd\"}",
+            "{ \"test\": \"\\ua12f\"}",
+            "{ \"test\": \"\\uA01F\"}",
     };
 
     for (i=0; i<(int)(sizeof(wrong)/sizeof(char*)); i++)

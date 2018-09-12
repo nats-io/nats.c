@@ -1962,7 +1962,7 @@ natsConnection_Buffered(natsConnection *nc);
  * call will fail with the status #NATS_CONNECTION_DISCONNECTED.
  *
  * If the connection is closed while this call is in progress, then the
- * status #CLOSED would be returned instead.
+ * status #NATS_CONN_STATUS_CLOSED would be returned instead.
  *
  * @param nc the pointer to the #natsConnection object.
  */

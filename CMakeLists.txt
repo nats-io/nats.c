@@ -120,14 +120,14 @@ endif(NATS_BUILD_WITH_TLS)
 #---------------------------------------------------------------------
 # Add to the 'clean' target the list (and location) of files to remove
 
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/include/nats.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/include/nats/nats.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/include/nats/status.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/include/nats/version.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/include/nats/adapters/libevent.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/include/nats/adapters/libuv.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/lib/libnats${CMAKE_SHARED_LIBRARY_SUFFIX}")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/lib/libnats_static${CMAKE_STATIC_LIBRARY_SUFFIX}")
+list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_INCLUDEDIR}/nats.h")
+list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_INCLUDEDIR}/nats/nats.h")
+list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_INCLUDEDIR}/nats/status.h")
+list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_INCLUDEDIR}/nats/version.h")
+list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_INCLUDEDIR}/nats/adapters/libevent.h")
+list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_INCLUDEDIR}/nats/adapters/libuv.h")
+list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_LIBDIR}/libnats${CMAKE_SHARED_LIBRARY_SUFFIX}")
+list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_LIBDIR}/libnats_static${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
 set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${NATS_INSTALLED_FILES}")
 #---------------------------------------------------------------------

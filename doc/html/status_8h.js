@@ -1,13 +1,13 @@
 var status_8h =
 [
     [ "natsConnStatus", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51", [
-      [ "DISCONNECTED", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51acdaad1112073e3e2ea032424c38c34e1", null ],
-      [ "CONNECTING", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a06b876bcf37a32fed1dbadf4273827bf", null ],
-      [ "CONNECTED", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a7a691a2430ec26878897b5fbc9c22a4c", null ],
-      [ "CLOSED", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a929f0327e17604ce9713b2a6117bd603", null ],
-      [ "RECONNECTING", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a1d5843fca4a8464bd4e24c90725352c0", null ],
-      [ "DRAINING_SUBS", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a99eeb21948b2d1fb98bcad33a87fc322", null ],
-      [ "DRAINING_PUBS", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a4695d39612939404418c91ce1fb1ef35", null ]
+      [ "NATS_CONN_STATUS_DISCONNECTED", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a08f92960811d1ff05b91a0870b4ecb92", null ],
+      [ "NATS_CONN_STATUS_CONNECTING", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a7e4d95cb29122f06e17ca4aff55cc736", null ],
+      [ "NATS_CONN_STATUS_CONNECTED", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a0dafab74b55f98cfc1d00e4d1ef38725", null ],
+      [ "NATS_CONN_STATUS_CLOSED", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51aa78753a4de2d0379078bb09cdc1acdb2", null ],
+      [ "NATS_CONN_STATUS_RECONNECTING", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51acfdc4826e08ce4b59f901952038e9206", null ],
+      [ "NATS_CONN_STATUS_DRAINING_SUBS", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51ab6f9d121707673a61cbe2c591f64fbf1", null ],
+      [ "NATS_CONN_STATUS_DRAINING_PUBS", "status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51ac6b8b7f138f6ca285fe1f4da707b2100", null ]
     ] ],
     [ "natsStatus", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80", [
       [ "NATS_OK", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9cee6c417868ecaa69f99ff4f6576990", null ],

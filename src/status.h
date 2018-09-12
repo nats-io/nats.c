@@ -18,9 +18,14 @@
 extern "C" {
 #endif
 
+
 /// The connection state
 typedef enum
 {
+#if defined(NATS_CONN_STATUS_NO_PREFIX)
+    // This is deprecated and applications referencing connection
+    // status should be updated to use the values prefixed with NATS_CONN_STATUS_.
+
     DISCONNECTED = 0, ///< The connection has been disconnected
     CONNECTING,       ///< The connection is in the process or connecting
     CONNECTED,        ///< The connection is connected
@@ -28,6 +33,15 @@ typedef enum
     RECONNECTING,     ///< The connection is in the process or reconnecting
     DRAINING_SUBS,    ///< The connection is draining subscriptions
     DRAINING_PUBS,    ///< The connection is draining publishers
+#else
+    NATS_CONN_STATUS_DISCONNECTED = 0, ///< The connection has been disconnected
+    NATS_CONN_STATUS_CONNECTING,       ///< The connection is in the process or connecting
+    NATS_CONN_STATUS_CONNECTED,        ///< The connection is connected
+    NATS_CONN_STATUS_CLOSED,           ///< The connection is closed
+    NATS_CONN_STATUS_RECONNECTING,     ///< The connection is in the process or reconnecting
+    NATS_CONN_STATUS_DRAINING_SUBS,    ///< The connection is draining subscriptions
+    NATS_CONN_STATUS_DRAINING_PUBS,    ///< The connection is draining publishers
+#endif
 
 } natsConnStatus;
 

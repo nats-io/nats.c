@@ -116,6 +116,18 @@ static const char *inboxPrefix = "_INBOX.";
         if ((s) == NATS_OK) \
             DUP_STRING((s), (s1), (s2))
 
+// This is temporary until we remove original connection status enum
+// values without NATS_CONN_STATUS_ prefix
+#if defined(NATS_CONN_STATUS_NO_PREFIX)
+#define NATS_CONN_STATUS_DISCONNECTED   DISCONNECTED
+#define NATS_CONN_STATUS_CONNECTING     CONNECTING
+#define NATS_CONN_STATUS_CONNECTED      CONNECTED
+#define NATS_CONN_STATUS_CLOSED         CLOSED
+#define NATS_CONN_STATUS_RECONNECTING   RECONNECTING
+#define NATS_CONN_STATUS_DRAINING_SUBS  DRAINING_SUBS
+#define NATS_CONN_STATUS_DRAINING_PUBS  DRAINING_PUBS
+#endif
+
 extern int64_t gLockSpinCount;
 
 typedef void (*natsInitOnceCb)(void);

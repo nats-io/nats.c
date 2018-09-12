@@ -435,7 +435,7 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 <p>Performs a round trip to the server and return when it receives the internal reply.</p>
 <p>Note that if this call occurs when the connection to the server is lost, the <code>PING</code> will not be echoed even if the library can connect to a new (or the same) server. Therefore, in such situation, this call will fail with the status <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80abef517217119e8446a8e3382e1f37eb3">NATS_CONNECTION_DISCONNECTED</a>.</p>
-<p>If the connection is closed while this call is in progress, then the status <a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a929f0327e17604ce9713b2a6117bd603" title="The connection is closed. ">CLOSED</a> would be returned instead.</p>
+<p>If the connection is closed while this call is in progress, then the status <a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51aa78753a4de2d0379078bb09cdc1acdb2" title="The connection is closed. ">NATS_CONN_STATUS_CLOSED</a> would be returned instead.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>

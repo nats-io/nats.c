@@ -10,7 +10,7 @@ if(NATS_BUILD_WITH_TLS)
 endif(NATS_BUILD_WITH_TLS)
 
 if(NATS_BUILD_STREAMING)
-  include_directories(${PROTOBUF_DIR}/include)
+  include_directories(${PROTOBUF_DIR}/${NATS_INCLUDE_DIR})
   include_directories(stan)
 endif(NATS_BUILD_STREAMING)
 
@@ -37,8 +37,8 @@ target_link_libraries(nats_static ${NATS_OPENSSL_LIBS} ${NATS_PROTOBUF_LIB})
 # --------------------------------------
 # Install the libraries and header files
 # --------------------------------------
-install(TARGETS nats DESTINATION lib)
-install(TARGETS nats_static DESTINATION lib)
-install(FILES deprnats.h DESTINATION include RENAME nats.h)
-install(FILES nats.h status.h version.h DESTINATION include/nats)
-install(FILES adapters/libevent.h adapters/libuv.h DESTINATION include/nats/adapters)
+install(TARGETS nats DESTINATION ${NATS_LIBDIR})
+install(TARGETS nats_static DESTINATION ${NATS_LIBDIR})
+install(FILES deprnats.h DESTINATION ${NATS_INCLUDE_DIR} RENAME nats.h)
+install(FILES nats.h status.h version.h DESTINATION ${NATS_INCLUDE_DIR}/nats)
+install(FILES adapters/libevent.h adapters/libuv.h DESTINATION ${NATS_INCLUDE_DIR}/nats/adapters)

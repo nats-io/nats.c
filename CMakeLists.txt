@@ -139,7 +139,6 @@ list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/${NATS_LIBDIR}/libnats
 set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${NATS_INSTALLED_FILES}")
 #---------------------------------------------------------------------
 
-if(NATS_UPDATE_VERSION OR NATS_UPDATE_DOC)
 #------------
 # Versionning and Doc
 
@@ -150,6 +149,7 @@ set(NATS_VERSION_SUFFIX "-beta")
 
 set(NATS_VERSION_REQUIRED_NUMBER 0x010100)
 
+if(NATS_UPDATE_VERSION OR NATS_UPDATE_DOC)
 configure_file(
 	${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in
 	${CMAKE_CURRENT_SOURCE_DIR}/src/version.h
@@ -159,8 +159,8 @@ configure_file(
 	${CMAKE_SOURCE_DIR}/doc/DoxyFile.NATS.Client.in
 	${CMAKE_SOURCE_DIR}/doc/DoxyFile.NATS.Client
 	@ONLY)
-#------------
 endif(NATS_UPDATE_VERSION OR NATS_UPDATE_DOC)
+#------------
 
 #----------------------------
 # Add the project directories

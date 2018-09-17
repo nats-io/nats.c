@@ -10,7 +10,7 @@ if(NATS_BUILD_WITH_TLS)
 endif(NATS_BUILD_WITH_TLS)
 
 if(NATS_BUILD_STREAMING)
-  include_directories(${PROTOBUF_DIR}/${NATS_INCLUDE_DIR})
+  include_directories(${PROTOBUF_DIR}/include)
   include_directories(stan)
 endif(NATS_BUILD_STREAMING)
 
@@ -40,7 +40,7 @@ set_target_properties(nats nats_static PROPERTIES
 # --------------------------------------
 # Install the libraries and header files
 # --------------------------------------
-install(TARGETS nats LIBRARY DESTINATION ${NATS_LIBDIR})
+install(TARGETS nats DESTINATION ${NATS_LIBDIR})
 install(TARGETS nats_static ARCHIVE DESTINATION ${NATS_LIBDIR})
 install(FILES deprnats.h DESTINATION ${NATS_INCLUDE_DIR} RENAME nats.h)
 install(FILES nats.h status.h version.h DESTINATION ${NATS_INCLUDE_DIR}/nats)

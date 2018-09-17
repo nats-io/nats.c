@@ -124,21 +124,6 @@ if(NATS_BUILD_WITH_TLS)
 endif(NATS_BUILD_WITH_TLS)
 
 
-#---------------------------------------------------------------------
-# Add to the 'clean' target the list (and location) of files to remove
-
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/${NATS_INCLUDE_DIR}/nats.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/${NATS_INCLUDE_DIR}/nats/nats.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/${NATS_INCLUDE_DIR}/nats/status.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/${NATS_INCLUDE_DIR}/nats/version.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/${NATS_INCLUDE_DIR}/nats/adapters/libevent.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/${NATS_INCLUDE_DIR}/nats/adapters/libuv.h")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/${NATS_LIBDIR}/libnats${CMAKE_SHARED_LIBRARY_SUFFIX}")
-list(APPEND NATS_INSTALLED_FILES "${CMAKE_INSTALL_PREFIX}/${NATS_LIBDIR}/libnats_static${CMAKE_STATIC_LIBRARY_SUFFIX}")
-
-set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${NATS_INSTALLED_FILES}")
-#---------------------------------------------------------------------
-
 #------------
 # Versionning and Doc
 

@@ -37,7 +37,8 @@ natsSub_release(natsSubscription *sub);
 
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
-               const char *queueGroup, int64_t timeout, natsMsgHandler cb, void *cbClosure);
+               const char *queueGroup, int64_t timeout, natsMsgHandler cb, void *cbClosure,
+               bool noLibDlvPool);
 
 void
 natsSub_setMax(natsSubscription *sub, uint64_t max);

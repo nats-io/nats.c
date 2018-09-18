@@ -164,3 +164,4 @@ StanPings
 StanPingsUnblockPublishCalls
 StanGetNATSConnection
 StanNoRetryOnFailedConnect
+StanInternalSubsNotPooled

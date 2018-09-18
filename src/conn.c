@@ -1127,7 +1127,7 @@ natsConn_createRespMux(natsConnection *nc, char *ginbox, natsMsgHandler cb)
     natsStatus          s    = NATS_OK;
     natsSubscription    *sub = NULL;
 
-    s = natsConn_subscribe(&sub, nc, ginbox, NULL, 0, cb, (void*) nc);
+    s = natsConn_subscribeNoPool(&sub, nc, ginbox, cb, (void*) nc);
     if (s == NATS_OK)
     {
         // Between a successful creation of the subscription and
@@ -2449,9 +2449,10 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub)
 // subscribe is the internal subscribe function that indicates interest in a
 // subject.
 natsStatus
-natsConn_subscribe(natsSubscription **newSub,
-                   natsConnection *nc, const char *subj, const char *queue,
-                   int64_t timeout, natsMsgHandler cb, void *cbClosure)
+natsConn_subscribeImpl(natsSubscription **newSub,
+                       natsConnection *nc, const char *subj, const char *queue,
+                       int64_t timeout, natsMsgHandler cb, void *cbClosure,
+                       bool preventUseOfLibDlvPool)
 {
     natsStatus          s    = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -2478,7 +2479,7 @@ natsConn_subscribe(natsSubscription **newSub,
         return nats_setDefaultError(NATS_DRAINING);
     }
 
-    s = natsSub_create(&sub, nc, subj, queue, timeout, cb, cbClosure);
+    s = natsSub_create(&sub, nc, subj, queue, timeout, cb, cbClosure, preventUseOfLibDlvPool);
     if (s == NATS_OK)
     {
         natsMutex_Lock(nc->subsMu);

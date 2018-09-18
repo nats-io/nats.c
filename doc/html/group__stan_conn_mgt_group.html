@@ -165,6 +165,7 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 <p>Attempts to connect to a <code>NATS Streaming Server</code>.</p>
 <p>This call is cloning the <a class="el" href="group__types_group.html#ga13d64411878ba13a6ca39c915f2447c1" title="Way to configure a stanConnection. ">stanConnOptions</a> object, if given. Once this call returns, changes made to the <code>options</code> will not have an effect to this connection. The <code>options</code> can however be changed prior to be passed to another <a class="el" href="group__stan_conn_mgt_group.html#ga35e0e6e5e3b7f3818a3ac3600efb8f8f" title="Connects to a NATS Streaming Server using the provided options. ">stanConnection_Connect()</a> call if desired.</p>
+<dl class="section note"><dt>Note</dt><dd>The Streaming connection does not honor the NATS Connection option <a class="el" href="group__opts_group.html#ga20946800d024b7089e73d63454d1c19f" title="Indicates if initial connect failure should be retried or not. ">natsOptions_SetRetryOnFailedConnect()</a>. If you pass NATS Options with this option enabled, no error is returned, but if the connection cannot be established "right away", the connect call will return an error.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__types_group.html#ga13d64411878ba13a6ca39c915f2447c1" title="Way to configure a stanConnection. ">stanConnOptions</a> </dd>
 <dd>
 <a class="el" href="group__stan_conn_mgt_group.html#gaea095eec18fdf04e06de16711f8b1a04" title="Destroys the connection object. ">stanConnection_Destroy()</a></dd></dl>

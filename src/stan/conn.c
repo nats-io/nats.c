@@ -298,6 +298,10 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
     if (s == NATS_OK)
         s = natsOptions_SetAllowReconnect(sc->opts->ncOpts, true);
 
+    // We don't support SetRetryOnFailedConnect for now
+    if ((s == NATS_OK) && (opts != NULL))
+        s = natsOptions_SetRetryOnFailedConnect(sc->opts->ncOpts, false, NULL, NULL);
+
     // Connect to NATS
     if (s == NATS_OK)
         s = natsConnection_Connect(&sc->nc, sc->opts->ncOpts);

@@ -15496,6 +15496,30 @@ test_StanGetNATSConnection(void)
     _stopServer(pid);
 }
 
+static void
+test_StanNoRetryOnFailedConnect(void)
+{
+    natsStatus      s;
+    natsOptions     *opts  = NULL;
+    stanConnOptions *sopts = NULL;
+    stanConnection  *sc    = NULL;
+
+    test("RetryOnFailedConnect not supported: ");
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetRetryOnFailedConnect(opts, true, _dummyConnHandler, (void*)1);
+    if (s == NATS_OK)
+        s = stanConnOptions_Create(&sopts);
+    if (s == NATS_OK)
+        s = stanConnOptions_SetNATSOptions(sopts, opts);
+    if (s == NATS_OK)
+        s = stanConnection_Connect(&sc, clusterName, clientName, sopts);
+    testCond(s == NATS_NO_SERVER);
+
+    natsOptions_Destroy(opts);
+    stanConnOptions_Destroy(sopts);
+}
+
 #endif
 
 typedef void (*testFunc)(void);
@@ -15688,6 +15712,7 @@ static testInfo allTests[] =
     {"StanPings",                       test_StanPings},
     {"StanPingsUnblockPublishCalls",    test_StanPingsUnblockPubCalls},
     {"StanGetNATSConnection",           test_StanGetNATSConnection},
+    {"StanNoRetryOnFailedConnect",      test_StanNoRetryOnFailedConnect},
 
 #endif
 

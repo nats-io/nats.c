@@ -2746,6 +2746,11 @@ natsSubscription_Destroy(natsSubscription *sub);
  * The `options` can however be changed prior to be passed to another
  * #stanConnection_Connect() call if desired.
  *
+ * \note The Streaming connection does not honor the NATS Connection option
+ * #natsOptions_SetRetryOnFailedConnect(). If you pass NATS Options with
+ * this option enabled, no error is returned, but if the connection cannot
+ * be established "right away", the connect call will return an error.
+ *
  * @see #stanConnOptions
  * @see #stanConnection_Destroy()
  *

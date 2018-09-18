@@ -163,3 +163,4 @@ StanSubscriptionAckMsg
 StanPings
 StanPingsUnblockPublishCalls
 StanGetNATSConnection
+StanNoRetryOnFailedConnect

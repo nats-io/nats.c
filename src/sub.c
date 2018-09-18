@@ -318,7 +318,8 @@ _asyncTimeoutStopCb(natsTimer *timer, void* closure)
 
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
-               const char *queueGroup, int64_t timeout, natsMsgHandler cb, void *cbClosure)
+               const char *queueGroup, int64_t timeout, natsMsgHandler cb, void *cbClosure,
+               bool preventUseOfLibDlvPool)
 {
     natsStatus          s = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -361,7 +362,7 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
         s = natsCondition_Create(&(sub->cond));
     if ((s == NATS_OK) && (cb != NULL))
     {
-        if (!(nc->opts->libMsgDelivery))
+        if (!(nc->opts->libMsgDelivery) || preventUseOfLibDlvPool)
         {
             // Let's not rely on the created thread acquiring the lock that
             // would make it safe to retain only on success.
@@ -414,7 +415,7 @@ natsConnection_Subscribe(natsSubscription **sub, natsConnection *nc, const char 
     if (cb == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = natsConn_subscribe(sub, nc, subject, NULL, 0, cb, cbClosure);
+    s = natsConn_subscribe(sub, nc, subject, cb, cbClosure);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -435,7 +436,7 @@ natsConnection_SubscribeTimeout(natsSubscription **sub, natsConnection *nc, cons
     if ((cb == NULL) || (timeout <= 0))
             return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = natsConn_subscribe(sub, nc, subject, NULL, timeout, cb, cbClosure);
+    s = natsConn_subscribeWithTimeout(sub, nc, subject, timeout, cb, cbClosure);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -449,7 +450,7 @@ natsConnection_SubscribeSync(natsSubscription **sub, natsConnection *nc, const c
 {
     natsStatus s;
 
-    s = natsConn_subscribe(sub, nc, subject, NULL, 0, NULL, NULL);
+    s = natsConn_subscribeSync(sub, nc, subject);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -470,7 +471,7 @@ natsConnection_QueueSubscribe(natsSubscription **sub, natsConnection *nc,
     if ((queueGroup == NULL) || (strlen(queueGroup) == 0) || (cb == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = natsConn_subscribe(sub, nc, subject, queueGroup, 0, cb, cbClosure);
+    s = natsConn_queueSubscribe(sub, nc, subject, queueGroup, cb, cbClosure);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -495,7 +496,7 @@ natsConnection_QueueSubscribeTimeout(natsSubscription **sub, natsConnection *nc,
         return nats_setDefaultError(NATS_INVALID_ARG);
     }
 
-    s = natsConn_subscribe(sub, nc, subject, queueGroup, timeout, cb, cbClosure);
+    s = natsConn_queueSubscribeWithTimeout(sub, nc, subject, queueGroup, timeout, cb, cbClosure);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -512,7 +513,7 @@ natsConnection_QueueSubscribeSync(natsSubscription **sub, natsConnection *nc,
     if ((queueGroup == NULL) || (strlen(queueGroup) == 0))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = natsConn_subscribe(sub, nc, subject, queueGroup, 0, NULL, NULL);
+    s = natsConn_queueSubscribeSync(sub, nc, subject, queueGroup);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

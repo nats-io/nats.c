@@ -349,7 +349,7 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
         s = natsInbox_Create(&sc->hbInbox);
     if (s == NATS_OK)
     {
-        s = natsConnection_Subscribe(&sc->hbSubscription, sc->nc, sc->hbInbox, _processHeartBeat, NULL);
+        s = natsConn_subscribeNoPool(&sc->hbSubscription, sc->nc, sc->hbInbox, _processHeartBeat, NULL);
         if (s == NATS_OK)
         {
             natsSubscription_SetPendingLimits(sc->hbSubscription, -1, -1);
@@ -364,7 +364,7 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
     {
         s = natsInbox_Create((char**) &pingInbox);
         if (s == NATS_OK)
-            s = natsConnection_Subscribe(&pingSub, sc->nc, pingInbox, _processPingResponse, (void*) sc);
+            s = natsConn_subscribeNoPool(&pingSub, sc->nc, pingInbox, _processPingResponse, (void*) sc);
         if (s == NATS_OK)
         {
             // Mark this as needing a destroy if we end up not using PINGs.
@@ -513,7 +513,7 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
         IF_OK_DUP_STRING(s, sc->ackSubject, (char*)tmp);
 
         if (s == NATS_OK)
-            s = natsConnection_Subscribe(&sc->ackSubscription, sc->nc, sc->ackSubject, stanProcessPubAck, (void*) sc);
+            s = natsConn_subscribeNoPool(&sc->ackSubscription, sc->nc, sc->ackSubject, stanProcessPubAck, (void*) sc);
         if (s == NATS_OK)
         {
             natsSubscription_SetPendingLimits(sc->ackSubscription, -1, -1);

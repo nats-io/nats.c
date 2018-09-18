@@ -15520,6 +15520,83 @@ test_StanNoRetryOnFailedConnect(void)
     stanConnOptions_Destroy(sopts);
 }
 
+static bool
+_subDlvThreadPooled(natsSubscription *sub)
+{
+    bool pooled;
+    natsSub_Lock(sub);
+    pooled = (sub->libDlvWorker != NULL);
+    natsSub_Unlock(sub);
+    return pooled;
+}
+
+static void
+test_StanInternalSubsNotPooled(void)
+{
+    natsStatus          s;
+    natsPid             pid         = NATS_INVALID_PID;
+    natsOptions         *opts       = NULL;
+    stanConnOptions     *sopts      = NULL;
+    stanSubscription    *sub        = NULL;
+    stanConnection      *sc         = NULL;
+    natsSubscription    *hbSub      = NULL;
+    natsSubscription    *ackSub     = NULL;
+    natsSubscription    *pingSub    = NULL;
+    natsSubscription    *inboxSub   = NULL;
+
+    pid = _startStreamingServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Can connet: ");
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_UseGlobalMessageDelivery(opts, true);
+    if (s == NATS_OK)
+        s = stanConnOptions_Create(&sopts);
+    if (s == NATS_OK)
+        s = stanConnOptions_SetNATSOptions(sopts, opts);
+    if (s == NATS_OK)
+        s = stanConnection_Connect(&sc, clusterName, clientName, sopts);
+    testCond(s == NATS_OK);
+
+    test("Create sub: ");
+    if (s == NATS_OK)
+        s = stanConnection_Subscribe(&sub, sc, "foo", _dummyStanMsgHandler, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    if (s == NATS_OK)
+    {
+        stanConn_Lock(sc);
+        hbSub   = sc->hbSubscription;
+        ackSub  = sc->ackSubscription;
+        pingSub = sc->pingSub;
+        stanConn_Unlock(sc);
+
+        stanSub_Lock(sub);
+        inboxSub = sub->inboxSub;
+        stanSub_Unlock(sub);
+    }
+
+    test("HBSub not pooled: ");
+    testCond((s == NATS_OK) && !_subDlvThreadPooled(hbSub));
+
+    test("AckSub not pooled: ");
+    testCond((s == NATS_OK) && !_subDlvThreadPooled(ackSub));
+
+    test("PingSub not pooled: ");
+    testCond((s == NATS_OK) && !_subDlvThreadPooled(pingSub));
+
+    test("InboxSub pooled: ");
+    testCond((s == NATS_OK) && _subDlvThreadPooled(inboxSub));
+
+    natsOptions_Destroy(opts);
+    stanConnOptions_Destroy(sopts);
+    stanSubscription_Destroy(sub);
+    stanConnection_Destroy(sc);
+
+    _stopServer(pid);
+}
+
 #endif
 
 typedef void (*testFunc)(void);
@@ -15713,6 +15790,7 @@ static testInfo allTests[] =
     {"StanPingsUnblockPublishCalls",    test_StanPingsUnblockPubCalls},
     {"StanGetNATSConnection",           test_StanGetNATSConnection},
     {"StanNoRetryOnFailedConnect",      test_StanNoRetryOnFailedConnect},
+    {"StanInternalSubsNotPooled",       test_StanInternalSubsNotPooled},
 
 #endif
 

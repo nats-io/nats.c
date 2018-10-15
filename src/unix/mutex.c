@@ -70,17 +70,25 @@ natsMutex_TryLock(natsMutex *m)
 void
 natsMutex_Lock(natsMutex *m)
 {
-    // The "rep" instruction used for spinning is not supported on ARM.
-#if !defined(__arm__) && !defined(__aarch64__)
     if (gLockSpinCount > 0)
     {
         int64_t attempts = 0;
-
         while (pthread_mutex_trylock(m) != 0)
         {
             if (++attempts <= gLockSpinCount)
             {
-                __asm__ __volatile__ ("rep; nop");
+                #if defined(__x86_64__) || \
+                    defined(__mips__)
+                    __asm__ __volatile__ ("pause" ::: "memory");
+                #elif defined(__arm__) || \
+                      defined(__aarch64__)
+                    __asm__ __volatile__ ("yield" ::: "memory");
+                #elif defined(__powerpc__) || \
+                      defined(__powerpc64__)
+                    __asm__ __volatile__ ("or 27,27,27" ::: "memory");
+                #else
+                    usleep(0);
+                #endif
             }
             else
             {
@@ -92,7 +100,6 @@ natsMutex_Lock(natsMutex *m)
         }
     }
     else
-#endif
     {
         if (pthread_mutex_lock(m))
             abort();

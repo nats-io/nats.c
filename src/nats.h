@@ -2093,6 +2093,22 @@ natsConnection_GetDiscoveredServers(natsConnection *nc, char ***servers, int *co
 NATS_EXTERN natsStatus
 natsConnection_GetLastError(natsConnection *nc, const char **lastError);
 
+/** \brief Gets the current client ID assigned by the server.
+ *
+ * Returns the client ID assigned by the server to which the client is
+ * currently connected to.
+ *
+ * \note The value may change if the client reconnects.
+ *
+ * This function returns #NATS_NO_SERVER_SUPPORT if the server's version
+ * is less than 1.2.0.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param cid the location where to store the client ID.
+ */
+NATS_EXTERN natsStatus
+natsConnection_GetClientID(natsConnection *nc, uint64_t *cid);
+
 /** \brief Drains the connection with default timeout.
  *
  * Drain will put a connection into a drain state. All subscriptions will

@@ -535,6 +535,9 @@ _processInfo(natsConnection *nc, char *info, int len)
     if (s == NATS_OK)
         s = nats_JSONGetValue(json, "proto", TYPE_INT,
                               (void**) &(nc->info.proto));
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "client_id", TYPE_LONG,
+                              (void**) &(nc->info.CID));
 
 #if 0
     fprintf(stderr, "Id=%s Version=%s Host=%s Port=%d Auth=%s SSL=%s Payload=%d Proto=%d\n",
@@ -3523,4 +3526,28 @@ natsConnection_ProcessWriteEvent(natsConnection *nc)
         _processOpError(nc, s, false);
 
     (void) NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_GetClientID(natsConnection *nc, uint64_t *cid)
+{
+    natsStatus s = NATS_OK;
+
+    if ((nc == NULL) || (cid == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+    if (natsConn_isClosed(nc))
+    {
+        s = NATS_CONNECTION_CLOSED;
+    }
+    else
+    {
+        *cid = nc->info.CID;
+        if (*cid == 0)
+            s = NATS_NO_SERVER_SUPPORT;
+    }
+    natsConn_Unlock(nc);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }

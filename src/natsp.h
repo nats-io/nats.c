@@ -153,6 +153,7 @@ typedef struct __natsServerInfo
     char        **connectURLs;
     int         connectURLsCount;
     int         proto;
+    uint64_t    CID;
 
 } natsServerInfo;
 

@@ -24,6 +24,7 @@
 #define TYPE_LONG       (5)
 #define TYPE_DOUBLE     (6)
 #define TYPE_ARRAY      (7)
+#define TYPE_ULONG      (8)
 
 typedef struct
 {

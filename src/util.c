@@ -778,6 +778,7 @@ nats_JSONGetValue(nats_JSON *json, const char *fieldName, int fieldType, void **
         case TYPE_BOOL:     (*(bool*)addr) = field->value.vbool;                break;
         case TYPE_INT:      (*(int*)addr) = (int)field->value.vdec;             break;
         case TYPE_LONG:     (*(int64_t*)addr) = (int64_t) field->value.vdec;    break;
+        case TYPE_ULONG:    (*(uint64_t*)addr) = (uint64_t) field->value.vdec;  break;
         case TYPE_DOUBLE:   (*(long double*)addr) = field->value.vdec;          break;
         default:
         {

@@ -2512,6 +2512,7 @@ test_natsJSON(void)
     long double doubleVal = 0;
     char        **arrVal = NULL;
     int         arrCount = 0;
+    uint64_t    ulongVal = 0;
     const char  *wrong[] = {
             "{",
             "}",
@@ -2650,6 +2651,19 @@ test_natsJSON(void)
     nats_JSONDestroy(json);
     json = NULL;
     longVal = 0;
+
+    test("Single field, ulong: ");
+    s = nats_JSONParse(&json, "{\"test\":1234}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_ULONG, (void**)&ulongVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (ulongVal == 1234));
+    nats_JSONDestroy(json);
+    json = NULL;
+    ulongVal = 0;
 
     test("Single field, double: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5}", -1);
@@ -6964,7 +6978,7 @@ test_ErrOnMaxPayloadLimit(void)
         char info[1024];
 
         snprintf(info, sizeof(info),
-                 "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":%d}\r\n",
+                 "INFO {\"server_id\":\"foobar\",\"version\":\"latest\",\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":%d}\r\n",
                  expectedMaxPayLoad);
 
         // Send INFO.
@@ -7289,7 +7303,7 @@ test_AuthViolation(void)
         char info[1024];
 
         strncpy(info,
-                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
+                "INFO {\"server_id\":\"foobar\",\"version\":\"latest\",\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 
         // Send INFO.
@@ -8812,7 +8826,7 @@ test_ReleaseFlush(void)
         char info[1024];
 
         strncpy(info,
-                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
+                "INFO {\"server_id\":\"foobar\",\"version\":\"latest\",\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 
         // Send INFO.
@@ -8894,7 +8908,7 @@ test_FlushErrOnDisconnect(void)
         char info[1024];
 
         strncpy(info,
-                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
+                "INFO {\"server_id\":\"foobar\",\"version\":\"latest\",\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 
         // Send INFO.
@@ -12230,7 +12244,7 @@ test_StaleConnection(void)
             char info[1024];
 
             strncpy(info,
-                    "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
+                    "INFO {\"server_id\":\"foobar\",\"version\":\"latest\",\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                     sizeof(info));
 
             // Send INFO.
@@ -12361,7 +12375,7 @@ test_ServerErrorClosesConnection(void)
         char info[1024];
 
         strncpy(info,
-                "INFO {\"server_id\":\"foobar\",\"version\":\"0.6.8\",\"go\":\"go1.5\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
+                "INFO {\"server_id\":\"foobar\",\"version\":\"latest\",\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 
         // Send INFO.
@@ -12486,7 +12500,7 @@ test_NoEcho(void)
 }
 
 static void
-_startOldServerForNoEcho(void *closure)
+_startMockupServerThread(void *closure)
 {
     natsStatus          s = NATS_OK;
     natsSock            sock = NATS_SOCK_INVALID;
@@ -12511,9 +12525,7 @@ _startOldServerForNoEcho(void *closure)
     {
         char info[1024];
 
-        strncpy(info,
-                "INFO {\"server_id\":\"22\",\"version\":\"1.1.0\",\"go\":\"go1.10.2\",\"port\":4222,\"max_payload\":1048576}\r\n",
-                sizeof(info));
+        strncpy(info, arg->string, sizeof(info));
 
         // Send INFO.
         s = natsSock_WriteFully(&ctx, info, (int) strlen(info));
@@ -12566,7 +12578,8 @@ test_NoEchoOldServer(void)
         // Set this to error, the mock server should set it to OK
         // if it can start successfully.
         arg.status = NATS_ERR;
-        s = natsThread_Create(&t, _startOldServerForNoEcho, (void*) &arg);
+        arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576}\r\n";
+        s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
     }
     if (s == NATS_OK)
     {
@@ -13127,6 +13140,146 @@ test_DrainConn(void)
     _destroyDefaultThreadArgs(&arg);
 
     _stopServer(pid);
+}
+
+static void
+test_GetClientID(void)
+{
+    natsStatus          s;
+    natsPid             pid1    = NATS_INVALID_PID;
+    natsPid             pid2    = NATS_INVALID_PID;
+    natsConnection      *nc1    = NULL;
+    natsConnection      *nc2    = NULL;
+    natsOptions         *opts   = NULL;
+    uint64_t            cid     = 0;
+    uint64_t            newcid  = 0;
+    natsThread          *t      = NULL;
+    struct threadArg    arg;
+
+    if (!serverVersionAtLeast(1,2,0))
+    {
+        char txt[200];
+
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 1.2.0, got %s: ", serverVersion);
+        test(txt);
+        testCond(true);
+        return;
+    }
+    pid1 = _startServer("nats://127.0.0.1:4222", "-cluster nats://127.0.0.1:6222", true);
+    CHECK_SERVER_STARTED(pid1);
+
+    test("Create nc1: ");
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetDiscoveredServersCB(opts, _discoveredServersCb, (void*)&arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*)&arg);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc1, opts);
+    testCond(s == NATS_OK);
+
+    test("GetClientID for nc1: ");
+    if (s == NATS_OK)
+        s = natsConnection_GetClientID(nc1, &cid);
+    testCond((s == NATS_OK) && (cid != 0));
+
+    test("Wait for discovered callback: ");
+    pid2 = _startServer("nats://127.0.0.1:4223", "-p 4223 -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222", true);
+    CHECK_SERVER_STARTED(pid2);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.sum != 1))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        s = (arg.sum == 1 ? NATS_OK: NATS_ERR);
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Check CID same: ");
+    if (s == NATS_OK)
+        s = natsConnection_GetClientID(nc1, &newcid);
+    testCond((s == NATS_OK) && (newcid == cid));
+
+    test("Connect to server 2: ");
+    if (s == NATS_OK)
+        s = natsConnection_ConnectTo(&nc2, "nats://127.0.0.1:4223");
+    testCond(s == NATS_OK);
+
+    test("Stop server 1: ");
+    _stopServer(pid1);
+    testCond(s == NATS_OK);
+
+    test("Wait for nc1 to reconnect: ");
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.reconnected)
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        s = (arg.reconnected ? NATS_OK : NATS_ERR);
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Check CID is different: ");
+    if (s == NATS_OK)
+        s = natsConnection_GetClientID(nc1, &newcid);
+    testCond((s == NATS_OK) && (newcid != cid));
+
+    // Stop clients and remaining server
+    natsConnection_Destroy(nc1);
+    natsConnection_Destroy(nc2);
+    natsOptions_Destroy(opts);
+    _stopServer(pid2);
+
+    if (s != NATS_OK)
+        return;
+
+    // Now have dummy server that returns no CID and check we get expected error.
+    nc1 = NULL;
+    arg.status = NATS_ERR;
+    arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576}\r\n";
+    s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+    if (s != NATS_OK)
+    {
+        if (t != NULL)
+        {
+            natsThread_Join(t);
+            natsThread_Destroy(t);
+        }
+        natsOptions_Destroy(opts);
+        _destroyDefaultThreadArgs(&arg);
+        FAIL("Unable to setup test");
+    }
+
+    test("CID not supported: ");
+    s = natsConnection_ConnectTo(&nc1, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConnection_GetClientID(nc1, &cid);
+    testCond((s == NATS_NO_SERVER_SUPPORT) && (cid == 0));
+
+    natsConnection_Destroy(nc1);
+
+    // Notify mock server we are done
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+
+    _destroyDefaultThreadArgs(&arg);
 }
 
 static void
@@ -15742,6 +15895,7 @@ static testInfo allTests[] =
     {"NoEchoOldServer",                 test_NoEchoOldServer},
     {"DrainSub",                        test_DrainSub},
     {"DrainConn",                       test_DrainConn},
+    {"GetClientID",                     test_GetClientID},
     {"SSLBasic",                        test_SSLBasic},
     {"SSLVerify",                       test_SSLVerify},
     {"SSLVerifyHostname",               test_SSLVerifyHostname},

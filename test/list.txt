@@ -121,6 +121,7 @@ NoEcho
 NoEchoOldServer
 DrainSub
 DrainConn
+GetClientID
 SSLBasic
 SSLVerify
 SSLVerifyHostname

@@ -4,9 +4,9 @@ set -e
 if [ ! "$(ls -A $HOME/gnatsd)" ]; then
   mkdir -p $HOME/gnatsd
   cd $HOME/gnatsd
-  wget https://github.com/nats-io/gnatsd/releases/download/v1.2.0/gnatsd-v1.2.0-linux-amd64.zip -O gnatsd.zip
+  wget https://github.com/nats-io/gnatsd/releases/download/v1.3.0/gnatsd-v1.3.0-linux-amd64.zip -O gnatsd.zip
   unzip gnatsd.zip
-  mv gnatsd-v1.2.0-linux-amd64/gnatsd .
+  mv gnatsd-v1.3.0-linux-amd64/gnatsd .
 else
   echo 'Using cached directory.';
 fi
@@ -16,9 +16,9 @@ cd $HOME
 if [ ! "$(ls -A $HOME/nats-streaming-server)" ]; then
   mkdir -p $HOME/nats-streaming-server
   cd $HOME/nats-streaming-server
-  wget https://github.com/nats-io/nats-streaming-server/releases/download/v0.10.2/nats-streaming-server-v0.10.2-linux-amd64.zip -O nats-streaming-server.zip
+  wget https://github.com/nats-io/nats-streaming-server/releases/download/v0.11.0/nats-streaming-server-v0.11.0-linux-amd64.zip -O nats-streaming-server.zip
   unzip nats-streaming-server.zip
-  mv nats-streaming-server-v0.10.2-linux-amd64/nats-streaming-server .
+  mv nats-streaming-server-v0.11.0-linux-amd64/nats-streaming-server .
 else
   echo 'Using cached directory.';
 fi

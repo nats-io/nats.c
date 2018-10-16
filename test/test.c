@@ -12065,6 +12065,157 @@ test_VersionMatchesTag(void)
 }
 
 static void
+_openCloseAndWaitMsgCB(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    int *msgsCount = (int*) closure;
+    nats_Sleep(300);
+    natsMsg_Destroy(msg);
+    (*msgsCount)++;
+}
+
+static void
+_openCloseAndWaitConnClosedCB(natsConnection *nc, void *closure)
+{
+    int *closedCount = (int*) closure;
+    (*closedCount)++;
+}
+
+static void
+_openCloseAndWaitCloseFromThread(void *closure)
+{
+    struct threadArg *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    arg->status = nats_CloseAndWait(0);
+    arg->done   = true;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+_openCloseAndWaitThread(void *closure)
+{
+    nats_Sleep(300);
+    natsLib_Release();
+}
+
+static void
+test_OpenCloseAndWait(void)
+{
+    natsStatus          s;
+    natsConnection      *nc  = NULL;
+    natsOptions         *opts= NULL;
+    natsSubscription    *sub = NULL;
+    natsPid             pid  = NATS_INVALID_PID;
+    int                 i;
+    volatile int        closedCount = 0;
+    volatile int        msgsCount   = 0;
+    natsThread          *t          = NULL;
+    struct threadArg    arg;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    if (_createDefaultThreadArgsForCbTests(&arg) != NATS_OK)
+        FAIL("Unable to setup test");
+
+    // First close the library since it is opened in main
+    test("Close to prepare for test: ");
+    s = nats_CloseAndWait(0);
+    testCond(s == NATS_OK);
+
+    test("Open/Close in loop: ");
+    for (i=0;i<2;i++)
+    {
+        s = nats_Open(-1);
+        if (s == NATS_OK)
+            s = natsOptions_Create(&opts);
+        if (s == NATS_OK)
+            s = natsOptions_SetClosedCB(opts, _openCloseAndWaitConnClosedCB, (void*)&closedCount);
+        if (s == NATS_OK)
+            s = natsConnection_Connect(&nc, opts);
+        if (s == NATS_OK)
+            s = natsConnection_Subscribe(&sub, nc, "foo", _openCloseAndWaitMsgCB, (void*)&msgsCount);
+        if (s == NATS_OK)
+            s = natsConnection_PublishString(nc, "foo", "hello");
+        if (s == NATS_OK)
+            s = natsConnection_Flush(nc);
+        if (s == NATS_OK)
+        {
+            while (msgsCount != (i+1))
+                nats_Sleep(100);
+
+            natsSubscription_Destroy(sub);
+            natsConnection_Destroy(nc);
+            natsOptions_Destroy(opts);
+            nats_CloseAndWait(0);
+        }
+    }
+    testCond(s == NATS_OK);
+
+    test("Check async cb count: ");
+    testCond(closedCount == 2);
+
+    test("Check msgs count: ");
+    testCond(msgsCount == 2);
+
+    test("Close while not opened returns error: ");
+    s = nats_CloseAndWait(0);
+    testCond(s == NATS_NOT_INITIALIZED);
+
+    // Re-open for rest of test
+    nats_Open(-1);
+
+    test("Check Close from thread returns error: ");
+    s = natsThread_Create(&t, _openCloseAndWaitCloseFromThread, (void*)&arg);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.done)
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        s = (arg.status == NATS_ILLEGAL_STATE ? NATS_OK : NATS_ERR);
+        natsMutex_Unlock(arg.m);
+
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+        t = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("No timeout: ");
+    if (s == NATS_OK)
+    {
+        natsLib_Retain();
+        s = natsThread_Create(&t, _openCloseAndWaitThread, NULL);
+    }
+    if (s == NATS_OK)
+        s = nats_CloseAndWait(0);
+    testCond(s == NATS_OK);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    t = NULL;
+    nats_Open(-1);
+
+    test("Timeout: ");
+    if (s == NATS_OK)
+    {
+        natsLib_Retain();
+        s = natsThread_Create(&t, _openCloseAndWaitThread, NULL);
+    }
+    if (s == NATS_OK)
+        s = nats_CloseAndWait(100);
+    testCond(s == NATS_TIMEOUT);
+
+    // Now wait for thread to exit
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(pid);
+}
+
+static void
 _testGetLastErrInThread(void *arg)
 {
     natsStatus  getLastErrSts;
@@ -15766,6 +15917,7 @@ static testInfo allTests[] =
     // Building blocks
     {"Version",                         test_Version},
     {"VersionMatchesTag",               test_VersionMatchesTag},
+    {"OpenCloseAndWait",                test_OpenCloseAndWait},
     {"natsNowAndSleep",                 test_natsNowAndSleep},
     {"natsAllocSprintf",                test_natsAllocSprintf},
     {"natsStrCaseStr",                  test_natsStrCaseStr},
@@ -16075,7 +16227,7 @@ int main(int argc, char **argv)
 #endif
 
     // Makes valgrind happy
-    nats_Close();
+    nats_CloseAndWait(2000);
 
     if (fails)
     {

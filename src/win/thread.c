@@ -55,6 +55,8 @@ static unsigned __stdcall _threadStart(void* arg)
 {
   struct threadCtx *c = (struct threadCtx*) arg;
 
+  nats_setNATSThreadKey();
+
   c->entry(c->arg);
 
   NATS_FREE(c);

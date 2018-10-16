@@ -98,8 +98,12 @@ typedef struct __natsLib
     bool            sslInitialized;
     natsThreadLocal errTLKey;
     natsThreadLocal sslTLKey;
+    natsThreadLocal natsThreadKey;
     bool            initialized;
     bool            closed;
+    natsCondition   *closeCompleteCond;
+    bool            *closeCompleteBool;
+    bool            closeCompleteSignal;
     // Do not move 'refs' without checking _freeLib()
     int             refs;
 
@@ -167,8 +171,15 @@ _finalCleanup(void)
     }
 
     natsThreadLocal_DestroyKey(gLib.errTLKey);
+    natsThreadLocal_DestroyKey(gLib.natsThreadKey);
     natsMutex_Destroy(gLib.lock);
     gLib.lock = NULL;
+}
+
+void
+nats_setNATSThreadKey(void)
+{
+    natsThreadLocal_Set(gLib.natsThreadKey, (const void*)1);
 }
 
 void
@@ -340,7 +351,18 @@ _freeLib(void)
     memset(&(gLib.refs), 0, sizeof(natsLib) - ((char *)&(gLib.refs) - (char*)&gLib));
 
     natsMutex_Lock(gLib.lock);
-    gLib.closed = false;
+    if (gLib.closeCompleteCond != NULL)
+    {
+        if (gLib.closeCompleteSignal)
+        {
+            *gLib.closeCompleteBool = true;
+            natsCondition_Signal(gLib.closeCompleteCond);
+        }
+        gLib.closeCompleteCond   = NULL;
+        gLib.closeCompleteBool   = NULL;
+        gLib.closeCompleteSignal = false;
+    }
+    gLib.closed      = false;
     gLib.initialized = false;
     natsMutex_Unlock(gLib.lock);
 }
@@ -380,6 +402,8 @@ _doInitOnce(void)
     s = natsMutex_Create(&(gLib.lock));
     if (s == NATS_OK)
         s = natsThreadLocal_CreateKey(&(gLib.errTLKey), _destroyErrTL);
+    if (s == NATS_OK)
+        s = natsThreadLocal_CreateKey(&(gLib.natsThreadKey), NULL);
     if (s != NATS_OK)
     {
         fprintf(stderr, "FATAL ERROR: Unable to initialize library!\n");
@@ -712,15 +736,13 @@ _asyncCbsThread(void *arg)
 
     natsMutex_Lock(asyncCbs->lock);
 
-    while (!(asyncCbs->shutdown))
+    // We want all callbacks to be invoked even on shutdown
+    while (true)
     {
-        while (!(asyncCbs->shutdown)
-               && ((cb = asyncCbs->head) == NULL))
-        {
+        while (((cb = asyncCbs->head) == NULL) && !asyncCbs->shutdown)
             natsCondition_Wait(asyncCbs->cond, asyncCbs->lock);
-        }
 
-        if (asyncCbs->shutdown)
+        if ((cb == NULL) && asyncCbs->shutdown)
             break;
 
         asyncCbs->head = cb->next;
@@ -771,13 +793,6 @@ _asyncCbsThread(void *arg)
         natsMutex_Lock(asyncCbs->lock);
     }
 
-    while ((cb = asyncCbs->head) != NULL)
-    {
-        asyncCbs->head = cb->next;
-
-        natsAsyncCb_Destroy(cb);
-    }
-
     natsMutex_Unlock(asyncCbs->lock);
 
     natsLib_Release();
@@ -822,8 +837,8 @@ _garbageCollector(void *closure)
 
     natsMutex_Lock(gc->lock);
 
-    // Repeat until notified to shutdown.
-    while (!(gc->shutdown))
+    // Process all elements in the list, even on shutdown
+    while (true)
     {
         // Go into wait until we are notified to shutdown
         // or there is something to garbage collect
@@ -865,6 +880,10 @@ _garbageCollector(void *closure)
             natsMutex_Lock(gc->lock);
         }
         while (gc->head != NULL);
+
+        // If we were ask to shutdown and since the list is now empty, exit
+        if (gc->shutdown)
+            break;
     }
 
     natsMutex_Unlock(gc->lock);
@@ -1094,22 +1113,45 @@ natsInbox_Destroy(natsInbox *inbox)
 }
 
 
-void
-nats_Close(void)
+static natsStatus
+_close(bool wait, int64_t timeout)
 {
-    int i;
+    natsStatus      s        = NATS_OK;
+    natsCondition   *cond    = NULL;
+    bool            complete = false;
+    int             i;
 
     // This is to protect against a call to nats_Close() while there
     // was no prior call to nats_Open(), either directly or indirectly.
     if (!nats_InitOnce(&gInitOnce, _doInitOnce))
-        return;
+        return NATS_ERR;
 
     natsMutex_Lock(gLib.lock);
 
-    if (gLib.closed || !(gLib.initialized))
+    if (gLib.closed || !gLib.initialized)
     {
+        bool closed = gLib.closed;
+
         natsMutex_Unlock(gLib.lock);
-        return;
+
+        if (closed)
+            return NATS_ILLEGAL_STATE;
+        return NATS_NOT_INITIALIZED;
+    }
+    if (wait)
+    {
+        if (natsThreadLocal_Get(gLib.natsThreadKey) != NULL)
+            s = NATS_ILLEGAL_STATE;
+        if (s == NATS_OK)
+            s = natsCondition_Create(&cond);
+        if (s != NATS_OK)
+        {
+            natsMutex_Unlock(gLib.lock);
+            return s;
+        }
+        gLib.closeCompleteCond   = cond;
+        gLib.closeCompleteBool   = &complete;
+        gLib.closeCompleteSignal = true;
     }
 
     gLib.closed = true;
@@ -1144,6 +1186,37 @@ nats_Close(void)
 
     nats_ReleaseThreadMemory();
     _libTearDown();
+
+    if (wait)
+    {
+        natsMutex_Lock(gLib.lock);
+        while ((s != NATS_TIMEOUT) && !complete)
+        {
+            if (timeout <= 0)
+                natsCondition_Wait(cond, gLib.lock);
+            else
+                s = natsCondition_TimedWait(cond, gLib.lock, timeout);
+        }
+        if (s != NATS_OK)
+            gLib.closeCompleteSignal = false;
+        natsMutex_Unlock(gLib.lock);
+
+        natsCondition_Destroy(cond);
+    }
+
+    return s;
+}
+
+void
+nats_Close(void)
+{
+    _close(false, true);
+}
+
+natsStatus
+nats_CloseAndWait(int64_t timeout)
+{
+    return _close(true, timeout);
 }
 
 const char*

@@ -8,7 +8,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 
 [![License Apache 2](https://img.shields.io/badge/License-Apache2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Build Status](https://travis-ci.org/nats-io/cnats.svg?branch=master)](http://travis-ci.org/nats-io/cnats)
-[![Release](https://img.shields.io/badge/release-v1.8.0--beta-blue.svg?style=flat)](https://github.com/nats-io/cnats/releases/tag/v1.8.0-beta)
+[![Release](https://img.shields.io/badge/release-v1.8.0-blue.svg?style=flat)](https://github.com/nats-io/cnats/releases/tag/v1.8.0)
 [![Documentation](https://img.shields.io/badge/doc-Doxygen-brightgreen.svg?style=flat)](http://nats-io.github.io/cnats)
 
 # Table of Contents

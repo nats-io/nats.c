@@ -548,6 +548,9 @@ natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWork
 natsLocale
 natsLib_getLocale(void);
 
+void
+nats_setNATSThreadKey(void);
+
 //
 // Threads
 //

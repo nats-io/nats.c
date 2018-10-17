@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">1.8.0-beta</span>
+   &#160;<span id="projectnumber">1.8.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -118,14 +118,14 @@ $(document).ready(function(){initNavTree('status_8h.html','');});
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="enum-members"></a>
 Enumerations</h2></td></tr>
 <tr class="memitem:a6d667c1f8dd289a7e0f39bf10e800b51"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51">natsConnStatus</a> { <br />
-&#160;&#160;<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51acdaad1112073e3e2ea032424c38c34e1">DISCONNECTED</a> = 0, 
-<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a06b876bcf37a32fed1dbadf4273827bf">CONNECTING</a>, 
-<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a7a691a2430ec26878897b5fbc9c22a4c">CONNECTED</a>, 
-<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a929f0327e17604ce9713b2a6117bd603">CLOSED</a>, 
+&#160;&#160;<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a08f92960811d1ff05b91a0870b4ecb92">NATS_CONN_STATUS_DISCONNECTED</a> = 0, 
+<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a7e4d95cb29122f06e17ca4aff55cc736">NATS_CONN_STATUS_CONNECTING</a>, 
+<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a0dafab74b55f98cfc1d00e4d1ef38725">NATS_CONN_STATUS_CONNECTED</a>, 
+<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51aa78753a4de2d0379078bb09cdc1acdb2">NATS_CONN_STATUS_CLOSED</a>, 
 <br />
-&#160;&#160;<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a1d5843fca4a8464bd4e24c90725352c0">RECONNECTING</a>, 
-<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a99eeb21948b2d1fb98bcad33a87fc322">DRAINING_SUBS</a>, 
-<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a4695d39612939404418c91ce1fb1ef35">DRAINING_PUBS</a>
+&#160;&#160;<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51acfdc4826e08ce4b59f901952038e9206">NATS_CONN_STATUS_RECONNECTING</a>, 
+<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51ab6f9d121707673a61cbe2c591f64fbf1">NATS_CONN_STATUS_DRAINING_SUBS</a>, 
+<a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51ac6b8b7f138f6ca285fe1f4da707b2100">NATS_CONN_STATUS_DRAINING_PUBS</a>
 <br />
  }<tr class="memdesc:a6d667c1f8dd289a7e0f39bf10e800b51"><td class="mdescLeft">&#160;</td><td class="mdescRight">The connection state.  <a href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51">More...</a><br /></td></tr>
 </td></tr>
@@ -188,25 +188,25 @@ Enumerations</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <table class="fieldtable">
-<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51acdaad1112073e3e2ea032424c38c34e1"></a>DISCONNECTED&#160;</td><td class="fielddoc">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51a08f92960811d1ff05b91a0870b4ecb92"></a>NATS_CONN_STATUS_DISCONNECTED&#160;</td><td class="fielddoc">
 <p>The connection has been disconnected. </p>
 </td></tr>
-<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51a06b876bcf37a32fed1dbadf4273827bf"></a>CONNECTING&#160;</td><td class="fielddoc">
+<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51a7e4d95cb29122f06e17ca4aff55cc736"></a>NATS_CONN_STATUS_CONNECTING&#160;</td><td class="fielddoc">
 <p>The connection is in the process or connecting. </p>
 </td></tr>
-<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51a7a691a2430ec26878897b5fbc9c22a4c"></a>CONNECTED&#160;</td><td class="fielddoc">
+<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51a0dafab74b55f98cfc1d00e4d1ef38725"></a>NATS_CONN_STATUS_CONNECTED&#160;</td><td class="fielddoc">
 <p>The connection is connected. </p>
 </td></tr>
-<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51a929f0327e17604ce9713b2a6117bd603"></a>CLOSED&#160;</td><td class="fielddoc">
+<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51aa78753a4de2d0379078bb09cdc1acdb2"></a>NATS_CONN_STATUS_CLOSED&#160;</td><td class="fielddoc">
 <p>The connection is closed. </p>
 </td></tr>
-<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51a1d5843fca4a8464bd4e24c90725352c0"></a>RECONNECTING&#160;</td><td class="fielddoc">
+<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51acfdc4826e08ce4b59f901952038e9206"></a>NATS_CONN_STATUS_RECONNECTING&#160;</td><td class="fielddoc">
 <p>The connection is in the process or reconnecting. </p>
 </td></tr>
-<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51a99eeb21948b2d1fb98bcad33a87fc322"></a>DRAINING_SUBS&#160;</td><td class="fielddoc">
+<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51ab6f9d121707673a61cbe2c591f64fbf1"></a>NATS_CONN_STATUS_DRAINING_SUBS&#160;</td><td class="fielddoc">
 <p>The connection is draining subscriptions. </p>
 </td></tr>
-<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51a4695d39612939404418c91ce1fb1ef35"></a>DRAINING_PUBS&#160;</td><td class="fielddoc">
+<tr><td class="fieldname"><a class="anchor" id="a6d667c1f8dd289a7e0f39bf10e800b51ac6b8b7f138f6ca285fe1f4da707b2100"></a>NATS_CONN_STATUS_DRAINING_PUBS&#160;</td><td class="fielddoc">
 <p>The connection is draining publishers. </p>
 </td></tr>
 </table>

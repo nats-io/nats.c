@@ -2,6 +2,7 @@ var searchData=
 [
   ['nats_5fcheckcompatibility',['nats_CheckCompatibility',['../group__library_group.html#ga8c2ad4df801bd9d11564587ed3a7081e',1,'nats.h']]],
   ['nats_5fclose',['nats_Close',['../group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e',1,'nats.h']]],
+  ['nats_5fcloseandwait',['nats_CloseAndWait',['../group__library_group.html#gaf75bb5b38bf32e6a8f43e54068625903',1,'nats.h']]],
   ['nats_5fgetlasterror',['nats_GetLastError',['../group__library_group.html#ga2610d5691a89a0f2526989083bee0fd3',1,'nats.h']]],
   ['nats_5fgetlasterrorstack',['nats_GetLastErrorStack',['../group__library_group.html#gaca24172e1b97ca01cee29ca437f5702e',1,'nats.h']]],
   ['nats_5fgetversion',['nats_GetVersion',['../group__library_group.html#gafc09930d38dcf3dcee144e8d3ffc225d',1,'nats.h']]],
@@ -22,6 +23,7 @@ var searchData=
   ['natsconnection_5fdraintimeout',['natsConnection_DrainTimeout',['../group__conn_mgt_group.html#gae06fe6f5933f216d6d93645a122a7dd4',1,'nats.h']]],
   ['natsconnection_5fflush',['natsConnection_Flush',['../group__conn_mgt_group.html#ga1c98f8d89bb8e20ea8621e860a90267f',1,'nats.h']]],
   ['natsconnection_5fflushtimeout',['natsConnection_FlushTimeout',['../group__conn_mgt_group.html#ga85915ef0c8b87993be1b076099d6a7c1',1,'nats.h']]],
+  ['natsconnection_5fgetclientid',['natsConnection_GetClientID',['../group__conn_mgt_group.html#ga747513ba6ab63fdf9a72bfc8025a14ba',1,'nats.h']]],
   ['natsconnection_5fgetconnectedserverid',['natsConnection_GetConnectedServerId',['../group__conn_mgt_group.html#ga48cee9ea1cdc9fc2770de2f9f0fd1ccf',1,'nats.h']]],
   ['natsconnection_5fgetconnectedurl',['natsConnection_GetConnectedUrl',['../group__conn_mgt_group.html#gaf623280407c43ade02285005f0642e6d',1,'nats.h']]],
   ['natsconnection_5fgetdiscoveredservers',['natsConnection_GetDiscoveredServers',['../group__conn_mgt_group.html#gad25c77be0873495412c90a73fe450708',1,'nats.h']]],

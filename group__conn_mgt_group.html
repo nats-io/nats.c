@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">1.8.0-beta</span>
+   &#160;<span id="projectnumber">1.8.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -163,6 +163,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gab6cfa9cb6857ae10f096a94f5e244e63"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#gab6cfa9cb6857ae10f096a94f5e244e63">natsConnection_GetLastError</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char **lastError)</td></tr>
 <tr class="memdesc:gab6cfa9cb6857ae10f096a94f5e244e63"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gets the last connection error.  <a href="#gab6cfa9cb6857ae10f096a94f5e244e63">More...</a><br /></td></tr>
 <tr class="separator:gab6cfa9cb6857ae10f096a94f5e244e63"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga747513ba6ab63fdf9a72bfc8025a14ba"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#ga747513ba6ab63fdf9a72bfc8025a14ba">natsConnection_GetClientID</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, uint64_t *cid)</td></tr>
+<tr class="memdesc:ga747513ba6ab63fdf9a72bfc8025a14ba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gets the current client ID assigned by the server.  <a href="#ga747513ba6ab63fdf9a72bfc8025a14ba">More...</a><br /></td></tr>
+<tr class="separator:ga747513ba6ab63fdf9a72bfc8025a14ba"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga59bdc4ad9fea2053f5d3841f6b83f88b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#ga59bdc4ad9fea2053f5d3841f6b83f88b">natsConnection_Drain</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
 <tr class="memdesc:ga59bdc4ad9fea2053f5d3841f6b83f88b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drains the connection with default timeout.  <a href="#ga59bdc4ad9fea2053f5d3841f6b83f88b">More...</a><br /></td></tr>
 <tr class="separator:ga59bdc4ad9fea2053f5d3841f6b83f88b"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -435,7 +438,7 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 <p>Performs a round trip to the server and return when it receives the internal reply.</p>
 <p>Note that if this call occurs when the connection to the server is lost, the <code>PING</code> will not be echoed even if the library can connect to a new (or the same) server. Therefore, in such situation, this call will fail with the status <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80abef517217119e8446a8e3382e1f37eb3">NATS_CONNECTION_DISCONNECTED</a>.</p>
-<p>If the connection is closed while this call is in progress, then the status <a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a929f0327e17604ce9713b2a6117bd603" title="The connection is closed. ">CLOSED</a> would be returned instead.</p>
+<p>If the connection is closed while this call is in progress, then the status <a class="el" href="status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51aa78753a4de2d0379078bb09cdc1acdb2" title="The connection is closed. ">NATS_CONN_STATUS_CLOSED</a> would be returned instead.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
@@ -737,6 +740,42 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">lastError</td><td>the location where the pointer to the connection's last error string is copied. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga747513ba6ab63fdf9a72bfc8025a14ba"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsConnection_GetClientID </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *&#160;</td>
+          <td class="paramname"><em>nc</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">uint64_t *&#160;</td>
+          <td class="paramname"><em>cid</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Returns the client ID assigned by the server to which the client is currently connected to.</p>
+<dl class="section note"><dt>Note</dt><dd>The value may change if the client reconnects.</dd></dl>
+<p>This function returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a4e298931ba0698a72e397b1b57c885" title="The server does not support this action. ">NATS_NO_SERVER_SUPPORT</a> if the server's version is less than 1.2.0.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> object. </td></tr>
+    <tr><td class="paramname">cid</td><td>the location where to store the client ID. </td></tr>
   </table>
   </dd>
 </dl>

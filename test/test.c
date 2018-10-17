@@ -8176,6 +8176,61 @@ test_Flush(void)
 }
 
 static void
+test_ConnCloseDoesFlush(void)
+{
+    natsStatus          s    = NATS_OK;
+    natsPid             pid  = NATS_INVALID_PID;
+    natsConnection      *nc1 = NULL;
+    natsConnection      *nc2 = NULL;
+    natsSubscription    *sub = NULL;
+    int                 tc   = 100000;
+    int                 i, iter;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    if (valgrind)
+        tc = 1000;
+
+    test("Connection close flushes: ");
+    for (iter=0; (s == NATS_OK) && (iter<10); iter++)
+    {
+        s = natsConnection_ConnectTo(&nc1, NATS_DEFAULT_URL);
+        if (s == NATS_OK)
+            s = natsConnection_SubscribeSync(&sub, nc1, "foo");
+        if (s == NATS_OK)
+            s = natsSubscription_SetPendingLimits(sub, -1, -1);
+        if (s == NATS_OK)
+            s = natsConnection_Flush(nc1);
+
+        if (s == NATS_OK)
+            s = natsConnection_ConnectTo(&nc2, NATS_DEFAULT_URL);
+
+        for (i=0; (s == NATS_OK) && (i<tc); i++)
+            s = natsConnection_PublishString(nc2, "foo", "hello");
+        if (s == NATS_OK)
+            natsConnection_Close(nc2);
+
+        for (i=0; (s == NATS_OK) && (i<tc); i++)
+        {
+            natsMsg *msg = NULL;
+            s = natsSubscription_NextMsg(&msg, sub, 1000);
+            natsMsg_Destroy(msg);
+        }
+
+        natsConnection_Destroy(nc2);
+        nc2 = NULL;
+        natsSubscription_Destroy(sub);
+        sub = NULL;
+        natsConnection_Destroy(nc1);
+        nc1 = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    _stopServer(pid);
+}
+
+static void
 test_QueueSubscriber(void)
 {
     natsStatus          s;
@@ -15853,6 +15908,7 @@ static testInfo allTests[] =
     {"SyncSubscribe",                   test_SyncSubscribe},
     {"PubSubWithReply",                 test_PubSubWithReply},
     {"Flush",                           test_Flush},
+    {"ConnCloseDoesFlush",              test_ConnCloseDoesFlush},
     {"QueueSubscriber",                 test_QueueSubscriber},
     {"ReplyArg",                        test_ReplyArg},
     {"SyncReplyArg",                    test_SyncReplyArg},

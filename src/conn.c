@@ -80,6 +80,9 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs);
 static bool
 _processOpError(natsConnection *nc, natsStatus s, bool initialConnect);
 
+static natsStatus
+_flushTimeout(natsConnection *nc, int64_t timeout);
+
 
 /*
  * ----------------------------------------
@@ -2072,6 +2075,12 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
 
     natsConn_lockAndRetain(nc);
 
+    // If connection is not already closed and currently connected, attempt to
+    // send a PING and get a PONG to ensure that not only buffers are flushed
+    // but that server has processed anything that was pending.
+    if (!natsConn_isClosed(nc) && (nc->status == NATS_CONN_STATUS_CONNECTED))
+        _flushTimeout(nc, 2000);
+
     if (natsConn_isClosed(nc))
     {
         nc->status = status;
@@ -2910,36 +2919,24 @@ _destroyPong(natsConnection *nc, natsPong *pong)
         NATS_FREE(pong);
 }
 
-natsStatus
-natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
+// Low-level flush. On entry, connection has been verified to no be closed
+// and lock is held.
+static natsStatus
+_flushTimeout(natsConnection *nc, int64_t timeout)
 {
     natsStatus  s       = NATS_OK;
     int64_t     target  = 0;
     natsPong    *pong   = NULL;
 
-    if (nc == NULL)
-        return nats_setDefaultError(NATS_INVALID_ARG);
+    // Use the cached PONG instead of creating one if the list
+    // is empty
+    if (nc->pongs.head == NULL)
+        pong = &(nc->pongs.cached);
+    else
+        pong = (natsPong*) NATS_CALLOC(1, sizeof(natsPong));
 
-    if (timeout <= 0)
-        return nats_setDefaultError(NATS_INVALID_TIMEOUT);
-
-    natsConn_lockAndRetain(nc);
-
-    if (natsConn_isClosed(nc))
-        s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
-
-    if (s == NATS_OK)
-    {
-        // Use the cached PONG instead of creating one if the list
-        // is empty
-        if (nc->pongs.head == NULL)
-            pong = &(nc->pongs.cached);
-        else
-            pong = (natsPong*) NATS_CALLOC(1, sizeof(natsPong));
-
-        if (pong == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-    }
+    if (pong == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
 
     if (s == NATS_OK)
     {
@@ -2984,6 +2981,30 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
         // We are done with the pong
         _destroyPong(nc, pong);
     }
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
+{
+    natsStatus  s       = NATS_OK;
+    int64_t     target  = 0;
+    natsPong    *pong   = NULL;
+
+    if (nc == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (timeout <= 0)
+        return nats_setDefaultError(NATS_INVALID_TIMEOUT);
+
+    natsConn_lockAndRetain(nc);
+
+    if (natsConn_isClosed(nc))
+        s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
+
+    if (s == NATS_OK)
+        s = _flushTimeout(nc, timeout);
 
     natsConn_unlockAndRelease(nc);
 

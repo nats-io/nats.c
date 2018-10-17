@@ -79,6 +79,7 @@ AsyncSubscribeTimeout
 SyncSubscribe
 PubSubWithReply
 Flush
+ConnCloseDoesFlush
 QueueSubscriber
 ReplyArg
 SyncReplyArg

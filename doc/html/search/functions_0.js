@@ -2,6 +2,7 @@ var searchData=
 [
   ['nats_5fcheckcompatibility',['nats_CheckCompatibility',['../group__library_group.html#ga8c2ad4df801bd9d11564587ed3a7081e',1,'nats.h']]],
   ['nats_5fclose',['nats_Close',['../group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e',1,'nats.h']]],
+  ['nats_5fcloseandwait',['nats_CloseAndWait',['../group__library_group.html#gaf75bb5b38bf32e6a8f43e54068625903',1,'nats.h']]],
   ['nats_5fgetlasterror',['nats_GetLastError',['../group__library_group.html#ga2610d5691a89a0f2526989083bee0fd3',1,'nats.h']]],
   ['nats_5fgetlasterrorstack',['nats_GetLastErrorStack',['../group__library_group.html#gaca24172e1b97ca01cee29ca437f5702e',1,'nats.h']]],
   ['nats_5fgetversion',['nats_GetVersion',['../group__library_group.html#gafc09930d38dcf3dcee144e8d3ffc225d',1,'nats.h']]],

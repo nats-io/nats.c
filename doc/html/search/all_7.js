@@ -4,6 +4,7 @@ var searchData=
   ['nats_5faddress_5fmissing',['NATS_ADDRESS_MISSING',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae1d2c1366dbed428f6589f057acc507d',1,'status.h']]],
   ['nats_5fcheckcompatibility',['nats_CheckCompatibility',['../group__library_group.html#ga8c2ad4df801bd9d11564587ed3a7081e',1,'nats.h']]],
   ['nats_5fclose',['nats_Close',['../group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e',1,'nats.h']]],
+  ['nats_5fcloseandwait',['nats_CloseAndWait',['../group__library_group.html#gaf75bb5b38bf32e6a8f43e54068625903',1,'nats.h']]],
   ['nats_5fconn_5fstatus_5fclosed',['NATS_CONN_STATUS_CLOSED',['../status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51aa78753a4de2d0379078bb09cdc1acdb2',1,'status.h']]],
   ['nats_5fconn_5fstatus_5fconnected',['NATS_CONN_STATUS_CONNECTED',['../status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a0dafab74b55f98cfc1d00e4d1ef38725',1,'status.h']]],
   ['nats_5fconn_5fstatus_5fconnecting',['NATS_CONN_STATUS_CONNECTING',['../status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51a7e4d95cb29122f06e17ca4aff55cc736',1,'status.h']]],

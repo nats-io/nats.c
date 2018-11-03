@@ -1587,11 +1587,11 @@ test_natsHashing(void)
 {
     const char *keys[] = {"foo",
                           "bar",
-                          "apcera.continuum.router.foo.bar",
-                          "apcera.continuum.router.foo.bar.baz"};
+                          "nats.foo.bar",
+                          "nats.foo.bar.baz"};
     const char *longKey = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@$#%^&*()";
 
-    uint32_t results[] = {1058908168, 1061739001, 4242539713, 3332038527};
+    uint32_t results[] = {1335397774, 3152566813, 3190233692, 2984684499};
     uint32_t r, lr;
     natsStatus s = NATS_OK;
     int64_t start, end;

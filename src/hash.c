@@ -21,14 +21,7 @@
 
 #define _freeEntry(e)   { NATS_FREE(e); (e) = NULL; }
 
-#define _OFF32  (2166136261)
-#define _YP32   (709607)
-
 #define _BSZ (8)
-#define _WSZ (4)
-
-static int _DWSZ   = _WSZ << 1; // 8
-static int _DDWSZ  = _WSZ << 2; // 16
 
 static int _MAX_BKT_SIZE = (1 << 30) - 1;
 
@@ -342,43 +335,38 @@ natsHashIter_Done(natsHashIter *iter)
     iter->hash->canResize = true;
 }
 
+#define _nats_ROL(x, n) (((x) << (n)) | ((x) >> (32-(n))))
 
 // Jesteress derivative of FNV1A from [http://www.sanmayce.com/Fastest_Hash/]
 uint32_t
 natsStrHash_Hash(const char *data, int dataLen)
 {
-    int      i      = 0;
-    int      dlen   = dataLen;
-    uint32_t h32    = (uint32_t)_OFF32;
-    uint64_t k1, k2;
+    const uint32_t  PRIME   = 709607;
+    uint32_t        hash32  = 2166136261;
+    const char      *p      = data;
+    uint32_t        wrdlen  = (uint32_t) dataLen;
 
-    for (; dlen >= _DDWSZ; dlen -= _DDWSZ)
-    {
-        k1  = *(uint64_t*) &(data[i]);
-        k2  = *(uint64_t*) &(data[i + 4]);
-        h32 = (uint32_t) ((((uint64_t) h32) ^ ((k1<<5 | k1>>27) ^ k2)) * _YP32);
-        i += _DDWSZ;
-    }
+    for(; wrdlen >= 2*sizeof(uint32_t); wrdlen -= 2*sizeof(uint32_t), p += 2*sizeof(uint32_t))
+        hash32 = (hash32 ^ (_nats_ROL(*(uint32_t*)p,5)^*(uint32_t*)(p+4))) * PRIME;
 
-    // Cases: 0,1,2,3,4,5,6,7
-    if ((dlen & _DWSZ) > 0)
+    if (wrdlen & sizeof(uint32_t))
     {
-        k1  = *(uint64_t*) &(data[i]);
-        h32 = (uint32_t) ((((uint64_t) h32) ^ k1) * _YP32);
-        i += _DWSZ;
+        hash32 = (hash32 ^ *(uint32_t*)p) * PRIME;
+        p += sizeof(uint32_t);
     }
-    if ((dlen & _WSZ) > 0)
+    if (wrdlen & sizeof(uint16_t))
     {
-        k1  = *(uint32_t*) &(data[i]);
-        h32 = (uint32_t) ((((uint64_t) h32) ^ k1) * _YP32);
-        i += _WSZ;
-    }
-    if ((dlen & 1) > 0)
-    {
-        h32 = (h32 ^ (uint32_t)(data[i])) * _YP32;
-    }
+        int         fc = *p;
+        int         sc = *(p+1);
+        uint16_t    w  = (uint16_t) ((sc & 0xFF) << 8) | (fc & 0xFF);
 
-    return h32 ^ (h32 >> 16);
+        hash32 = (hash32 ^ w) * PRIME;
+        p += sizeof(uint16_t);
+    }
+    if (wrdlen & 1)
+        hash32 = (hash32 ^ *p) * PRIME;
+
+    return hash32 ^ (hash32 >> 16);
 }
 
 natsStatus

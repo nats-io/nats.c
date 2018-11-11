@@ -766,6 +766,15 @@ _connectProto(natsConnection *nc, char **proto)
         pwd   = opts->password;
         token = opts->token;
     }
+
+    if (opts->tokenCb != NULL)
+    {
+        if (token != NULL)
+            return nats_setError(NATS_ILLEGAL_STATE, "%s", "Token and token handler options cannot be both set");
+
+        token = opts->tokenCb(opts->tokenCbClosure);
+    }
+
     if (opts->name != NULL)
         name = opts->name;
 

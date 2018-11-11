@@ -273,6 +273,15 @@ typedef natsStatus (*natsEvLoop_WriteAddRemove)(
 typedef natsStatus (*natsEvLoop_Detach)(
         void            *userData);
 
+/** \brief Callback used to build a token on connections and reconnections.
+ *
+ * This is the function that one provides to build a different token at each reconnect.
+ *
+ * @see natsOptions_SetTokenHandler()
+ *
+ * \warning Such callback is invoked synchronously from the connection thread.
+ */
+typedef const char* (*natsTokenHandler)(void *closure);
 
 #if defined(NATS_HAS_STREAMING)
 /** \brief Callback used to notify of an asynchronous publish result.
@@ -779,6 +788,25 @@ natsOptions_SetUserInfo(natsOptions *opts, const char *user, const char *passwor
  */
 NATS_EXTERN natsStatus
 natsOptions_SetToken(natsOptions *opts, const char *token);
+
+/** \brief Sets the tokenCb to use whenever a token is needed.
+ *
+ * For use cases where setting a static token through the URL<br>
+ * or through #natsOptions_SetToken is not desirable.<br>
+ * <br>
+ * This function can be used to generate a token whenever the client needs one.<br>
+ * Some example of use cases: expiring token, credential rotation, ...
+ *
+ * @see natsOptions_SetToken
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param token the tokenCb to use to generate a token to the server during connect.
+ * @param cbClosure a pointer to an user defined object (can be `NULL`). See
+ * the #natsMsgHandler prototype.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetTokenHandler(natsOptions *opts, natsTokenHandler tokenCb,
+                            void *closure);
 
 /** \brief Indicate if the servers list should be randomized.
  *

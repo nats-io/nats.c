@@ -102,6 +102,9 @@ struct threadArg
     bool            msgReceived;
     bool            done;
     int             results[10];
+    const char      *tokens[3];
+    int             tokenCallCount;
+
 
     natsSubscription *sub;
     natsOptions      *opts;
@@ -2086,6 +2089,12 @@ test_natsStrHash(void)
     testCond(1);
 }
 
+static const char*
+_dummyTokenHandler(void *closure)
+{
+    return "token";
+}
+
 static void
 _dummyErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err,
                  void *closure)
@@ -2123,6 +2132,7 @@ test_natsOptions(void)
              && (opts->user == NULL)
              && (opts->password == NULL)
              && (opts->token == NULL)
+             && (opts->tokenCb == NULL)
              && (opts->orderIP == 0)
              && !opts->noEcho
              && !opts->retryOnFailedConnect)
@@ -2375,6 +2385,15 @@ test_natsOptions(void)
     test("Remove Token: ");
     s = natsOptions_SetToken(opts, NULL);
     testCond((s == NATS_OK) && (opts->token == NULL));
+
+    test("Set TokenHandler: ");
+    s = natsOptions_SetTokenHandler(opts, _dummyTokenHandler, NULL);
+    testCond((s == NATS_OK) && (opts->tokenCb == _dummyTokenHandler)
+             && (strcmp(opts->tokenCb(NULL), "token") == 0));
+
+    test("Remove TokenHandler: ");
+    s = natsOptions_SetTokenHandler(opts, NULL, NULL);
+    testCond((s == NATS_OK) && (opts->tokenCb == NULL));
 
     test("IP order invalid values: ");
     s = natsOptions_IPResolutionOrder(opts, -1);
@@ -7126,10 +7145,8 @@ test_AuthToken(void)
     natsPid             serverPid = NATS_INVALID_PID;
     natsOptions         *opts     = NULL;
 
-    serverPid = _startServer("nats://127.0.0.1:8232", "-auth testSecret -p 8232", false);
+    serverPid = _startServer("nats://testSecret@127.0.0.1:8232", "-auth testSecret -p 8232", true);
     CHECK_SERVER_STARTED(serverPid);
-
-    nats_Sleep(1000);
 
     test("Server with token authorization, client without should fail: ");
     s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:8232");
@@ -7163,6 +7180,65 @@ test_AuthToken(void)
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _stopServer(serverPid);
+}
+
+static const char*
+_tokenHandler(void* closure)
+{
+    return (char*) closure;
+}
+
+static void
+test_AuthTokenHandler(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsOptions         *opts     = NULL;
+
+    serverPid = _startServer("nats://testSecret@127.0.0.1:8232", "-auth testSecret -p 8232", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect using SetTokenHandler: ");
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://127.0.0.1:8232");
+    if (s == NATS_OK)
+        s = natsOptions_SetTokenHandler(opts, _tokenHandler, (char*) "testSecret");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    test("cannot set a tokenHandler when token set: ");
+    s = natsOptions_SetTokenHandler(opts, NULL, NULL);
+    if (s == NATS_OK)
+        s = natsOptions_SetToken(opts, "token");
+    if (s == NATS_OK)
+        s = natsOptions_SetTokenHandler(opts, _tokenHandler, (char*) "testSecret");
+    testCond(s == NATS_ILLEGAL_STATE);
+    s = natsOptions_SetToken(opts, NULL);
+
+    test("cannot set a token when tokenHandler set: ");
+    if (s == NATS_OK)
+        s = natsOptions_SetTokenHandler(opts, _tokenHandler, (char*) "testSecret");
+    if (s == NATS_OK)
+        s = natsOptions_SetToken(opts, "token");
+    testCond(s == NATS_ILLEGAL_STATE);
+
+    test("token in URL not valid with tokenHandler: ");
+    s = natsOptions_SetURL(opts, "nats://testSecret@127.0.0.1:8232");
+    if (s == NATS_OK)
+        s = natsOptions_SetTokenHandler(opts, _dummyTokenHandler, NULL);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_ILLEGAL_STATE);
 
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
@@ -10822,6 +10898,119 @@ test_BasicClusterReconnect(void)
     _destroyDefaultThreadArgs(&arg);
 
     _stopServer(serverPid2);
+}
+
+static const char*
+_reconnectTokenHandler(void* closure)
+{
+    const char *token;
+    struct threadArg *args      = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    token = args->tokens[args->tokenCallCount % (sizeof(args->tokens)/sizeof(char*))];
+    args->tokenCallCount++;
+    natsMutex_Unlock(args->m);
+
+    return token;
+}
+
+static void
+test_ReconnectWithTokenHandler(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid1= NATS_INVALID_PID;
+    natsPid             serverPid2= NATS_INVALID_PID;
+    natsPid             serverPid3= NATS_INVALID_PID;
+    char                buffer[64];
+    const char          *servers[] = {"nats://127.0.0.1:22222",
+                                      "nats://127.0.0.1:22223",
+                                      "nats://127.0.0.1:22224"};
+    struct threadArg    args;
+
+    int serversCount = 3;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    args.tokenCallCount = 0;
+    args.tokens[0] = "token1";
+    args.tokens[1] = "badtoken";
+    args.tokens[2] = "token3";
+
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetNoRandomize(opts, true);
+    if (s == NATS_OK)
+        s = natsOptions_SetServers(opts, servers, serversCount);
+    if (s == NATS_OK)
+        s = natsOptions_SetTokenHandler(opts, _reconnectTokenHandler, (void*) &args);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &args);
+    if (s == NATS_OK)
+        s = natsOptions_SetMaxReconnect(opts, 10);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectWait(opts, 100);
+
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    serverPid1 = _startServer("nats://token1@127.0.0.1:22222", "-p 22222 --auth token1", true);
+    CHECK_SERVER_STARTED(serverPid1);
+
+    serverPid2 = _startServer("nats://user:foo@127.0.0.1:22223", "-p 22223 --user ivan --pass foo", true);
+    if (serverPid2 == NATS_INVALID_PID)
+        _stopServer(serverPid1);
+    CHECK_SERVER_STARTED(serverPid2);
+
+    serverPid3 = _startServer("nats://token3@127.0.0.1:22224", "-p 22224 --auth token3", true);
+    if (serverPid3 == NATS_INVALID_PID)
+    {
+        _stopServer(serverPid1);
+        _stopServer(serverPid2);
+    }
+    CHECK_SERVER_STARTED(serverPid3);
+
+    test("Connect should succeed: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    // Stop the server which will trigger the reconnect
+    _stopServer(serverPid1);
+    serverPid1 = NATS_INVALID_PID;
+
+
+    // The client will try to connect to the second server, and that
+    // should fail. It should then try to connect to the third and succeed.
+
+    // Wait for the reconnect CB.
+    test("Reconnect callback should be triggered: ")
+    natsMutex_Lock(args.m);
+    while ((s == NATS_OK)
+           && !(args.reconnected))
+    {
+        s = natsCondition_TimedWait(args.c, args.m, 5000);
+    }
+    natsMutex_Unlock(args.m);
+    testCond((s == NATS_OK) && args.reconnected);
+
+    test("Connection should not be closed: ");
+    testCond(natsConnection_IsClosed(nc) == false);
+
+    buffer[0] = '\0';
+    s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
+
+    test("Should have connected to third server: ");
+    testCond((s == NATS_OK) && (buffer[0] != '\0')
+             && (strcmp(buffer, servers[2]) == 0));
+
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid2);
+    _stopServer(serverPid3);
 }
 
 #define NUM_CLIENTS (100)
@@ -16047,6 +16236,7 @@ static testInfo allTests[] =
     {"Auth",                            test_Auth},
     {"AuthFailNoDisconnectCB",          test_AuthFailNoDisconnectCB},
     {"AuthToken",                       test_AuthToken},
+    {"AuthTokenHandler",                test_AuthTokenHandler},
     {"PermViolation",                   test_PermViolation},
     {"AuthViolation",                   test_AuthViolation},
     {"ConnectedServer",                 test_ConnectedServer},
@@ -16117,6 +16307,7 @@ static testInfo allTests[] =
     {"ServersOption",                   test_ServersOption},
     {"AuthServers",                     test_AuthServers},
     {"AuthFailToReconnect",             test_AuthFailToReconnect},
+    {"ReconnectWithTokenHandler",       test_ReconnectWithTokenHandler},
     {"BasicClusterReconnect",           test_BasicClusterReconnect},
     {"HotSpotReconnect",                test_HotSpotReconnect},
     {"ProperReconnectDelay",            test_ProperReconnectDelay},

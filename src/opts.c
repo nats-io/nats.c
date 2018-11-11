@@ -180,13 +180,38 @@ natsOptions_SetToken(natsOptions *opts, const char *token)
 
     LOCK_AND_CHECK_OPTIONS(opts, 0);
 
-    NATS_FREE(opts->token);
-    opts->token= NULL;
-    if (token != NULL)
+    if ((token != NULL) && (opts->tokenCb != NULL))
+        s = nats_setError(NATS_ILLEGAL_STATE, "%s", "Cannot set a token if a token handler has already been set");
+    else
     {
-        opts->token = NATS_STRDUP(token);
-        if (opts->token == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
+        NATS_FREE(opts->token);
+        opts->token = NULL;
+        if (token != NULL)
+        {
+            opts->token = NATS_STRDUP(token);
+            if (opts->token == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+        }
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return s;
+}
+
+natsStatus
+natsOptions_SetTokenHandler(natsOptions *opts, natsTokenHandler tokenCb, void *closure)
+{
+    natsStatus  s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    if ((tokenCb != NULL) && (opts->token != NULL))
+        s = nats_setError(NATS_ILLEGAL_STATE, "%s", "Cannot set a token handler if a token has already been set");
+    else
+    {
+        opts->tokenCb = tokenCb;
+        opts->tokenCbClosure = closure;
     }
 
     UNLOCK_OPTS(opts);
@@ -1097,4 +1122,3 @@ natsOptions_Destroy(natsOptions *opts)
 
     _freeOptions(opts);
 }
-

@@ -202,6 +202,9 @@ struct __natsOptions
     char                    *password;
     char                    *token;
 
+    natsTokenHandler        tokenCb;
+    void                    *tokenCbClosure;
+
     natsConnectionHandler   closedCb;
     void                    *closedCbClosure;
 

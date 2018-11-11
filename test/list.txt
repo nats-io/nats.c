@@ -67,6 +67,7 @@ ErrOnMaxPayloadLimit
 Auth
 AuthFailNoDisconnectCB
 AuthToken
+AuthTokenHandler
 PermViolation
 AuthViolation
 ConnectedServer
@@ -134,6 +135,7 @@ SSLConnectVerboseOption
 ServersOption
 AuthServers
 AuthFailToReconnect
+ReconnectWithTokenHandler
 BasicClusterReconnect
 HotSpotReconnect
 ProperReconnectDelay

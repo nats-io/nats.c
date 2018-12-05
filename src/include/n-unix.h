@@ -30,6 +30,11 @@
 #include <sys/select.h>
 #endif
 
+#if defined(__FreeBSD__)
+#include <sys/socket.h>
+#include <xlocale.h> /* Needed for strtold_l */
+#endif
+
 #include <sys/time.h>
 #include <fcntl.h>
 #include <netinet/tcp.h>

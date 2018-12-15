@@ -40,7 +40,6 @@ typedef CONDITION_VARIABLE  natsCondition;
 typedef INIT_ONCE           natsInitOnceType;
 typedef int                 natsSockLen;
 typedef int                 natsRecvLen;
-typedef _locale_t           natsLocale;
 
 #define NATS_ONCE_TYPE          INIT_ONCE
 #define NATS_ONCE_STATIC_INIT   INIT_ONCE_STATIC_INIT
@@ -58,17 +57,21 @@ typedef _locale_t           natsLocale;
 // Windows doesn't have those..
 // snprintf support is introduced starting MSVC 14.0 (_MSC_VER 1900: Visual Studio 2015)
 #if _MSC_VER < 1900
-#define snprintf _snprintf
+#define snprintf    nats_snprintf
 #endif
 #define strcasecmp  _stricmp
 
 #define nats_vsnprintf(b, sb, f, a) vsnprintf_s((b), (sb), (_TRUNCATE), (f), (a))
-#define nats_strtold(p, t)          _strtold_l((p), (t), (natsLib_getLocale()))
 
 int
 nats_asprintf(char **newStr, const char *fmt, ...);
 
 char*
 nats_strcasestr(const char *haystack, const char *needle);
+
+#if _MSC_VER < 1900
+int
+nats_snprintf(char *buffer, size_t countszt, char *format, ...);
+#endif
 
 #endif /* N_WIN_H_ */

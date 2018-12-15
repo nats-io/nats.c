@@ -548,9 +548,6 @@ natsLib_isLibHandlingMsgDeliveryByDefault(void);
 void
 natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWorker ***workersArray);
 
-natsLocale
-natsLib_getLocale(void);
-
 void
 nats_setNATSThreadKey(void);
 

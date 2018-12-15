@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "util.h"
 #include "mem.h"
@@ -320,18 +321,97 @@ _jsonGetStr(char **ptr, char **value)
 static natsStatus
 _jsonGetNum(char **ptr, long double *val)
 {
-    char        *tail = NULL;
-    long double lval  = 0;
+    char        *p             = *ptr;
+    bool        expIsNegative  = false;
+    int64_t     intVal         = 0;
+    int64_t     decVal         = 0;
+    int64_t     decPower       = 1;
+    int64_t     sign           = 1;
+    long double ePower         = 1.0;
+    long double res            = 0.0;
+    int         decPCount      = 0;
 
-    errno = 0;
+    while (isspace(*p))
+        p++;
 
-    lval = nats_strtold(*ptr, &tail);
-    if (errno != 0)
-        return nats_setError(NATS_INVALID_ARG,
-                             "error parsing numeric: %d", errno);
+    sign = (*p == '-' ? -1 : 1);
 
-    *ptr = tail;
-    *val = lval;
+    if ((*p == '-') || (*p == '+'))
+        p++;
+
+    while (isdigit(*p))
+        intVal = intVal * 10 + (*p++ - '0');
+
+    if (*p == '.')
+        p++;
+
+    while (isdigit(*p))
+    {
+        decVal = decVal * 10 + (*p++ - '0');
+        decPower *= 10;
+        decPCount++;
+    }
+
+    if ((*p == 'e') || (*p == 'E'))
+    {
+        int64_t eVal = 0;
+
+        p++;
+
+        expIsNegative = (*p == '-' ? true : false);
+
+        if ((*p == '-') || (*p == '+'))
+            p++;
+
+        while (isdigit(*p))
+            eVal = eVal * 10 + (*p++ - '0');
+
+        if (expIsNegative)
+        {
+            if (decPower > 0)
+                ePower = (long double) decPower;
+        }
+        else
+        {
+            if (decPCount > eVal)
+            {
+                eVal = decPCount - eVal;
+                expIsNegative = true;
+            }
+            else
+            {
+                eVal -= decPCount;
+            }
+        }
+        while (eVal != 0)
+        {
+            ePower *= 10;
+            eVal--;
+        }
+    }
+
+    // If we don't end with a ' ', ',' or '}', this is syntax error.
+    if ((*p != ' ') && (*p != ',') && (*p != '}'))
+        return NATS_ERR;
+
+    if (decVal > 0)
+        res = (long double) (sign * (intVal * decPower + decVal));
+    else
+        res = (long double) (sign * intVal);
+
+    if (ePower > 1)
+    {
+        if (expIsNegative)
+            res /= ePower;
+        else
+            res *= ePower;
+    }
+    else if (decVal > 0)
+    {
+        res /= decPower;
+    }
+    *ptr = p;
+    *val = res;
     return NATS_OK;
 }
 
@@ -510,6 +590,7 @@ nats_JSONParse(nats_JSON **newJSON, const char *jsonStr, int jsonLen)
     char            *fieldName = NULL;
     int             state;
     bool            gotEnd    = false;
+    char            *copyStr  = NULL;
 
     if (jsonLen < 0)
     {
@@ -543,6 +624,12 @@ nats_JSONParse(nats_JSON **newJSON, const char *jsonStr, int jsonLen)
     }
 
     ptr = json->str;
+    copyStr = NATS_STRDUP(ptr);
+    if (copyStr == NULL)
+    {
+        nats_JSONDestroy(json);
+        return nats_setDefaultError(NATS_NO_MEMORY);
+    }
     state = JSON_STATE_START;
 
     while ((s == NATS_OK) && (*ptr != '\0'))
@@ -649,7 +736,7 @@ nats_JSONParse(nats_JSON **newJSON, const char *jsonStr, int jsonLen)
                                           "invalid boolean value for field '%s': '%s'",
                                           fieldName, ptr);
                 }
-                else if (((*ptr >= 48) && (*ptr <= 57)) || (*ptr == '-'))
+                else if (isdigit(*ptr) || (*ptr == '-'))
                 {
                     field->typ = TYPE_NUM;
                     s = _jsonGetNum(&ptr, &field->value.vdec);
@@ -706,7 +793,7 @@ nats_JSONParse(nats_JSON **newJSON, const char *jsonStr, int jsonLen)
                 // We should have a ',' separator or be at the end of the string
                 if ((*ptr != ',') && (*ptr != '}'))
                 {
-                    s =  nats_setError(NATS_ERR, "missing separator: '%s' (%s)", ptr, jsonStr);
+                    s =  nats_setError(NATS_ERR, "missing separator: '%s' (%s)", ptr, copyStr);
                     break;
                 }
                 if (*ptr == ',')
@@ -737,6 +824,8 @@ nats_JSONParse(nats_JSON **newJSON, const char *jsonStr, int jsonLen)
     else
         nats_JSONDestroy(json);
 
+    NATS_FREE(copyStr);
+
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -751,13 +840,30 @@ nats_JSONGetValue(nats_JSON *json, const char *fieldName, int fieldType, void **
         return NATS_OK;
 
     // Check parsed type matches what is being asked.
-    if ((((fieldType == TYPE_INT) || (fieldType == TYPE_LONG)) && (field->typ != TYPE_NUM))
-        || ((field->typ != TYPE_NUM) && (fieldType != field->typ)))
+    switch (fieldType)
     {
-        return nats_setError(NATS_INVALID_ARG,
-                             "Asked for field '%s' as type %d, but got type %d when parsing",
-                             field->name, fieldType, field->typ);
+        case TYPE_INT:
+        case TYPE_LONG:
+        case TYPE_ULONG:
+        case TYPE_DOUBLE:
+            if (field->typ != TYPE_NUM)
+                return nats_setError(NATS_INVALID_ARG,
+                                     "Asked for field '%s' as type %d, but got type %d when parsing",
+                                     field->name, fieldType, field->typ);
+            break;
+        case TYPE_BOOL:
+        case TYPE_STR:
+            if (field->typ != fieldType)
+                return nats_setError(NATS_INVALID_ARG,
+                                     "Asked for field '%s' as type %d, but got type %d when parsing",
+                                     field->name, fieldType, field->typ);
+            break;
+        default:
+            return nats_setError(NATS_INVALID_ARG,
+                                 "Asked for field '%s' as type %d, but this type does not exist",
+                                 field->name, fieldType);
     }
+    // We have proper type, return value
     switch (fieldType)
     {
         case TYPE_STR:

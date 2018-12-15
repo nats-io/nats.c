@@ -21,7 +21,6 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <stdarg.h>
-#include <locale.h>
 
 #include "mem.h"
 #include "timer.h"
@@ -114,8 +113,6 @@ typedef struct __natsLib
     natsLibTimers       timers;
     natsLibAsyncCbs     asyncCbs;
     natsLibDlvWorkers   dlvWorkers;
-
-    natsLocale      locale;
 
     natsCondition   *cond;
 
@@ -309,33 +306,6 @@ _freeDlvWorkers(void)
     workers->workers = NULL;
 }
 
-static natsStatus
-_createLocale(void)
-{
-#ifdef _WIN32
-    gLib.locale = _create_locale(LC_ALL, "C");
-#else
-    gLib.locale = newlocale(LC_ALL_MASK, "C", (locale_t) 0);
-    if (gLib.locale == (locale_t) 0)
-        return NATS_NO_MEMORY;
-#endif
-    return NATS_OK;
-}
-
-static void
-_freeLocale(void)
-{
-    if (gLib.locale == NULL)
-        return;
-
-#ifdef _WIN32
-    _free_locale(gLib.locale);
-#else
-    freelocale(gLib.locale);
-#endif
-    gLib.locale = NULL;
-}
-
 static void
 _freeLib(void)
 {
@@ -344,7 +314,6 @@ _freeLib(void)
     _freeGC();
     _freeDlvWorkers();
     natsNUID_free();
-    _freeLocale();
 
     natsCondition_Destroy(gLib.cond);
 
@@ -983,9 +952,7 @@ nats_Open(int64_t lockSpinCount)
     if (lockSpinCount >= 0)
         gLockSpinCount = lockSpinCount;
 
-    s = _createLocale();
-    if (s == NATS_OK)
-        s = natsCondition_Create(&(gLib.cond));
+    s = natsCondition_Create(&(gLib.cond));
 
     if (s == NATS_OK)
         s = natsMutex_Create(&(gLib.timers.lock));
@@ -1949,10 +1916,4 @@ natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWork
     *idx = workers->idx;
     *workersArray = workers->workers;
     natsMutex_Unlock(workers->lock);
-}
-
-natsLocale
-natsLib_getLocale()
-{
-    return gLib.locale;
 }

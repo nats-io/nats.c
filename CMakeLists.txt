@@ -20,6 +20,7 @@ option(NATS_BUILD_LIBEVENT_EXAMPLE "Build libevent examples" OFF)
 option(NATS_BUILD_STATIC_EXAMPLES "Statically link examples" OFF)
 option(NATS_BUILD_STREAMING "Build NATS Streaming" ON)
 option(NATS_BUILD_NO_PREFIX_CONNSTS "No prefix for connection status enum" OFF)
+option(NATS_COMPILER_HARDENING "Compiler hardening flags" OFF)
 
 if(NATS_BUILD_WITH_TLS)
   find_package(OpenSSL REQUIRED)
@@ -63,6 +64,15 @@ if(UNIX)
 
   set(NATS_COMMON_C_FLAGS "-std=c99 -pedantic")
   
+  # Some compiler hardening flags.
+  if(NATS_COMPILER_HARDENING)
+     set(NATS_COMMON_C_FLAGS "${NATS_COMMON_C_FLAGS} -fPIE -fstack-protector-all -D_FORTIFY_SOURCE=2 -O1")
+     # Works only with GCC.
+     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+       set(NATS_COMMON_C_FLAGS "${NATS_COMMON_C_FLAGS} -Wl,-z,relro,-z,now -pie")
+     endif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+  endif(NATS_COMPILER_HARDENING)
+
   if(NATS_BUILD_TYPE MATCHES "Debug")
     set(NATS_COMMON_C_FLAGS "${NATS_COMMON_C_FLAGS} -ggdb")    
   endif(NATS_BUILD_TYPE MATCHES "Debug")
@@ -114,7 +124,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_CODE_COVERAGE} ${NATS_COMMON_C_FLAGS}
 
 if(UNIX)
   if(APPLE)
-    add_definitions(-DNATS_USE_X_LOCALE)
   else(APPLE)
     add_definitions(-D_GNU_SOURCE)
   endif(APPLE)

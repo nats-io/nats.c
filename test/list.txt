@@ -4,6 +4,7 @@ OpenCloseAndWait
 natsNowAndSleep
 natsAllocSprintf
 natsStrCaseStr
+natsSnprintf
 natsBuffer
 natsParseInt64
 natsParseControl
@@ -32,8 +33,9 @@ SelectNextServer
 ParserPing
 ParserErr
 ParserOK
-ParserSouldFail
+ParserShouldFail
 ParserSplitMsg
+ProcessMsgArgs
 LibMsgDelivery
 AsyncINFO
 RequestPool

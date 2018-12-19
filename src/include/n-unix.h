@@ -41,11 +41,6 @@
 #include <errno.h>
 #include <string.h>
 #include <netinet/in.h>
-#if defined(NATS_USE_X_LOCALE)
-#include <xlocale.h>
-#else
-#include <locale.h>
-#endif
 
 typedef pthread_t       natsThread;
 typedef pthread_key_t   natsThreadLocal;
@@ -54,7 +49,6 @@ typedef pthread_cond_t  natsCondition;
 typedef pthread_once_t  natsInitOnceType;
 typedef socklen_t       natsSockLen;
 typedef size_t          natsRecvLen;
-typedef locale_t        natsLocale;
 
 #define NATS_ONCE_STATIC_INIT   PTHREAD_ONCE_INIT
 
@@ -71,6 +65,5 @@ typedef locale_t        natsLocale;
 #define nats_asprintf       asprintf
 #define nats_strcasestr     strcasestr
 #define nats_vsnprintf      vsnprintf
-#define nats_strtold(p, t)  strtold_l((p), (t), (natsLib_getLocale()))
 
 #endif /* N_UNIX_H_ */

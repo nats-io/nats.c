@@ -117,3 +117,24 @@ nats_strcasestr(const char *haystack, const char *needle)
     return res;
 }
 
+#if _MSC_VER < 1900
+int
+nats_snprintf(char *buffer, size_t countszt, char *format, ...)
+{
+    int     count = (int) countszt;
+    int     len   = 0;
+    va_list ap;
+
+    memset(buffer, 0, count);
+
+    va_start(ap, format);
+    len = (int) vsnprintf(buffer, count, format, ap);
+    va_end(ap);
+    if ((len == count) || (len < 0))
+    {
+        buffer[count-1] = '\0';
+        len = count-1;
+    }
+    return len;
+}
+#endif

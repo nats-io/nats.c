@@ -69,7 +69,6 @@ _cloneMsgArg(natsConnection *nc)
                                         replyLen);
             if (s == NATS_OK)
                 nc->ps->ma.reply = &(nc->ps->ma.replyRec);
-
         }
     }
 
@@ -93,6 +92,7 @@ _processMsgArgs(natsConnection *nc, char *buf, int bufLen)
     int             i;
     char            b;
     struct slice    slices[4];
+    char            errTxt[256];
 
     for (i = 0; i < bufLen; i++)
     {
@@ -101,6 +101,11 @@ _processMsgArgs(natsConnection *nc, char *buf, int bufLen)
         if (((b == ' ') || (b == '\t') || (b == '\r') || (b == '\n'))
             && started)
         {
+            if (index > 3)
+            {
+                s = NATS_PROTOCOL_ERROR;
+                break;
+            }
             slices[index].start = start;
             slices[index].len   = len;
             index++;
@@ -118,14 +123,20 @@ _processMsgArgs(natsConnection *nc, char *buf, int bufLen)
             len++;
         }
     }
-    if (started)
+    if ((s == NATS_OK) && started)
     {
-        slices[index].start = start;
-        slices[index].len   = len;
-        index++;
+        if (index > 3)
+        {
+            s = NATS_PROTOCOL_ERROR;
+        }
+        else
+        {
+            slices[index].start = start;
+            slices[index].len   = len;
+            index++;
+        }
     }
-
-    if ((index == 3) || (index == 4))
+    if ((s == NATS_OK) && ((index == 3) || (index == 4)))
     {
         int maSizeIndex = 2;
 
@@ -162,21 +173,28 @@ _processMsgArgs(natsConnection *nc, char *buf, int bufLen)
     }
     else
     {
-        snprintf(nc->errStr, sizeof(nc->errStr), "processMsgArgs Parse Error: '%.*s'",
-                 bufLen, buf);
+        snprintf(errTxt, sizeof(errTxt), "%s", "processMsgArgs Parse Error: wrong number of arguments");
         s = NATS_PROTOCOL_ERROR;
     }
     if (nc->ps->ma.sid < 0)
     {
-        snprintf(nc->errStr, sizeof(nc->errStr), "processMsgArgs Bad or Missing Sid: '%.*s'",
+        snprintf(errTxt, sizeof(errTxt), "processMsgArgs Bad or Missing Sid: '%.*s'",
                  bufLen, buf);
         s = NATS_PROTOCOL_ERROR;
     }
     if (nc->ps->ma.size < 0)
     {
-        snprintf(nc->errStr, sizeof(nc->errStr), "processMsgArgs Bad or Missing Size: '%.*s'",
+        snprintf(errTxt, sizeof(errTxt), "processMsgArgs Bad or Missing Size: '%.*s'",
                  bufLen, buf);
         s = NATS_PROTOCOL_ERROR;
+    }
+
+    if (s != NATS_OK)
+    {
+        natsConn_Lock(nc);
+        snprintf(nc->errStr, sizeof(nc->errStr), "%s", errTxt);
+        nc->err = s;
+        natsConn_Unlock(nc);
     }
 
     return s;

@@ -16,7 +16,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <locale.h>
 
 #include "buf.h"
 #include "timer.h"
@@ -222,7 +221,18 @@ test_natsStrCaseStr(void)
     test("StrStr case insensitive (no match): ");
     res = nats_strcasestr(s1, "xx");
     testCond(res == NULL);
+}
 
+static void
+test_natsSnprintf(void)
+{
+    // This test is specific to older version of Windows
+    // that did not provide snprintf...
+    char buf[5];
+
+    test("snprintf over limit: ");
+    snprintf(buf, sizeof(buf), "%s", "abcdefghijklmnopqrstuvwxyz");
+    testCond(strcmp(buf, "abcd") == 0);
 }
 
 static void test_natsBuffer(void)
@@ -2685,14 +2695,170 @@ test_natsJSON(void)
     ulongVal = 0;
 
     test("Single field, double: ");
-    s = nats_JSONParse(&json, "{\"test\":1234.5}", -1);
+    s = nats_JSONParse(&json, "{\"test\":1234.5e3}", -1);
     if (s == NATS_OK)
         s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
                 && (json->fields->used == 1)
-                && (doubleVal == 1234.5));
+                && (doubleVal == (long double) 1234.5e+3));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double negative: ");
+    s = nats_JSONParse(&json, "{\"test\":-1234}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) -1234));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double exp negative 1: ");
+    s = nats_JSONParse(&json, "{\"test\":1234e-3}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) 1234.0/1000.0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double exp negative 2: ");
+    s = nats_JSONParse(&json, "{\"test\":1234.5e-3}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) 12345.0/10000.0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double exp negative 3: ");
+    s = nats_JSONParse(&json, "{\"test\":1234.5e-1}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) 12345.0/100.0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double exp negative 4: ");
+    s = nats_JSONParse(&json, "{\"test\":1234.5e-0}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) 12345.0/10.0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double exp positive 1: ");
+    s = nats_JSONParse(&json, "{\"test\":1234e+3}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) 1234.0*1000));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double exp positive 2: ");
+    s = nats_JSONParse(&json, "{\"test\":1234.5e+3}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) 12345.0*100.0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double exp positive 3: ");
+    s = nats_JSONParse(&json, "{\"test\":1234.5678e+2}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) 12345678.0/100.0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double exp positive 4: ");
+    s = nats_JSONParse(&json, "{\"test\":1234.5678e+4}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) 12345678.0/10000.0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double exp positive 5: ");
+    s = nats_JSONParse(&json, "{\"test\":1234.5678e+5}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) 12345678.0*10.0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double exp positive 6: ");
+    s = nats_JSONParse(&json, "{\"test\":1234.5678e+0}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) 12345678.0/10000.0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    doubleVal = 0;
+
+    test("Single field, double exp positive 6: ");
+    s = nats_JSONParse(&json, "{\"test\":1234.5678e1}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (doubleVal == (long double) 12345678.0/1000.0));
     nats_JSONDestroy(json);
     json = NULL;
     doubleVal = 0;
@@ -2753,7 +2919,7 @@ test_natsJSON(void)
                 && (strcmp(strVal, "abc") == 0)
                 && (intVal == 123)
                 && (longVal == 456)
-                && (doubleVal == 123.5)
+                && (doubleVal == (long double) 1235.0/10.0)
                 && (arrCount == 1)
                 && (strcmp(arrVal[0], "a") == 0));
     nats_JSONDestroy(json);
@@ -2799,7 +2965,7 @@ test_natsJSON(void)
     s = nats_JSONParse(&json, "{\"test\":true}", -1);
     if (s == NATS_OK)
         s = nats_JSONGetValue(json, "test", 9999, (void**)&intVal);
-    testCond((s != NATS_OK)
+    testCond((s == NATS_INVALID_ARG)
                 && (json != NULL)
                 && (json->fields != NULL)
                 && (json->fields->used == 1)
@@ -2811,7 +2977,7 @@ test_natsJSON(void)
     s = nats_JSONParse(&json, "{\"test\":true}", -1);
     if (s == NATS_OK)
         s = nats_JSONGetArrayValue(json, "test", 9999, (void***)&arrVal, &arrCount);
-    testCond((s != NATS_OK)
+    testCond((s == NATS_INVALID_ARG)
                 && (json != NULL)
                 && (json->fields != NULL)
                 && (json->fields->used == 1)
@@ -2857,6 +3023,19 @@ test_natsJSON(void)
         nats_JSONDestroy(json);
         json = NULL;
     }
+
+    test("Wrong string type: ");
+    strVal = NULL;
+    s = nats_JSONParse(&json, "{\"test\":12345678901112}", -1);
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "test", TYPE_STR, (void**)&strVal);
+    testCond((s == NATS_INVALID_ARG)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (strVal == NULL));
+    nats_JSONDestroy(json);
+    json = NULL;
 }
 
 static void
@@ -4496,6 +4675,43 @@ test_ParserSplitMsg(void)
     natsConnection_Destroy(nc);
 }
 
+static void
+test_ProcessMsgArgs(void)
+{
+    natsConnection  *nc = NULL;
+    natsOptions     *opts = NULL;
+    natsStatus      s;
+    char            buf[2048];
+    const char*     le = NULL;
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsConn_create(&nc, opts);
+    if (s == NATS_OK)
+        s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "MSG a b c d e\r\n");
+
+    test("Parsing MSG with too many arguments: ")
+    // parsing: 'MSG a'
+    s = natsParser_Parse(nc, buf, 5);
+    // parse the rest..
+    if (s == NATS_OK)
+        s = natsParser_Parse(nc, buf + 5, 10);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL));
+    test("Connection last error properly set: ");
+    s = natsConnection_GetLastError(nc, &le);
+    testCond(s == NATS_PROTOCOL_ERROR);
+
+    natsConnection_Destroy(nc);
+}
+
 static natsStatus
 _checkPool(natsConnection *nc, char **expectedURLs, int expectedURLsCount)
 {
@@ -4581,7 +4797,7 @@ test_AsyncINFO(void)
                                 "INFOx {}\r\n", "INFO{}\r\n", "INFO {}"};
     const char      *allURLs[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222",
                                   "localhost:8222", "localhost:9222", "localhost:10222", "localhost:11222"};
-
+    const char      *lastErr = NULL;
 
     s = natsOptions_Create(&opts);
     if (s == NATS_OK)
@@ -4590,6 +4806,21 @@ test_AsyncINFO(void)
         s = natsParser_Create(&(nc->ps));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "INFO {\"test\":\"abcde\"x\r\n");
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, buf, 9);
+    testCond((s == NATS_OK)
+                && (nc->ps->state == INFO_ARG)
+                && (nc->ps->argBuf != NULL));
+
+    PARSER_START_TEST;
+    natsParser_Parse(nc, buf+9, 30);
+    lastErr = nats_GetLastError(&s);
+    testCond((s == NATS_ERR)
+                && (lastErr != NULL)
+                && (strstr(lastErr, "missing") != NULL));
+    nats_clearLastError();
 
     snprintf(buf, sizeof(buf), "%s", "INFO {}\r\n");
 
@@ -11968,10 +12199,19 @@ serverVersionAtLeast(int major, int minor, int update)
         return false;
 
     version = strstr(serverVersion, "version ");
-    if (version == NULL)
-        return false;
+    if (version != NULL)
+    {
+        version += 8;
+    }
+    else
+    {
+        version = strstr(serverVersion, " v");
+        if (version == NULL)
+            return false;
 
-    version += 8;
+        version += 3;
+    }
+
     sscanf(version, "%d.%d.%d", &ma, &mi, &up);
     if ((ma > major) || ((ma == major) && (mi > minor)) || ((ma == major) && (mi == minor) && (up >= update)))
         return true;
@@ -12945,7 +13185,7 @@ _startMockupServerThread(void *closure)
             // Wait for client to tell us it is done
             natsMutex_Lock(arg->m);
             while ((s != NATS_TIMEOUT) && !(arg->done))
-                s = natsCondition_TimedWait(arg->c, arg->m, 5000);
+                s = natsCondition_TimedWait(arg->c, arg->m, 10000);
             natsMutex_Unlock(arg->m);
         }
         natsSock_Close(ctx.fd);
@@ -13643,6 +13883,7 @@ test_GetClientID(void)
         natsMutex_Lock(arg.m);
         while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
             s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        s = arg.status;
         natsMutex_Unlock(arg.m);
     }
     if (s != NATS_OK)
@@ -13663,13 +13904,13 @@ test_GetClientID(void)
         s = natsConnection_GetClientID(nc1, &cid);
     testCond((s == NATS_NO_SERVER_SUPPORT) && (cid == 0));
 
-    natsConnection_Destroy(nc1);
-
     // Notify mock server we are done
     natsMutex_Lock(arg.m);
     arg.done = true;
     natsCondition_Signal(arg.c);
     natsMutex_Unlock(arg.m);
+
+    natsConnection_Destroy(nc1);
 
     natsThread_Join(t);
     natsThread_Destroy(t);
@@ -16165,6 +16406,7 @@ static testInfo allTests[] =
     {"natsNowAndSleep",                 test_natsNowAndSleep},
     {"natsAllocSprintf",                test_natsAllocSprintf},
     {"natsStrCaseStr",                  test_natsStrCaseStr},
+    {"natsSnprintf",                    test_natsSnprintf},
     {"natsBuffer",                      test_natsBuffer},
     {"natsParseInt64",                  test_natsParseInt64},
     {"natsParseControl",                test_natsParseControl},
@@ -16196,8 +16438,9 @@ static testInfo allTests[] =
     {"ParserPing",                      test_ParserPing},
     {"ParserErr",                       test_ParserErr},
     {"ParserOK",                        test_ParserOK},
-    {"ParserSouldFail",                 test_ParserShouldFail},
+    {"ParserShouldFail",                test_ParserShouldFail},
     {"ParserSplitMsg",                  test_ParserSplitMsg},
+    {"ProcessMsgArgs",                  test_ProcessMsgArgs},
     {"LibMsgDelivery",                  test_LibMsgDelivery},
     {"AsyncINFO",                       test_AsyncINFO},
     {"RequestPool",                     test_RequestPool},
@@ -16403,13 +16646,6 @@ int main(int argc, char **argv)
     envStr = getenv("NATS_TEST_TRAVIS");
     if ((envStr != NULL) && (envStr[0] != '\0'))
         runOnTravis = true;
-
-    envStr = getenv("NATS_TEST_SET_LOCALE");
-    if ((envStr != NULL) && (envStr[0] != '\0'))
-    {
-        const char * localeSet = setlocale(LC_ALL, envStr);
-        printf("Locale was set to %s, setting it to %s\n", localeSet, envStr);
-    }
 
     envStr = getenv("NATS_TEST_VALGRIND");
     if ((envStr != NULL) && (envStr[0] != '\0'))

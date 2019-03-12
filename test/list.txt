@@ -26,6 +26,7 @@ natsSock_ReadLine
 natsJSON
 natsErrWithLongText
 natsErrStackMoreThanMaxFrames
+natsMsg
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize
@@ -153,6 +154,7 @@ ServerPoolUpdatedOnClusterUpdate
 StanPBufAllocator
 StanConnOptions
 StanSubOptions
+StanMsg
 StanServerNotReachable
 StanBasicConnect
 StanConnectError

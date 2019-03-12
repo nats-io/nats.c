@@ -2560,6 +2560,7 @@ test_natsJSON(void)
             "{\"test\": \"abc\\""",
             "{\"test\": \"abc\\u1234",
             "{\"test\": \"abc\\uabc",
+            "{\"test\" \"separator missing\"}",
     };
     const char  *good[] = {
             " {}",
@@ -2877,7 +2878,7 @@ test_natsJSON(void)
     boolVal = false;
 
     test("Single field, string array: ");
-    s = nats_JSONParse(&json, "{\"test\":[\"a\",\"b\",\"c\"]}", -1);
+    s = nats_JSONParse(&json, "{\"test\":[\"a\",\"b\",\"c\",\"d\",\"e\"]}", -1);
     if (s == NATS_OK)
         s = nats_JSONGetArrayValue(json, "test", TYPE_STR,
                                    (void***)&arrVal, &arrCount);
@@ -2885,10 +2886,12 @@ test_natsJSON(void)
                 && (json != NULL)
                 && (json->fields != NULL)
                 && (json->fields->used == 1)
-                && (arrCount == 3)
+                && (arrCount == 5)
                 && (strcmp(arrVal[0], "a") == 0)
                 && (strcmp(arrVal[1], "b") == 0)
-                && (strcmp(arrVal[2], "c") == 0))
+                && (strcmp(arrVal[2], "c") == 0)
+                && (strcmp(arrVal[3], "d") == 0)
+                && (strcmp(arrVal[4], "e") == 0));
     nats_JSONDestroy(json);
     json = NULL;
     for (i=0; i<arrCount; i++)
@@ -2922,6 +2925,13 @@ test_natsJSON(void)
                 && (doubleVal == (long double) 1235.0/10.0)
                 && (arrCount == 1)
                 && (strcmp(arrVal[0], "a") == 0));
+    test("Unknown field type: ");
+    if (s == NATS_OK)
+    {
+        intVal = 0;
+        s = nats_JSONGetValue(json, "int", 255, (void**)&intVal);
+    }
+    testCond((s != NATS_OK) && (intVal == 0));
     nats_JSONDestroy(json);
     json = NULL;
     free(strVal);
@@ -3036,6 +3046,20 @@ test_natsJSON(void)
                 && (strVal == NULL));
     nats_JSONDestroy(json);
     json = NULL;
+
+    test("NULL string with -1 len: ");
+    s = nats_JSONParse(&json, NULL, -1);
+    testCond((s == NATS_INVALID_ARG) && (json == NULL));
+
+    test("Field reused: ");
+    {
+        s = nats_JSONParse(&json, "{\"field\":1,\"field\":2}", -1);
+        if (s == NATS_OK)
+            s = nats_JSONGetValue(json, "field", TYPE_INT, (void**)&intVal);
+        testCond((s == NATS_OK) && (intVal == 2));
+        nats_JSONDestroy(json);
+        json = NULL;
+    }
 }
 
 static void
@@ -3129,6 +3153,43 @@ test_natsErrStackMoreThanMaxFrames(void)
             s = NATS_ERR;
     }
     testCond(s == NATS_OK);
+}
+
+static void
+test_natsMsg(void)
+{
+    natsMsg     *msg = NULL;
+    natsStatus  s    = NATS_OK;
+
+    test("Check invalid subj (NULL): ");
+    s = natsMsg_Create(&msg, NULL, "reply", "data", 4);
+    testCond((msg == NULL) && (s == NATS_INVALID_ARG));
+
+    test("Check invalid subj (empty): ");
+    s = natsMsg_Create(&msg, "", "reply", "data", 4);
+    testCond((msg == NULL) && (s == NATS_INVALID_ARG));
+
+    test("Check invalid reply (empty): ");
+    s = natsMsg_Create(&msg, "foo", "", "data", 4);
+    testCond((msg == NULL) && (s == NATS_INVALID_ARG));
+
+    test("GetSubject with NULL msg: ");
+    testCond(natsMsg_GetSubject(NULL) == NULL);
+
+    test("GetReply with NULL msg: ");
+    testCond(natsMsg_GetReply(NULL) == NULL);
+
+    test("GetData with NULL msg: ");
+    testCond(natsMsg_GetData(NULL) == NULL);
+
+    test("GetDataLength with NULL msg: ");
+    testCond(natsMsg_GetDataLength(NULL) == 0);
+
+    test("Create ok: ");
+    s = natsMsg_Create(&msg, "foo", "reply", "data", 4);
+    testCond((s == NATS_OK) && (msg != NULL));
+
+    natsMsg_Destroy(msg);
 }
 
 natsStatus
@@ -3567,6 +3628,8 @@ test_ReconnectServerStats(void)
     natsOptions     *opts     = NULL;
     natsSrv         *srv      = NULL;
     natsPid         serverPid = NATS_INVALID_PID;
+    natsStatistics  *stats    = NULL;
+    uint64_t        reconnects= 0;
     struct threadArg args;
 
     test("Reconnect Server Stats: ");
@@ -3612,6 +3675,15 @@ test_ReconnectServerStats(void)
 
     testCond((s == NATS_OK) && (srv->reconnects == 0));
 
+    test("Tracking Reconnects stats: ");
+    s = natsStatistics_Create(&stats);
+    if (s == NATS_OK)
+        s = natsConnection_GetStats(nc, stats);
+    if (s == NATS_OK)
+        s = natsStatistics_GetCounts(stats, NULL, NULL, NULL, NULL, &reconnects);
+    testCond((s == NATS_OK) && (reconnects == 1));
+
+    natsStatistics_Destroy(stats);
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
 
@@ -9342,6 +9414,11 @@ test_Stats(void)
     uint64_t            outBytes = 0;
     uint64_t            inMsgs = 0;
     uint64_t            inBytes = 0;
+    uint64_t            reconnects = 0;
+
+    test("Check invalid arg: ");
+    s = natsStatistics_GetCounts(NULL, NULL, NULL, NULL, NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
 
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
@@ -14938,6 +15015,27 @@ test_StanSubOptions(void)
 }
 
 static void
+test_StanMsg(void)
+{
+    test("GetSequence with NULL msg: ");
+    testCond(stanMsg_GetSequence(NULL) == 0);
+
+    test("GetData with NULL msg: ");
+    testCond(stanMsg_GetData(NULL) == NULL);
+
+    test("GetDataLength with NULL msg: ");
+    testCond(stanMsg_GetDataLength(NULL) == 0);
+
+    test("GetTimestamp with NULL msg: ");
+    testCond(stanMsg_GetTimestamp(NULL) == 0);
+
+    test("IsRedelivered with NULL msg: ");
+    testCond(stanMsg_IsRedelivered(NULL) == false);
+
+    stanMsg_Destroy(NULL);
+}
+
+static void
 test_StanServerNotReachable(void)
 {
     natsStatus      s;
@@ -16428,6 +16526,7 @@ static testInfo allTests[] =
     {"natsJSON",                        test_natsJSON},
     {"natsErrWithLongText",             test_natsErrWithLongText},
     {"natsErrStackMoreThanMaxFrames",   test_natsErrStackMoreThanMaxFrames},
+    {"natsMsg",                         test_natsMsg},
 
     // Package Level Tests
 
@@ -16568,6 +16667,7 @@ static testInfo allTests[] =
     {"StanPBufAllocator",               test_StanPBufAllocator},
     {"StanConnOptions",                 test_StanConnOptions},
     {"StanSubOptions",                  test_StanSubOptions},
+    {"StanMsg",                         test_StanMsg},
     {"StanServerNotReachable",          test_StanServerNotReachable},
     {"StanBasicConnect",                test_StanBasicConnect},
     {"StanConnectError",                test_StanConnectError},

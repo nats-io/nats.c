@@ -46,17 +46,6 @@ _freeStanSub(stanSubscription *sub)
 }
 
 void
-stanSub_retain(stanSubscription *sub)
-{
-    if (sub == NULL)
-        return;
-
-    stanSub_Lock(sub);
-    sub->refs++;
-    stanSub_Unlock(sub);
-}
-
-void
 stanSub_release(stanSubscription *sub)
 {
     int refs = 0;

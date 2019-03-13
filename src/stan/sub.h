@@ -37,9 +37,6 @@ void stanSub_Unlock(stanSubscription *sub);
 #define STAN_ERR_SUB_NOT_OWNER                  "subscription is not the owner of this message"
 
 void
-stanSub_retain(stanSubscription *sub);
-
-void
 stanSub_release(stanSubscription *sub);
 
 

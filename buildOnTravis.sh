@@ -36,17 +36,13 @@ if [ $res -ne 0 ]; then
   exit $res
 fi
 export NATS_TEST_SERVER_VERSION="$(gnatsd -v)"
-env NATS_TEST_TRAVIS=yes ctest --timeout 60 --output-on-failure $4
+export NATS_TEST_TRAVIS=yes
+if [ "$2" = "coverage" ]; then
+  make coveralls
+else
+  ctest --timeout 60 --output-on-failure $4
+fi
 res=$?
 if [ $res -ne 0 ]; then
   exit $res
 fi
-
-if [ "$2" = "coverage" ]; then
-  ctest -T coverage
-  res=$?
-  if [ $res -ne 0 ]; then 
-    exit $res
-  fi
-fi
-

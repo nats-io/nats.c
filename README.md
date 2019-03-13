@@ -80,7 +80,21 @@ Or, if you don't want to build the NATS Streaming APIs to be included in the NAT
 cmake .. -DNATS_BUILD_STREAMING=OFF
 ```
 
-If you had previously build the library, you may need to do a `make clean`, or simply delete and re-create the build directory before executing the cmake command.
+In some architectures, you may experience a compilation error for `mutex.c.o` because there is no support
+for the assembler instruction that we use to yield when spinning trying to acquire a lock.
+
+You may get this sort of build error:
+```
+/tmp/cc1Yp7sD.s: Assembler messages:
+/tmp/cc1Yp7sD.s:302: Error: selected processor does not support ARM mode `yield'
+src/CMakeFiles/nats_static.dir/build.make:542: recipe for target 'src/CMakeFiles/nats_static.dir/unix/mutex.c.o' failed
+```
+If that's the case, you can solve this by enabling the `NATS_BUILD_NO_SPIN` flag (or use `-DNATS_NO_SPIN` if you compile without CMake):
+```
+cmake .. -DNATS_BUILD_NO_SPIN=ON
+```
+
+If you had previously built the library, you may need to do a `make clean`, or simply delete and re-create the build directory before executing the cmake command.
 
 To build on Windows, you would need to select the build generator. For instance, to select `nmake`, you would run:
 

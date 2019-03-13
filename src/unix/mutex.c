@@ -70,6 +70,7 @@ natsMutex_TryLock(natsMutex *m)
 void
 natsMutex_Lock(natsMutex *m)
 {
+#if !defined(NATS_NO_SPIN)
     if (gLockSpinCount > 0)
     {
         int64_t attempts = 0;
@@ -100,6 +101,7 @@ natsMutex_Lock(natsMutex *m)
         }
     }
     else
+#endif
     {
         if (pthread_mutex_lock(m))
             abort();

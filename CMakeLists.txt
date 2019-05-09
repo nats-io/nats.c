@@ -23,6 +23,9 @@ option(NATS_BUILD_STATIC_EXAMPLES "Statically link examples" OFF)
 option(NATS_BUILD_STREAMING "Build NATS Streaming" ON)
 option(NATS_BUILD_NO_PREFIX_CONNSTS "No prefix for connection status enum" OFF)
 option(NATS_COMPILER_HARDENING "Compiler hardening flags" OFF)
+option(NATS_BUILD_STATIC_LIBRARY "Build static library" ON)
+option(NATS_BUILD_SHARED_LIBRARY "Build shared library" ON)
+
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/coveralls-cmake/cmake)
 

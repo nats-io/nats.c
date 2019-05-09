@@ -29,18 +29,30 @@ endif(NATS_BUILD_STREAMING)
 # --------------------------------------
 # Create the shared and static libraries
 # --------------------------------------
-add_library(nats SHARED ${SOURCES} ${PS_SOURCES} ${S_SOURCES})
-target_link_libraries(nats ${NATS_OPENSSL_LIBS} ${NATS_EXTRA_LIB} ${NATS_PROTOBUF_LIB})
-add_library(nats_static STATIC ${SOURCES} ${PS_SOURCES} ${S_SOURCES})
-target_link_libraries(nats_static ${NATS_OPENSSL_LIBS} ${NATS_PROTOBUF_LIB})
-set_target_properties(nats nats_static PROPERTIES
-  VERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR}.${NATS_VERSION_PATCH}
-  SOVERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR})
+
+if(NATS_BUILD_SHARED_LIBRARY)
+  add_library(nats SHARED ${SOURCES} ${PS_SOURCES} ${S_SOURCES})
+  target_link_libraries(nats ${NATS_OPENSSL_LIBS} ${NATS_EXTRA_LIB} ${NATS_PROTOBUF_LIB})
+  set_target_properties(nats PROPERTIES
+    VERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR}.${NATS_VERSION_PATCH}
+    SOVERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR})
+endif(NATS_BUILD_SHARED_LIBRARY)
+
+if(NATS_BUILD_STATIC_LIBRARY)
+  add_library(nats_static STATIC ${SOURCES} ${PS_SOURCES} ${S_SOURCES})
+  target_link_libraries(nats_static ${NATS_OPENSSL_LIBS} ${NATS_PROTOBUF_LIB})
+  set_target_properties(nats_static PROPERTIES
+    VERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR}.${NATS_VERSION_PATCH}
+    SOVERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR})
+endif(NATS_BUILD_STATIC_LIBRARY)
 
 # --------------------------------------
 # Install the libraries and header files
 # --------------------------------------
-install(TARGETS nats DESTINATION ${NATS_LIBDIR})
+if(NATS_BUILD_SHARED_LIBRARY)
+  install(TARGETS nats DESTINATION ${NATS_LIBDIR})
+endif(NATS_BUILD_SHARED_LIBRARY)
+
 install(TARGETS nats_static ARCHIVE DESTINATION ${NATS_LIBDIR})
 install(FILES deprnats.h DESTINATION ${NATS_INCLUDE_DIR} RENAME nats.h)
 install(FILES nats.h status.h version.h DESTINATION ${NATS_INCLUDE_DIR}/nats)

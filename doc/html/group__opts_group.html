@@ -124,6 +124,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gad58a5b9dabadeebda30e952ff7b39193"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193">natsOptions_SetToken</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *token)</td></tr>
 <tr class="memdesc:gad58a5b9dabadeebda30e952ff7b39193"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the token to use when not specified in the URL.  <a href="#gad58a5b9dabadeebda30e952ff7b39193">More...</a><br /></td></tr>
 <tr class="separator:gad58a5b9dabadeebda30e952ff7b39193"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga23a3b1f022112e98ddccb18b247b4426"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga23a3b1f022112e98ddccb18b247b4426">natsOptions_SetTokenHandler</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, <a class="el" href="group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094">natsTokenHandler</a> tokenCb, void *closure)</td></tr>
+<tr class="memdesc:ga23a3b1f022112e98ddccb18b247b4426"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the tokenCb to use whenever a token is needed.  <a href="#ga23a3b1f022112e98ddccb18b247b4426">More...</a><br /></td></tr>
+<tr class="separator:ga23a3b1f022112e98ddccb18b247b4426"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaabf8763b931dcf389c83fd95d760a413"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gaabf8763b931dcf389c83fd95d760a413">natsOptions_SetNoRandomize</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool noRandomize)</td></tr>
 <tr class="memdesc:gaabf8763b931dcf389c83fd95d760a413"><td class="mdescLeft">&#160;</td><td class="mdescRight">Indicate if the servers list should be randomized.  <a href="#gaabf8763b931dcf389c83fd95d760a413">More...</a><br /></td></tr>
 <tr class="separator:gaabf8763b931dcf389c83fd95d760a413"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -427,6 +430,52 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
     <tr><td class="paramname">token</td><td>the token to send to the server during connect. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga23a3b1f022112e98ddccb18b247b4426"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetTokenHandler </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094">natsTokenHandler</a>&#160;</td>
+          <td class="paramname"><em>tokenCb</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>closure</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>For use cases where setting a static token through the URL<br />
+ or through <a class="el" href="group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193" title="Sets the token to use when not specified in the URL. ">natsOptions_SetToken</a> is not desirable.<br />
+ <br />
+ This function can be used to generate a token whenever the client needs one.<br />
+ Some example of use cases: expiring token, credential rotation, ...</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193" title="Sets the token to use when not specified in the URL. ">natsOptions_SetToken</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">tokenCb</td><td>the tokenCb to use to generate a token to the server during connect. </td></tr>
+    <tr><td class="paramname">closure</td><td>a pointer to an user defined object (can be <code>NULL</code>). See the <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe" title="Callback used to deliver messages to the application. ">natsMsgHandler</a> prototype. </td></tr>
   </table>
   </dd>
 </dl>

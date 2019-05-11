@@ -130,6 +130,9 @@ Typedefs</h2></td></tr>
 <tr class="memitem:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gab63dee7f7012ba11ae20b76dbc36f2d0">natsEvLoop_Detach</a>) (void *userData)</td></tr>
 <tr class="memdesc:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Detach from the event loop.  <a href="#gab63dee7f7012ba11ae20b76dbc36f2d0">More...</a><br /></td></tr>
 <tr class="separator:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga7d93a74068ac6e5f4406d70b7c1f0094"><td class="memItemLeft" align="right" valign="top">typedef const char *(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094">natsTokenHandler</a>) (void *closure)</td></tr>
+<tr class="memdesc:ga7d93a74068ac6e5f4406d70b7c1f0094"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to build a token on connections and reconnections.  <a href="#ga7d93a74068ac6e5f4406d70b7c1f0094">More...</a><br /></td></tr>
+<tr class="separator:ga7d93a74068ac6e5f4406d70b7c1f0094"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gad5d6a685731b3bf635995b7375af4d18"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gad5d6a685731b3bf635995b7375af4d18">stanPubAckHandler</a>) (const char *guid, const char *error, void *closure)</td></tr>
 <tr class="memdesc:gad5d6a685731b3bf635995b7375af4d18"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify of an asynchronous publish result.  <a href="#gad5d6a685731b3bf635995b7375af4d18">More...</a><br /></td></tr>
 <tr class="separator:gad5d6a685731b3bf635995b7375af4d18"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -269,6 +272,21 @@ Typedefs</h2></td></tr>
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a class="anchor" id="ga7d93a74068ac6e5f4406d70b7c1f0094"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef const char*(* natsTokenHandler) (void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This is the function that one provides to build a different token at each reconnect.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga23a3b1f022112e98ddccb18b247b4426" title="Sets the tokenCb to use whenever a token is needed. ">natsOptions_SetTokenHandler()</a></dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd>Such callback is invoked synchronously from the connection thread. </dd></dl>
 
 </div>
 </div>

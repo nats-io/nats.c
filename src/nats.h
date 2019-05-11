@@ -62,11 +62,11 @@ extern "C" {
  * \section install_sec Installation
  *
  * Instructions to build and install the %NATS C Client can be
- * found at the [NATS C Client GitHub page](https://github.com/nats-io/cnats)
+ * found at the [NATS C Client GitHub page](https://github.com/nats-io/nats.c)
  *
  * \section faq_sec Frequently Asked Questions
  *
- * Some of the frequently asked questions can be found [here](https://github.com/nats-io/cnats#faq)
+ * Some of the frequently asked questions can be found [here](https://github.com/nats-io/nats.c#faq)
  *
  * \section other_doc_section Other Documentation
  *
@@ -74,8 +74,8 @@ extern "C" {
  * information, refer to the following:
  *
  * - [General Documentation for nats.io](http://nats.io/documentation)
- * - [NATS C Client found on GitHub](https://github.com/nats-io/cnats)
- * - [The NATS Server (gnatsd) found on GitHub](https://github.com/nats-io/gnatsd)
+ * - [NATS C Client found on GitHub](https://github.com/nats-io/nats.c)
+ * - [The NATS Server (nats-server) found on GitHub](https://github.com/nats-io/nats-server)
  */
 
 /** \brief The default `NATS Server` URL.
@@ -800,8 +800,8 @@ natsOptions_SetToken(natsOptions *opts, const char *token);
  * @see natsOptions_SetToken
  *
  * @param opts the pointer to the #natsOptions object.
- * @param token the tokenCb to use to generate a token to the server during connect.
- * @param cbClosure a pointer to an user defined object (can be `NULL`). See
+ * @param tokenCb the tokenCb to use to generate a token to the server during connect.
+ * @param closure a pointer to an user defined object (can be `NULL`). See
  * the #natsMsgHandler prototype.
  */
 NATS_EXTERN natsStatus

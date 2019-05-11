@@ -13,5 +13,6 @@ var searchData=
   ['natsoptions',['natsOptions',['../group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e',1,'nats.h']]],
   ['natssock',['natsSock',['../nats_8h.html#af798865ac824e5959987de0fe8d07383',1,'nats.h']]],
   ['natsstatistics',['natsStatistics',['../group__types_group.html#ga57a4b8c7109e2773878655722ce028aa',1,'nats.h']]],
-  ['natssubscription',['natsSubscription',['../group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8',1,'nats.h']]]
+  ['natssubscription',['natsSubscription',['../group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8',1,'nats.h']]],
+  ['natstokenhandler',['natsTokenHandler',['../group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094',1,'nats.h']]]
 ];

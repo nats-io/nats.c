@@ -99,6 +99,7 @@ var searchData=
   ['natsoptions_5fsetservers',['natsOptions_SetServers',['../group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf',1,'nats.h']]],
   ['natsoptions_5fsettimeout',['natsOptions_SetTimeout',['../group__opts_group.html#ga17cd7fe41176cd98aca1184fa9352ad9',1,'nats.h']]],
   ['natsoptions_5fsettoken',['natsOptions_SetToken',['../group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193',1,'nats.h']]],
+  ['natsoptions_5fsettokenhandler',['natsOptions_SetTokenHandler',['../group__opts_group.html#ga23a3b1f022112e98ddccb18b247b4426',1,'nats.h']]],
   ['natsoptions_5fseturl',['natsOptions_SetURL',['../group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5',1,'nats.h']]],
   ['natsoptions_5fsetuserinfo',['natsOptions_SetUserInfo',['../group__opts_group.html#ga5b99da7dd74aac3be962f323c3863d9e',1,'nats.h']]],
   ['natsoptions_5fsetverbose',['natsOptions_SetVerbose',['../group__opts_group.html#gaa16bfd09ef318af18c27a0e199681b69',1,'nats.h']]],

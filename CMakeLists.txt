@@ -65,9 +65,7 @@ if(UNIX)
 
   set(NATS_BUILD_ARCH "64" CACHE STRING "32 for 32bits builds")
 
-  set(NATS_MEMCHECK_CMD "/usr/bin/valgrind" CACHE FILE "Memcheck tool")
-  set(MEMORYCHECK_COMMAND ${NATS_MEMCHECK_CMD} CACHE INTERNAL "")
-
+  find_program(MEMORYCHECK_COMMAND valgrind)
   set(NATS_MEMCHECK_CMD_OPTS "--leak-check=full --track-fds=yes --show-reachable=yes --num-callers=50" CACHE STRING "Memcheck options")
   set(MEMORYCHECK_COMMAND_OPTIONS ${NATS_MEMCHECK_CMD_OPTS} CACHE INTERNAL "")
 

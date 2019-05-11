@@ -154,6 +154,7 @@ var searchData=
   ['natsoptions_5fsetservers',['natsOptions_SetServers',['../group__opts_group.html#gacb7e964ae54b74d972d72e118b7b8bdf',1,'nats.h']]],
   ['natsoptions_5fsettimeout',['natsOptions_SetTimeout',['../group__opts_group.html#ga17cd7fe41176cd98aca1184fa9352ad9',1,'nats.h']]],
   ['natsoptions_5fsettoken',['natsOptions_SetToken',['../group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193',1,'nats.h']]],
+  ['natsoptions_5fsettokenhandler',['natsOptions_SetTokenHandler',['../group__opts_group.html#ga23a3b1f022112e98ddccb18b247b4426',1,'nats.h']]],
   ['natsoptions_5fseturl',['natsOptions_SetURL',['../group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5',1,'nats.h']]],
   ['natsoptions_5fsetuserinfo',['natsOptions_SetUserInfo',['../group__opts_group.html#ga5b99da7dd74aac3be962f323c3863d9e',1,'nats.h']]],
   ['natsoptions_5fsetverbose',['natsOptions_SetVerbose',['../group__opts_group.html#gaa16bfd09ef318af18c27a0e199681b69',1,'nats.h']]],
@@ -184,5 +185,6 @@ var searchData=
   ['natssubscription_5fqueuedmsgs',['natsSubscription_QueuedMsgs',['../group__sub_group.html#ga8a37b2d5290da3aecc05483d79e7e254',1,'nats.h']]],
   ['natssubscription_5fsetpendinglimits',['natsSubscription_SetPendingLimits',['../group__sub_group.html#ga68a7cea89e75c529a7dd3bb77303dda4',1,'nats.h']]],
   ['natssubscription_5funsubscribe',['natsSubscription_Unsubscribe',['../group__sub_group.html#gaee87f8be0e6c2a4693ba2cea070583ba',1,'nats.h']]],
-  ['natssubscription_5fwaitfordraincompletion',['natsSubscription_WaitForDrainCompletion',['../group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d',1,'nats.h']]]
+  ['natssubscription_5fwaitfordraincompletion',['natsSubscription_WaitForDrainCompletion',['../group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d',1,'nats.h']]],
+  ['natstokenhandler',['natsTokenHandler',['../group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094',1,'nats.h']]]
 ];

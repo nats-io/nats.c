@@ -1,16 +1,16 @@
 # NATS & NATS Streaming - C Client
 A C client for the [NATS messaging system](https://nats.io).
 
-Go [here](http://nats-io.github.io/cnats) for the online documentation,
-and check the [frequently asked questions](https://github.com/nats-io/cnats#faq).
+Go [here](http://nats-io.github.io/nats.c) for the online documentation,
+and check the [frequently asked questions](https://github.com/nats-io/nats.c#faq).
 
-This NATS Client implementation is heavily based on the [NATS GO Client](https://github.com/nats-io/nats). There is support for Mac OS/X, Linux and Windows (although we don't have specific platform support matrix).
+This NATS Client implementation is heavily based on the [NATS GO Client](https://github.com/nats-io/nats.go). There is support for Mac OS/X, Linux and Windows (although we don't have specific platform support matrix).
 
 [![License Apache 2](https://img.shields.io/badge/License-Apache2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
-[![Build Status](https://travis-ci.org/nats-io/cnats.svg?branch=master)](http://travis-ci.org/nats-io/cnats)
-[![Coverage Status](https://coveralls.io/repos/github/nats-io/cnats/badge.svg?branch=add_coveralls)](https://coveralls.io/github/nats-io/cnats?branch=add_coveralls)
-[![Release](https://img.shields.io/badge/release-v1.8.0-blue.svg?style=flat)](https://github.com/nats-io/cnats/releases/tag/v1.8.0)
-[![Documentation](https://img.shields.io/badge/doc-Doxygen-brightgreen.svg?style=flat)](http://nats-io.github.io/cnats)
+[![Build Status](https://travis-ci.org/nats-io/nats.c.svg?branch=master)](http://travis-ci.org/nats-io/nats.c)
+[![Coverage Status](https://coveralls.io/repos/github/nats-io/nats.c/badge.svg?branch=add_coveralls)](https://coveralls.io/github/nats-io/nats.c?branch=add_coveralls)
+[![Release](https://img.shields.io/badge/release-v1.8.0-blue.svg?style=flat)](https://github.com/nats-io/nats.c/releases/tag/v1.8.0)
+[![Documentation](https://img.shields.io/badge/doc-Doxygen-brightgreen.svg?style=flat)](http://nats-io.github.io/nats.c)
 
 # Table of Contents
 
@@ -55,7 +55,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 
 First, download the source code:
 ```
-git clone git@github.com:nats-io/cnats.git .
+git clone git@github.com:nats-io/nats.c.git .
 ```
 
 To build the library, use [CMake](https://cmake.org/download/). Note that by default the NATS Streaming API will be built and included in the NATS library.
@@ -181,7 +181,7 @@ Then, refresh the build:
 $ cmake ..
 -- Configuring done
 -- Generating done
--- Build files have been written to: /home/ivan/cnats/build
+-- Build files have been written to: /home/ivan/nats.c/build
 ```
 
 You can use the following environment variables to influence the testsuite behavior.
@@ -200,10 +200,10 @@ When running the tests in verbose mode, the following environment variable allow
 export NATS_TEST_KEEP_SERVER_OUTPUT=yes
 ```
 
-If you want to change the default server executable name (`gnastd`) or specify a specific location, use this environment variable:
+If you want to change the default server executable name (`nats-server.exe`) or specify a specific location, use this environment variable:
 
 ```
-set NATS_TEST_SERVER_EXE=c:\test\gnatsd.exe
+set NATS_TEST_SERVER_EXE=c:\test\nats-server.exe
 ```
 
 # Documentation
@@ -223,13 +223,13 @@ From the build directory:
 ```
 cmake .. -DNATS_UPDATE_DOC=ON
 make
-cd <cnats root dir>/doc
+cd <nats.c root dir>/doc
 doxygen DoxyFile.NATS.Client
 ```
 
 The generated documentation will be located in the `html` directory. To see the documentation, point your browser to the file `index.html` in that directory.
 
-Go [here](http://nats-io.github.io/cnats) for the online documentation.
+Go [here](http://nats-io.github.io/nats.c) for the online documentation.
 
 The source code is also quite documented.
 
@@ -748,11 +748,11 @@ does not break the ones we support!
 
 We use cmake since it allows cross-platforms builds. This works for us. You are free to
 create your own makefile or Windows solution. If you want to use cmake, follow these
-[instructions](https://github.com/nats-io/cnats#build).
+[instructions](https://github.com/nats-io/nats.c#build).
 
 <b>I have found a bug in your library, what do I do?</b>
 
-Please report an issue [here](https://github.com/nats-io/cnats/issues/new). Give us as much
+Please report an issue [here](https://github.com/nats-io/nats.c/issues/new). Give us as much
 as possible information on how you can reproduce this. If you have a fix for it, you can
 also open a PR.
 

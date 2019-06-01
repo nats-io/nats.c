@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <openssl/opensslv.h>
 
 #include "buf.h"
 #include "timer.h"
@@ -12596,6 +12597,14 @@ test_Version(void)
 
     test("Version number: ");
     testCond(nats_GetVersionNumber() == LIB_NATS_VERSION_NUMBER);
+
+    long int openSSLVersion = 0x01010102f;
+
+    test("Check if OpenSSL version is extracted correctly: ");
+
+    testCond(natsOpenSSL_Version(1, 1, 1, openSSLVersion));
+    testCond(natsOpenSSL_Version(1, 1, 0, openSSLVersion));
+    testCond(!natsOpenSSL_Version(1, 1, 2, openSSLVersion));
 }
 
 static void

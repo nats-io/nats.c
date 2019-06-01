@@ -499,6 +499,11 @@ struct __natsConnection
 //
 // Library
 //
+// Returns true if version of the current installed OpenSSL is not older than
+// the given version as parameter to the function.
+bool
+natsOpenSSL_Version(int majorVersion, int minorVersion, int patchVersion, long int openSSLVersion);
+
 void
 natsSys_Init(void);
 

@@ -298,8 +298,13 @@ _hostnameMatchesSubjectAltName(char *hostname, X509 *cert)
         if (namePart->type == GEN_DNS)
         {
             foundAnyEntry = true;
-            foundMatch = _hostnameMatches((char*) ASN1_STRING_data(namePart->d.uniformResourceIdentifier),
-                                           hostname);
+
+            if (!(natsOpenSSL_Version(1, 1, 0, OPENSSL_VERSION_NUMBER)))
+                foundMatch = _hostnameMatches((char*) ASN1_STRING_data(namePart->d.uniformResourceIdentifier),
+                                               hostname);
+            else
+                foundMatch = _hostnameMatches((char*) ASN1_STRING_get0_data(namePart->d.uniformResourceIdentifier),
+                                               hostname);
         }
 
         GENERAL_NAME_free(namePart);

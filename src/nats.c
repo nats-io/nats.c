@@ -21,6 +21,7 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <openssl/opensslv.h>
 
 #include "mem.h"
 #include "timer.h"
@@ -137,7 +138,8 @@ static void
 _cleanupThreadSSL(void *localStorage)
 {
 #if defined(NATS_HAS_TLS)
-    ERR_remove_thread_state(0);
+    if (!(natsOpenSSL_Version(1, 1, 0, OPENSSL_VERSION_NUMBER)))
+        ERR_remove_thread_state(0);
 #endif
 }
 
@@ -161,7 +163,8 @@ _finalCleanup(void)
         ERR_free_strings();
         EVP_cleanup();
         CRYPTO_cleanup_all_ex_data();
-        ERR_remove_thread_state(0);
+        if (!(natsOpenSSL_Version(1, 1, 0, OPENSSL_VERSION_NUMBER)))
+            ERR_remove_thread_state(0);
         sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
 #endif
         natsThreadLocal_DestroyKey(gLib.sslTLKey);
@@ -334,6 +337,17 @@ _freeLib(void)
     gLib.closed      = false;
     gLib.initialized = false;
     natsMutex_Unlock(gLib.lock);
+}
+
+bool
+natsOpenSSL_Version(int majorVersion, int minorVersion, int patchVersion, long int openSSLVersion)
+{
+    int requiredVersion = (majorVersion << 16) |
+                          (minorVersion << 8) |
+                          patchVersion;
+
+    return (((openSSLVersion & 0xffffff000) >> 12) >= requiredVersion);
+
 }
 
 void

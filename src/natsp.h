@@ -105,6 +105,8 @@ static const char *inboxPrefix = "_INBOX.";
 
 #define MAX_FRAMES (50)
 
+#define BUFF_MARGINAL (100)
+
 #define DUP_STRING(s, s1, s2) \
         { \
             (s1) = NATS_STRDUP(s2); \
@@ -447,7 +449,7 @@ struct __natsConnection
     natsConnStatus      status;
     bool                initc; // true if the connection is performing the initial connect
     natsStatus          err;
-    char                errStr[256];
+    char                errStr[256 + BUFF_MARGINAL];
 
     natsParser          *ps;
     natsTimer           *ptmr;

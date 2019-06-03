@@ -233,6 +233,7 @@ test_natsSnprintf(void)
 
     test("snprintf over limit: ");
     snprintf(buf, sizeof(buf), "%s", "abcdefghijklmnopqrstuvwxyz");
+
     testCond(strcmp(buf, "abcd") == 0);
 }
 
@@ -628,7 +629,7 @@ test_natsParseControl(void)
 static void
 test_natsNormalizeErr(void)
 {
-    char error[256];
+    char error[256 + BUFF_MARGINAL];
     char expected[256];
 
     test("Check typical -ERR: ");
@@ -4248,7 +4249,7 @@ test_ParserErr(void)
     natsConnection  *nc = NULL;
     natsOptions     *opts = NULL;
     natsStatus      s;
-    char            errProto[256];
+    char            errProto[256 + BUFF_MARGINAL];
     char            expected[256];
     int             len;
 
@@ -13245,7 +13246,6 @@ _startMockupServerThread(void *closure)
     if (s == NATS_OK)
     {
         char info[1024];
-
         strncpy(info, arg->string, sizeof(info));
 
         // Send INFO.

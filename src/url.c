@@ -125,16 +125,14 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
         {
             char        *str = NULL;
             int         res  = 0;
-            const char  *fmt = NULL;
 
             if (*start == '\0')
-                fmt = "%slocalhost:%s";
+                res = nats_asprintf(&str, "%slocalhost:%s", copy, DEFAULT_PORT_STRING);
             else if (ptr != NULL)
-                fmt = "%s%s";
+                res = nats_asprintf(&str, "%s%s", copy, DEFAULT_PORT_STRING);
             else
-                fmt = "%s:%s";
+                res = nats_asprintf(&str, "%s:%s", copy, DEFAULT_PORT_STRING);
 
-            res = nats_asprintf(&str, fmt, copy, DEFAULT_PORT_STRING);
             if (res == -1)
                 s = nats_setDefaultError(NATS_NO_MEMORY);
             else

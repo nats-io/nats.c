@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -154,6 +154,7 @@ typedef struct __natsServerInfo
     int         connectURLsCount;
     int         proto;
     uint64_t    CID;
+    char        *nonce;
 
 } natsServerInfo;
 
@@ -177,6 +178,13 @@ typedef struct
     natsEvLoop_Detach           detach;
 
 } natsEvLoopCallbacks;
+
+typedef struct __userCreds
+{
+    char        *userOrChainedFile;
+    char        *seedFile;
+
+} userCreds;
 
 struct __natsOptions
 {
@@ -252,6 +260,24 @@ struct __natsOptions
     // If set to true, in case of failed connect, tries again using
     // reconnect options values.
     bool                    retryOnFailedConnect;
+
+    // Callback/closure used to get the user JWT. Will be set to
+    // internal natsConn_userFromFile function when userCreds != NULL.
+    natsUserJWTHandler      userJWTHandler;
+    void                    *userJWTClosure;
+
+    // Callback/closure used to sign the server nonce. Will be set to
+    // internal natsConn_signatureHandler function when userCreds != NULL;
+    natsSignatureHandler    sigHandler;
+    void                    *sigClosure;
+
+    // Public NKey that will be used to authenticate when connecting
+    // to the server.
+    char                    *nkey;
+
+    // If user has invoked natsOptions_SetUserCredentialsFromFiles, this
+    // will be set and points to userOrChainedFile and possibly seedFile.
+    userCreds               *userCreds;
 };
 
 typedef struct __natsMsgList
@@ -424,7 +450,8 @@ struct __natsConnection
 {
     natsMutex           *mu;
     natsOptions         *opts;
-    const natsUrl       *url;
+    natsSrv             *cur;
+    const char          *tlsName;
 
     int                 refs;
 
@@ -499,10 +526,6 @@ struct __natsConnection
 //
 // Library
 //
-// Returns true if version of the current installed OpenSSL is not older than
-// the given version as parameter to the function.
-bool
-natsOpenSSL_Version(int majorVersion, int minorVersion, int patchVersion, long int openSSLVersion);
 
 void
 natsSys_Init(void);

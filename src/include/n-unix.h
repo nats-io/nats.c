@@ -65,5 +65,6 @@ typedef size_t          natsRecvLen;
 #define nats_asprintf       asprintf
 #define nats_strcasestr     strcasestr
 #define nats_vsnprintf      vsnprintf
+#define nats_strtok         strtok_r
 
 #endif /* N_UNIX_H_ */

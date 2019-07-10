@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -21,9 +21,6 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <stdarg.h>
-#if defined(NATS_HAS_TLS)
-#include <openssl/opensslv.h>
-#endif
 
 #include "mem.h"
 #include "timer.h"
@@ -31,6 +28,7 @@
 #include "asynccb.h"
 #include "conn.h"
 #include "sub.h"
+#include "nkeys.h"
 
 #define WAIT_LIB_INITIALIZED \
         natsMutex_Lock(gLib.lock); \
@@ -139,9 +137,8 @@ _destroyErrTL(void *localStorage)
 static void
 _cleanupThreadSSL(void *localStorage)
 {
-#if defined(NATS_HAS_TLS)
-    if (!(natsOpenSSL_Version(1, 1, 0, OPENSSL_VERSION_NUMBER)))
-        ERR_remove_thread_state(0);
+#if defined(NATS_HAS_TLS) && !defined(NATS_USE_OPENSSL_1_1)
+    ERR_remove_thread_state(0);
 #endif
 }
 
@@ -165,8 +162,9 @@ _finalCleanup(void)
         ERR_free_strings();
         EVP_cleanup();
         CRYPTO_cleanup_all_ex_data();
-        if (!(natsOpenSSL_Version(1, 1, 0, OPENSSL_VERSION_NUMBER)))
-            ERR_remove_thread_state(0);
+#if !defined(NATS_USE_OPENSSL_1_1)
+        ERR_remove_thread_state(0);
+#endif
         sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
 #endif
         natsThreadLocal_DestroyKey(gLib.sslTLKey);
@@ -339,17 +337,6 @@ _freeLib(void)
     gLib.closed      = false;
     gLib.initialized = false;
     natsMutex_Unlock(gLib.lock);
-}
-
-bool
-natsOpenSSL_Version(int majorVersion, int minorVersion, int patchVersion, long int openSSLVersion)
-{
-    int requiredVersion = (majorVersion << 16) |
-                          (minorVersion << 8) |
-                          patchVersion;
-
-    return (((openSSLVersion & 0xffffff000) >> 12) >= requiredVersion);
-
 }
 
 void
@@ -967,6 +954,8 @@ nats_Open(int64_t lockSpinCount)
     // If the caller specifies negative value, then we use the default
     if (lockSpinCount >= 0)
         gLockSpinCount = lockSpinCount;
+
+    nats_Base32_Init();
 
     s = natsCondition_Create(&(gLib.cond));
 

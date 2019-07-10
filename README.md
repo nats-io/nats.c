@@ -15,6 +15,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 # Table of Contents
 
 - [Building](#building)
+	* [TLS Support](#tls-support)
 - [Documentation](#documentation)
 - [NATS Client](#nats-client)
     * [Important Changes](#important-changes)
@@ -23,6 +24,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 	* [Wildcard Subscriptions](#wildcard-subscriptions)
 	* [Queue Groups](#queue-groups)
 	* [TLS](#tls)
+	* [New Authentication (Nkeys and User Credentials)](#new-authentication-nkeys-and-user-credentials)
 	* [Advanced Usage](#advanced-usage)
 	* [Clustered Usage](#clustered-usage)
 	* [Using an Event Loop Library](#using-an-event-loop-library)
@@ -148,7 +150,7 @@ If you add a test to `test/test.c`, you need to add it into the `allTests` array
 Build you changes:
 
 ```
-$ make
+make
 [ 44%] Built target nats
 [ 88%] Built target nats_static
 [ 90%] Built target nats-publisher
@@ -165,20 +167,20 @@ Linking C executable testsuite
 Now regenerate the list by invoking the test suite without any argument:
 
 ```
-$ ./test/testsuite
+./test/testsuite
 Number of tests: 77
 ```
 
 This list the number of tests added to the file `list.txt`. Move this file to the source's test directory.
 
 ```
-$ mv list.txt ../test/
+mv list.txt ../test/
 ```
 
 Then, refresh the build:
 
 ```
-$ cmake ..
+cmake ..
 -- Configuring done
 -- Generating done
 -- Build files have been written to: /home/ivan/nats.c/build
@@ -205,6 +207,32 @@ If you want to change the default server executable name (`nats-server.exe`) or 
 ```
 set NATS_TEST_SERVER_EXE=c:\test\nats-server.exe
 ```
+
+## TLS Support
+
+By default, the library is built with TLS support. You can disable this from the cmake gui `make edit_cache` and switch the `NATS_BUILD_WITH_TLS` option to `OFF`, or pass the option directly to the `cmake` command:
+
+```
+cmake .. -DNATS_BUILD_WITH_TLS=OFF
+```
+
+Starting `2.0.0`, when building with TLS/SSL support, the server certificate's expected hostname is always verified. It means that the hostname provided in the URL(s) or through the option `natsOptions_SetExpectedHostname()` will be used to check the hostname present in the certificate. Prior to `2.0.0`, the hostname would be verified *only* if the option `natsOptions_SetExpectedHostname()` was invoked.
+
+Although we recommend leaving the new default behavior, you can restore the previous behavior by building the library with this option off:
+
+```
+cmake .. -DNATS_BUILD_TLS_FORCE_HOST_VERIFY=OFF
+```
+
+The NATS C client is built using APIs from the [OpenSSL](https://github.com/openssl/openssl) library. By default we use `1.0.2` APIs. You can compile the NATS C client with OpenSSL API version `1.1+`. To do that, you need to enable the `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` option:
+
+```
+cmake .. -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON
+```
+
+Since the NATS C client dynamically links to the OpenSSL library, you need to make sure that you are then running your application against an OpenSSL 1.1+ library.
+
+Note that the option `NATS_BUILD_WITH_TLS_CLIENT_METHOD` is deprecated. Its purpose was to make the NATS C client use a method that was introduced in OpenSSL `1.1+`. The new option `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` is more generic and replaces `NATS_BUILD_WITH_TLS_CLIENT_METHOD`. If you are using scripts to automate your build process that makes use of `NATS_BUILD_WITH_TLS_CLIENT_METHOD`, they will still work and using this deprecated option will have the same effect than setting `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` to `ON`.
 
 # Documentation
 
@@ -238,6 +266,12 @@ The source code is also quite documented.
 ## Important Changes
 
 This section lists important changes such as deprecation notices, etc...
+
+### Version `2.0.0`
+
+This version introduces the security concepts used by NATS Server `2.0.0` and therefore aligns with the server version. There have been new APIs introduced, but the most important change is the new default behavior with TLS connections:
+
+* When establishing a secure connection, the server certificate's hostname is now always verified, regardless if the user has invoked `natsOptions_SetExpectedHostname()`. This may break applications that were for instance using an IP to connect to a server that had only the hostname in the certificate. This can be solved by changing your application to use the hostname in the URL or make use of `natsOptions_SetExpectedHostname()`. If this is not possible, you can restore the old behavior by building the library with the new behavior disabled. See #tls-support for more information.
 
 ### Version `1.8.0`
 
@@ -446,6 +480,59 @@ natsOptions_SetCiphers(opts, "-ALL:HIGH");
 natsConnection_Connect(&nc, opts);
 
 // That's it! On success you will have a secure connection with the server!
+```
+
+## New Authentication (Nkeys and User Credentials)
+
+This requires server with version >= 2.0.0
+
+NATS servers have a new security and authentication mechanism to authenticate with user credentials and Nkeys. The simplest form is to use the helper option `natsOptions_SetUserCredentialsFromFiles()`.
+
+```c
+// Retrieve both user JWT and NKey seed from single file `user.creds`.
+s = natsOptions_SetUserCredentialsFromFiles(opts, "user.creds", NULL);
+if (s == NATS_OK)
+    s = natsConnection_Connect(&nc, opts);
+```
+
+With this option, the library will load the user JWT and NKey seed from a single file. Note that the library wipes the buffers used to read the files.
+
+If you prefer to store the JWT and seed in two distinct files, use this form instead:
+
+```c
+// Retrieve the user JWT from the file `user.jwt` and the seed from the file `user.nk`.
+s = natsOptions_SetUserCredentialsFromFiles(opts, "user.jwt", "user.nk");
+if (s == NATS_OK)
+    s = natsConnection_Connect(&nc, opts);
+```
+
+You can also set the callback handlers and manage challenge signing directly.
+
+```c
+/*
+ * myUserJWTCb is a callback that is supposed to return the user JWT.
+ * An optional closure can be specified.
+ * mySignatureCB is a callback that is presented with a nonce and is
+ * responsible for returning the signature for this nonce.
+ * An optional closure can be specified.
+ */
+s = natsOptions_SetUserCredentialsCallbacks(opts, myUserJWTCb, NULL, mySignatureCb, NULL);
+if (s == NATS_OK)
+    s = natsConnection_Connect(&nc, opts);
+```
+
+Finally, it is possible to specify the public NKey and the signature callback. The public key will be sent to the server and the provided callback is responsible for signing the server's nonce. When the server receives the signed nonce, it can check that it was signed poperly using the provided public key.
+
+```c
+/*
+ * myPublicKey is the user's public key, which will be sent to the server.
+ * mySignatureCB is a callback that is presented with a nonce and is
+ * responsible for returning the signature for this nonce.
+ * An optional closure can be specified.
+ */
+s = natsOptions_SetNKey(opts, myPublicKey, mySignatureCb, NULL);
+if (s == NATS_OK)
+    s = natsConnection_Connect(&nc, opts);
 ```
 
 ## Advanced Usage

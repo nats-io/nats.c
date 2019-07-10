@@ -78,7 +78,7 @@ natsBuf_Reset(natsBuffer *buf);
 // Sets the size of the buffer to 'newPosition' and new data will be appended
 // starting at this position.
 void
-natsBuf_RewindTo(natsBuffer *buf, int newPosition);
+natsBuf_MoveTo(natsBuffer *buf, int newPosition);
 
 // Expands 'buf' underlying buffer to the given new size 'newSize'.
 //

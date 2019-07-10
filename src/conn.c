@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -31,6 +31,7 @@
 #include "msg.h"
 #include "asynccb.h"
 #include "comsock.h"
+#include "nkeys.h"
 
 #define DEFAULT_SCRATCH_SIZE    (512)
 #define DEFAULT_BUF_SIZE        (32768)
@@ -160,6 +161,8 @@ _clearServerInfo(natsServerInfo *si)
     for (i=0; i<si->connectURLsCount; i++)
         NATS_FREE(si->connectURLs[i]);
     NATS_FREE(si->connectURLs);
+
+    NATS_FREE(si->nonce);
 
     memset(si, 0, sizeof(natsServerInfo));
 }
@@ -373,13 +376,8 @@ static natsStatus
 _createConn(natsConnection *nc)
 {
     natsStatus  s = NATS_OK;
-    natsSrv     *cur = NULL;
 
-    cur = natsSrvPool_GetCurrentServer(nc->srvPool, nc->url, NULL);
-    if (cur == NULL)
-        return nats_setDefaultError(NATS_NO_SERVER);
-
-    cur->lastAttempt = nats_Now();
+    nc->cur->lastAttempt = nats_Now();
 
     // Sets a deadline for the connect process (not just the low level
     // tcp connect. The deadline will be removed when we have received
@@ -389,7 +387,7 @@ _createConn(natsConnection *nc)
     // Set the IP resolution order
     nc->sockCtx.orderIP = nc->opts->orderIP;
 
-    s = natsSock_ConnectTcp(&(nc->sockCtx), nc->url->host, nc->url->port);
+    s = natsSock_ConnectTcp(&(nc->sockCtx), nc->cur->url->host, nc->cur->url->port);
     if (s == NATS_OK)
     {
         nc->sockCtx.fdActive = true;
@@ -541,6 +539,9 @@ _processInfo(natsConnection *nc, char *info, int len)
     if (s == NATS_OK)
         s = nats_JSONGetValue(json, "client_id", TYPE_LONG,
                               (void**) &(nc->info.CID));
+    if (s == NATS_OK)
+        s = nats_JSONGetValue(json, "nonce", TYPE_STR,
+                              (void**) &(nc->info.nonce));
 
 #if 0
     fprintf(stderr, "Id=%s Version=%s Host=%s Port=%d Auth=%s SSL=%s Payload=%d Proto=%d\n",
@@ -557,12 +558,17 @@ _processInfo(natsConnection *nc, char *info, int len)
     // If empty, do not remove the implicit servers from the pool.
     if ((s == NATS_OK) && (nc->info.connectURLsCount > 0))
     {
-        bool added = false;
+        bool        added    = false;
+        const char  *tlsName = NULL;
+
+        if ((nc->cur != NULL) && (nc->cur->url != NULL) && !nats_HostIsIP(nc->cur->url->host))
+            tlsName = (const char*) nc->cur->url->host;
 
         s = natsSrvPool_addNewURLs(nc->srvPool,
-                                   nc->url,
+                                   nc->cur->url,
                                    nc->info.connectURLs,
                                    nc->info.connectURLsCount,
+                                   tlsName,
                                    &added);
         if ((s == NATS_OK) && added && !nc->initc && (nc->opts->discoveredServersCb != NULL))
             natsAsyncCb_PostConnHandler(nc, ASYNC_DISCOVERED_SERVERS);
@@ -588,6 +594,52 @@ natsConn_processAsyncINFO(natsConnection *nc, char *buf, int len)
     (void) _processInfo(nc, buf, len);
     natsConn_Unlock(nc);
 }
+
+#if defined(NATS_HAS_TLS)
+static int
+_collectSSLErr(int preverifyOk, X509_STORE_CTX* ctx)
+{
+    SSL             *ssl  = NULL;
+    X509            *cert = X509_STORE_CTX_get_current_cert(ctx);
+    int             depth = X509_STORE_CTX_get_error_depth(ctx);
+    int             err   = X509_STORE_CTX_get_error(ctx);
+    natsConnection  *nc   = NULL;
+
+    // Retrieve the SSL object, then our connection...
+    ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
+    nc = (natsConnection*) SSL_get_ex_data(ssl, 0);
+
+    // Should we skip serve certificate verification?
+    if (nc->opts->sslCtx->skipVerify)
+        return 1;
+
+    if (!preverifyOk)
+    {
+        char certName[256]= {0};
+
+        X509_NAME_oneline(X509_get_subject_name(cert), certName, sizeof(certName));
+
+        if (err == X509_V_ERR_HOSTNAME_MISMATCH)
+        {
+            snprintf(nc->errStr, sizeof(nc->errStr), "%d:%s:expected=%s:cert=%s",
+                     err, X509_verify_cert_error_string(err), nc->tlsName,
+                     certName);
+        }
+        else
+        {
+            char issuer[256]  = {0};
+
+            X509_NAME_oneline(X509_get_issuer_name(cert), issuer, sizeof(issuer));
+
+            snprintf(nc->errStr, sizeof(nc->errStr), "%d:%s:depth=%d:cert=%s:issuer=%s",
+                    err, X509_verify_cert_error_string(err), depth,
+                    certName, issuer);
+        }
+    }
+
+    return preverifyOk;
+}
+#endif
 
 // makeTLSConn will wrap an existing Conn using TLS
 static natsStatus
@@ -632,37 +684,56 @@ _makeTLSConn(natsConnection *nc)
     }
     if (s == NATS_OK)
     {
-        if (SSL_do_handshake(ssl) != 1)
+#if defined(NATS_HAS_TLS)
+        if (nc->opts->sslCtx->skipVerify)
         {
-            s = nats_setError(NATS_SSL_ERROR,
-                              "SSL handshake error: %s",
-                              NATS_SSL_ERR_REASON_STRING);
-        }
-    }
-    if ((s == NATS_OK) && !nc->opts->sslCtx->skipVerify)
-    {
-        X509 *cert = SSL_get_peer_certificate(ssl);
-
-        if (cert != NULL)
-        {
-            if ((SSL_get_verify_result(ssl) != X509_V_OK)
-                || (nc->errStr[0] != '\0'))
-            {
-                s = nats_setError(NATS_SSL_ERROR,
-                                  "Server certificate verification failed: %s",
-                                  nc->errStr);
-            }
-            X509_free(cert);
+            SSL_set_verify(ssl, SSL_VERIFY_NONE, NULL);
         }
         else
         {
-            s = nats_setError(NATS_SSL_ERROR, "%s",
-                              "Server did not provide a certificate");
-        }
-    }
+            nc->tlsName = NULL;
 
+            // If we don't force hostname verification, perform it only
+            // if expectedHostname is set (to be backward compatible with
+            // releases prior to 2.0.0)
+            if (nc->opts->sslCtx->expectedHostname != NULL)
+                nc->tlsName = nc->opts->sslCtx->expectedHostname;
+#if defined(NATS_FORCE_HOST_VERIFICATION)
+            else if (nc->cur->tlsName != NULL)
+                nc->tlsName = nc->cur->tlsName;
+            else
+                nc->tlsName = nc->cur->url->host;
+#endif
+            if (nc->tlsName != NULL)
+            {
+#if defined(NATS_USE_OPENSSL_1_1)
+                SSL_set_hostflags(ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+                if (!SSL_set1_host(ssl, nc->tlsName))
+#else
+                X509_VERIFY_PARAM *param = SSL_get0_param(ssl);
+                X509_VERIFY_PARAM_set_hostflags(param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+                if (!X509_VERIFY_PARAM_set1_host(param, nc->tlsName, 0))
+#endif
+                    s = nats_setError(NATS_SSL_ERROR, "unable to set expected hostname '%s'", nc->tlsName);
+            }
+            if (s == NATS_OK)
+                SSL_set_verify(ssl, SSL_VERIFY_PEER, _collectSSLErr);
+        }
+#endif
+    }
+    if ((s == NATS_OK) && (SSL_do_handshake(ssl) != 1))
+    {
+        s = nats_setError(NATS_SSL_ERROR,
+                          "SSL handshake error: %s",
+                          (nc->errStr[0] != '\0' ? nc->errStr : NATS_SSL_ERR_REASON_STRING));
+    }
+    // Make sure that if nc-errStr was set in _collectSSLErr but
+    // the overall handshake is ok, then we clear the error
     if (s == NATS_OK)
+    {
+        nc->errStr[0] = '\0';
         s = natsSock_SetBlocking(nc->sockCtx.fd, false);
+    }
 
     natsMutex_Unlock(nc->opts->sslCtx->lock);
 
@@ -739,21 +810,27 @@ _processExpectedInfo(natsConnection *nc)
 static natsStatus
 _connectProto(natsConnection *nc, char **proto)
 {
+    natsStatus  s     = NATS_OK;
     natsOptions *opts = nc->opts;
     const char  *token= NULL;
     const char  *user = NULL;
     const char  *pwd  = NULL;
     const char  *name = NULL;
+    char        *sig  = NULL;
+    char        *ujwt = NULL;
+    char        *nkey = NULL;
     int         res;
+    unsigned char   *sigRaw    = NULL;
+    int             sigRawLen  = 0;
 
     // Check if NoEcho is set and we have a server that supports it.
     if (opts->noEcho && (nc->info.proto < 1))
         return NATS_NO_SERVER_SUPPORT;
 
-    if (nc->url->username != NULL)
-        user = nc->url->username;
-    if (nc->url->password != NULL)
-        pwd = nc->url->password;
+    if (nc->cur->url->username != NULL)
+        user = nc->cur->url->username;
+    if (nc->cur->url->password != NULL)
+        pwd = nc->cur->url->password;
     if ((user != NULL) && (pwd == NULL))
     {
         token = user;
@@ -765,43 +842,89 @@ _connectProto(natsConnection *nc, char **proto)
         user  = opts->user;
         pwd   = opts->password;
         token = opts->token;
+        nkey  = opts->nkey;
     }
 
-    if (opts->tokenCb != NULL)
+    if (opts->userJWTHandler != NULL)
+    {
+        char *errTxt = NULL;
+
+        s = opts->userJWTHandler(&ujwt, &errTxt, (void*) opts->userJWTClosure);
+        if ((s != NATS_OK) && (errTxt != NULL))
+        {
+            s = nats_setError(s, "%s", errTxt);
+            NATS_FREE(errTxt);
+        }
+        if ((s == NATS_OK) && !nats_IsStringEmpty(nkey))
+            s = nats_setError(NATS_ILLEGAL_STATE, "%s", "user JWT callback and NKey cannot be both specified");
+    }
+
+    if ((s == NATS_OK) && (!nats_IsStringEmpty(ujwt) || !nats_IsStringEmpty(nkey)))
+    {
+        char *errTxt = NULL;
+
+        s = opts->sigHandler(&errTxt, &sigRaw, &sigRawLen, nc->info.nonce, opts->sigClosure);
+        if ((s != NATS_OK) && (errTxt != NULL))
+        {
+            s = nats_setError(s, "%s", errTxt);
+            NATS_FREE(errTxt);
+        }
+        if (s == NATS_OK)
+            s = nats_Base64RawURL_EncodeString((const unsigned char*) sigRaw, sigRawLen, &sig);
+    }
+
+    if ((s == NATS_OK) && (opts->tokenCb != NULL))
     {
         if (token != NULL)
-            return nats_setError(NATS_ILLEGAL_STATE, "%s", "Token and token handler options cannot be both set");
+            s = nats_setError(NATS_ILLEGAL_STATE, "%s", "Token and token handler options cannot be both set");
 
-        token = opts->tokenCb(opts->tokenCbClosure);
+        if (s == NATS_OK)
+            token = opts->tokenCb(opts->tokenCbClosure);
     }
 
-    if (opts->name != NULL)
+    if ((s == NATS_OK) && (opts->name != NULL))
         name = opts->name;
 
-    res = nats_asprintf(proto,
-                        "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s%s%s%s\"tls_required\":%s," \
-                        "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\",\"protocol\":%d,\"echo\":%s}%s",
-                        nats_GetBoolStr(opts->verbose),
-                        nats_GetBoolStr(opts->pedantic),
-                        (user != NULL ? "\"user\":\"" : ""),
-                        (user != NULL ? user : ""),
-                        (user != NULL ? "\"," : ""),
-                        (pwd != NULL ? "\"pass\":\"" : ""),
-                        (pwd != NULL ? pwd : ""),
-                        (pwd != NULL ? "\"," : ""),
-                        (token != NULL ? "\"auth_token\":\"" :""),
-                        (token != NULL ? token : ""),
-                        (token != NULL ? "\"," : ""),
-                        nats_GetBoolStr(opts->secure),
-                        (name != NULL ? name : ""),
-                        CString, NATS_VERSION_STRING,
-                        CLIENT_PROTO_INFO,
-                        nats_GetBoolStr(!opts->noEcho),
-                        _CRLF_);
-    if (res < 0)
-        return NATS_NO_MEMORY;
+    if (s == NATS_OK)
+    {
+        res = nats_asprintf(proto,
+                            "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\"tls_required\":%s," \
+                            "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\",\"protocol\":%d,\"echo\":%s}%s",
+                            nats_GetBoolStr(opts->verbose),
+                            nats_GetBoolStr(opts->pedantic),
+                            (nkey != NULL ? "\"nkey\":\"" : ""),
+                            (nkey != NULL ? nkey : ""),
+                            (nkey != NULL ? "\"," : ""),
+                            (ujwt != NULL ? "\"jwt\":\"" : ""),
+                            (ujwt != NULL ? ujwt : ""),
+                            (ujwt != NULL ? "\"," : ""),
+                            (sig != NULL ? "\"sig\":\"" : ""),
+                            (sig != NULL ? sig : ""),
+                            (sig != NULL ? "\"," : ""),
+                            (user != NULL ? "\"user\":\"" : ""),
+                            (user != NULL ? user : ""),
+                            (user != NULL ? "\"," : ""),
+                            (pwd != NULL ? "\"pass\":\"" : ""),
+                            (pwd != NULL ? pwd : ""),
+                            (pwd != NULL ? "\"," : ""),
+                            (token != NULL ? "\"auth_token\":\"" :""),
+                            (token != NULL ? token : ""),
+                            (token != NULL ? "\"," : ""),
+                            nats_GetBoolStr(opts->secure),
+                            (name != NULL ? name : ""),
+                            CString, NATS_VERSION_STRING,
+                            CLIENT_PROTO_INFO,
+                            nats_GetBoolStr(!opts->noEcho),
+                            _CRLF_);
+        if (res < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
 
-    return NATS_OK;
+    NATS_FREE(ujwt);
+    NATS_FREE(sigRaw);
+    NATS_FREE(sig);
+
+    return s;
 }
 
 static natsStatus
@@ -1215,7 +1338,6 @@ _doReconnect(void *arg)
 {
     natsStatus              s = NATS_OK;
     natsConnection          *nc = (natsConnection*) arg;
-    natsSrv                 *cur;
     int64_t                 elapsed;
     natsSrvPool             *pool = NULL;
     int64_t                 sleepTime;
@@ -1250,9 +1372,8 @@ _doReconnect(void *arg)
     // natsSrvPool_GetNextServer.
     while ((s == NATS_OK) && (natsSrvPool_GetSize(pool) > 0))
     {
-        cur = natsSrvPool_GetNextServer(pool, nc->opts, nc->url);
-        nc->url = (cur == NULL ? NULL : cur->url);
-        if (cur == NULL)
+        nc->cur = natsSrvPool_GetNextServer(pool, nc->opts, nc->cur);
+        if (nc->cur == NULL)
         {
             nc->err = NATS_NO_SERVER;
             break;
@@ -1263,7 +1384,7 @@ _doReconnect(void *arg)
         // Sleep appropriate amount of time before the
         // connection attempt if connecting to same server
         // we just got disconnected from..
-        if (((elapsed = nats_Now() - cur->lastAttempt)) < nc->opts->reconnectWait)
+        if (((elapsed = nats_Now() - nc->cur->lastAttempt)) < nc->opts->reconnectWait)
             sleepTime = (nc->opts->reconnectWait - elapsed);
 
         if (sleepTime > 0)
@@ -1282,7 +1403,7 @@ _doReconnect(void *arg)
             break;
 
         // Mark that we tried a reconnect
-        cur->reconnects += 1;
+        nc->cur->reconnects += 1;
 
         // Try to create a new connection
         s = _createConn(nc);
@@ -1349,8 +1470,8 @@ _doReconnect(void *arg)
         // No more failure allowed past this point.
 
         // Clear out server stats for the server we connected to..
-        cur->didConnect = true;
-        cur->reconnects = 0;
+        nc->cur->didConnect = true;
+        nc->cur->reconnects = 0;
 
         // At this point we know that we don't need the pending buffer
         // anymore. Destroy now.
@@ -1443,7 +1564,7 @@ _readProto(natsConnection *nc, natsBuffer **proto)
 	char		protoEnd	= '\n';
 	int			i			= 0;
 	natsBuffer	*buf		= NULL;
-	char		oneChar[1];
+	char		oneChar[1]  = { '\0' };
 
 	s = natsBuf_Create(&buf, 10);
 	if (s != NATS_OK)
@@ -1656,7 +1777,7 @@ _connect(natsConnection *nc)
         // The pool may change inside the loop iteration due to INFO protocol.
         for (i = 0; i < natsSrvPool_GetSize(pool); i++)
         {
-            nc->url = natsSrvPool_GetSrvUrl(pool,i);
+            nc->cur = natsSrvPool_GetSrv(pool,i);
 
             s = _createConn(nc);
             if (s == NATS_OK)
@@ -1681,7 +1802,7 @@ _connect(natsConnection *nc)
 
                     natsConn_Lock(nc);
 
-                    nc->url = NULL;
+                    nc->cur = NULL;
                 }
             }
             else
@@ -2659,7 +2780,7 @@ _setupServerPool(natsConnection *nc)
 
     s = natsSrvPool_Create(&(nc->srvPool), nc->opts);
     if (s == NATS_OK)
-        nc->url = natsSrvPool_GetSrvUrl(nc->srvPool, 0);
+        nc->cur = natsSrvPool_GetSrv(nc->srvPool, 0);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -3301,13 +3422,13 @@ natsConnection_GetConnectedUrl(natsConnection *nc, char *buffer, size_t bufferSi
 
     buffer[0] = '\0';
 
-    if ((nc->status == NATS_CONN_STATUS_CONNECTED) && (nc->url->fullUrl != NULL))
+    if ((nc->status == NATS_CONN_STATUS_CONNECTED) && (nc->cur->url->fullUrl != NULL))
     {
-        if (strlen(nc->url->fullUrl) >= bufferSize)
+        if (strlen(nc->cur->url->fullUrl) >= bufferSize)
             s = nats_setDefaultError(NATS_INSUFFICIENT_BUFFER);
 
         if (s == NATS_OK)
-            snprintf(buffer, bufferSize, "%s", nc->url->fullUrl);
+            snprintf(buffer, bufferSize, "%s", nc->cur->url->fullUrl);
     }
 
     natsConn_Unlock(nc);
@@ -3581,3 +3702,98 @@ natsConnection_GetClientID(natsConnection *nc, uint64_t *cid)
 
     return NATS_UPDATE_ERR_STACK(s);
 }
+
+static natsStatus
+_getJwtOrSeed(char **val, const char *fn, bool seed, int item)
+{
+    natsStatus  s       = NATS_OK;
+    natsBuffer  *buf    = NULL;
+
+    s = nats_ReadFile(&buf, 1024, fn);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    s = nats_GetJWTOrSeed(val, (const char*) natsBuf_Data(buf), item);
+    if (s == NATS_NOT_FOUND)
+    {
+        s = NATS_OK;
+        if (!seed)
+        {
+            *val = NATS_STRDUP(natsBuf_Data(buf));
+            if (*val == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+        }
+        else
+        {
+            // Look for "SU..."
+            char *nt  = NULL;
+            char *pch = nats_strtok(natsBuf_Data(buf), "\n", &nt);
+
+            while (pch != NULL)
+            {
+                char *ptr = pch;
+
+                while (((*ptr == ' ') || (*ptr == '\t')) && (*ptr != '\0'))
+                    ptr++;
+
+                if ((*ptr != '\0') && (*ptr == 'S') && (*(ptr+1) == 'U'))
+                {
+                    *val = NATS_STRDUP(ptr);
+                    if (*val == NULL)
+                        s = nats_setDefaultError(NATS_NO_MEMORY);
+                    break;
+                }
+
+                pch = nats_strtok(NULL, "\n", &nt);
+            }
+            if ((s == NATS_OK) && (*val == NULL))
+                s = nats_setError(NATS_ERR, "no nkey user seed found in '%s'", fn);
+        }
+    }
+    if (buf != NULL)
+    {
+        memset(natsBuf_Data(buf), 0, natsBuf_Capacity(buf));
+        natsBuf_Destroy(buf);
+        buf = NULL;
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConn_userFromFile(char **userJWT, char **customErrTxt, void *closure)
+{
+    natsStatus  s   = NATS_OK;
+    userCreds   *uc = (userCreds*) closure;
+
+    s = _getJwtOrSeed(userJWT, uc->userOrChainedFile, false, 0);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConn_signatureHandler(char **customErrTxt, unsigned char **psig, int *sigLen, const char *nonce, void *closure)
+{
+    natsStatus      s       = NATS_OK;
+    userCreds       *uc     = (userCreds*) closure;
+    char            *seed   = NULL;
+    unsigned char   *sig    = NULL;
+
+    if (uc->seedFile != NULL)
+        s = _getJwtOrSeed(&seed, uc->seedFile, true, 0);
+    else
+        s = _getJwtOrSeed(&seed, uc->userOrChainedFile, true, 1);
+
+    if (s == NATS_OK)
+        s = natsKeys_Sign((const char*) seed, nonce, &sig, sigLen);
+
+    if (s == NATS_OK)
+        *psig = sig;
+
+    if (seed != NULL)
+    {
+        memset(seed, 0, strlen(seed));
+        NATS_FREE(seed);
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+

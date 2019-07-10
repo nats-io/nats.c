@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -23,11 +23,12 @@ _freeSrv(natsSrv *srv)
         return;
 
     natsUrl_Destroy(srv->url);
+    NATS_FREE(srv->tlsName);
     NATS_FREE(srv);
 }
 
 static natsStatus
-_createSrv(natsSrv **newSrv, char *url, bool implicit)
+_createSrv(natsSrv **newSrv, char *url, bool implicit, const char *tlsName)
 {
     natsStatus  s = NATS_OK;
     natsSrv     *srv = (natsSrv*) NATS_CALLOC(1, sizeof(natsSrv));
@@ -38,6 +39,12 @@ _createSrv(natsSrv **newSrv, char *url, bool implicit)
     srv->isImplicit = implicit;
 
     s = natsUrl_Create(&(srv->url), url);
+    if ((s == NATS_OK) && (tlsName != NULL))
+    {
+        srv->tlsName = NATS_STRDUP(tlsName);
+        if (srv->tlsName == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
     if (s == NATS_OK)
         *newSrv = srv;
     else
@@ -47,7 +54,7 @@ _createSrv(natsSrv **newSrv, char *url, bool implicit)
 }
 
 natsSrv*
-natsSrvPool_GetCurrentServer(natsSrvPool *pool, const natsUrl *url, int *index)
+natsSrvPool_GetCurrentServer(natsSrvPool *pool, const natsSrv *cur, int *index)
 {
     natsSrv *s = NULL;
     int     i;
@@ -55,7 +62,7 @@ natsSrvPool_GetCurrentServer(natsSrvPool *pool, const natsUrl *url, int *index)
     for (i = 0; i < pool->size; i++)
     {
         s = pool->srvrs[i];
-        if (s->url == url)
+        if (s == cur)
         {
             if (index != NULL)
                 *index = i;
@@ -73,12 +80,12 @@ natsSrvPool_GetCurrentServer(natsSrvPool *pool, const natsUrl *url, int *index)
 // Pop the current server and put onto the end of the list. Select head of list as long
 // as number of reconnect attempts under MaxReconnect.
 natsSrv*
-natsSrvPool_GetNextServer(natsSrvPool *pool, natsOptions *opts, const natsUrl *ncUrl)
+natsSrvPool_GetNextServer(natsSrvPool *pool, natsOptions *opts, const natsSrv *cur)
 {
     natsSrv *s = NULL;
     int     i, j;
 
-    s = natsSrvPool_GetCurrentServer(pool, ncUrl, &i);
+    s = natsSrvPool_GetCurrentServer(pool, cur, &i);
     if (i < 0)
         return NULL;
 
@@ -129,14 +136,14 @@ natsSrvPool_Destroy(natsSrvPool *pool)
 }
 
 static natsStatus
-_addURLToPool(natsSrvPool *pool, char *sURL, bool implicit)
+_addURLToPool(natsSrvPool *pool, char *sURL, bool implicit, const char *tlsName)
 {
     natsStatus  s;
     natsSrv     *srv = NULL;
     bool        addedToMap = false;
     char        bareURL[256];
 
-    s = _createSrv(&srv, sURL, implicit);
+    s = _createSrv(&srv, sURL, implicit, tlsName);
     if (s != NATS_OK)
         return s;
 
@@ -196,7 +203,7 @@ _shufflePool(natsSrvPool *pool)
 }
 
 natsStatus
-natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, int urlCount, bool *added)
+natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, int urlCount, const char *tlsName, bool *added)
 {
     natsStatus  s       = NATS_OK;
     char        url[256];
@@ -312,7 +319,7 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, in
 
                 *added = true;
             }
-            s = _addURLToPool(pool, url, true);
+            s = _addURLToPool(pool, url, true, tlsName);
         }
     }
 
@@ -359,7 +366,7 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
 
     // Add URLs from Options' Servers
     for (i=0; (s == NATS_OK) && (i < opts->serversCount); i++)
-        s = _addURLToPool(pool, opts->servers[i], false);
+        s = _addURLToPool(pool, opts->servers[i], false, NULL);
 
     if (s == NATS_OK)
     {
@@ -373,7 +380,7 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
     if ((s == NATS_OK) && (opts->url != NULL))
     {
         // Add to the end of the array
-        s = _addURLToPool(pool, opts->url, false);
+        s = _addURLToPool(pool, opts->url, false, NULL);
         if ((s == NATS_OK) && (pool->size > 1))
         {
             // Then swap it with first to guarantee that Options.Url is tried first.
@@ -386,7 +393,7 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
     else if ((s == NATS_OK) && (pool->size == 0))
     {
         // Place default URL if pool is empty.
-        s = _addURLToPool(pool, (char*) NATS_DEFAULT_URL, false);
+        s = _addURLToPool(pool, (char*) NATS_DEFAULT_URL, false, NULL);
     }
 
     if (s == NATS_OK)

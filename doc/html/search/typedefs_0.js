@@ -11,8 +11,10 @@ var searchData=
   ['natsmsg',['natsMsg',['../group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a',1,'nats.h']]],
   ['natsmsghandler',['natsMsgHandler',['../group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe',1,'nats.h']]],
   ['natsoptions',['natsOptions',['../group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e',1,'nats.h']]],
+  ['natssignaturehandler',['natsSignatureHandler',['../group__callbacks_group.html#gab786ffd670c86de0563559351305080b',1,'nats.h']]],
   ['natssock',['natsSock',['../nats_8h.html#af798865ac824e5959987de0fe8d07383',1,'nats.h']]],
   ['natsstatistics',['natsStatistics',['../group__types_group.html#ga57a4b8c7109e2773878655722ce028aa',1,'nats.h']]],
   ['natssubscription',['natsSubscription',['../group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8',1,'nats.h']]],
-  ['natstokenhandler',['natsTokenHandler',['../group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094',1,'nats.h']]]
+  ['natstokenhandler',['natsTokenHandler',['../group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094',1,'nats.h']]],
+  ['natsuserjwthandler',['natsUserJWTHandler',['../group__callbacks_group.html#ga258b30458134be90f17315c037f34b7b',1,'nats.h']]]
 ];

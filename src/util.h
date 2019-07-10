@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -57,6 +57,8 @@ typedef struct
 
 } nats_JSON;
 
+#define nats_IsStringEmpty(s) (((s == NULL) || (s[0] == '\0')) ? true : false)
+
 int64_t
 nats_ParseInt64(const char *d, int dLen);
 
@@ -83,5 +85,30 @@ nats_JSONGetArrayValue(nats_JSON *json, const char *fieldName, int fieldType, vo
 
 void
 nats_JSONDestroy(nats_JSON *json);
+
+void
+nats_Base32_Init(void);
+
+natsStatus
+nats_Base32_DecodeString(const char *src, char *dst, int dstMax, int *dstLen);
+
+natsStatus
+nats_Base64RawURL_EncodeString(const unsigned char *src, int srcLen, char **pDest);
+
+uint16_t
+nats_CRC16_Compute(unsigned char *data, int len);
+
+bool
+nats_CRC16_Validate(unsigned char *data, int len, uint16_t expected);
+
+natsStatus
+nats_ReadFile(natsBuffer **buffer, int initBufSize, const char *fn);
+
+bool
+nats_HostIsIP(const char *host);
+
+natsStatus
+nats_GetJWTOrSeed(char **val, const char* content, int item);
+
 
 #endif /* UTIL_H_ */

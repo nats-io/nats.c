@@ -113,14 +113,13 @@ natsBuf_Reset(natsBuffer *buf)
 }
 
 void
-natsBuf_RewindTo(natsBuffer *buf, int newPosition)
+natsBuf_MoveTo(natsBuffer *buf, int newPosition)
 {
-    assert(newPosition < buf->capacity);
+    assert(newPosition <= buf->capacity);
 
     buf->len = newPosition;
     buf->pos = buf->data + newPosition;
 }
-
 
 natsStatus
 natsBuf_Expand(natsBuffer *buf, int newSize)

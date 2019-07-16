@@ -16,7 +16,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#if defined(NATS_HAS_TLS)
 #include <openssl/opensslv.h>
+#endif
 
 #include "buf.h"
 #include "timer.h"

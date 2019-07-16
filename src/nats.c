@@ -21,7 +21,9 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <stdarg.h>
+#if defined(NATS_HAS_TLS)
 #include <openssl/opensslv.h>
+#endif
 
 #include "mem.h"
 #include "timer.h"

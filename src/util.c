@@ -1320,7 +1320,7 @@ _isLineAnHeader(const char *ptr)
 }
 
 natsStatus
-nats_GetJWTOrSeed(char **val, const char* content, int item)
+nats_GetJWTOrSeed(char **val, const char *content, int item)
 {
     natsStatus  s       = NATS_OK;
     char        *pch    = NULL;

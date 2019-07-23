@@ -231,6 +231,7 @@ test_natsStrCaseStr(void)
 static void
 test_natsSnprintf(void)
 {
+#if _WIN32
     // This test is specific to older version of Windows
     // that did not provide snprintf...
     char buf[5];
@@ -238,6 +239,10 @@ test_natsSnprintf(void)
     test("snprintf over limit: ");
     snprintf(buf, sizeof(buf), "%s", "abcdefghijklmnopqrstuvwxyz");
     testCond(strcmp(buf, "abcd") == 0);
+#else
+    test("Skip when not running on Windows: ");
+    testCond(true);
+#endif
 }
 
 static void test_natsBuffer(void)
@@ -660,7 +665,7 @@ test_natsParseControl(void)
 static void
 test_natsNormalizeErr(void)
 {
-    char error[256];
+    char error[1024];
     char expected[256];
 
     test("Check typical -ERR: ");
@@ -1086,6 +1091,7 @@ test_natsTimer(void)
     natsStatus          s;
     natsTimer           *t = NULL;
     struct threadArg    tArg;
+    int                 refs;
 
     s = _createDefaultThreadArgsForCbTests(&tArg);
     if (s != NATS_OK)
@@ -1103,10 +1109,13 @@ test_natsTimer(void)
     tArg.control = 0;
     natsTimer_Stop(t);
     nats_Sleep(600);
+    natsMutex_Lock(t->mu);
+    refs = t->refs;
+    natsMutex_Unlock(t->mu);
     natsMutex_Lock(tArg.m);
     testCond((tArg.timerFired == 0)
              && (tArg.timerStopped == 1)
-             && (t->refs == 1)
+             && (refs == 1)
              && (nats_getTimersCount() == 0));
     natsMutex_Unlock(tArg.m);
 
@@ -1117,11 +1126,14 @@ test_natsTimer(void)
     nats_Sleep(1100);
     natsTimer_Stop(t);
     nats_Sleep(600);
+    natsMutex_Lock(t->mu);
+    refs = t->refs;
+    natsMutex_Unlock(t->mu);
     natsMutex_Lock(tArg.m);
     testCond((tArg.timerFired > 0)
              && (tArg.timerFired <= 5)
              && (tArg.timerStopped == 1)
-             && (t->refs == 1)
+             && (refs == 1)
              && (nats_getTimersCount() == 0));
     natsMutex_Unlock(tArg.m);
 
@@ -1135,10 +1147,13 @@ test_natsTimer(void)
     nats_Sleep(100);
     natsTimer_Stop(t);
     nats_Sleep(100);
+    natsMutex_Lock(t->mu);
+    refs = t->refs;
+    natsMutex_Unlock(t->mu);
     natsMutex_Lock(tArg.m);
     testCond((tArg.timerFired > 0)
              && (tArg.timerStopped == 1)
-             && (t->refs == 1)
+             && (refs == 1)
              && (nats_getTimersCount() == 0));
     natsMutex_Unlock(tArg.m);
 
@@ -1150,10 +1165,13 @@ test_natsTimer(void)
     nats_Sleep(900);
     natsTimer_Stop(t);
     nats_Sleep(600);
+    natsMutex_Lock(t->mu);
+    refs = t->refs;
+    natsMutex_Unlock(t->mu);
     natsMutex_Lock(tArg.m);
     testCond((tArg.timerFired == 2)
              && (tArg.timerStopped == 1)
-             && (t->refs == 1)
+             && (refs == 1)
              && nats_getTimersCount() == 0);
     natsMutex_Unlock(tArg.m);
 
@@ -1166,10 +1184,13 @@ test_natsTimer(void)
     natsTimer_Reset(t, 200);
     natsTimer_Reset(t, 500);
     nats_Sleep(600);
+    natsMutex_Lock(t->mu);
+    refs = t->refs;
+    natsMutex_Unlock(t->mu);
     natsMutex_Lock(tArg.m);
     testCond((tArg.timerFired == 1)
              && (tArg.timerStopped == 0)
-             && (t->refs == 1)
+             && (refs == 1)
              && nats_getTimersCount() == 1);
     natsMutex_Unlock(tArg.m);
 
@@ -1187,7 +1208,10 @@ test_natsTimer(void)
         natsCondition_Wait(tArg.c, tArg.m);
     natsMutex_Unlock(tArg.m);
 
-    testCond((t->refs == 2)
+    natsMutex_Lock(t->mu);
+    refs = t->refs;
+    natsMutex_Unlock(t->mu);
+    testCond((refs == 2)
              && nats_getTimersCountInList() == 0
              && nats_getTimersCount() == 1);
 
@@ -1199,10 +1223,13 @@ test_natsTimer(void)
     test("Stop from callback: ");
     natsTimer_Reset(t, 250);
     nats_Sleep(500);
+    natsMutex_Lock(t->mu);
+    refs = t->refs;
+    natsMutex_Unlock(t->mu);
     natsMutex_Lock(tArg.m);
     testCond((tArg.timerFired == 1)
              && (tArg.timerStopped == 1)
-             && (t->refs == 1)
+             && (refs == 1)
              && (nats_getTimersCount() == 0));
     natsMutex_Unlock(tArg.m);
 
@@ -1214,10 +1241,13 @@ test_natsTimer(void)
     nats_Sleep(800);
     natsTimer_Stop(t);
     nats_Sleep(500);
+    natsMutex_Lock(t->mu);
+    refs = t->refs;
+    natsMutex_Unlock(t->mu);
     natsMutex_Lock(tArg.m);
     testCond((tArg.timerFired <= 3)
              && (tArg.timerStopped == 1)
-             && (t->refs == 1)
+             && (refs == 1)
              && (nats_getTimersCount() == 0));
     natsMutex_Unlock(tArg.m);
 
@@ -1229,17 +1259,25 @@ test_natsTimer(void)
     nats_Sleep(200);
     natsTimer_Stop(t);
     nats_Sleep(700);
+    natsMutex_Lock(t->mu);
+    refs = t->refs;
+    natsMutex_Unlock(t->mu);
     natsMutex_Lock(tArg.m);
     testCond((tArg.timerFired == 1)
              && (tArg.timerStopped == 1)
-             && (t->refs == 1)
+             && (refs == 1)
              && (nats_getTimersCount() == 0));
     natsMutex_Unlock(tArg.m);
 
     test("Destroy timer: ");
+    natsMutex_Lock(t->mu);
     t->refs++;
+    natsMutex_Unlock(t->mu);
     natsTimer_Destroy(t);
-    testCond(t->refs == 1);
+    natsMutex_Lock(t->mu);
+    refs = t->refs;
+    natsMutex_Unlock(t->mu);
+    testCond(refs == 1);
     natsTimer_Release(t);
 
     _destroyDefaultThreadArgs(&tArg);
@@ -4689,7 +4727,7 @@ test_ParserErr(void)
     natsConnection  *nc = NULL;
     natsOptions     *opts = NULL;
     natsStatus      s;
-    char            errProto[256];
+    char            errProto[1024];
     char            expected[256];
     int             len;
 
@@ -13080,17 +13118,23 @@ test_VersionMatchesTag(void)
 static void
 _openCloseAndWaitMsgCB(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    int *msgsCount = (int*) closure;
+    struct threadArg *arg = (struct threadArg*) closure;
+
     nats_Sleep(300);
     natsMsg_Destroy(msg);
-    (*msgsCount)++;
+    natsMutex_Lock(arg->m);
+    arg->results[0]++;
+    natsMutex_Unlock(arg->m);
 }
 
 static void
 _openCloseAndWaitConnClosedCB(natsConnection *nc, void *closure)
 {
-    int *closedCount = (int*) closure;
-    (*closedCount)++;
+    struct threadArg *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    arg->sum++;
+    natsMutex_Unlock(arg->m);
 }
 
 static void
@@ -13121,9 +13165,7 @@ test_OpenCloseAndWait(void)
     natsSubscription    *sub = NULL;
     natsPid             pid  = NATS_INVALID_PID;
     int                 i;
-    volatile int        closedCount = 0;
-    volatile int        msgsCount   = 0;
-    natsThread          *t          = NULL;
+    natsThread          *t   = NULL;
     struct threadArg    arg;
 
     pid = _startServer("nats://127.0.0.1:4222", NULL, true);
@@ -13144,19 +13186,28 @@ test_OpenCloseAndWait(void)
         if (s == NATS_OK)
             s = natsOptions_Create(&opts);
         if (s == NATS_OK)
-            s = natsOptions_SetClosedCB(opts, _openCloseAndWaitConnClosedCB, (void*)&closedCount);
+            s = natsOptions_SetClosedCB(opts, _openCloseAndWaitConnClosedCB, (void*)&arg);
         if (s == NATS_OK)
             s = natsConnection_Connect(&nc, opts);
         if (s == NATS_OK)
-            s = natsConnection_Subscribe(&sub, nc, "foo", _openCloseAndWaitMsgCB, (void*)&msgsCount);
+            s = natsConnection_Subscribe(&sub, nc, "foo", _openCloseAndWaitMsgCB, (void*)&arg);
         if (s == NATS_OK)
             s = natsConnection_PublishString(nc, "foo", "hello");
         if (s == NATS_OK)
             s = natsConnection_Flush(nc);
         if (s == NATS_OK)
         {
-            while (msgsCount != (i+1))
+            for (;;)
+            {
+                natsMutex_Lock(arg.m);
+                if (arg.results[0] == (i+1))
+                {
+                    natsMutex_Unlock(arg.m);
+                    break;
+                }
+                natsMutex_Unlock(arg.m);
                 nats_Sleep(100);
+            }
 
             natsSubscription_Destroy(sub);
             natsConnection_Destroy(nc);
@@ -13167,10 +13218,14 @@ test_OpenCloseAndWait(void)
     testCond(s == NATS_OK);
 
     test("Check async cb count: ");
-    testCond(closedCount == 2);
+    natsMutex_Lock(arg.m);
+    testCond(arg.sum == 2);
+    natsMutex_Unlock(arg.m);
 
     test("Check msgs count: ");
-    testCond(msgsCount == 2);
+    natsMutex_Lock(arg.m);
+    testCond(arg.results[0] == 2);
+    natsMutex_Unlock(arg.m);
 
     test("Close while not opened returns error: ");
     s = nats_CloseAndWait(0);
@@ -13691,7 +13746,7 @@ _startMockupServerThread(void *closure)
     {
         char info[1024];
 
-        strncpy(info, arg->string, sizeof(info));
+        snprintf(info, sizeof(info), "%s", arg->string);
 
         // Send INFO.
         s = natsSock_WriteFully(&ctx, info, (int) strlen(info));

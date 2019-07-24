@@ -15,7 +15,8 @@ option(NATS_COVERAGE "Code coverage" OFF)
 option(NATS_COVERAGE_UPLOAD "Upload the generated coveralls json" OFF)
 option(NATS_BUILD_NO_SPIN "Enable if spin code does not compile on your arch" OFF)
 option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
-option(NATS_BUILD_WITH_TLS_CLIENT_METHOD "Use TLS_client_method()" OFF)
+option(NATS_BUILD_TLS_FORCE_HOST_VERIFY "Forces hostname verification" ON)
+option(NATS_BUILD_TLS_USE_OPENSSL_1_1_API "Build for OpenSSL 1.1+" OFF)
 option(NATS_BUILD_EXAMPLES "Build examples" ON)
 option(NATS_BUILD_LIBUV_EXAMPLE "Build libuv examples" OFF)
 option(NATS_BUILD_LIBEVENT_EXAMPLE "Build libevent examples" OFF)
@@ -34,6 +35,11 @@ endif(NATS_COVERAGE)
 if(NATS_BUILD_WITH_TLS)
   find_package(OpenSSL REQUIRED)
 endif(NATS_BUILD_WITH_TLS)
+
+# Convert deprecated option
+if(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
+  set(NATS_BUILD_TLS_USE_OPENSSL_1_1_API ON)
+endif(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
 
 set(LIBUV_DIR "/usr/local/" CACHE PATH "Libuv install directory")
 set(LIBEVENT_DIR "/usr/local/" CACHE PATH "Libevent install directory")
@@ -139,17 +145,20 @@ add_definitions(-D${NATS_OS})
 add_definitions(-D_REENTRANT)
 if(NATS_BUILD_WITH_TLS)
   add_definitions(-DNATS_HAS_TLS)
-  if(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
-    add_definitions(-DNATS_USE_TLS_CLIENT_METHOD)
-  endif(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
+  if(NATS_BUILD_TLS_USE_OPENSSL_1_1_API)
+    add_definitions(-DNATS_USE_OPENSSL_1_1)
+  endif(NATS_BUILD_TLS_USE_OPENSSL_1_1_API)
+  if(NATS_BUILD_TLS_FORCE_HOST_VERIFY)
+    add_definitions(-DNATS_FORCE_HOST_VERIFICATION)
+  endif(NATS_BUILD_TLS_FORCE_HOST_VERIFY)
 endif(NATS_BUILD_WITH_TLS)
 
 
 #------------
 # Versionning and Doc
 
-set(NATS_VERSION_MAJOR  1)
-set(NATS_VERSION_MINOR  8)
+set(NATS_VERSION_MAJOR  2)
+set(NATS_VERSION_MINOR  0)
 set(NATS_VERSION_PATCH  0)
 set(NATS_VERSION_SUFFIX "")
 

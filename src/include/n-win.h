@@ -74,4 +74,6 @@ int
 nats_snprintf(char *buffer, size_t countszt, char *format, ...);
 #endif
 
+#define nats_strtok         strtok_s
+
 #endif /* N_WIN_H_ */

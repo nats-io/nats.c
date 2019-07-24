@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -239,7 +239,7 @@ typedef natsStatus (*natsEvLoop_Attach)(
 
 /** \brief Read event needs to be added or removed.
  *
- * The `NATS` library will invoked this callback to indicate if the event
+ * The `NATS` library will invoke this callback to indicate if the event
  * loop should start (`add is `true`) or stop (`add` is `false`) polling
  * for read events on the socket.
  *
@@ -252,7 +252,7 @@ typedef natsStatus (*natsEvLoop_ReadAddRemove)(
 
 /** \brief Write event needs to be added or removed.
  *
- * The `NATS` library will invoked this callback to indicate if the event
+ * The `NATS` library will invoke this callback to indicate if the event
  * loop should start (`add is `true`) or stop (`add` is `false`) polling
  * for write events on the socket.
  *
@@ -265,13 +265,72 @@ typedef natsStatus (*natsEvLoop_WriteAddRemove)(
 
 /** \brief Detach from the event loop.
  *
- * The `NATS` library will invoked this callback to indicate that the connection
+ * The `NATS` library will invoke this callback to indicate that the connection
  * no longer needs to be attached to the event loop. User can cleanup some state.
  *
  * @param userData the pointer to an user object created in #natsEvLoop_Attach.
  */
 typedef natsStatus (*natsEvLoop_Detach)(
         void            *userData);
+
+/** \brief Callback used to fetch and return account signed user JWT.
+ *
+ * This handler is invoked when connecting and reconnecting. It should
+ * return the user JWT that will be sent to the server.
+ *
+ * The user JWT is returned as a string that is allocated by the user and is
+ * freed by the library after the handler is invoked.
+ *
+ * If the user is unable to return the JWT, a status other than `NATS_OK` should
+ * be returned (we recommend `NATS_ERR`). A custom error message can be returned
+ * through `customErrTxt`. The user must allocate the memory for this error
+ * message and the library will free it after the invocation of the handler.
+ *
+ * \warning There may be repeated invocations of this handler for a given connection
+ * so it is crucial to always return a copy of the user JWT maintained by the
+ * application, since again, the library will free the memory pointed by `userJWT`
+ * after each invocation of this handler.
+ *
+ * @see natsOptions_SetUserCredentialsCallbacks()
+ * @see natsOptions_SetUserCredentialsFromFiles()
+ */
+typedef natsStatus (*natsUserJWTHandler)(
+        char            **userJWT,
+        char            **customErrTxt,
+        void            *closure);
+
+
+/** \brief Callback used to sign a nonce sent by the server.
+ *
+ * This handler is invoked when connecting and reconnecting. It should
+ * sign the given `nonce` and return a raw signature through `signature` and
+ * specify how many characters the signature has using `signatureLength`.
+ *
+ * The memory pointed by `signature` must be allocated by the user and
+ * will be freed by the library after each invocation of this handler.
+ *
+ * If the user is unable to sign, a status other than `NATS_OK` (we recommend
+ * `NATS_ERR`) should be returned. A custom error message can be returned
+ * through `customErrTxt`. The user must allocate the memory for this error
+ * message and the library will free it after the invocation of this handler.
+ *
+ * The library will base64 encode this raw signature and send that to the server.
+ *
+ * \warning There may be repeated invocations of this handler for a given connection
+ * so it is crucial to always return a copy of the signature, since again,
+ * the library will free the memory pointed by `signature` after each invocation
+ * of this handler.
+ *
+ * @see natsOptions_SetUserCredentialsCallbacks()
+ * @see natsOptions_SetUserCredentialsFromFiles()
+ * @see natsOptions_SetNKey()
+ */
+typedef natsStatus (*natsSignatureHandler)(
+        char            **customErrTxt,
+        unsigned char   **signature,
+        int             *signatureLength,
+        const char      *nonce,
+        void            *closure);
 
 /** \brief Callback used to build a token on connections and reconnections.
  *
@@ -1348,6 +1407,113 @@ natsOptions_SetNoEcho(natsOptions *opts, bool noEcho);
 NATS_EXTERN natsStatus
 natsOptions_SetRetryOnFailedConnect(natsOptions *opts, bool retry,
         natsConnectionHandler connectedCb, void* closure);
+
+/** \brief Sets the callbacks to fetch user JWT and sign server's nonce.
+ *
+ * Any time the library creates a TCP connection to the server, the server
+ * in response sends an `INFO` protocol. That `INFO` protocol, for NATS Server
+ * at v2.0.0+, may include a `nonce` for the client to sign.
+ *
+ * If this option is set, the library will invoke the two handlers to fetch
+ * the user JWT and sign the server's nonce.
+ *
+ * This is an option that will be used only by users that are able to
+ * sign using Ed25519 (public-key signature system). Most users will probably
+ * prefer the user of #natsOptions_SetUserCredentialsFromFiles().
+ *
+ * \note natsOptions_SetUserCredentialsCallbacks() and natsOptions_SetNKey()
+ * are mutually exclusive. Calling this function will remove the NKey and
+ * replace the signature handler, that was set with natsOptions_SetNKey(),
+ * with this one.
+ *
+ * @see natsUserJWTHandler
+ * @see natsSignatureHandler
+ * @see natsOptions_SetUserCredentialsFromFiles()
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param ujwtCB the callback to invoke to fetch the user JWT.
+ * @param ujwtClosure the closure that will be passed to the `ujwtCB` callback.
+ * @param sigCB the callback to invoke to sign the server nonce.
+ * @param sigClosure the closure that will be passed to the `sigCB` callback.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetUserCredentialsCallbacks(natsOptions *opts,
+                                        natsUserJWTHandler      ujwtCB,
+                                        void                    *ujwtClosure,
+                                        natsSignatureHandler    sigCB,
+                                        void                    *sigClosure);
+
+/** \brief Sets the file(s) to use to fetch user JWT and see required to sign nonce.
+ *
+ * This is a convenient option that specifies the files(s) to use to fetch
+ * the user JWT and the user seed to be used to sign the server's nonce.
+ *
+ * The `userOrChainedFile` contains the user JWT token and possibly the user
+ * NKey seed. Note the format of this file:
+ *
+ * \code{.unparsed}
+ * -----BEGIN NATS USER JWT-----
+ * ...an user JWT token...
+ * ------END NATS USER JWT------
+ *
+ * ************************* IMPORTANT *************************
+ * NKEY Seed printed below can be used to sign and prove identity.
+ * NKEYs are sensitive and should be treated as secrets.
+ *
+ * -----BEGIN USER NKEY SEED-----
+ * SU...
+ * ------END USER NKEY SEED------
+ * \endcode
+ *
+ * The `---BEGIN NATS USER JWT---` header is used to detect where the user
+ * JWT is in this file.
+ *
+ * If the file does not contain the user NKey seed, then the `seedFile` file
+ * name must be specified and must contain the user NKey seed.
+ *
+ * \note natsOptions_SetUserCredentialsFromFiles() and natsOptions_SetNKey()
+ * are mutually exclusive. Calling this function will remove the NKey and
+ * replace the signature handler, that was set with natsOptions_SetNKey(),
+ * with an internal one that will handle the signature.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param userOrChainedFile the name of the file containing the user JWT and
+ * possibly the user NKey seed.
+ * @param seedFile the name of the file containing the user NKey seed.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetUserCredentialsFromFiles(natsOptions *opts,
+                                        const char *userOrChainedFile,
+                                        const char *seedFile);
+
+/** \brief Sets the NKey public key and signature callback.
+ *
+ * Any time the library creates a TCP connection to the server, the server
+ * in response sends an `INFO` protocol. That `INFO` protocol, for NATS Server
+ * at v2.0.0+, may include a `nonce` for the client to sign.
+ *
+ * If this option is set, the library will add the NKey publick key `pubKey`
+ * to the `CONNECT` protocol along with the server's nonce signature resulting
+ * from the invocation of the signature handler `sigCB`.
+ *
+ * \note natsOptions_SetNKey() and natsOptions_SetUserCredentialsCallbacks()
+ * or natsOptions_SetUserCredentialsFromFiles() are mutually exclusive.
+ * Calling this function will remove the user JWT callback and replace the
+ * signature handler, that was set with one of the user credentials options,
+ * with this one.
+ *
+ * @see natsSignatureHandler
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param pubKey the user NKey public key.
+ * @param sigCB the callback to invoke to sign the server nonce.
+ * @param sigClosure the closure that will be passed to the `sigCB` callback.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetNKey(natsOptions             *opts,
+                    const char              *pubKey,
+                    natsSignatureHandler    sigCB,
+                    void                    *sigClosure);
 
 /** \brief Destroys a #natsOptions object.
  *

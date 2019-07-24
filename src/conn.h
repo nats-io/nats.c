@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -126,6 +126,12 @@ natsStatus
 natsConn_publish(natsConnection *nc, const char *subj,
          const char *reply, const void *data, int dataLen,
          bool directFlush);
+
+natsStatus
+natsConn_userFromFile(char **userJWT, char **customErrTxt, void *closure);
+
+natsStatus
+natsConn_signatureHandler(char **customErrTxt, unsigned char **sig, int *sigLen, const char *nonce, void *closure);
 
 void
 natsConn_close(natsConnection *nc);

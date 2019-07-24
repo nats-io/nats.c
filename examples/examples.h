@@ -143,6 +143,7 @@ printUsageAndExit(const char *progName, const char *usage)
 "-tlsciphers    ciphers suite\n"
 "-tlshost       server certificate's expected hostname\n" \
 "-tlsskip       skip server certificate verification\n" \
+"-creds         user credentials chained file\n" \
 "-subj          subject (default is 'foo')\n" \
 "-print         for consumers, print received messages (default is false)\n" \
                 "%s\n",
@@ -364,6 +365,13 @@ parseArgs(int argc, char **argv, const char *usage)
         else if (strcasecmp(argv[i], "-unsubscribe") == 0)
         {
             unsubscribe = true;
+        }
+        else if (strcasecmp(argv[i], "-creds") == 0)
+        {
+            if (i + 1 == argc)
+                printUsageAndExit(argv[0], usage);
+
+            s = natsOptions_SetUserCredentialsFromFiles(opts, argv[++i], NULL);
         }
         else
         {

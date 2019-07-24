@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,9 +16,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#if defined(NATS_HAS_TLS)
-#include <openssl/opensslv.h>
-#endif
 
 #include "buf.h"
 #include "timer.h"
@@ -31,6 +28,8 @@
 #include "msg.h"
 #include "stats.h"
 #include "comsock.h"
+#include "crypto.h"
+#include "nkeys.h"
 #if defined(NATS_HAS_STREAMING)
 #include "stan/conn.h"
 #include "stan/pub.h"
@@ -79,6 +78,8 @@ static const char *clusterName = "test-cluster";
 static const char *clientName  = "client";
 #endif
 
+typedef natsStatus (*testCheckInfoCB)(char *buffer);
+
 struct threadArg
 {
     natsMutex       *m;
@@ -106,6 +107,7 @@ struct threadArg
     int             results[10];
     const char      *tokens[3];
     int             tokenCallCount;
+    testCheckInfoCB checkInfoCB;
 
 
     natsSubscription *sub;
@@ -511,6 +513,34 @@ static void test_natsBuffer(void)
              && (natsBuf_Len(buf) == 0)
              && (natsBuf_Available(buf) == 10)
              && (*(buf->pos) == 'f'));
+
+    natsBuf_Destroy(buf);
+    buf = NULL;
+
+    test("MoveTo (forward): ");
+    s = natsBuf_Create(&buf, 100);
+    if (s == NATS_OK)
+    {
+        memcpy(natsBuf_Data(buf), "this is a test", 14);
+        natsBuf_MoveTo(buf, 14);
+        memcpy(natsBuf_Data(buf)+14, " of move by", 11);
+        natsBuf_MoveTo(buf, 14+11);
+    }
+    if (s == NATS_OK)
+        s = natsBuf_AppendByte(buf, '\0');
+    testCond((s == NATS_OK)
+                && (natsBuf_Len(buf) == 26)
+                && (strcmp(natsBuf_Data(buf), "this is a test of move by") == 0));
+
+    test("MoveTo (backward): ");
+    if (s == NATS_OK)
+    {
+        natsBuf_MoveTo(buf, 14);
+        s = natsBuf_AppendByte(buf, '\0');
+    }
+    testCond((s == NATS_OK)
+            && (natsBuf_Len(buf) == 15)
+            && (strcmp(natsBuf_Data(buf), "this is a test") == 0));
 
     natsBuf_Destroy(buf);
     buf = NULL;
@@ -2121,6 +2151,20 @@ _dummyConnHandler(natsConnection *nc, void *closure)
     // do nothing
 }
 
+static natsStatus
+_dummyUserJWTCb(char **userJWT, char **customErrTxt, void *closure)
+{
+    // do nothing
+    return NATS_OK;
+}
+
+static natsStatus
+_dummySigCb(char **customErrTxt, unsigned char **psig, int *sigLen, const char* nonce, void *closure)
+{
+    // do nothing
+    return NATS_OK;
+}
+
 static void
 test_natsOptions(void)
 {
@@ -2445,6 +2489,57 @@ test_natsOptions(void)
     test("Remove SendAsap: ");
     s = natsOptions_SetSendAsap(opts, false);
     testCond((s == NATS_OK) && (opts->sendAsap == false));
+
+    test("Set UserCreds: ");
+    s = natsOptions_SetUserCredentialsCallbacks(opts, _dummyUserJWTCb, (void*) 1, _dummySigCb, (void*) 2);
+    testCond((s == NATS_OK)
+                && (opts->userJWTHandler == _dummyUserJWTCb)
+                && (opts->userJWTClosure == (void*) 1)
+                && (opts->sigHandler == _dummySigCb)
+                && (opts->sigClosure == (void*) 2));
+
+    test("Remove UserCreds: ");
+    s = natsOptions_SetUserCredentialsCallbacks(opts, NULL, NULL, NULL, NULL);
+    testCond((s == NATS_OK)
+                && (opts->userJWTHandler == NULL)
+                && (opts->userJWTClosure == NULL)
+                && (opts->sigHandler == NULL)
+                && (opts->sigClosure == NULL));
+
+    test("Set UserCredsFromFile: ");
+    s = natsOptions_SetUserCredentialsFromFiles(opts, "foo", "bar");
+    testCond((s == NATS_OK)
+                && (opts->userCreds != NULL)
+                && (strcmp(opts->userCreds->userOrChainedFile, "foo") == 0)
+                && (strcmp(opts->userCreds->seedFile, "bar") == 0)
+                && (opts->userJWTHandler == natsConn_userFromFile)
+                && (opts->userJWTClosure == (void*) opts->userCreds)
+                && (opts->sigHandler == natsConn_signatureHandler)
+                && (opts->sigClosure == (void*) opts->userCreds));
+
+    test("Remove UserCredsFromFile: ");
+    s = natsOptions_SetUserCredentialsFromFiles(opts, NULL, NULL);
+    testCond((s == NATS_OK)
+            && (opts->userCreds == NULL)
+            && (opts->userJWTHandler == NULL)
+            && (opts->userJWTClosure == NULL)
+            && (opts->sigHandler == NULL)
+            && (opts->sigClosure == NULL));
+
+    test("Set NKey: ");
+    s = natsOptions_SetNKey(opts, "pubkey", _dummySigCb, (void*) 1);
+    testCond((s == NATS_OK)
+                && (opts->nkey != NULL)
+                && (strcmp(opts->nkey, "pubkey") == 0)
+                && (opts->sigHandler == _dummySigCb)
+                && (opts->sigClosure == (void*) 1));
+
+    test("Remove NKey: ");
+    s = natsOptions_SetNKey(opts, NULL, NULL, NULL);
+    testCond((s == NATS_OK)
+                && (opts->nkey == NULL)
+                && (opts->sigHandler == NULL)
+                && (opts->sigClosure == NULL));
 
     // Prepare some values for the clone check
     s = natsOptions_SetURL(opts, "url");
@@ -3195,7 +3290,350 @@ test_natsMsg(void)
     natsMsg_Destroy(msg);
 }
 
-natsStatus
+static void
+test_natsBase32Decode(void)
+{
+    natsStatus      s;
+    const char      *src       = "KRUGS4ZANFZSA5DIMUQHEZLTOVWHIIDPMYQGCIDCMFZWKMZSEBSGKY3PMRUW4ZY";
+    const char      *expected  = "This is the result of a base32 decoding";
+    char            dst[256];
+    int             dstLen = 0;
+
+    test("Decode: ");
+    s = nats_Base32_DecodeString((char*) src, dst, (int) sizeof(dst), &dstLen);
+    testCond((s == NATS_OK)
+                && (dstLen == (int) strlen(expected))
+                && (memcmp((void*) expected, (void*) dst, dstLen) == 0));
+
+    test("Dest too small: ");
+    if (s == NATS_OK)
+        s = nats_Base32_DecodeString((char*) src, dst, 10, &dstLen);
+    testCond((s == NATS_INSUFFICIENT_BUFFER) && (dstLen == 0));
+    if (s == NATS_INSUFFICIENT_BUFFER)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Invalid string: ");
+    if (s == NATS_OK)
+        s = nats_Base32_DecodeString((char*)"This is invalid content", dst, (int) sizeof(dst), &dstLen);
+    testCond((s == NATS_ERR)
+                && (nats_GetLastError(NULL) != NULL)
+                && (strstr(nats_GetLastError(NULL), "invalid") != NULL));
+}
+
+static void
+test_natsBase64Encode(void)
+{
+    natsStatus  s;
+    char        *enc = NULL;
+    int         i;
+    const char  *testStrings[] = {
+            "this is testing base64 encoding",
+            "dfslfdlkjsfdllkjfds dfsjlklkfsda dfsalkjklfdsalkj adfskjllkjfdaslkjfdslk",
+            "This is another with numbers like 12345678.90 and special characters !@#$%^&*()-=+",
+    };
+    const char  *expectedResults[] = {
+            "dGhpcyBpcyB0ZXN0aW5nIGJhc2U2NCBlbmNvZGluZw",
+            "ZGZzbGZkbGtqc2ZkbGxramZkcyBkZnNqbGtsa2ZzZGEgZGZzYWxramtsZmRzYWxraiBhZGZza2psbGtqZmRhc2xramZkc2xr",
+            "VGhpcyBpcyBhbm90aGVyIHdpdGggbnVtYmVycyBsaWtlIDEyMzQ1Njc4LjkwIGFuZCBzcGVjaWFsIGNoYXJhY3RlcnMgIUAjJCVeJiooKS09Kw",
+    };
+
+    test("Encode nil: ");
+    s = nats_Base64RawURL_EncodeString(NULL, 0, &enc);
+    testCond((s == NATS_OK) && (enc == NULL));
+
+    test("Encode empty: ");
+    s = nats_Base64RawURL_EncodeString((const unsigned char*) "", 0, &enc);
+    testCond((s == NATS_OK) && (enc == NULL));
+
+    test("Encode strings: ");
+    for (i=0; i<(int)(sizeof(testStrings)/sizeof(char*)); i++)
+    {
+        s = nats_Base64RawURL_EncodeString((const unsigned char*) testStrings[i], (int)strlen(testStrings[i]), &enc);
+        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, expectedResults[i]) != 0)))
+            s = NATS_ERR;
+
+        free(enc);
+        enc = NULL;
+        if (s != NATS_OK)
+            break;
+    }
+    testCond(s == NATS_OK);
+
+    test("Encode bytes: ");
+    {
+        const uint8_t   src[] = {1, 2, 0, 3, 4, 5, 0, 6, 7, 8, 0, 9, 0};
+        int             len = 13;
+
+        enc = NULL;
+
+        s = nats_Base64RawURL_EncodeString((const unsigned char*) &src, len, &enc);
+        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, "AQIAAwQFAAYHCAAJAA") != 0)))
+            s = NATS_ERR;
+
+        free(enc);
+    }
+    testCond(s == NATS_OK);
+}
+
+static void
+test_natsCRC16(void)
+{
+    unsigned char   a[] = {153, 209, 36, 74, 103, 32, 65, 34, 111, 68, 104, 156, 50, 14, 164, 140, 144, 230};
+    uint16_t        crc = 0;
+    uint16_t        expected = 10272;
+
+    test("Compute: ");
+    crc = nats_CRC16_Compute(a, (int)sizeof(a));
+    testCond(crc == expected);
+
+    test("Verify: ");
+    testCond(nats_CRC16_Validate(a, (int)sizeof(a), expected));
+
+    test("Expect failure: ");
+    a[3] = 63;
+    testCond(!nats_CRC16_Validate(a, (int)sizeof(a), expected));
+}
+
+static void
+test_natsKeys(void)
+{
+    natsStatus          s;
+    unsigned char       *out       = NULL;
+    int                 outLen     = 0;
+    const char          *nonce     = "nonce";
+    const unsigned char expected[] = {
+            155, 157,   8, 183,  93, 154,  78,   7,
+            219,  39,  11,  16, 134, 231,  46, 142,
+            168,  87, 110, 202, 187, 180, 179,  62,
+             49, 255, 225,  74,  48,  80, 176, 111,
+            248, 162, 121, 188, 203, 101, 100, 195,
+            162,  70, 213, 182, 220,  14,  71, 113,
+             93, 239, 141, 131,  66, 190, 237, 127,
+            104, 191, 138, 217, 227,   1,  92,  14,
+    };
+
+    test("Invalid key: ");
+    s = natsKeys_Sign("ABC", nonce, &out, &outLen);
+    testCond((s == NATS_ERR)
+            && (out == NULL)
+            && (outLen == 0)
+            && (nats_GetLastError(NULL) != NULL)
+            && (strstr(nats_GetLastError(NULL), NKEYS_INVALID_ENCODED_KEY) != NULL));
+    nats_clearLastError();
+
+    // This is generated from XYTHISISNOTAVALIDSEED with correct checksum.
+    // Expect to get invalid seed
+    test("Invalid seed: ");
+    s = natsKeys_Sign("LBMVISCJKNEVGTSPKRAVMQKMJFCFGRKFIQ52C", nonce, &out, &outLen);
+    testCond((s == NATS_ERR)
+                && (out == NULL)
+                && (outLen == 0)
+                && (nats_GetLastError(NULL) != NULL)
+                && (strstr(nats_GetLastError(NULL), NKEYS_INVALID_SEED) != NULL));
+    nats_clearLastError();
+
+    test("Invalid prefix: ");
+    s = natsKeys_Sign("SBAUEQ2EIVDEOSCJJJFUYTKOJ5IFCUSTKRKVMV2YLFNECQSDIRCUMR2IJFFEWTCNJZHVAUKSKNKFKVSXLBMVUQKCINCEKRSHJBEUUS2MJVHE6UCRKJJVIVKWK5MFSWV2QA", nonce, &out, &outLen);
+    testCond((s == NATS_ERR)
+                && (out == NULL)
+                && (outLen == 0)
+                && (nats_GetLastError(NULL) != NULL)
+                && (strstr(nats_GetLastError(NULL), NKEYS_INVALID_PREFIX) != NULL));
+    nats_clearLastError();
+
+    // This is the valid seed: SUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4GY
+    // Make the checksum incorrect by changing last 2 bytes.
+    test("Invalid checksum: ");
+    s = natsKeys_Sign("SUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4AA", nonce, &out, &outLen);
+    testCond((s == NATS_ERR)
+                && (out == NULL)
+                && (outLen == 0)
+                && (nats_GetLastError(NULL) != NULL)
+                && (strstr(nats_GetLastError(NULL), NKEYS_INVALID_CHECKSUM) != NULL));
+    nats_clearLastError();
+
+    // Now use valid SEED
+    test("Sign ok: ");
+    s = natsKeys_Sign("SUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4GY", nonce, &out, &outLen);
+    testCond((s == NATS_OK)
+                && (out != NULL)
+                && (outLen == NKEYS_SIGN_BYTES)
+                && (memcmp(out, expected, sizeof(expected)) == 0));
+    free(out);
+    out = NULL;
+}
+
+static void
+test_natsReadFile(void)
+{
+    natsStatus      s    = NATS_OK;
+    natsBuffer      *buf = NULL;
+    FILE            *f   = NULL;
+    const char      *fn  = "test_readfile.txt";
+    const char      *content = "This is some content.\nThere are 2 lines in this file.\n";
+
+    test("Invalid arg 1: ");
+    s = nats_ReadFile(&buf, 0, "file.txt");
+    testCond((s == NATS_INVALID_ARG) && (buf == NULL));
+
+    test("Invalid arg 2: ");
+    s = nats_ReadFile(&buf, -1, "file.txt");
+    testCond((s == NATS_INVALID_ARG) && (buf == NULL));
+
+    test("Invalid arg 3: ");
+    s = nats_ReadFile(&buf, 100, NULL);
+    testCond((s == NATS_INVALID_ARG) && (buf == NULL));
+
+    test("Invalid arg 4: ");
+    s = nats_ReadFile(&buf, 100, "");
+    testCond((s == NATS_INVALID_ARG) && (buf == NULL));
+
+    test("File not found: ");
+    s = nats_ReadFile(&buf, 100, "fileNotFound.txt");
+    testCond((s == NATS_ERR)
+                && (strstr(nats_GetLastError(NULL), "fileNotFound.txt") != NULL)
+                && (buf == NULL));
+    nats_clearLastError();
+
+    // Create temp file with some content...
+    f = fopen(fn, "w");
+    if (f == NULL)
+    {
+        FAIL("Unable to create test file");
+    }
+    else
+    {
+        int res = fputs(content, f);
+        if (res < 0)
+            FAIL("Unable to write content of test file");
+
+        fclose(f);
+        f = NULL;
+    }
+
+    test("Read with large buffer: ");
+    s = nats_ReadFile(&buf, 1024, fn);
+    testCond((s == NATS_OK)
+                && (buf != NULL)
+                && (natsBuf_Capacity(buf) == 1024)
+                && (natsBuf_Len(buf) == (int) strlen(content)+1)
+                && (strcmp(natsBuf_Data(buf), content) == 0));
+    natsBuf_Destroy(buf);
+    buf = NULL;
+
+    test("Read with small buffer: ");
+    // The content is 55 bytes. We start with buffer of 10 and x2
+    // when expanding, so capacity should be 10, 20, 40, 80.
+    s = nats_ReadFile(&buf, 10, fn);
+    testCond((s == NATS_OK)
+                && (buf != NULL)
+                && (natsBuf_Capacity(buf) == 80)
+                && (natsBuf_Len(buf) == (int) strlen(content)+1)
+                && (strcmp(natsBuf_Data(buf), content) == 0));
+    natsBuf_Destroy(buf);
+    buf = NULL;
+
+    test("Read with buffer of exact file content: ");
+    // Use a buf capacity that matches exactly the content on file.
+    // But since we need to add the terminating `\0`, then we will
+    // need to expand.
+    s = nats_ReadFile(&buf, (int)strlen(content), fn);
+    testCond((s == NATS_OK)
+                && (buf != NULL)
+                && (natsBuf_Capacity(buf) == (int)strlen(content)*2)
+                && (natsBuf_Len(buf) == (int) strlen(content)+1)
+                && (strcmp(natsBuf_Data(buf), content) == 0));
+    natsBuf_Destroy(buf);
+    buf = NULL;
+
+    s = nats_ReadFile(&buf, (int)strlen(content)+1, fn);
+    testCond((s == NATS_OK)
+                && (buf != NULL)
+                && (natsBuf_Capacity(buf) == (int)strlen(content)+1)
+                && (natsBuf_Len(buf) == (int) strlen(content)+1)
+                && (strcmp(natsBuf_Data(buf), content) == 0));
+    natsBuf_Destroy(buf);
+    buf = NULL;
+
+    remove(fn);
+}
+
+static void
+test_natsGetJWTOrSeed(void)
+{
+    natsStatus  s;
+    char        *val = NULL;
+    char        buf[256];
+    const char  *valids[] = {
+        "--- START JWT ---\nsome value\n--- END JWT ---\n",
+        "--- ---\nsome value\n--- ---\n",
+        "------\nsome value\n------\n",
+        "---\nabc\n--\n---START---\nsome value\n---END---\n----\ndef\n--- ---\n",
+        "nothing first\nthen it starts\n  --- START ---\nsome value\n--- END ---\n---START---\nof something else\n---END---\n",
+        "--- START ---\nsome value\n\n\n--- END ---\n",
+    };
+    const char *invalids[] = {
+        "-- JWT -- START ----\nsome value\n--- END ---\n",
+        "--- START --- \nsome value\n--- END ---\n",
+        "--- START ---\nsome value\n-- END ---\n",
+        "--- START ---\nsome value\n---- END --- \n",
+    };
+    int i;
+    int iter;
+
+    for (iter=0; iter<2; iter++)
+    {
+        for (i=0; i<(int)(sizeof(valids)/sizeof(char*));i++)
+        {
+            snprintf(buf, sizeof(buf), "%s %d: ", (iter==0 ? "JWT" : "Seed"), (i+1));
+            test(buf);
+            snprintf(buf, sizeof(buf), "%s%s", (iter == 0 ? "" : "------\njwt\n------\n"), valids[i]);
+            s = nats_GetJWTOrSeed(&val, buf, iter);
+            testCond((s == NATS_OK) && (val != NULL) && (strcmp(val, "some value") == 0));
+            free(val);
+            val = NULL;
+        }
+
+        for (i=0; i<(int)(sizeof(invalids)/sizeof(char*));i++)
+        {
+            snprintf(buf, sizeof(buf), "%s invalid %d: ", (iter == 0 ? "JWT" : "Seed"), (i+1));
+            test(buf);
+            snprintf(buf, sizeof(buf), "%s%s", (iter == 0 ? "" : "------\njwt\n------\n"), invalids[i]);
+            s = nats_GetJWTOrSeed(&val, buf, iter);
+            testCond((s == NATS_NOT_FOUND) && (val == NULL));
+        }
+    }
+}
+
+static void
+test_natsHostIsIP(void)
+{
+    struct _testHost {
+        const char *host;
+        bool       isIP;
+    };
+    const struct _testHost hosts[] = {
+        { "1.2.3.4", true },
+        { "::1", true },
+        { "localhost", false },
+        { "www.host.name.com", false },
+    };
+    int i;
+
+    for (i=0; i<(int)(sizeof(hosts)/sizeof(struct _testHost)); i++)
+    {
+        char buf[256];
+
+        snprintf(buf, sizeof(buf), "Check '%s': ", hosts[i].host);
+        test(buf);
+        testCond(nats_HostIsIP(hosts[i].host) == hosts[i].isIP)
+    }
+}
+
+static natsStatus
 _checkStart(const char *url, int orderIP, int maxAttempts)
 {
     natsStatus      s        = NATS_OK;
@@ -3232,7 +3670,7 @@ _checkStart(const char *url, int orderIP, int maxAttempts)
     return s;
 }
 
-natsStatus
+static natsStatus
 _checkStreamingStart(const char *url, int maxAttempts)
 {
     natsStatus      s     = NATS_NOT_PERMITTED;
@@ -3671,7 +4109,7 @@ test_ReconnectServerStats(void)
 
     if (s == NATS_OK)
     {
-        srv = natsSrvPool_GetCurrentServer(nc->srvPool, nc->url, NULL);
+        srv = natsSrvPool_GetCurrentServer(nc->srvPool, nc->cur, NULL);
         if (srv == NULL)
             s = NATS_ILLEGAL_STATE;
     }
@@ -4065,18 +4503,18 @@ test_SelectNextServer(void)
     if (s == NATS_OK)
         s = natsConn_create(&nc, natsOptions_clone(opts));
     testCond((s == NATS_OK)
-             && (nc->url == nc->srvPool->srvrs[0]->url));
+             && (nc->cur->url == nc->srvPool->srvrs[0]->url));
 
     test("Get next server: ");
     if (s == NATS_OK)
     {
-        srv = natsSrvPool_GetNextServer(nc->srvPool, nc->opts, nc->url);
+        srv = natsSrvPool_GetNextServer(nc->srvPool, nc->opts, nc->cur);
         if (srv != NULL)
-            nc->url = srv->url;
+            nc->cur = srv;
     }
     testCond((s == NATS_OK)
              && (nc != NULL)
-             && (nc->url != NULL));
+             && (nc->cur != NULL));
 
     test("Check list size: ");
     testCond((s == NATS_OK)
@@ -4087,9 +4525,9 @@ test_SelectNextServer(void)
     test("Check selection: ");
     testCond((s == NATS_OK)
              && (nc != NULL)
-             && (nc->url != NULL)
-             && (nc->url->fullUrl != NULL)
-             && (strcmp(nc->url->fullUrl, testServers[1]) == 0));
+             && (nc->cur->url != NULL)
+             && (nc->cur->url->fullUrl != NULL)
+             && (strcmp(nc->cur->url->fullUrl, testServers[1]) == 0));
 
     test("Check old was pushed to last position: ");
     testCond((s == NATS_OK)
@@ -4129,11 +4567,11 @@ test_SelectNextServer(void)
         }
         if (s == NATS_OK)
         {
-            srv = natsSrvPool_GetNextServer(nc->srvPool, nc->opts, nc->url);
+            srv = natsSrvPool_GetNextServer(nc->srvPool, nc->opts, nc->cur);
             if (srv != NULL)
-                nc->url = srv->url;
+                nc->cur = srv;
         }
-        testCond((s == NATS_OK) && (nc->url != NULL));
+        testCond((s == NATS_OK) && (nc->cur != NULL));
     }
 
     // Check that we are now looking at #3, and current is not in the list.
@@ -4144,9 +4582,10 @@ test_SelectNextServer(void)
     test("Check selection: ");
     testCond((s == NATS_OK)
              && (nc != NULL)
-             && (nc->url != NULL)
-             && (nc->url->fullUrl != NULL)
-             && (strcmp(nc->url->fullUrl, testServers[2]) == 0));
+             && (nc->cur != NULL)
+             && (nc->cur->url != NULL)
+             && (nc->cur->url->fullUrl != NULL)
+             && (strcmp(nc->cur->url->fullUrl, testServers[2]) == 0));
 
     test("Check last server was discarded: ");
     testCond((s == NATS_OK)
@@ -8450,6 +8889,8 @@ test_Flush(void)
 
     s = natsOptions_Create(&opts);
     if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");
+    if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
     if (s == NATS_OK)
         s = natsOptions_SetPingInterval(opts, 100);
@@ -8543,13 +8984,16 @@ test_Flush(void)
         natsThread_Join(threads[i]);
         natsThread_Destroy(threads[i]);
 
-        if (args[i].s != NATS_OK)
+        if ((s == NATS_OK) && (args[i].s != NATS_OK))
+        {
             s = args[i].s;
+            printf("t=%d s=%d\n", i, s);
+        }
     }
     if (s == NATS_OK)
         elapsed = (nats_Now() - start);
 
-    testCond((s == NATS_OK) && (elapsed >= 2800) && (elapsed <= 3200));
+    testCond((s == NATS_OK) && (elapsed >= 2500) && (elapsed <= 3200));
 
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
@@ -10906,6 +11350,7 @@ test_NextMsgCallOnAsyncSub(void)
     _stopServer(serverPid);
 }
 
+
 static void
 test_ServersOption(void)
 {
@@ -12272,8 +12717,10 @@ test_ReceiveINFORightAfterFirstPONG(void)
 static bool
 serverVersionAtLeast(int major, int minor, int update)
 {
-    int ma, mi, up;
-    char *version;
+    int     ma       = 0;
+    int     mi       = 0;
+    int     up       = 0;
+    char    *version = NULL;
 
     if (serverVersion == NULL)
         return false;
@@ -12289,7 +12736,7 @@ serverVersionAtLeast(int major, int minor, int update)
         if (version == NULL)
             return false;
 
-        version += 3;
+        version += 2;
     }
 
     sscanf(version, "%d.%d.%d", &ma, &mi, &up);
@@ -12427,7 +12874,7 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
 
         // Check the server we reconnected to.
         natsMutex_Lock(conn->mu);
-        port = conn->url->port;
+        port = conn->cur->url->port;
         natsMutex_Unlock(conn->mu);
 
         if (port == 4223)
@@ -12584,6 +13031,8 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
+
+
 static void
 test_Version(void)
 {
@@ -12599,14 +13048,6 @@ test_Version(void)
 
     test("Version number: ");
     testCond(nats_GetVersionNumber() == LIB_NATS_VERSION_NUMBER);
-
-    long int openSSLVersion = 0x01010102f;
-
-    test("Check if OpenSSL version is extracted correctly: ");
-
-    testCond(natsOpenSSL_Version(1, 1, 1, openSSLVersion));
-    testCond(natsOpenSSL_Version(1, 1, 0, openSSLVersion));
-    testCond(!natsOpenSSL_Version(1, 1, 2, openSSLVersion));
 }
 
 static void
@@ -13230,6 +13671,7 @@ _startMockupServerThread(void *closure)
     natsThread          *t = NULL;
     struct threadArg    *arg = (struct threadArg*) closure;
     natsSockCtx         ctx;
+    testCheckInfoCB     checkInfoCB = NULL;
 
     memset(&ctx, 0, sizeof(natsSockCtx));
 
@@ -13237,6 +13679,7 @@ _startMockupServerThread(void *closure)
     natsMutex_Lock(arg->m);
     arg->status = s;
     natsCondition_Signal(arg->c);
+    checkInfoCB = arg->checkInfoCB;
     natsMutex_Unlock(arg->m);
 
     if (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
@@ -13260,6 +13703,8 @@ _startMockupServerThread(void *closure)
 
             // Read connect and ping commands sent from the client
             s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            if ((s == NATS_OK) && (checkInfoCB != NULL))
+                s = (*checkInfoCB)(buffer);
             if (s == NATS_OK)
                 s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
         }
@@ -14006,6 +14451,564 @@ test_GetClientID(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
+static natsStatus
+_userJWTCB(char **userJWT, char **customErrTxt, void *closure)
+{
+    if (closure != NULL)
+    {
+        *customErrTxt = strdup("some jwt error");
+        return NATS_ERR;
+    }
+
+    *userJWT = strdup("some user jwt");
+
+    return NATS_OK;
+}
+
+static natsStatus
+_sigCB(char **customErrTxt, unsigned char **psig, int *sigLen, const char* nonce, void *closure)
+{
+    const unsigned char correctSign[] = {
+            155, 157,   8, 183,  93, 154,  78,   7,
+            219,  39,  11,  16, 134, 231,  46, 142,
+            168,  87, 110, 202, 187, 180, 179,  62,
+             49, 255, 225,  74,  48,  80, 176, 111,
+            248, 162, 121, 188, 203, 101, 100, 195,
+            162,  70, 213, 182, 220,  14,  71, 113,
+             93, 239, 141, 131,  66, 190, 237, 127,
+            104, 191, 138, 217, 227,   1,  92,  14,
+    };
+    int i;
+    unsigned char *sig = NULL;
+    unsigned char *ptr = NULL;
+
+    if (closure != NULL)
+    {
+        *customErrTxt = strdup("some sig error");
+        return NATS_ERR;
+    }
+
+    sig = malloc(64);
+    ptr = sig;
+
+    for (i=0; i<64; i++)
+    {
+        (*ptr) = correctSign[i];
+        ptr++;
+    }
+
+    *psig = sig;
+    *sigLen = 64;
+
+    return NATS_OK;
+}
+
+static natsStatus
+_checkJWTAndSigCB(char *buffer)
+{
+    // UserJWT callback should have returned this...
+    if (strstr(buffer, "some user jwt") == NULL)
+        return NATS_ERR;
+
+    // The server is sending the nonce "nonce" and we
+    // use a seed that should have produced a signature
+    // that converted to base64 should be:
+    if (strstr(buffer, "m50It12aTgfbJwsQhucujqhXbsq7tLM-Mf_hSjBQsG_4onm8y2Vkw6JG1bbcDkdxXe-Ng0K-7X9ov4rZ4wFcDg") == NULL)
+        return NATS_ERR;
+
+    return NATS_OK;
+}
+
+static void
+test_UserCredsCallbacks(void)
+{
+    natsStatus          s;
+    natsConnection      *nc     = NULL;
+    natsOptions         *opts   = NULL;
+    natsOptions         *opts2  = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+    natsThread          *t      = NULL;
+    struct threadArg    arg;
+
+    s = natsOptions_Create(&opts);
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test UserCredsCallbacks");
+
+    test("Invalid arg 1: ");
+    s = natsOptions_SetUserCredentialsCallbacks(NULL, _dummyUserJWTCb, NULL, _dummySigCb, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Invalid arg 2: ");
+    s = NATS_OK;
+    s = natsOptions_SetUserCredentialsCallbacks(opts, NULL, NULL, _dummySigCb, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Clone: ");
+    s = natsOptions_SetUserCredentialsCallbacks(opts, _dummyUserJWTCb, (void*) 1, _dummySigCb, (void*) 2);
+    if (s == NATS_OK)
+    {
+        opts2 = natsOptions_clone(opts);
+        if (opts2 == NULL)
+            s = NATS_NO_MEMORY;
+    }
+    if (s == NATS_OK)
+        s = natsOptions_SetUserCredentialsCallbacks(opts, NULL, NULL, NULL, NULL);
+    testCond((s == NATS_OK)
+                && (opts2->userJWTHandler == _dummyUserJWTCb)
+                && (opts2->userJWTClosure == (void*) 1)
+                && (opts2->sigHandler == _dummySigCb)
+                && (opts2->sigClosure == (void*) 2));
+
+    natsOptions_Destroy(opts2);
+
+    // We first check that we get error when callbacks do return error.
+    // For that part, we don't need that the server sends the nonce.
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    // Create a connection. The user JWT callback is going to return
+    // an error, ensure connection fails.
+    test("UserJWTCB returns error: ");
+    s = natsOptions_SetUserCredentialsCallbacks(opts, _userJWTCB, (void*) "fail", _sigCB, NULL);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond((s == NATS_ERR)
+                && (strstr(nats_GetLastError(NULL), "some jwt error") != NULL));
+
+    s = NATS_OK;
+    nats_clearLastError();
+    test("SignatureCB returns error: ");
+    s = natsOptions_SetUserCredentialsCallbacks(opts, _userJWTCB, NULL, _sigCB, (void*) "fail");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond((s == NATS_ERR)
+                && (strstr(nats_GetLastError(NULL), "some sig error") != NULL));
+
+    _stopServer(pid);
+
+    // Start fake server that will send predefined "nonce" so we can check
+    // that connection is sending appropriate jwt and signature.
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        // Set this to error, the mock server should set it to OK
+        // if it can start successfully.
+        arg.status = NATS_ERR;
+        arg.checkInfoCB = _checkJWTAndSigCB;
+        arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576,\"nonce\":\"nonce\"}\r\n";
+        s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
+    }
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+    if (s != NATS_OK)
+    {
+        if (t != NULL)
+        {
+            natsThread_Join(t);
+            natsThread_Destroy(t);
+        }
+        natsOptions_Destroy(opts);
+        _destroyDefaultThreadArgs(&arg);
+        FAIL("Unable to setup test");
+    }
+
+    s = NATS_OK;
+    test("Connect sends proper JWT and Signature: ");
+    s = natsOptions_SetUserCredentialsCallbacks(opts, _userJWTCB, NULL, _sigCB, NULL);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    // Notify mock server we are done
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
+test_UserCredsFromFiles(void)
+{
+    natsStatus          s       = NATS_OK;
+    natsConnection      *nc     = NULL;
+    natsOptions         *opts   = NULL;
+    natsOptions         *opts2  = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+    natsThread          *t      = NULL;
+    int                 i;
+    struct threadArg    arg;
+    const char          *ucfn   = "user.creds";
+    const char          *sfn    = "seed.txt";
+    const char          *snhfn  = "seednh.txt";
+    const char          *nusfn  = "nouors.txt";
+    FILE                *f      = NULL;
+
+    f = fopen(ucfn, "w");
+    if (f == NULL)
+        s = NATS_ERR;
+    else
+    {
+        int res = fputs("-----BEGIN NATS USER JWT----\nsome user jwt\n-----END NATS USER JWT-----\n\n-----BEGIN USER NKEY SEED-----\nSUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4GY\n-----END USER NKEY SEED-----\n", f);
+        if (res < 0)
+            s = NATS_ERR;
+
+        if (fclose(f) != 0)
+            s = NATS_ERR;
+        f = NULL;
+    }
+    if (s == NATS_OK)
+    {
+        f = fopen(sfn, "w");
+        if (f == NULL)
+            s = NATS_ERR;
+        else
+        {
+            int res = fputs("-----BEGIN USER NKEY SEED-----\nSUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4GY\n-----END USER NKEY SEED-----\n", f);
+            if (res < 0)
+                s = NATS_ERR;
+
+            if (fclose(f) != 0)
+                s = NATS_ERR;
+            f = NULL;
+        }
+    }
+    if (s == NATS_OK)
+    {
+        f = fopen(snhfn, "w");
+        if (f == NULL)
+            s = NATS_ERR;
+        else
+        {
+            int res = fputs("This file does not have the proper header\nand also has spaces before the seed:\n  \tSUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4GY\nthis should work\n", f);
+            if (res < 0)
+                s = NATS_ERR;
+
+            if (fclose(f) != 0)
+                s = NATS_ERR;
+            f = NULL;
+        }
+    }
+    if (s == NATS_OK)
+    {
+        f = fopen(nusfn, "w");
+        if (f == NULL)
+            s = NATS_ERR;
+        else
+        {
+            int res = fputs("This file does not have a jwt\nnor a valid seed\n", f);
+            if (res < 0)
+                s = NATS_ERR;
+
+            if (fclose(f) != 0)
+                s = NATS_ERR;
+            f = NULL;
+        }
+    }
+    if (s != NATS_OK)
+        FAIL("Unable to create creds test files");
+
+    s = natsOptions_Create(&opts);
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test UserCredsFromFiles");
+
+    test("Invalid arg 1: ");
+    s = natsOptions_SetUserCredentialsFromFiles(NULL, "foo", "bar");
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Invalid arg 2: ");
+    s = NATS_OK;
+    s = natsOptions_SetUserCredentialsFromFiles(opts, NULL, "bar");
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Invalid arg 3: ");
+    s = NATS_OK;
+    s = natsOptions_SetUserCredentialsFromFiles(opts, "", "bar");
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Clone: ");
+    s = natsOptions_SetUserCredentialsFromFiles(opts, "foo", "bar");
+    if (s == NATS_OK)
+    {
+        opts2 = natsOptions_clone(opts);
+        if (opts2 == NULL)
+            s = NATS_NO_MEMORY;
+    }
+    if (s == NATS_OK)
+        s = natsOptions_SetUserCredentialsFromFiles(opts, NULL, NULL);
+    testCond((s == NATS_OK)
+                && (opts2->userCreds != NULL)
+                && (opts2->userJWTHandler == natsConn_userFromFile)
+                && (opts2->userJWTClosure == (void*) opts2->userCreds)
+                && (opts2->sigHandler == natsConn_signatureHandler)
+                && (opts2->sigClosure == (void*) opts2->userCreds));
+    natsOptions_Destroy(opts2);
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("UserOrChainedFile not found: ");
+    s = NATS_OK;
+    s = natsOptions_SetUserCredentialsFromFiles(opts, "userCredsNotFound", NULL);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond((s == NATS_ERR)
+                && (strstr(nats_GetLastError(NULL), "error opening file 'userCredsNotFound'") != NULL));
+
+    // Use a file that contains no userJWT..
+    test("UserOrChainedFile has no JWT: ");
+    s = NATS_OK;
+    s = natsOptions_SetUserCredentialsFromFiles(opts, "list.txt", NULL);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    // Since we return the whole content of the file when we don't find
+    // the key for the user, but we don't for seed, the error we'll get
+    // is about no user seed found.
+    testCond((s == NATS_ERR)
+                && (strstr(nats_GetLastError(NULL), "no nkey user seed found") != NULL));
+
+    test("SeedFile not found: ");
+    s = NATS_OK;
+    s = natsOptions_SetUserCredentialsFromFiles(opts, ucfn, "seedFileNotFound");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond((s == NATS_ERR)
+                && (strstr(nats_GetLastError(NULL), "error opening file 'seedFileNotFound'") != NULL));
+
+    // Use a seed file that contains no seed..
+    test("SeedFile has no seed: ");
+    s = NATS_OK;
+    s = natsOptions_SetUserCredentialsFromFiles(opts, ucfn, "list.txt");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond((s == NATS_ERR)
+                && (strstr(nats_GetLastError(NULL), "no nkey user seed found") != NULL));
+
+    _stopServer(pid);
+
+    for (i=0; i<3; i++)
+    {
+        // Start fake server that will send predefined "nonce" so we can check
+        // that connection is sending appropriate jwt and signature.
+        s = _createDefaultThreadArgsForCbTests(&arg);
+        if (s == NATS_OK)
+        {
+            // Set this to error, the mock server should set it to OK
+            // if it can start successfully.
+            arg.done = false;
+            arg.status = NATS_ERR;
+            arg.checkInfoCB = _checkJWTAndSigCB;
+            arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576,\"nonce\":\"nonce\"}\r\n";
+            s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
+        }
+        if (s == NATS_OK)
+        {
+            // Wait for server to be ready
+            natsMutex_Lock(arg.m);
+            while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+                s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+            natsMutex_Unlock(arg.m);
+        }
+        if (s != NATS_OK)
+        {
+            if (t != NULL)
+            {
+                natsThread_Join(t);
+                natsThread_Destroy(t);
+            }
+            natsOptions_Destroy(opts);
+            _destroyDefaultThreadArgs(&arg);
+            FAIL("Unable to setup test");
+        }
+
+        s = NATS_OK;
+        if (i == 0)
+        {
+            test("Connect with chained file: ");
+            s = natsOptions_SetUserCredentialsFromFiles(opts, ucfn, NULL);
+        }
+        else if (i == 1)
+        {
+            test("Connect with user and seed files: ");
+            s = natsOptions_SetUserCredentialsFromFiles(opts, ucfn, sfn);
+        }
+        else if (i == 2)
+        {
+            test("Connect with user and seed files (seed does not contain header): ");
+            s = natsOptions_SetUserCredentialsFromFiles(opts, ucfn, snhfn);
+        }
+        if (s == NATS_OK)
+            s = natsConnection_Connect(&nc, opts);
+        testCond(s == NATS_OK);
+
+        // Notify mock server we are done
+        natsMutex_Lock(arg.m);
+        arg.done = true;
+        natsCondition_Signal(arg.c);
+        natsMutex_Unlock(arg.m);
+
+        natsConnection_Destroy(nc);
+        nc = NULL;
+
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+        t = NULL;
+
+        _destroyDefaultThreadArgs(&arg);
+    }
+    natsOptions_Destroy(opts);
+
+    remove(ucfn);
+    remove(sfn);
+    remove(snhfn);
+    remove(nusfn);
+}
+
+static natsStatus
+_checkNKeyAndSig(char *buffer)
+{
+    // NKey should have been included
+    if (strstr(buffer, "pubKey") == NULL)
+        return NATS_ERR;
+
+    // The server is sending the nonce "nonce" and we
+    // use a seed that should have produced a signature
+    // that converted to base64 should be:
+    if (strstr(buffer, "m50It12aTgfbJwsQhucujqhXbsq7tLM-Mf_hSjBQsG_4onm8y2Vkw6JG1bbcDkdxXe-Ng0K-7X9ov4rZ4wFcDg") == NULL)
+        return NATS_ERR;
+
+    return NATS_OK;
+}
+
+static void
+test_NKey(void)
+{
+    natsStatus          s;
+    natsOptions         *opts  = NULL;
+    natsOptions         *opts2 = NULL;
+    natsConnection      *nc    = NULL;
+    natsThread          *t     = NULL;
+    struct threadArg    arg;
+
+    s = natsOptions_Create(&opts);
+    if (s != NATS_OK)
+        FAIL("Failed to setup test");
+
+    test("Invalid arg 1: ");
+    s = natsOptions_SetNKey(NULL, "pubkey", _dummySigCb, (void*) 1);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Invalid arg 2: ");
+    s = natsOptions_SetNKey(opts, "pubkey", NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Clone: ");
+    s = natsOptions_SetNKey(opts, "pubkey", _dummySigCb, (void*) 1);
+    if (s == NATS_OK)
+    {
+        opts2 = natsOptions_clone(opts);
+        if (opts2 == NULL)
+            s = NATS_NO_MEMORY;
+    }
+    if (s == NATS_OK)
+        s = natsOptions_SetNKey(opts, NULL, NULL, NULL);
+    testCond((s == NATS_OK)
+                && (opts2->nkey != NULL)
+                && (strcmp(opts2->nkey, "pubkey") == 0)
+                && (opts2->sigHandler == _dummySigCb)
+                && (opts2->sigClosure == (void*) 1));
+    natsOptions_Destroy(opts2);
+
+    test("NKey erase JWT: ");
+    s = natsOptions_SetUserCredentialsFromFiles(opts, "foo", "bar");
+    if (s == NATS_OK)
+        s = natsOptions_SetNKey(opts, "pubkey2", _dummySigCb, (void*) 2);
+    testCond((s == NATS_OK)
+                && (opts->nkey != NULL)
+                && (strcmp(opts->nkey, "pubkey2") == 0)
+                && (opts->userJWTHandler == NULL)
+                && (opts->userJWTClosure == NULL)
+                && (opts->sigHandler == _dummySigCb)
+                && (opts->sigClosure == (void*) 2));
+
+    test("UserCreds erase NKey: ");
+    s = natsOptions_SetUserCredentialsFromFiles(opts, "foo", "bar");
+    testCond((s == NATS_OK)
+                && (opts->nkey == NULL)
+                && (opts->userJWTHandler == natsConn_userFromFile)
+                && (opts->userJWTClosure == (void*) opts->userCreds)
+                && (opts->sigHandler == natsConn_signatureHandler)
+                && (opts->sigClosure == (void*) opts->userCreds));
+
+    // Start fake server that will send predefined "nonce" so we can check
+    // that connection is sending appropriate jwt and signature.
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        // Set this to error, the mock server should set it to OK
+        // if it can start successfully.
+        arg.done = false;
+        arg.status = NATS_ERR;
+        arg.checkInfoCB = _checkNKeyAndSig;
+        arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576,\"nonce\":\"nonce\"}\r\n";
+        s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
+    }
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+    if (s != NATS_OK)
+    {
+        if (t != NULL)
+        {
+            natsThread_Join(t);
+            natsThread_Destroy(t);
+        }
+        natsOptions_Destroy(opts);
+        _destroyDefaultThreadArgs(&arg);
+        FAIL("Unable to setup test");
+    }
+
+    test("NKey works ok: ");
+    s = natsOptions_SetNKey(opts, "pubKey", _sigCB, NULL);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    // Notify mock server we are done
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    t = NULL;
+
+    _destroyDefaultThreadArgs(&arg);
+
+    natsOptions_Destroy(opts);
+}
+
 static void
 test_SSLBasic(void)
 {
@@ -14104,7 +15107,7 @@ test_SSLVerify(void)
     CHECK_SERVER_STARTED(serverPid);
 
     test("Check that connect fails if no SSL certs: ");
-    s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
+    s = natsOptions_SetURL(opts, "nats://localhost:4443");
     if (s == NATS_OK)
         s = natsOptions_SetSecure(opts, true);
     // For test purposes, we provide the CA trusted certs
@@ -14178,7 +15181,7 @@ test_SSLVerifyHostname(void)
     serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
-    test("Check that connect fails if no wrong hostname: ");
+    test("Check that connect fails if url is IP: ");
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
     if (s == NATS_OK)
         s = natsOptions_SetSecure(opts, true);
@@ -14186,15 +15189,33 @@ test_SSLVerifyHostname(void)
     if (s == NATS_OK)
         s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
     if (s == NATS_OK)
-        s = natsOptions_SetExpectedHostname(opts, "foo");
-    if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_SSL_ERROR);
 
-    test("Check that connect succeeds with correct hostname: ");
-    s = natsOptions_SetExpectedHostname(opts, "localhost");
+    test("Check that connect fails if wrong expected hostname: ");
+    s = natsOptions_SetURL(opts, "nats://localhost:4443");
+    if (s == NATS_OK)
+        s = natsOptions_SetExpectedHostname(opts, "foo");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_SSL_ERROR);
+
+    test("Check that connect succeeds if hostname ok and no expected hostname set: ");
+    s = natsOptions_SetURL(opts, "nats://localhost:4443");
+    if (s == NATS_OK)
+        s = natsOptions_SetExpectedHostname(opts, NULL);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK)
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    test("Check that connect succeeds with proper expected hostname: ");
+    s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
+    if (s == NATS_OK)
+        s = natsOptions_SetExpectedHostname(opts, "localhost");
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     if (s == NATS_OK)
@@ -14319,8 +15340,8 @@ test_SSLCiphers(void)
     serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
-    test("Check that connect fails if no improper ciphers: ");
-    s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
+    test("Check that connect fails if improper ciphers: ");
+    s = natsOptions_SetURL(opts, "nats://localhost:4443");
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
     if (s == NATS_OK)
@@ -14335,9 +15356,7 @@ test_SSLCiphers(void)
     testCond(s != NATS_OK);
 
     test("Check connects OK with proper ciphers: ");
-    s = natsOptions_SetSecure(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetCiphers(opts, "-ALL:HIGH");
+    s = natsOptions_SetCiphers(opts, "-ALL:HIGH");
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     if (s == NATS_OK)
@@ -16538,6 +17557,13 @@ static testInfo allTests[] =
     {"natsErrWithLongText",             test_natsErrWithLongText},
     {"natsErrStackMoreThanMaxFrames",   test_natsErrStackMoreThanMaxFrames},
     {"natsMsg",                         test_natsMsg},
+    {"natsBase32",                      test_natsBase32Decode},
+    {"natsBase64",                      test_natsBase64Encode},
+    {"natsCRC16",                       test_natsCRC16},
+    {"natsKeys",                        test_natsKeys},
+    {"natsReadFile",                    test_natsReadFile},
+    {"natsGetJWTOrSeed",                test_natsGetJWTOrSeed},
+    {"natsHostIsIP",                    test_natsHostIsIP},
 
     // Package Level Tests
 
@@ -16647,6 +17673,9 @@ static testInfo allTests[] =
     {"DrainSub",                        test_DrainSub},
     {"DrainConn",                       test_DrainConn},
     {"GetClientID",                     test_GetClientID},
+    {"UserCredsCallbacks",              test_UserCredsCallbacks},
+    {"UserCredsFromFiles",              test_UserCredsFromFiles},
+    {"NKey",                            test_NKey},
     {"SSLBasic",                        test_SSLBasic},
     {"SSLVerify",                       test_SSLVerify},
     {"SSLVerifyHostname",               test_SSLVerifyHostname},

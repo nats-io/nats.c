@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -17,6 +17,8 @@
 
 #include "mem.h"
 #include "opts.h"
+#include "util.h"
+#include "conn.h"
 
 natsStatus
 natsOptions_SetURL(natsOptions *opts, const char* url)
@@ -253,161 +255,6 @@ natsSSLCtx_retain(natsSSLCtx *ctx)
 }
 
 #if defined(NATS_HAS_TLS)
-// See section RFC 6125 Sections 2.4 and 3.1
-static bool
-_hostnameMatches(char *expr, char *string)
-{
-    int i, j;
-
-    for (i = 0, j = 0; i < (int) strlen(expr); i++)
-    {
-        if (expr[i] == '*')
-        {
-            if (string[j] == '.')
-                return 0;
-            while (string[j] != '.')
-                j++;
-        }
-        else if (expr[i] != string[j])
-        {
-            return false;
-        }
-        else
-            j++;
-    }
-
-    return (j == (int) strlen(string));
-}
-
-// Does this hostname match an entry in the subjectAltName extension?
-// returns: 0 if no, 1 if yes, -1 if no subjectAltName entries were found.
-static int
-_hostnameMatchesSubjectAltName(char *hostname, X509 *cert)
-{
-    bool                    foundAnyEntry = false;
-    bool                    foundMatch = false;
-    GENERAL_NAME            *namePart = NULL;
-    STACK_OF(GENERAL_NAME)  *san;
-
-    san = (STACK_OF(GENERAL_NAME)*) X509_get_ext_d2i(cert, NID_subject_alt_name, NULL, NULL);
-
-    while (sk_GENERAL_NAME_num(san) > 0)
-    {
-        namePart = sk_GENERAL_NAME_pop(san);
-
-        if (namePart->type == GEN_DNS)
-        {
-            foundAnyEntry = true;
-            foundMatch = _hostnameMatches((char*) ASN1_STRING_data(namePart->d.uniformResourceIdentifier),
-                                           hostname);
-        }
-
-        GENERAL_NAME_free(namePart);
-
-        if (foundMatch)
-            break;
-    }
-
-    GENERAL_NAMES_free(san);
-
-    if (foundMatch)
-        return 1;
-
-    return (foundAnyEntry ? 0 : -1);
-}
-
-static bool
-_hostnameMatchesSubjectCN(char *hostname, X509 *cert)
-{
-    X509_NAME       *name;
-    X509_NAME_ENTRY *name_entry;
-    char            *certname;
-    int             position;
-
-    name = X509_get_subject_name(cert);
-    position = -1;
-    while (1)
-    {
-        position = X509_NAME_get_index_by_NID(name, NID_commonName, position);
-        if (position == -1)
-            break;
-        name_entry = X509_NAME_get_entry(name, position);
-        certname = (char*) X509_NAME_ENTRY_get_data(name_entry)->data;
-        if (_hostnameMatches(certname, hostname))
-            return true;
-    }
-
-    return false;
-}
-
-static int
-_hostnameMatchesCertificate(char *hostname, X509 *cert)
-{
-    int san_result = _hostnameMatchesSubjectAltName(hostname, cert);
-    if (san_result > -1)
-        return san_result;
-
-    return _hostnameMatchesSubjectCN(hostname, cert);
-}
-
-static int
-_verifyCb(int preverifyOk, X509_STORE_CTX* ctx)
-{
-    char            buf[256];
-    SSL             *ssl  = NULL;
-    X509            *cert = X509_STORE_CTX_get_current_cert(ctx);
-    int             depth = X509_STORE_CTX_get_error_depth(ctx);
-    int             err   = X509_STORE_CTX_get_error(ctx);
-    natsConnection  *nc   = NULL;
-
-    // Retrieve the SSL object, then our connection...
-    ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
-    nc = (natsConnection*) SSL_get_ex_data(ssl, 0);
-
-    // Should we skip serve certificate verification?
-    if (nc->opts->sslCtx->skipVerify)
-        return 1;
-
-    // If the depth is greater than the limit (when not set, the limit is
-    // 100), then report as an error.
-    if (depth > 100)
-    {
-        preverifyOk = 0;
-        err = X509_V_ERR_CERT_CHAIN_TOO_LONG;
-        X509_STORE_CTX_set_error(ctx, err);
-    }
-
-    if (!preverifyOk)
-    {
-        X509_NAME_oneline(X509_get_subject_name(cert), buf, sizeof(buf));
-        snprintf(nc->errStr, sizeof(nc->errStr), "%d:%s:depth=%d:%s",
-                 err, X509_verify_cert_error_string(err),
-                 depth, buf);
-    }
-
-    if (!preverifyOk && (err == X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT))
-    {
-        X509_NAME_oneline(X509_get_issuer_name(cert), buf, sizeof(buf));
-        snprintf(nc->errStr, sizeof(nc->errStr), "issuer=%s", buf);
-    }
-
-    if (preverifyOk
-        && (depth == 0) // Verify hostname only for the server certificate.
-        && (natsSSLCtx_getExpectedHostname(nc->opts->sslCtx) != NULL))
-    {
-        if (!_hostnameMatchesCertificate(
-                natsSSLCtx_getExpectedHostname(nc->opts->sslCtx), cert))
-        {
-            snprintf(nc->errStr, sizeof(nc->errStr),
-                     "Did not get expected hostname '%s'",
-                     natsSSLCtx_getExpectedHostname(nc->opts->sslCtx));
-
-            preverifyOk = 0;
-        }
-    }
-
-    return preverifyOk;
-}
 
 static natsStatus
 _createSSLCtx(natsSSLCtx **newCtx)
@@ -427,7 +274,7 @@ _createSSLCtx(natsSSLCtx **newCtx)
     }
     if (s == NATS_OK)
     {
-#if defined(NATS_USE_TLS_CLIENT_METHOD)
+#if defined(NATS_USE_OPENSSL_1_1)
         ctx->ctx = SSL_CTX_new(TLS_client_method());
 #else
         ctx->ctx = SSL_CTX_new(TLSv1_2_client_method());
@@ -444,10 +291,7 @@ _createSSLCtx(natsSSLCtx **newCtx)
 
         SSL_CTX_set_options(ctx->ctx, SSL_OP_NO_SSLv2);
         SSL_CTX_set_options(ctx->ctx, SSL_OP_NO_SSLv3);
-
-        // Set to SSL_VERIFY_NONE so that we can get more error trace in
-        // the verifyCb that is then used in conn.c's makeTLSConn function.
-        SSL_CTX_set_verify(ctx->ctx, SSL_VERIFY_NONE, _verifyCb);
+        SSL_CTX_set_default_verify_paths(ctx->ctx);
 
         *newCtx = ctx;
     }
@@ -623,7 +467,8 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname)
 {
     natsStatus s = NATS_OK;
 
-    LOCK_AND_CHECK_OPTIONS(opts, ((hostname == NULL) || (hostname[0] == '\0')));
+    // Allow hostname to be empty in order to reset...
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
 
     s = _getSSLCtx(opts);
     if (s == NATS_OK)
@@ -994,6 +839,188 @@ natsOptions_UseOldRequestStyle(natsOptions *opts, bool useOldStype)
 }
 
 static void
+_freeUserCreds(userCreds *uc)
+{
+    if (uc == NULL)
+        return;
+
+    NATS_FREE(uc->userOrChainedFile);
+    NATS_FREE(uc->seedFile);
+    NATS_FREE(uc);
+}
+
+static natsStatus
+_createUserCreds(userCreds **puc, const char *uocf, const char *sf)
+{
+    natsStatus  s   = NATS_OK;
+    userCreds   *uc = NULL;
+
+    uc = NATS_CALLOC(1, sizeof(userCreds));
+    if (uc == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    uc->userOrChainedFile = NATS_STRDUP(uocf);
+    if (uc->userOrChainedFile == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    if ((s == NATS_OK) && sf != NULL)
+    {
+        uc->seedFile = NATS_STRDUP(sf);
+        if (uc->seedFile == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    if (s != NATS_OK)
+        _freeUserCreds(uc);
+    else
+        *puc = uc;
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsOptions_SetUserCredentialsFromFiles(natsOptions *opts, const char *userOrChainedFile, const char *seedFile)
+{
+    natsStatus  s   = NATS_OK;
+    userCreds   *uc = NULL;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    // Both files can be NULL (to unset), but if seeFile can't
+    // be set if userOrChainedFile is not.
+    if (nats_IsStringEmpty(userOrChainedFile) && !nats_IsStringEmpty(seedFile))
+    {
+        UNLOCK_OPTS(opts);
+        return nats_setError(NATS_INVALID_ARG, "%s", "user or chained file need to be specified");
+    }
+
+    if (!nats_IsStringEmpty(userOrChainedFile))
+    {
+        s = _createUserCreds(&uc, userOrChainedFile, seedFile);
+        if (s != NATS_OK)
+        {
+            UNLOCK_OPTS(opts);
+            return NATS_UPDATE_ERR_STACK(s);
+        }
+    }
+
+    // Free previous object
+    _freeUserCreds(opts->userCreds);
+    // Set to new one (possibly NULL)
+    opts->userCreds = uc;
+
+    if (uc != NULL)
+    {
+        opts->userJWTHandler = natsConn_userFromFile;
+        opts->userJWTClosure = (void*) uc;
+
+        opts->sigHandler = natsConn_signatureHandler;
+        opts->sigClosure = (void*) uc;
+
+        // NKey and UserCreds are mutually exclusive.
+        if (opts->nkey != NULL)
+        {
+            NATS_FREE(opts->nkey);
+            opts->nkey = NULL;
+        }
+    }
+    else
+    {
+        opts->userJWTHandler = NULL;
+        opts->userJWTClosure = NULL;
+
+        opts->sigHandler = NULL;
+        opts->sigClosure = NULL;
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_SetUserCredentialsCallbacks(natsOptions *opts,
+                                        natsUserJWTHandler      ujwtCB,
+                                        void                    *ujwtClosure,
+                                        natsSignatureHandler    sigCB,
+                                        void                    *sigClosure)
+{
+    natsStatus  s   = NATS_OK;
+
+    // Callbacks can all be NULL (to unset), however, if one is set,
+    // the other must be.
+    LOCK_AND_CHECK_OPTIONS(opts,
+            (((ujwtCB != NULL) && (sigCB == NULL)) ||
+                    ((ujwtCB == NULL) && (sigCB != NULL))));
+
+    _freeUserCreds(opts->userCreds);
+    opts->userCreds = NULL;
+
+    opts->userJWTHandler = ujwtCB;
+    opts->userJWTClosure = ujwtClosure;
+
+    opts->sigHandler = sigCB;
+    opts->sigClosure = sigClosure;
+
+    // If setting callbacks and there is an NKey, erase it
+    // (NKey and UserCreds are mutually exclusive).
+    if ((ujwtCB != NULL) && (opts->nkey != NULL))
+    {
+        NATS_FREE(opts->nkey);
+        opts->nkey = NULL;
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_SetNKey(natsOptions             *opts,
+                    const char              *pubKey,
+                    natsSignatureHandler    sigCB,
+                    void                    *sigClosure)
+{
+    natsStatus  s   = NATS_OK;
+    char        *nk = NULL;
+
+    // If pubKey is not empty, then signature must be specified
+    LOCK_AND_CHECK_OPTIONS(opts,
+            (!nats_IsStringEmpty(pubKey) && (sigCB == NULL)));
+
+    if (!nats_IsStringEmpty(pubKey))
+    {
+        nk = NATS_STRDUP(pubKey);
+        if (nk == NULL)
+        {
+            UNLOCK_OPTS(opts);
+            return nats_setDefaultError(NATS_NO_MEMORY);
+        }
+    }
+
+    // Free previous value
+    NATS_FREE(opts->nkey);
+
+    // Set new values
+    opts->nkey       = nk;
+    opts->sigHandler = sigCB;
+    opts->sigClosure = sigClosure;
+
+    // If we set an NKey, make sure that userJWT is unset
+    // since the two are mutually exclusive.
+    if (nk != NULL)
+    {
+        if (opts->userCreds != NULL)
+        {
+            _freeUserCreds(opts->userCreds);
+            opts->userCreds = NULL;
+        }
+        opts->userJWTHandler = NULL;
+        opts->userJWTClosure = NULL;
+    }
+    UNLOCK_OPTS(opts);
+    return NATS_OK;
+}
+
+static void
 _freeOptions(natsOptions *opts)
 {
     if (opts == NULL)
@@ -1005,8 +1032,10 @@ _freeOptions(natsOptions *opts)
     NATS_FREE(opts->user);
     NATS_FREE(opts->password);
     NATS_FREE(opts->token);
-    natsMutex_Destroy(opts->mu);
+    NATS_FREE(opts->nkey);
     natsSSLCtx_release(opts->sslCtx);
+    _freeUserCreds(opts->userCreds);
+    natsMutex_Destroy(opts->mu);
     NATS_FREE(opts);
 }
 
@@ -1077,6 +1106,8 @@ natsOptions_clone(natsOptions *opts)
     cloned->user    = NULL;
     cloned->password= NULL;
     cloned->token   = NULL;
+    cloned->nkey    = NULL;
+    cloned->userCreds = NULL;
 
     // Also, set the number of servers count to 0, until we update
     // it (if necessary) when calling SetServers.
@@ -1101,6 +1132,14 @@ natsOptions_clone(natsOptions *opts)
 
     if ((s == NATS_OK) && (opts->sslCtx != NULL))
         cloned->sslCtx = natsSSLCtx_retain(opts->sslCtx);
+
+    if ((s == NATS_OK) && (opts->nkey != NULL))
+        s = natsOptions_SetNKey(cloned, opts->nkey, opts->sigHandler, opts->sigClosure);
+
+    if ((s == NATS_OK) && (opts->userCreds != NULL))
+        s = natsOptions_SetUserCredentialsFromFiles(cloned,
+                                                    opts->userCreds->userOrChainedFile,
+                                                    opts->userCreds->seedFile);
 
     if (s != NATS_OK)
     {

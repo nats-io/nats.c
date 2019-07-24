@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">1.8.0</span>
+   &#160;<span id="projectnumber">2.0.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -130,6 +130,12 @@ Typedefs</h2></td></tr>
 <tr class="memitem:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gab63dee7f7012ba11ae20b76dbc36f2d0">natsEvLoop_Detach</a>) (void *userData)</td></tr>
 <tr class="memdesc:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Detach from the event loop.  <a href="#gab63dee7f7012ba11ae20b76dbc36f2d0">More...</a><br /></td></tr>
 <tr class="separator:gab63dee7f7012ba11ae20b76dbc36f2d0"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga258b30458134be90f17315c037f34b7b"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga258b30458134be90f17315c037f34b7b">natsUserJWTHandler</a>) (char **userJWT, char **customErrTxt, void *closure)</td></tr>
+<tr class="memdesc:ga258b30458134be90f17315c037f34b7b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to fetch and return account signed user JWT.  <a href="#ga258b30458134be90f17315c037f34b7b">More...</a><br /></td></tr>
+<tr class="separator:ga258b30458134be90f17315c037f34b7b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gab786ffd670c86de0563559351305080b"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gab786ffd670c86de0563559351305080b">natsSignatureHandler</a>) (char **customErrTxt, unsigned char **signature, int *signatureLength, const char *nonce, void *closure)</td></tr>
+<tr class="memdesc:gab786ffd670c86de0563559351305080b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to sign a nonce sent by the server.  <a href="#gab786ffd670c86de0563559351305080b">More...</a><br /></td></tr>
+<tr class="separator:gab786ffd670c86de0563559351305080b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga7d93a74068ac6e5f4406d70b7c1f0094"><td class="memItemLeft" align="right" valign="top">typedef const char *(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094">natsTokenHandler</a>) (void *closure)</td></tr>
 <tr class="memdesc:ga7d93a74068ac6e5f4406d70b7c1f0094"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to build a token on connections and reconnections.  <a href="#ga7d93a74068ac6e5f4406d70b7c1f0094">More...</a><br /></td></tr>
 <tr class="separator:ga7d93a74068ac6e5f4406d70b7c1f0094"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -225,7 +231,7 @@ Typedefs</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>The <code>NATS</code> library will invoked this callback to indicate if the event loop should start (<code>add is</code>true<code>) or stop (</code>add<code>is</code>false`) polling for read events on the socket.</p>
+<p>The <code>NATS</code> library will invoke this callback to indicate if the event loop should start (<code>add is</code>true<code>) or stop (</code>add<code>is</code>false`) polling for read events on the socket.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">userData</td><td>the pointer to an user object created in <a class="el" href="group__callbacks_group.html#ga245eab0a01a485e40fba267f84ec037f" title="Attach this connection to the external event loop. ">natsEvLoop_Attach</a>. </td></tr>
@@ -245,7 +251,7 @@ Typedefs</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>The <code>NATS</code> library will invoked this callback to indicate if the event loop should start (<code>add is</code>true<code>) or stop (</code>add<code>is</code>false`) polling for write events on the socket.</p>
+<p>The <code>NATS</code> library will invoke this callback to indicate if the event loop should start (<code>add is</code>true<code>) or stop (</code>add<code>is</code>false`) polling for write events on the socket.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">userData</td><td>the pointer to an user object created in <a class="el" href="group__callbacks_group.html#ga245eab0a01a485e40fba267f84ec037f" title="Attach this connection to the external event loop. ">natsEvLoop_Attach</a>. </td></tr>
@@ -265,13 +271,54 @@ Typedefs</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>The <code>NATS</code> library will invoked this callback to indicate that the connection no longer needs to be attached to the event loop. User can cleanup some state.</p>
+<p>The <code>NATS</code> library will invoke this callback to indicate that the connection no longer needs to be attached to the event loop. User can cleanup some state.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">userData</td><td>the pointer to an user object created in <a class="el" href="group__callbacks_group.html#ga245eab0a01a485e40fba267f84ec037f" title="Attach this connection to the external event loop. ">natsEvLoop_Attach</a>. </td></tr>
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a class="anchor" id="ga258b30458134be90f17315c037f34b7b"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(* natsUserJWTHandler) (char **userJWT, char **customErrTxt, void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This handler is invoked when connecting and reconnecting. It should return the user JWT that will be sent to the server.</p>
+<p>The user JWT is returned as a string that is allocated by the user and is freed by the library after the handler is invoked.</p>
+<p>If the user is unable to return the JWT, a status other than <code>NATS_OK</code> should be returned (we recommend <code>NATS_ERR</code>). A custom error message can be returned through <code>customErrTxt</code>. The user must allocate the memory for this error message and the library will free it after the invocation of the handler.</p>
+<dl class="section warning"><dt>Warning</dt><dd>There may be repeated invocations of this handler for a given connection so it is crucial to always return a copy of the user JWT maintained by the application, since again, the library will free the memory pointed by <code>userJWT</code> after each invocation of this handler.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga60117450fc1f7b6f81bab455aeed7515" title="Sets the callbacks to fetch user JWT and sign server&#39;s nonce. ">natsOptions_SetUserCredentialsCallbacks()</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#ga59b47f7b7a19085cf8eaada9bfe5606e" title="Sets the file(s) to use to fetch user JWT and see required to sign nonce. ">natsOptions_SetUserCredentialsFromFiles()</a> </dd></dl>
+
+</div>
+</div>
+<a class="anchor" id="gab786ffd670c86de0563559351305080b"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(* natsSignatureHandler) (char **customErrTxt, unsigned char **signature, int *signatureLength, const char *nonce, void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This handler is invoked when connecting and reconnecting. It should sign the given <code>nonce</code> and return a raw signature through <code>signature</code> and specify how many characters the signature has using <code>signatureLength</code>.</p>
+<p>The memory pointed by <code>signature</code> must be allocated by the user and will be freed by the library after each invocation of this handler.</p>
+<p>If the user is unable to sign, a status other than <code>NATS_OK</code> (we recommend <code>NATS_ERR</code>) should be returned. A custom error message can be returned through <code>customErrTxt</code>. The user must allocate the memory for this error message and the library will free it after the invocation of this handler.</p>
+<p>The library will base64 encode this raw signature and send that to the server.</p>
+<dl class="section warning"><dt>Warning</dt><dd>There may be repeated invocations of this handler for a given connection so it is crucial to always return a copy of the signature, since again, the library will free the memory pointed by <code>signature</code> after each invocation of this handler.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga60117450fc1f7b6f81bab455aeed7515" title="Sets the callbacks to fetch user JWT and sign server&#39;s nonce. ">natsOptions_SetUserCredentialsCallbacks()</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#ga59b47f7b7a19085cf8eaada9bfe5606e" title="Sets the file(s) to use to fetch user JWT and see required to sign nonce. ">natsOptions_SetUserCredentialsFromFiles()</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#ga0290eac4665569c850468d9f00e246a0" title="Sets the NKey public key and signature callback. ">natsOptions_SetNKey()</a> </dd></dl>
 
 </div>
 </div>

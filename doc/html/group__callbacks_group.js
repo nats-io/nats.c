@@ -7,6 +7,8 @@ var group__callbacks_group =
     [ "natsEvLoop_ReadAddRemove", "group__callbacks_group.html#gaea4c125ecfb43eaf43da20e8444c2aaa", null ],
     [ "natsEvLoop_WriteAddRemove", "group__callbacks_group.html#ga2bb5dd2d821ca5bbc0488f7e6aceed17", null ],
     [ "natsEvLoop_Detach", "group__callbacks_group.html#gab63dee7f7012ba11ae20b76dbc36f2d0", null ],
+    [ "natsUserJWTHandler", "group__callbacks_group.html#ga258b30458134be90f17315c037f34b7b", null ],
+    [ "natsSignatureHandler", "group__callbacks_group.html#gab786ffd670c86de0563559351305080b", null ],
     [ "natsTokenHandler", "group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094", null ],
     [ "stanPubAckHandler", "group__callbacks_group.html#gad5d6a685731b3bf635995b7375af4d18", null ],
     [ "stanMsgHandler", "group__callbacks_group.html#gaf7456e37fa14f1834d9048d3789e9409", null ],

@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -116,7 +116,7 @@ natsConn_publish(natsConnection *nc, const char *subj,
                 + (replyLen > 0 ? replyLen + 1 : 0)
                 + sizeSize + _CRLF_LEN_;
 
-    natsBuf_RewindTo(nc->scratch, _PUB_P_LEN_);
+    natsBuf_MoveTo(nc->scratch, _PUB_P_LEN_);
 
     if (natsBuf_Capacity(nc->scratch) < msgHdSize)
     {

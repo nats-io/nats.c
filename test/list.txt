@@ -27,6 +27,13 @@ natsJSON
 natsErrWithLongText
 natsErrStackMoreThanMaxFrames
 natsMsg
+natsBase32
+natsBase64
+natsCRC16
+natsKeys
+natsReadFile
+natsGetJWTOrSeed
+natsHostIsIP
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize
@@ -128,6 +135,9 @@ NoEchoOldServer
 DrainSub
 DrainConn
 GetClientID
+UserCredsCallbacks
+UserCredsFromFiles
+NKey
 SSLBasic
 SSLVerify
 SSLVerifyHostname

@@ -20,6 +20,8 @@ html/
 .project
 .settings/
 
+.vscode/
+
 # Mac
 .DS_Store
 

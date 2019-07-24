@@ -19,6 +19,7 @@ addons:
     - unzip
 
 before_install:
+  - eval "${MATRIX_EVAL}"
   - bash install_servers.sh
 
 before_script:
@@ -32,6 +33,86 @@ env:
   - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" NATS_TEST_VALGRIND=yes CTEST_OPT="-T memcheck" DO_COVERAGE="no"
   - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes NATS_TEST_VALGRIND=yes CTEST_OPT="-T memcheck" DO_COVERAGE="no"
   - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Debug -DNATS_COVERAGE=ON -DNATS_COVERAGE_UPLOAD=ON -DCMAKE_BUILD_TYPE=Debug" DO_COVERAGE="coverage"
+
+matrix:
+  include:
+    - compiler: gcc
+      os: linux
+      addons:
+        apt:
+          packages:
+          - gcc-6
+          sources:
+          - ubuntu-toolchain-r-test
+      env: 
+        - MATRIX_EVAL="CC=gcc-6"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no"
+    - compiler: gcc
+      os: linux
+      addons:
+        apt:
+          packages:
+          - gcc-7
+          sources:
+          - ubuntu-toolchain-r-test
+      env: 
+        - MATRIX_EVAL="CC=gcc-7"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no"
+    - compiler: gcc
+      os: linux
+      addons:
+        apt:
+          packages:
+          - gcc-8
+          sources:
+          - ubuntu-toolchain-r-test
+      env: 
+        - MATRIX_EVAL="CC=gcc-8"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no"
+    - compiler: gcc
+      os: linux
+      addons:
+        apt:
+          packages:
+          - gcc-9
+          sources:
+          - ubuntu-toolchain-r-test
+      env: 
+        - MATRIX_EVAL="CC=gcc-9"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no"
+    - compiler: gcc
+      os: linux
+      addons:
+        apt:
+          packages:
+          - gcc-9
+          sources:
+          - ubuntu-toolchain-r-test
+      env: 
+        - MATRIX_EVAL="CC=gcc-9"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" DO_COVERAGE="no"
+    - compiler: gcc
+      os: linux
+      addons:
+        apt:
+          packages:
+          - gcc-9
+          sources:
+          - ubuntu-toolchain-r-test
+      env: 
+        - MATRIX_EVAL="CC=gcc-9"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" DO_COVERAGE="no"                
+    - compiler: clang
+      os: linux
+      addons:
+        apt:
+          sources:
+            - llvm-toolchain-xenial-8
+          packages:
+            - clang-8
+      env:
+        - MATRIX_EVAL="CC=clang-8"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no"
 
 script:
   - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT" "$CTEST_OPT"

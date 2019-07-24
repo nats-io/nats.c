@@ -59,6 +59,13 @@ typedef struct
 
 #define nats_IsStringEmpty(s) (((s == NULL) || (s[0] == '\0')) ? true : false)
 
+#define snprintf_truncate(d, szd, f, ...) if (snprintf((d), (szd), (f), __VA_ARGS__) >= (int) (szd)) { \
+    int offset = (int) (szd) - 2;         \
+    if (offset > 0) (d)[offset--] = '.';  \
+    if (offset > 0) (d)[offset--] = '.';  \
+    if (offset > 0) (d)[offset--] = '.';  \
+}
+
 int64_t
 nats_ParseInt64(const char *d, int dLen);
 
@@ -108,7 +115,6 @@ bool
 nats_HostIsIP(const char *host);
 
 natsStatus
-nats_GetJWTOrSeed(char **val, const char* content, int item);
-
+nats_GetJWTOrSeed(char **val, const char *content, int item);
 
 #endif /* UTIL_H_ */

@@ -621,9 +621,9 @@ _collectSSLErr(int preverifyOk, X509_STORE_CTX* ctx)
 
         if (err == X509_V_ERR_HOSTNAME_MISMATCH)
         {
-            snprintf(nc->errStr, sizeof(nc->errStr), "%d:%s:expected=%s:cert=%s",
-                     err, X509_verify_cert_error_string(err), nc->tlsName,
-                     certName);
+            snprintf_truncate(nc->errStr, sizeof(nc->errStr), "%d:%s:expected=%s:cert=%s",
+                              err, X509_verify_cert_error_string(err), nc->tlsName,
+                              certName);
         }
         else
         {
@@ -631,9 +631,9 @@ _collectSSLErr(int preverifyOk, X509_STORE_CTX* ctx)
 
             X509_NAME_oneline(X509_get_issuer_name(cert), issuer, sizeof(issuer));
 
-            snprintf(nc->errStr, sizeof(nc->errStr), "%d:%s:depth=%d:cert=%s:issuer=%s",
-                    err, X509_verify_cert_error_string(err), depth,
-                    certName, issuer);
+            snprintf_truncate(nc->errStr, sizeof(nc->errStr), "%d:%s:depth=%d:cert=%s:issuer=%s",
+                              err, X509_verify_cert_error_string(err), depth,
+                              certName, issuer);
         }
     }
 

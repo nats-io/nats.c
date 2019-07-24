@@ -312,6 +312,7 @@ _freeDlvWorkers(void)
 static void
 _freeLib(void)
 {
+    const unsigned int offset = (unsigned int) offsetof(natsLib, refs);
     _freeTimers();
     _freeAsyncCbs();
     _freeGC();
@@ -320,7 +321,7 @@ _freeLib(void)
 
     natsCondition_Destroy(gLib.cond);
 
-    memset(&(gLib.refs), 0, sizeof(natsLib) - ((char *)&(gLib.refs) - (char*)&gLib));
+    memset((void*) (offset + (char*)&gLib), 0, sizeof(natsLib) - offset);
 
     natsMutex_Lock(gLib.lock);
     if (gLib.closeCompleteCond != NULL)

@@ -1315,8 +1315,11 @@ _updateStack(natsTLError *errTL, const char *funcName, natsStatus errSts,
     errTL->func[idx] = funcName;
 }
 
+#if !defined(_WIN32)
+__attribute__ ((format (printf, 5, 6)))
+#endif
 natsStatus
-nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStatus errSts, const void *errTxtFmt, ...)
+nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStatus errSts, const char *errTxtFmt, ...)
 {
     natsTLError *errTL  = _getTLError();
     char        tmp[256];
@@ -1354,8 +1357,11 @@ nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStat
     return errSts;
 }
 
+#if !defined(_WIN32)
+__attribute__ ((format (printf, 4, 5)))
+#endif
 void
-nats_updateErrTxt(const char *fileName, const char *funcName, int line, const void *errTxtFmt, ...)
+nats_updateErrTxt(const char *fileName, const char *funcName, int line, const char *errTxtFmt, ...)
 {
     natsTLError *errTL  = _getTLError();
     char        tmp[256];
@@ -1791,7 +1797,7 @@ nats_SetMessageDeliveryPoolSize(int max)
     if (max <= 0)
     {
         natsMutex_Unlock(workers->lock);
-        return nats_setError(NATS_ERR, "Pool size cannot be negative or zero", "");
+        return nats_setError(NATS_ERR, "%s", "Pool size cannot be negative or zero");
     }
 
     // Do not error on max < workers->maxSize in case we allow shrinking
@@ -1863,7 +1869,7 @@ natsLib_msgDeliveryAssignWorker(natsSubscription *sub)
     if (workers->maxSize == 0)
     {
         natsMutex_Unlock(workers->lock);
-        return nats_setError(NATS_FAILED_TO_INITIALIZE, "Message delivery thread pool size is 0!", "");
+        return nats_setError(NATS_FAILED_TO_INITIALIZE, "%s", "Message delivery thread pool size is 0!");
     }
 
     worker = workers->workers[workers->idx];

@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -26,7 +26,7 @@
 #define nats_setError(e, f, ...) nats_setErrorReal(__FILE__, __NATS_FUNCTION__, __LINE__, (e), (f), __VA_ARGS__)
 
 natsStatus
-nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStatus errSts, const void *errTxtFmt, ...);
+nats_setErrorReal(const char *fileName, const char *funcName, int line, natsStatus errSts, const char *errTxtFmt, ...);
 
 #define NATS_UPDATE_ERR_STACK(s) (s == NATS_OK ? s : nats_updateErrStack(s, __NATS_FUNCTION__))
 
@@ -42,6 +42,6 @@ nats_doNotUpdateErrStack(bool skipStackUpdate);
 #define NATS_UPDATE_ERR_TXT(f, ...) nats_updateErrTxt(__FILE__, __NATS_FUNCTION__, __LINE__, (f), __VA_ARGS__)
 
 void
-nats_updateErrTxt(const char *fileName, const char *funcName, int line, const void *errTxtFmt, ...);
+nats_updateErrTxt(const char *fileName, const char *funcName, int line, const char *errTxtFmt, ...);
 
 #endif /* ERR_H_ */

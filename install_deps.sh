@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -ex
 # check to see if gnatsd folder is empty
 if [ ! "$(ls -A $HOME/gnatsd)" ]; then
   mkdir -p $HOME/gnatsd
@@ -22,3 +22,17 @@ if [ ! "$(ls -A $HOME/nats-streaming-server)" ]; then
 else
   echo 'Using cached directory.';
 fi
+
+# check to see if pbuf folder is empty
+if [ ! "$(ls -A $HOME/pbuf)" ]; then
+  sudo echo "deb http://archive.ubuntu.com/ubuntu disco main restricted universe multiverse" >> /etc/apt/sources.list
+  sudo apt-get update
+  sudo apt-get install libprotobuf-c-dev
+  mkdir -p $HOME/pbuf
+  cp -pr /usr/include/protobuf-c $HOME/pbuf/
+  cp /usr/lib/x86_64-linux-gnu/libprotobuf-c.so* $HOME/pbuf
+  sudo rm /usr/lib/x86_64-linux-gnu/libprotobuf-c.*
+else
+  echo 'Using cached directory.';
+fi
+cd $HOME

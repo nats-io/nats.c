@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 
 project(cnats)
 include(CTest)
+include(FindPackageHandleStandardArgs)
 
 # Uncomment to have the build process verbose
 #set(CMAKE_VERBOSE_MAKEFILE TRUE)
@@ -46,7 +47,36 @@ set(LIBEVENT_DIR "/usr/local/" CACHE PATH "Libevent install directory")
 
 set(NATS_DOC_PROJECT_NAME "NATS C Client")
 if(NATS_BUILD_STREAMING)
-  set(PROTOBUF_DIR "${PROJECT_SOURCE_DIR}/pbuf")
+  IF(DEFINED ENV{NATS_PROTOBUF_DIR})
+    SET(NATS_PROTOBUF_DIR "$ENV{NATS_PROTOBUF_DIR}")
+  ENDIF()
+  FIND_PATH(
+    NATS_PROTOBUF_INCLUDE_DIR
+      protobuf-c/protobuf-c.h
+    HINTS
+      ${NATS_PROTOBUF_DIR}
+  )
+  FIND_LIBRARY(NATS_PROTOBUF_LIBRARY
+    NAMES libprotobuf-c.a libprotobuf-c.so libprotobuf-c.dylib protobuf-c.lib protobuf-c.dll
+    HINTS ${NATS_PROTOBUF_DIR}
+  )
+  FIND_PACKAGE_HANDLE_STANDARD_ARGS(libprotobuf-c DEFAULT_MSG
+    NATS_PROTOBUF_INCLUDE_DIR
+    NATS_PROTOBUF_LIBRARY
+  )
+  IF(libprotobuf-c_FOUND)
+    SET(NATS_PROTOBUF_INCLUDE_DIRS ${NATS_PROTOBUF_INCLUDE_DIR})
+    SET(NATS_PROTOBUF_LIBRARIES ${NATS_PROTOBUF_LIBRARY})
+    MARK_AS_ADVANCED(
+      NATS_PROTOBUF_LIBRARY
+      NATS_PROTOBUF_INCLUDE_DIR
+      NATS_PROTOBUF_DIR
+    )
+  ELSE()
+    SET(NATS_PROTOBUF_DIR "" CACHE STRING
+      "An optional hint to a directory for finding `libprotobuf-c`"
+    )
+  ENDIF()
   add_definitions(-DNATS_HAS_STREAMING)
   set(NATS_DOC_INCLUDE_STREAMING "NATS_HAS_STREAMING")
   set(NATS_DOC_PROJECT_NAME "NATS C Client with Streaming support")
@@ -96,16 +126,10 @@ if(UNIX)
   if(APPLE)
     set(CMAKE_MACOSX_RPATH OFF)
     set(NATS_OS "DARWIN")
-    if(NATS_BUILD_STREAMING)
-      set(NATS_PROTOBUF_LIB "${PROTOBUF_DIR}/lib/darwin/libprotobuf-c.a")
-    endif(NATS_BUILD_STREAMING)
   else(APPLE)
     set(NATS_OS "LINUX")
     set(NATS_USE_PTHREAD "-pthread")
     set(NATS_EXTRA_LIB "rt")
-    if(NATS_BUILD_STREAMING)
-      set(NATS_PROTOBUF_LIB "${PROTOBUF_DIR}/lib/linux/libprotobuf-c.so")
-    endif(NATS_BUILD_STREAMING)
   endif(APPLE)
   if (${NATS_BUILD_ARCH} MATCHES "32")
     if(NOT APPLE)
@@ -125,9 +149,6 @@ elseif(WIN32)
   set(NATS_EXTRA_LIB "Ws2_32")
   set(NATS_OS "_WIN32")
   set(NATS_PLATFORM_INCLUDE "win")
-  if(NATS_BUILD_STREAMING)
-    set(NATS_PROTOBUF_LIB "${PROTOBUF_DIR}/lib/win/protobuf-c.lib")
-  endif(NATS_BUILD_STREAMING)
 endif(UNIX)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_COMMON_C_FLAGS} ${NATS_USE_PTHREAD} ${NATS_WARNINGS}")

@@ -4,39 +4,39 @@ cache:
   directories:
   - $HOME/gnatsd
   - $HOME/nats-streaming-server
+  - $HOME/pbuf
 
-sudo: false
+sudo: true
 
-compiler: 
+compiler:
   - gcc
   - clang
 
-addons:
-  apt:
-    packages:
-    - valgrind
-    - libssl-dev
-    - unzip
-
 before_install:
+  - bash install_deps.sh
   - eval "${MATRIX_EVAL}"
-  - bash install_servers.sh
 
 before_script:
-  - export PATH=$HOME/gnatsd:$HOME/nats-streaming-server:$PATH
+  - export PATH=$HOME/gnatsd:$HOME/nats-streaming-server:$HOME/pbuf:$PATH
   - mkdir build && cd build
   - export COVERALLS_SERVICE_NAME=travis-ci
 
 env:
-  - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no"
-  - BUILD_OPT="-DNATS_BUILD_WITH_TLS=OFF -DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no"
-  - BUILD_OPT="-DNATS_COMPILER_HARDENING=ON -DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no"
-  - NATS_TEST_VALGRIND=yes BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" CTEST_OPT="-T memcheck" DO_COVERAGE="no"
-  - NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" NATS_TEST_VALGRIND=yes CTEST_OPT="-T memcheck" DO_COVERAGE="no"
-  - BUILD_OPT="-DNATS_COVERAGE=ON -DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Debug -DNATS_COVERAGE_UPLOAD=ON -DCMAKE_BUILD_TYPE=Debug" DO_COVERAGE="coverage"
+  - DO_COVERAGE="coverage" BUILD_OPT="-DNATS_COVERAGE=ON -DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Debug -DNATS_COVERAGE_UPLOAD=ON -DCMAKE_BUILD_TYPE=Debug"
 
 matrix:
   include:
+    - compiler: gcc
+      os: linux
+      addons:
+        apt:
+          sources:
+          - ubuntu-toolchain-r-test
+          packages:
+          - gcc-9
+      env:
+        - MATRIX_EVAL="CC=gcc-9"
+        - BUILD_OPT="-DNATS_BUILD_WITH_TLS=OFF -DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no"
     - compiler: gcc
       os: linux
       addons:
@@ -58,7 +58,30 @@ matrix:
           - gcc-9
       env:
         - MATRIX_EVAL="CC=gcc-9"
+        - NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" DO_COVERAGE="no"
+    - compiler: gcc
+      os: linux
+      addons:
+        apt:
+          sources:
+          - ubuntu-toolchain-r-test
+          packages:
+          - gcc-9
+      env:
+        - MATRIX_EVAL="CC=gcc-9"
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" DO_COVERAGE="no"
+    - compiler: clang
+      os: linux
+      addons:
+        apt:
+          sources:
+            - llvm-toolchain-xenial-8
+          packages:
+            - clang-8
+      env:
+        - MATRIX_EVAL="CC=clang-8"
+        # Run only one test, this matrix is just to make sure that we compile ok.
+        - BUILD_OPT="-DNATS_BUILD_WITH_TLS=OFF -DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no" CTEST_OPT="-I 1,1"
     - compiler: clang
       os: linux
       addons:
@@ -83,7 +106,7 @@ matrix:
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" DO_COVERAGE="no"
 
 script:
-  - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT" "$CTEST_OPT"
+  - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT -DNATS_PROTOBUF_DIR=$HOME/pbuf" "$CTEST_OPT"
 
 notifications:
   email: false

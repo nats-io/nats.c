@@ -4296,14 +4296,14 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
         }
     }
 
+    natsMsg_Destroy(msg);
+
     if (doSignal)
     {
         arg->msgReceived = true;
         natsCondition_Signal(arg->c);
     }
     natsMutex_Unlock(arg->m);
-
-    natsMsg_Destroy(msg);
 }
 
 static void

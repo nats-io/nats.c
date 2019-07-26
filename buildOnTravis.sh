@@ -35,7 +35,7 @@ res=$?
 if [ $res -ne 0 ]; then
   exit $res
 fi
-export NATS_TEST_SERVER_VERSION="$(gnatsd -v)"
+export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
 export NATS_TEST_TRAVIS=yes
 if [ "$2" = "coverage" ]; then
   make coveralls

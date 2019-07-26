@@ -45,7 +45,7 @@ static bool keepServerOutput    = false;
 static bool valgrind            = false;
 static bool runOnTravis         = false;
 
-static const char *natsServerExe = "gnatsd";
+static const char *natsServerExe = "nats-server";
 static const char *serverVersion = NULL;
 
 static const char *natsStreamingServerExe = "nats-streaming-server";

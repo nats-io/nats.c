@@ -77,7 +77,24 @@ You can also specify command line parameters to set some of the cmake options di
 cmake .. -DNATS_BUILD_WITH_TLS=OFF
 ```
 
-Or, if you don't want to build the NATS Streaming APIs to be included in the NATS library:
+When building the library with Streaming support, the NATS library uses the [libprotobuf-c](https://github.com/protobuf-c/protobuf-c) library.
+When cmake runs for the first time (or after removing `CMakeCache.txt` and calling `cmake ..` again), it is looking for the libprotobuf-c library. If it does not find it, a message is printed and the build process fails.
+CMake searches for the library in directories where libraries are usually found. However, if you want to specify a specific directory where the library is located, you need to do this:
+```
+cmake .. -DNATS_PROTOBUF_DIR=<my libprotobuf-c directory>
+```
+The static library will be used by default. If you want to change that, or if the library has not the expected name, you need to do this:
+```
+# Use the library named mylibproto.so located at /my/location
+cmake .. -DNATS_PROTOBUF_LIBRARY=/my/location/mylibproto.so
+```
+The two could be combined if the include header is located in a different directory
+```
+# Use the library named mylibproto.so located at /my/location and the directory protobuf-c/ containing protobuf-c.h located at /my/other/location
+cmake .. -DNATS_PROTOBUF_LIBRARY=/my/location/mylibproto.so -DNATS_PROTOBUF_DIR=/my/other/location
+```
+
+If you don't want to build the NATS Streaming APIs to be included in the NATS library:
 ```
 cmake .. -DNATS_BUILD_STREAMING=OFF
 ```
@@ -272,6 +289,9 @@ This section lists important changes such as deprecation notices, etc...
 This version introduces the security concepts used by NATS Server `2.0.0` and therefore aligns with the server version. There have been new APIs introduced, but the most important change is the new default behavior with TLS connections:
 
 * When establishing a secure connection, the server certificate's hostname is now always verified, regardless if the user has invoked `natsOptions_SetExpectedHostname()`. This may break applications that were for instance using an IP to connect to a server that had only the hostname in the certificate. This can be solved by changing your application to use the hostname in the URL or make use of `natsOptions_SetExpectedHostname()`. If this is not possible, you can restore the old behavior by building the library with the new behavior disabled. See #tls-support for more information.
+
+* This repository used to include precompiled libraries of [libprotobuf-c](https://github.com/protobuf-c/protobuf-c) for macOS, Linux and Windows along with the header files (in the `/pbuf` directory).
+We have now removed this directory and require that the user installs the libprotobuf-c library separately. See the [building instructions](#building) to specify the library location if CMake cannot find it directly.
 
 ### Version `1.8.0`
 

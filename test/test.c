@@ -10670,6 +10670,11 @@ test_PendingLimitsDeliveredAndDropped(void)
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
 
+    // With -fsanitize, this is a test that often shows a report.
+    // Do sleep here, if more tests show up, will pass NATS_TEST_VALGRIND
+    // to the test suite to have automatic sleep in _destroyDefaultThreadArgs().
+    nats_Sleep(100);
+
     _destroyDefaultThreadArgs(&arg);
 
     _stopServer(serverPid);
@@ -10859,6 +10864,11 @@ test_AsyncSubscriptionPending(void)
     while (!arg.msgReceived)
         natsCondition_TimedWait(arg.c, arg.m, 5000);
     natsMutex_Unlock(arg.m);
+
+    // With -fsanitize, this is a test that often shows a report.
+    // Do sleep here, if more tests show up, will pass NATS_TEST_VALGRIND
+    // to the test suite to have automatic sleep in _destroyDefaultThreadArgs().
+    nats_Sleep(100);
 
     _destroyDefaultThreadArgs(&arg);
 

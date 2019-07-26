@@ -2,7 +2,7 @@ language: c
 
 cache:
   directories:
-  - $HOME/gnatsd
+  - $HOME/nats-server
   - $HOME/nats-streaming-server
   - $HOME/pbuf
 
@@ -17,7 +17,7 @@ before_install:
   - eval "${MATRIX_EVAL}"
 
 before_script:
-  - export PATH=$HOME/gnatsd:$HOME/nats-streaming-server:$HOME/pbuf:$PATH
+  - export PATH=$HOME/nats-server:$HOME/nats-streaming-server:$HOME/pbuf:$PATH
   - mkdir build && cd build
   - export COVERALLS_SERVICE_NAME=travis-ci
 

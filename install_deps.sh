@@ -1,12 +1,12 @@
 #!/bin/sh
 set -ex
-# check to see if gnatsd folder is empty
-if [ ! "$(ls -A $HOME/gnatsd)" ]; then
-  mkdir -p $HOME/gnatsd
-  cd $HOME/gnatsd
-  wget https://github.com/nats-io/nats-server/releases/download/v1.3.0/gnatsd-v1.3.0-linux-amd64.zip -O gnatsd.zip
-  unzip gnatsd.zip
-  mv gnatsd-v1.3.0-linux-amd64/gnatsd .
+# check to see if nats-server folder is empty
+if [ ! "$(ls -A $HOME/nats-server)" ]; then
+  mkdir -p $HOME/nats-server
+  cd $HOME/nats-server
+  wget https://github.com/nats-io/nats-server/releases/download/v2.0.2/nats-server-v2.0.2-linux-amd64.zip -O nats-server.zip
+  unzip nats-server.zip
+  mv nats-server-v2.0.2-linux-amd64/nats-server .
 else
   echo 'Using cached directory.';
 fi
@@ -16,9 +16,9 @@ cd $HOME
 if [ ! "$(ls -A $HOME/nats-streaming-server)" ]; then
   mkdir -p $HOME/nats-streaming-server
   cd $HOME/nats-streaming-server
-  wget https://github.com/nats-io/nats-streaming-server/releases/download/v0.14.3/nats-streaming-server-v0.14.3-linux-amd64.zip -O nats-streaming-server.zip
+  wget https://github.com/nats-io/nats-streaming-server/releases/download/v0.15.1/nats-streaming-server-v0.15.1-linux-amd64.zip -O nats-streaming-server.zip
   unzip nats-streaming-server.zip
-  mv nats-streaming-server-v0.14.3-linux-amd64/nats-streaming-server .
+  mv nats-streaming-server-v0.15.1-linux-amd64/nats-streaming-server .
 else
   echo 'Using cached directory.';
 fi

@@ -36,5 +36,8 @@ var group__opts_group =
     [ "natsOptions_UseOldRequestStyle", "group__opts_group.html#ga70aa85319933d78c0076cc862fa3e5a6", null ],
     [ "natsOptions_SetNoEcho", "group__opts_group.html#ga4f694b87039cedaa65cd25656b14d1a3", null ],
     [ "natsOptions_SetRetryOnFailedConnect", "group__opts_group.html#ga20946800d024b7089e73d63454d1c19f", null ],
+    [ "natsOptions_SetUserCredentialsCallbacks", "group__opts_group.html#ga60117450fc1f7b6f81bab455aeed7515", null ],
+    [ "natsOptions_SetUserCredentialsFromFiles", "group__opts_group.html#ga59b47f7b7a19085cf8eaada9bfe5606e", null ],
+    [ "natsOptions_SetNKey", "group__opts_group.html#ga0290eac4665569c850468d9f00e246a0", null ],
     [ "natsOptions_Destroy", "group__opts_group.html#ga93d8068cd6fff53b7f8e1c403db45eb9", null ]
 ];

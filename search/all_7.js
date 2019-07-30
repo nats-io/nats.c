@@ -141,6 +141,7 @@ var searchData=
   ['natsoptions_5fsetmaxpingsout',['natsOptions_SetMaxPingsOut',['../group__opts_group.html#gaaff89c3f41627f4b2929dbc9b82d265b',1,'nats.h']]],
   ['natsoptions_5fsetmaxreconnect',['natsOptions_SetMaxReconnect',['../group__opts_group.html#gab54cd2719c0b64eebd6c7b83dd2908a0',1,'nats.h']]],
   ['natsoptions_5fsetname',['natsOptions_SetName',['../group__opts_group.html#ga1c529d347be0fe2eec17c7f4698e283e',1,'nats.h']]],
+  ['natsoptions_5fsetnkey',['natsOptions_SetNKey',['../group__opts_group.html#ga0290eac4665569c850468d9f00e246a0',1,'nats.h']]],
   ['natsoptions_5fsetnoecho',['natsOptions_SetNoEcho',['../group__opts_group.html#ga4f694b87039cedaa65cd25656b14d1a3',1,'nats.h']]],
   ['natsoptions_5fsetnorandomize',['natsOptions_SetNoRandomize',['../group__opts_group.html#gaabf8763b931dcf389c83fd95d760a413',1,'nats.h']]],
   ['natsoptions_5fsetpedantic',['natsOptions_SetPedantic',['../group__opts_group.html#ga26f166af20de98bec67bc6cc916f769e',1,'nats.h']]],
@@ -156,11 +157,14 @@ var searchData=
   ['natsoptions_5fsettoken',['natsOptions_SetToken',['../group__opts_group.html#gad58a5b9dabadeebda30e952ff7b39193',1,'nats.h']]],
   ['natsoptions_5fsettokenhandler',['natsOptions_SetTokenHandler',['../group__opts_group.html#ga23a3b1f022112e98ddccb18b247b4426',1,'nats.h']]],
   ['natsoptions_5fseturl',['natsOptions_SetURL',['../group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5',1,'nats.h']]],
+  ['natsoptions_5fsetusercredentialscallbacks',['natsOptions_SetUserCredentialsCallbacks',['../group__opts_group.html#ga60117450fc1f7b6f81bab455aeed7515',1,'nats.h']]],
+  ['natsoptions_5fsetusercredentialsfromfiles',['natsOptions_SetUserCredentialsFromFiles',['../group__opts_group.html#ga59b47f7b7a19085cf8eaada9bfe5606e',1,'nats.h']]],
   ['natsoptions_5fsetuserinfo',['natsOptions_SetUserInfo',['../group__opts_group.html#ga5b99da7dd74aac3be962f323c3863d9e',1,'nats.h']]],
   ['natsoptions_5fsetverbose',['natsOptions_SetVerbose',['../group__opts_group.html#gaa16bfd09ef318af18c27a0e199681b69',1,'nats.h']]],
   ['natsoptions_5fskipserververification',['natsOptions_SkipServerVerification',['../group__opts_group.html#ga6f804ec44adc299989fe623570679da3',1,'nats.h']]],
   ['natsoptions_5fuseglobalmessagedelivery',['natsOptions_UseGlobalMessageDelivery',['../group__opts_group.html#gabf060c92648b50c069f0abe7cbb06f1c',1,'nats.h']]],
   ['natsoptions_5fuseoldrequeststyle',['natsOptions_UseOldRequestStyle',['../group__opts_group.html#ga70aa85319933d78c0076cc862fa3e5a6',1,'nats.h']]],
+  ['natssignaturehandler',['natsSignatureHandler',['../group__callbacks_group.html#gab786ffd670c86de0563559351305080b',1,'nats.h']]],
   ['natssock',['natsSock',['../nats_8h.html#af798865ac824e5959987de0fe8d07383',1,'nats.h']]],
   ['natsstatistics',['natsStatistics',['../group__types_group.html#ga57a4b8c7109e2773878655722ce028aa',1,'nats.h']]],
   ['natsstatistics_5fcreate',['natsStatistics_Create',['../group__stats_group.html#gafa923df029168f4991b77ffdd9e24877',1,'nats.h']]],
@@ -186,5 +190,6 @@ var searchData=
   ['natssubscription_5fsetpendinglimits',['natsSubscription_SetPendingLimits',['../group__sub_group.html#ga68a7cea89e75c529a7dd3bb77303dda4',1,'nats.h']]],
   ['natssubscription_5funsubscribe',['natsSubscription_Unsubscribe',['../group__sub_group.html#gaee87f8be0e6c2a4693ba2cea070583ba',1,'nats.h']]],
   ['natssubscription_5fwaitfordraincompletion',['natsSubscription_WaitForDrainCompletion',['../group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d',1,'nats.h']]],
-  ['natstokenhandler',['natsTokenHandler',['../group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094',1,'nats.h']]]
+  ['natstokenhandler',['natsTokenHandler',['../group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094',1,'nats.h']]],
+  ['natsuserjwthandler',['natsUserJWTHandler',['../group__callbacks_group.html#ga258b30458134be90f17315c037f34b7b',1,'nats.h']]]
 ];

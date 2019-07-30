@@ -141,6 +141,7 @@ var nats_8h =
     [ "natsConnection_GetClientID", "group__conn_mgt_group.html#ga747513ba6ab63fdf9a72bfc8025a14ba", null ],
     [ "natsConnection_Drain", "group__conn_mgt_group.html#ga59bdc4ad9fea2053f5d3841f6b83f88b", null ],
     [ "natsConnection_DrainTimeout", "group__conn_mgt_group.html#gae06fe6f5933f216d6d93645a122a7dd4", null ],
+    [ "natsConnection_Sign", "group__conn_mgt_group.html#ga84ab9fe010febd047dd54a5d047d3a30", null ],
     [ "natsConnection_Close", "group__conn_mgt_group.html#ga19e204d27a232e2d4334301fc002b2ed", null ],
     [ "natsConnection_Destroy", "group__conn_mgt_group.html#gafda2f702276fb0ac301efac10df09495", null ],
     [ "natsConnection_Publish", "group__conn_pub_group.html#gac0b9f7759ecc39b8d77807b94254f9b4", null ],

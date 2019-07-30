@@ -47,7 +47,7 @@ matrix:
           - gcc-9
       env:
         - MATRIX_EVAL="CC=gcc-9"
-        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" DO_COVERAGE="no"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
     - compiler: gcc
       os: linux
       addons:
@@ -58,7 +58,7 @@ matrix:
           - gcc-9
       env:
         - MATRIX_EVAL="CC=gcc-9"
-        - NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" DO_COVERAGE="no"
+        - NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
     - compiler: gcc
       os: linux
       addons:
@@ -92,7 +92,7 @@ matrix:
             - clang-8
       env:
         - MATRIX_EVAL="CC=clang-8"
-        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" DO_COVERAGE="no"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
     - compiler: clang
       os: linux
       addons:
@@ -106,7 +106,7 @@ matrix:
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" DO_COVERAGE="no"
 
 script:
-  - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT -DNATS_PROTOBUF_DIR=$HOME/pbuf" "$CTEST_OPT"
+  - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT -DNATS_SANITIZE=ON -DNATS_PROTOBUF_DIR=$HOME/pbuf" "$CTEST_OPT"
 
 notifications:
   email: false

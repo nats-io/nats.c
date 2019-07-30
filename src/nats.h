@@ -2403,6 +2403,23 @@ natsConnection_Drain(natsConnection *nc);
 NATS_EXTERN natsStatus
 natsConnection_DrainTimeout(natsConnection *nc, int64_t timeout);
 
+/** \brief Signs any 'message' using the connection's user credentials.
+ *
+ * The connection must have been created with the #natsOptions_SetUserCredentialsFromFiles.
+ *
+ * This call will sign the given message with the private key extracted through
+ * the user credentials file(s).
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param message the byte array to sign.
+ * @param messageLen the length of the given byte array.
+ * @param sig an array of 64 bytes in which the signature will be copied.
+ */
+natsStatus
+natsConnection_Sign(natsConnection *nc,
+                    const unsigned char *message, int messageLen,
+                    unsigned char sig[64]);
+
 /** \brief Closes the connection.
  *
  * Closes the connection to the server. This call will release all blocking

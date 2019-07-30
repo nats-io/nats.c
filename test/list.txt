@@ -138,6 +138,7 @@ GetClientID
 UserCredsCallbacks
 UserCredsFromFiles
 NKey
+ConnSign
 SSLBasic
 SSLVerify
 SSLVerifyHostname

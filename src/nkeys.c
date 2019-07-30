@@ -96,7 +96,7 @@ _decodeSeed(const char *seed, char *raw, int rawMax)
 }
 
 natsStatus
-natsKeys_Sign(const char *encodedSeed, const char *input, unsigned char **out, int *outLen)
+natsKeys_Sign(const char *encodedSeed, const unsigned char *input, int inputLen, unsigned char **out, int *outLen)
 {
     natsStatus      s               = NATS_OK;
     char            *rawSeed        = NULL;
@@ -109,8 +109,10 @@ natsKeys_Sign(const char *encodedSeed, const char *input, unsigned char **out, i
     *out    = NULL;
     *outLen = 0;
 
-    if (input != NULL)
-        mlen = (int) strlen(input);
+    if ((input != NULL) && (inputLen == 0))
+        mlen = (int) strlen((char*) input);
+    else
+        mlen = inputLen;
 
     rawSeedAllocLen = (int)((strlen(encodedSeed) * 5) / 8);
     rawSeed = NATS_CALLOC(1, rawSeedAllocLen);

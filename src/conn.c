@@ -807,6 +807,55 @@ _processExpectedInfo(natsConnection *nc)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static char*
+_escape(char *origin)
+{
+    char    escChar[] = {'\a', '\b', '\f', '\n', '\r', '\t', '\v', '\\'};
+    char    escRepl[] = {'a', 'b', 'f', 'n', 'r', 't', 'v', '\\'};
+    int     l         = (int) strlen(origin);
+    int     ec        = 0;
+    char    *dest     = NULL;
+    char    *ptr      = NULL;
+    int i;
+    int j;
+
+    for (i=0; i<l; i++)
+    {
+        for (j=0; j<8; j++)
+        {
+            if (origin[i] == escChar[j])
+            {
+                ec++;
+                break;
+            }
+        }
+    }
+    if (ec == 0)
+        return origin;
+
+    dest = NATS_MALLOC(l + ec + 1);
+    if (dest == NULL)
+        return NULL;
+
+    ptr = dest;
+    for (i=0; i<l; i++)
+    {
+        for (j=0; j<8 ;j++)
+        {
+            if (origin[i] == escChar[j])
+            {
+                *ptr++ = '\\';
+                *ptr++ = escRepl[j];
+                 break;
+            }
+        }
+        if(j == 8 )
+            *ptr++ = origin[i];
+    }
+    *ptr = '\0';
+    return dest;
+}
+
 static natsStatus
 _connectProto(natsConnection *nc, char **proto)
 {
@@ -848,8 +897,20 @@ _connectProto(natsConnection *nc, char **proto)
     if (opts->userJWTHandler != NULL)
     {
         char *errTxt = NULL;
+        bool userCb  = opts->userJWTHandler != natsConn_userFromFile;
+
+        // If callback is not the internal one, we need to release connection lock.
+        if (userCb)
+            natsConn_Unlock(nc);
 
         s = opts->userJWTHandler(&ujwt, &errTxt, (void*) opts->userJWTClosure);
+
+        if (userCb)
+        {
+            natsConn_Lock(nc);
+            if (nc->abortConn && (s == NATS_OK))
+                s = NATS_CONNECTION_CLOSED;
+        }
         if ((s != NATS_OK) && (errTxt != NULL))
         {
             s = nats_setError(s, "%s", errTxt);
@@ -857,13 +918,38 @@ _connectProto(natsConnection *nc, char **proto)
         }
         if ((s == NATS_OK) && !nats_IsStringEmpty(nkey))
             s = nats_setError(NATS_ILLEGAL_STATE, "%s", "user JWT callback and NKey cannot be both specified");
+
+        if ((s == NATS_OK) && (ujwt != NULL))
+        {
+            char *tmp = _escape(ujwt);
+            if (tmp == NULL)
+            {
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+            }
+            else if (tmp != ujwt)
+            {
+                NATS_FREE(ujwt);
+                ujwt = tmp;
+            }
+        }
     }
 
     if ((s == NATS_OK) && (!nats_IsStringEmpty(ujwt) || !nats_IsStringEmpty(nkey)))
     {
         char *errTxt = NULL;
+        bool userCb  = opts->sigHandler != natsConn_signatureHandler;
+
+        if (userCb)
+            natsConn_Unlock(nc);
 
         s = opts->sigHandler(&errTxt, &sigRaw, &sigRawLen, nc->info.nonce, opts->sigClosure);
+
+        if (userCb)
+        {
+            natsConn_Lock(nc);
+            if (nc->abortConn && (s == NATS_OK))
+                s = NATS_CONNECTION_CLOSED;
+        }
         if ((s != NATS_OK) && (errTxt != NULL))
         {
             s = nats_setError(s, "%s", errTxt);
@@ -1432,6 +1518,12 @@ _doReconnect(void *arg)
 
         // Process Connect logic
         s = _processConnInit(nc);
+        if (nc->abortConn)
+        {
+            if (s == NATS_OK)
+                s = nats_setError(NATS_CONNECTION_CLOSED, "%s", "connection has been closed/destroyed while reconnecting");
+            break;
+        }
 
         // Send existing subscription state
         if (s == NATS_OK)
@@ -1807,6 +1899,13 @@ _connect(natsConnection *nc)
             }
             else
             {
+                if (nc->abortConn)
+                {
+                    if (s == NATS_OK)
+                        s = NATS_CONNECTION_CLOSED;
+                    break;
+                }
+
                 if (s == NATS_IO_ERROR)
                     retSts = NATS_OK;
             }
@@ -2204,6 +2303,7 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
     natsSubscription        *sub = NULL;
 
     natsConn_lockAndRetain(nc);
+    nc->abortConn = true;
 
     // If connection is not already closed and currently connected, attempt to
     // send a PING and get a PONG to ensure that not only buffers are flushed
@@ -3770,11 +3870,10 @@ natsConn_userFromFile(char **userJWT, char **customErrTxt, void *closure)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-natsStatus
-natsConn_signatureHandler(char **customErrTxt, unsigned char **psig, int *sigLen, const char *nonce, void *closure)
+static natsStatus
+_sign(userCreds *uc, const unsigned char *input, int inputLen, unsigned char **psig, int *sigLen)
 {
     natsStatus      s       = NATS_OK;
-    userCreds       *uc     = (userCreds*) closure;
     char            *seed   = NULL;
     unsigned char   *sig    = NULL;
 
@@ -3784,7 +3883,7 @@ natsConn_signatureHandler(char **customErrTxt, unsigned char **psig, int *sigLen
         s = _getJwtOrSeed(&seed, uc->userOrChainedFile, true, 1);
 
     if (s == NATS_OK)
-        s = natsKeys_Sign((const char*) seed, nonce, &sig, sigLen);
+        s = natsKeys_Sign((const char*) seed, input, inputLen, &sig, sigLen);
 
     if (s == NATS_OK)
         *psig = sig;
@@ -3797,3 +3896,43 @@ natsConn_signatureHandler(char **customErrTxt, unsigned char **psig, int *sigLen
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+natsStatus
+natsConn_signatureHandler(char **customErrTxt, unsigned char **psig, int *sigLen, const char *nonce, void *closure)
+{
+    natsStatus      s       = NATS_OK;
+    userCreds       *uc     = (userCreds*) closure;
+
+    s = _sign(uc, (const unsigned char*) nonce, 0, psig, sigLen);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_Sign(natsConnection *nc, const unsigned char *payload, int payloadLen, unsigned char sig[64])
+{
+    natsStatus  s   = NATS_OK;
+    userCreds   *uc = NULL;
+
+    if ((nc == NULL) || (payloadLen < 0) || (sig == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+    // We can't sign if that is not set...
+    uc = nc->opts->userCreds;
+    if (uc == NULL)
+        s = nats_setError(NATS_ERR, "%s", "unable to sign since no user credentials have been set");
+    else
+    {
+        unsigned char   *signature  = NULL;
+        int             sigLen      = 0;
+
+        s = _sign(uc, payload, payloadLen, &signature, &sigLen);
+        if (s == NATS_OK)
+        {
+            memcpy(sig, signature, sigLen);
+            NATS_FREE(signature);
+        }
+    }
+    natsConn_Unlock(nc);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}

@@ -26,6 +26,11 @@ option(NATS_BUILD_STREAMING "Build NATS Streaming" ON)
 option(NATS_BUILD_NO_PREFIX_CONNSTS "No prefix for connection status enum" OFF)
 option(NATS_COMPILER_HARDENING "Compiler hardening flags" OFF)
 
+if(DEFINED ENV{NATS_SANITIZE})
+  set(NATS_STANITIZE "$ENV{NATS_SANITIZE}")
+  mark_as_advanced(NATS_SANITIZE)
+endif()
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/coveralls-cmake/cmake)
 
 if(NATS_COVERAGE)
@@ -116,10 +121,6 @@ if(UNIX)
      endif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   endif(NATS_COMPILER_HARDENING)
 
-  if(NATS_BUILD_TYPE MATCHES "Debug")
-    set(NATS_COMMON_C_FLAGS "${NATS_COMMON_C_FLAGS} -ggdb")    
-  endif(NATS_BUILD_TYPE MATCHES "Debug")
-  
   set(NATS_WARNINGS "-Wall -W -Wno-unused-variable -Wno-unused-parameter -Wno-unused-function -Wstrict-prototypes -Wwrite-strings")
   set(NATS_PLATFORM_INCLUDE "unix")
   
@@ -152,6 +153,9 @@ elseif(WIN32)
 endif(UNIX)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_COMMON_C_FLAGS} ${NATS_USE_PTHREAD} ${NATS_WARNINGS}")
+if(NATS_SANITIZE)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+endif(NATS_SANITIZE)
 
 if(UNIX)
   if(APPLE)
@@ -180,7 +184,7 @@ endif(NATS_BUILD_WITH_TLS)
 
 set(NATS_VERSION_MAJOR  2)
 set(NATS_VERSION_MINOR  0)
-set(NATS_VERSION_PATCH  0)
+set(NATS_VERSION_PATCH  1)
 set(NATS_VERSION_SUFFIX "")
 
 set(NATS_VERSION_REQUIRED_NUMBER 0x010100)

@@ -473,6 +473,7 @@ struct __natsConnection
 
     natsConnStatus      status;
     bool                initc; // true if the connection is performing the initial connect
+    bool                abortConn;
     natsStatus          err;
     char                errStr[256];
 

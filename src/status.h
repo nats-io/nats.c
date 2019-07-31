@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -121,6 +121,8 @@ typedef enum
 
     NATS_DRAINING,                      ///< A connection and/or subscription entered the draining mode.
                                         ///  Some operations will fail when in that mode.
+
+    NATS_INVALID_QUEUE_NAME,            ///< An invalid queue name was passed when creating a queue subscription.
 
 } natsStatus;
 

@@ -110,6 +110,7 @@ FlushErrOnDisconnect
 Inbox
 Stats
 BadSubject
+SubBadSubjectAndQueueNames
 ClientAsyncAutoUnsub
 ClientSyncAutoUnsub
 ClientAutoUnsubAndReconnect

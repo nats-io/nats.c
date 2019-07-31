@@ -2691,6 +2691,44 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub)
         natsSub_release(sub);
 }
 
+static bool
+_checkSubjOrQueue(const char *name, bool checkToken)
+{
+    int     i       = 0;
+    int     len     = 0;
+    int     lastDot = 0;
+    char    c;
+
+    len = (int) strlen(name);
+    for (i=0; i<len ; i++)
+    {
+        c = name[i];
+        if ((c == ' ') || (c == '\t') || (c == '\r') || (c == '\n'))
+            return true;
+
+        if (checkToken && (c == '.'))
+        {
+            if ((i == 0) || (i == len-1) || (i == lastDot+1))
+                return true;
+
+            lastDot = i;
+        }
+    }
+    return false;
+}
+
+static bool
+_badSubject(const char *subj)
+{
+    return _checkSubjOrQueue(subj, true);
+}
+
+static bool
+_badQueue(const char *queue)
+{
+    return _checkSubjOrQueue(queue, false);
+}
+
 // subscribe is the internal subscribe function that indicates interest in a
 // subject.
 natsStatus
@@ -2705,8 +2743,11 @@ natsConn_subscribeImpl(natsSubscription **newSub,
     if (nc == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if ((subj == NULL) || (strlen(subj) == 0))
+    if ((subj == NULL) || (strlen(subj) == 0) || _badSubject(subj))
         return nats_setDefaultError(NATS_INVALID_SUBJECT);
+
+    if ((queue != NULL) && ((strlen(subj) == 0) || _badQueue(queue)))
+        return nats_setDefaultError(NATS_INVALID_QUEUE_NAME);
 
     natsConn_Lock(nc);
 

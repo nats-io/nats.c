@@ -10207,6 +10207,49 @@ test_BadSubject(void)
 }
 
 static void
+test_SubBadSubjectAndQueueName(void)
+{
+    natsStatus          s;
+    natsConnection      *nc         = NULL;
+    natsSubscription    *sub        = NULL;
+    natsPid             pid         = NATS_INVALID_PID;
+    const char          *badSubs[]  = {"foo bar", "foo..bar", ".foo", "bar.baz.", "baz\t.foo"};
+    const char          *badQueues[]= {"foo group", "group\t1", "g1\r\n2"};
+    char                buf[256];
+    int                 i;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect ok: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    for (i=0; i<(int) (sizeof(badSubs)/sizeof(char*)); i++)
+    {
+        snprintf(buf, sizeof(buf), "test subject '%s': ", badSubs[i]);
+        test(buf)
+        s = natsConnection_SubscribeSync(&sub, nc, badSubs[i]);
+        testCond((s == NATS_INVALID_SUBJECT) && (sub == NULL));
+        nats_clearLastError();
+    }
+
+    for (i=0; i<(int) (sizeof(badQueues)/sizeof(char*)); i++)
+    {
+        snprintf(buf, sizeof(buf), "test queue '%s': ", badQueues[i]);
+        test(buf)
+        s = natsConnection_QueueSubscribeSync(&sub, nc, "foo", badQueues[i]);
+        testCond((s == NATS_INVALID_QUEUE_NAME) && (sub == NULL));
+        nats_clearLastError();
+    }
+
+    natsConnection_Destroy(nc);
+
+    _stopServer(pid);
+}
+
+
+static void
 test_ClientAsyncAutoUnsub(void)
 {
     natsStatus          s;
@@ -18120,6 +18163,7 @@ static testInfo allTests[] =
     {"Inbox",                           test_Inbox},
     {"Stats",                           test_Stats},
     {"BadSubject",                      test_BadSubject},
+    {"SubBadSubjectAndQueueNames",      test_SubBadSubjectAndQueueName},
     {"ClientAsyncAutoUnsub",            test_ClientAsyncAutoUnsub},
     {"ClientSyncAutoUnsub",             test_ClientSyncAutoUnsub},
     {"ClientAutoUnsubAndReconnect",     test_ClientAutoUnsubAndReconnect},

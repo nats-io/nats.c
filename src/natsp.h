@@ -75,9 +75,10 @@
 #define _UNSUB_PROTO_        "UNSUB %" PRId64 " %d\r\n"
 #define _UNSUB_NO_MAX_PROTO_ "UNSUB %" PRId64 " \r\n"
 
-#define STALE_CONNECTION     "Stale Connection"
-#define PERMISSIONS_ERR      "Permissions Violation"
-#define AUTHORIZATION_ERR    "Authorization Violation"
+#define STALE_CONNECTION            "Stale Connection"
+#define PERMISSIONS_ERR             "Permissions Violation"
+#define AUTHORIZATION_ERR           "Authorization Violation"
+#define AUTHENTICATION_EXPIRED_ERR  "User Authentication Expired"
 
 #define _CRLF_LEN_          (2)
 #define _SPC_LEN_           (1)

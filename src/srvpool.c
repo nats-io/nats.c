@@ -24,6 +24,7 @@ _freeSrv(natsSrv *srv)
 
     natsUrl_Destroy(srv->url);
     NATS_FREE(srv->tlsName);
+    NATS_FREE(srv->lastErr);
     NATS_FREE(srv);
 }
 

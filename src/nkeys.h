@@ -26,6 +26,6 @@
 #define NKEYS_INVALID_PREFIX        "invalid prefix byte"
 
 natsStatus
-natsKeys_Sign(const char *encodedSeed, const char *input, unsigned char **out, int *outLen);
+natsKeys_Sign(const char *encodedSeed, const unsigned char *input, int inputLen, unsigned char **out, int *outLen);
 
 #endif /* NKEYS_H_ */

@@ -555,6 +555,26 @@ if (s == NATS_OK)
     s = natsConnection_Connect(&nc, opts);
 ```
 
+You can sign any content and get the signature in return. The connection must have been created with the `natsOptions_SetUserCredentialsFromFiles()` option for that to work.
+```c
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetUserCredentialsFromFiles(opts, "user.creds", NULL);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+
+    // Sign some arbitrary content
+    const unsigned char *content   = (const unsigned char*) "hello";
+    int                 contentLen = 5;
+    unsigned char       sig[64];
+
+    s = natsConnection_Sign(nc, content, contentLen, sig);
+    if (s == NATS_OK)
+    {
+        // Do something with signature...
+    }
+```
+
 ## Advanced Usage
 
 Flushing a connection ensures that any data buffered is flushed (sent to) the NATS Server.
@@ -733,6 +753,7 @@ passing a connection handler:
     // long as the reconnect buffer is not full).
 ```
 Check the example `examples/connect.c` for more use cases.
+
 
 ## Clustered Usage
 

@@ -2551,30 +2551,35 @@ natsConn_processOK(natsConnection *nc)
     // Do nothing for now.
 }
 
-// _processPermissionViolation is called when the server signals a subject
-// permissions violation on either publish or subscribe.
+// _processAuthError does common processing of auth/perm errors.
+// We want to do retries unless we get the same error again.
+// This allows us for instance to swap credentials and have
+// the app reconnect, but if nothing is changing we should bail.
 static void
-_processPermissionViolation(natsConnection *nc, char *error)
+_processAuthError(natsConnection *nc, char *error)
 {
-    natsConn_Lock(nc);
-    nc->err = NATS_NOT_PERMITTED;
-    snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
-    if (nc->opts->asyncErrCb != NULL)
-        natsAsyncCb_PostErrHandler(nc, NULL, NATS_NOT_PERMITTED);
-    natsConn_Unlock(nc);
-}
+    bool close = false;
 
-// _processAuthorizationViolation is called when the server signals a user
-// authorization violation.
-static void
-_processAuthorizationViolation(natsConnection *nc, char *error)
-{
     natsConn_Lock(nc);
     nc->err = NATS_NOT_PERMITTED;
     snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
     if (nc->opts->asyncErrCb != NULL)
         natsAsyncCb_PostErrHandler(nc, NULL, NATS_NOT_PERMITTED);
+    // We should give up if we tried twice on this server and got the
+    // same error.
+    if ((nc->cur->lastErr != NULL) && (strcasecmp(nc->cur->lastErr, error) == 0))
+    {
+        close = true;
+    }
+    else
+    {
+        NATS_FREE(nc->cur->lastErr);
+        nc->cur->lastErr = NATS_STRDUP(error);
+    }
     natsConn_Unlock(nc);
+
+    if (close)
+        _close(nc, NATS_CONN_STATUS_CLOSED, true);
 }
 
 void
@@ -2592,13 +2597,11 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
     {
         _processOpError(nc, NATS_STALE_CONNECTION, false);
     }
-    else if (nats_strcasestr(error, PERMISSIONS_ERR) != NULL)
+    else if ((nats_strcasestr(error, PERMISSIONS_ERR) != NULL)
+                || (nats_strcasestr(error, AUTHORIZATION_ERR) != NULL)
+                || (nats_strcasestr(error, AUTHENTICATION_EXPIRED_ERR) != NULL))
     {
-        _processPermissionViolation(nc, error);
-    }
-    else if (nats_strcasestr(error, AUTHORIZATION_ERR) != NULL)
-    {
-        _processAuthorizationViolation(nc, error);
+        _processAuthError(nc, error);
     }
     else
     {

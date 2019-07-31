@@ -108,6 +108,7 @@ struct threadArg
     const char      *tokens[3];
     int             tokenCallCount;
     testCheckInfoCB checkInfoCB;
+    natsSock        sock;
 
 
     natsSubscription *sub;
@@ -4318,14 +4319,18 @@ _closedCb(natsConnection *nc, void *closure)
     natsMutex_Unlock(arg->m);
 }
 
-static void
+static natsStatus
 _waitForConnClosed(struct threadArg *arg)
 {
+    natsStatus s = NATS_OK;
+
     natsMutex_Lock(arg->m);
-    while (!arg->closed)
-        natsCondition_TimedWait(arg->c, arg->m, 2000);
+    while ((s != NATS_TIMEOUT) && !arg->closed)
+        s = natsCondition_TimedWait(arg->c, arg->m, 2000);
     arg->closed = false;
     natsMutex_Unlock(arg->m);
+
+    return s;
 }
 
 static void
@@ -8041,6 +8046,7 @@ _errorHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *c
         && (natsConnection_GetLastError(nc, &lastError) == NATS_NOT_PERMITTED)
         && (nats_strcasestr(lastError, args->string) != NULL))
     {
+        args->results[0]++;
         args->done = true;
         natsCondition_Broadcast(args->c);
     }
@@ -8225,6 +8231,223 @@ test_AuthViolation(void)
     testCond(arg.done
              && (arg.reconnects == 0)
              && arg.closed);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
+_startServerSendErrThread(void *closure)
+{
+    natsStatus          s = NATS_OK;
+    natsSock            sock = NATS_SOCK_INVALID;
+    struct threadArg    *arg = (struct threadArg*) closure;
+    natsSockCtx         ctx;
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    s = _startMockupServer(&sock, "localhost", "4222");
+
+    natsMutex_Lock(arg->m);
+    arg->status = s;
+    arg->sock = sock;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+
+    while (s == NATS_OK)
+    {
+        if (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+                || (natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK))
+        {
+            s = NATS_SYS_ERROR;
+        }
+        if (s == NATS_OK)
+        {
+            char buffer[1024];
+            const char info[] = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576}\r\n";
+
+            // Send INFO.
+            s = natsSock_WriteFully(&ctx, info, (int) strlen(info));
+            if (s == NATS_OK)
+            {
+                memset(buffer, 0, sizeof(buffer));
+
+                // Read connect and ping commands sent from the client
+                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+                if (s == NATS_OK)
+                    s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            }
+            // Send PONG
+            if (s == NATS_OK)
+                s = natsSock_WriteFully(&ctx,
+                                        _PONG_PROTO_, _PONG_PROTO_LEN_);
+
+            if (s == NATS_OK)
+            {
+                bool sendErr = false;
+
+                nats_Sleep(300);
+
+                natsMutex_Lock(arg->m);
+                if (arg->sum <= 1)
+                {
+                    sendErr = true;
+                    if (arg->sum == 1)
+                        arg->sum = 2;
+                }
+                natsMutex_Unlock(arg->m);
+
+                if (sendErr)
+                {
+                    snprintf(buffer, sizeof(buffer), "-ERR '%s'\r\n", arg->string);
+                    s = natsSock_WriteFully(&ctx, buffer, (int)strlen(buffer));
+                }
+                else
+                {
+                    s = NATS_OK;
+                    natsMutex_Lock(arg->m);
+                    while ((s != NATS_TIMEOUT) && !arg->disconnected)
+                        s = natsCondition_TimedWait(arg->c, arg->m, 5000);
+                    natsMutex_Unlock(arg->m);
+                }
+                natsSock_Close(ctx.fd);
+            }
+        }
+    }
+    natsMutex_Lock(arg->m);
+    if (arg->sock != NATS_SOCK_INVALID)
+    {
+        natsSock_Close(arg->sock);
+        arg->sock = NATS_SOCK_INVALID;
+    }
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+test_AuthenticationExpired(void)
+{
+    natsStatus          s    = NATS_OK;
+    natsConnection      *nc  = NULL;
+    natsOptions         *opts= NULL;
+    natsThread          *t   = NULL;
+    struct threadArg    arg;
+    natsSockCtx         ctx;
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetMaxReconnect(opts, -1);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectWait(opts, 25);
+    if (s == NATS_OK)
+        s = natsOptions_SetErrorHandler(opts, _errorHandler, &arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetClosedCB(opts, _closedCb, &arg);
+    if (s != NATS_OK)
+        FAIL("@@ Unable to setup test!");
+
+    natsMutex_Lock(arg.m);
+    arg.control = 7;
+    arg.string  = AUTHENTICATION_EXPIRED_ERR;
+    arg.sum     = 0;
+    // Set this to error, the mock server should set it to OK
+    // if it can start successfully.
+    arg.status = NATS_ERR;
+    natsMutex_Unlock(arg.m);
+
+    s = natsThread_Create(&t, _startServerSendErrThread, (void*) &arg);
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        if (s == NATS_OK)
+            s = arg.status;
+        natsMutex_Unlock(arg.m);
+    }
+    if (s != NATS_OK)
+    {
+        if (t != NULL)
+        {
+            natsThread_Join(t);
+            natsThread_Destroy(t);
+        }
+        _destroyDefaultThreadArgs(&arg);
+        FAIL("Unable to setup test");
+    }
+
+    test("Should connect ok: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Should have been closed: ");
+    s = _waitForConnClosed(&arg);
+    testCond(s == NATS_OK);
+
+    test("Should have posted 2 errors: ");
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        s = (((arg.results[0] == 2) && arg.done) ? NATS_OK : NATS_ERR);
+        natsMutex_Unlock(arg.m);
+        testCond(s == NATS_OK);
+    }
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    // Now try again but have the "server" sends the error only once.
+    // Client should reconnect and stay connected.
+    natsMutex_Lock(arg.m);
+    arg.done       = false;
+    arg.closed     = false;
+    arg.results[0] = 0;
+    arg.sum        = 1;
+    natsMutex_Unlock(arg.m);
+
+    test("Connect ok: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Should receive an ERR: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && (arg.results[0] != 1) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    // Wait a tiny bit and make sure connection is still connected
+    nats_Sleep(100);
+    test("Still connected: ");
+    testCond(!natsConnection_IsClosed(nc));
+
+    natsMutex_Lock(arg.m);
+    arg.disconnected = true;
+    natsCondition_Broadcast(arg.c);
+    if (arg.sock != NATS_SOCK_INVALID)
+    {
+#if defined(LINUX)
+        natsSock_Shutdown(arg.sock);
+#else
+        natsSock_Close(arg.sock);
+#endif
+        arg.sock = NATS_SOCK_INVALID;
+    }
+    natsMutex_Unlock(arg.m);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+
+    test("Close: ");
+    natsConnection_Destroy(nc);
+    s = _waitForConnClosed(&arg);
+    testCond(s == NATS_OK);
+    nc = NULL;
+
+    natsOptions_Destroy(opts);
 
     _destroyDefaultThreadArgs(&arg);
 }
@@ -13724,7 +13947,6 @@ _startMockupServerThread(void *closure)
 {
     natsStatus          s = NATS_OK;
     natsSock            sock = NATS_SOCK_INVALID;
-    natsThread          *t = NULL;
     struct threadArg    *arg = (struct threadArg*) closure;
     natsSockCtx         ctx;
     testCheckInfoCB     checkInfoCB = NULL;
@@ -17868,6 +18090,7 @@ static testInfo allTests[] =
     {"AuthTokenHandler",                test_AuthTokenHandler},
     {"PermViolation",                   test_PermViolation},
     {"AuthViolation",                   test_AuthViolation},
+    {"AuthenticationExpired",           test_AuthenticationExpired},
     {"ConnectedServer",                 test_ConnectedServer},
     {"MultipleClose",                   test_MultipleClose},
     {"SimplePublish",                   test_SimplePublish},

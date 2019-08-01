@@ -203,6 +203,7 @@ struct __natsOptions
     bool                    pedantic;
     bool                    allowReconnect;
     bool                    secure;
+    int                     ioBufSize;
     int                     maxReconnect;
     int64_t                 reconnectWait;
     int                     reconnectBufSize;

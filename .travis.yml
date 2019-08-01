@@ -47,6 +47,17 @@ matrix:
           - gcc-9
       env:
         - MATRIX_EVAL="CC=gcc-9"
+        - BUILD_OPT="-DNATS_BUILD_STREAMING=OFF -DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release" DO_COVERAGE="no" CTEST_OPT="-I 1,1"
+    - compiler: gcc
+      os: linux
+      addons:
+        apt:
+          sources:
+          - ubuntu-toolchain-r-test
+          packages:
+          - gcc-9
+      env:
+        - MATRIX_EVAL="CC=gcc-9"
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
     - compiler: gcc
       os: linux

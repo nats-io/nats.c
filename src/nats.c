@@ -16,6 +16,7 @@
 #include "stan/stanp.h"
 #endif
 
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>

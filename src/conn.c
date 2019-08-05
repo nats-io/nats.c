@@ -2093,6 +2093,8 @@ _readLoop(void  *arg)
         natsConn_Lock(nc);
     }
 
+    NATS_FREE(buffer);
+
     natsSock_Close(fd);
     nc->sockCtx.fd       = NATS_SOCK_INVALID;
     nc->sockCtx.fdActive = false;

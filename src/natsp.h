@@ -117,6 +117,10 @@ static const char *inboxPrefix = "_INBOX.";
         if ((s) == NATS_OK) \
             DUP_STRING((s), (s1), (s2))
 
+
+#define ERR_CODE_AUTH_EXPIRED   (1)
+#define ERR_CODE_AUTH_VIOLATION (2)
+
 // This is temporary until we remove original connection status enum
 // values without NATS_CONN_STATUS_ prefix
 #if defined(NATS_CONN_STATUS_NO_PREFIX)
@@ -474,7 +478,8 @@ struct __natsConnection
 
     natsConnStatus      status;
     bool                initc; // true if the connection is performing the initial connect
-    bool                abortConn;
+    bool                ar;    // abort reconnect attempts
+    bool                rle;   // reconnect loop ended
     natsStatus          err;
     char                errStr[256];
 

@@ -26,7 +26,7 @@ typedef struct __natsSrv
     int         reconnects;
     int64_t     lastAttempt;
     char        *tlsName;
-    char        *lastErr;
+    int         lastAuthErrCode;
 
 } natsSrv;
 

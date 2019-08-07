@@ -84,6 +84,11 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect);
 static natsStatus
 _flushTimeout(natsConnection *nc, int64_t timeout);
 
+static bool
+_processAuthError(natsConnection *nc, int errCode, char *error);
+
+static int
+_checkAuthError(char *error);
 
 /*
  * ----------------------------------------
@@ -908,7 +913,7 @@ _connectProto(natsConnection *nc, char **proto)
         if (userCb)
         {
             natsConn_Lock(nc);
-            if (nc->abortConn && (s == NATS_OK))
+            if (natsConn_isClosed(nc) && (s == NATS_OK))
                 s = NATS_CONNECTION_CLOSED;
         }
         if ((s != NATS_OK) && (errTxt != NULL))
@@ -947,7 +952,7 @@ _connectProto(natsConnection *nc, char **proto)
         if (userCb)
         {
             natsConn_Lock(nc);
-            if (nc->abortConn && (s == NATS_OK))
+            if (natsConn_isClosed(nc) && (s == NATS_OK))
                 s = NATS_CONNECTION_CLOSED;
         }
         if ((s != NATS_OK) && (errTxt != NULL))
@@ -1518,7 +1523,10 @@ _doReconnect(void *arg)
 
         // Process Connect logic
         s = _processConnInit(nc);
-        if (nc->abortConn)
+        // Check if connection has been closed (it could happen due to
+        // user callback that may be invoked as part of the connect)
+        // or if the reconnect process should be aborted.
+        if (natsConn_isClosed(nc) || nc->ar)
         {
             if (s == NATS_OK)
                 s = nats_setError(NATS_CONNECTION_CLOSED, "%s", "connection has been closed/destroyed while reconnecting");
@@ -1560,6 +1568,9 @@ _doReconnect(void *arg)
         nc->status = NATS_CONN_STATUS_CONNECTED;
 
         // No more failure allowed past this point.
+
+        // Clear the possible current lastErr
+        nc->cur->lastAuthErrCode = 0;
 
         // Clear out server stats for the server we connected to..
         nc->cur->didConnect = true;
@@ -1620,6 +1631,7 @@ _doReconnect(void *arg)
         nc->err = NATS_NO_SERVER;
 
     nc->inReconnect--;
+    nc->rle = true;
     natsConn_Unlock(nc);
 
     _close(nc, NATS_CONN_STATUS_CLOSED, true);
@@ -1739,22 +1751,28 @@ _sendConnect(natsConnection *nc)
 
         if (strncmp(natsBuf_Data(proto), _ERR_OP_, _ERR_OP_LEN_) == 0)
         {
-            char buffer[1024];
+            char    buffer[256];
+            int     authErrCode = 0;
 
             buffer[0] = '\0';
-            snprintf(buffer, sizeof(buffer), "%s", natsBuf_Data(proto));
+            snprintf_truncate(buffer, sizeof(buffer), "%s", natsBuf_Data(proto));
 
             // Remove -ERR, trim spaces and quotes.
             nats_NormalizeErr(buffer);
 
-            // Search if the error message says something about
-            // authentication failure.
-
-            if (nats_strcasestr(buffer, "authorization") != NULL)
-                s = nats_setError(NATS_CONNECTION_AUTH_FAILED,
-                                  "%s", buffer);
+            // Look for auth errors.
+            if ((authErrCode = _checkAuthError(buffer)) != 0)
+            {
+                // This sets nc->err to NATS_CONNECTION_AUTH_FAILED
+                // copy content of buffer into nc->errStr.
+                _processAuthError(nc, authErrCode, buffer);
+                s = nc->err;
+            }
             else
-                s = nats_setError(NATS_ERR, "%s", buffer);
+                s = NATS_ERR;
+
+            // Update stack
+            s = nats_setError(s, "%s", buffer);
         }
         else
         {
@@ -1878,6 +1896,7 @@ _connect(natsConnection *nc)
 
                 if (s == NATS_OK)
                 {
+                    nc->cur->lastAuthErrCode = 0;
                     natsSrvPool_SetSrvDidConnect(pool, i, true);
                     natsSrvPool_SetSrvReconnects(pool, i, 0);
                     retSts = NATS_OK;
@@ -1899,7 +1918,7 @@ _connect(natsConnection *nc)
             }
             else
             {
-                if (nc->abortConn)
+                if (natsConn_isClosed(nc))
                 {
                     if (s == NATS_OK)
                         s = NATS_CONNECTION_CLOSED;
@@ -2303,7 +2322,6 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
     natsSubscription        *sub = NULL;
 
     natsConn_lockAndRetain(nc);
-    nc->abortConn = true;
 
     // If connection is not already closed and currently connected, attempt to
     // send a PING and get a PONG to ensure that not only buffers are flushed
@@ -2342,7 +2360,10 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
     // Go ahead and make sure we have flushed the outbound buffer.
     if (nc->sockCtx.fdActive)
     {
-        natsConn_bufferFlush(nc);
+        // Don't need to flush if we are here due to a terminating
+        // reconnect loop.
+        if (!nc->rle)
+            natsConn_bufferFlush(nc);
 
         // If there is no readLoop, then it is our responsibility to close
         // the socket. Otherwise, _readLoop is the one doing it.
@@ -2368,7 +2389,7 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
     // Perform appropriate callback if needed for a disconnect.
     // Do not invoke if we were disconnected and failed to reconnect (since
     // it has already been invoked in doReconnect).
-    if (doCBs && (nc->opts->disconnectedCb != NULL) && sockWasActive)
+    if (doCBs && !nc->rle && (nc->opts->disconnectedCb != NULL) && sockWasActive)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
     sub = nc->respMux;
@@ -2551,41 +2572,58 @@ natsConn_processOK(natsConnection *nc)
     // Do nothing for now.
 }
 
-// _processAuthError does common processing of auth/perm errors.
-// We want to do retries unless we get the same error again.
-// This allows us for instance to swap credentials and have
-// the app reconnect, but if nothing is changing we should bail.
+// _processPermissionViolation is called when the server signals a subject
+// permissions violation on either publish or subscribe.
 static void
-_processAuthError(natsConnection *nc, char *error)
+_processPermissionViolation(natsConnection *nc, char *error)
 {
-    bool close = false;
-
     natsConn_Lock(nc);
     nc->err = NATS_NOT_PERMITTED;
     snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
     if (nc->opts->asyncErrCb != NULL)
         natsAsyncCb_PostErrHandler(nc, NULL, NATS_NOT_PERMITTED);
-    // We should give up if we tried twice on this server and got the
-    // same error.
-    if ((nc->cur->lastErr != NULL) && (strcasecmp(nc->cur->lastErr, error) == 0))
-    {
-        close = true;
-    }
-    else
-    {
-        NATS_FREE(nc->cur->lastErr);
-        nc->cur->lastErr = NATS_STRDUP(error);
-    }
     natsConn_Unlock(nc);
+}
 
-    if (close)
-        _close(nc, NATS_CONN_STATUS_CLOSED, true);
+// _processAuthError does common processing of auth errors.
+// We want to do retries unless we get the same error again.
+// This allows us for instance to swap credentials and have
+// the app reconnect, but if nothing is changing we should bail.
+static bool
+_processAuthError(natsConnection *nc, int errCode, char *error)
+{
+    nc->err = NATS_CONNECTION_AUTH_FAILED;
+    snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
+
+    if (!nc->initc && nc->opts->asyncErrCb != NULL)
+        natsAsyncCb_PostErrHandler(nc, NULL, NATS_CONNECTION_AUTH_FAILED);
+
+    if (nc->cur->lastAuthErrCode == errCode)
+        nc->ar = true;
+    else
+        nc->cur->lastAuthErrCode = errCode;
+
+    return nc->ar;
+}
+
+// Checks if the error is an authentication error and if so returns
+// the error code for the string, 0 otherwise.
+static int
+_checkAuthError(char *error)
+{
+    if (nats_strcasestr(error, AUTHORIZATION_ERR) != NULL)
+        return ERR_CODE_AUTH_VIOLATION;
+    else if (nats_strcasestr(error, AUTHENTICATION_EXPIRED_ERR) != NULL)
+        return ERR_CODE_AUTH_EXPIRED;
+    return 0;
 }
 
 void
 natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
 {
     char error[256];
+    bool close       = false;
+    int  authErrCode = 0;
 
     // Copy the error in this local buffer.
     snprintf(error, sizeof(error), "%.*s", bufLen, buf);
@@ -2597,20 +2635,26 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
     {
         _processOpError(nc, NATS_STALE_CONNECTION, false);
     }
-    else if ((nats_strcasestr(error, PERMISSIONS_ERR) != NULL)
-                || (nats_strcasestr(error, AUTHORIZATION_ERR) != NULL)
-                || (nats_strcasestr(error, AUTHENTICATION_EXPIRED_ERR) != NULL))
+    else if (nats_strcasestr(error, PERMISSIONS_ERR) != NULL)
     {
-        _processAuthError(nc, error);
+        _processPermissionViolation(nc, error);
+    }
+    else if ((authErrCode = _checkAuthError(error)) != 0)
+    {
+        natsConn_Lock(nc);
+        close = _processAuthError(nc, authErrCode, error);
+        natsConn_Unlock(nc);
     }
     else
     {
+        close = true;
         natsConn_Lock(nc);
         nc->err = NATS_ERR;
         snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
         natsConn_Unlock(nc);
-        _close(nc, NATS_CONN_STATUS_CLOSED, true);
     }
+    if (close)
+        _close(nc, NATS_CONN_STATUS_CLOSED, true);
 }
 
 void

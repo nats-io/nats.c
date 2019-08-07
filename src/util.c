@@ -243,8 +243,12 @@ nats_NormalizeErr(char *error)
     }
 
     for (end=len-1; end>0; end--)
-        if ((error[end] != ' ') && (error[end] != '\''))
-            break;
+    {
+        char c = error[end];
+        if ((c == '\r') || (c == '\n') || (c == '\'') || (c == ' '))
+            continue;
+        break;
+    }
 
     if (end <= start)
     {

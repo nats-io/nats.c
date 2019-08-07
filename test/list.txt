@@ -156,7 +156,7 @@ BasicClusterReconnect
 HotSpotReconnect
 ProperReconnectDelay
 ProperFalloutAfterMaxAttempts
-ProperFalloutMaxAttemptsAuth
+StopReconnectAfterTwoAuthErr
 TimeoutOnNoServer
 PingReconnect
 GetServers

@@ -600,13 +600,13 @@ natsOptions_SetMaxPingsOut(natsOptions *opts, int maxPignsOut)
 natsStatus
 natsOptions_SetIOBufSize(natsOptions *opts, int ioBufSize)
 {
-  LOCK_AND_CHECK_OPTIONS(opts, (ioBufSize < 0));
+    LOCK_AND_CHECK_OPTIONS(opts, (ioBufSize < 0));
 
-  opts->ioBufSize = ioBufSize;
+    opts->ioBufSize = ioBufSize;
 
-  UNLOCK_OPTS(opts);
+    UNLOCK_OPTS(opts);
 
-  return NATS_OK;
+    return NATS_OK;
 }
 
 natsStatus

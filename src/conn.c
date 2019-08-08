@@ -2052,14 +2052,16 @@ _readLoop(void  *arg)
     char        *buffer;
     natsSock    fd;
     int         n;
+    int         bufSize;
 
     natsConnection *nc = (natsConnection*) arg;
 
     natsConn_Lock(nc);
 
     fd = nc->sockCtx.fd;
+    bufSize = nc->opts->ioBufSize;
 
-    buffer = NATS_MALLOC(nc->opts->ioBufSize);
+    buffer = NATS_MALLOC(bufSize);
     if (buffer == NULL) {
         natsSock_Close(fd);
         nc->sockCtx.fd       = NATS_SOCK_INVALID;
@@ -2083,7 +2085,7 @@ _readLoop(void  *arg)
 
         n = 0;
 
-        s = natsSock_Read(&(nc->sockCtx), buffer, nc->opts->ioBufSize, &n);
+        s = natsSock_Read(&(nc->sockCtx), buffer, bufSize, &n);
         if (s == NATS_OK)
             s = natsParser_Parse(nc, buffer, n);
 

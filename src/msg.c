@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "mem.h"
+#include "util.h"
 
 void
 natsMsg_free(void *object)
@@ -172,5 +173,28 @@ natsMsg_Create(natsMsg **newMsg, const char *subj, const char *reply,
                        data, dataLen);
 
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsMsg_Respond(natsMsg *msg, const void *reply, int len)
+{
+    natsConnection *nc = NULL;
+
+    if (msg == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (msg->sub == NULL)
+        return nats_setDefaultError(NATS_MSG_NOT_BOUND);
+
+    if (nats_IsStringEmpty(msg->reply))
+        return nats_setDefaultError(NATS_MSG_NO_REPLY);
+
+    natsMutex_Lock(msg->sub->mu);
+    nc = msg->sub->conn;
+    natsMutex_Unlock(msg->sub->mu);
+
+    // No need to check the connection here since the
+    // call to publish will do all the checking.
+    return natsConnection_Publish(nc, msg->reply, reply, len);
 }
 

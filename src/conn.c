@@ -2514,15 +2514,11 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
         sub->slowConsumer = false;
 
+        msg->sub = sub;
         if (ldw != NULL)
-        {
-            msg->sub = sub;
             list = &ldw->msgList;
-        }
         else
-        {
             list = &sub->msgList;
-        }
 
         if (list->head == NULL)
             list->head = msg;

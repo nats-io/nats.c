@@ -66,6 +66,9 @@ static const char *statusText[] = {
     "Draining in progress",
 
     "Invalid queue name",
+
+    "Message is not bound to subscription/connection",
+    "Message does not have a reply",
 };
 
 const char*

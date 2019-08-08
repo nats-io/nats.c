@@ -124,6 +124,12 @@ typedef enum
 
     NATS_INVALID_QUEUE_NAME,            ///< An invalid queue name was passed when creating a queue subscription.
 
+    NATS_MSG_NOT_BOUND,                 ///< Using #natsMsg_Respond() with a message that has not been delivered
+                                        ///  and therefore not assigned to a connection and/or subscription.
+
+    NATS_MSG_NO_REPLY,                  ///< Using #natsMsg_Respond() with a message that does not have a reply
+                                        ///  subject.
+
 } natsStatus;
 
 #ifdef __cplusplus

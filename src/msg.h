@@ -31,7 +31,7 @@ struct __natsMsg
     const char          *data;
     int                 dataLen;
 
-    // subscription (needed when delivery done by connection)
+    // subscription message is to be delivered to
     struct __natsSubscription *sub;
 
     // Must be last field!

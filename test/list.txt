@@ -141,6 +141,7 @@ UserCredsCallbacks
 UserCredsFromFiles
 NKey
 ConnSign
+Respond
 SSLBasic
 SSLVerify
 SSLVerifyHostname

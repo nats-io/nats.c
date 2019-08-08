@@ -15599,6 +15599,120 @@ test_ConnSign(void)
 }
 
 static void
+_respondCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    natsMsg_Respond(msg, (const void*) "reply", 5);
+    natsMsg_Destroy(msg);
+}
+
+static void
+test_Respond(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    natsMsg             *m  = NULL;
+    natsSubscription    *sub= NULL;
+    natsSubscription    *sub2= NULL;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Not bound: ");
+    s = natsMsg_Create(&m, "foo", NULL, NULL, 0);
+    if (s == NATS_OK)
+        s = natsMsg_Respond(m, (const void*) "hello", 5);
+    testCond(s == NATS_MSG_NOT_BOUND);
+
+    natsMsg_Destroy(m);
+    m = NULL;
+
+    test("No reply: ");
+    s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4222");
+    if (s == NATS_OK)
+        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "hello");
+    if (s == NATS_OK)
+        s = natsSubscription_NextMsg(&m, sub, 1000);
+    if (s == NATS_OK)
+        s = natsMsg_Respond(m, (const void*) "reply", 5);
+    testCond(s == NATS_MSG_NO_REPLY);
+
+    natsMsg_Destroy(m);
+    m = NULL;
+
+    test("Respond with sync sub ok: ");
+    s = natsConnection_PublishRequestString(nc, "foo", "bar", "help");
+    if (s == NATS_OK)
+        s = natsSubscription_NextMsg(&m, sub, 1000);
+    if (s == NATS_OK)
+        s = natsMsg_Respond(m, (const void*) "reply", 5);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(m);
+    m = NULL;
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Respond with sync sub with auto-unsub ok: ");
+    // Create a sub for getting the "Respond()" message
+    s = natsConnection_SubscribeSync(&sub2, nc, "bar");
+    if (s == NATS_OK)
+        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    if (s == NATS_OK)
+        s = natsSubscription_AutoUnsubscribe(sub, 1);
+    if (s == NATS_OK)
+        s = natsConnection_PublishRequestString(nc, "foo", "bar", "help");
+    if (s == NATS_OK)
+        s = natsSubscription_NextMsg(&m, sub, 1000);
+    if (s == NATS_OK)
+    {
+        s = natsMsg_Respond(m, (const void*) "reply", 5);
+        natsMsg_Destroy(m);
+        m = NULL;
+    }
+    if (s == NATS_OK)
+        s = natsSubscription_NextMsg(&m, sub2, 1000);
+    testCond((s == NATS_OK)
+                && (m != NULL)
+                && (natsMsg_GetData(m) != NULL)
+                && (strncmp(natsMsg_GetData(m), "reply", 5) == 0));
+    natsMsg_Destroy(m);
+    m = NULL;
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    natsSubscription_Destroy(sub2);
+    sub2 = NULL;
+
+    test("Respond with async sub ok: ");
+    s = natsConnection_Subscribe(&sub, nc, "foo", _respondCb, NULL);
+    if (s == NATS_OK)
+        s = natsConnection_RequestString(&m, nc, "foo", "help", 1000);
+    testCond((s == NATS_OK)
+                && (m != NULL)
+                && (natsMsg_GetData(m) != NULL)
+                && (strncmp(natsMsg_GetData(m), "reply", 5) == 0));
+    natsMsg_Destroy(m);
+    m = NULL;
+
+    test("Respond with async sub auto-unsub ok: ");
+    s = natsSubscription_AutoUnsubscribe(sub, 2);
+    if (s == NATS_OK)
+        s = natsConnection_RequestString(&m, nc, "foo", "help", 1000);
+    testCond((s == NATS_OK)
+                && (m != NULL)
+                && (natsMsg_GetData(m) != NULL)
+                && (strncmp(natsMsg_GetData(m), "reply", 5) == 0));
+    natsMsg_Destroy(m);
+    m = NULL;
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _stopServer(pid);
+}
+
+static void
 test_SSLBasic(void)
 {
 #if defined(NATS_HAS_TLS)
@@ -18268,6 +18382,7 @@ static testInfo allTests[] =
     {"UserCredsFromFiles",              test_UserCredsFromFiles},
     {"NKey",                            test_NKey},
     {"ConnSign",                        test_ConnSign},
+    {"Respond",                         test_Respond},
     {"SSLBasic",                        test_SSLBasic},
     {"SSLVerify",                       test_SSLVerify},
     {"SSLVerifyHostname",               test_SSLVerifyHostname},

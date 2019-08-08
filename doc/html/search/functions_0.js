@@ -70,6 +70,7 @@ var searchData=
   ['natsmsg_5fgetdatalength',['natsMsg_GetDataLength',['../group__msg_group.html#ga3ed150076a029a5b6a38667d2359e57a',1,'nats.h']]],
   ['natsmsg_5fgetreply',['natsMsg_GetReply',['../group__msg_group.html#ga3efb98fd6369d9b674638ea93cccf0ab',1,'nats.h']]],
   ['natsmsg_5fgetsubject',['natsMsg_GetSubject',['../group__msg_group.html#gad4597240ee8061b4dbec88576b5e1bed',1,'nats.h']]],
+  ['natsmsg_5frespond',['natsMsg_Respond',['../group__msg_group.html#ga69566646fdac27810490dfc385062e4c',1,'nats.h']]],
   ['natsoptions_5fcreate',['natsOptions_Create',['../group__opts_group.html#ga61d4a0cf2fbf7d13cc910e5a00c575be',1,'nats.h']]],
   ['natsoptions_5fdestroy',['natsOptions_Destroy',['../group__opts_group.html#ga93d8068cd6fff53b7f8e1c403db45eb9',1,'nats.h']]],
   ['natsoptions_5fipresolutionorder',['natsOptions_IPResolutionOrder',['../group__opts_group.html#ga7ca713c7532eff4d41a492e95b8822cf',1,'nats.h']]],

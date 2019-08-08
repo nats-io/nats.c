@@ -171,7 +171,10 @@ Enumerations</h2></td></tr>
 <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a4e298931ba0698a72e397b1b57c885">NATS_NO_SERVER_SUPPORT</a>, 
 <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a49a1ea653ce112b3c53eedebcd60811d">NATS_NOT_YET_CONNECTED</a>, 
 <br />
-&#160;&#160;<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a07fdbda44f43cef9866a75b25053c2ae">NATS_DRAINING</a>
+&#160;&#160;<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a07fdbda44f43cef9866a75b25053c2ae">NATS_DRAINING</a>, 
+<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a0d239cfdfa30fe730afea65941779b">NATS_INVALID_QUEUE_NAME</a>, 
+<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a907a24d4f3c439ed10220e8862aac4bb">NATS_MSG_NOT_BOUND</a>, 
+<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab70c36dd1b07766571b0a71e6cb2d0af">NATS_MSG_NO_REPLY</a>
 <br />
  }<tr class="memdesc:a36c934157b663b7b5fb5d6609c897c80"><td class="mdescLeft">&#160;</td><td class="mdescRight">Status returned by most of the APIs.  <a href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">More...</a><br /></td></tr>
 </td></tr>
@@ -321,6 +324,15 @@ Enumerations</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a class="anchor" id="a36c934157b663b7b5fb5d6609c897c80a07fdbda44f43cef9866a75b25053c2ae"></a>NATS_DRAINING&#160;</td><td class="fielddoc">
 <p>A connection and/or subscription entered the draining mode. Some operations will fail when in that mode. </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="a36c934157b663b7b5fb5d6609c897c80a8a0d239cfdfa30fe730afea65941779b"></a>NATS_INVALID_QUEUE_NAME&#160;</td><td class="fielddoc">
+<p>An invalid queue name was passed when creating a queue subscription. </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="a36c934157b663b7b5fb5d6609c897c80a907a24d4f3c439ed10220e8862aac4bb"></a>NATS_MSG_NOT_BOUND&#160;</td><td class="fielddoc">
+<p>Using <a class="el" href="group__msg_group.html#ga69566646fdac27810490dfc385062e4c" title="Convenient function to send back a response for a request message. ">natsMsg_Respond()</a> with a message that has not been delivered and therefore not assigned to a connection and/or subscription. </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="a36c934157b663b7b5fb5d6609c897c80ab70c36dd1b07766571b0a71e6cb2d0af"></a>NATS_MSG_NO_REPLY&#160;</td><td class="fielddoc">
+<p>Using <a class="el" href="group__msg_group.html#ga69566646fdac27810490dfc385062e4c" title="Convenient function to send back a response for a request message. ">natsMsg_Respond()</a> with a message that does not have a reply subject. </p>
 </td></tr>
 </table>
 

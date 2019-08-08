@@ -1988,6 +1988,20 @@ natsMsg_GetData(natsMsg *msg);
 NATS_EXTERN int
 natsMsg_GetDataLength(natsMsg *msg);
 
+/** \brief Convenient function to send back a response for a request message.
+ *
+ * If a message is received and user knows that this message was
+ * a request, this function will send the reply using the connection
+ * this message was received from and the reply subject in the `request`
+ * message.
+ *
+ * @param request the pointer to the #natsMsg object.
+ * @param reply the data to send back.
+ * @param len the length of the `reply` data to send back.
+ */
+NATS_EXTERN natsStatus
+natsMsg_Respond(natsMsg *request, const void* reply, int len);
+
 /** \brief Destroys the message object.
  *
  * Destroys the message, freeing memory.

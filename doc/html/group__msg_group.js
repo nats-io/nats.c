@@ -5,5 +5,6 @@ var group__msg_group =
     [ "natsMsg_GetReply", "group__msg_group.html#ga3efb98fd6369d9b674638ea93cccf0ab", null ],
     [ "natsMsg_GetData", "group__msg_group.html#ga6bc3cece03b182d2c94e671fd3444cbd", null ],
     [ "natsMsg_GetDataLength", "group__msg_group.html#ga3ed150076a029a5b6a38667d2359e57a", null ],
+    [ "natsMsg_Respond", "group__msg_group.html#ga69566646fdac27810490dfc385062e4c", null ],
     [ "natsMsg_Destroy", "group__msg_group.html#ga9e9590018284939f43f60964283f33ae", null ]
 ];

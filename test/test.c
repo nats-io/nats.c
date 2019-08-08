@@ -2392,7 +2392,11 @@ test_natsOptions(void)
     testCond((s == NATS_OK) && (opts->maxPingsOut == 10));
 
     test("Set IOBufSize: ");
-    s = natsOptions_SetIOBufSize(opts, 1024 * 1024);
+    s = natsOptions_SetIOBufSize(opts, -1);
+    if ((s != NATS_OK) && (opts->ioBufSize == NATS_OPTS_DEFAULT_IO_BUF_SIZE))
+        s = natsOptions_SetIOBufSize(opts, 0);
+    if ((s == NATS_OK) && (opts->ioBufSize == 0))
+        s = natsOptions_SetIOBufSize(opts, 1024 * 1024);
     testCond((s == NATS_OK) && (opts->ioBufSize == 1024 * 1024));
 
     test("Set AllowReconnect: ");

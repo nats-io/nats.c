@@ -1045,15 +1045,15 @@ natsOptions_SetPingInterval(natsOptions *opts, int64_t interval);
 NATS_EXTERN natsStatus
 natsOptions_SetMaxPingsOut(natsOptions *opts, int maxPingsOut);
 
-/** \brief Sets the size of the internal read buffer.
+/** \brief Sets the size of the internal read/write buffers.
  *
- * Sets the size, in bytes, of the internal read buffer used for read data from
- * a socket.
+ * Sets the size, in bytes, of the internal read/write buffers used for
+ * reading/writing data from a socket.
  * If not specified, or the value is 0, the library will use a default value,
  * currently set to 32KB.
  *
  * @param opts the pointer to the #natsOptions object.
- * @param ioBufSize the size, in bytes, of the internal buffer for read
+ * @param ioBufSize the size, in bytes, of the internal buffer for read/write
  * operations.
  */
 NATS_EXTERN natsStatus

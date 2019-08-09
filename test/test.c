@@ -10284,6 +10284,7 @@ test_SubBadSubjectAndQueueName(void)
     natsPid             pid         = NATS_INVALID_PID;
     const char          *badSubs[]  = {"foo bar", "foo..bar", ".foo", "bar.baz.", "baz\t.foo"};
     const char          *badQueues[]= {"foo group", "group\t1", "g1\r\n2"};
+    const char          *goodSubs[] = {"foo.bar", "a.bcd", "abc.d"};
     char                buf[256];
     int                 i;
 
@@ -10301,6 +10302,16 @@ test_SubBadSubjectAndQueueName(void)
         s = natsConnection_SubscribeSync(&sub, nc, badSubs[i]);
         testCond((s == NATS_INVALID_SUBJECT) && (sub == NULL));
         nats_clearLastError();
+    }
+
+    for (i=0; i<(int) (sizeof(goodSubs)/sizeof(char*)); i++)
+    {
+        snprintf(buf, sizeof(buf), "test subject '%s': ", goodSubs[i]);
+        test(buf)
+        s = natsConnection_SubscribeSync(&sub, nc, goodSubs[i]);
+        testCond(s == NATS_OK);
+        natsSubscription_Destroy(sub);
+        sub = NULL;
     }
 
     for (i=0; i<(int) (sizeof(badQueues)/sizeof(char*)); i++)

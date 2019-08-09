@@ -2740,7 +2740,7 @@ _checkSubjOrQueue(const char *name, bool checkToken)
 {
     int     i       = 0;
     int     len     = 0;
-    int     lastDot = 0;
+    int     lastDot = -1;
     char    c;
 
     len = (int) strlen(name);
@@ -2752,7 +2752,7 @@ _checkSubjOrQueue(const char *name, bool checkToken)
 
         if (checkToken && (c == '.'))
         {
-            if ((i == 0) || (i == len-1) || (i == lastDot+1))
+            if ((i == len-1) || (i == lastDot+1))
                 return true;
 
             lastDot = i;

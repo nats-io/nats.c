@@ -24,10 +24,9 @@ option(NATS_BUILD_LIBEVENT_EXAMPLE "Build libevent examples" OFF)
 option(NATS_BUILD_STATIC_EXAMPLES "Statically link examples" OFF)
 option(NATS_BUILD_STREAMING "Build NATS Streaming" ON)
 option(NATS_BUILD_NO_PREFIX_CONNSTS "No prefix for connection status enum" OFF)
+option(NATS_BUILD_LIB_STATIC "Build static library" ON)
+option(NATS_BUILD_LIB_SHARED "Build shared library" ON)
 option(NATS_COMPILER_HARDENING "Compiler hardening flags" OFF)
-option(NATS_BUILD_STATIC_LIBRARY "Build static library" ON)
-option(NATS_BUILD_SHARED_LIBRARY "Build shared library" ON)
-
 
 if(DEFINED ENV{NATS_SANITIZE})
   set(NATS_STANITIZE "$ENV{NATS_SANITIZE}")

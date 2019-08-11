@@ -23,6 +23,14 @@
 #include "comsock.h"
 #include "mem.h"
 
+natsStatus
+natsSock_Init(natsSockCtx *ctx)
+{
+    memset(ctx, 0, sizeof(natsSockCtx));
+    ctx->fd = NATS_SOCK_INVALID;
+    return NATS_OK;
+}
+
 static void
 _closeFd(natsSock fd)
 {
@@ -69,37 +77,6 @@ natsSock_SetCommonTcpOptions(natsSock fd)
     return NATS_OK;
 }
 
-natsStatus
-natsSock_CreateFDSet(fd_set **newFDSet)
-{
-    fd_set  *fdSet = NULL;
-
-#ifdef _WIN32
-#else
-    assert(FD_SETSIZE == 32768);
-#endif
-
-    fdSet = (fd_set*) NATS_MALLOC(sizeof(fd_set));
-
-    if (fdSet == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
-
-    FD_ZERO(fdSet);
-
-    *newFDSet = fdSet;
-
-    return NATS_OK;
-}
-
-void
-natsSock_DestroyFDSet(fd_set *fdSet)
-{
-    if (fdSet == NULL)
-        return;
-
-    NATS_FREE(fdSet);
-}
-
 #define MAX_HOST_NAME   (256)
 
 natsStatus
@@ -114,7 +91,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     bool            waitForConnect = false;
     bool            error = false;
     int             i;
-    int             max = 2;
+    int             max = 1;
     char            hosta[MAX_HOST_NAME];
     int             hostLen;
     char            *host;
@@ -136,10 +113,10 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
 
     snprintf(sport, sizeof(sport), "%d", port);
 
-    if ((ctx->orderIP == 4) || (ctx->orderIP == 6))
-        max = 1;
+    if ((ctx->orderIP == 46) || (ctx->orderIP == 64))
+        max = 2;
 
-    for (i=0; i<max; i++)
+    for (i=0; (s != NATS_TIMEOUT) && i<max; i++)
     {
         memset(&hints,0,sizeof(hints));
         hints.ai_socktype = SOCK_STREAM;
@@ -175,9 +152,12 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
             if ((res == NATS_SOCK_ERROR)
                 && (NATS_SOCK_GET_ERROR == NATS_SOCK_CONNECT_IN_PROGRESS))
             {
-                if ((natsSock_WaitReady(WAIT_FOR_CONNECT, ctx) != NATS_OK)
-                    || !natsSock_IsConnected(ctx->fd))
+                s = natsSock_WaitReady(WAIT_FOR_CONNECT, ctx);
+                if (s == NATS_TIMEOUT)
+                    break;
+                else if ((s != NATS_OK) || !natsSock_IsConnected(ctx->fd))
                 {
+                    s = NATS_OK;
                     error = true;
                 }
             }

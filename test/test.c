@@ -3704,7 +3704,6 @@ _checkStart(const char *url, int orderIP, int maxAttempts)
             s = NATS_NO_SERVER;
     }
 
-    natsSock_Clear(&ctx);
     nats_clearLastError();
 
     return s;
@@ -12016,7 +12015,7 @@ test_BasicClusterReconnect(void)
 
     test("Check reconnect time did not take too long: ");
 #if _WIN32
-    testCond(reconnectTime <= 1100);
+    testCond(reconnectTime <= 1300);
 #else
     testCond(reconnectTime <= 100);
 #endif

@@ -191,7 +191,6 @@ _freeConn(natsConnection *nc)
     natsThread_Destroy(nc->flusherThread);
     natsHash_Destroy(nc->subs);
     natsOptions_Destroy(nc->opts);
-    natsSock_Clear(&nc->sockCtx);
     if (nc->sockCtx.ssl != NULL)
         SSL_free(nc->sockCtx.ssl);
     NATS_FREE(nc->el.buffer);

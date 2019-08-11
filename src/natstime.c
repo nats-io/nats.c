@@ -63,8 +63,6 @@ natsDeadline_Init(natsDeadline *deadline, int64_t timeout)
 {
     deadline->active          = true;
     deadline->absoluteTime    = nats_Now() + timeout;
-    deadline->timeout.tv_sec  = (long) timeout / 1000;
-    deadline->timeout.tv_usec = (timeout % 1000) * 1000;
 }
 
 void
@@ -73,18 +71,17 @@ natsDeadline_Clear(natsDeadline *deadline)
     deadline->active = false;
 }
 
-struct timeval*
+int
 natsDeadline_GetTimeout(natsDeadline *deadline)
 {
-    int64_t timeout;
+    int timeout;
 
     if (!(deadline->active))
-        return NULL;
+        return -1;
 
-    timeout = deadline->absoluteTime - nats_Now();
+    timeout = (int) (deadline->absoluteTime - nats_Now());
+    if (timeout < 0)
+        timeout = 0;
 
-    deadline->timeout.tv_sec  = (long) (timeout / 1000);
-    deadline->timeout.tv_usec = (timeout % 1000) * 1000;
-
-    return &(deadline->timeout);
+    return timeout;
 }

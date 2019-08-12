@@ -19,8 +19,6 @@
 natsStatus
 natsSock_Init(natsSockCtx *ctx);
 
-void
-natsSock_Clear(natsSockCtx *ctx);
 
 natsStatus
 natsSock_WaitReady(int waitMode, natsSockCtx *ctx);
@@ -30,12 +28,6 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port);
 
 natsStatus
 natsSock_SetBlocking(natsSock fd, bool blocking);
-
-natsStatus
-natsSock_CreateFDSet(fd_set **newFDSet);
-
-void
-natsSock_DestroyFDSet(fd_set *fdSet);
 
 bool
 natsSock_IsConnected(natsSock fd);

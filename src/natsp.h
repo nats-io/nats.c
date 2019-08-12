@@ -423,12 +423,7 @@ typedef struct __natsSockCtx
 
     // We switch to blocking socket after receiving the PONG to the first PING
     // during the connect process. Should we make all read/writes non blocking,
-    // then we will use two different fd sets, and also probably pass deadlines
-    // individually as opposed to use one at the connection level.
-    fd_set          *fdSet;
-#ifdef _WIN32
-    fd_set          *errSet;
-#endif
+    // then we will use two different deadlines.
     natsDeadline    deadline;
 
     SSL             *ssl;

@@ -23,49 +23,35 @@ natsSys_Init(void)
 }
 
 natsStatus
-natsSock_Init(natsSockCtx *ctx)
-{
-    memset(ctx, 0, sizeof(natsSockCtx));
-
-    ctx->fd = NATS_SOCK_INVALID;
-
-
-    return natsSock_CreateFDSet(&ctx->fdSet);
-}
-
-void
-natsSock_Clear(natsSockCtx *ctx)
-{
-    natsSock_DestroyFDSet(ctx->fdSet);
-}
-
-natsStatus
 natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
 {
-    struct timeval  *timeout = NULL;
-    int             res;
-    fd_set          *fdSet = ctx->fdSet;
-    natsSock        sock = ctx->fd;
     natsDeadline    *deadline = &(ctx->deadline);
+    struct pollfd   pfd       = {0};
+    int             timeout   = -1;
+    int             res;
 
-    FD_ZERO(fdSet);
-    FD_SET(sock, fdSet);
-
-     if (deadline != NULL)
-        timeout = natsDeadline_GetTimeout(deadline);
+    pfd.fd = ctx->fd;
 
     switch (waitMode)
     {
-        case WAIT_FOR_READ:     res = select((int) (sock + 1), fdSet, NULL, NULL, timeout); break;
-        case WAIT_FOR_WRITE:    res = select((int) (sock + 1), NULL, fdSet, NULL, timeout); break;
-        case WAIT_FOR_CONNECT:  res = select((int) (sock + 1), NULL, fdSet, NULL, timeout); break;
-        default: abort();
+        case WAIT_FOR_READ:
+            pfd.events = POLLIN;
+            break;
+        case WAIT_FOR_WRITE:
+        case WAIT_FOR_CONNECT:
+            pfd.events = POLLOUT;
+            break;
+        default:
+            abort();
     }
 
-    if (res == NATS_SOCK_ERROR)
-        return nats_setError(NATS_IO_ERROR, "select error: %d", res);
+    if (deadline != NULL)
+        timeout = natsDeadline_GetTimeout(deadline);
 
-    if ((res == 0) || !FD_ISSET(sock, fdSet))
+    res = poll(&pfd, 1, timeout);
+    if (res == NATS_SOCK_ERROR)
+        return nats_setError(NATS_IO_ERROR, "poll error: %d", NATS_SOCK_GET_ERROR);
+    else if (res == 0)
         return nats_setDefaultError(NATS_TIMEOUT);
 
     return NATS_OK;

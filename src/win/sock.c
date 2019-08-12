@@ -34,75 +34,55 @@ natsSys_Init(void)
     }
 }
 
-natsStatus
-natsSock_Init(natsSockCtx *ctx)
-{
-    natsStatus  s;
-
-    memset(ctx, 0, sizeof(natsSockCtx));
-
-    ctx->fd = NATS_SOCK_INVALID;
-
-    s = natsSock_CreateFDSet(&ctx->fdSet);
-    if (s == NATS_OK)
-    {
-        s = natsSock_CreateFDSet(&ctx->errSet);
-        if (s != NATS_OK)
-        {
-            natsSock_DestroyFDSet(ctx->fdSet);
-            ctx->fdSet = NULL;
-        }
-    }
-    return s;
-}
-
-void
-natsSock_Clear(natsSockCtx *ctx)
-{
-    natsSock_DestroyFDSet(ctx->fdSet);
-    natsSock_DestroyFDSet(ctx->errSet);
-}
 
 natsStatus
 natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
 {
-    struct timeval  *timeout = NULL;
-    int             res;
-    fd_set          *fdSet = ctx->fdSet;
-    fd_set          *errSet = ctx->errSet;
-    natsSock        sock = ctx->fd;
     natsDeadline    *deadline = &(ctx->deadline);
+    struct timeval  timeout_tv= {0};
+    struct timeval  *timeout  = NULL;
+    natsSock        sock      = ctx->fd;
+    fd_set          fdSet;
+    fd_set          errSet;
+    int             res;
+    int64_t start, dur;
 
-    FD_ZERO(fdSet);
-    FD_SET(sock, fdSet);
+    FD_ZERO(&fdSet);
+    FD_SET(sock, &fdSet);
 
-    FD_ZERO(errSet);
-    FD_SET(sock, errSet);
+    FD_ZERO(&errSet);
+    FD_SET(sock, &errSet);
 
     if (deadline != NULL)
-        timeout = natsDeadline_GetTimeout(deadline);
+    {
+        int timeoutMS = natsDeadline_GetTimeout(deadline);
+        timeout_tv.tv_sec = (long) timeoutMS / 1000;
+        timeout_tv.tv_usec = (timeoutMS % 1000) * 1000;
+        timeout = &timeout_tv;
+    }
 
+    start = nats_Now();
+    // On Windows, we will know if the non-blocking connect has failed
+    // by using the exception set, not the write set.
     switch (waitMode)
     {
-        case WAIT_FOR_READ:     res = select((int) (sock + 1), fdSet, NULL, NULL, timeout); break;
-        case WAIT_FOR_WRITE:    res = select((int) (sock + 1), NULL, fdSet, NULL, timeout); break;
-        // On Windows, we will know if the non-blocking connect has failed
-        // by using the exception set, not the write set.
-        case WAIT_FOR_CONNECT:  res = select((int) (sock + 1), NULL, fdSet, errSet, timeout); break;
+        case WAIT_FOR_READ:
+            res = select(0, &fdSet, NULL, &errSet, timeout);
+            break;
+        case WAIT_FOR_WRITE:
+        case WAIT_FOR_CONNECT:
+            res = select(0, NULL, &fdSet, &errSet, timeout);
+            break;
         default: abort();
     }
+    dur = nats_Now()-start;
 
     if (res == NATS_SOCK_ERROR)
-        return nats_setError(NATS_IO_ERROR, "select error: %d", res);
+        return nats_setError(NATS_IO_ERROR, "select error: %d", NATS_SOCK_GET_ERROR);
 
-    // Not ready if select returned no socket, the socket is not in the
-    // given fdSet, or for connect, the socket is set in the error set.
-    if ((res == 0)
-            || !FD_ISSET(sock, fdSet)
-            || ((waitMode == WAIT_FOR_CONNECT) && FD_ISSET(sock, errSet)))
-    {
+    // Not ready...
+    if (res == 0)
         return nats_setDefaultError(NATS_TIMEOUT);
-    }
 
     return NATS_OK;
 }

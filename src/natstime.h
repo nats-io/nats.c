@@ -20,7 +20,6 @@
 typedef struct __natsDeadline
 {
     int64_t             absoluteTime;
-    struct timeval      timeout;
     bool                active;
 
 } natsDeadline;
@@ -28,7 +27,7 @@ typedef struct __natsDeadline
 void
 natsDeadline_Init(natsDeadline *deadline, int64_t timeout);
 
-struct timeval*
+int
 natsDeadline_GetTimeout(natsDeadline *deadline);
 
 void

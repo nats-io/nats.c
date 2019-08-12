@@ -1,5 +1,9 @@
 if(NOT BUILD_TESTING)
   return()
+endif()
+if(NOT NATS_BUILD_LIB_STATIC)
+   message("Building tests require static library")
+  return()
 endif()  
 
 # We need this to build the test program

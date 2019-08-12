@@ -1,6 +1,9 @@
 if(NOT NATS_BUILD_EXAMPLES)
   return()
 endif()
+if(NOT NATS_BUILD_STATIC_EXAMPLES AND NOT NATS_BUILD_LIB_SHARED)
+  message("Building examples require shared library")
+endif()
 
 # We need this directory to build the examples
 include_directories(${PROJECT_SOURCE_DIR}/src)

@@ -34,6 +34,7 @@
 #include "nkeys.h"
 
 #define DEFAULT_SCRATCH_SIZE    (512)
+#define MAX_INFO_MESSAGE_SIZE   (32768)
 
 #define NATS_EVENT_ACTION_ADD       (true)
 #define NATS_EVENT_ACTION_REMOVE    (false)
@@ -477,20 +478,13 @@ static natsStatus
 _readOp(natsConnection *nc, natsControl *control)
 {
     natsStatus  s = NATS_OK;
-    char        *buffer;
-
-    buffer = NATS_MALLOC(nc->opts->ioBufSize);
-    if (buffer == NULL) {
-        return NATS_UPDATE_ERR_STACK(NATS_NO_MEMORY);
-    }
+    char        buffer[MAX_INFO_MESSAGE_SIZE];
 
     buffer[0] = '\0';
 
-    s = natsSock_ReadLine(&(nc->sockCtx), buffer, nc->opts->ioBufSize);
+    s = natsSock_ReadLine(&(nc->sockCtx), buffer, sizeof(buffer));
     if (s == NATS_OK)
         s = nats_ParseControl(control, buffer);
-
-    NATS_FREE(buffer);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

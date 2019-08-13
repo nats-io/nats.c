@@ -34,8 +34,7 @@
 #include "nkeys.h"
 
 #define DEFAULT_SCRATCH_SIZE    (512)
-#define DEFAULT_BUF_SIZE        (32768)
-#define DEFAULT_PENDING_SIZE    (1024 * 1024)
+#define MAX_INFO_MESSAGE_SIZE   (32768)
 
 #define NATS_EVENT_ACTION_ADD       (true)
 #define NATS_EVENT_ACTION_REMOVE    (false)
@@ -313,7 +312,7 @@ natsConn_bufferWrite(natsConnection *nc, const char *buffer, int len)
     {
         s = natsBuf_Append(nc->bw, buffer, len);
         if ((s == NATS_OK)
-            && (natsBuf_Len(nc->bw) >= DEFAULT_BUF_SIZE)
+            && (natsBuf_Len(nc->bw) >= nc->opts->ioBufSize)
             && !(nc->el.writeAdded))
         {
             nc->el.writeAdded = true;
@@ -412,7 +411,7 @@ _createConn(natsConnection *nc)
         natsStatus ls = NATS_OK;
 
         if (nc->bw == NULL)
-            ls = natsBuf_Create(&(nc->bw), DEFAULT_BUF_SIZE);
+            ls = natsBuf_Create(&(nc->bw), nc->opts->ioBufSize);
         else
             natsBuf_Reset(nc->bw);
 
@@ -483,7 +482,7 @@ static natsStatus
 _readOp(natsConnection *nc, natsControl *control)
 {
     natsStatus  s = NATS_OK;
-    char        buffer[DEFAULT_BUF_SIZE];
+    char        buffer[MAX_INFO_MESSAGE_SIZE];
 
     buffer[0] = '\0';
 
@@ -1823,7 +1822,7 @@ _processConnInit(natsConnection *nc)
         // If we are reconnecting, buffer will have already been allocated
         if ((s == NATS_OK) && (nc->el.buffer == NULL))
         {
-            nc->el.buffer = (char*) malloc(DEFAULT_BUF_SIZE);
+            nc->el.buffer = (char*) malloc(nc->opts->ioBufSize);
             if (nc->el.buffer == NULL)
                 s = nats_setDefaultError(NATS_NO_MEMORY);
         }
@@ -2062,18 +2061,30 @@ static void
 _readLoop(void  *arg)
 {
     natsStatus  s = NATS_OK;
-    char        buffer[DEFAULT_BUF_SIZE];
+    char        *buffer;
     natsSock    fd;
     int         n;
+    int         bufSize;
 
     natsConnection *nc = (natsConnection*) arg;
 
     natsConn_Lock(nc);
 
+    fd = nc->sockCtx.fd;
+    bufSize = nc->opts->ioBufSize;
+
+    buffer = NATS_MALLOC(bufSize);
+    if (buffer == NULL) {
+        natsSock_Close(fd);
+        nc->sockCtx.fd       = NATS_SOCK_INVALID;
+        nc->sockCtx.fdActive = false;
+
+        natsConn_unlockAndRelease(nc);
+        return;
+    }
+
     if (nc->sockCtx.ssl != NULL)
         nats_sslRegisterThreadForCleanup();
-
-    fd = nc->sockCtx.fd;
 
     if (nc->ps == NULL)
         s = natsParser_Create(&(nc->ps));
@@ -2086,7 +2097,7 @@ _readLoop(void  *arg)
 
         n = 0;
 
-        s = natsSock_Read(&(nc->sockCtx), buffer, sizeof(buffer), &n);
+        s = natsSock_Read(&(nc->sockCtx), buffer, bufSize, &n);
         if (s == NATS_OK)
             s = natsParser_Parse(nc, buffer, n);
 
@@ -2095,6 +2106,8 @@ _readLoop(void  *arg)
 
         natsConn_Lock(nc);
     }
+
+    NATS_FREE(buffer);
 
     natsSock_Close(fd);
     nc->sockCtx.fd       = NATS_SOCK_INVALID;
@@ -3000,6 +3013,9 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     if (nc->opts->maxPingsOut == 0)
         nc->opts->maxPingsOut = NATS_OPTS_DEFAULT_MAX_PING_OUT;
 
+    if (nc->opts->ioBufSize == 0)
+        nc->opts->ioBufSize = NATS_OPTS_DEFAULT_IO_BUF_SIZE;
+
     if (nc->opts->maxPendingMsgs == 0)
         nc->opts->maxPendingMsgs = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
 
@@ -3799,7 +3815,7 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
     _retain(nc);
 
     buffer = nc->el.buffer;
-    size   = DEFAULT_BUF_SIZE;
+    size   = nc->opts->ioBufSize;
 
     natsConn_Unlock(nc);
 

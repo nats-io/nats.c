@@ -597,6 +597,17 @@ natsOptions_SetMaxPingsOut(natsOptions *opts, int maxPignsOut)
     return NATS_OK;
 }
 
+natsStatus
+natsOptions_SetIOBufSize(natsOptions *opts, int ioBufSize)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, (ioBufSize < 0));
+
+    opts->ioBufSize = ioBufSize;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
 
 natsStatus
 natsOptions_SetAllowReconnect(natsOptions *opts, bool allow)
@@ -1066,6 +1077,7 @@ natsOptions_Create(natsOptions **newOpts)
     opts->reconnectWait  = NATS_OPTS_DEFAULT_RECONNECT_WAIT;
     opts->pingInterval   = NATS_OPTS_DEFAULT_PING_INTERVAL;
     opts->maxPingsOut    = NATS_OPTS_DEFAULT_MAX_PING_OUT;
+    opts->ioBufSize      = NATS_OPTS_DEFAULT_IO_BUF_SIZE;
     opts->maxPendingMsgs = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
     opts->timeout        = NATS_OPTS_DEFAULT_TIMEOUT;
     opts->libMsgDelivery = natsLib_isLibHandlingMsgDeliveryByDefault();

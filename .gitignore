@@ -6,6 +6,7 @@ Compiled Object files, Static and Dynamic libs (Shared Objects)
 
 # Folders
 build*/
+cmake-build*/
 install/
 html/
 !doc/html/
@@ -21,6 +22,7 @@ html/
 .settings/
 
 .vscode/
+.idea/
 
 # Mac
 .DS_Store

@@ -56,9 +56,12 @@ natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
     if (deadline != NULL)
     {
         int timeoutMS = natsDeadline_GetTimeout(deadline);
-        timeout_tv.tv_sec = (long) timeoutMS / 1000;
-        timeout_tv.tv_usec = (timeoutMS % 1000) * 1000;
-        timeout = &timeout_tv;
+        if (timeoutMS != -1)
+        {
+            timeout_tv.tv_sec = (long) timeoutMS / 1000;
+            timeout_tv.tv_usec = (timeoutMS % 1000) * 1000;
+            timeout = &timeout_tv;
+        }
     }
 
     start = nats_Now();

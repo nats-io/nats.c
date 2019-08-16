@@ -34,6 +34,7 @@ natsKeys
 natsReadFile
 natsGetJWTOrSeed
 natsHostIsIP
+natsWaitReady
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize

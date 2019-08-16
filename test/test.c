@@ -3682,6 +3682,119 @@ test_natsHostIsIP(void)
     }
 }
 
+static void
+_testWaitReadyServer(void *closure)
+{
+    struct addrinfo     *servinfo = NULL;
+    natsStatus          s         = NATS_OK;
+    natsSock            sock      = NATS_SOCK_INVALID;
+    natsSock            cliSock   = NATS_SOCK_INVALID;
+    struct addrinfo     hints;
+    int                 res;
+
+    memset(&hints,0,sizeof(hints));
+
+    hints.ai_family   = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags    = AI_PASSIVE;
+
+    if ((res = getaddrinfo("127.0.0.1", "1234", &hints, &servinfo)) != 0)
+         s = NATS_SYS_ERROR;
+    if (s == NATS_OK)
+    {
+        sock = socket(servinfo->ai_family, servinfo->ai_socktype,
+                      servinfo->ai_protocol);
+        if (sock == NATS_SOCK_INVALID)
+            s = NATS_SYS_ERROR;
+
+        if (s == NATS_OK)
+            s = natsSock_SetCommonTcpOptions(sock);
+        if (s == NATS_OK)
+            s = natsSock_SetBlocking(sock, true);
+    }
+    if ((s == NATS_OK)
+        && (bind(sock, servinfo->ai_addr, (natsSockLen) servinfo->ai_addrlen) == NATS_SOCK_ERROR))
+    {
+        s = NATS_SYS_ERROR;
+    }
+
+    if ((s == NATS_OK) && (listen(sock, 100) == 0))
+    {
+        cliSock = accept(sock, NULL, NULL);
+        if ((cliSock != NATS_SOCK_INVALID)
+                && (natsSock_SetCommonTcpOptions(cliSock) == NATS_OK))
+        {
+            nats_Sleep(500);
+
+            if (send(cliSock, "*", 1, 0) != NATS_SOCK_ERROR)
+                nats_Sleep(300);
+
+            natsSock_Close(cliSock);
+        }
+    }
+    natsSock_Close(sock);
+    freeaddrinfo(servinfo);
+}
+
+static void
+test_natsWaitReady(void)
+{
+    natsStatus          s  = NATS_OK;
+    natsThread          *t = NULL;
+    natsSockCtx         ctx;
+    int64_t             start, dur;
+    char                buffer[1];
+    int                 i;
+
+    if (natsThread_Create(&t, _testWaitReadyServer, NULL) != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Connect: ");
+    natsSock_Init(&ctx);
+    ctx.orderIP = 4;
+    natsDeadline_Clear(&ctx.deadline);
+    for (i=0; i<20; i++)
+    {
+        s = natsSock_ConnectTcp(&ctx, "127.0.0.1", 1234);
+        if (s == NATS_OK)
+            break;
+        nats_Sleep(100);
+    }
+    testCond(s == NATS_OK);
+
+    test("Set non blocking: ");
+    s = natsSock_SetCommonTcpOptions(ctx.fd);
+    if (s == NATS_OK)
+        s = natsSock_SetBlocking(ctx.fd, false);
+    testCond(s == NATS_OK);
+
+    // Ensure that we get a would_block on read..
+    while (recv(ctx.fd, buffer, 1, 0) != -1) {}
+
+    test("WaitReady no deadline: ");
+    natsDeadline_Clear(&ctx.deadline);
+    start = nats_Now();
+    s = natsSock_WaitReady(WAIT_FOR_READ, &ctx);
+    dur = nats_Now()-start;
+    testCond((s == NATS_OK) && (dur >= 450) && (dur <= 600));
+
+    // Ensure that we get a would_block on read..
+    while (recv(ctx.fd, buffer, 1, 0) != -1) {}
+
+    test("WaitReady deadline timeout: ");
+    natsDeadline_Init(&ctx.deadline, 50);
+    start = nats_Now();
+    s = natsSock_WaitReady(WAIT_FOR_READ, &ctx);
+    dur = nats_Now()-start;
+    testCond((s == NATS_TIMEOUT) && (dur >= 40) && (dur <= 100));
+
+    natsSock_Close(ctx.fd);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+}
+
 static natsStatus
 _checkStart(const char *url, int orderIP, int maxAttempts)
 {
@@ -8295,6 +8408,7 @@ _startServerSendErrThread(void *closure)
 
     natsMutex_Lock(arg->m);
     arg->status = s;
+    arg->sock   = sock;
     natsCondition_Signal(arg->c);
     natsMutex_Unlock(arg->m);
 
@@ -8334,7 +8448,8 @@ _startServerSendErrThread(void *closure)
             // Fail on initial CONNECT
             snprintf(buffer, sizeof(buffer), "-ERR '%s'\r\n", AUTHORIZATION_ERR);
             s = natsSock_WriteFully(&ctx, buffer, (int)strlen(buffer));
-            natsSock_Shutdown(ctx.fd);
+            nats_Sleep(100);
+            natsSock_Close(ctx.fd);
         }
         else if (s == NATS_OK)
         {
@@ -8348,7 +8463,8 @@ _startServerSendErrThread(void *closure)
 
                 snprintf(buffer, sizeof(buffer), "-ERR '%s'\r\n", AUTHENTICATION_EXPIRED_ERR);
                 s = natsSock_WriteFully(&ctx, buffer, (int)strlen(buffer));
-                natsSock_Shutdown(ctx.fd);
+                nats_Sleep(100);
+                natsSock_Close(ctx.fd);
             }
             else if (s == NATS_OK)
             {
@@ -8370,7 +8486,7 @@ _startServerSendErrThread(void *closure)
                     buffer[0] = '\0';
                     s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
                 }
-                natsSock_Shutdown(ctx.fd);
+                natsSock_Close(ctx.fd);
             }
         }
     }
@@ -8521,6 +8637,14 @@ test_AuthenticationExpired(void)
     s = _waitForConnClosed(&arg);
     testCond(s == NATS_OK);
     nc = NULL;
+
+    natsMutex_Lock(arg.m);
+#ifdef LINUX
+    natsSock_Shutdown(arg.sock);
+#else
+    natsSock_Close(arg.sock);
+#endif
+    natsMutex_Unlock(arg.m);
 
     natsThread_Join(t);
     natsThread_Destroy(t);
@@ -18172,6 +18296,7 @@ static testInfo allTests[] =
     {"natsReadFile",                    test_natsReadFile},
     {"natsGetJWTOrSeed",                test_natsGetJWTOrSeed},
     {"natsHostIsIP",                    test_natsHostIsIP},
+    {"natsWaitReady",                   test_natsWaitReady},
 
     // Package Level Tests
 

@@ -41,6 +41,7 @@ _threadStart(void *arg)
     NATS_FREE(c);
 
     nats_ReleaseThreadMemory();
+    natsLib_Release();
 
     return NULL;
 }
@@ -53,6 +54,7 @@ natsThread_Create(natsThread **thread, natsThreadCb cb, void *arg)
     natsStatus          s    = NATS_OK;
     int                 err;
 
+    natsLib_Retain();
     ctx = (struct threadCtx*) NATS_CALLOC(1, sizeof(*ctx));
     t = (natsThread*) NATS_CALLOC(1, sizeof(natsThread));
 
@@ -78,6 +80,7 @@ natsThread_Create(natsThread **thread, natsThreadCb cb, void *arg)
     {
         NATS_FREE(ctx);
         NATS_FREE(t);
+        natsLib_Release();
     }
 
     return s;
@@ -161,9 +164,12 @@ natsThreadLocal_SetEx(natsThreadLocal tl, const void *value, bool setErr)
 
     if ((ret = pthread_setspecific(tl, value)) != 0)
     {
-        return nats_setError(NATS_SYS_ERROR,
-                             "pthread_setspecific: %d",
-                             ret);
+        if (setErr)
+            return nats_setError(NATS_SYS_ERROR,
+                                 "pthread_setspecific: %d",
+                                 ret);
+        else
+            return NATS_SYS_ERROR;
     }
 
     return NATS_OK;

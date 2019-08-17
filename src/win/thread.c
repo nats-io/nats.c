@@ -62,6 +62,7 @@ static unsigned __stdcall _threadStart(void* arg)
   NATS_FREE(c);
 
   nats_ReleaseThreadMemory();
+  natsLib_Release();
 
   return 0;
 }
@@ -73,6 +74,7 @@ natsThread_Create(natsThread **thread, natsThreadCb cb, void *arg)
     natsThread          *t   = NULL;
     natsStatus          s    = NATS_OK;
 
+    natsLib_Retain();
     ctx = (struct threadCtx*) NATS_CALLOC(1, sizeof(*ctx));
     t = (natsThread*) NATS_CALLOC(1, sizeof(natsThread));
 
@@ -100,6 +102,7 @@ natsThread_Create(natsThread **thread, natsThreadCb cb, void *arg)
     {
         NATS_FREE(ctx);
         NATS_FREE(t);
+        natsLib_Release();
     }
 
     return s;

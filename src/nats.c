@@ -105,6 +105,7 @@ typedef struct __natsLib
     natsCondition   *closeCompleteCond;
     bool            *closeCompleteBool;
     bool            closeCompleteSignal;
+    bool            finalCleanup;
     // Do not move 'refs' without checking _freeLib()
     int             refs;
 
@@ -146,17 +147,6 @@ _cleanupThreadSSL(void *localStorage)
 static void
 _finalCleanup(void)
 {
-    int refs = 0;
-
-    natsMutex_Lock(gLib.lock);
-    refs = gLib.refs;
-    natsMutex_Unlock(gLib.lock);
-
-    // If some thread is still around when the process exits and has a
-    // reference to the library, then don't do the final cleanup...
-    if (refs != 0)
-        return;
-
     if (gLib.sslInitialized)
     {
 #if defined(NATS_HAS_TLS)
@@ -245,6 +235,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, // DLL module handle
 static void
 natsLib_Destructor(void)
 {
+    int refs = 0;
+
     if (!(gLib.wasOpenedOnce))
         return;
 
@@ -252,6 +244,21 @@ natsLib_Destructor(void)
     nats_ReleaseThreadMemory();
 
     // Do the final cleanup if possible
+    natsMutex_Lock(gLib.lock);
+    refs = gLib.refs;
+    if (refs > 0)
+    {
+        // If some thread is still around when the process exits and has a
+        // reference to the library, then don't do the final cleanup now.
+        // If the process has not fully exited when the lib's last reference
+        // is decremented, the final cleanup will be executed from that thread.
+        gLib.finalCleanup = true;
+    }
+    natsMutex_Unlock(gLib.lock);
+
+    if (refs != 0)
+        return;
+
     _finalCleanup();
 }
 
@@ -314,6 +321,8 @@ static void
 _freeLib(void)
 {
     const unsigned int offset = (unsigned int) offsetof(natsLib, refs);
+    bool               callFinalCleanup = false;
+
     _freeTimers();
     _freeAsyncCbs();
     _freeGC();
@@ -325,6 +334,7 @@ _freeLib(void)
     memset((void*) (offset + (char*)&gLib), 0, sizeof(natsLib) - offset);
 
     natsMutex_Lock(gLib.lock);
+    callFinalCleanup = gLib.finalCleanup;
     if (gLib.closeCompleteCond != NULL)
     {
         if (gLib.closeCompleteSignal)
@@ -338,7 +348,11 @@ _freeLib(void)
     }
     gLib.closed      = false;
     gLib.initialized = false;
+    gLib.finalCleanup= false;
     natsMutex_Unlock(gLib.lock);
+
+    if (callFinalCleanup)
+        _finalCleanup();
 }
 
 void

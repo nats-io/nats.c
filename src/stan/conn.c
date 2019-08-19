@@ -1,4 +1,4 @@
-// Copyright 2018 The NATS Authors
+// Copyright 2018-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -301,6 +301,10 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
     // We don't support SetRetryOnFailedConnect for now
     if ((s == NATS_OK) && (opts != NULL))
         s = natsOptions_SetRetryOnFailedConnect(sc->opts->ncOpts, false, NULL, NULL);
+
+    // Set the URL if provided through STAN options
+    if ((s == NATS_OK) && (sc->opts->url != NULL))
+        s = natsOptions_SetURL(sc->opts->ncOpts, sc->opts->url);
 
     // Connect to NATS
     if (s == NATS_OK)

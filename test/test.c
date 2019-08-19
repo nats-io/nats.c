@@ -16477,8 +16477,7 @@ test_StanConnOptions(void)
             (opts->pingInterval == STAN_CONN_OPTS_DEFAULT_PING_INTERVAL) &&
             (opts->pingMaxOut == STAN_CONN_OPTS_DEFAULT_PING_MAX_OUT) &&
             (opts->pubAckTimeout == STAN_CONN_OPTS_DEFAULT_PUB_ACK_TIMEOUT) &&
-            (strcmp(opts->url, NATS_DEFAULT_URL) == 0)
-            );
+            (opts->url == NULL));
 
     test("Check invalid connection wait: ");
     s = stanConnOptions_SetConnectionWait(opts, -10);
@@ -16527,13 +16526,6 @@ test_StanConnOptions(void)
     testCond(s != NATS_OK);
     nats_clearLastError();
 
-    test("Check invalid url: ");
-    s = stanConnOptions_SetURL(opts, NULL);
-    if (s != NATS_OK)
-        s = stanConnOptions_SetURL(opts, "");
-    testCond(s != NATS_OK);
-    nats_clearLastError();
-
     test("Set values: ");
     s = stanConnOptions_SetConnectionWait(opts, 10000);
     if (s == NATS_OK)
@@ -16579,7 +16571,7 @@ test_StanConnOptions(void)
 
     test("Check clone: ");
     s = stanConnOptions_clone(&clone, opts);
-    // Change valuse from original, check that clone
+    // Change values from original, check that clone
     // keeps original values.
     if (s == NATS_OK)
         s = stanConnOptions_SetConnectionWait(opts, 3000);
@@ -16619,6 +16611,10 @@ test_StanConnOptions(void)
             (opts->ncOpts == NULL) &&
             (opts->connectionLostCB == NULL) &&
             (opts->connectionLostCBClosure == NULL));
+
+    test("Check URL can be set to NULL: ");
+    s = stanConnOptions_SetURL(opts, NULL);
+    testCond(s == NATS_OK);
 
     test("Check clone ok after destroy original: ");
     stanConnOptions_Destroy(opts);
@@ -16839,6 +16835,8 @@ test_StanBasicConnect(void)
     natsStatus      s;
     stanConnection  *sc = NULL;
     natsPid         pid = NATS_INVALID_PID;
+    stanConnOptions *opts   = NULL;
+    natsOptions     *nopts  = NULL;
 
     pid = _startStreamingServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(pid);
@@ -16856,6 +16854,53 @@ test_StanBasicConnect(void)
     testCond(s == NATS_OK);
 
     stanConnection_Destroy(sc);
+    sc = NULL;
+
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+
+    pid = _startStreamingServer("nats://127.0.0.1:4223", "-p 4223", true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect with non default stan URL: ");
+    s = stanConnOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = stanConnOptions_SetURL(opts, "nats://127.0.0.1:4223");
+    if (s == NATS_OK)
+        s = stanConnection_Connect(&sc, clusterName, clientName, opts);
+    testCond(s == NATS_OK);
+
+    stanConnection_Destroy(sc);
+    sc = NULL;
+
+    test("stan URL takes precedence: ");
+    s = natsOptions_Create(&nopts);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(nopts, "nats://127.0.0.1:4224"); // wrong URL
+    if (s == NATS_OK)
+        s = stanConnOptions_SetNATSOptions(opts, nopts);
+    if (s == NATS_OK)
+        s = stanConnection_Connect(&sc, clusterName, clientName, opts);
+    // Should connect because it should use the one from stanConnOptions_SetURL.
+    testCond(s == NATS_OK);
+
+    stanConnection_Destroy(sc);
+    sc = NULL;
+
+    test("If no stan URL set, uses NATS URL: ");
+    s = stanConnOptions_SetURL(opts, NULL);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(nopts, "nats://127.0.0.1:4223");
+    if (s == NATS_OK)
+        s = stanConnOptions_SetNATSOptions(opts, nopts);
+    if (s == NATS_OK)
+        s = stanConnection_Connect(&sc, clusterName, clientName, opts);
+    // Should connect because it should use the one from StanURL.
+    testCond(s == NATS_OK);
+
+    stanConnection_Destroy(sc);
+    stanConnOptions_Destroy(opts);
+    natsOptions_Destroy(nopts);
 
     _stopServer(pid);
 }

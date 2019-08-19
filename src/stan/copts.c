@@ -1,4 +1,4 @@
-// Copyright 2018 The NATS Authors
+// Copyright 2018-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -48,8 +48,7 @@ stanConnOptions_Create(stanConnOptions **newOpts)
         return NATS_UPDATE_ERR_STACK(NATS_NO_MEMORY);
     }
 
-    DUP_STRING(s, opts->url, NATS_DEFAULT_URL);
-    IF_OK_DUP_STRING(s, opts->discoveryPrefix, STAN_CONN_OPTS_DEFAULT_DISCOVERY_PREFIX);
+    DUP_STRING(s, opts->discoveryPrefix, STAN_CONN_OPTS_DEFAULT_DISCOVERY_PREFIX);
     if (s == NATS_OK)
     {
         opts->pubAckTimeout = STAN_CONN_OPTS_DEFAULT_PUB_ACK_TIMEOUT;
@@ -73,14 +72,15 @@ stanConnOptions_SetURL(stanConnOptions *opts, const char *url)
 {
     natsStatus s = NATS_OK;
 
-    LOCK_AND_CHECK_OPTIONS(opts, ((url == NULL) || (url[0] == '\0')));
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
 
     if (opts->url != NULL)
     {
         NATS_FREE(opts->url);
         opts->url = NULL;
     }
-    DUP_STRING(s, opts->url, url);
+    if ((url != NULL) && (url[0] != '\0'))
+        DUP_STRING(s, opts->url, url);
 
     UNLOCK_OPTS(opts);
 
@@ -215,10 +215,8 @@ stanConnOptions_clone(stanConnOptions **clonedOpts, stanConnOptions *opts)
     if (s != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
-    // The Create call sets (strdup) the default URL and discovery prefix.
+    // The Create call sets (strdup) the default discovery prefix.
     // So free those now.
-    NATS_FREE(cloned->url);
-    cloned->url = NULL;
     NATS_FREE(cloned->discoveryPrefix);
     cloned->discoveryPrefix = NULL;
 

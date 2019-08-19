@@ -1,4 +1,4 @@
-// Copyright 2018 The NATS Authors
+// Copyright 2018-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -25,7 +25,7 @@ struct __stanConnOptions
 {
     natsMutex                   *mu;
 
-    // URL to connect to, unless ncOpts is not NULL.
+    // URL to connect to. Takes precedence to any URL set in ncOpts.
     char                        *url;
 
     // Low level NATS connection options to use to create the NATS connection.

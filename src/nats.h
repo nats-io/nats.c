@@ -1581,13 +1581,18 @@ stanConnOptions_Create(stanConnOptions **newOpts);
 /** \brief Sets the URL to connect to.
  *
  * Sets the URL of the `NATS Streaming Server` the client should try to connect to.
- * The URL can contain optional user name and password.
+ * The URL can contain optional user name and password. You can provide a comma
+ * separated list of URLs too.
  *
  * Some valid URLS:
  *
  * - nats://localhost:4222
  * - nats://user\@localhost:4222
  * - nats://user:password\@localhost:4222
+ * - nats://host1:4222,nats://host2:4222,nats://host3:4222
+ *
+ * \note This option takes precedence over #natsOptions_SetURL when NATS options
+ * are passed with #stanConnOptions_SetNATSOptions.
  *
  * @param opts the pointer to the #stanConnOptions object.
  * @param url the string representing the URL the connection should use
@@ -1605,6 +1610,9 @@ stanConnOptions_SetURL(stanConnOptions *opts, const char *url);
  *
  * This function clones the passed options, so after this call, any
  * changes to the given #natsOptions will not affect the #stanConnOptions.
+ *
+ * \note If both #natsOptions_SetURL and #stanConnOptions_SetURL are used
+ * the URL(s) set in the later take precedence.
  *
  * @param opts the pointer to the #stanConnOptions object.
  * @param nOpts the pointer to the #natsOptions object to use to create

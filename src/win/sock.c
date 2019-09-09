@@ -45,7 +45,6 @@ natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
     fd_set          fdSet;
     fd_set          errSet;
     int             res;
-    int64_t start, dur;
 
     FD_ZERO(&fdSet);
     FD_SET(sock, &fdSet);
@@ -64,7 +63,6 @@ natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
         }
     }
 
-    start = nats_Now();
     // On Windows, we will know if the non-blocking connect has failed
     // by using the exception set, not the write set.
     switch (waitMode)
@@ -78,7 +76,6 @@ natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
             break;
         default: abort();
     }
-    dur = nats_Now()-start;
 
     if (res == NATS_SOCK_ERROR)
         return nats_setError(NATS_IO_ERROR, "select error: %d", NATS_SOCK_GET_ERROR);

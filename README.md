@@ -754,6 +754,15 @@ passing a connection handler:
 ```
 Check the example `examples/connect.c` for more use cases.
 
+You can also specify a write deadline which means that when the library is trying to
+send bytes to the NATS Server, if the connection if unhealthy but as not been reported
+as closed, calls will fail with a `NATS_TIMEOUT` error. The socket will be closed and
+the library will attempt to reconnect (unless disabled). Note that this could also
+happen in the event the server is not consuming fast enough.
+```c
+    // Sets a write deadline of 2 seconds (value is in milliseconds).
+    s = natsOptions_SetWriteDeadline(opts, 2000);
+```
 
 ## Clustered Usage
 

@@ -1529,6 +1529,22 @@ natsOptions_SetNKey(natsOptions             *opts,
                     natsSignatureHandler    sigCB,
                     void                    *sigClosure);
 
+/** \brief Sets the write deadline.
+ *
+ * If this is set, the socket is set to non-blocking mode and
+ * write will have a deadline set. If the deadline is reached,
+ * the write call will return an error which will translate
+ * to publish calls, or any library call trying to send data
+ * to the server, to possibly fail.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param deadline the write deadline expressed in milliseconds.
+ * If set to 0, it means that there is no deadline and socket
+ * is in blocking mode.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetWriteDeadline(natsOptions *opts, int64_t deadline);
+
 /** \brief Destroys a #natsOptions object.
  *
  * Destroys the natsOptions object, freeing used memory. See the note in

@@ -25,7 +25,7 @@ natsSys_Init(void)
 natsStatus
 natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
 {
-    natsDeadline    *deadline = &(ctx->deadline);
+    natsDeadline    *deadline = &(ctx->writeDeadline);
     struct pollfd   pfd       = {0};
     int             timeout   = -1;
     int             res;
@@ -35,6 +35,7 @@ natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
     switch (waitMode)
     {
         case WAIT_FOR_READ:
+            deadline = &(ctx->readDeadline);
             pfd.events = POLLIN;
             break;
         case WAIT_FOR_WRITE:

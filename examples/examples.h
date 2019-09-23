@@ -146,6 +146,7 @@ printUsageAndExit(const char *progName, const char *usage)
 "-creds         user credentials chained file\n" \
 "-subj          subject (default is 'foo')\n" \
 "-print         for consumers, print received messages (default is false)\n" \
+"-wd            write deadline in milliseconds\n" \
                 "%s\n",
                 progName, usage);
 
@@ -372,6 +373,13 @@ parseArgs(int argc, char **argv, const char *usage)
                 printUsageAndExit(argv[0], usage);
 
             s = natsOptions_SetUserCredentialsFromFiles(opts, argv[++i], NULL);
+        }
+        else if (strcasecmp(argv[i], "-wd") == 0)
+        {
+            if (i + 1 == argc)
+                printUsageAndExit(argv[0], usage);
+
+            s = natsOptions_SetWriteDeadline(opts, atol(argv[++i]));
         }
         else
         {

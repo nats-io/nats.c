@@ -52,7 +52,7 @@ _freeConn(stanConnection *sc)
     natsSubscription_Destroy(sc->hbSubscription);
     natsSubscription_Destroy(sc->ackSubscription);
     natsSubscription_Destroy(sc->pingSub);
-    natsConn_destroy(sc->nc);
+    natsConn_destroy(sc->nc, false);
     natsInbox_Destroy(sc->hbInbox);
     natsStrHash_Destroy(sc->pubAckMap);
     natsCondition_Destroy(sc->pubAckCond);

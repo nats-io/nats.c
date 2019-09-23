@@ -32,6 +32,8 @@ void natsConn_Unlock(natsConnection *nc);
 
 #endif // DEV_MODE
 
+#define SET_WRITE_DEADLINE(nc) if ((nc)->opts->writeDeadline > 0) natsDeadline_Init(&(nc)->sockCtx.writeDeadline, (nc)->opts->writeDeadline)
+
 natsStatus
 natsConn_create(natsConnection **newConn, natsOptions *options);
 
@@ -137,6 +139,6 @@ void
 natsConn_close(natsConnection *nc);
 
 void
-natsConn_destroy(natsConnection *nc);
+natsConn_destroy(natsConnection *nc, bool fromPublicDestroy);
 
 #endif /* CONN_H_ */

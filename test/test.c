@@ -2231,6 +2231,7 @@ test_natsOptions(void)
              && (opts->token == NULL)
              && (opts->tokenCb == NULL)
              && (opts->orderIP == 0)
+             && (opts->writeDeadline == natsLib_defaultWriteDeadline())
              && !opts->noEcho
              && !opts->retryOnFailedConnect)
 
@@ -2499,6 +2500,14 @@ test_natsOptions(void)
     test("Remove TokenHandler: ");
     s = natsOptions_SetTokenHandler(opts, NULL, NULL);
     testCond((s == NATS_OK) && (opts->tokenCb == NULL));
+
+    test("Set write deadline: ");
+    s = natsOptions_SetWriteDeadline(opts, 1000);
+    testCond((s == NATS_OK) && (opts->writeDeadline == 1000));
+
+    test("Remove write deadline: ");
+    s = natsOptions_SetWriteDeadline(opts, 0);
+    testCond((s == NATS_OK) && (opts->writeDeadline == 0));
 
     test("IP order invalid values: ");
     s = natsOptions_IPResolutionOrder(opts, -1);
@@ -3753,7 +3762,7 @@ test_natsWaitReady(void)
     test("Connect: ");
     natsSock_Init(&ctx);
     ctx.orderIP = 4;
-    natsDeadline_Clear(&ctx.deadline);
+    natsSock_ClearDeadline(&ctx);
     for (i=0; i<20; i++)
     {
         s = natsSock_ConnectTcp(&ctx, "127.0.0.1", 1234);
@@ -3773,7 +3782,7 @@ test_natsWaitReady(void)
     while (recv(ctx.fd, buffer, 1, 0) != -1) {}
 
     test("WaitReady no deadline: ");
-    natsDeadline_Clear(&ctx.deadline);
+    natsSock_ClearDeadline(&ctx);
     start = nats_Now();
     s = natsSock_WaitReady(WAIT_FOR_READ, &ctx);
     dur = nats_Now()-start;
@@ -3783,7 +3792,7 @@ test_natsWaitReady(void)
     while (recv(ctx.fd, buffer, 1, 0) != -1) {}
 
     test("WaitReady deadline timeout: ");
-    natsDeadline_Init(&ctx.deadline, 50);
+    natsSock_InitDeadline(&ctx, 50);
     start = nats_Now();
     s = natsSock_WaitReady(WAIT_FOR_READ, &ctx);
     dur = nats_Now()-start;
@@ -3806,7 +3815,7 @@ _checkStart(const char *url, int orderIP, int maxAttempts)
     natsSock_Init(&ctx);
     ctx.orderIP = orderIP;
 
-    natsDeadline_Init(&(ctx.deadline), 2000);
+    natsDeadline_Init(&(ctx.writeDeadline), 2000);
 
     s = natsUrl_Create(&nUrl, url);
     if (s == NATS_OK)
@@ -15742,6 +15751,80 @@ test_ConnSign(void)
 }
 
 static void
+test_WriteDeadline(void)
+{
+    natsStatus          s;
+    natsOptions         *opts = NULL;
+    natsConnection      *nc   = NULL;
+    natsThread          *t    = NULL;
+    char                data[1024] = {0};
+    struct threadArg    arg;
+
+    test("Create options: ");
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetAllowReconnect(opts, false);
+    testCond(s == NATS_OK);
+
+    test("Set invalid write deadline: ");
+    s = natsOptions_SetWriteDeadline(opts, -1);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Start mock server: ");
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        arg.status = NATS_ERR;
+        arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576}\r\n";
+        s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
+    }
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Write deadline kicks publish out: ");
+    s = natsOptions_SetIOBufSize(opts, 100);
+    if (s == NATS_OK)
+        s = natsOptions_SetClosedCB(opts, _closedCb, &arg);
+    if (s == NATS_OK)
+        s = natsOptions_SetWriteDeadline(opts, 1);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    while (s == NATS_OK)
+        s = natsConnection_Publish(nc, "foo", data, sizeof(data));
+    testCond(s == NATS_TIMEOUT);
+
+    test("Caused a disconnect: ");
+    // Since we are not allowing for reconnect, we should
+    // get the closed CB.
+    natsMutex_Lock(arg.m);
+    s = NATS_OK;
+    while ((s != NATS_TIMEOUT) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 test_SSLBasic(void)
 {
 #if defined(NATS_HAS_TLS)
@@ -18457,6 +18540,7 @@ static testInfo allTests[] =
     {"UserCredsFromFiles",              test_UserCredsFromFiles},
     {"NKey",                            test_NKey},
     {"ConnSign",                        test_ConnSign},
+    {"WriteDeadline",                   test_WriteDeadline},
     {"SSLBasic",                        test_SSLBasic},
     {"SSLVerify",                       test_SSLVerify},
     {"SSLVerifyHostname",               test_SSLVerifyHostname},

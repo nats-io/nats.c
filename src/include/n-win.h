@@ -46,7 +46,7 @@ typedef int                 natsRecvLen;
 
 #define NATS_SOCK_INVALID               (INVALID_SOCKET)
 #define NATS_SOCK_CLOSE(s)              closesocket((s))
-#define NATS_SOCK_SHUTDOWN(s)           shutdown((s), SD_BOTH)
+#define NATS_SOCK_SHUTDOWN(s)           {shutdown((s), SD_BOTH); closesocket((s));}
 #define NATS_SOCK_CONNECT_IN_PROGRESS   (WSAEWOULDBLOCK)
 #define NATS_SOCK_WOULD_BLOCK           (WSAEWOULDBLOCK)
 #define NATS_SOCK_ERROR                 (SOCKET_ERROR)

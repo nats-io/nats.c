@@ -920,11 +920,10 @@ natsOptions_SetSecure(natsOptions *opts, bool secure);
  *
  * Loads the trusted CA certificates from a file.
  *
- * Note that the certificates
- * are added to a SSL context for this #natsOptions object at the time of
- * this call, so possible errors while loading the certificates will be
- * reported now instead of when a connection is created. You can get extra
- * information by calling #nats_GetLastError.
+ * Note that the certificates are added to a SSL context for this #natsOptions
+ * object at the time of this call, so possible errors while loading the
+ * certificates will be reported now instead of when a connection is created.
+ * You can get extra information by calling #nats_GetLastError.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param fileName the file containing the CA certificates.
@@ -932,6 +931,34 @@ natsOptions_SetSecure(natsOptions *opts, bool secure);
  */
 NATS_EXTERN natsStatus
 natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName);
+
+/** \brief Sets the trusted CA certificates from memory.
+ *
+ * Similar to #natsOptions_LoadCATrustedCertificates expect that instead
+ * of loading from file, this loads from the given memory location.
+ *
+ * If more than one certificate need to be provided, they need to be
+ * concatenated. For instance:
+ *
+ * \code{.unparsed}
+ * const char *certs =
+ *    "-----BEGIN CERTIFICATE-----\n"
+ *    "MIIGjzCCBHegAwIBAgIJAKT2W9SKY7o4MA0GCSqGSIb3DQEBCwUAMIGLMQswCQYD\n"
+ *    (...)
+ *    "-----END CERTIFICATE-----\n"
+ *    "-----BEGIN CERTIFICATE-----\n"
+ *    "MIIXyz...\n"
+ *    (...)
+ *    "-----END CERTIFICATE-----\n"
+ * \endcode
+ *
+ * @see natsOptions_LoadCATrustedCertificates
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param certificates the string containing the concatenated CA certificates.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetCATrustedCertificates(natsOptions *opts, const char *certificates);
 
 /** \brief Loads the certificate chain from a file, using the given key.
  *
@@ -951,6 +978,22 @@ NATS_EXTERN natsStatus
 natsOptions_LoadCertificatesChain(natsOptions *opts,
                                   const char *certsFileName,
                                   const char *keyFileName);
+
+/** \brief Sets the client certificate and key.
+ *
+ * Similar to #natsOptions_LoadCertificatesChain expect that instead
+ * of loading from file, this loads from the given memory locations.
+ *
+ * @see natsOptions_LoadCertificatesChain()
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param cert the memory location containing the client certificates.
+ * @param key the memory location containing the client private key.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetCertificatesChain(natsOptions *opts,
+                                 const char *cert,
+                                 const char *key);
 
 /** \brief Sets the list of available ciphers.
  *

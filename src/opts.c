@@ -392,6 +392,84 @@ natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName)
 }
 
 natsStatus
+natsOptions_SetCATrustedCertificates(natsOptions *opts, const char *certs)
+{
+    natsStatus s = NATS_OK;
+
+    if (nats_IsStringEmpty(certs))
+    {
+        return nats_setError(NATS_INVALID_ARG, "%s",
+                             "CA certificates can't be NULL nor empty");
+    }
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    s = _getSSLCtx(opts);
+    if (s == NATS_OK)
+    {
+        X509                *cert = NULL;
+        BIO                 *bio  = NULL;
+        X509_STORE          *cts  = NULL;
+        STACK_OF(X509_INFO) *inf  = NULL;
+        int i;
+
+        nats_sslRegisterThreadForCleanup();
+
+        cts = SSL_CTX_get_cert_store(opts->sslCtx->ctx);
+        if (cts == NULL)
+        {
+            s = nats_setError(NATS_SSL_ERROR,
+                              "unable to get certificates store: %s",
+                              NATS_SSL_ERR_REASON_STRING);
+        }
+        if (s == NATS_OK)
+        {
+            bio = BIO_new_mem_buf((char*) certs, -1);
+            if (bio != NULL)
+                inf = PEM_X509_INFO_read_bio(bio, NULL, NULL, NULL);
+            if ((inf == NULL) || (sk_X509_INFO_num(inf) == 0))
+            {
+                s = nats_setError(NATS_SSL_ERROR,
+                                  "unable to get CA certificates: %s",
+                                  NATS_SSL_ERR_REASON_STRING);
+            }
+        }
+        for (i = 0; ((s == NATS_OK) && (i < sk_X509_INFO_num(inf))); i++)
+        {
+            X509_INFO *itmp = sk_X509_INFO_value(inf, i);
+            if (itmp->x509)
+            {
+                if (X509_STORE_add_cert(cts, itmp->x509) != 1)
+                {
+                    s = nats_setError(NATS_SSL_ERROR,
+                                      "error adding CA certificates: %s",
+                                      NATS_SSL_ERR_REASON_STRING);
+                }
+            }
+            if ((s == NATS_OK) && (itmp->crl))
+            {
+                if (X509_STORE_add_crl(cts, itmp->crl) != 1)
+                {
+                    s = nats_setError(NATS_SSL_ERROR,
+                                      "error adding CA CRL: %s",
+                                      NATS_SSL_ERR_REASON_STRING);
+                }
+            }
+        }
+
+        if (inf != NULL)
+            sk_X509_INFO_pop_free(inf, X509_INFO_free);
+
+        if (bio != NULL)
+            BIO_free(bio);
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return s;
+}
+
+natsStatus
 natsOptions_LoadCertificatesChain(natsOptions *opts,
                                   const char *certFileName,
                                   const char *keyFileName)
@@ -429,6 +507,74 @@ natsOptions_LoadCertificatesChain(natsOptions *opts,
                               keyFileName,
                               NATS_SSL_ERR_REASON_STRING);
         }
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return s;
+}
+
+natsStatus
+natsOptions_SetCertificatesChain(natsOptions *opts, const char *certStr, const char *keyStr)
+{
+    natsStatus  s = NATS_OK;
+
+    if (nats_IsStringEmpty(certStr) || nats_IsStringEmpty(keyStr))
+    {
+        return nats_setError(NATS_INVALID_ARG, "%s",
+                             "certificate and key can't be NULL nor empty");
+    }
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    s = _getSSLCtx(opts);
+    if (s == NATS_OK)
+    {
+        X509 *cert = NULL;
+        BIO  *bio  = NULL;
+
+        nats_sslRegisterThreadForCleanup();
+
+        bio = BIO_new_mem_buf((char*) certStr, -1);
+        if ((bio == NULL) || ((cert = PEM_read_bio_X509(bio, NULL, 0, NULL)) == NULL))
+        {
+            s = nats_setError(NATS_SSL_ERROR,
+                              "Error creating certificate: %s",
+                              NATS_SSL_ERR_REASON_STRING);
+        }
+        if ((s == NATS_OK) && (SSL_CTX_use_certificate(opts->sslCtx->ctx, cert) != 1))
+        {
+            s = nats_setError(NATS_SSL_ERROR,
+                              "Error using certificate: %s",
+                              NATS_SSL_ERR_REASON_STRING);
+        }
+        if (cert != NULL)
+            X509_free(cert);
+        if (bio != NULL)
+            BIO_free(bio);
+    }
+    if (s == NATS_OK)
+    {
+        RSA *rsa  = NULL;
+        BIO *bio  = NULL;
+
+        bio = BIO_new_mem_buf((char*) keyStr, -1);
+        if ((bio == NULL) || ((rsa = PEM_read_bio_RSAPrivateKey(bio, NULL, 0, NULL)) == NULL))
+        {
+            s = nats_setError(NATS_SSL_ERROR,
+                              "Error creating key: %s",
+                              NATS_SSL_ERR_REASON_STRING);
+        }
+        if ((s == NATS_OK) && (SSL_CTX_use_RSAPrivateKey(opts->sslCtx->ctx, rsa) != 1))
+        {
+            s = nats_setError(NATS_SSL_ERROR,
+                              "Error using private key: %s",
+                              NATS_SSL_ERR_REASON_STRING);
+        }
+        if (rsa != NULL)
+            RSA_free(rsa);
+        if (bio != NULL)
+            BIO_free(bio);
     }
 
     UNLOCK_OPTS(opts);
@@ -522,9 +668,21 @@ natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName)
 }
 
 natsStatus
+natsOptions_SetCATrustedCertificates(natsOptions *opts, const char *certificates)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
 natsOptions_LoadCertificatesChain(natsOptions *opts,
                                   const char *certFileName,
                                   const char *keyFileName)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
+natsOptions_SetCertificatesChain(natsOptions *opts, const char *certStr, const char *keyStr)
 {
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }

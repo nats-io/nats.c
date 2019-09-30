@@ -15868,7 +15868,202 @@ test_SSLVerify(void)
 
     nats_Sleep(100);
 
-    serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    natsMutex_Lock(args.m);
+    while ((s == NATS_OK) && !(args.reconnected))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "test");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    testCond(s == NATS_OK)
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
+static void
+test_SSLLoadCAFromMemory(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsBuffer          *certBuf  = NULL;
+    struct threadArg    args;
+
+    s = nats_ReadFile(&certBuf, 10000, "certs/ca.pem");
+    if (s == NATS_OK)
+        s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if (opts == NULL)
+        FAIL("Unable to create reconnect options!");
+
+    test("Check NULL certs: ");
+    s = natsOptions_SetCATrustedCertificates(opts, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check empty certs: ");
+    s = natsOptions_SetCATrustedCertificates(opts, "");
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check invalid cert: ");
+    s = natsOptions_SetCATrustedCertificates(opts, "invalid");
+    testCond(s == NATS_SSL_ERROR);
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check that connect succeeds with proper certs: ");
+    s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://localhost:4443");
+    if (s == NATS_OK)
+        s = natsOptions_SetSecure(opts, true);
+    // For test purposes, we provide the CA trusted certs
+    if (s == NATS_OK)
+    {
+        s = natsOptions_SetCATrustedCertificates(opts, (const char*) natsBuf_Data(certBuf));
+        // Demonstrate that we can free the memory after this call..
+        natsBuf_Destroy(certBuf);
+    }
+    if (s == NATS_OK)
+        s = natsOptions_LoadCertificatesChain(opts,
+                                              "certs/client-cert.pem",
+                                              "certs/client-key.pem");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "test");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    testCond(s == NATS_OK);
+
+    test("Check reconnects OK: ");
+    _stopServer(serverPid);
+
+    nats_Sleep(100);
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    natsMutex_Lock(args.m);
+    while ((s == NATS_OK) && !(args.reconnected))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "test");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    testCond(s == NATS_OK)
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
+static void
+test_SSLCertAndKeyFromMemory(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsBuffer          *certBuf  = NULL;
+    natsBuffer          *keyBuf   = NULL;
+    struct threadArg    args;
+
+    s = nats_ReadFile(&certBuf, 10000, "certs/client-cert.pem");
+    if (s == NATS_OK)
+        s = nats_ReadFile(&keyBuf, 10000, "certs/client-key.pem");
+    if (s == NATS_OK)
+        s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if (opts == NULL)
+        FAIL("Unable to create reconnect options!");
+
+    test("Check NULL cert: ");
+    s = natsOptions_SetCertificatesChain(opts, NULL, (const char*) natsBuf_Data(keyBuf));
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check empty cert: ");
+    s = natsOptions_SetCertificatesChain(opts, "", (const char*) natsBuf_Data(keyBuf));
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check NULL key: ");
+    s = natsOptions_SetCertificatesChain(opts, (const char*) natsBuf_Data(certBuf), NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check empty key: ");
+    s = natsOptions_SetCertificatesChain(opts, (const char*) natsBuf_Data(certBuf), "");
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check invalid cert: ");
+    s = natsOptions_SetCertificatesChain(opts, "invalid", (const char*) natsBuf_Data(keyBuf));
+    testCond(s == NATS_SSL_ERROR);
+
+    test("Check invalid key: ");
+    s = natsOptions_SetCertificatesChain(opts, (const char*) natsBuf_Data(certBuf), "invalid");
+    testCond(s == NATS_SSL_ERROR);
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check that connect succeeds with proper certs: ");
+    s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://localhost:4443");
+    if (s == NATS_OK)
+        s = natsOptions_SetSecure(opts, true);
+    // For test purposes, we provide the CA trusted certs
+    if (s == NATS_OK)
+        s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
+    if (s == NATS_OK)
+        s = natsOptions_SetCertificatesChain(opts,
+                                             (const char*) natsBuf_Data(certBuf),
+                                             (const char*) natsBuf_Data(keyBuf));
+    // Demonstrate that we can free the memory after this call..
+    natsBuf_Destroy(certBuf);
+    natsBuf_Destroy(keyBuf);
+
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "test");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    testCond(s == NATS_OK);
+
+    test("Check reconnects OK: ");
+    _stopServer(serverPid);
+
+    nats_Sleep(100);
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
     natsMutex_Lock(args.m);
@@ -18459,6 +18654,8 @@ static testInfo allTests[] =
     {"ConnSign",                        test_ConnSign},
     {"SSLBasic",                        test_SSLBasic},
     {"SSLVerify",                       test_SSLVerify},
+    {"SSLCAFromMemory",                 test_SSLLoadCAFromMemory},
+    {"SSLCertAndKeyFromMemory",         test_SSLCertAndKeyFromMemory},
     {"SSLVerifyHostname",               test_SSLVerifyHostname},
     {"SSLSkipServerVerification",       test_SSLSkipServerVerification},
     {"SSLCiphers",                      test_SSLCiphers},

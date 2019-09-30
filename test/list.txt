@@ -144,6 +144,8 @@ NKey
 ConnSign
 SSLBasic
 SSLVerify
+SSLCAFromMemory
+SSLCertAndKeyFromMemory
 SSLVerifyHostname
 SSLSkipServerVerification
 SSLCiphers

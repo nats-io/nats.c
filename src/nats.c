@@ -112,6 +112,7 @@ typedef struct __natsLib
     bool            initializing;
     bool            initAborted;
     bool            libHandlingMsgDeliveryByDefault;
+    int64_t         libDefaultWriteDeadline;
 
     natsLibTimers       timers;
     natsLibAsyncCbs     asyncCbs;
@@ -1013,6 +1014,11 @@ nats_Open(int64_t lockSpinCount)
         s = natsMutex_Create(&(gLib.dlvWorkers.lock));
     if (s == NATS_OK)
     {
+        char *defaultWriteDeadlineStr = getenv("NATS_DEFAULT_LIB_WRITE_DEADLINE");
+
+        if (defaultWriteDeadlineStr != NULL)
+            gLib.libDefaultWriteDeadline = (int64_t) atol(defaultWriteDeadlineStr);
+
         gLib.libHandlingMsgDeliveryByDefault = (getenv("NATS_DEFAULT_TO_LIB_MSG_DELIVERY") != NULL ? true : false);
         gLib.dlvWorkers.maxSize = 2;
         gLib.dlvWorkers.workers = NATS_CALLOC(gLib.dlvWorkers.maxSize, sizeof(natsMsgDlvWorker*));
@@ -1930,6 +1936,12 @@ bool
 natsLib_isLibHandlingMsgDeliveryByDefault()
 {
     return gLib.libHandlingMsgDeliveryByDefault;
+}
+
+int64_t
+natsLib_defaultWriteDeadline()
+{
+    return gLib.libDefaultWriteDeadline;
 }
 
 void

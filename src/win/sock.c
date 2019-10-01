@@ -38,7 +38,7 @@ natsSys_Init(void)
 natsStatus
 natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
 {
-    natsDeadline    *deadline = &(ctx->deadline);
+    natsDeadline    *deadline = &ctx->writeDeadline;
     struct timeval  timeout_tv= {0};
     struct timeval  *timeout  = NULL;
     natsSock        sock      = ctx->fd;
@@ -51,6 +51,9 @@ natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
 
     FD_ZERO(&errSet);
     FD_SET(sock, &errSet);
+
+    if (waitMode == WAIT_FOR_READ)
+        deadline = &ctx->readDeadline;
 
     if (deadline != NULL)
     {

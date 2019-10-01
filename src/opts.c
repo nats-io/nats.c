@@ -1189,6 +1189,18 @@ natsOptions_SetNKey(natsOptions             *opts,
     return NATS_OK;
 }
 
+natsStatus
+natsOptions_SetWriteDeadline(natsOptions *opts, int64_t deadline)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, (deadline < 0));
+
+    opts->writeDeadline = deadline;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
 static void
 _freeOptions(natsOptions *opts)
 {
@@ -1239,6 +1251,7 @@ natsOptions_Create(natsOptions **newOpts)
     opts->maxPendingMsgs = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
     opts->timeout        = NATS_OPTS_DEFAULT_TIMEOUT;
     opts->libMsgDelivery = natsLib_isLibHandlingMsgDeliveryByDefault();
+    opts->writeDeadline  = natsLib_defaultWriteDeadline();
 
     *newOpts = opts;
 

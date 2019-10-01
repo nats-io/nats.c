@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2019 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -64,7 +64,8 @@ natsStatus
 natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n);
 
 // Writes 'len' bytes to the socket. Does not return until all bytes
-// have been written, unless the socket is closed or an error occurs.
+// have been written, unless the socket is closed or an error occurs
+// (including write timeout).
 natsStatus
 natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len);
 
@@ -80,5 +81,10 @@ natsSock_SetCommonTcpOptions(natsSock fd);
 void
 natsSock_Shutdown(natsSock fd);
 
+void
+natsSock_ClearDeadline(natsSockCtx *ctx);
+
+void
+natsSock_InitDeadline(natsSockCtx *ctx, int64_t timeout);
 
 #endif /* SOCK_H_ */

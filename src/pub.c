@@ -89,7 +89,7 @@ natsConn_publish(natsConnection *nc, const char *subj,
         if (natsBuf_Len(nc->pending) >= nc->opts->reconnectBufSize)
         {
             natsConn_Unlock(nc);
-            return NATS_INSUFFICIENT_BUFFER;
+            return nats_setDefaultError(NATS_INSUFFICIENT_BUFFER);
         }
     }
 
@@ -140,6 +140,8 @@ natsConn_publish(natsConnection *nc, const char *subj,
         s = natsBuf_Append(nc->scratch, (b+i), sizeSize);
     if (s == NATS_OK)
         s = natsBuf_Append(nc->scratch, _CRLF_, _CRLF_LEN_);
+
+    SET_WRITE_DEADLINE(nc);
 
     if (s == NATS_OK)
         s = natsConn_bufferWrite(nc, natsBuf_Data(nc->scratch), msgHdSize);

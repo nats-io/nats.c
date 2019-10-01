@@ -142,6 +142,7 @@ UserCredsCallbacks
 UserCredsFromFiles
 NKey
 ConnSign
+WriteDeadline
 SSLBasic
 SSLVerify
 SSLCAFromMemory

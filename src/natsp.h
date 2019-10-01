@@ -211,6 +211,7 @@ struct __natsOptions
     int                     maxReconnect;
     int64_t                 reconnectWait;
     int                     reconnectBufSize;
+    int64_t                 writeDeadline;
 
     char                    *user;
     char                    *password;
@@ -422,10 +423,8 @@ typedef struct __natsSockCtx
     natsSock        fd;
     bool            fdActive;
 
-    // We switch to blocking socket after receiving the PONG to the first PING
-    // during the connect process. Should we make all read/writes non blocking,
-    // then we will use two different deadlines.
-    natsDeadline    deadline;
+    natsDeadline    readDeadline;
+    natsDeadline    writeDeadline;
 
     SSL             *ssl;
 
@@ -575,6 +574,9 @@ natsLib_msgDeliveryAssignWorker(natsSubscription *sub);
 
 bool
 natsLib_isLibHandlingMsgDeliveryByDefault(void);
+
+int64_t
+natsLib_defaultWriteDeadline(void);
 
 void
 natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWorker ***workersArray);

@@ -75,7 +75,7 @@ static natsStatus
 _processConnInit(natsConnection *nc);
 
 static void
-_close(natsConnection *nc, natsConnStatus status, bool doCBs);
+_close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doCBs);
 
 static bool
 _processOpError(natsConnection *nc, natsStatus s, bool initialConnect);
@@ -333,6 +333,8 @@ natsConn_bufferWrite(natsConnection *nc, const char *buffer, int len)
         {
             // Do a single socket write to avoid a copy
             s = natsSock_WriteFully(&(nc->sockCtx), buffer + offset, len);
+            if (s != NATS_OK)
+                natsBuf_Append(nc->bw, buffer + offset, len);
 
             // We are done
             return NATS_UPDATE_ERR_STACK(s);
@@ -385,7 +387,7 @@ _createConn(natsConnection *nc)
     // Sets a deadline for the connect process (not just the low level
     // tcp connect. The deadline will be removed when we have received
     // the PONG to our initial PING. See _processConnInit().
-    natsDeadline_Init(&(nc->sockCtx.deadline), nc->opts->timeout);
+    natsSock_InitDeadline(&nc->sockCtx, nc->opts->timeout);
 
     // Set the IP resolution order
     nc->sockCtx.orderIP = nc->opts->orderIP;
@@ -422,7 +424,7 @@ _createConn(natsConnection *nc)
     if (s != NATS_OK)
     {
         // reset the deadline
-        natsDeadline_Clear(&(nc->sockCtx.deadline));
+        natsSock_ClearDeadline(&nc->sockCtx);
     }
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -1073,6 +1075,8 @@ _resendSubscriptions(natsConnection *nc)
     }
     natsMutex_Unlock(nc->subsMu);
 
+    SET_WRITE_DEADLINE(nc);
+
     for (i=0; (s == NATS_OK) && (i<count); i++)
     {
         sub = subs[i];
@@ -1632,7 +1636,7 @@ _doReconnect(void *arg)
     nc->rle = true;
     natsConn_Unlock(nc);
 
-    _close(nc, NATS_CONN_STATUS_CLOSED, true);
+    _close(nc, NATS_CONN_STATUS_CLOSED, false, true);
 
     // Release to compensate for the retain in processOpError.
     natsConn_release(nc);
@@ -1805,11 +1809,11 @@ _processConnInit(natsConnection *nc)
         s = _sendConnect(nc);
 
     // Clear our deadline, regardless of error
-    natsDeadline_Clear(&(nc->sockCtx.deadline));
+    natsSock_ClearDeadline(&nc->sockCtx);
 
-    // Switch to blocking socket here...
-    if (s == NATS_OK)
-        s = natsSock_SetBlocking(nc->sockCtx.fd, true);
+    // If there is no write deadline option, switch to blocking socket here...
+   if ((s == NATS_OK) && (nc->opts->writeDeadline <= 0))
+       s = natsSock_SetBlocking(nc->sockCtx.fd, true);
 
     // Start the readLoop and flusher threads
     if (s == NATS_OK)
@@ -1907,7 +1911,7 @@ _connect(natsConnection *nc)
 
                     natsConn_Unlock(nc);
 
-                    _close(nc, NATS_CONN_STATUS_DISCONNECTED, false);
+                    _close(nc, NATS_CONN_STATUS_DISCONNECTED, false, false);
 
                     natsConn_Lock(nc);
 
@@ -1994,6 +1998,7 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
 
         if (nc->sockCtx.fdActive)
         {
+            SET_WRITE_DEADLINE(nc);
             natsConn_bufferFlush(nc);
 
             natsSock_Shutdown(nc->sockCtx.fd);
@@ -2042,7 +2047,7 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
 
     natsConn_Unlock(nc);
 
-    _close(nc, NATS_CONN_STATUS_CLOSED, true);
+    _close(nc, NATS_CONN_STATUS_CLOSED, false, true);
 
     return false;
 }
@@ -2062,7 +2067,6 @@ _readLoop(void  *arg)
 {
     natsStatus  s = NATS_OK;
     char        *buffer;
-    natsSock    fd;
     int         n;
     int         bufSize;
 
@@ -2070,21 +2074,15 @@ _readLoop(void  *arg)
 
     natsConn_Lock(nc);
 
-    fd = nc->sockCtx.fd;
     bufSize = nc->opts->ioBufSize;
-
     buffer = NATS_MALLOC(bufSize);
-    if (buffer == NULL) {
-        natsSock_Close(fd);
-        nc->sockCtx.fd       = NATS_SOCK_INVALID;
-        nc->sockCtx.fdActive = false;
-
-        natsConn_unlockAndRelease(nc);
-        return;
-    }
+    if (buffer == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
 
     if (nc->sockCtx.ssl != NULL)
         nats_sslRegisterThreadForCleanup();
+
+    natsDeadline_Clear(&(nc->sockCtx.readDeadline));
 
     if (nc->ps == NULL)
         s = natsParser_Create(&(nc->ps));
@@ -2098,7 +2096,9 @@ _readLoop(void  *arg)
         n = 0;
 
         s = natsSock_Read(&(nc->sockCtx), buffer, bufSize, &n);
-        if (s == NATS_OK)
+        if ((s == NATS_IO_ERROR) && (NATS_SOCK_GET_ERROR == NATS_SOCK_WOULD_BLOCK))
+            s = NATS_OK;
+        if ((s == NATS_OK) && (n > 0))
             s = natsParser_Parse(nc, buffer, n);
 
         if (s != NATS_OK)
@@ -2109,7 +2109,7 @@ _readLoop(void  *arg)
 
     NATS_FREE(buffer);
 
-    natsSock_Close(fd);
+    natsSock_Close(nc->sockCtx.fd);
     nc->sockCtx.fd       = NATS_SOCK_INVALID;
     nc->sockCtx.fdActive = false;
 
@@ -2163,6 +2163,7 @@ _flusher(void *arg)
 
         if (nc->sockCtx.fdActive && (natsBuf_Len(nc->bw) > 0))
         {
+            SET_WRITE_DEADLINE(nc);
             s = natsConn_bufferFlush(nc);
             if ((s != NATS_OK) && (nc->err == NATS_OK))
                 nc->err = s;
@@ -2181,6 +2182,7 @@ _sendPing(natsConnection *nc, natsPong *pong)
 {
     natsStatus  s     = NATS_OK;
 
+    SET_WRITE_DEADLINE(nc);
     s = natsConn_bufferWrite(nc, _PING_PROTO_, _PING_PROTO_LEN_);
     if (s == NATS_OK)
     {
@@ -2326,7 +2328,7 @@ _removeAllSubscriptions(natsConnection *nc)
 // will be triggered. The lock should not be held entering this
 // function. This function will handle the locking manually.
 static void
-_close(natsConnection *nc, natsConnStatus status, bool doCBs)
+_close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doCBs)
 {
     struct threadsToJoin    ttj;
     bool                    sockWasActive = false;
@@ -2335,11 +2337,17 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
 
     natsConn_lockAndRetain(nc);
 
-    // If connection is not already closed and currently connected, attempt to
-    // send a PING and get a PONG to ensure that not only buffers are flushed
-    // but that server has processed anything that was pending.
-    if (!natsConn_isClosed(nc) && (nc->status == NATS_CONN_STATUS_CONNECTED))
-        _flushTimeout(nc, 2000);
+    // If invoked from the public Close() call, attempt to flush
+    // to ensure that server has received all pending data.
+    // Note that _flushTimeout will release the lock and wait
+    // for PONG so this is why we do this early in that function.
+    if (fromPublicClose
+            && (nc->status == NATS_CONN_STATUS_CONNECTED)
+            && nc->sockCtx.fdActive
+            && (natsBuf_Len(nc->bw) > 0))
+    {
+        _flushTimeout(nc, 500);
+    }
 
     if (natsConn_isClosed(nc))
     {
@@ -2372,11 +2380,6 @@ _close(natsConnection *nc, natsConnStatus status, bool doCBs)
     // Go ahead and make sure we have flushed the outbound buffer.
     if (nc->sockCtx.fdActive)
     {
-        // Don't need to flush if we are here due to a terminating
-        // reconnect loop.
-        if (!nc->rle)
-            natsConn_bufferFlush(nc);
-
         // If there is no readLoop, then it is our responsibility to close
         // the socket. Otherwise, _readLoop is the one doing it.
         if ((ttj.readLoop == NULL) && (nc->opts->evLoop == NULL))
@@ -2666,7 +2669,7 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
         natsConn_Unlock(nc);
     }
     if (close)
-        _close(nc, NATS_CONN_STATUS_CLOSED, true);
+        _close(nc, NATS_CONN_STATUS_CLOSED, false, true);
 }
 
 void
@@ -2674,6 +2677,7 @@ natsConn_processPing(natsConnection *nc)
 {
     natsConn_Lock(nc);
 
+    SET_WRITE_DEADLINE(nc);
     if (natsConn_bufferWrite(nc, _PONG_PROTO_, _PONG_PROTO_LEN_) == NATS_OK)
         natsConn_flushOrKickFlusher(nc);
 
@@ -2848,6 +2852,7 @@ natsConn_subscribeImpl(natsSubscription **newSub,
 
             if (s == NATS_OK)
             {
+                SET_WRITE_DEADLINE(nc);
                 s = natsConn_bufferWriteString(nc, proto);
                 if (s == NATS_OK)
                     s = natsConn_flushOrKickFlusher(nc);
@@ -2917,6 +2922,7 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max)
 
     if ((s == NATS_OK) && !natsConn_isReconnecting(nc))
     {
+        SET_WRITE_DEADLINE(nc);
         // We will send these for all subs when we reconnect
         // so that we can suppress here.
         s = _sendUnsubProto(nc, sub->sid, max);
@@ -2958,7 +2964,10 @@ natsConn_drainSub(natsConnection *nc, natsSubscription *sub, bool checkConnDrain
             s = nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
     if (s == NATS_OK)
+    {
+        SET_WRITE_DEADLINE(nc);
         s = _sendUnsubProto(nc, sub->sid, 0);
+    }
 
     _retain(nc);
     natsConn_Unlock(nc);
@@ -3730,7 +3739,7 @@ natsConn_close(natsConnection *nc)
 
     nats_doNotUpdateErrStack(true);
 
-    _close(nc, NATS_CONN_STATUS_CLOSED, true);
+    _close(nc, NATS_CONN_STATUS_CLOSED, true, true);
 
     nats_doNotUpdateErrStack(false);
 }
@@ -3752,14 +3761,14 @@ natsConnection_Close(natsConnection *nc)
 }
 
 void
-natsConn_destroy(natsConnection *nc)
+natsConn_destroy(natsConnection *nc, bool fromPublicDestroy)
 {
     if (nc == NULL)
         return;
 
     nats_doNotUpdateErrStack(true);
 
-    _close(nc, NATS_CONN_STATUS_CLOSED, true);
+    _close(nc, NATS_CONN_STATUS_CLOSED, fromPublicDestroy, true);
 
     nats_doNotUpdateErrStack(false);
 
@@ -3779,7 +3788,7 @@ natsConnection_Destroy(natsConnection *nc)
     natsConn_Unlock(nc);
 
     if (!stanOwned)
-        natsConn_destroy(nc);
+        natsConn_destroy(nc, true);
 }
 
 void

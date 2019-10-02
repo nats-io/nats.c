@@ -2496,7 +2496,7 @@ natsConnection_DrainTimeout(natsConnection *nc, int64_t timeout);
  * @param messageLen the length of the given byte array.
  * @param sig an array of 64 bytes in which the signature will be copied.
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_Sign(natsConnection *nc,
                     const unsigned char *message, int messageLen,
                     unsigned char sig[64]);

@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.0.1</span>
+   &#160;<span id="projectnumber">2.1.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -195,13 +195,15 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Sets the URL of the <code>NATS Streaming Server</code> the client should try to connect to. The URL can contain optional user name and password.</p>
+<p>Sets the URL of the <code>NATS Streaming Server</code> the client should try to connect to. The URL can contain optional user name and password. You can provide a comma separated list of URLs too.</p>
 <p>Some valid URLS:</p>
 <ul>
 <li>nats://localhost:4222</li>
 <li>nats://user@localhost:4222</li>
 <li>nats://user:password@localhost:4222</li>
+<li>nats://host1:4222,nats://host2:4222,nats://host3:4222</li>
 </ul>
+<dl class="section note"><dt>Note</dt><dd>This option takes precedence over <a class="el" href="group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5" title="Sets the URL to connect to. ">natsOptions_SetURL</a> when NATS options are passed with <a class="el" href="group__stan_conn_opts_group.html#gae3fc9a4daa7f85367811a313857337b4" title="Sets the NATS Options to use to create the connection. ">stanConnOptions_SetNATSOptions</a>.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#ga13d64411878ba13a6ca39c915f2447c1" title="Way to configure a stanConnection. ">stanConnOptions</a> object. </td></tr>
@@ -237,6 +239,7 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 <p>The Streaming client connects to the NATS Streaming Server through a regular NATS Connection (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a>). To configure this connection create a <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> and configure it as needed, then call this function.</p>
 <p>This function clones the passed options, so after this call, any changes to the given <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> will not affect the <a class="el" href="group__types_group.html#ga13d64411878ba13a6ca39c915f2447c1" title="Way to configure a stanConnection. ">stanConnOptions</a>.</p>
+<dl class="section note"><dt>Note</dt><dd>If both <a class="el" href="group__opts_group.html#ga3f7e760214417c7d87541ecb9ab5bea5" title="Sets the URL to connect to. ">natsOptions_SetURL</a> and <a class="el" href="group__stan_conn_opts_group.html#ga3c6d511fc1e1febcdf5344960de5a0b3" title="Sets the URL to connect to. ">stanConnOptions_SetURL</a> are used the URL(s) set in the later take precedence.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#ga13d64411878ba13a6ca39c915f2447c1" title="Way to configure a stanConnection. ">stanConnOptions</a> object. </td></tr>

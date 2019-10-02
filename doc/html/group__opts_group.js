@@ -11,7 +11,9 @@ var group__opts_group =
     [ "natsOptions_SetName", "group__opts_group.html#ga1c529d347be0fe2eec17c7f4698e283e", null ],
     [ "natsOptions_SetSecure", "group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba", null ],
     [ "natsOptions_LoadCATrustedCertificates", "group__opts_group.html#ga2cd6563694a439b3949a31fd81103099", null ],
+    [ "natsOptions_SetCATrustedCertificates", "group__opts_group.html#gafb30794fc2ae74b9e0bd8fb609b901c8", null ],
     [ "natsOptions_LoadCertificatesChain", "group__opts_group.html#ga36943e2ba53d05407cdabc4e7e96484b", null ],
+    [ "natsOptions_SetCertificatesChain", "group__opts_group.html#gae98f0f9034e93941767ab1ae6eec2c0c", null ],
     [ "natsOptions_SetCiphers", "group__opts_group.html#ga5698f020e8eb3e7440eb073fe08ef62c", null ],
     [ "natsOptions_SetExpectedHostname", "group__opts_group.html#ga0ba43ba9930df385e4781b12be9f2851", null ],
     [ "natsOptions_SkipServerVerification", "group__opts_group.html#ga6f804ec44adc299989fe623570679da3", null ],
@@ -19,6 +21,7 @@ var group__opts_group =
     [ "natsOptions_SetPedantic", "group__opts_group.html#ga26f166af20de98bec67bc6cc916f769e", null ],
     [ "natsOptions_SetPingInterval", "group__opts_group.html#gae68fb615835364c0809555e8dc93f57e", null ],
     [ "natsOptions_SetMaxPingsOut", "group__opts_group.html#gaaff89c3f41627f4b2929dbc9b82d265b", null ],
+    [ "natsOptions_SetIOBufSize", "group__opts_group.html#ga1a3e3abfd7ddd8aff247df8f332bbda3", null ],
     [ "natsOptions_SetAllowReconnect", "group__opts_group.html#ga3d1d3cb2f2a0e23d27dd60e96d1cc91b", null ],
     [ "natsOptions_SetMaxReconnect", "group__opts_group.html#gab54cd2719c0b64eebd6c7b83dd2908a0", null ],
     [ "natsOptions_SetReconnectWait", "group__opts_group.html#ga2730f4e16e318a2ef8de98dbf6ede807", null ],
@@ -39,5 +42,6 @@ var group__opts_group =
     [ "natsOptions_SetUserCredentialsCallbacks", "group__opts_group.html#ga60117450fc1f7b6f81bab455aeed7515", null ],
     [ "natsOptions_SetUserCredentialsFromFiles", "group__opts_group.html#ga59b47f7b7a19085cf8eaada9bfe5606e", null ],
     [ "natsOptions_SetNKey", "group__opts_group.html#ga0290eac4665569c850468d9f00e246a0", null ],
+    [ "natsOptions_SetWriteDeadline", "group__opts_group.html#gaafda5fb8d9ee3a17bd475ceaecfac218", null ],
     [ "natsOptions_Destroy", "group__opts_group.html#ga93d8068cd6fff53b7f8e1c403db45eb9", null ]
 ];

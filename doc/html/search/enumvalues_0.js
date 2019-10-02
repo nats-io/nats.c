@@ -17,6 +17,7 @@ var searchData=
   ['nats_5fillegal_5fstate',['NATS_ILLEGAL_STATE',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9bb78b4f245d2870040d25c450febd4b',1,'status.h']]],
   ['nats_5finsufficient_5fbuffer',['NATS_INSUFFICIENT_BUFFER',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a317fb9be1a80f6b1877f96a9a2db16ad',1,'status.h']]],
   ['nats_5finvalid_5farg',['NATS_INVALID_ARG',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a71b57630aebf5c20eecdab832c2a9235',1,'status.h']]],
+  ['nats_5finvalid_5fqueue_5fname',['NATS_INVALID_QUEUE_NAME',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a0d239cfdfa30fe730afea65941779b',1,'status.h']]],
   ['nats_5finvalid_5fsubject',['NATS_INVALID_SUBJECT',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a790c08a7d33e3aefce07c04120c4c19e',1,'status.h']]],
   ['nats_5finvalid_5fsubscription',['NATS_INVALID_SUBSCRIPTION',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a273e92a0ff3b7eaf946b4b7fa6cc6c6c',1,'status.h']]],
   ['nats_5finvalid_5ftimeout',['NATS_INVALID_TIMEOUT',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a827072fc245a99a60691e1e4b173ca86',1,'status.h']]],

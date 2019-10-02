@@ -5,6 +5,7 @@ cache:
   - $HOME/nats-server
   - $HOME/nats-streaming-server
   - $HOME/pbuf
+  - $HOME/sodium
 
 sudo: true
 
@@ -128,7 +129,7 @@ matrix:
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" DO_COVERAGE="no"
 
 script:
-  - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT -DNATS_SANITIZE=ON -DNATS_PROTOBUF_DIR=$HOME/pbuf" "$CTEST_OPT"
+  - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT -DNATS_SANITIZE=ON -DNATS_PROTOBUF_DIR=$HOME/pbuf -DNATS_BUILD_USE_SODIUM=ON -DNATS_SODIUM_DIR=$HOME/sodium" "$CTEST_OPT"
 
 notifications:
   email: false

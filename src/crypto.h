@@ -14,12 +14,20 @@
 #ifndef CRYPTO_H_
 #define CRYPTO_H_
 
-void
-crypto_sign(unsigned char *signedMsg, int *signedMsgLen,
-            const unsigned char *msg, int msgLen,
-            const unsigned char *secretKey);
+#include "status.h"
+
+#define NATS_CRYPTO_SECRET_BYTES    64
+#define NATS_CRYPTO_SIGN_BYTES      64
+
+natsStatus
+natsCrypto_Init(void);
+
+natsStatus
+natsCrypto_Sign(const unsigned char *seed,
+                const unsigned char *input, int inputLen,
+                unsigned char signature[NATS_CRYPTO_SIGN_BYTES]);
 
 void
-crypto_new_key_from_seed(const unsigned char *seed, unsigned char *sk);
+natsCrypto_Clear(void *mem, int memLen);
 
 #endif /* CRYPTO_H_ */

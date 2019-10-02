@@ -18,6 +18,7 @@ option(NATS_BUILD_NO_SPIN "Enable if spin code does not compile on your arch" OF
 option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
 option(NATS_BUILD_TLS_FORCE_HOST_VERIFY "Forces hostname verification" ON)
 option(NATS_BUILD_TLS_USE_OPENSSL_1_1_API "Build for OpenSSL 1.1+" OFF)
+option(NATS_BUILD_USE_SODIUM "Build using libsodium library" OFF)
 option(NATS_BUILD_EXAMPLES "Build examples" ON)
 option(NATS_BUILD_LIBUV_EXAMPLE "Build libuv examples" OFF)
 option(NATS_BUILD_LIBEVENT_EXAMPLE "Build libevent examples" OFF)
@@ -33,6 +34,7 @@ if(DEFINED ENV{NATS_SANITIZE})
   mark_as_advanced(NATS_SANITIZE)
 endif()
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_BINARY_DIR})
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/coveralls-cmake/cmake)
 
 if(NATS_COVERAGE)
@@ -88,6 +90,40 @@ if(NATS_BUILD_STREAMING)
   set(NATS_DOC_INCLUDE_STREAMING "NATS_HAS_STREAMING")
   set(NATS_DOC_PROJECT_NAME "NATS C Client with Streaming support")
 endif(NATS_BUILD_STREAMING)
+
+if(NATS_BUILD_USE_SODIUM)
+  IF(DEFINED ENV{NATS_SODIUM_DIR})
+    SET(NATS_SODIUM_DIR "$ENV{NATS_SODIUM_DIR}")
+  ENDIF()
+  FIND_PATH(
+    NATS_SODIUM_INCLUDE_DIR
+      sodium.h
+    HINTS
+      ${NATS_SODIUM_DIR}
+  )
+  FIND_LIBRARY(NATS_SODIUM_LIBRARY
+    NAMES libsodium.a libsodium.so libsodium.dylib libsodium.lib libsodium.dll
+    HINTS ${NATS_SODIUM_DIR}
+  )
+  FIND_PACKAGE_HANDLE_STANDARD_ARGS(libsodium DEFAULT_MSG
+    NATS_SODIUM_INCLUDE_DIR
+    NATS_SODIUM_LIBRARY
+  )
+  IF(libsodium_FOUND)
+    SET(NATS_SODIUM_INCLUDE_DIRS ${NATS_SODIUM_INCLUDE_DIR})
+    SET(NATS_SODIUM_LIBRARIES ${NATS_SODIUM_LIBRARY})
+    MARK_AS_ADVANCED(
+      NATS_SODIUM_LIBRARY
+      NATS_SODIUM_INCLUDE_DIR
+      NATS_SODIUM_DIR
+    )
+  ELSE()
+    SET(NATS_SODIUM_DIR "" CACHE STRING
+      "An optional hint to a directory for finding `libsodium`"
+    )
+  ENDIF()
+  add_definitions(-DNATS_USE_LIBSODIUM)
+endif(NATS_BUILD_USE_SODIUM)
 
 if(NATS_BUILD_NO_PREFIX_CONNSTS)
   add_definitions(-DNATS_CONN_STATUS_NO_PREFIX)
@@ -152,6 +188,12 @@ elseif(WIN32)
   set(NATS_EXTRA_LIB "Ws2_32")
   set(NATS_OS "_WIN32")
   set(NATS_PLATFORM_INCLUDE "win")
+  if(sodium_USE_STATIC_LIBS)
+    add_definitions(
+      -DSODIUM_STATIC
+      -DSODIUM_EXPORT=
+    )
+  endif(sodium_USE_STATIC_LIBS)
 endif(UNIX)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${NATS_COMMON_C_FLAGS} ${NATS_USE_PTHREAD} ${NATS_WARNINGS}")

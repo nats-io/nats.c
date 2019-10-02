@@ -13,6 +13,42 @@
 
 #include "crypto.h"
 
+#ifdef NATS_USE_LIBSODIUM
+#include <sodium.h>
+
+natsStatus
+natsCrypto_Init()
+{
+    return ((sodium_init() == -1) ? NATS_ERR : NATS_OK);
+}
+
+natsStatus
+natsCrypto_Sign(const unsigned char *seed,
+                const unsigned char *input, int inputLen,
+                unsigned char signature[NATS_CRYPTO_SIGN_BYTES])
+{
+    unsigned char pk[crypto_sign_PUBLICKEYBYTES];
+    unsigned char sk[crypto_sign_SECRETKEYBYTES];
+
+    crypto_sign_seed_keypair(pk, sk, seed);
+    crypto_sign_detached(signature, NULL, input, inputLen, sk);
+    sodium_memzero(sk, crypto_sign_SECRETKEYBYTES);
+    return NATS_OK;
+}
+
+void
+natsCrypto_Clear(void *mem, int memLen)
+{
+    sodium_memzero(mem, (size_t) memLen);
+}
+
+#else
+
+#include <string.h>
+
+#include "mem.h"
+#include "err.h"
+
 // Taken from https://tweetnacl.cr.yp.to/index.html
 // and simplified since we only need crypto_sign().
 // Also fixed some warnings due to different integer sizes.
@@ -372,8 +408,8 @@ reduce(u8 *r)
   modL(r,x);
 }
 
-void
-crypto_new_key_from_seed(const unsigned char *seed, unsigned char *sk)
+static void
+newKeyFromSeed(const unsigned char *seed, unsigned char *sk)
 {
     u8  d[64];
     gf  p[4];
@@ -392,10 +428,10 @@ crypto_new_key_from_seed(const unsigned char *seed, unsigned char *sk)
     FOR(i,32) sk[32 + i] = pk[i];
 }
 
-void
-crypto_sign(unsigned char *sm, int *smlen,
-            const unsigned char *m, int mlen,
-            const unsigned char *sk)
+static void
+cryptoSign(unsigned char *sm,
+           const unsigned char *m, int mlen,
+           const unsigned char *sk)
 {
   u8    d[64],h[64],r[64];
   i64   j,x[64];
@@ -408,7 +444,6 @@ crypto_sign(unsigned char *sm, int *smlen,
   d[31] &= 127;
   d[31] |= 64;
 
-  *smlen = mlen+64;
   FOR(i,n) sm[64 + i] = m[i];
   FOR(i,32) sm[32 + i] = d[32 + i];
 
@@ -426,3 +461,38 @@ crypto_sign(unsigned char *sm, int *smlen,
   FOR(i,32) FOR(j,32) x[i+j] += h[i] * (u64) d[j];
   modL(sm + 32,x);
 }
+
+natsStatus
+natsCrypto_Init()
+{
+  return NATS_OK;
+}
+
+natsStatus
+natsCrypto_Sign(const unsigned char *seed,
+                const unsigned char *input, int inputLen,
+                unsigned char signature[NATS_CRYPTO_SIGN_BYTES])
+{
+    char          *sm = NULL;
+    unsigned char sk[NATS_CRYPTO_SECRET_BYTES];
+
+    sm = NATS_MALLOC(inputLen + NATS_CRYPTO_SIGN_BYTES);
+    if (sm == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    newKeyFromSeed(seed, sk);
+    cryptoSign((unsigned char*) sm, input, inputLen, sk);
+    memcpy(signature, sm, NATS_CRYPTO_SIGN_BYTES);
+    memset((void*) sm, 0, NATS_CRYPTO_SIGN_BYTES);
+    memset((void*) sk, 0, sizeof(sk));
+    NATS_FREE(sm);
+    return NATS_OK;
+}
+
+void
+natsCrypto_Clear(void *mem, int memLen)
+{
+    memset(mem, 0, (size_t) memLen);
+}
+
+#endif

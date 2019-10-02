@@ -35,4 +35,17 @@ if [ ! "$(ls -A $HOME/pbuf)" ]; then
 else
   echo 'Using cached directory.';
 fi
+
+# check to see if sodium folder is empty
+if [ ! "$(ls -A $HOME/sodium)" ]; then
+  sudo apt-get update
+  sudo apt-get install libsodium-dev
+  mkdir -p $HOME/sodium
+  cp -pr /usr/include/sodium $HOME/sodium/
+  cp -pr /usr/include/sodium.h $HOME/sodium/
+  cp /usr/lib/x86_64-linux-gnu/libsodium.so* $HOME/sodium
+  sudo rm /usr/lib/x86_64-linux-gnu/libsodium.*
+else
+  echo 'Using cached directory.';
+fi
 cd $HOME

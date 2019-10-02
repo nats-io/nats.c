@@ -14,6 +14,10 @@ if(NATS_BUILD_STREAMING)
   include_directories(stan)
 endif(NATS_BUILD_STREAMING)
 
+if(NATS_BUILD_USE_SODIUM)
+  include_directories(${NATS_SODIUM_INCLUDE_DIRS})
+endif(NATS_BUILD_USE_SODIUM)
+
 #---------------------------------------
 # Grab all files in 'src' and 'src/unix'
 # or 'src/win' depending on the platform
@@ -31,7 +35,7 @@ endif(NATS_BUILD_STREAMING)
 # --------------------------------------
 if(NATS_BUILD_LIB_SHARED)
   add_library(nats SHARED ${SOURCES} ${PS_SOURCES} ${S_SOURCES})
-  target_link_libraries(nats ${NATS_OPENSSL_LIBS} ${NATS_EXTRA_LIB} ${NATS_PROTOBUF_LIBRARIES})
+  target_link_libraries(nats ${NATS_OPENSSL_LIBS} ${NATS_EXTRA_LIB} ${NATS_PROTOBUF_LIBRARIES} ${NATS_SODIUM_LIBRARIES})
   set_target_properties(nats PROPERTIES
     VERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR}.${NATS_VERSION_PATCH}
     SOVERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR})
@@ -39,7 +43,7 @@ endif(NATS_BUILD_LIB_SHARED)
 
 if(NATS_BUILD_LIB_STATIC)
   add_library(nats_static STATIC ${SOURCES} ${PS_SOURCES} ${S_SOURCES})
-  target_link_libraries(nats_static ${NATS_OPENSSL_LIBS} ${NATS_PROTOBUF_LIBRARIES})
+  target_link_libraries(nats_static ${NATS_OPENSSL_LIBS} ${NATS_PROTOBUF_LIBRARIES} ${NATS_SODIUM_LIBRARIES})
   set_target_properties(nats_static PROPERTIES
     VERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR}.${NATS_VERSION_PATCH}
     SOVERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR})

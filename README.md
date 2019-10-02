@@ -16,6 +16,9 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 
 - [Building](#building)
 	* [TLS Support](#tls-support)
+    * [Building with Streaming](#building-with-streaming)
+    * [Building with Libsodium](#building-with-libsodium)
+    * [Testing](#testing)
 - [Documentation](#documentation)
 - [NATS Client](#nats-client)
     * [Important Changes](#important-changes)
@@ -71,34 +74,6 @@ Create a `build` directory (any name would work) from the root source tree, and 
 cmake ..
 ```
 
-You can also specify command line parameters to set some of the cmake options directly. For instance, if you want to build the library without TLS support, do this:
-
-```
-cmake .. -DNATS_BUILD_WITH_TLS=OFF
-```
-
-When building the library with Streaming support, the NATS library uses the [libprotobuf-c](https://github.com/protobuf-c/protobuf-c) library.
-When cmake runs for the first time (or after removing `CMakeCache.txt` and calling `cmake ..` again), it is looking for the libprotobuf-c library. If it does not find it, a message is printed and the build process fails.
-CMake searches for the library in directories where libraries are usually found. However, if you want to specify a specific directory where the library is located, you need to do this:
-```
-cmake .. -DNATS_PROTOBUF_DIR=<my libprotobuf-c directory>
-```
-The static library will be used by default. If you want to change that, or if the library has not the expected name, you need to do this:
-```
-# Use the library named mylibproto.so located at /my/location
-cmake .. -DNATS_PROTOBUF_LIBRARY=/my/location/mylibproto.so
-```
-The two could be combined if the include header is located in a different directory
-```
-# Use the library named mylibproto.so located at /my/location and the directory protobuf-c/ containing protobuf-c.h located at /my/other/location
-cmake .. -DNATS_PROTOBUF_LIBRARY=/my/location/mylibproto.so -DNATS_PROTOBUF_DIR=/my/other/location
-```
-
-If you don't want to build the NATS Streaming APIs to be included in the NATS library:
-```
-cmake .. -DNATS_BUILD_STREAMING=OFF
-```
-
 In some architectures, you may experience a compilation error for `mutex.c.o` because there is no support
 for the assembler instruction that we use to yield when spinning trying to acquire a lock.
 
@@ -146,8 +121,84 @@ The default target will build everything, that is, the static and shared NATS li
 ```
 make install
 ```
-
 Will copy both the static and shared libraries in the folder `install/lib` and the public headers in `install/include`.
+
+## TLS Support
+
+By default, the library is built with TLS support. You can disable this from the cmake gui `make edit_cache` and switch the `NATS_BUILD_WITH_TLS` option to `OFF`, or pass the option directly to the `cmake` command:
+
+```
+cmake .. -DNATS_BUILD_WITH_TLS=OFF
+```
+
+Starting `2.0.0`, when building with TLS/SSL support, the server certificate's expected hostname is always verified. It means that the hostname provided in the URL(s) or through the option `natsOptions_SetExpectedHostname()` will be used to check the hostname present in the certificate. Prior to `2.0.0`, the hostname would be verified *only* if the option `natsOptions_SetExpectedHostname()` was invoked.
+
+Although we recommend leaving the new default behavior, you can restore the previous behavior by building the library with this option off:
+
+```
+cmake .. -DNATS_BUILD_TLS_FORCE_HOST_VERIFY=OFF
+```
+
+The NATS C client is built using APIs from the [OpenSSL](https://github.com/openssl/openssl) library. By default we use `1.0.2` APIs. You can compile the NATS C client with OpenSSL API version `1.1+`. To do that, you need to enable the `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` option:
+
+```
+cmake .. -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON
+```
+
+Since the NATS C client dynamically links to the OpenSSL library, you need to make sure that you are then running your application against an OpenSSL 1.1+ library.
+
+Note that the option `NATS_BUILD_WITH_TLS_CLIENT_METHOD` is deprecated. Its purpose was to make the NATS C client use a method that was introduced in OpenSSL `1.1+`. The new option `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` is more generic and replaces `NATS_BUILD_WITH_TLS_CLIENT_METHOD`. If you are using scripts to automate your build process that makes use of `NATS_BUILD_WITH_TLS_CLIENT_METHOD`, they will still work and using this deprecated option will have the same effect than setting `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` to `ON`.
+
+## Building with Streaming
+
+When building the library with Streaming support, the NATS library uses the [libprotobuf-c](https://github.com/protobuf-c/protobuf-c) library.
+When cmake runs for the first time (or after removing `CMakeCache.txt` and calling `cmake ..` again), it is looking for the libprotobuf-c library. If it does not find it, a message is printed and the build process fails.
+CMake searches for the library in directories where libraries are usually found. However, if you want to specify a specific directory where the library is located, you need to do this:
+```
+cmake .. -DNATS_PROTOBUF_DIR=<my libprotobuf-c directory>
+```
+The static library will be used by default. If you want to change that, or if the library has not the expected name, you need to do this:
+```
+# Use the library named mylibproto.so located at /my/location
+cmake .. -DNATS_PROTOBUF_LIBRARY=/my/location/mylibproto.so
+```
+The two could be combined if the include header is located in a different directory
+```
+# Use the library named mylibproto.so located at /my/location and the directory protobuf-c/ containing protobuf-c.h located at /my/other/location
+cmake .. -DNATS_PROTOBUF_LIBRARY=/my/location/mylibproto.so -DNATS_PROTOBUF_DIR=/my/other/location
+```
+
+If you don't want to build the NATS Streaming APIs to be included in the NATS library:
+```
+cmake .. -DNATS_BUILD_STREAMING=OFF
+```
+
+## Building with Libsodium
+
+When using the new NATS 2.0 security features, the library needs to sign some "nonce" sent by the server during a connect or reconnect.
+We use [Ed25519](https://ed25519.cr.yp.to/) public-key signature. The library comes with some code to perform the signature.
+In most case, it will be fine, but if performance is an issue (especially if you plan to use the `natsConnection_Sign()` function a lot), you will have the option to build with the [Libsodium](https://github.com/jedisct1/libsodium) library.
+
+Follow instructions on how to install the libsodium library [here](https://download.libsodium.org/doc/).
+
+On macOS, you could use `brew`:
+```
+brew install libsodium
+```
+On Linux, you could use `apt-get`
+```
+apt-get install libsodium-dev
+```
+Once installed, you can rebuild the NATS C client by first enabling the use of the libsodium library:
+```
+cmake .. -DNATS_BUILD_USE_SODIUM=ON
+```
+If you have the libsodium library installed in a non standard location that CMake cannot find, you can specify the location of this directory:
+```
+cmake .. -DNATS_BUILD_USE_SODIUM=ON -DNATS_SODIUM_DIR=/my/path/to/libsodium
+```
+
+## Testing
 
 On platforms where `valgrind` is available, you can run the tests with memory checks.
 Here is an example:
@@ -225,31 +276,6 @@ If you want to change the default server executable name (`nats-server.exe`) or 
 set NATS_TEST_SERVER_EXE=c:\test\nats-server.exe
 ```
 
-## TLS Support
-
-By default, the library is built with TLS support. You can disable this from the cmake gui `make edit_cache` and switch the `NATS_BUILD_WITH_TLS` option to `OFF`, or pass the option directly to the `cmake` command:
-
-```
-cmake .. -DNATS_BUILD_WITH_TLS=OFF
-```
-
-Starting `2.0.0`, when building with TLS/SSL support, the server certificate's expected hostname is always verified. It means that the hostname provided in the URL(s) or through the option `natsOptions_SetExpectedHostname()` will be used to check the hostname present in the certificate. Prior to `2.0.0`, the hostname would be verified *only* if the option `natsOptions_SetExpectedHostname()` was invoked.
-
-Although we recommend leaving the new default behavior, you can restore the previous behavior by building the library with this option off:
-
-```
-cmake .. -DNATS_BUILD_TLS_FORCE_HOST_VERIFY=OFF
-```
-
-The NATS C client is built using APIs from the [OpenSSL](https://github.com/openssl/openssl) library. By default we use `1.0.2` APIs. You can compile the NATS C client with OpenSSL API version `1.1+`. To do that, you need to enable the `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` option:
-
-```
-cmake .. -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON
-```
-
-Since the NATS C client dynamically links to the OpenSSL library, you need to make sure that you are then running your application against an OpenSSL 1.1+ library.
-
-Note that the option `NATS_BUILD_WITH_TLS_CLIENT_METHOD` is deprecated. Its purpose was to make the NATS C client use a method that was introduced in OpenSSL `1.1+`. The new option `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` is more generic and replaces `NATS_BUILD_WITH_TLS_CLIENT_METHOD`. If you are using scripts to automate your build process that makes use of `NATS_BUILD_WITH_TLS_CLIENT_METHOD`, they will still work and using this deprecated option will have the same effect than setting `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` to `ON`.
 
 # Documentation
 

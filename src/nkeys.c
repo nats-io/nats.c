@@ -96,60 +96,31 @@ _decodeSeed(const char *seed, char *raw, int rawMax)
 }
 
 natsStatus
-natsKeys_Sign(const char *encodedSeed, const unsigned char *input, int inputLen, unsigned char **out, int *outLen)
+natsKeys_Sign(const char *encodedSeed, const unsigned char *input, int inputLen, unsigned char *signature)
 {
-    natsStatus      s               = NATS_OK;
-    char            *rawSeed        = NULL;
-    int             rawSeedAllocLen = 0;
-    unsigned char   *sm             = NULL;
-    int             smlen           = 0;
-    int             mlen            = 0;
-    unsigned char   sk[NKEYS_SECRETKEY_BYTES];
-
-    *out    = NULL;
-    *outLen = 0;
+    natsStatus      s       = NATS_OK;
+    char            *seed   = NULL;
+    int             seedLen = 0;
 
     if ((input != NULL) && (inputLen == 0))
-        mlen = (int) strlen((char*) input);
-    else
-        mlen = inputLen;
+        inputLen = (int) strlen((char*) input);
 
-    rawSeedAllocLen = (int)((strlen(encodedSeed) * 5) / 8);
-    rawSeed = NATS_CALLOC(1, rawSeedAllocLen);
-    if (rawSeed == NULL)
+    seedLen = (int)((strlen(encodedSeed) * 5) / 8);
+    seed = NATS_CALLOC(1, seedLen);
+    if (seed == NULL)
         s = nats_setDefaultError(NATS_NO_MEMORY);
     if (s == NATS_OK)
-        s = _decodeSeed(encodedSeed, rawSeed, rawSeedAllocLen);
-    if (s == NATS_OK)
-    {
-        sm = NATS_MALLOC(mlen + NKEYS_SIGN_BYTES + 1);
-        if (sm == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-    }
+        s = _decodeSeed(encodedSeed, seed, seedLen);
     if (s == NATS_OK)
     {
         // The actual seed starts after the first 2 characters.
-        crypto_new_key_from_seed((const unsigned char*) (rawSeed+2), sk);
-
-        crypto_sign(sm, &smlen,
-                    (const unsigned char*) input, mlen,
-                    (const unsigned char*) sk);
-
-        // sm contains the input at the end. We don't need to return that
-        // as part of the signature, so adjust smlen.
-        smlen -= mlen;
-        // Memset the end of sm to remove the input
-        memset(sm + smlen, 0, mlen);
-
-        *out    = sm;
-        *outLen = smlen;
+        s = natsCrypto_Sign((const unsigned char*) (seed+2), input, inputLen, signature);
     }
-    if (rawSeed != NULL)
-        memset((void*) rawSeed, 0, rawSeedAllocLen);
-
-    memset((void*) &sk, 0, sizeof(sk));
-
-    NATS_FREE(rawSeed);
+    if (seed != NULL)
+    {
+        natsCrypto_Clear((void*) seed, seedLen);
+        NATS_FREE(seed);
+    }
 
     return NATS_UPDATE_ERR_STACK(s);
 }

@@ -32,6 +32,7 @@
 #include "asynccb.h"
 #include "comsock.h"
 #include "nkeys.h"
+#include "crypto.h"
 
 #define DEFAULT_SCRATCH_SIZE    (512)
 #define MAX_INFO_MESSAGE_SIZE   (32768)
@@ -3983,27 +3984,23 @@ natsConn_userFromFile(char **userJWT, char **customErrTxt, void *closure)
 }
 
 static natsStatus
-_sign(userCreds *uc, const unsigned char *input, int inputLen, unsigned char **psig, int *sigLen)
+_sign(userCreds *uc, const unsigned char *input, int inputLen, unsigned char *sig)
 {
-    natsStatus      s       = NATS_OK;
-    char            *seed   = NULL;
-    unsigned char   *sig    = NULL;
+    natsStatus      s            = NATS_OK;
+    char            *encodedSeed = NULL;
 
     if (uc->seedFile != NULL)
-        s = _getJwtOrSeed(&seed, uc->seedFile, true, 0);
+        s = _getJwtOrSeed(&encodedSeed, uc->seedFile, true, 0);
     else
-        s = _getJwtOrSeed(&seed, uc->userOrChainedFile, true, 1);
+        s = _getJwtOrSeed(&encodedSeed, uc->userOrChainedFile, true, 1);
 
     if (s == NATS_OK)
-        s = natsKeys_Sign((const char*) seed, input, inputLen, &sig, sigLen);
+        s = natsKeys_Sign((const char*) encodedSeed, input, inputLen, sig);
 
-    if (s == NATS_OK)
-        *psig = sig;
-
-    if (seed != NULL)
+    if (encodedSeed != NULL)
     {
-        memset(seed, 0, strlen(seed));
-        NATS_FREE(seed);
+        natsCrypto_Clear((void*) encodedSeed, (int) strlen(encodedSeed));
+        NATS_FREE(encodedSeed);
     }
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -4011,10 +4008,29 @@ _sign(userCreds *uc, const unsigned char *input, int inputLen, unsigned char **p
 natsStatus
 natsConn_signatureHandler(char **customErrTxt, unsigned char **psig, int *sigLen, const char *nonce, void *closure)
 {
-    natsStatus      s       = NATS_OK;
-    userCreds       *uc     = (userCreds*) closure;
+    natsStatus      s    = NATS_OK;
+    userCreds       *uc  = (userCreds*) closure;
+    char            *sig = NULL;
 
-    s = _sign(uc, (const unsigned char*) nonce, 0, psig, sigLen);
+    *psig = NULL;
+    if (sigLen != NULL)
+        *sigLen = 0;
+
+    sig = NATS_MALLOC(NATS_CRYPTO_SIGN_BYTES);
+    if (sig == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    s = _sign(uc, (const unsigned char*) nonce, 0, (unsigned char*) sig);
+    if (s == NATS_OK)
+    {
+        *psig = (unsigned char*) sig;
+        if (sigLen != NULL)
+            *sigLen = NATS_CRYPTO_SIGN_BYTES;
+    }
+    else
+    {
+        NATS_FREE(sig);
+    }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -4033,17 +4049,7 @@ natsConnection_Sign(natsConnection *nc, const unsigned char *payload, int payloa
     if (uc == NULL)
         s = nats_setError(NATS_ERR, "%s", "unable to sign since no user credentials have been set");
     else
-    {
-        unsigned char   *signature  = NULL;
-        int             sigLen      = 0;
-
-        s = _sign(uc, payload, payloadLen, &signature, &sigLen);
-        if (s == NATS_OK)
-        {
-            memcpy(sig, signature, sigLen);
-            NATS_FREE(signature);
-        }
-    }
+        s = _sign(uc, payload, payloadLen, sig);
     natsConn_Unlock(nc);
 
     return NATS_UPDATE_ERR_STACK(s);

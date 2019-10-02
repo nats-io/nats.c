@@ -3458,8 +3458,7 @@ static void
 test_natsKeys(void)
 {
     natsStatus          s;
-    unsigned char       *out       = NULL;
-    int                 outLen     = 0;
+    unsigned char       sig[NATS_CRYPTO_SIGN_BYTES];
     const char          *nonceVal  = "nonce";
     const unsigned char *nonce     = (const unsigned char*) nonceVal;
     const unsigned char expected[] = {
@@ -3474,10 +3473,8 @@ test_natsKeys(void)
     };
 
     test("Invalid key: ");
-    s = natsKeys_Sign("ABC", nonce, 0, &out, &outLen);
+    s = natsKeys_Sign("ABC", nonce, 0, sig);
     testCond((s == NATS_ERR)
-            && (out == NULL)
-            && (outLen == 0)
             && (nats_GetLastError(NULL) != NULL)
             && (strstr(nats_GetLastError(NULL), NKEYS_INVALID_ENCODED_KEY) != NULL));
     nats_clearLastError();
@@ -3485,19 +3482,15 @@ test_natsKeys(void)
     // This is generated from XYTHISISNOTAVALIDSEED with correct checksum.
     // Expect to get invalid seed
     test("Invalid seed: ");
-    s = natsKeys_Sign("LBMVISCJKNEVGTSPKRAVMQKMJFCFGRKFIQ52C", nonce, 0, &out, &outLen);
+    s = natsKeys_Sign("LBMVISCJKNEVGTSPKRAVMQKMJFCFGRKFIQ52C", nonce, 0, sig);
     testCond((s == NATS_ERR)
-                && (out == NULL)
-                && (outLen == 0)
                 && (nats_GetLastError(NULL) != NULL)
                 && (strstr(nats_GetLastError(NULL), NKEYS_INVALID_SEED) != NULL));
     nats_clearLastError();
 
     test("Invalid prefix: ");
-    s = natsKeys_Sign("SBAUEQ2EIVDEOSCJJJFUYTKOJ5IFCUSTKRKVMV2YLFNECQSDIRCUMR2IJFFEWTCNJZHVAUKSKNKFKVSXLBMVUQKCINCEKRSHJBEUUS2MJVHE6UCRKJJVIVKWK5MFSWV2QA", nonce, 0, &out, &outLen);
+    s = natsKeys_Sign("SBAUEQ2EIVDEOSCJJJFUYTKOJ5IFCUSTKRKVMV2YLFNECQSDIRCUMR2IJFFEWTCNJZHVAUKSKNKFKVSXLBMVUQKCINCEKRSHJBEUUS2MJVHE6UCRKJJVIVKWK5MFSWV2QA", nonce, 0, sig);
     testCond((s == NATS_ERR)
-                && (out == NULL)
-                && (outLen == 0)
                 && (nats_GetLastError(NULL) != NULL)
                 && (strstr(nats_GetLastError(NULL), NKEYS_INVALID_PREFIX) != NULL));
     nats_clearLastError();
@@ -3505,23 +3498,17 @@ test_natsKeys(void)
     // This is the valid seed: SUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4GY
     // Make the checksum incorrect by changing last 2 bytes.
     test("Invalid checksum: ");
-    s = natsKeys_Sign("SUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4AA", nonce, 0, &out, &outLen);
+    s = natsKeys_Sign("SUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4AA", nonce, 0, sig);
     testCond((s == NATS_ERR)
-                && (out == NULL)
-                && (outLen == 0)
                 && (nats_GetLastError(NULL) != NULL)
                 && (strstr(nats_GetLastError(NULL), NKEYS_INVALID_CHECKSUM) != NULL));
     nats_clearLastError();
 
     // Now use valid SEED
     test("Sign ok: ");
-    s = natsKeys_Sign("SUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4GY", nonce, 0, &out, &outLen);
+    s = natsKeys_Sign("SUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4GY", nonce, 0, sig);
     testCond((s == NATS_OK)
-                && (out != NULL)
-                && (outLen == NKEYS_SIGN_BYTES)
-                && (memcmp(out, expected, sizeof(expected)) == 0));
-    free(out);
-    out = NULL;
+                && (memcmp(sig, expected, sizeof(expected)) == 0));
 }
 
 static void
@@ -15042,7 +15029,6 @@ _sigCB(char **customErrTxt, unsigned char **psig, int *sigLen, const char* nonce
              93, 239, 141, 131,  66, 190, 237, 127,
             104, 191, 138, 217, 227,   1,  92,  14,
     };
-    int i;
     unsigned char *sig = NULL;
     unsigned char *ptr = NULL;
 
@@ -15069,17 +15055,11 @@ _sigCB(char **customErrTxt, unsigned char **psig, int *sigLen, const char* nonce
         }
     }
 
-    sig = malloc(64);
-    ptr = sig;
-
-    for (i=0; i<64; i++)
-    {
-        (*ptr) = correctSign[i];
-        ptr++;
-    }
-
+    sig = malloc(NATS_CRYPTO_SIGN_BYTES);
+    memcpy(sig, correctSign, NATS_CRYPTO_SIGN_BYTES);
     *psig = sig;
-    *sigLen = 64;
+    if (sigLen != NULL)
+        *sigLen = NATS_CRYPTO_SIGN_BYTES;
 
     return NATS_OK;
 }

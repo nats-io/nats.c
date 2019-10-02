@@ -30,6 +30,7 @@
 #include "conn.h"
 #include "sub.h"
 #include "nkeys.h"
+#include "crypto.h"
 
 #define WAIT_LIB_INITIALIZED \
         natsMutex_Lock(gLib.lock); \
@@ -975,6 +976,9 @@ nats_Open(int64_t lockSpinCount)
     nats_Base32_Init();
 
     s = natsCondition_Create(&(gLib.cond));
+
+    if (s == NATS_OK)
+        s = natsCrypto_Init();
 
     if (s == NATS_OK)
         s = natsMutex_Create(&(gLib.timers.lock));

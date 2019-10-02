@@ -16,16 +16,12 @@
 
 #include "natsp.h"
 
-#define NKEYS_SEED_BYTES        32
-#define NKEYS_SECRETKEY_BYTES   64
-#define NKEYS_SIGN_BYTES        64
-
 #define NKEYS_INVALID_ENCODED_KEY   "invalid encoded key"
 #define NKEYS_INVALID_CHECKSUM      "invalid checksum"
 #define NKEYS_INVALID_SEED          "invalid seed"
 #define NKEYS_INVALID_PREFIX        "invalid prefix byte"
 
 natsStatus
-natsKeys_Sign(const char *encodedSeed, const unsigned char *input, int inputLen, unsigned char **out, int *outLen);
+natsKeys_Sign(const char *encodedSeed, const unsigned char *input, int inputLen, unsigned char *signature);
 
 #endif /* NKEYS_H_ */

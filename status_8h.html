@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.0.0</span>
+   &#160;<span id="projectnumber">2.1.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -171,7 +171,8 @@ Enumerations</h2></td></tr>
 <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a4e298931ba0698a72e397b1b57c885">NATS_NO_SERVER_SUPPORT</a>, 
 <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a49a1ea653ce112b3c53eedebcd60811d">NATS_NOT_YET_CONNECTED</a>, 
 <br />
-&#160;&#160;<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a07fdbda44f43cef9866a75b25053c2ae">NATS_DRAINING</a>
+&#160;&#160;<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a07fdbda44f43cef9866a75b25053c2ae">NATS_DRAINING</a>, 
+<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a0d239cfdfa30fe730afea65941779b">NATS_INVALID_QUEUE_NAME</a>
 <br />
  }<tr class="memdesc:a36c934157b663b7b5fb5d6609c897c80"><td class="mdescLeft">&#160;</td><td class="mdescRight">Status returned by most of the APIs.  <a href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">More...</a><br /></td></tr>
 </td></tr>
@@ -321,6 +322,9 @@ Enumerations</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a class="anchor" id="a36c934157b663b7b5fb5d6609c897c80a07fdbda44f43cef9866a75b25053c2ae"></a>NATS_DRAINING&#160;</td><td class="fielddoc">
 <p>A connection and/or subscription entered the draining mode. Some operations will fail when in that mode. </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="a36c934157b663b7b5fb5d6609c897c80a8a0d239cfdfa30fe730afea65941779b"></a>NATS_INVALID_QUEUE_NAME&#160;</td><td class="fielddoc">
+<p>An invalid queue name was passed when creating a queue subscription. </p>
 </td></tr>
 </table>
 

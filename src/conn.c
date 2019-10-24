@@ -398,13 +398,11 @@ _createConn(natsConnection *nc)
     {
         nc->sockCtx.fdActive = true;
 
-        if ((nc->pending != NULL) && (nc->bw != NULL)
-            && (natsBuf_Len(nc->bw) > 0))
-        {
-            // Move to pending buffer
-            s = natsConn_bufferWrite(nc, natsBuf_Data(nc->bw),
-                                     natsBuf_Len(nc->bw));
-        }
+        if (nc->pending != NULL)
+            natsBuf_Reset(nc->pending);
+
+        if (nc->bw != NULL)
+            natsBuf_Reset(nc->bw);
     }
 
     // Need to create the buffer even on failure in case we allow

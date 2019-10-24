@@ -144,6 +144,14 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
 
             error = false;
 
+#ifdef SO_NOSIGPIPE
+            int set = 1;
+            if (setsockopt(ctx->fd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&set, sizeof(int)) == -1) {
+                s = NATS_ERR;
+                break;
+            }
+#endif
+
             s = natsSock_SetBlocking(ctx->fd, false);
             if (s != NATS_OK)
                 break;
@@ -376,7 +384,11 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
             bytes = SSL_write(ctx->ssl, data, len);
         else
 #endif
+#ifdef MSG_NOSIGNAL
+            bytes = send(ctx->fd, data, len, MSG_NOSIGNAL);
+#else
             bytes = send(ctx->fd, data, len, 0);
+#endif
 
         if ((bytes == 0) || (bytes == NATS_SOCK_ERROR))
         {

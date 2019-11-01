@@ -2661,11 +2661,7 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
     }
     else
     {
-        close = true;
-        natsConn_Lock(nc);
-        nc->err = NATS_ERR;
-        snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
-        natsConn_Unlock(nc);
+        _processOpError(nc, NATS_ERR, false);
     }
     if (close)
         _close(nc, NATS_CONN_STATUS_CLOSED, false, true);

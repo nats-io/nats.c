@@ -50,6 +50,25 @@ if(NATS_BUILD_LIB_STATIC)
   target_compile_definitions(nats_static PRIVATE -DNATS_STATIC)
 endif(NATS_BUILD_LIB_STATIC)
 
+# ---------------------------
+# Create the bindings for C++
+# ---------------------------
+if(NATS_BUILD_CPP_BINDINGS)
+  add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/nats.hpp
+        COMMAND ${Python3_EXECUTABLE}
+          bindings/cpp_generator.py
+          bindings/cpp_template.mako
+          nats.h
+          ${CMAKE_CURRENT_BINARY_DIR}/nats.hpp
+        DEPENDS
+          bindings/cpp_generator.py
+          bindings/cpp_template.mako
+          nats.h
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+  add_custom_target(nats_cpp_bindings ALL DEPENDS ${CMAKE_BINARY_DIR}/nats.hpp)
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nats.hpp DESTINATION ${NATS_INCLUDE_DIR}/nats)
+endif(NATS_BUILD_CPP_BINDINGS)
+
 # --------------------------------------
 # Install the libraries and header files
 # --------------------------------------

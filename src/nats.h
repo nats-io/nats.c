@@ -1979,7 +1979,7 @@ stanSubOptions_Destroy(stanSubOptions *opts);
  * created #natsInbox.
  */
 NATS_EXTERN natsStatus
-natsInbox_Create(char **newInbox);
+natsInbox_Create(natsInbox **newInbox);
 
 /** \brief Destroys the inbox.
  *
@@ -1988,7 +1988,7 @@ natsInbox_Create(char **newInbox);
  * @param inbox the pointer to the #natsInbox object to destroy.
  */
 NATS_EXTERN void
-natsInbox_Destroy(char *inbox);
+natsInbox_Destroy(natsInbox *inbox);
 
 /** @} */ // end of inboxGroup
 

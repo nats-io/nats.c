@@ -206,6 +206,7 @@ nats_ReleaseThreadMemory(void)
 }
 
 #if _WIN32
+#ifndef NATS_STATIC
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, // DLL module handle
      DWORD fdwReason,                   // reason called
      LPVOID lpvReserved)                // reserved
@@ -232,6 +233,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, // DLL module handle
     UNREFERENCED_PARAMETER(hinstDLL);
     UNREFERENCED_PARAMETER(lpvReserved);
 }
+#endif
 #endif
 
 static void

@@ -47,6 +47,7 @@ if(NATS_BUILD_LIB_STATIC)
   set_target_properties(nats_static PROPERTIES
     VERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR}.${NATS_VERSION_PATCH}
     SOVERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR})
+  target_compile_definitions(nats_static PRIVATE -DNATS_STATIC)
 endif(NATS_BUILD_LIB_STATIC)
 
 # --------------------------------------

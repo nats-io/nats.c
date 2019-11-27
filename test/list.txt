@@ -73,6 +73,7 @@ IsClosed
 IsReconnectingAndStatus
 ReconnectBufSize
 RetryOnFailedConnect
+NoPartialOnReconnect
 ErrOnConnectAndDeadlock
 ErrOnMaxPayloadLimit
 Auth

@@ -41,6 +41,8 @@ natsConn_publish(natsConnection *nc, const char *subj,
     int         subjLen = 0;
     int         replyLen = 0;
     int         sizeSize = 0;
+    int         pos = 0;
+    bool        reconnecting = false;
 
     if (nc == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -80,11 +82,8 @@ natsConn_publish(natsConnection *nc, const char *subj,
 
     // Check if we are reconnecting, and if so check if
     // we have exceeded our reconnect outbound buffer limits.
-    if (natsConn_isReconnecting(nc))
+    if ((reconnecting = natsConn_isReconnecting(nc)))
     {
-        // Flush to underlying buffer.
-        natsConn_bufferFlush(nc);
-
         // Check if we are over
         if (natsBuf_Len(nc->pending) >= nc->opts->reconnectBufSize)
         {
@@ -141,18 +140,28 @@ natsConn_publish(natsConnection *nc, const char *subj,
     if (s == NATS_OK)
         s = natsBuf_Append(nc->scratch, _CRLF_, _CRLF_LEN_);
 
-    SET_WRITE_DEADLINE(nc);
-
     if (s == NATS_OK)
+    {
+        int pos = 0;
+
+        if (reconnecting)
+            pos = natsBuf_Len(nc->pending);
+        else
+            SET_WRITE_DEADLINE(nc);
+
         s = natsConn_bufferWrite(nc, natsBuf_Data(nc->scratch), msgHdSize);
 
-    if (s == NATS_OK)
-        s = natsConn_bufferWrite(nc, data, dataLen);
+        if (s == NATS_OK)
+            s = natsConn_bufferWrite(nc, data, dataLen);
 
-    if (s == NATS_OK)
-        s = natsConn_bufferWrite(nc, _CRLF_, _CRLF_LEN_);
+        if (s == NATS_OK)
+            s = natsConn_bufferWrite(nc, _CRLF_, _CRLF_LEN_);
 
-    if (s == NATS_OK)
+        if ((s != NATS_OK) && reconnecting)
+            natsBuf_MoveTo(nc->pending, pos);
+    }
+
+    if ((s == NATS_OK) && !reconnecting)
     {
         if (directFlush)
             s = natsConn_bufferFlush(nc);

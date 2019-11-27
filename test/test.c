@@ -15805,6 +15805,119 @@ test_WriteDeadline(void)
 }
 
 static void
+_publish(void *arg)
+{
+    natsConnection  *nc = (natsConnection*) arg;
+    char            data[1024] = {0};
+    int             i;
+    natsStatus      s = NATS_OK;
+
+    for (i=0; ((s == NATS_OK) && (i<1000)); i++)
+        s = natsConnection_Publish(nc, "foo", data, sizeof(data));
+
+}
+
+static void
+test_NoPartialOnReconnect(void)
+{
+    natsStatus          s;
+    natsOptions         *opts = NULL;
+    natsConnection      *nc   = NULL;
+    natsThread          *t    = NULL;
+    natsThread          *t2   = NULL;
+    natsPid             pid   = NATS_INVALID_PID;
+    struct threadArg    arg;
+    const char          *servers[2] = {"nats://127.0.0.1:4222", "nats://127.0.0.1:4223"};
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("unable to setup test");
+
+    test("Create options: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetAllowReconnect(opts, true));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 10));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 10000));
+    IFOK(s, natsOptions_SetServers(opts, servers, 2));
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &arg));
+    testCond(s == NATS_OK);
+
+    test("Start real backup server: ");
+    pid = _startServer("nats://127.0.0.1:4223", "-p 4223", true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Start mock server: ");
+    if (s == NATS_OK)
+    {
+        arg.status = NATS_ERR;
+        arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576}\r\n";
+        s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
+    }
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Connect: ");
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK)
+
+    test("Start Publish: ");
+    IFOK(s, natsThread_Create(&t2, _publish, (void*) nc));
+    testCond(s == NATS_OK);
+
+    nats_Sleep(1000);
+
+    test("Kill server: ");
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Wait for reconnect: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !(arg.reconnected))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    if (t2 != NULL)
+    {
+        natsThread_Join(t2);
+        natsThread_Destroy(t2);
+    }
+
+    test("Check no proto error: ");
+    if (s == NATS_OK)
+    {
+        const char *le = NULL;
+        s = natsConnection_GetLastError(nc, &le);
+    }
+    testCond(s == NATS_OK);
+
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(pid);
+}
+
+static void
 test_SSLBasic(void)
 {
 #if defined(NATS_HAS_TLS)
@@ -18644,6 +18757,7 @@ static testInfo allTests[] =
     {"IsReconnectingAndStatus",         test_IsReconnectingAndStatus},
     {"ReconnectBufSize",                test_ReconnectBufSize},
     {"RetryOnFailedConnect",            test_RetryOnFailedConnect},
+    {"NoPartialOnReconnect",            test_NoPartialOnReconnect},
 
     {"ErrOnConnectAndDeadlock",         test_ErrOnConnectAndDeadlock},
     {"ErrOnMaxPayloadLimit",            test_ErrOnMaxPayloadLimit},

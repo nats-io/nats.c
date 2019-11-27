@@ -290,8 +290,7 @@ natsConn_bufferFlush(natsConnection *nc)
         s = natsSock_WriteFully(&(nc->sockCtx), natsBuf_Data(nc->bw), bufLen);
     }
 
-    if (s == NATS_OK)
-        natsBuf_Reset(nc->bw);
+    natsBuf_Reset(nc->bw);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -334,8 +333,6 @@ natsConn_bufferWrite(natsConnection *nc, const char *buffer, int len)
         {
             // Do a single socket write to avoid a copy
             s = natsSock_WriteFully(&(nc->sockCtx), buffer + offset, len);
-            if (s != NATS_OK)
-                natsBuf_Append(nc->bw, buffer + offset, len);
 
             // We are done
             return NATS_UPDATE_ERR_STACK(s);
@@ -395,19 +392,9 @@ _createConn(natsConnection *nc)
 
     s = natsSock_ConnectTcp(&(nc->sockCtx), nc->cur->url->host, nc->cur->url->port);
     if (s == NATS_OK)
-    {
         nc->sockCtx.fdActive = true;
 
-        if ((nc->pending != NULL) && (nc->bw != NULL)
-            && (natsBuf_Len(nc->bw) > 0))
-        {
-            // Move to pending buffer
-            s = natsConn_bufferWrite(nc, natsBuf_Data(nc->bw),
-                                     natsBuf_Len(nc->bw));
-        }
-    }
-
-    // Need to create the buffer even on failure in case we allow
+    // Need to create or reset the buffer even on failure in case we allow
     // retry on failed connect
     if ((s == NATS_OK) || nc->opts->retryOnFailedConnect)
     {
@@ -466,7 +453,7 @@ natsConn_isClosed(natsConnection *nc)
 bool
 natsConn_isReconnecting(natsConnection *nc)
 {
-    return (nc->status == NATS_CONN_STATUS_RECONNECTING);
+    return (nc->pending != NULL);
 }
 
 bool
@@ -1136,8 +1123,14 @@ _flushReconnectPendingItems(natsConnection *nc)
 
     if (natsBuf_Len(nc->pending) > 0)
     {
-        s = natsBuf_Append(nc->bw, natsBuf_Data(nc->pending),
-                           natsBuf_Len(nc->pending));
+        // Flush pending buffer
+        s = natsConn_bufferWrite(nc, natsBuf_Data(nc->pending),
+                                 natsBuf_Len(nc->pending));
+
+        // Regardless of outcome, we must clear the pending buffer
+        // here to avoid duplicates (if the flush were to fail
+        // with some messages/partial messages being sent).
+        natsBuf_Reset(nc->pending);
     }
 
     return s;
@@ -1515,11 +1508,6 @@ _doReconnect(void *arg)
             continue;
         }
 
-        // We have a valid FD and the writer buffer was moved to pending.
-        // We are now going to send data directly to the newly connected
-        // server, so we need to disable the use of 'pending' for the
-        // moment
-        nc->usePending = false;
 
         // We are reconnected
         nc->stats.reconnects += 1;
@@ -1535,6 +1523,11 @@ _doReconnect(void *arg)
                 s = nats_setError(NATS_CONNECTION_CLOSED, "%s", "connection has been closed/destroyed while reconnecting");
             break;
         }
+
+        // We have a valid FD. We are now going to send data directly
+        // to the newly connected server, so we need to disable the
+        // use of 'pending' for the moment.
+        nc->usePending = false;
 
         // Send existing subscription state
         if (s == NATS_OK)
@@ -1707,9 +1700,19 @@ _sendConnect(natsConnection *nc)
     natsStatus  s       = NATS_OK;
     char        *cProto = NULL;
     natsBuffer	*proto  = NULL;
+    bool        rup     = (nc->pending != NULL);
 
     // Create the CONNECT protocol
     s = _connectProto(nc, &cProto);
+
+    // Because we now possibly release the connection lock in _connectProto()
+    // (if there is user callbacks for jwt/signing keys), we can't have the
+    // set/reset of usePending be in doReconnect(). There are then windows in
+    // which a user Publish() could sneak in a try to send to socket. So limit
+    // the disable/re-enable of that boolean to around this buffer write/flush
+    // calls.
+    if (rup)
+        nc->usePending = false;
 
     // Add it to the buffer
     if (s == NATS_OK)
@@ -1724,6 +1727,10 @@ _sendConnect(natsConnection *nc)
     // Flush the buffer
     if (s == NATS_OK)
         s = natsConn_bufferFlush(nc);
+
+    // Reset here..
+    if (rup)
+        nc->usePending = true;
 
     // Now read the response from the server.
     if (s == NATS_OK)

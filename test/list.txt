@@ -83,6 +83,7 @@ AuthTokenHandler
 PermViolation
 AuthViolation
 AuthenticationExpired
+AuthenticationExpiredReconnect
 ConnectedServer
 MultipleClose
 SimplePublish

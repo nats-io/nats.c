@@ -1508,7 +1508,6 @@ _doReconnect(void *arg)
             continue;
         }
 
-
         // We are reconnected
         nc->stats.reconnects += 1;
 
@@ -1564,6 +1563,10 @@ _doReconnect(void *arg)
         nc->status = NATS_CONN_STATUS_CONNECTED;
 
         // No more failure allowed past this point.
+
+        // Clear connection's last error
+        nc->err       = NATS_OK;
+        nc->errStr[0] = '\0';
 
         // Clear the possible current lastErr
         nc->cur->lastAuthErrCode = 0;

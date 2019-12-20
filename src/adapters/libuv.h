@@ -143,7 +143,13 @@ natsLibuvPoll(uv_poll_t* handle, int status, int events)
     natsLibuvEvents *nle = (natsLibuvEvents*)handle->data;
 
     if (status != 0)
+    {
+        // There was an error, try to process as a read event.
+        // If we had an issue with the socket, this will cause
+        // an auto-reconnect.
+        natsConnection_ProcessReadEvent(nle->nc);
         return;
+    }
 
     if (events & UV_READABLE)
         natsConnection_ProcessReadEvent(nle->nc);

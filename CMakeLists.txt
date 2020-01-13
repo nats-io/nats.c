@@ -85,6 +85,8 @@ if(NATS_BUILD_STREAMING)
     SET(NATS_PROTOBUF_DIR "" CACHE STRING
       "An optional hint to a directory for finding `libprotobuf-c`"
     )
+    MESSAGE(FATAL_ERROR
+      "Could not find libprotobuf-c package. Check build instructions: https://github.com/nats-io/nats.c#building-with-streaming")
   ENDIF()
   add_definitions(-DNATS_HAS_STREAMING)
   set(NATS_DOC_INCLUDE_STREAMING "NATS_HAS_STREAMING")
@@ -121,6 +123,8 @@ if(NATS_BUILD_USE_SODIUM)
     SET(NATS_SODIUM_DIR "" CACHE STRING
       "An optional hint to a directory for finding `libsodium`"
     )
+    MESSAGE(FATAL_ERROR
+      "Could not find libsodium package. Check build instructions: https://github.com/nats-io/nats.c#building-with-libsodium")
   ENDIF()
   add_definitions(-DNATS_USE_LIBSODIUM)
 endif(NATS_BUILD_USE_SODIUM)

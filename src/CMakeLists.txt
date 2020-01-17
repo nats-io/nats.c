@@ -53,12 +53,28 @@ endif(NATS_BUILD_LIB_STATIC)
 # --------------------------------------
 # Install the libraries and header files
 # --------------------------------------
+
+
 if(NATS_BUILD_LIB_SHARED)
-  install(TARGETS nats DESTINATION ${NATS_LIBDIR})
+  set_property(TARGET nats PROPERTY DEBUG_POSTFIX d)
+  target_include_directories(nats PUBLIC
+        $<INSTALL_INTERFACE:include>)
+  install(TARGETS nats EXPORT cnats-targets DESTINATION ${NATS_LIBDIR})
+  install(EXPORT cnats-targets
+        NAMESPACE cnats::
+        FILE cnats-config.cmake
+        DESTINATION lib/cmake/cnats)
 endif(NATS_BUILD_LIB_SHARED)
 
 if(NATS_BUILD_LIB_STATIC)
-  install(TARGETS nats_static ARCHIVE DESTINATION ${NATS_LIBDIR})
+  set_property(TARGET nats_static PROPERTY DEBUG_POSTFIX d)
+  target_include_directories(nats_static PUBLIC
+        $<INSTALL_INTERFACE:include>)
+  install(TARGETS nats_static EXPORT cnats-targets ARCHIVE DESTINATION ${NATS_LIBDIR})
+  install(EXPORT cnats-targets
+        NAMESPACE cnats::
+        FILE cnats-config.cmake
+        DESTINATION lib/cmake/cnats)
 endif(NATS_BUILD_LIB_STATIC)
 
 install(FILES deprnats.h DESTINATION ${NATS_INCLUDE_DIR} RENAME nats.h)

@@ -2,7 +2,8 @@ if(NOT BUILD_TESTING)
   return()
 endif()
 if(NOT NATS_BUILD_LIB_STATIC)
-   message("Building tests require static library")
+   MESSAGE(FATAL_ERROR
+     "Building tests require static library, or run CMake with -DBUILD_TESTING=OFF")
   return()
 endif()  
 

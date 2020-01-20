@@ -2,7 +2,8 @@ if(NOT NATS_BUILD_EXAMPLES)
   return()
 endif()
 if(NOT NATS_BUILD_STATIC_EXAMPLES AND NOT NATS_BUILD_LIB_SHARED)
-  message("Building examples require shared library")
+  MESSAGE(FATAL_ERROR
+    "Building examples require shared library, or run CMake with -DNATS_BUILD_STATIC_EXAMPLES=ON")
 endif()
 
 # We need this directory to build the examples

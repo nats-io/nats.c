@@ -66,7 +66,7 @@ if(NATS_BUILD_STREAMING)
       ${NATS_PROTOBUF_DIR}
   )
   FIND_LIBRARY(NATS_PROTOBUF_LIBRARY
-    NAMES libprotobuf-c.a libprotobuf-c.so libprotobuf-c.dylib protobuf-c.lib protobuf-c.dll
+    NAMES libprotobuf-c.so libprotobuf-c.dylib libprotobuf-c.a protobuf-c.lib protobuf-c.dll
     HINTS ${NATS_PROTOBUF_DIR}
   )
   FIND_PACKAGE_HANDLE_STANDARD_ARGS(libprotobuf-c DEFAULT_MSG
@@ -104,7 +104,7 @@ if(NATS_BUILD_USE_SODIUM)
       ${NATS_SODIUM_DIR}
   )
   FIND_LIBRARY(NATS_SODIUM_LIBRARY
-    NAMES libsodium.a libsodium.so libsodium.dylib libsodium.lib libsodium.dll
+    NAMES libsodium.so libsodium.dylib libsodium.a libsodium.lib libsodium.dll
     HINTS ${NATS_SODIUM_DIR}
   )
   FIND_PACKAGE_HANDLE_STANDARD_ARGS(libsodium DEFAULT_MSG

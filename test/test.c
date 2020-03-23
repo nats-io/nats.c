@@ -11986,6 +11986,128 @@ test_NextMsgCallOnAsyncSub(void)
     _stopServer(serverPid);
 }
 
+static void
+testSubOnComplete(void *closure)
+{
+    struct threadArg *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    arg->status = (arg->control == 2 ? NATS_OK : NATS_ERR);
+    arg->done = true;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+testOnCompleteMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    struct threadArg *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    arg->control = 1;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+
+    // Sleep here so that main thread invokes Unsubscribe() and we make sure that the
+    // onComplete is not invoked until this function returns.
+    nats_Sleep(500);
+
+    natsMutex_Lock(arg->m);
+    arg->control = 2;
+    natsMutex_Unlock(arg->m);
+
+    natsMsg_Destroy(msg);
+}
+
+static void
+test_SubOnComplete(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    natsMsg             *msg      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Invalid arg: ");
+    s = natsSubscription_SetOnCompleteCB(NULL, testSubOnComplete, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    if (s == NATS_OK)
+        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    test("Invalid sub (NULL): ");
+    if (s == NATS_OK)
+        s= natsSubscription_SetOnCompleteCB(sub, testSubOnComplete, NULL);
+    testCond(s == NATS_INVALID_SUBSCRIPTION);
+
+    natsSubscription_Unsubscribe(sub);
+    test("Invalid sub (sync): ");
+    s = natsSubscription_SetOnCompleteCB(sub, testSubOnComplete, NULL);
+    testCond(s == NATS_INVALID_SUBSCRIPTION);
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    arg.status = NATS_ERR;
+    s = natsConnection_Subscribe(&sub, nc, "foo", testOnCompleteMsgHandler, &arg);
+    test("SetOnCompleteCB ok: ");
+    if (s == NATS_OK)
+        s = natsSubscription_SetOnCompleteCB(sub, testSubOnComplete, &arg);
+    testCond(s == NATS_OK);
+    test("SetOnCompleteCB to NULL ok: ");
+    if (s == NATS_OK)
+        s = natsSubscription_SetOnCompleteCB(sub, NULL, NULL);
+    if (s == NATS_OK)
+    {
+        natsSub_Lock(sub);
+        s = (((sub->onCompleteCB == NULL) && (sub->onCompleteCBClosure == NULL)) ? NATS_OK : NATS_ERR);
+        natsSub_Unlock(sub);
+    }
+    testCond(s == NATS_OK);
+    test("OnComplete invoked after last message: ");
+    if (s == NATS_OK)
+        s = natsSubscription_SetOnCompleteCB(sub, testSubOnComplete, &arg);
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(nc, "foo", "hello");
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    if (s == NATS_OK)
+    {
+        // Wait for message handler to be invoked
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.control != 1))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+    if (s == NATS_OK)
+        s = natsSubscription_Unsubscribe(sub);
+    if (s == NATS_OK)
+    {
+        // Now wait for the onComplete to return.
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.done)
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+
+        // This will be OK if complete callback was invoked after msg handler returned,
+        // otherwise will be NATS_ERR;
+        s = arg.status;
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
 
 static void
 test_ServersOption(void)
@@ -18941,6 +19063,7 @@ static testInfo allTests[] =
     {"AsyncSubscriberStarvation",       test_AsyncSubscriberStarvation},
     {"AsyncSubscriberOnClose",          test_AsyncSubscriberOnClose},
     {"NextMsgCallOnAsyncSub",           test_NextMsgCallOnAsyncSub},
+    {"SubOnComplete",                   test_SubOnComplete},
     {"GetLastError",                    test_GetLastError},
     {"StaleConnection",                 test_StaleConnection},
     {"ServerErrorClosesConnection",     test_ServerErrorClosesConnection},

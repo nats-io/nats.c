@@ -346,7 +346,7 @@ stanConn_subscribe(stanSubscription **newSub, stanConnection *sc,
             // Retain both sub and sc
             sub->refs++;
             stanConn_retain(sc);
-            s = natsSub_setOnCompleteCB(sub->inboxSub, _releaseStanSubCB, (void*) sub);
+            s = natsSubscription_SetOnCompleteCB(sub->inboxSub, _releaseStanSubCB, (void*) sub);
             if (s != NATS_OK)
             {
                 sub->refs--;

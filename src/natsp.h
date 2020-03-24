@@ -137,8 +137,6 @@ extern int64_t gLockSpinCount;
 
 typedef void (*natsInitOnceCb)(void);
 
-typedef void (*natsOnCompleteCB)(void *closure);
-
 typedef struct __natsControl
 {
     char    *op;

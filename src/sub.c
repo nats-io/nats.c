@@ -226,12 +226,15 @@ natsSub_setMax(natsSubscription *sub, uint64_t max)
 }
 
 natsStatus
-natsSub_setOnCompleteCB(natsSubscription *sub, natsOnCompleteCB cb, void *closure)
+natsSubscription_SetOnCompleteCB(natsSubscription *sub, natsOnCompleteCB cb, void *closure)
 {
     natsStatus s = NATS_OK;
 
+    if (sub == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
     natsSub_Lock(sub);
-    if (sub->closed)
+    if ((sub->closed) || (sub->msgCb == NULL))
         s = nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     else
     {
@@ -434,7 +437,7 @@ natsConnection_SubscribeTimeout(natsSubscription **sub, natsConnection *nc, cons
     natsStatus s;
 
     if ((cb == NULL) || (timeout <= 0))
-            return nats_setDefaultError(NATS_INVALID_ARG);
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     s = natsConn_subscribeWithTimeout(sub, nc, subject, timeout, cb, cbClosure);
 

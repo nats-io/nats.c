@@ -358,7 +358,7 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
         {
             natsSubscription_SetPendingLimits(sc->hbSubscription, -1, -1);
             sc->refs++;
-            s = natsSub_setOnCompleteCB(sc->hbSubscription, _releaseStanConnCB, (void*) sc);
+            s = natsSubscription_SetOnCompleteCB(sc->hbSubscription, _releaseStanConnCB, (void*) sc);
             if (s != NATS_OK)
                 sc->refs--;
         }
@@ -376,7 +376,7 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
 
             natsSubscription_SetPendingLimits(pingSub, -1, -1);
             sc->refs++;
-            s = natsSub_setOnCompleteCB(pingSub, _releaseStanConnCB, (void*) sc);
+            s = natsSubscription_SetOnCompleteCB(pingSub, _releaseStanConnCB, (void*) sc);
             if (s != NATS_OK)
                 sc->refs--;
         }
@@ -522,7 +522,7 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
         {
             natsSubscription_SetPendingLimits(sc->ackSubscription, -1, -1);
             sc->refs++;
-            s = natsSub_setOnCompleteCB(sc->ackSubscription, _releaseStanConnCB, (void*) sc);
+            s = natsSubscription_SetOnCompleteCB(sc->ackSubscription, _releaseStanConnCB, (void*) sc);
             if (s != NATS_OK)
                 sc->refs--;
         }

@@ -342,6 +342,16 @@ typedef natsStatus (*natsSignatureHandler)(
  */
 typedef const char* (*natsTokenHandler)(void *closure);
 
+
+/** \brief Callback used to notify that an object lifecycle is complete.
+ *
+ * Currently used for asynchronous #natsSubscription objects. When set, this callback will
+ * be invoked after the subscription is closed and the message handler has returned.
+ *
+ * @see natsSubscription_SetOnCompleteCB()
+ */
+typedef void (*natsOnCompleteCB)(void *closure);
+
 #if defined(NATS_HAS_STREAMING)
 /** \brief Callback used to notify of an asynchronous publish result.
  *
@@ -3078,6 +3088,37 @@ natsSubscription_Drain(natsSubscription *sub);
  */
 NATS_EXTERN natsStatus
 natsSubscription_WaitForDrainCompletion(natsSubscription *sub, int64_t timeout);
+
+/** \brief Sets a completion callback.
+ *
+ * In order to make sure that an asynchronous subscription's message handler is no longer invoked once the
+ * subscription is closed (#natsSubscription_Unsubscribe), the subscription should be closed from the
+ * message handler itslef.
+ *
+ * If the application closes the subscription from a different thread and immediately frees resources
+ * needed in the message handler, there is a risk of a crash since the subscription's message handler
+ * may still be invoked one last time or already in the process of executing.
+ *
+ * To address this, the user can set a callback that will be invoked after the subscription is closed and the
+ * message handler has returned. This applies to asynchronous subscriptions using their own dispatcher or using
+ * the library's delivery thread pool.
+ *
+ * \note You don't need to call this function if you are not freeing resources needed in the message handler or if
+ * you always close the subscription from the message handler itself.
+ *
+ * \note If you plan on calling this function, you should do so before calling #natsSubscription_AutoUnsubscribe, since
+ * there is a risk that the subscription be removed as soon as #natsSubscription_AutoUnsubscribe returns.
+ *
+ * Calling this function on a synchronous or closed subscription will return #NATS_INVALID_SUBSCRIPTION.
+ *
+ * @see natsOnCompleteCB
+ *
+ * @param sub the pointer to the #natsSubscription object
+ * @param cb the callback to invoke when the last message of a closed subscription has been dispatched
+ * @param closure the pointer to a user defined object (possibly `NULL`) that will be passed to the callback
+ */
+NATS_EXTERN natsStatus
+natsSubscription_SetOnCompleteCB(natsSubscription *sub, natsOnCompleteCB cb, void *closure);
 
 /** \brief Destroys the subscription.
  *

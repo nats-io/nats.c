@@ -132,6 +132,7 @@ AsyncErrHandler
 AsyncSubscriberStarvation
 AsyncSubscriberOnClose
 NextMsgCallOnAsyncSub
+SubOnComplete
 GetLastError
 StaleConnection
 ServerErrorClosesConnection

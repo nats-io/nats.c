@@ -33,7 +33,7 @@ natsStatistics_Create(natsStatistics **newStats)
 }
 
 natsStatus
-natsStatistics_GetCounts(natsStatistics *stats,
+natsStatistics_GetCounts(const natsStatistics *stats,
                          uint64_t *inMsgs, uint64_t *inBytes,
                          uint64_t *outMsgs, uint64_t *outBytes,
                          uint64_t *reconnects)

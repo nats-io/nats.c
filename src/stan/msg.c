@@ -14,7 +14,7 @@
 #include "msg.h"
 
 uint64_t
-stanMsg_GetSequence(stanMsg *msg)
+stanMsg_GetSequence(const stanMsg *msg)
 {
     if (msg == NULL)
         return 0;
@@ -23,7 +23,7 @@ stanMsg_GetSequence(stanMsg *msg)
 }
 
 const char*
-stanMsg_GetData(stanMsg *msg)
+stanMsg_GetData(const stanMsg *msg)
 {
     if (msg == NULL)
         return NULL;
@@ -32,7 +32,7 @@ stanMsg_GetData(stanMsg *msg)
 }
 
 int
-stanMsg_GetDataLength(stanMsg *msg)
+stanMsg_GetDataLength(const stanMsg *msg)
 {
     if (msg == NULL)
         return 0;
@@ -41,7 +41,7 @@ stanMsg_GetDataLength(stanMsg *msg)
 }
 
 int64_t
-stanMsg_GetTimestamp(stanMsg *msg)
+stanMsg_GetTimestamp(const stanMsg *msg)
 {
     if (msg == NULL)
         return 0;
@@ -50,7 +50,7 @@ stanMsg_GetTimestamp(stanMsg *msg)
 }
 
 bool
-stanMsg_IsRedelivered(stanMsg *msg)
+stanMsg_IsRedelivered(const stanMsg *msg)
 {
     if (msg == NULL)
         return false;

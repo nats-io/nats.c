@@ -5431,6 +5431,88 @@ test_ProcessMsgArgs(void)
     s = natsConnection_GetLastError(nc, &le);
     testCond(s == NATS_PROTOCOL_ERROR);
 
+    // Test extra spaces first without reply
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "MSG foo  1 2\r\n");
+    test("Parsing MSG with extra space before sid: ")
+    s = natsParser_Parse(nc, buf, strlen(buf));
+    testCond((s == NATS_OK)
+                && (natsBuf_Len(nc->ps->ma.subject) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.subject), "foo", 3) == 0)
+                && (nc->ps->ma.sid == 1)
+                && (nc->ps->ma.reply == NULL)
+                && (nc->ps->ma.size == 2));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "MSG bar 1  2\r\n");
+    test("Parsing MSG with extra space before size: ")
+    s = natsParser_Parse(nc, buf, strlen(buf));
+    testCond((s == NATS_OK)
+                && (natsBuf_Len(nc->ps->ma.subject) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.subject), "bar", 3) == 0)
+                && (nc->ps->ma.sid == 1)
+                && (nc->ps->ma.reply == NULL)
+                && (nc->ps->ma.size == 2));
+
+    // Test extra spaces first with reply
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "MSG baz  3 bat 4\r\n");
+    test("Parsing MSG with extra space before sid: ")
+    s = natsParser_Parse(nc, buf, strlen(buf));
+    testCond((s == NATS_OK)
+                && (natsBuf_Len(nc->ps->ma.subject) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.subject), "baz", 3) == 0)
+                && (nc->ps->ma.sid == 3)
+                && (natsBuf_Len(nc->ps->ma.reply) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.reply), "bat", 3) == 0)
+                && (nc->ps->ma.size == 4));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "MSG boo 5  baa 6\r\n");
+    test("Parsing MSG with extra space before reply: ")
+    s = natsParser_Parse(nc, buf, strlen(buf));
+    testCond((s == NATS_OK)
+                && (natsBuf_Len(nc->ps->ma.subject) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.subject), "boo", 3) == 0)
+                && (nc->ps->ma.sid == 5)
+                && (natsBuf_Len(nc->ps->ma.reply) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.reply), "baa", 3) == 0)
+                && (nc->ps->ma.size == 6));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "MSG coo 7 caa  8\r\n");
+    test("Parsing MSG with extra space before size: ")
+    s = natsParser_Parse(nc, buf, strlen(buf));
+    testCond((s == NATS_OK)
+                && (natsBuf_Len(nc->ps->ma.subject) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.subject), "coo", 3) == 0)
+                && (nc->ps->ma.sid == 7)
+                && (natsBuf_Len(nc->ps->ma.reply) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.reply), "caa", 3) == 0)
+                && (nc->ps->ma.size == 8));
+
     natsConnection_Destroy(nc);
 }
 

@@ -5513,6 +5513,24 @@ test_ProcessMsgArgs(void)
                 && (strncmp(natsBuf_Data(nc->ps->ma.reply), "caa", 3) == 0)
                 && (nc->ps->ma.size == 8));
 
+    // Test with extra space everywhere
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "MSG  doo  8  daa   9  \r\n");
+    test("Parsing MSG with extra space everywhere: ")
+    s = natsParser_Parse(nc, buf, strlen(buf));
+    testCond((s == NATS_OK)
+                && (natsBuf_Len(nc->ps->ma.subject) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.subject), "doo", 3) == 0)
+                && (nc->ps->ma.sid == 8)
+                && (natsBuf_Len(nc->ps->ma.reply) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.reply), "daa", 3) == 0)
+                && (nc->ps->ma.size == 9));
+
     natsConnection_Destroy(nc);
 }
 

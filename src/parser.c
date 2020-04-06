@@ -85,8 +85,7 @@ static natsStatus
 _processMsgArgs(natsConnection *nc, char *buf, int bufLen)
 {
     natsStatus      s       = NATS_OK;
-    bool            started = false;
-    char            *start  = buf;
+    int             start   = -1;
     int             len     = 0;
     int             index   = 0;
     int             i;
@@ -98,32 +97,27 @@ _processMsgArgs(natsConnection *nc, char *buf, int bufLen)
     {
         b = buf[i];
 
-        if (((b == ' ') || (b == '\t') || (b == '\r') || (b == '\n'))
-            && started)
+        if (((b == ' ') || (b == '\t') || (b == '\r') || (b == '\n')))
         {
-            if (index > 3)
+            if (start >=0)
             {
-                s = NATS_PROTOCOL_ERROR;
-                break;
+                if (index > 3)
+                {
+                    s = NATS_PROTOCOL_ERROR;
+                    break;
+                }
+                slices[index].start = buf + start;
+                slices[index].len   = i - start;
+                index++;
+                start = -1;
             }
-            slices[index].start = start;
-            slices[index].len   = len;
-            index++;
-
-            started = false;
-            len = 0;
         }
-        else
+        else if (start < 0)
         {
-            if (!started)
-            {
-                start   = buf + i;
-                started = true;
-            }
-            len++;
+            start = i;
         }
     }
-    if ((s == NATS_OK) && started)
+    if ((s == NATS_OK) && (start >= 0))
     {
         if (index > 3)
         {
@@ -131,8 +125,8 @@ _processMsgArgs(natsConnection *nc, char *buf, int bufLen)
         }
         else
         {
-            slices[index].start = start;
-            slices[index].len   = len;
+            slices[index].start = buf + start;
+            slices[index].len   = i - start;
             index++;
         }
     }

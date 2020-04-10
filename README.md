@@ -959,7 +959,7 @@ with `strlen` for the number of bytes.
 
 For throughput reasons (and to mimic the Go client this library is based on), the client library
 uses a buffer for all socket writes. This buffer is flushed in the thread where the publish occurs
-if the buffer is full. The buffer size is not configurable at the moment. You can query how
+if the buffer is full. The buffer size can be configured with natsOptions_SetIOBufSize(). You can query how
 much data is in that buffer using the natsConnection_Buffered() function.
 
 When a publish call does not fill the buffer, the call returns without any data actually sent

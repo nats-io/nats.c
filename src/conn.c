@@ -502,39 +502,29 @@ _processInfo(natsConnection *nc, char *info, int len)
         return NATS_UPDATE_ERR_STACK(s);
 
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "server_id", TYPE_STR,
-                              (void**) &(nc->info.id));
+        s = nats_JSONGetStr(json, "server_id", &(nc->info.id));
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "version", TYPE_STR,
-                              (void**) &(nc->info.version));
+        s = nats_JSONGetStr(json, "version", &(nc->info.version));
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "host", TYPE_STR,
-                              (void**) &(nc->info.host));
+        s = nats_JSONGetStr(json, "host", &(nc->info.host));
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "port", TYPE_INT,
-                              (void**) &(nc->info.port));
+        s = nats_JSONGetInt(json, "port", &(nc->info.port));
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "auth_required", TYPE_BOOL,
-                              (void**) &(nc->info.authRequired));
+        s = nats_JSONGetBool(json, "auth_required", &(nc->info.authRequired));
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "tls_required", TYPE_BOOL,
-                              (void**) &(nc->info.tlsRequired));
+        s = nats_JSONGetBool(json, "tls_required", &(nc->info.tlsRequired));
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "max_payload", TYPE_LONG,
-                             (void**) &(nc->info.maxPayload));
+        s = nats_JSONGetLong(json, "max_payload", &(nc->info.maxPayload));
     if (s == NATS_OK)
-        s = nats_JSONGetArrayValue(json, "connect_urls", TYPE_STR,
-                                   (void***) &(nc->info.connectURLs),
-                                   &(nc->info.connectURLsCount));
+        s = nats_JSONGetArrayStr(json, "connect_urls",
+                                 &(nc->info.connectURLs),
+                                 &(nc->info.connectURLsCount));
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "proto", TYPE_INT,
-                              (void**) &(nc->info.proto));
+        s = nats_JSONGetInt(json, "proto", &(nc->info.proto));
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "client_id", TYPE_LONG,
-                              (void**) &(nc->info.CID));
+        s = nats_JSONGetULong(json, "client_id", &(nc->info.CID));
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "nonce", TYPE_STR,
-                              (void**) &(nc->info.nonce));
+        s = nats_JSONGetStr(json, "nonce", &(nc->info.nonce));
 
 #if 0
     fprintf(stderr, "Id=%s Version=%s Host=%s Port=%d Auth=%s SSL=%s Payload=%d Proto=%d\n",
@@ -1054,10 +1044,12 @@ _resendSubscriptions(natsConnection *nc)
 
         if (s == NATS_OK)
         {
+            void *p = NULL;
+
             natsHashIter_Init(&iter, nc->subs);
-            while (natsHashIter_Next(&iter, NULL, (void**) &sub))
+            while (natsHashIter_Next(&iter, NULL, &p))
             {
-                subs[count++] = sub;
+                subs[count++] = (natsSubscription*) p;
             }
         }
     }
@@ -1401,14 +1393,15 @@ static void
 _clearPendingRequestCalls(natsConnection *nc)
 {
     natsStrHashIter iter;
-    respInfo        *val = NULL;
+    void            *p = NULL;
 
     if (nc->respMap == NULL)
         return;
 
     natsStrHashIter_Init(&iter, nc->respMap);
-    while (natsStrHashIter_Next(&iter, NULL, (void**)&val))
+    while (natsStrHashIter_Next(&iter, NULL, &p))
     {
+        respInfo *val = (respInfo*) p;
         natsMutex_Lock(val->mu);
         val->closed = true;
         val->removed = true;
@@ -2318,12 +2311,14 @@ static void
 _removeAllSubscriptions(natsConnection *nc)
 {
     natsHashIter     iter;
-    natsSubscription *sub;
+    void             *p = NULL;
 
     natsMutex_Lock(nc->subsMu);
     natsHashIter_Init(&iter, nc->subs);
-    while (natsHashIter_Next(&iter, NULL, (void**) &sub))
+    while (natsHashIter_Next(&iter, NULL, &p))
     {
+        natsSubscription *sub = (natsSubscription*) p;
+
         (void) natsHashIter_RemoveCurrent(&iter);
 
         natsSub_close(sub, true);
@@ -2729,9 +2724,9 @@ natsStatus
 natsConn_addSubcription(natsConnection *nc, natsSubscription *sub)
 {
     natsStatus          s       = NATS_OK;
-    natsSubscription    *oldSub = NULL;
+    void                *oldSub = NULL;
 
-    s = natsHash_Set(nc->subs, sub->sid, (void*) sub, (void**) &oldSub);
+    s = natsHash_Set(nc->subs, sub->sid, (void*) sub, &oldSub);
     if (s == NATS_OK)
     {
         assert(oldSub == NULL);
@@ -3492,9 +3487,12 @@ _drain(natsConnection *nc, int64_t timeout)
                 s = NATS_NO_MEMORY;
             if (s == NATS_OK)
             {
+                void *p = NULL;
+
                 natsHashIter_Init(&iter, nc->subs);
-                while (natsHashIter_Next(&iter, NULL, (void**)&sub))
+                while (natsHashIter_Next(&iter, NULL, &p))
                 {
+                    sub = (natsSubscription*) p;
                     natsSub_retain(sub);
                     subs[numSubs++] = sub;
                 }

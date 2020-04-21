@@ -629,7 +629,7 @@ nats_JSONParse(nats_JSON **newJSON, const char *jsonStr, int jsonLen)
     natsStatus      s         = NATS_OK;
     nats_JSON       *json     = NULL;
     nats_JSONField  *field    = NULL;
-    nats_JSONField  *oldField = NULL;
+    void            *oldField = NULL;
     char            *ptr;
     char            *fieldName = NULL;
     int             state;
@@ -732,7 +732,7 @@ nats_JSONParse(nats_JSON **newJSON, const char *jsonStr, int jsonLen)
                     NATS_UPDATE_ERR_STACK(s);
                     break;
                 }
-                s = natsStrHash_Set(json->fields, fieldName, false, (void*) field, (void**)&oldField);
+                s = natsStrHash_Set(json->fields, fieldName, false, (void*) field, &oldField);
                 if (s != NATS_OK)
                 {
                     NATS_UPDATE_ERR_STACK(s);
@@ -874,11 +874,12 @@ nats_JSONParse(nats_JSON **newJSON, const char *jsonStr, int jsonLen)
 }
 
 natsStatus
-nats_JSONGetValue(nats_JSON *json, const char *fieldName, int fieldType, void **addr)
+nats_JSONGetField(nats_JSON *json, const char *fieldName, int fieldType, nats_JSONField **retField)
 {
     nats_JSONField *field = NULL;
 
     field = (nats_JSONField*) natsStrHash_Get(json->fields, (char*) fieldName);
+    *retField = field;
     // If unknown field, just ignore
     if (field == NULL)
         return NATS_OK;
@@ -907,47 +908,101 @@ nats_JSONGetValue(nats_JSON *json, const char *fieldName, int fieldType, void **
                                  "Asked for field '%s' as type %d, but this type does not exist",
                                  field->name, fieldType);
     }
-    // We have proper type, return value
-    switch (fieldType)
-    {
-        case TYPE_STR:
-        {
-            if (field->value.vstr == NULL)
-            {
-                (*(char**)addr) = NULL;
-            }
-            else
-            {
-                char *tmp = NATS_STRDUP(field->value.vstr);
-                if (tmp == NULL)
-                    return nats_setDefaultError(NATS_NO_MEMORY);
-                (*(char**)addr) = tmp;
-            }
-            break;
-        }
-        case TYPE_BOOL:     (*(bool*)addr) = field->value.vbool;                break;
-        case TYPE_INT:      (*(int*)addr) = (int)field->value.vdec;             break;
-        case TYPE_LONG:     (*(int64_t*)addr) = (int64_t) field->value.vdec;    break;
-        case TYPE_ULONG:    (*(uint64_t*)addr) = (uint64_t) field->value.vdec;  break;
-        case TYPE_DOUBLE:   (*(long double*)addr) = field->value.vdec;          break;
-        default:
-        {
-            return nats_setError(NATS_NOT_FOUND,
-                                 "Unknown field type for field '%s': %d",
-                                 field->name, fieldType);
-        }
-    }
     return NATS_OK;
 }
 
 natsStatus
-nats_JSONGetArrayValue(nats_JSON *json, const char *fieldName, int fieldType, void ***array, int *arraySize)
+nats_JSONGetStr(nats_JSON *json, const char *fieldName, char **value)
+{
+    natsStatus      s      = NATS_OK;
+    nats_JSONField  *field = NULL;
+
+    s = nats_JSONGetField(json, fieldName, TYPE_STR, &field);
+    if ((s == NATS_OK) && (field != NULL))
+    {
+        if (field->value.vstr == NULL)
+        {
+            *value = NULL;
+        }
+        else
+        {
+            char *tmp = NATS_STRDUP(field->value.vstr);
+            if (tmp == NULL)
+                return nats_setDefaultError(NATS_NO_MEMORY);
+            *value = tmp;
+        }
+    }
+    return s;
+}
+
+natsStatus
+nats_JSONGetInt(nats_JSON *json, const char *fieldName, int *value)
+{
+    natsStatus      s      = NATS_OK;
+    nats_JSONField  *field = NULL;
+
+    s = nats_JSONGetField(json, fieldName, TYPE_INT, &field);
+    if ((s == NATS_OK) && (field != NULL))
+        *value = (int)field->value.vdec;
+    return s;
+}
+
+natsStatus
+nats_JSONGetBool(nats_JSON *json, const char *fieldName, bool *value)
+{
+    natsStatus      s      = NATS_OK;
+    nats_JSONField  *field = NULL;
+
+    s = nats_JSONGetField(json, fieldName, TYPE_BOOL, &field);
+    if ((s == NATS_OK) && (field != NULL))
+        *value = field->value.vbool;
+    return s;
+}
+
+natsStatus
+nats_JSONGetLong(nats_JSON *json, const char *fieldName, int64_t *value)
+{
+    natsStatus      s      = NATS_OK;
+    nats_JSONField  *field = NULL;
+
+    s = nats_JSONGetField(json, fieldName, TYPE_LONG, &field);
+    if ((s == NATS_OK) && (field != NULL))
+        *value = (int64_t) field->value.vdec;
+    return s;
+}
+
+natsStatus
+nats_JSONGetULong(nats_JSON *json, const char *fieldName, uint64_t *value)
+{
+    natsStatus      s      = NATS_OK;
+    nats_JSONField  *field = NULL;
+
+    s = nats_JSONGetField(json, fieldName, TYPE_ULONG, &field);
+    if ((s == NATS_OK) && (field != NULL))
+        *value = (uint64_t) field->value.vdec;
+    return s;
+}
+
+natsStatus
+nats_JSONGetDouble(nats_JSON *json, const char *fieldName, long double *value)
+{
+    natsStatus      s      = NATS_OK;
+    nats_JSONField  *field = NULL;
+
+    s = nats_JSONGetField(json, fieldName, TYPE_DOUBLE, &field);
+    if ((s == NATS_OK) && (field != NULL))
+        *value = (long double) field->value.vdec;
+    return s;
+}
+
+natsStatus
+nats_JSONGetArrayField(nats_JSON *json, const char *fieldName, int fieldType, nats_JSONField **retField)
 {
     natsStatus      s        = NATS_OK;
     nats_JSONField  *field   = NULL;
-    void            **values = NULL;
 
     field = (nats_JSONField*) natsStrHash_Get(json->fields, (char*) fieldName);
+    *retField = field;
     // If unknown field, just ignore
     if (field == NULL)
         return NATS_OK;
@@ -962,13 +1017,29 @@ nats_JSONGetArrayValue(nats_JSON *json, const char *fieldName, int fieldType, vo
                              "Asked for field '%s' as an array of type: %d, but it is an array of type: %d",
                              field->name, fieldType, field->typ);
 
-    values = NATS_CALLOC(field->value.varr->size, field->value.varr->eltSize);
-    if (values == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
+    if (fieldType != TYPE_STR)
+    {
+        s = nats_setError(NATS_INVALID_ARG, "%s",
+                          "Only string arrays are supported");
+    }
 
-    if (fieldType == TYPE_STR)
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+nats_JSONGetArrayStr(nats_JSON *json, const char *fieldName, char ***array, int *arraySize)
+{
+    natsStatus      s      = NATS_OK;
+    nats_JSONField  *field = NULL;
+
+    s = nats_JSONGetArrayField(json, fieldName, TYPE_STR, &field);
+    if ((s == NATS_OK) && (field != NULL))
     {
         int i;
+
+        char **values = NATS_CALLOC(field->value.varr->size, field->value.varr->eltSize);
+        if (values == NULL)
+            return nats_setDefaultError(NATS_NO_MEMORY);
 
         for (i=0; i<field->value.varr->size; i++)
         {
@@ -988,35 +1059,29 @@ nats_JSONGetArrayValue(nats_JSON *json, const char *fieldName, int fieldType, vo
 
             NATS_FREE(values);
         }
+        else
+        {
+            *array     = values;
+            *arraySize = field->value.varr->size;
+        }
     }
-    else
-    {
-        s = nats_setError(NATS_INVALID_ARG, "%s",
-                          "Only string arrays are supported");
-    }
-    if (s == NATS_OK)
-    {
-        *array     = values;
-        *arraySize = field->value.varr->size;
-    }
-
-    return NATS_UPDATE_ERR_STACK(s);
+    return s;
 }
 
 void
 nats_JSONDestroy(nats_JSON *json)
 {
     natsStrHashIter iter;
-    nats_JSONField  *field;
+    void            *field = NULL;
 
     if (json == NULL)
         return;
 
     natsStrHashIter_Init(&iter, json->fields);
-    while (natsStrHashIter_Next(&iter, NULL, (void**)&field))
+    while (natsStrHashIter_Next(&iter, NULL, &field))
     {
         natsStrHashIter_RemoveCurrent(&iter);
-        _jsonFreeField(field);
+        _jsonFreeField((nats_JSONField*) field);
     }
     natsStrHash_Destroy(json->fields);
     NATS_FREE(json->str);

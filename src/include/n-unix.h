@@ -18,6 +18,7 @@
 #define _GNU_SOURCE
 #endif
 
+#include <sys/socket.h>
 #include <stdint.h>
 #include <stdbool.h>
 

@@ -944,7 +944,8 @@ nats_JSONGetInt(nats_JSON *json, const char *fieldName, int *value)
     s = nats_JSONGetField(json, fieldName, TYPE_INT, &field);
     if ((s == NATS_OK) && (field != NULL))
         *value = (int)field->value.vdec;
-    return s;
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -956,7 +957,8 @@ nats_JSONGetBool(nats_JSON *json, const char *fieldName, bool *value)
     s = nats_JSONGetField(json, fieldName, TYPE_BOOL, &field);
     if ((s == NATS_OK) && (field != NULL))
         *value = field->value.vbool;
-    return s;
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -968,7 +970,8 @@ nats_JSONGetLong(nats_JSON *json, const char *fieldName, int64_t *value)
     s = nats_JSONGetField(json, fieldName, TYPE_LONG, &field);
     if ((s == NATS_OK) && (field != NULL))
         *value = (int64_t) field->value.vdec;
-    return s;
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -980,7 +983,8 @@ nats_JSONGetULong(nats_JSON *json, const char *fieldName, uint64_t *value)
     s = nats_JSONGetField(json, fieldName, TYPE_ULONG, &field);
     if ((s == NATS_OK) && (field != NULL))
         *value = (uint64_t) field->value.vdec;
-    return s;
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -992,7 +996,8 @@ nats_JSONGetDouble(nats_JSON *json, const char *fieldName, long double *value)
     s = nats_JSONGetField(json, fieldName, TYPE_DOUBLE, &field);
     if ((s == NATS_OK) && (field != NULL))
         *value = (long double) field->value.vdec;
-    return s;
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -1018,12 +1023,10 @@ nats_JSONGetArrayField(nats_JSON *json, const char *fieldName, int fieldType, na
                              field->name, fieldType, field->typ);
 
     if (fieldType != TYPE_STR)
-    {
-        s = nats_setError(NATS_INVALID_ARG, "%s",
-                          "Only string arrays are supported");
-    }
+        return nats_setError(NATS_INVALID_ARG, "%s",
+                             "Only string arrays are supported");
 
-    return NATS_UPDATE_ERR_STACK(s);
+    return NATS_OK;
 }
 
 natsStatus
@@ -1065,7 +1068,8 @@ nats_JSONGetArrayStr(nats_JSON *json, const char *fieldName, char ***array, int 
             *arraySize = field->value.varr->size;
         }
     }
-    return s;
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void

@@ -163,7 +163,7 @@ if(UNIX)
      endif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   endif(NATS_COMPILER_HARDENING)
 
-  set(NATS_WARNINGS "-Wall -W -Wno-unused-variable -Wno-unused-parameter -Wno-unused-function -Wstrict-prototypes -Wwrite-strings")
+  set(NATS_WARNINGS "-fstrict-aliasing -Wall -W -Wno-unused-variable -Wno-unused-parameter -Wno-unused-function -Wstrict-prototypes -Wwrite-strings")
   set(NATS_PLATFORM_INCLUDE "unix")
   
   if(APPLE)

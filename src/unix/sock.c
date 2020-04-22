@@ -26,11 +26,13 @@ natsStatus
 natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
 {
     natsDeadline    *deadline = &(ctx->writeDeadline);
-    struct pollfd   pfd       = {0};
+    struct pollfd   pfd;
     int             timeout   = -1;
     int             res;
 
     pfd.fd = ctx->fd;
+    pfd.events = 0;
+    pfd.revents = 0;
 
     switch (waitMode)
     {

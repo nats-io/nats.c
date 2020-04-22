@@ -85,10 +85,31 @@ natsStatus
 nats_JSONParse(nats_JSON **json, const char *str, int strLen);
 
 natsStatus
-nats_JSONGetValue(nats_JSON *json, const char *fieldName, int fieldType, void **addr);
+nats_JSONGetField(nats_JSON *json, const char *fieldName, int fieldType, nats_JSONField **retField);
 
 natsStatus
-nats_JSONGetArrayValue(nats_JSON *json, const char *fieldName, int fieldType, void ***array, int *arraySize);
+nats_JSONGetStr(nats_JSON *json, const char *fieldName, char **value);
+
+natsStatus
+nats_JSONGetInt(nats_JSON *json, const char *fieldName, int *value);
+
+natsStatus
+nats_JSONGetBool(nats_JSON *json, const char *fieldName, bool *value);
+
+natsStatus
+nats_JSONGetLong(nats_JSON *json, const char *fieldName, int64_t *value);
+
+natsStatus
+nats_JSONGetULong(nats_JSON *json, const char *fieldName, uint64_t *value);
+
+natsStatus
+nats_JSONGetDouble(nats_JSON *json, const char *fieldName, long double *value);
+
+natsStatus
+nats_JSONGetArrayField(nats_JSON *json, const char *fieldName, int fieldType, nats_JSONField **retField);
+
+natsStatus
+nats_JSONGetArrayStr(nats_JSON *json, const char *fieldName, char ***array, int *arraySize);
 
 void
 nats_JSONDestroy(nats_JSON *json);

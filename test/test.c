@@ -1607,7 +1607,8 @@ test_natsInbox(void)
     natsThread          *threads[INBOX_THREADS_COUNT];
     struct threadArg    args[INBOX_THREADS_COUNT];
     int                 i, j;
-    natsInbox           *key, *oldInbox;
+    natsInbox           *key;
+    void                *oldInbox;
     natsStrHash         *inboxes = NULL;
     natsStrHashIter     iter;
 
@@ -1644,7 +1645,7 @@ test_natsInbox(void)
             {
                 j++;
 
-                s = natsStrHash_Set(inboxes, key, true, (void*) 1, (void**) &oldInbox);
+                s = natsStrHash_Set(inboxes, key, true, (void*) 1, &oldInbox);
 
                 natsStrHashIter_RemoveCurrent(&iter);
             }
@@ -1677,7 +1678,8 @@ test_natsHashing(void)
     const char *longKey = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@$#%^&*()";
 
     uint32_t results[] = {1058908168, 1061739001, 4242539713, 3332038527};
-    uint32_t r, lr;
+    uint32_t r = 0;
+    uint32_t lr = 0;
     natsStatus s = NATS_OK;
     int64_t start, end;
     int sizeLongKey = (int) strlen(longKey);
@@ -2762,6 +2764,7 @@ test_natsJSON(void)
             "{ \"test\": \"\\ua12f\"}",
             "{ \"test\": \"\\uA01F\"}",
     };
+    nats_JSONField *f = NULL;
 
     for (i=0; i<(int)(sizeof(wrong)/sizeof(char*)); i++)
     {
@@ -2788,7 +2791,7 @@ test_natsJSON(void)
     test("Empty string: ");
     s = nats_JSONParse(&json, "{}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_INT, (void**)&intVal);
+        s = nats_JSONGetInt(json, "test", &intVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2800,7 +2803,7 @@ test_natsJSON(void)
     test("Single field, string: ");
     s = nats_JSONParse(&json, "{\"test\":\"abc\"}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_STR, (void**)&strVal);
+        s = nats_JSONGetStr(json, "test", &strVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2814,7 +2817,7 @@ test_natsJSON(void)
     test("Single field, int: ");
     s = nats_JSONParse(&json, "{\"test\":1234}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_INT, (void**)&intVal);
+        s = nats_JSONGetInt(json, "test", &intVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2827,7 +2830,7 @@ test_natsJSON(void)
     test("Single field, long: ");
     s = nats_JSONParse(&json, "{\"test\":1234}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_LONG, (void**)&longVal);
+        s = nats_JSONGetLong(json, "test", &longVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2840,7 +2843,7 @@ test_natsJSON(void)
     test("Single field, ulong: ");
     s = nats_JSONParse(&json, "{\"test\":1234}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_ULONG, (void**)&ulongVal);
+        s = nats_JSONGetULong(json, "test", &ulongVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2853,7 +2856,7 @@ test_natsJSON(void)
     test("Single field, double: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5e3}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2866,7 +2869,7 @@ test_natsJSON(void)
     test("Single field, double negative: ");
     s = nats_JSONParse(&json, "{\"test\":-1234}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2879,7 +2882,7 @@ test_natsJSON(void)
     test("Single field, double exp negative 1: ");
     s = nats_JSONParse(&json, "{\"test\":1234e-3}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test",&doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2892,7 +2895,7 @@ test_natsJSON(void)
     test("Single field, double exp negative 2: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5e-3}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2905,7 +2908,7 @@ test_natsJSON(void)
     test("Single field, double exp negative 3: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5e-1}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2918,7 +2921,7 @@ test_natsJSON(void)
     test("Single field, double exp negative 4: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5e-0}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2931,7 +2934,7 @@ test_natsJSON(void)
     test("Single field, double exp positive 1: ");
     s = nats_JSONParse(&json, "{\"test\":1234e+3}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2944,7 +2947,7 @@ test_natsJSON(void)
     test("Single field, double exp positive 2: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5e+3}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2957,7 +2960,7 @@ test_natsJSON(void)
     test("Single field, double exp positive 3: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5678e+2}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2970,7 +2973,7 @@ test_natsJSON(void)
     test("Single field, double exp positive 4: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5678e+4}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2983,7 +2986,7 @@ test_natsJSON(void)
     test("Single field, double exp positive 5: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5678e+5}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2996,7 +2999,7 @@ test_natsJSON(void)
     test("Single field, double exp positive 6: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5678e+0}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3009,7 +3012,7 @@ test_natsJSON(void)
     test("Single field, double exp positive 6: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5678e1}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "test", &doubleVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3022,7 +3025,7 @@ test_natsJSON(void)
     test("Single field, bool: ");
     s = nats_JSONParse(&json, "{\"test\":true}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_BOOL, (void**)&boolVal);
+        s = nats_JSONGetBool(json, "test", &boolVal);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3035,8 +3038,7 @@ test_natsJSON(void)
     test("Single field, string array: ");
     s = nats_JSONParse(&json, "{\"test\":[\"a\",\"b\",\"c\",\"d\",\"e\"]}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetArrayValue(json, "test", TYPE_STR,
-                                   (void***)&arrVal, &arrCount);
+        s = nats_JSONGetArrayStr(json, "test", &arrVal, &arrCount);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3058,17 +3060,17 @@ test_natsJSON(void)
     test("All field types: ");
     s = nats_JSONParse(&json, "{\"bool\":true,\"str\":\"abc\",\"int\":123,\"long\":456,\"double\":123.5,\"array\":[\"a\"]}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "bool", TYPE_BOOL, (void**)&boolVal);
+        s = nats_JSONGetBool(json, "bool", &boolVal);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "str", TYPE_STR, (void**)&strVal);
+        s = nats_JSONGetStr(json, "str", &strVal);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "int", TYPE_INT, (void**)&intVal);
+        s = nats_JSONGetInt(json, "int", &intVal);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "long", TYPE_LONG, (void**)&longVal);
+        s = nats_JSONGetLong(json, "long", &longVal);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "double", TYPE_DOUBLE, (void**)&doubleVal);
+        s = nats_JSONGetDouble(json, "double", &doubleVal);
     if (s == NATS_OK)
-        s = nats_JSONGetArrayValue(json, "array", TYPE_STR, (void***)&arrVal, &arrCount);
+        s = nats_JSONGetArrayStr(json, "array", &arrVal, &arrCount);
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3082,11 +3084,8 @@ test_natsJSON(void)
                 && (strcmp(arrVal[0], "a") == 0));
     test("Unknown field type: ");
     if (s == NATS_OK)
-    {
-        intVal = 0;
-        s = nats_JSONGetValue(json, "int", 255, (void**)&intVal);
-    }
-    testCond((s != NATS_OK) && (intVal == 0));
+        s = nats_JSONGetField(json, "int", 255, &f);
+    testCond(s != NATS_OK);
     nats_JSONDestroy(json);
     json = NULL;
     free(strVal);
@@ -3104,7 +3103,7 @@ test_natsJSON(void)
     test("Ask for wrong type: ");
     s = nats_JSONParse(&json, "{\"test\":true}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_INT, (void**)&intVal);
+        s = nats_JSONGetInt(json, "test", &intVal);
     testCond((s != NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3116,7 +3115,7 @@ test_natsJSON(void)
     test("Ask for wrong type (array): ");
     s = nats_JSONParse(&json, "{\"test\":[\"a\", \"b\"]}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetArrayValue(json, "test", TYPE_INT, (void***)&arrVal, &arrCount);
+        s = nats_JSONGetArrayField(json, "test", TYPE_INT, &f);
     testCond((s != NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3129,25 +3128,22 @@ test_natsJSON(void)
     test("Ask for unknown type: ");
     s = nats_JSONParse(&json, "{\"test\":true}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", 9999, (void**)&intVal);
+        s = nats_JSONGetField(json, "test", 9999, &f);
     testCond((s == NATS_INVALID_ARG)
                 && (json != NULL)
                 && (json->fields != NULL)
-                && (json->fields->used == 1)
-                && (intVal == 0));
+                && (json->fields->used == 1));
     nats_JSONDestroy(json);
     json = NULL;
 
     test("Ask for unknown type (array): ");
     s = nats_JSONParse(&json, "{\"test\":true}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetArrayValue(json, "test", 9999, (void***)&arrVal, &arrCount);
+        s = nats_JSONGetArrayField(json, "test", 9999, &f);
     testCond((s == NATS_INVALID_ARG)
                 && (json != NULL)
                 && (json->fields != NULL)
-                && (json->fields->used == 1)
-                && (arrCount == 0)
-                && (arrVal == NULL));
+                && (json->fields->used == 1));
     nats_JSONDestroy(json);
     json = NULL;
 
@@ -3165,17 +3161,17 @@ test_natsJSON(void)
         arrCount = 2;
         s = nats_JSONParse(&json, "{\"test\":true}", -1);
         if (s == NATS_OK)
-            s = nats_JSONGetValue(json, "str", TYPE_STR, (void**)&strVal);
+            s = nats_JSONGetStr(json, "str", &strVal);
         if (s == NATS_OK)
-            s = nats_JSONGetValue(json, "int", TYPE_INT, (void**)&intVal);
+            s = nats_JSONGetInt(json, "int", &intVal);
         if (s == NATS_OK)
-            s = nats_JSONGetValue(json, "long", TYPE_LONG, (void**)&longVal);
+            s = nats_JSONGetLong(json, "long", &longVal);
         if (s == NATS_OK)
-            s = nats_JSONGetValue(json, "bool", TYPE_BOOL, (void**)&boolVal);
+            s = nats_JSONGetBool(json, "bool", &boolVal);
         if (s == NATS_OK)
-            s = nats_JSONGetValue(json, "bool", TYPE_DOUBLE, (void**)&doubleVal);
+            s = nats_JSONGetDouble(json, "bool", &doubleVal);
         if (s == NATS_OK)
-            s = nats_JSONGetArrayValue(json, "array", TYPE_STR, (void***)&arrVal, &arrCount);
+            s = nats_JSONGetArrayStr(json, "array", &arrVal, &arrCount);
         testCond((s == NATS_OK)
                     && (strcmp(strVal, initStr) == 0)
                     && boolVal
@@ -3193,7 +3189,7 @@ test_natsJSON(void)
     strVal = NULL;
     s = nats_JSONParse(&json, "{\"test\":12345678901112}", -1);
     if (s == NATS_OK)
-        s = nats_JSONGetValue(json, "test", TYPE_STR, (void**)&strVal);
+        s = nats_JSONGetStr(json, "test", &strVal);
     testCond((s == NATS_INVALID_ARG)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3210,7 +3206,7 @@ test_natsJSON(void)
     {
         s = nats_JSONParse(&json, "{\"field\":1,\"field\":2}", -1);
         if (s == NATS_OK)
-            s = nats_JSONGetValue(json, "field", TYPE_INT, (void**)&intVal);
+            s = nats_JSONGetInt(json, "field", &intVal);
         testCond((s == NATS_OK) && (intVal == 2));
         nats_JSONDestroy(json);
         json = NULL;
@@ -5440,7 +5436,7 @@ test_ProcessMsgArgs(void)
 
     snprintf(buf, sizeof(buf), "%s", "MSG foo  1 2\r\n");
     test("Parsing MSG with extra space before sid: ")
-    s = natsParser_Parse(nc, buf, strlen(buf));
+    s = natsParser_Parse(nc, buf, (int) strlen(buf));
     testCond((s == NATS_OK)
                 && (natsBuf_Len(nc->ps->ma.subject) == 3)
                 && (strncmp(natsBuf_Data(nc->ps->ma.subject), "foo", 3) == 0)
@@ -5455,7 +5451,7 @@ test_ProcessMsgArgs(void)
 
     snprintf(buf, sizeof(buf), "%s", "MSG bar 1  2\r\n");
     test("Parsing MSG with extra space before size: ")
-    s = natsParser_Parse(nc, buf, strlen(buf));
+    s = natsParser_Parse(nc, buf, (int) strlen(buf));
     testCond((s == NATS_OK)
                 && (natsBuf_Len(nc->ps->ma.subject) == 3)
                 && (strncmp(natsBuf_Data(nc->ps->ma.subject), "bar", 3) == 0)
@@ -5472,7 +5468,7 @@ test_ProcessMsgArgs(void)
 
     snprintf(buf, sizeof(buf), "%s", "MSG baz  3 bat 4\r\n");
     test("Parsing MSG with extra space before sid: ")
-    s = natsParser_Parse(nc, buf, strlen(buf));
+    s = natsParser_Parse(nc, buf, (int) strlen(buf));
     testCond((s == NATS_OK)
                 && (natsBuf_Len(nc->ps->ma.subject) == 3)
                 && (strncmp(natsBuf_Data(nc->ps->ma.subject), "baz", 3) == 0)
@@ -5488,7 +5484,7 @@ test_ProcessMsgArgs(void)
 
     snprintf(buf, sizeof(buf), "%s", "MSG boo 5  baa 6\r\n");
     test("Parsing MSG with extra space before reply: ")
-    s = natsParser_Parse(nc, buf, strlen(buf));
+    s = natsParser_Parse(nc, buf, (int) strlen(buf));
     testCond((s == NATS_OK)
                 && (natsBuf_Len(nc->ps->ma.subject) == 3)
                 && (strncmp(natsBuf_Data(nc->ps->ma.subject), "boo", 3) == 0)
@@ -5504,7 +5500,7 @@ test_ProcessMsgArgs(void)
 
     snprintf(buf, sizeof(buf), "%s", "MSG coo 7 caa  8\r\n");
     test("Parsing MSG with extra space before size: ")
-    s = natsParser_Parse(nc, buf, strlen(buf));
+    s = natsParser_Parse(nc, buf, (int) strlen(buf));
     testCond((s == NATS_OK)
                 && (natsBuf_Len(nc->ps->ma.subject) == 3)
                 && (strncmp(natsBuf_Data(nc->ps->ma.subject), "coo", 3) == 0)
@@ -5522,7 +5518,7 @@ test_ProcessMsgArgs(void)
 
     snprintf(buf, sizeof(buf), "%s", "MSG  doo  8  daa   9  \r\n");
     test("Parsing MSG with extra space everywhere: ")
-    s = natsParser_Parse(nc, buf, strlen(buf));
+    s = natsParser_Parse(nc, buf, (int) strlen(buf));
     testCond((s == NATS_OK)
                 && (natsBuf_Len(nc->ps->ma.subject) == 3)
                 && (strncmp(natsBuf_Data(nc->ps->ma.subject), "doo", 3) == 0)
@@ -12759,10 +12755,12 @@ test_HotSpotReconnect(void)
         int                 total;
         int                 delta;
         int                 v = (int) (((float)NUM_CLIENTS / 2) * 0.30);
+        void                *p = NULL;
 
         natsStrHashIter_Init(&iter, cs);
-        while (natsStrHashIter_Next(&iter, NULL, (void**)&val))
+        while (natsStrHashIter_Next(&iter, NULL, &p))
         {
+            val = (struct hashCount*) p;
             total = val->count;
 
             delta = ((NUM_CLIENTS / 2) - total);

@@ -168,6 +168,7 @@ _clearServerInfo(natsServerInfo *si)
     NATS_FREE(si->connectURLs);
 
     NATS_FREE(si->nonce);
+    NATS_FREE(si->clientIP);
 
     memset(si, 0, sizeof(natsServerInfo));
 }
@@ -525,6 +526,8 @@ _processInfo(natsConnection *nc, char *info, int len)
         s = nats_JSONGetULong(json, "client_id", &(nc->info.CID));
     if (s == NATS_OK)
         s = nats_JSONGetStr(json, "nonce", &(nc->info.nonce));
+    if (s == NATS_OK)
+        s = nats_JSONGetStr(json, "client_ip", &(nc->info.clientIP));
 
 #if 0
     fprintf(stderr, "Id=%s Version=%s Host=%s Port=%d Auth=%s SSL=%s Payload=%d Proto=%d\n",
@@ -4061,4 +4064,24 @@ natsConnection_Sign(natsConnection *nc, const unsigned char *payload, int payloa
     natsConn_Unlock(nc);
 
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_GetClientIP(natsConnection *nc, char **ip)
+{
+    natsStatus s = NATS_OK;
+
+    if ((nc == NULL) || (ip == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    *ip = NULL;
+
+    natsConn_Lock(nc);
+    if (natsConn_isClosed(nc))
+        s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    else if ((nc->info.clientIP != NULL) && ((*ip = NATS_STRDUP(nc->info.clientIP)) == NULL))
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    natsConn_Unlock(nc);
+
+    return s;
 }

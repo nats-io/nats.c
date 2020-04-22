@@ -158,6 +158,7 @@ typedef struct __natsServerInfo
     int         proto;
     uint64_t    CID;
     char        *nonce;
+    char        *clientIP;
 
 } natsServerInfo;
 

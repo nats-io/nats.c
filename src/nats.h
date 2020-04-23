@@ -2511,6 +2511,21 @@ natsConnection_Sign(natsConnection *nc,
                     const unsigned char *message, int messageLen,
                     unsigned char sig[64]);
 
+/** \brief Returns the client's IP address as reported by the server.
+ *
+ * When a connection is created to the server, the server identifies
+ * the connection's remote IP address and return it back to the client.
+ *
+ * \note The user is responsible to free memory allocated to store
+ * the client IP address.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param ip the memory location where to store the client's IP string.
+ * The user is responsible from freeing this memory.
+ */
+NATS_EXTERN natsStatus
+natsConnection_GetClientIP(natsConnection *nc, char **ip);
+
 /** \brief Closes the connection.
  *
  * Closes the connection to the server. This call will release all blocking

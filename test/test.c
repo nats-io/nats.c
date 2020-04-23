@@ -15329,6 +15329,56 @@ test_GetClientID(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
+static void
+test_GetClientIP(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    char                *ip       = NULL;
+
+    test("Check server version: ");
+    if (!serverVersionAtLeast(2,1,6))
+    {
+        char txt[200];
+
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.1.6, got %s: ", serverVersion);
+        test(txt);
+        testCond(true);
+        return;
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get client IP - no conn: ");
+    s = natsConnection_GetClientIP(NULL, &ip);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Get client IP - no ip loc: ");
+    s = natsConnection_GetClientIP(nc, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Get client IP: ");
+    s = natsConnection_GetClientIP(nc, &ip);
+    testCond((s == NATS_OK) && (ip != NULL));
+    free(ip);
+    ip = NULL;
+
+    natsConnection_Close(nc);
+    test("Get client IP after conn closed: ");
+    s = natsConnection_GetClientIP(nc, &ip);
+    testCond((s == NATS_CONNECTION_CLOSED) && (ip == NULL));
+
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
 static natsStatus
 _userJWTCB(char **userJWT, char **customErrTxt, void *closure)
 {
@@ -19171,6 +19221,7 @@ static testInfo allTests[] =
     {"DrainSub",                        test_DrainSub},
     {"DrainConn",                       test_DrainConn},
     {"GetClientID",                     test_GetClientID},
+    {"GetClientIP",                     test_GetClientIP},
     {"UserCredsCallbacks",              test_UserCredsCallbacks},
     {"UserCredsFromFiles",              test_UserCredsFromFiles},
     {"NKey",                            test_NKey},

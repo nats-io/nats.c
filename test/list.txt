@@ -141,6 +141,7 @@ NoEchoOldServer
 DrainSub
 DrainConn
 GetClientID
+GetClientIP
 UserCredsCallbacks
 UserCredsFromFiles
 NKey

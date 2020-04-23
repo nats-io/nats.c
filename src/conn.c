@@ -529,15 +529,6 @@ _processInfo(natsConnection *nc, char *info, int len)
     if (s == NATS_OK)
         s = nats_JSONGetStr(json, "client_ip", &(nc->info.clientIP));
 
-#if 0
-    fprintf(stderr, "Id=%s Version=%s Host=%s Port=%d Auth=%s SSL=%s Payload=%d Proto=%d\n",
-            nc->info.id, nc->info.version, nc->info.host, nc->info.port,
-            nats_GetBoolStr(nc->info.authRequired),
-            nats_GetBoolStr(nc->info.tlsRequired),
-            (int) nc->info.maxPayload,
-            nc->info.proto);
-#endif
-
     // The array could be empty/not present on initial connect,
     // if advertise is disabled on that server, or servers that
     // did not include themselves in the async INFO protocol.

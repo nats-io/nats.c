@@ -30,6 +30,7 @@
 #include "comsock.h"
 #include "crypto.h"
 #include "nkeys.h"
+#include "parser.h"
 #if defined(NATS_HAS_STREAMING)
 #include "stan/conn.h"
 #include "stan/pub.h"
@@ -5230,7 +5231,7 @@ test_ParserSplitMsg(void)
     natsConnection  *nc = NULL;
     natsOptions     *opts = NULL;
     natsStatus      s;
-    char            buf[2048];
+    char            buf[2*MAX_CONTROL_LINE_SIZE];
     uint64_t        expectedCount;
     uint64_t        expectedSize;
     int             msgSize, start, i;

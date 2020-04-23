@@ -66,7 +66,7 @@ typedef struct __natsMsgArg
 
 } natsMsgArg;
 
-#define MAX_CONTROL_LINE_SIZE   (1024)
+#define MAX_CONTROL_LINE_SIZE   (4096)
 
 typedef struct __natsParser
 {

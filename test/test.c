@@ -15336,6 +15336,8 @@ test_GetClientIP(void)
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     char                *ip       = NULL;
+    natsThread          *t    = NULL;
+    struct threadArg    arg;
 
     test("Check server version: ");
     if (!serverVersionAtLeast(2,1,6))
@@ -15347,6 +15349,7 @@ test_GetClientIP(void)
         testCond(true);
         return;
     }
+    testCond(true);
 
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
@@ -15365,7 +15368,7 @@ test_GetClientIP(void)
 
     test("Get client IP: ");
     s = natsConnection_GetClientIP(nc, &ip);
-    testCond((s == NATS_OK) && (ip != NULL));
+    testCond((s == NATS_OK) && (strcmp(ip, "127.0.0.1")==0));
     free(ip);
     ip = NULL;
 
@@ -15375,8 +15378,59 @@ test_GetClientIP(void)
     testCond((s == NATS_CONNECTION_CLOSED) && (ip == NULL));
 
     natsConnection_Destroy(nc);
+    nc = NULL;
 
     _stopServer(serverPid);
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        // Set this to error, the mock server should set it to OK
+        // if it can start successfully.
+        arg.status = NATS_ERR;
+        arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576}\r\n";
+        s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
+    }
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+    if (s != NATS_OK)
+    {
+        if (t != NULL)
+        {
+            natsThread_Join(t);
+            natsThread_Destroy(t);
+        }
+        _destroyDefaultThreadArgs(&arg);
+        FAIL("Unable to setup test");
+    }
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get client IP with old server: ");
+    s = natsConnection_GetClientIP(nc, &ip);
+    testCond ((s == NATS_NO_SERVER_SUPPORT) && (ip == NULL));
+
+    // Notify mock server we are done
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsConnection_Close(nc);
+    natsConnection_Destroy(nc);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+
+    _destroyDefaultThreadArgs(&arg);
 }
 
 static natsStatus

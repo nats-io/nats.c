@@ -4070,7 +4070,9 @@ natsConnection_GetClientIP(natsConnection *nc, char **ip)
     natsConn_Lock(nc);
     if (natsConn_isClosed(nc))
         s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
-    else if ((nc->info.clientIP != NULL) && ((*ip = NATS_STRDUP(nc->info.clientIP)) == NULL))
+    else if (nc->info.clientIP == NULL)
+        s = nats_setDefaultError(NATS_NO_SERVER_SUPPORT);
+    else if ((*ip = NATS_STRDUP(nc->info.clientIP)) == NULL)
         s = nats_setDefaultError(NATS_NO_MEMORY);
     natsConn_Unlock(nc);
 

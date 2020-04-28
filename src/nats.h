@@ -2519,6 +2519,10 @@ natsConnection_Sign(natsConnection *nc,
  * \note The user is responsible to free memory allocated to store
  * the client IP address.
  *
+ * \note This is supported on servers >= version 2.1.6. Calling
+ * #natsConnection_GetClientIP() with server below this version will
+ * return the #NATS_NO_SERVER_SUPPORT error.
+ *
  * @param nc the pointer to the #natsConnection object.
  * @param ip the memory location where to store the client's IP string.
  * The user is responsible from freeing this memory.

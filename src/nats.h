@@ -2530,6 +2530,19 @@ natsConnection_Sign(natsConnection *nc,
 NATS_EXTERN natsStatus
 natsConnection_GetClientIP(natsConnection *nc, char **ip);
 
+/** \brief Returns the round trip time between this client and the server.
+ *
+ * The value returned is in nanoseconds.
+ *
+ * \note If the library is currently trying to reconnect, this call will
+ * return #NATS_CONNECTION_DISCONNECTED.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param rtt the memory location where to store the rtt.
+ */
+NATS_EXTERN natsStatus
+natsConnection_GetRTT(natsConnection *nc, int64_t *rtt);
+
 /** \brief Closes the connection.
  *
  * Closes the connection to the server. This call will release all blocking

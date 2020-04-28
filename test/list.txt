@@ -142,6 +142,7 @@ DrainSub
 DrainConn
 GetClientID
 GetClientIP
+GetRTT
 UserCredsCallbacks
 UserCredsFromFiles
 NKey

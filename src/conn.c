@@ -36,6 +36,7 @@
 
 #define DEFAULT_SCRATCH_SIZE    (512)
 #define MAX_INFO_MESSAGE_SIZE   (32768)
+#define DEFAULT_FLUSH_TIMEOUT   (10000)
 
 #define NATS_EVENT_ACTION_ADD       (true)
 #define NATS_EVENT_ACTION_REMOVE    (false)
@@ -3356,7 +3357,7 @@ natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
 natsStatus
 natsConnection_Flush(natsConnection *nc)
 {
-    natsStatus s = natsConnection_FlushTimeout(nc, 60000);
+    natsStatus s = natsConnection_FlushTimeout(nc, DEFAULT_FLUSH_TIMEOUT);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

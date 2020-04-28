@@ -4076,3 +4076,31 @@ natsConnection_GetClientIP(natsConnection *nc, char **ip)
 
     return s;
 }
+
+natsStatus
+natsConnection_GetRTT(natsConnection *nc, int64_t *rtt)
+{
+    natsStatus  s = NATS_OK;
+    int64_t     start, end;
+
+    if ((nc == NULL) || (rtt == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    *rtt = 0;
+
+    natsConn_Lock(nc);
+    if (natsConn_isClosed(nc))
+        s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    else if (natsConn_isReconnecting(nc))
+        s = nats_setDefaultError(NATS_CONNECTION_DISCONNECTED);
+    else
+    {
+        start = nats_NowInNanoSeconds();
+        s = _flushTimeout(nc, 10000);
+        if (s == NATS_OK)
+            *rtt = nats_NowInNanoSeconds()-start;
+    }
+    natsConn_Unlock(nc);
+
+    return s;
+}

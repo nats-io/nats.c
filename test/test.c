@@ -15379,6 +15379,50 @@ test_GetClientIP(void)
     _stopServer(serverPid);
 }
 
+static void
+test_GetRTT(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    int64_t             rtt       = 0;
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect: ");
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectWait(opts, 10);
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Get RTT - no conn: ");
+    s = natsConnection_GetRTT(NULL, &rtt);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Get RTT - no rtt loc: ");
+    s = natsConnection_GetRTT(nc, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Get RTT: ");
+    s = natsConnection_GetRTT(nc, &rtt);
+    // Check that it is below 500ms...
+    testCond((s == NATS_OK) && (rtt/1000000 <= 500));
+
+    _stopServer(serverPid);
+
+    test("Get RTT while not connected: ");
+    s = natsConnection_GetRTT(nc, &rtt);
+    testCond(s == NATS_CONNECTION_DISCONNECTED);
+
+    natsConnection_Close(nc);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+}
+
 static natsStatus
 _userJWTCB(char **userJWT, char **customErrTxt, void *closure)
 {
@@ -19222,6 +19266,7 @@ static testInfo allTests[] =
     {"DrainConn",                       test_DrainConn},
     {"GetClientID",                     test_GetClientID},
     {"GetClientIP",                     test_GetClientIP},
+    {"GetRTT",                          test_GetRTT},
     {"UserCredsCallbacks",              test_UserCredsCallbacks},
     {"UserCredsFromFiles",              test_UserCredsFromFiles},
     {"NKey",                            test_NKey},

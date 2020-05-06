@@ -183,19 +183,19 @@ _addURLToPool(natsSrvPool *pool, char *sURL, bool implicit, const char *tlsName)
 }
 
 static void
-_shufflePool(natsSrvPool *pool)
+_shufflePool(natsSrvPool *pool, int offset)
 {
     int     i, j;
     natsSrv *tmp;
 
-    if (pool->size <= 1)
+    if (pool->size <= offset+1)
         return;
 
     srand((unsigned int) nats_NowInNanoSeconds());
 
-    for (i = 0; i < pool->size; i++)
+    for (i = offset; i < pool->size; i++)
     {
-        j = rand() % (i + 1);
+        j = offset + rand() % (i + 1 - offset);
         tmp = pool->srvrs[i];
         pool->srvrs[i] = pool->srvrs[j];
         pool->srvrs[j] = tmp;
@@ -322,7 +322,7 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, in
             s = _addURLToPool(pool, url, true, tlsName);
         }
         if ((s == NATS_OK) && added && pool->randomize)
-            _shufflePool(pool);
+            _shufflePool(pool, 1);
     }
 
     natsStrHash_Destroy(tmp);
@@ -375,7 +375,7 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
     {
         // Randomize if allowed to
         if (pool->randomize)
-            _shufflePool(pool);
+            _shufflePool(pool, 0);
     }
 
     // Normally, if this one is set, Options.Servers should not be,

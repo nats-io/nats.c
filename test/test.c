@@ -5839,6 +5839,9 @@ test_AsyncINFO(void)
             s = checkNewURLsAddedRandomly(nc, urlsAfterPoolSetup, initialPoolSize);
         testCond((s == NATS_OK) && (nc->ps->state == OP_START));
 
+        test("First URL should not have been changed: ")
+        testCond((s == NATS_OK) && !strcmp(nc->srvPool->srvrs[0]->url->fullUrl, urlsAfterPoolSetup[0]));
+
         if (urlsAfterPoolSetup != NULL)
         {
             for (i=0; i<initialPoolSize; i++)

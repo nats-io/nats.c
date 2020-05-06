@@ -321,6 +321,8 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, in
             }
             s = _addURLToPool(pool, url, true, tlsName);
         }
+        if ((s == NATS_OK) && added && pool->randomize)
+            _shufflePool(pool);
     }
 
     natsStrHash_Destroy(tmp);
@@ -360,6 +362,7 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
     // Set the current capacity. The array of urls may have to grow in
     // the future.
     pool->cap = poolSize;
+    pool->randomize = !opts->noRandomize;
 
     // Map that helps find out if an URL is already known.
     s = natsStrHash_Create(&(pool->urls), poolSize);
@@ -371,7 +374,7 @@ natsSrvPool_Create(natsSrvPool **newPool, natsOptions *opts)
     if (s == NATS_OK)
     {
         // Randomize if allowed to
-        if (!(opts->noRandomize))
+        if (pool->randomize)
             _shufflePool(pool);
     }
 

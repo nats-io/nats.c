@@ -5579,7 +5579,7 @@ _checkPool(natsConnection *nc, char **expectedURLs, int expectedURLsCount)
 }
 
 static natsStatus
-checkPoolOrderDidNotChange(natsConnection *nc, char **urlsAfterPoolSetup, int initialPoolSize)
+checkNewURLsAddedRandomly(natsConnection *nc, char **urlsAfterPoolSetup, int initialPoolSize)
 {
     natsStatus  s;
     int         i;
@@ -5587,10 +5587,22 @@ checkPoolOrderDidNotChange(natsConnection *nc, char **urlsAfterPoolSetup, int in
     int         currentPoolSize = 0;
 
     s = natsConnection_GetServers(nc, &currentPool, &currentPoolSize);
-    for (i= 0; (s == NATS_OK) && (i < initialPoolSize); i++)
+    if (s == NATS_OK)
     {
-        if (strcmp(urlsAfterPoolSetup[i], currentPool[i]))
-            s = NATS_ERR;
+        // Reset status to error by default. If we find a new URL
+        // before the end of the initial list, we consider success
+        // and return.
+        s = NATS_ERR;
+        for (i= 0; i < initialPoolSize; i++)
+        {
+            // If one of the position in initial list is occupied
+            // by a new URL, we are ok.
+            if (strcmp(urlsAfterPoolSetup[i], currentPool[i]))
+            {
+                s = NATS_OK;
+                break;
+            }
+        }
     }
     if (currentPool != NULL)
     {
@@ -5796,18 +5808,14 @@ test_AsyncINFO(void)
     natsConnection_Destroy(nc);
     nc = NULL;
 
-    // Check that pool may be randomized on setup, but new URLs are always
-    // added at end of pool.
+    // Check that new URLs are added at random places in the pool
     if (s == NATS_OK)
     {
         int  initialPoolSize = 0;
         char **urlsAfterPoolSetup = NULL;
-        const char *newURLs[] = {
-                "localhost:6222",
-                "localhost:7222",
-                "localhost:8222\", \"localhost:9222",
-                "localhost:10222\", \"localhost:11222\", \"localhost:12222,",
-        };
+        const char *newURLs = "\"impA:4222\", \"impB:4222\", \"impC:4222\", "\
+            "\"impD:4222\", \"impE:4222\", \"impF:4222\", \"impG:4222\", "\
+            "\"impH:4222\", \"impI:4222\", \"impJ:4222\"";
 
         s = natsOptions_Create(&opts);
         if (s == NATS_OK)
@@ -5824,18 +5832,12 @@ test_AsyncINFO(void)
             FAIL("Unable to setup test");
 
         // Add new urls
-        for (i=0; i<(int)(sizeof(newURLs)/sizeof(char*)); i++)
-        {
-            snprintf(buf, sizeof(buf), "INFO {\"connect_urls\":[\"%s\"]}\r\n", newURLs[i]);
-            PARSER_START_TEST;
-            s = natsParser_Parse(nc, buf, (int)strlen(buf));
-            if (s == NATS_OK)
-            {
-                // Check that pool order does not change up to the new addition(s).
-                s = checkPoolOrderDidNotChange(nc, urlsAfterPoolSetup, initialPoolSize);
-            }
-            testCond((s == NATS_OK) && (nc->ps->state == OP_START));
-        }
+        snprintf(buf, sizeof(buf), "INFO {\"connect_urls\":[%s]}\r\n", newURLs);
+        test("New URLs are added randomly: ");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+        if (s == NATS_OK)
+            s = checkNewURLsAddedRandomly(nc, urlsAfterPoolSetup, initialPoolSize);
+        testCond((s == NATS_OK) && (nc->ps->state == OP_START));
 
         if (urlsAfterPoolSetup != NULL)
         {

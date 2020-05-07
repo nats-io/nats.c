@@ -36,6 +36,7 @@ typedef struct __natsSrvPool
     natsStrHash *urls;
     int         size;
     int         cap;
+    bool        randomize;
 
 } natsSrvPool;
 

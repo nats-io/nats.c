@@ -43,6 +43,12 @@ void stanConn_Unlock(stanConnection *nc) { natsMutex_Unlock(nc->mu); }
 
 bool testAllowMillisecInPings = false;
 
+#if defined(__arm__)
+int MEMALIGN = (int)(__alignof(void*));
+#else
+int MEMALIGN = 1;
+#endif
+
 static void
 _freeConn(stanConnection *sc)
 {
@@ -344,7 +350,7 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
     if (s == NATS_OK)
         s = natsMutex_Create(&sc->pubAckMu);
     if (s == NATS_OK)
-        s = natsPBufAllocator_Create(&sc->pubAckAllocator, sizeof(Pb__PubAck), 3);
+        s = natsPBufAllocator_Create(&sc->pubAckAllocator, sizeof(Pb__PubAck), 2);
     if (s == NATS_OK)
         s = natsMutex_Create(&sc->pingMu);
 
@@ -743,11 +749,17 @@ expandBuf(char **buf, int *cap, int newcap)
     return NATS_OK;
 }
 
+static int
+_roundUp(int val)
+{
+    return ((val+(MEMALIGN-1))/MEMALIGN)*MEMALIGN;
+}
+
 static void*
-natsPBuf_Alloc(void *allocator, size_t size)
+_pbufAlloc(void *allocator, size_t size)
 {
     natsPBufAllocator   *a     = (natsPBufAllocator*) allocator;
-    int                 needed = (int) (size + 1);
+    int                 needed = MEMALIGN + _roundUp((int) size);
     char                *ptr;
 
     if (needed > a->remaining)
@@ -764,26 +776,26 @@ natsPBuf_Alloc(void *allocator, size_t size)
 
         ptr[0] = '0';
     }
-    return (void*) (ptr+1);
+    return (void*) (ptr+MEMALIGN);
 }
 
 static void
-natsPBuf_Free(void *allocator, void *ptr)
+_pbufFree(void *allocator, void *ptr)
 {
-    char *real = (char*)((char*)ptr)-1;
+    char *real = ((char*)ptr - MEMALIGN);
 
     if (real[0] == '1')
         NATS_FREE(real);
 }
 
-// Creates a mew protobuf allocator with given protobuf object size and overhead.
+// Creates a new protobuf allocator with given protobuf object size and overhead.
 // When calling pb__xxx__unpack() functions, we will pass such allocator.
 // An allocator is created for a specific protobuf object. The protobuf library
-// will call the alloc function with at the very least the size of the protobuf
+// will call the alloc function with, at the very least, the size of the protobuf
 // object (protoSize), and for each field that is a string or byte array.
 // For strings, the protobuf library asks for 1 more byte. The overhead is
-// to count the number of expected strings in the protobuf object the allocator
-// is created for.
+// to count the number of expected strings or byte arrays in the protobuf object
+// the allocator is created for.
 //
 // An allocator once created is not thread-safe and expected to be used in a
 // single thread this way:
@@ -802,11 +814,11 @@ natsPBufAllocator_Create(natsPBufAllocator **newAllocator, int protoSize, int ov
     if (a == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    a->protoSize = protoSize+1;
-    a->overhead  = overhead;
+    a->protoSize = MEMALIGN + _roundUp(protoSize);
+    a->overhead  = (overhead * MEMALIGN) + overhead + (overhead * (MEMALIGN-1));
 
-    a->base.alloc           = natsPBuf_Alloc;
-    a->base.free            = natsPBuf_Free;
+    a->base.alloc           = _pbufAlloc;
+    a->base.free            = _pbufFree;
     a->base.allocator_data  = a;
 
     *newAllocator = a;

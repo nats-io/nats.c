@@ -34,6 +34,8 @@ void stanConn_Unlock(stanConnection *sc);
 #define STAN_ERR_CLOSE_REQUEST_TIMEOUT      "close request timeout"
 #define STAN_ERR_MAX_PINGS                  "connection lost due to PING failure"
 
+extern int MEMALIGN;
+
 void
 stanConn_retain(stanConnection *nc);
 

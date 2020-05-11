@@ -17218,6 +17218,12 @@ test_SSLConnectVerboseOption(void)
 
 #if defined(NATS_HAS_STREAMING)
 
+static int
+_roundUp(int val)
+{
+    return ((val + (MEMALIGN-1))/MEMALIGN)*MEMALIGN;
+}
+
 static void
 test_StanPBufAllocator(void)
 {
@@ -17229,54 +17235,71 @@ test_StanPBufAllocator(void)
     char                *ptr4;
     char                *oldBuf;
     int                 oldCap;
+    int                 expectedProtoSize;
+    int                 expectedOverhead;
+    int                 expectedUsed;
+    int                 expectedRemaining;
+    int                 expectedCap;
+    int                 prevUsed;
 
     test("Create: ");
     s = natsPBufAllocator_Create(&a, 10, 2);
+    expectedProtoSize = MEMALIGN + _roundUp(10);
+    expectedOverhead  = (MEMALIGN * 2) + 2 + (2 * (MEMALIGN-1));
     testCond((s == NATS_OK)
-            && (a->protoSize == 11)
-            && (a->overhead == 2)
+            && (a->protoSize == expectedProtoSize)
+            && (a->overhead == expectedOverhead)
             && (a->base.alloc != NULL)
             && (a->base.free != NULL)
             && (a->base.allocator_data == a));
 
     test("Prepare: ");
-    natsPBufAllocator_Prepare(a, 8);
+    natsPBufAllocator_Prepare(a, 20);
+    expectedCap = expectedProtoSize + expectedOverhead + 20;
     testCond((a->buf != NULL)
-            && (a->cap == 11+2+8)
+            && (a->cap == expectedCap)
             && (a->remaining == a->cap)
             && (a->used == 0));
 
     test("Alloc 1: ");
     ptr1 = (char*) a->base.alloc((void*)a, 10);
+    expectedUsed = MEMALIGN + _roundUp(10);
+    expectedRemaining = expectedCap - expectedUsed;
     testCond((ptr1 != NULL)
-            && ((ptr1-1) == a->buf)
-            && ((ptr1-1)[0] == '0')
-            && (a->used == 11)
-            && (a->remaining == a->cap-11));
+            && ((ptr1-MEMALIGN) == a->buf)
+            && ((ptr1-MEMALIGN)[0] == '0')
+            && (a->used == expectedUsed)
+            && (a->remaining == expectedRemaining));
 
     test("Alloc 2: ");
     ptr2 = (char*) a->base.alloc((void*)a, 5);
+    prevUsed           = expectedUsed;
+    expectedUsed      += MEMALIGN + _roundUp(5);
+    expectedRemaining  = expectedCap - expectedUsed;
     testCond((ptr2 != ptr1)
-            && ((ptr2-1) == (a->buf + 11))
-            && ((ptr2-1)[0] == '0')
-            && (a->used == 11+6)
-            && (a->remaining == a->cap-(11+6)));
+            && ((ptr2-MEMALIGN) == (a->buf + prevUsed))
+            && ((ptr2-MEMALIGN)[0] == '0')
+            && (a->used == expectedUsed)
+            && (a->remaining == expectedRemaining));
 
     test("Alloc 3: ");
     ptr3 = (char*) a->base.alloc((void*)a, 3);
+    prevUsed           = expectedUsed;
+    expectedUsed      += MEMALIGN + _roundUp(3);
+    expectedRemaining  = expectedCap - expectedUsed;
     testCond((ptr3 != ptr2)
-            && ((ptr3-1) == (a->buf + 11+6))
-            && ((ptr3-1)[0] == '0')
-            && (a->used == 11+6+4)
-            && (a->remaining == a->cap-(11+6+4)));
+            && ((ptr3-MEMALIGN) == (a->buf + prevUsed))
+            && ((ptr3-MEMALIGN)[0] == '0')
+            && (a->used == expectedUsed)
+            && (a->remaining == expectedRemaining));
 
     test("Alloc 4: ");
-    ptr4 = (char*) a->base.alloc((void*)a, 8);
+    ptr4 = (char*) a->base.alloc((void*)a, 50);
     testCond((ptr4 != ptr3)
-            && (((ptr4-1) < a->buf) || ((ptr4-1) > (a->buf+a->cap)))
-            && ((ptr4-1)[0] == '1')
-            && (a->used == 11+6+4)
-            && (a->remaining == a->cap-(11+6+4)));
+            && (((ptr4-MEMALIGN) < a->buf) || ((ptr4-MEMALIGN) > (a->buf+a->cap)))
+            && ((ptr4-MEMALIGN)[0] == '1')
+            && (a->used == expectedUsed)
+            && (a->remaining == expectedRemaining));
 
     // Free out of order, just make sure it does not crash
     // and valgrind will make sure that we freed ptr4.
@@ -17308,10 +17331,11 @@ test_StanPBufAllocator(void)
             && (a->used == 0));
 
     test("Prepare requires expand: ");
-    natsPBufAllocator_Prepare(a, 20);
+    natsPBufAllocator_Prepare(a, 100);
     // Realloc may or may not make a->buf be different...
+    expectedCap = expectedProtoSize + expectedOverhead + 100;
     testCond((a->buf != NULL)
-            && (a->cap == 11+2+20)
+            && (a->cap == expectedCap)
             && (a->remaining == a->cap)
             && (a->used == 0));
 

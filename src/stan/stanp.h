@@ -231,6 +231,9 @@ struct __stanSubscription
     natsPBufAllocator   *allocator;
 
     bool                closed;
+
+    natsOnCompleteCB    onCompleteCB;
+    void                *onCompleteCBClosure;
 };
 
 #endif /* STANP_H_ */

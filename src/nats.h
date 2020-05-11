@@ -3387,6 +3387,31 @@ stanConnection_QueueSubscribe(stanSubscription **sub, stanConnection *sc,
  *  @{
  */
 
+/** \brief Sets a completion callback.
+ *
+ * In order to make sure that an asynchronous subscription's message handler is no longer invoked once the
+ * subscription is closed (or unsubscribed) (#stanSubscription_Close, #stanSubscription_Unsubscribe), the
+ * subscription should be closed from the message handler itslef.
+ *
+ * If the application closes the subscription from a different thread and immediately frees resources
+ * needed in the message handler, there is a risk of a crash since the subscription's message handler
+ * may still be invoked one last time or already in the process of executing.
+ *
+ * To address this, the user can set a callback that will be invoked after the subscription is closed and the
+ * message handler has returned.
+ *
+ * \note You don't need to call this function if you are not freeing resources needed in the message handler or if
+ * you always close the subscription from the message handler itself.
+ *
+ * @see natsOnCompleteCB
+ *
+ * @param sub the pointer to the #stanSubscription object
+ * @param cb the callback to invoke when the last message of a closed subscription has been dispatched
+ * @param closure the pointer to a user defined object (possibly `NULL`) that will be passed to the callback
+ */
+NATS_EXTERN natsStatus
+stanSubscription_SetOnCompleteCB(stanSubscription *sub, natsOnCompleteCB cb, void *closure);
+
 /** \brief Acknowledge a message.
  *
  * If the subscription is created with manual acknowledgment mode (see #stanSubOptions_SetManualAckMode)

@@ -19159,6 +19159,124 @@ test_StanInternalSubsNotPooled(void)
     _stopServer(pid);
 }
 
+static void
+_stanSubOnComplete(void *closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    if (arg->control == 1)
+    {
+        arg->done = true;
+        natsCondition_Signal(arg->c);
+    }
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+_stanSubOnCompleteMsgCB(stanConnection *sc, stanSubscription *sub, const char *channel,
+    stanMsg *msg, void* closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    arg->msgReceived = true;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+    // Sleep to simulate callbac doing some processing and let the
+    // main thread close the subscription.
+    nats_Sleep(500);
+    // Update a field that _stanSubOnComplete will ensure is set to
+    // prove that the onComplete is invoked after the msg callback
+    // has returned.
+    natsMutex_Lock(arg->m);
+    arg->control = 1;
+    natsMutex_Unlock(arg->m);
+
+    stanMsg_Destroy(msg);
+}
+
+static void
+test_StanSubOnComplete(void)
+{
+    natsStatus          s;
+    natsPid             pid         = NATS_INVALID_PID;
+    stanConnection      *sc         = NULL;
+    stanSubscription    *sub        = NULL;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    pid = _startStreamingServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Can connet: ");
+    s = stanConnection_Connect(&sc, clusterName, clientName, NULL);
+    testCond(s == NATS_OK);
+
+    test("SetOnComplete error: ");
+    s = stanSubscription_SetOnCompleteCB(NULL, _stanSubOnComplete, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Create sub: ");
+    s = stanConnection_Subscribe(&sub, sc, "foo", _stanSubOnCompleteMsgCB, &arg, NULL);
+    testCond(s == NATS_OK);
+
+    test("SetOnComplete ok: ");
+    s = stanSubscription_SetOnCompleteCB(sub, _stanSubOnComplete, &arg);
+    testCond(s == NATS_OK);
+
+    test("Remove onComplete: ");
+    s = stanSubscription_SetOnCompleteCB(sub, NULL, NULL);
+    if (s == NATS_OK)
+    {
+        stanSub_Lock(sub);
+        if ((sub->onCompleteCB != NULL) || (sub->onCompleteCBClosure != NULL))
+            s = NATS_ERR;
+        stanSub_Unlock(sub);
+    }
+    testCond(s == NATS_OK);
+
+    test("SetOnComplete ok: ");
+    s = stanSubscription_SetOnCompleteCB(sub, _stanSubOnComplete, &arg);
+    testCond(s == NATS_OK);
+
+    test("Publish msg: ");
+    if (s == NATS_OK)
+        s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
+    testCond(s == NATS_OK);
+
+    test("Wait for message to be received: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.msgReceived)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Close subscription: ")
+    s = stanSubscription_Close(sub);
+    testCond(s == NATS_OK);
+
+    test("Ensure onComplete invoked after cb returned: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("SetOnComplete after close: ");
+    s = stanSubscription_SetOnCompleteCB(sub, _stanSubOnComplete, &arg);
+    testCond(s == NATS_INVALID_SUBSCRIPTION);
+
+    stanSubscription_Destroy(sub);
+    stanConnection_Destroy(sc);
+    _stopServer(pid);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
 #endif
 
 typedef void (*testFunc)(void);
@@ -19384,6 +19502,7 @@ static testInfo allTests[] =
     {"StanGetNATSConnection",           test_StanGetNATSConnection},
     {"StanNoRetryOnFailedConnect",      test_StanNoRetryOnFailedConnect},
     {"StanInternalSubsNotPooled",       test_StanInternalSubsNotPooled},
+    {"StanSubOnComplete",               test_StanSubOnComplete},
 
 #endif
 

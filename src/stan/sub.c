@@ -246,12 +246,19 @@ _releaseStanSubCB(void *closure)
 {
     stanSubscription *sub = (stanSubscription*) closure;
     stanConnection   *sc  = NULL;
+    natsOnCompleteCB cb   = NULL;
+    void             *cbc = NULL;
     int              refs;
 
     stanSub_Lock(sub);
+    cb = sub->onCompleteCB;
+    cbc = sub->onCompleteCBClosure;
     sc = sub->sc;
     refs = --sub->refs;
     stanSub_Unlock(sub);
+
+    if (cb != NULL)
+        (cb)(cbc);
 
     if (refs == 0)
         _freeStanSub(sub);
@@ -575,6 +582,27 @@ _closeOrUnsubscribeStanSub(stanSubscription *sub, bool doClose)
         }
     }
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+stanSubscription_SetOnCompleteCB(stanSubscription *sub, natsOnCompleteCB cb, void *closure)
+{
+    natsStatus s = NATS_OK;
+
+    if (sub == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    stanSub_Lock(sub);
+    if (sub->closed)
+        s = nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
+    else
+    {
+        sub->onCompleteCB = cb;
+        sub->onCompleteCBClosure = closure;
+    }
+    stanSub_Unlock(sub);
+
+    return s;
 }
 
 natsStatus

@@ -1221,10 +1221,7 @@ natsOptions_SetClosedCB(natsOptions *opts, natsConnectionHandler closedCb,
  *         lost.
  *
  * Specifies the callback to invoke when a connection to the `NATS Server`
- * is lost. There could be two instances of the callback when reconnection
- * is allowed: one before attempting the reconnect attempts, and one when
- * all reconnect attempts have failed and the connection is going to be
- * permanently closed.
+ * is lost.
  *
  * \warning Invocation of this callback is asynchronous, which means that
  * the state of the connection may have changed when this callback is

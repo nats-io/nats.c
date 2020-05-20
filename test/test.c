@@ -16522,7 +16522,7 @@ test_SSLVerify(void)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
-    testCond(s == NATS_SSL_ERROR);
+    testCond(s != NATS_OK);
 
     test("Check that connect succeeds with proper certs: ");
     s = natsOptions_LoadCertificatesChain(opts,
@@ -16940,6 +16940,14 @@ test_SSLCiphers(void)
     serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("SetCipherSuites requires OpenSSL 1.1: ");
+    s = natsOptions_SetCipherSuites(opts, "TLS_AES_128_GCM_SHA256");
+#if defined(NATS_USE_OPENSSL_1_1)
+    testCond(s == NATS_OK);
+#else
+    testCond(s == NATS_ERR);
+#endif
+
     test("Check that connect fails if improper ciphers: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
     if (s == NATS_OK)
@@ -16951,12 +16959,20 @@ test_SSLCiphers(void)
         s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
     if (s == NATS_OK)
         s = natsOptions_SetCiphers(opts, "-ALL:RSA");
+#if defined(NATS_USE_OPENSSL_1_1)
+    if (s == NATS_OK)
+        s = natsOptions_SetCipherSuites(opts, "");
+#endif
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s != NATS_OK);
 
     test("Check connects OK with proper ciphers: ");
     s = natsOptions_SetCiphers(opts, "-ALL:HIGH");
+#if defined(NATS_USE_OPENSSL_1_1)
+    if (s == NATS_OK)
+        s = natsOptions_SetCipherSuites(opts, "TLS_AES_128_GCM_SHA256");
+#endif
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     if (s == NATS_OK)

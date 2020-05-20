@@ -1007,8 +1007,10 @@ natsOptions_SetCertificatesChain(natsOptions *opts,
 
 /** \brief Sets the list of available ciphers.
  *
+ * \note This function does not impact TLSv1.3 ciphersuites.
+ *
  * Sets the list of available ciphers.
- * Check https://www.openssl.org/docs/manmaster/apps/ciphers.html for the
+ * Check https://www.openssl.org/docs/man1.1.1/man1/ciphers.html for the
  * proper syntax. Here is an example:
  *
  * > "-ALL:HIGH"
@@ -1020,6 +1022,22 @@ natsOptions_SetCertificatesChain(natsOptions *opts,
  */
 NATS_EXTERN natsStatus
 natsOptions_SetCiphers(natsOptions *opts, const char *ciphers);
+
+/** \brief Sets the list of available ciphers for TLSv1.3.
+ *
+ * Sets the list of available ciphers.
+ * Check https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_ciphersuites.html for the
+ * proper syntax. Here is an example:
+ *
+ * > "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256"
+ *
+ * See #natsOptions_LoadCATrustedCertificates regarding error reports.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param ciphers the ciphers suite.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetCipherSuites(natsOptions *opts, const char *ciphers);
 
 /** \brief Sets the server certificate's expected hostname.
  *

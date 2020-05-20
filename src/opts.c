@@ -289,8 +289,12 @@ _createSSLCtx(natsSSLCtx **newCtx)
     {
         (void) SSL_CTX_set_mode(ctx->ctx, SSL_MODE_AUTO_RETRY);
 
+#if defined(NATS_USE_OPENSSL_1_1)
+        SSL_CTX_set_min_proto_version(ctx->ctx, TLS1_2_VERSION);
+#else
         SSL_CTX_set_options(ctx->ctx, SSL_OP_NO_SSLv2);
         SSL_CTX_set_options(ctx->ctx, SSL_OP_NO_SSLv3);
+#endif
         SSL_CTX_set_default_verify_paths(ctx->ctx);
 
         *newCtx = ctx;
@@ -604,6 +608,36 @@ natsOptions_SetCiphers(natsOptions *opts, const char *ciphers)
     }
 
     UNLOCK_OPTS(opts);
+
+    return s;
+}
+
+natsStatus
+natsOptions_SetCipherSuites(natsOptions *opts, const char *ciphers)
+{
+    natsStatus s = NATS_OK;
+
+#if defined(NATS_USE_OPENSSL_1_1)
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    s = _getSSLCtx(opts);
+    if (s == NATS_OK)
+    {
+        nats_sslRegisterThreadForCleanup();
+
+        if (SSL_CTX_set_ciphersuites(opts->sslCtx->ctx, ciphers) != 1)
+        {
+            s = nats_setError(NATS_SSL_ERROR,
+                              "Error setting ciphers '%s': %s",
+                              ciphers,
+                              NATS_SSL_ERR_REASON_STRING);
+        }
+    }
+
+    UNLOCK_OPTS(opts);
+#else
+    s = nats_setError(NATS_ERR, "%s", "Setting TLSv1.3 ciphersuites requires OpenSSL 1.1+");
+#endif
 
     return s;
 }

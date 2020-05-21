@@ -351,11 +351,12 @@ natsStrHash_Hash(const char *data, int dataLen)
     int      dlen   = dataLen;
     uint32_t h32    = (uint32_t)_OFF32;
     uint64_t k1, k2;
+    uint32_t k3;
 
     for (; dlen >= _DDWSZ; dlen -= _DDWSZ)
     {
-        k1  = *(uint64_t*) &(data[i]);
-        k2  = *(uint64_t*) &(data[i + 4]);
+        memcpy(&k1, &(data[i]), sizeof(k1));
+        memcpy(&k2, &(data[i + 4]), sizeof(k2));
         h32 = (uint32_t) ((((uint64_t) h32) ^ ((k1<<5 | k1>>27) ^ k2)) * _YP32);
         i += _DDWSZ;
     }
@@ -363,14 +364,14 @@ natsStrHash_Hash(const char *data, int dataLen)
     // Cases: 0,1,2,3,4,5,6,7
     if ((dlen & _DWSZ) > 0)
     {
-        k1  = *(uint64_t*) &(data[i]);
+        memcpy(&k1, &(data[i]), sizeof(k1));
         h32 = (uint32_t) ((((uint64_t) h32) ^ k1) * _YP32);
         i += _DWSZ;
     }
     if ((dlen & _WSZ) > 0)
     {
-        k1  = *(uint32_t*) &(data[i]);
-        h32 = (uint32_t) ((((uint64_t) h32) ^ k1) * _YP32);
+        memcpy(&k3, &(data[i]), sizeof(k3));
+        h32 = (uint32_t) ((((uint64_t) h32) ^ (uint64_t) k3) * _YP32);
         i += _WSZ;
     }
     if ((dlen & 1) > 0)

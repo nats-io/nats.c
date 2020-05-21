@@ -4084,7 +4084,7 @@ natsStatus
 natsConnection_GetRTT(natsConnection *nc, int64_t *rtt)
 {
     natsStatus  s = NATS_OK;
-    int64_t     start, end;
+    int64_t     start;
 
     if ((nc == NULL) || (rtt == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);

@@ -838,6 +838,34 @@ natsOptions_SetReconnectWait(natsOptions *opts, int64_t reconnectWait)
 }
 
 natsStatus
+natsOptions_SetReconnectJitter(natsOptions *opts, int64_t jitter, int64_t jitterTLS)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, ((jitter < 0) || (jitterTLS < 0)));
+
+    opts->reconnectJitter    = jitter;
+    opts->reconnectJitterTLS = jitterTLS;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_SetCustomReconnectDelay(natsOptions *opts,
+                                    natsCustomReconnectDelayHandler cb,
+                                    void *closure)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->customReconnectDelayCB        = cb;
+    opts->customReconnectDelayCBClosure = closure;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
 natsOptions_SetReconnectBufSize(natsOptions *opts, int reconnectBufSize)
 {
     LOCK_AND_CHECK_OPTIONS(opts, (reconnectBufSize < 0));
@@ -1275,17 +1303,20 @@ natsOptions_Create(natsOptions **newOpts)
         return NATS_UPDATE_ERR_STACK(NATS_NO_MEMORY);
     }
 
-    opts->allowReconnect = true;
-    opts->secure         = false;
-    opts->maxReconnect   = NATS_OPTS_DEFAULT_MAX_RECONNECT;
-    opts->reconnectWait  = NATS_OPTS_DEFAULT_RECONNECT_WAIT;
-    opts->pingInterval   = NATS_OPTS_DEFAULT_PING_INTERVAL;
-    opts->maxPingsOut    = NATS_OPTS_DEFAULT_MAX_PING_OUT;
-    opts->ioBufSize      = NATS_OPTS_DEFAULT_IO_BUF_SIZE;
-    opts->maxPendingMsgs = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
-    opts->timeout        = NATS_OPTS_DEFAULT_TIMEOUT;
-    opts->libMsgDelivery = natsLib_isLibHandlingMsgDeliveryByDefault();
-    opts->writeDeadline  = natsLib_defaultWriteDeadline();
+    opts->allowReconnect        = true;
+    opts->secure                = false;
+    opts->maxReconnect          = NATS_OPTS_DEFAULT_MAX_RECONNECT;
+    opts->reconnectWait         = NATS_OPTS_DEFAULT_RECONNECT_WAIT;
+    opts->pingInterval          = NATS_OPTS_DEFAULT_PING_INTERVAL;
+    opts->maxPingsOut           = NATS_OPTS_DEFAULT_MAX_PING_OUT;
+    opts->ioBufSize             = NATS_OPTS_DEFAULT_IO_BUF_SIZE;
+    opts->maxPendingMsgs        = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
+    opts->timeout               = NATS_OPTS_DEFAULT_TIMEOUT;
+    opts->libMsgDelivery        = natsLib_isLibHandlingMsgDeliveryByDefault();
+    opts->writeDeadline         = natsLib_defaultWriteDeadline();
+    opts->reconnectBufSize      = NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE;
+    opts->reconnectJitter       = NATS_OPTS_DEFAULT_RECONNECT_JITTER;
+    opts->reconnectJitterTLS    = NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS;
 
     *newOpts = opts;
 

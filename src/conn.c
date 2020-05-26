@@ -382,8 +382,6 @@ _createConn(natsConnection *nc)
 {
     natsStatus  s = NATS_OK;
 
-    nc->cur->lastAttempt = nats_Now();
-
     // Sets a deadline for the connect process (not just the low level
     // tcp connect. The deadline will be removed when we have received
     // the PONG to our initial PING. See _processConnInit().
@@ -1411,13 +1409,19 @@ _clearPendingRequestCalls(natsConnection *nc)
 static void
 _doReconnect(void *arg)
 {
-    natsStatus              s = NATS_OK;
-    natsConnection          *nc = (natsConnection*) arg;
-    int64_t                 elapsed;
-    natsSrvPool             *pool = NULL;
-    int64_t                 sleepTime;
-    struct threadsToJoin    ttj;
-    natsThread              *rt = NULL;
+    natsStatus                      s           = NATS_OK;
+    natsConnection                  *nc         = (natsConnection*) arg;
+    int64_t                         elapsed     = 0;
+    natsSrvPool                     *pool       = NULL;
+    int64_t                         sleepTime   = 0;
+    struct threadsToJoin            ttj;
+    natsThread                      *rt         = NULL;
+    int                             wlf         = 0;
+    bool                            doSleep     = false;
+    int64_t                         jitter      = 0;
+    int                             i           = 0;
+    natsCustomReconnectDelayHandler crd         = NULL;
+    void                            *crdClosure = NULL;
 
     natsConn_Lock(nc);
 
@@ -1443,9 +1447,23 @@ _doReconnect(void *arg)
     if (!nc->initc && (nc->opts->disconnectedCb != NULL))
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
+    crd = nc->opts->customReconnectDelayCB;
+    if (crd == NULL)
+    {
+        jitter = nc->opts->reconnectJitter;
+        // TODO: since we sleep only after the whole list has been tried, we can't
+        // rely on individual *natsSrv to know if it is a TLS or non-TLS url.
+        // We have to pick which type of jitter to use, for now, we use these hints:
+        jitter = nc->opts->reconnectJitter;
+        if (nc->opts->secure || (nc->opts->sslCtx != NULL))
+			jitter = nc->opts->reconnectJitterTLS;
+    }
+    else
+        crdClosure = nc->opts->customReconnectDelayCBClosure;
+
     // Note that the pool's size may decrement after the call to
     // natsSrvPool_GetNextServer.
-    while ((s == NATS_OK) && (natsSrvPool_GetSize(pool) > 0))
+    for (i=0; (s == NATS_OK) && (natsSrvPool_GetSize(pool) > 0); )
     {
         nc->cur = natsSrvPool_GetNextServer(pool, nc->opts, nc->cur);
         if (nc->cur == NULL)
@@ -1454,20 +1472,31 @@ _doReconnect(void *arg)
             break;
         }
 
-        sleepTime = 0;
+        doSleep = (i+1 >= natsSrvPool_GetSize(pool));
 
-        // Sleep appropriate amount of time before the
-        // connection attempt if connecting to same server
-        // we just got disconnected from..
-        if (((elapsed = nats_Now() - nc->cur->lastAttempt)) < nc->opts->reconnectWait)
-            sleepTime = (nc->opts->reconnectWait - elapsed);
-
-        if (sleepTime > 0)
+        if (doSleep)
         {
+            i = 0;
+            if (crd != NULL)
+            {
+                wlf++;
+                natsConn_Unlock(nc);
+                sleepTime = crd(nc, wlf, crdClosure);
+                natsConn_Lock(nc);
+                if (natsConn_isClosed(nc))
+                    break;
+            }
+            else
+            {
+                sleepTime = nc->opts->reconnectWait;
+                if (jitter > 0)
+                    sleepTime += rand() % jitter;
+            }
             natsCondition_TimedWait(nc->reconnectCond, nc->mu, sleepTime);
         }
         else
         {
+            i++;
             natsConn_Unlock(nc);
             natsThread_Yield();
             natsConn_Lock(nc);
@@ -3019,18 +3048,6 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     nc->refs        = 1;
     nc->sockCtx.fd  = NATS_SOCK_INVALID;
     nc->opts        = options;
-
-    if (nc->opts->maxPingsOut == 0)
-        nc->opts->maxPingsOut = NATS_OPTS_DEFAULT_MAX_PING_OUT;
-
-    if (nc->opts->ioBufSize == 0)
-        nc->opts->ioBufSize = NATS_OPTS_DEFAULT_IO_BUF_SIZE;
-
-    if (nc->opts->maxPendingMsgs == 0)
-        nc->opts->maxPendingMsgs = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
-
-    if (nc->opts->reconnectBufSize == 0)
-        nc->opts->reconnectBufSize = NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE;
 
     nc->errStr[0] = '\0';
 

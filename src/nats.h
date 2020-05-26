@@ -352,6 +352,28 @@ typedef const char* (*natsTokenHandler)(void *closure);
  */
 typedef void (*natsOnCompleteCB)(void *closure);
 
+/** \brief Callback used to specify how long to wait between reconnects.
+ *
+ * This callback is used to get from the user the desired delay the library
+ * should pause before attempting to reconnect again. Note that this is invoked
+ * after the library tried the whole list of URLs and failed to reconnect.
+ *
+ * \note This callback is invoked from the connection reconnect thread and waits
+ * for user input. It should not block and instead quickly return the desired
+ * reconnect delay.
+ * The state of the connection is disconnected when this callback is invoked.
+ * Not much can be done with the passed connection, but user can call
+ * #natsConnection_Close() if desired. This will abort the reconnect attempts
+ * and close the connection.
+ *
+ * @param nc the pointer to the #natsConnection invoking this handler.
+ * @param attempts the number of times the library tried the whole list of server URLs.
+ * @param closure an optional pointer to a user defined object that was specified when
+ * registering the callback.
+ * @return the number of milliseconds to wait before trying to reconnect.
+ */
+typedef int64_t (*natsCustomReconnectDelayHandler)(natsConnection *nc, int attempts, void *closure);
+
 #if defined(NATS_HAS_STREAMING)
 /** \brief Callback used to notify of an asynchronous publish result.
  *
@@ -1169,6 +1191,55 @@ natsOptions_SetMaxReconnect(natsOptions *opts, int maxReconnect);
  */
 NATS_EXTERN natsStatus
 natsOptions_SetReconnectWait(natsOptions *opts, int64_t reconnectWait);
+
+/** \brief Set the upper bound of a random delay added to reconnect wait.
+ *
+ * After a disconnect, the library will try to reconnect to any server URLs
+ * in its list (the URLs are either provided by the user or discovered through
+ * gossip protocol).
+ *
+ * After the library failed to reconnect to every server in the list, it
+ * will wait for `reconnectWait` as specified with #natsOptions_SetReconnectWait().
+ * This option adds some random jitter to the reconnect wait delay.
+ *
+ * This will help minimize the thundering herd phenomenon. For instance, suppose
+ * a server has 1000 connections, all were created at different times, but
+ * have the same reconnect wait option. If this server suddenly stops, then all
+ * connections will detect the failure and initiate a reconnect at the same time.
+ * The issue is even greater when those connections are TLS because of the added
+ * cost of the TLS handshake.
+ *
+ * @see natsOptions_SetReconnectWait()
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param jitter the jitter in milliseconds for non TLS connections.
+ * @param jitterTLS the jitter in milliseconds for TLS connections.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetReconnectJitter(natsOptions *opts, int64_t jitter, int64_t jitterTLS);
+
+/** \brief Sets the handler to invoke when the library needs to wait before the next reconnect attempts.
+ *
+ * This callback is invoked after the library tried every URL in the server list
+ * and failed to reconnect. It passes to the user the current number of attempts.
+ * This function shall return the amount of time the library will sleep before attempting
+ * to reconnect again.
+ *
+ * It is strongly recommended that this value contains some jitter to prevent all
+ * connections to attempt reconnecting at the same time.
+ *
+ * \note When using this approach, the reconnect wait as specified by #natsOptions_SetReconnectWait()
+ * is ignored.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param cb the custom reconnect delay handler to invoke.
+ * @param closure a pointer to an user defined object (can be `NULL`). See
+ * the #natsCustomReconnectDelayHandler prototype.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetCustomReconnectDelay(natsOptions *opts,
+                                    natsCustomReconnectDelayHandler cb,
+                                    void *closure);
 
 /** \brief Sets the size of the backing buffer used during reconnect.
  *

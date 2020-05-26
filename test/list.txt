@@ -173,6 +173,8 @@ GetDiscoveredServers
 DiscoveredServersCb
 INFOAfterFirstPONGisProcessedOK
 ServerPoolUpdatedOnClusterUpdate
+ReconnectJitter
+CustomReconnectDelay
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

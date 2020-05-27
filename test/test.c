@@ -4229,6 +4229,8 @@ _createReconnectOptions(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
     if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    if (s == NATS_OK)
 #ifdef WIN32
         s = natsOptions_SetTimeout(opts, 500);
 #else
@@ -6926,6 +6928,8 @@ test_ReconnectAllowedFlags(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 1000);
     if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    if (s == NATS_OK)
         s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
@@ -7442,6 +7446,8 @@ test_IsReconnectingAndStatus(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
     if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    if (s == NATS_OK)
         s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
@@ -7619,6 +7625,14 @@ _connectedCb(natsConnection *nc, void* closure)
     natsMutex_Unlock(arg->m);
 }
 
+static int64_t
+_testCustomReconnectDelayOnInitialConnect(natsConnection *nc, int attempts, void *closure)
+{
+    if (attempts == 10)
+        natsConnection_Close(nc);
+    return 50;
+}
+
 static void
 test_RetryOnFailedConnect(void)
 {
@@ -7640,6 +7654,8 @@ test_RetryOnFailedConnect(void)
         s = natsOptions_SetMaxReconnect(opts, 10);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
 #ifdef _WIN32
     // Windows takes the full timeout to report connect failure, so reduce
     // timeout here.
@@ -7750,6 +7766,24 @@ test_RetryOnFailedConnect(void)
     natsThread_Destroy(t);
 
     natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    // Try the custom reconnect handler and close the connection after
+    // certain number of attempts.
+    test("Close in custom reconnect delay: ")
+    s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
+    IFOK(s, natsOptions_SetCustomReconnectDelay(opts, _testCustomReconnectDelayOnInitialConnect, NULL));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    if (s == NATS_NOT_YET_CONNECTED)
+        s = NATS_OK;
+
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
 
@@ -8659,6 +8693,8 @@ test_AuthenticationExpired(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 25);
     if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    if (s == NATS_OK)
         s = natsOptions_SetErrorHandler(opts, _authExpiredHandler, &arg);
     if (s == NATS_OK)
         s = natsOptions_SetClosedCB(opts, _closedCb, &arg);
@@ -8802,6 +8838,8 @@ test_AuthenticationExpiredReconnect(void)
         s = natsOptions_SetMaxReconnect(opts, 2);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 25);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
     if (s == NATS_OK)
         s = natsOptions_SetErrorHandler(opts, _authExpiredHandler, &arg);
     if (s == NATS_OK)
@@ -9577,6 +9615,8 @@ test_Flush(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
     if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    if (s == NATS_OK)
         s = natsOptions_SetPingInterval(opts, 100);
 
     if (s != NATS_OK)
@@ -9631,6 +9671,8 @@ test_Flush(void)
 
     test("Check Flush while in doReconnect: ")
     s = natsOptions_SetReconnectWait(opts, 3000);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     if (s == NATS_OK)
@@ -12362,6 +12404,8 @@ test_AuthFailToReconnect(void)
         s = natsOptions_SetMaxReconnect(opts, 10);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
 
     if (s != NATS_OK)
         FAIL("Unable to setup test");
@@ -12460,6 +12504,8 @@ test_BasicClusterReconnect(void)
         s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -12567,6 +12613,8 @@ test_ReconnectWithTokenHandler(void)
         s = natsOptions_SetMaxReconnect(opts, 10);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
 
     if (s != NATS_OK)
         FAIL("Unable to setup test");
@@ -12901,6 +12949,8 @@ test_ProperFalloutAfterMaxAttempts(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 25);
     if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    if (s == NATS_OK)
         s = natsOptions_SetServers(opts, testServers, serversCount);
     if (s == NATS_OK)
         s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
@@ -12978,6 +13028,8 @@ test_StopReconnectAfterTwoAuthErr(void)
         s = natsOptions_SetMaxReconnect(opts, -1);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 25);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
     if (s == NATS_OK)
         s = natsOptions_SetServers(opts, servers, serversCount);
     if (s == NATS_OK)
@@ -13077,6 +13129,8 @@ test_TimeoutOnNoServer(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
     if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    if (s == NATS_OK)
         s = natsOptions_SetServers(opts, testServers, serversCount);
     if (s == NATS_OK)
         s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
@@ -13157,6 +13211,8 @@ test_PingReconnect(void)
         s = natsOptions_SetNoRandomize(opts, true);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 200);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
     if (s == NATS_OK)
         s = natsOptions_SetPingInterval(opts, 50);
     if (s == NATS_OK)
@@ -13894,7 +13950,188 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
+static void
+test_ReconnectJitter(void)
+{
+    natsStatus          s       = NATS_OK;
+    natsConnection      *nc     = NULL;
+    natsOptions         *opts   = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+    int64_t             start   = 0;
+    int64_t             dur     = 0;
+    struct threadArg arg;
 
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&opts));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Default jitter values: ");
+    natsMutex_Lock(opts->mu);
+    s = (((opts->reconnectJitter == NATS_OPTS_DEFAULT_RECONNECT_JITTER)
+            && (opts->reconnectJitterTLS == NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS)) ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(opts->mu);
+    testCond(s == NATS_OK);
+
+    s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");
+    IFOK(s, natsOptions_SetMaxReconnect(opts, -1));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 50));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 500, 0));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg));
+
+    pid = _startServer("nats://127.0.0.1:4222", "-p 4222", true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    // Shutdown server
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+
+    // Wait for several iterations of failed attempts and make
+    // sure that overall wait time is a bit more than just
+    // the number of reconnect attempts.
+    start = nats_Now();
+    nats_Sleep(400);
+	pid = _startServer("nats://127.0.0.1:4222", "-p 4222", true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Check jitter: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    if (s == NATS_OK)
+        dur = nats_Now() - start;
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && (dur >=500));
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    // Use a long reconnect wait
+    s = natsOptions_SetReconnectWait(opts, 10*60*1000); // 10 minutes
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    // Cause a disconnect
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+    // Wait a bit for the reconnect loop to go into wait mode.
+    nats_Sleep(50);
+    pid = _startServer("nats://127.0.0.1:4222", "-p 4222", true);
+    CHECK_SERVER_STARTED(pid);
+    // Now close and expect the reconnect thread to return..
+    natsConnection_Close(nc);
+
+    test("Wait for closed: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Check reconnect thread done: ");
+    natsConn_Lock(nc);
+    s = (nc->reconnectThread == NULL ? NATS_OK : NATS_ERR);
+    natsConn_Unlock(nc);
+    testCond(s == NATS_OK)
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+    _stopServer(pid);
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static int64_t
+_customReconnectDelayCB(natsConnection *nc, int attempts, void *closure)
+{
+    struct threadArg *arg  = (struct threadArg*) closure;
+    int64_t          delay = 0;
+
+    natsMutex_Lock(arg->m);
+    if (attempts != arg->control)
+    {
+        arg->status = NATS_ERR;
+        natsCondition_Signal(arg->c);
+    }
+    else
+    {
+        arg->control++;
+        if (attempts <= 4)
+            delay = 100;
+        else
+            natsConnection_Close(nc);
+    }
+    natsMutex_Unlock(arg->m);
+    return delay;
+}
+
+static void
+test_CustomReconnectDelay(void)
+{
+    natsStatus          s       = NATS_OK;
+    natsConnection      *nc     = NULL;
+    natsOptions         *opts   = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+    int64_t             start   = 0;
+    int64_t             dur     = 0;
+    struct threadArg arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+#if _WIN32
+    IFOK(s, natsOptions_SetTimeout(opts, 100));
+#endif
+    IFOK(s, natsOptions_SetMaxReconnect(opts, -1));
+    IFOK(s, natsOptions_SetCustomReconnectDelay(opts, _customReconnectDelayCB, (void*) &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    arg.control = 1;
+    arg.status  = NATS_OK;
+
+    pid = _startServer("nats://127.0.0.1:4222", "-p 4222", true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+	// Cause disconnect
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+
+	// We should be trying to reconnect 4 times
+	start = nats_Now();
+
+	// Wait on error or completion of test.
+    test("Check custom delay cb: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.closed && (arg.status == NATS_OK))
+        s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+    IFOK(s, arg.status);
+    if (s == NATS_OK)
+        dur = nats_Now()-start;
+    natsMutex_Unlock(arg.m);
+#if _WIN32
+    testCond((s == NATS_OK) && (dur <= 1000));
+#else
+    testCond((s == NATS_OK) && (dur <= 500));
+#endif
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+}
 
 static void
 test_Version(void)
@@ -14256,6 +14493,8 @@ test_StaleConnection(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(arg.opts, 20);
     if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(arg.opts, 0, 0);
+    if (s == NATS_OK)
         s = natsOptions_SetMaxReconnect(arg.opts, 100);
     if (s == NATS_OK)
         s = natsOptions_SetDisconnectedCB(arg.opts, _disconnectedCb, &arg);
@@ -14386,6 +14625,8 @@ test_ServerErrorClosesConnection(void)
         s = natsOptions_Create(&(arg.opts));
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(arg.opts, 20);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(arg.opts, 0, 0);
     if (s == NATS_OK)
         s = natsOptions_SetMaxReconnect(arg.opts, 100);
     if (s == NATS_OK)
@@ -15455,6 +15696,8 @@ test_GetRTT(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 10);
     if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK);
 
@@ -15665,6 +15908,8 @@ test_UserCredsCallbacks(void)
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
     if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    if (s == NATS_OK)
         s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
     if (s == NATS_OK)
         s = natsConnection_Connect(&nc, opts);
@@ -15697,6 +15942,8 @@ test_UserCredsCallbacks(void)
     s = natsOptions_SetUserCredentialsCallbacks(opts, _userJWTCB, NULL, _sigCB, (void*) &arg);
     if (s == NATS_OK)
         s = natsOptions_SetReconnectWait(opts, 100);
+    if (s == NATS_OK)
+        s = natsOptions_SetReconnectJitter(opts, 0, 0);
     if (s == NATS_OK)
         s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
     if (s == NATS_OK)
@@ -16334,6 +16581,7 @@ test_NoPartialOnReconnect(void)
     s = natsOptions_Create(&opts);
     IFOK(s, natsOptions_SetAllowReconnect(opts, true));
     IFOK(s, natsOptions_SetReconnectWait(opts, 10));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
     IFOK(s, natsOptions_SetMaxReconnect(opts, 10000));
     IFOK(s, natsOptions_SetServers(opts, servers, 2));
     IFOK(s, natsOptions_SetNoRandomize(opts, true));
@@ -19517,6 +19765,8 @@ static testInfo allTests[] =
     {"DiscoveredServersCb",             test_DiscoveredServersCb},
     {"INFOAfterFirstPONGisProcessedOK", test_ReceiveINFORightAfterFirstPONG},
     {"ServerPoolUpdatedOnClusterUpdate",test_ServerPoolUpdatedOnClusterUpdate},
+    {"ReconnectJitter",                 test_ReconnectJitter},
+    {"CustomReconnectDelay",            test_CustomReconnectDelay},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

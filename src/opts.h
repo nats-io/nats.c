@@ -24,14 +24,16 @@
 #define UNLOCK_OPTS(o) natsMutex_Unlock((o)->mu)
 
 
-#define NATS_OPTS_DEFAULT_MAX_RECONNECT       (60)
-#define NATS_OPTS_DEFAULT_TIMEOUT             (2 * 1000)          // 2 seconds
-#define NATS_OPTS_DEFAULT_RECONNECT_WAIT      (2 * 1000)          // 2 seconds
-#define NATS_OPTS_DEFAULT_PING_INTERVAL       (2 * 60 * 1000)     // 2 minutes
-#define NATS_OPTS_DEFAULT_MAX_PING_OUT        (2)
-#define NATS_OPTS_DEFAULT_IO_BUF_SIZE         (32 * 1024)         // 32 KB
-#define NATS_OPTS_DEFAULT_MAX_PENDING_MSGS    (65536)
-#define NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE  (8 * 1024 * 1024)   // 8 MB
+#define NATS_OPTS_DEFAULT_MAX_RECONNECT         (60)
+#define NATS_OPTS_DEFAULT_TIMEOUT               (2 * 1000)          // 2 seconds
+#define NATS_OPTS_DEFAULT_RECONNECT_WAIT        (2 * 1000)          // 2 seconds
+#define NATS_OPTS_DEFAULT_PING_INTERVAL         (2 * 60 * 1000)     // 2 minutes
+#define NATS_OPTS_DEFAULT_MAX_PING_OUT          (2)
+#define NATS_OPTS_DEFAULT_IO_BUF_SIZE           (32 * 1024)         // 32 KB
+#define NATS_OPTS_DEFAULT_MAX_PENDING_MSGS      (65536)
+#define NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE    (8 * 1024 * 1024)   // 8 MB
+#define NATS_OPTS_DEFAULT_RECONNECT_JITTER      (100)               // 100 ms
+#define NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS  (1000)              // 1 second
 
 natsOptions*
 natsOptions_clone(natsOptions *opts);

@@ -24,7 +24,6 @@ typedef struct __natsSrv
     bool        didConnect;
     bool        isImplicit;
     int         reconnects;
-    int64_t     lastAttempt;
     char        *tlsName;
     int         lastAuthErrCode;
 

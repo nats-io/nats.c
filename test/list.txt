@@ -122,6 +122,7 @@ CloseSubRelease
 IsValidSubscriber
 SlowSubscriber
 SlowAsyncSubscriber
+SlowConsumerCb
 PendingLimitsDeliveredAndDropped
 PendingLimitsWithSyncSub
 AsyncSubscriptionPending

@@ -11186,6 +11186,80 @@ test_SlowAsyncSubscriber(void)
 }
 
 static void
+_slowConsErrCB(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
+{
+    struct threadArg *arg    = (struct threadArg*) closure;
+    int64_t          dropped = 0;
+
+    natsMutex_Lock(arg->m);
+    if (err == NATS_SLOW_CONSUMER)
+    {
+        arg->sum++;
+        natsCondition_Signal(arg->c);
+    }
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+test_SlowConsumerCB(void)
+{
+    natsStatus          s;
+    natsConnection      *nc     = NULL;
+    natsSubscription    *sub    = NULL;
+    natsOptions         *opts   = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetMaxPendingMsgs(opts, 1));
+    IFOK(s, natsOptions_SetErrorHandler(opts, _slowConsErrCB, (void*) &arg));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Create sub: ")
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"))
+    testCond(s == NATS_OK);
+
+    test("Publish 2 messages: ");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "msg1"));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "msg2"));
+    testCond(s == NATS_OK);
+
+    test("Error handler invoked: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && (arg.sum != 1))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Produce 1 message: ");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "msg3"));
+    testCond(s == NATS_OK);
+
+    test("Check handler is not invoked: ");
+    nats_Sleep(50);
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && (arg.sum != 1))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    natsSubscription_Destroy(sub);
+    natsOptions_Destroy(opts);
+    _stopServer(pid);
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 test_PendingLimitsDeliveredAndDropped(void)
 {
     natsStatus          s;
@@ -19711,6 +19785,7 @@ static testInfo allTests[] =
     {"IsValidSubscriber",               test_IsValidSubscriber},
     {"SlowSubscriber",                  test_SlowSubscriber},
     {"SlowAsyncSubscriber",             test_SlowAsyncSubscriber},
+    {"SlowConsumerCb",                  test_SlowConsumerCB},
     {"PendingLimitsDeliveredAndDropped",test_PendingLimitsDeliveredAndDropped},
     {"PendingLimitsWithSyncSub",        test_PendingLimitsWithSyncSub},
     {"AsyncSubscriptionPending",        test_AsyncSubscriptionPending},

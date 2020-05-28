@@ -2540,7 +2540,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
         sub->dropped++;
 
-        sc = sub->slowConsumer;
+        sc = !sub->slowConsumer;
         sub->slowConsumer = true;
 
         // Undo stats from above.

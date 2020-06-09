@@ -45,7 +45,7 @@ natsMsg_Destroy(natsMsg *msg)
 }
 
 const char*
-natsMsg_GetSubject(natsMsg *msg)
+natsMsg_GetSubject(const natsMsg *msg)
 {
     if (msg == NULL)
         return NULL;
@@ -54,7 +54,7 @@ natsMsg_GetSubject(natsMsg *msg)
 }
 
 const char*
-natsMsg_GetReply(natsMsg *msg)
+natsMsg_GetReply(const natsMsg *msg)
 {
     if (msg == NULL)
         return NULL;
@@ -63,7 +63,7 @@ natsMsg_GetReply(natsMsg *msg)
 }
 
 const char*
-natsMsg_GetData(natsMsg *msg)
+natsMsg_GetData(const natsMsg *msg)
 {
     if (msg == NULL)
         return NULL;
@@ -72,7 +72,7 @@ natsMsg_GetData(natsMsg *msg)
 }
 
 int
-natsMsg_GetDataLength(natsMsg *msg)
+natsMsg_GetDataLength(const natsMsg *msg)
 {
     if (msg == NULL)
         return 0;

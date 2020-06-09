@@ -734,7 +734,7 @@ natsStatistics_Create(natsStatistics **newStats);
  * @param reconnects total number of times the client has reconnected.
  */
 NATS_EXTERN natsStatus
-natsStatistics_GetCounts(natsStatistics *stats,
+natsStatistics_GetCounts(const natsStatistics *stats,
                          uint64_t *inMsgs, uint64_t *inBytes,
                          uint64_t *outMsgs, uint64_t *outBytes,
                          uint64_t *reconnects);
@@ -2124,7 +2124,7 @@ natsMsg_Create(natsMsg **newMsg, const char *subj, const char *reply,
  * @param msg the pointer to the #natsMsg object.
  */
 NATS_EXTERN const char*
-natsMsg_GetSubject(natsMsg *msg);
+natsMsg_GetSubject(const natsMsg *msg);
 
 /** \brief Returns the reply set in this message.
  *
@@ -2136,7 +2136,7 @@ natsMsg_GetSubject(natsMsg *msg);
  * @param msg the pointer to the #natsMsg object.
  */
 NATS_EXTERN const char*
-natsMsg_GetReply(natsMsg *msg);
+natsMsg_GetReply(const natsMsg *msg);
 
 /** \brief Returns the message payload.
  *
@@ -2154,7 +2154,7 @@ natsMsg_GetReply(natsMsg *msg);
  * @param msg the pointer to the #natsMsg object.
  */
 NATS_EXTERN const char*
-natsMsg_GetData(natsMsg *msg);
+natsMsg_GetData(const natsMsg *msg);
 
 /** \brief Returns the message length.
  *
@@ -2163,7 +2163,7 @@ natsMsg_GetData(natsMsg *msg);
  * @param msg the pointer to the #natsMsg object.
  */
 NATS_EXTERN int
-natsMsg_GetDataLength(natsMsg *msg);
+natsMsg_GetDataLength(const natsMsg *msg);
 
 /** \brief Destroys the message object.
  *
@@ -2190,7 +2190,7 @@ natsMsg_Destroy(natsMsg *msg);
  * @param msg the pointer to the #stanMsg object.
  */
 NATS_EXTERN uint64_t
-stanMsg_GetSequence(stanMsg *msg);
+stanMsg_GetSequence(const stanMsg *msg);
 
 /** \brief Returns the message's timestamp.
  *
@@ -2199,7 +2199,7 @@ stanMsg_GetSequence(stanMsg *msg);
  * @param msg the pointer to the #stanMsg object.
  */
 NATS_EXTERN int64_t
-stanMsg_GetTimestamp(stanMsg *msg);
+stanMsg_GetTimestamp(const stanMsg *msg);
 
 /** \brief Returns the message's redelivered flag.
  *
@@ -2210,7 +2210,7 @@ stanMsg_GetTimestamp(stanMsg *msg);
  * @param msg the pointer to the #stanMsg object.
  */
 NATS_EXTERN bool
-stanMsg_IsRedelivered(stanMsg *msg);
+stanMsg_IsRedelivered(const stanMsg *msg);
 
 /** \brief Returns the message payload.
  *
@@ -2228,7 +2228,7 @@ stanMsg_IsRedelivered(stanMsg *msg);
  * @param msg the pointer to the #stanMsg object.
  */
 NATS_EXTERN const char*
-stanMsg_GetData(stanMsg *msg);
+stanMsg_GetData(const stanMsg *msg);
 
 /** \brief Returns the message length.
  *
@@ -2237,7 +2237,7 @@ stanMsg_GetData(stanMsg *msg);
  * @param msg the pointer to the #stanMsg object.
  */
 NATS_EXTERN int
-stanMsg_GetDataLength(stanMsg *msg);
+stanMsg_GetDataLength(const stanMsg *msg);
 
 /** \brief Destroys the message object.
  *

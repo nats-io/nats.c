@@ -15509,6 +15509,87 @@ test_DrainConn(void)
 }
 
 static void
+_noDoubleCloseCb(natsConnection *nc, void *closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    arg->sum++;
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+_noDoubleCbSubCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    nats_Sleep(200);
+    natsMsg_Destroy(msg);
+}
+
+static void
+test_NoDoubleConnClosedOnDrain(void)
+{
+    natsStatus          s;
+    natsConnection      *nc     = NULL;
+    natsOptions         *opts   = NULL;
+    natsSubscription    *sub    = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetClosedCB(opts, _noDoubleCloseCb, (void*)&arg));
+    if (s != NATS_OK)
+    {
+        _destroyDefaultThreadArgs(&arg);
+        natsOptions_Destroy(opts);
+        FAIL("Unable to setup test");
+    }
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Create sub: ");
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _noDoubleCbSubCb, (void*)&arg));
+    testCond(s == NATS_OK);
+
+    test("Publish msg: ");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "hello"));
+    testCond(s == NATS_OK);
+
+    // Wait a bit and issue a drain
+    nats_Sleep(100);
+    test("Drain: ");
+    IFOK(s, natsConnection_Drain(nc));
+    testCond(s == NATS_OK);
+
+    nats_Sleep(200);
+    test("Closing: ");
+    natsConnection_Close(nc);
+    testCond(s == NATS_OK);
+
+    // Now wait for connection close and make sure it was invoked once.
+    test("Check closeCb invoked once: ")
+    if (s == NATS_OK)
+    {
+        nats_Sleep(300);
+        natsMutex_Lock(arg.m);
+        s = (arg.sum == 1 ? NATS_OK : NATS_ERR);
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(pid);
+}
+
+static void
 test_GetClientID(void)
 {
     natsStatus          s;
@@ -19804,6 +19885,7 @@ static testInfo allTests[] =
     {"NoEchoOldServer",                 test_NoEchoOldServer},
     {"DrainSub",                        test_DrainSub},
     {"DrainConn",                       test_DrainConn},
+    {"NoDoubleCloseCbOnDrain",          test_NoDoubleConnClosedOnDrain},
     {"GetClientID",                     test_GetClientID},
     {"GetClientIP",                     test_GetClientIP},
     {"GetRTT",                          test_GetRTT},

@@ -141,6 +141,7 @@ NoEcho
 NoEchoOldServer
 DrainSub
 DrainConn
+NoDoubleCloseCbOnDrain
 GetClientID
 GetClientIP
 GetRTT

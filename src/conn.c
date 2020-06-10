@@ -3408,6 +3408,11 @@ _drainPubsAndClose(natsConnection *nc)
 
     // Flip state
     natsConn_Lock(nc);
+    if (natsConn_isClosed(nc))
+    {
+        natsConn_Unlock(nc);
+        return;
+    }
     nc->status = NATS_CONN_STATUS_DRAINING_PUBS;
     natsConn_Unlock(nc);
 
@@ -3430,6 +3435,7 @@ _checkAllSubsAreDrained(natsTimer *t, void *closure)
     natsConn_Lock(nc);
     if (nc->status == NATS_CONN_STATUS_CLOSED)
     {
+        natsTimer_Stop(nc->drainTimer);
         natsConn_Unlock(nc);
         return;
     }

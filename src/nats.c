@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -767,6 +767,9 @@ _asyncCbsThread(void *arg)
                 break;
             case ASYNC_DISCOVERED_SERVERS:
                 (*(nc->opts->discoveredServersCb))(nc, nc->opts->discoveredServersClosure);
+                break;
+            case ASYNC_LAME_DUCK_MODE:
+                (*(nc->opts->lameDuckCb))(nc, nc->opts->lameDuckClosure);
                 break;
             case ASYNC_ERROR:
                 (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);

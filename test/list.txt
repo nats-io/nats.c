@@ -177,6 +177,7 @@ INFOAfterFirstPONGisProcessedOK
 ServerPoolUpdatedOnClusterUpdate
 ReconnectJitter
 CustomReconnectDelay
+LameDuckMode
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

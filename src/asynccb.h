@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -24,6 +24,7 @@ typedef enum
     ASYNC_ERROR,
     ASYNC_DISCOVERED_SERVERS,
     ASYNC_CONNECTED,
+    ASYNC_LAME_DUCK_MODE,
 
 #if defined(NATS_HAS_STREAMING)
     ASYNC_STAN_CONN_LOST

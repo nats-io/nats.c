@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -527,6 +527,8 @@ _processInfo(natsConnection *nc, char *info, int len)
         s = nats_JSONGetStr(json, "nonce", &(nc->info.nonce));
     if (s == NATS_OK)
         s = nats_JSONGetStr(json, "client_ip", &(nc->info.clientIP));
+    if (s == NATS_OK)
+        s = nats_JSONGetBool(json, "ldm", &(nc->info.lameDuckMode));
 
     // The array could be empty/not present on initial connect,
     // if advertise is disabled on that server, or servers that
@@ -549,6 +551,11 @@ _processInfo(natsConnection *nc, char *info, int len)
         if ((s == NATS_OK) && added && !nc->initc && (nc->opts->discoveredServersCb != NULL))
             natsAsyncCb_PostConnHandler(nc, ASYNC_DISCOVERED_SERVERS);
     }
+    // Process the LDM callback after the above. It will cover cases where
+    // we have connect URLs and invoke discovered server callback, and case
+    // where we don't.
+    if ((s == NATS_OK) && nc->info.lameDuckMode && (nc->opts->lameDuckCb != NULL))
+        natsAsyncCb_PostConnHandler(nc, ASYNC_LAME_DUCK_MODE);
 
     if (s != NATS_OK)
         s = nats_setError(NATS_PROTOCOL_ERROR,

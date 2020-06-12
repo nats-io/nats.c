@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -1365,6 +1365,27 @@ NATS_EXTERN natsStatus
 natsOptions_SetDiscoveredServersCB(natsOptions *opts,
                                    natsConnectionHandler discoveredServersCb,
                                    void *closure);
+
+/** \brief Sets the callback to be invoked when server enters lame duck mode.
+ *
+ * Specifies the callback to invoke when the server notifies
+ * the connection that it entered lame duck mode, that is, going to
+ * gradually disconnect all its connections before shuting down. This is
+ * often used in deployments when upgrading NATS Servers.
+ *
+ * \warning Invocation of this callback is asynchronous, which means that
+ * the state may have changed when this callback is invoked.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param lameDuckCb the callback to be invoked when server enters
+ * lame duck mode.
+ * @param closure a pointer to an user object that will be passed to
+ * the callback. `closure` can be `NULL`.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetLameDuckModeCB(natsOptions *opts,
+                              natsConnectionHandler lameDuckCb,
+                              void *closure);
 
 /** \brief Sets the external event loop and associated callbacks.
  *

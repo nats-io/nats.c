@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -956,6 +956,21 @@ natsOptions_SetDiscoveredServersCB(natsOptions *opts,
 
     opts->discoveredServersCb = discoveredServersCb;
     opts->discoveredServersClosure = closure;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_SetLameDuckModeCB(natsOptions *opts,
+                              natsConnectionHandler lameDuckCb,
+                              void *closure)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->lameDuckCb = lameDuckCb;
+    opts->lameDuckClosure = closure;
 
     UNLOCK_OPTS(opts);
 

@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -159,6 +159,7 @@ typedef struct __natsServerInfo
     uint64_t    CID;
     char        *nonce;
     char        *clientIP;
+    bool        lameDuckMode;
 
 } natsServerInfo;
 
@@ -233,6 +234,9 @@ struct __natsOptions
 
     natsConnectionHandler   connectedCb;
     void                    *connectedCbClosure;
+
+    natsConnectionHandler   lameDuckCb;
+    void                    *lameDuckClosure;
 
     natsErrHandler          asyncErrCb;
     void                    *asyncErrCbClosure;

@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -14208,6 +14208,186 @@ test_CustomReconnectDelay(void)
 }
 
 static void
+_lameDuckDiscoveredCb(natsConnection *nc, void *closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+    natsStatus          s;
+    char                **servers = NULL;
+    int                 count     = 0;
+
+    natsMutex_Lock(arg->m);
+    s = natsConnection_GetDiscoveredServers(nc, &servers, &count);
+    if (s == NATS_OK)
+    {
+        int i;
+
+        if ((count != 1) || (strcmp(servers[0], "nats://127.0.0.1:1234") != 0))
+            arg->status = NATS_ERR;
+
+        for (i=0; i<count; i++)
+            free(servers[i]);
+        free(servers);
+    }
+    // Use this flag to indicate that discovered cb was invoked.
+    arg->done = true;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+_lameDuckCb(natsConnection *nc, void *closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    // Use this flag to indicate that LDM cb was invoked.
+    arg->disconnected = true;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+_lameDuckMockupServerThread(void *closure)
+{
+    natsStatus          s = NATS_OK;
+    natsSock            sock = NATS_SOCK_INVALID;
+    struct threadArg    *arg = (struct threadArg*) closure;
+    char                buffer[1024];
+    const char          *ldm[] = {"INFO {\"ldm\":true}\r\n", "INFO {\"connect_urls\":[\"127.0.0.1:1234\"],\"ldm\":true}\r\n"};
+    natsSockCtx         ctx;
+    int                 i;
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    s = _startMockupServer(&sock, "127.0.0.1", "4222");
+    natsMutex_Lock(arg->m);
+    arg->status = s;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+
+    for (i=0; (s == NATS_OK) && (i<2); i++)
+    {
+        if (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+                || (natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK))
+        {
+            s = NATS_SYS_ERROR;
+        }
+        if (s == NATS_OK)
+        {
+            const char *info = "INFO {\"server_id\":\"foobar\"}\r\n";
+
+            // Send INFO.
+            s = natsSock_WriteFully(&ctx, info, (int) strlen(info));
+            if (s == NATS_OK)
+            {
+                memset(buffer, 0, sizeof(buffer));
+
+                // Read connect and ping commands sent from the client
+                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+                IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
+            }
+            // Send PONG
+            IFOK(s, natsSock_WriteFully(&ctx,_PONG_PROTO_, _PONG_PROTO_LEN_));
+            if (s == NATS_OK)
+            {
+                // Wait a bit and then send a INFO with LDM
+                nats_Sleep(100);
+                s = natsSock_WriteFully(&ctx, ldm[i], (int) strlen(ldm[i]));
+                // Wait for client to close
+                if (s == NATS_OK)
+                    natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            }
+            natsSock_Close(ctx.fd);
+        }
+    }
+
+    natsSock_Close(sock);
+}
+
+static void
+test_LameDuckMode(void)
+{
+    natsStatus          s       = NATS_OK;
+    natsConnection      *nc     = NULL;
+    natsOptions         *opts   = NULL;
+    natsThread          *t      = NULL;
+    int                 i;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, -1));
+    IFOK(s, natsOptions_SetDiscoveredServersCB(opts, _lameDuckDiscoveredCb, (void*) &arg));
+    IFOK(s, natsOptions_SetLameDuckModeCB(opts, _lameDuckCb, (void*) &arg));
+    // IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    // Set this to error, the mock server should set it to OK
+    // if it can start successfully.
+    arg.status = NATS_ERR;
+    s = natsThread_Create(&t, _lameDuckMockupServerThread, (void*) &arg);
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+
+    for (i=0; i<2; i++)
+    {
+        test("Connect: ");
+        s = natsConnection_Connect(&nc, opts);
+        testCond(s == NATS_OK);
+
+        test("Lame duck callback invoked: ");
+        natsMutex_Lock(arg.m);
+        while ((s == NATS_OK) && !arg.disconnected)
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+        testCond(s == NATS_OK);
+
+        if (i == 0)
+        {
+            test("Discovered not invoked: ");
+            natsMutex_Lock(arg.m);
+            while ((s == NATS_OK) && !arg.done)
+                s = natsCondition_TimedWait(arg.c, arg.m, 200);
+            if ((arg.status == NATS_OK) && (s == NATS_TIMEOUT))
+                s = NATS_OK;
+            natsMutex_Unlock(arg.m);
+            testCond(s == NATS_OK);
+        }
+        else
+        {
+            test("Discovered servers ok: ");
+            natsMutex_Lock(arg.m);
+            while ((s == NATS_OK) && !arg.done)
+                s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+            if (s == NATS_OK)
+                s = arg.status;
+            natsMutex_Unlock(arg.m);
+            testCond(s == NATS_OK);
+        }
+
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 test_Version(void)
 {
     const char *str = NULL;
@@ -19924,6 +20104,7 @@ static testInfo allTests[] =
     {"ServerPoolUpdatedOnClusterUpdate",test_ServerPoolUpdatedOnClusterUpdate},
     {"ReconnectJitter",                 test_ReconnectJitter},
     {"CustomReconnectDelay",            test_CustomReconnectDelay},
+    {"LameDuckMode",                    test_LameDuckMode},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

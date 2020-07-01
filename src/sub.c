@@ -249,8 +249,6 @@ natsSubscription_SetOnCompleteCB(natsSubscription *sub, natsOnCompleteCB cb, voi
 void
 natsSub_close(natsSubscription *sub, bool connectionClosed)
 {
-    natsMsgDlvWorker *ldw = NULL;
-
     natsSub_Lock(sub);
 
     SUB_DLV_WORKER_LOCK(sub);

@@ -411,7 +411,6 @@ natsOptions_SetCATrustedCertificates(natsOptions *opts, const char *certs)
     s = _getSSLCtx(opts);
     if (s == NATS_OK)
     {
-        X509                *cert = NULL;
         BIO                 *bio  = NULL;
         X509_STORE          *cts  = NULL;
         STACK_OF(X509_INFO) *inf  = NULL;
@@ -438,7 +437,7 @@ natsOptions_SetCATrustedCertificates(natsOptions *opts, const char *certs)
                                   NATS_SSL_ERR_REASON_STRING);
             }
         }
-        for (i = 0; ((s == NATS_OK) && (i < sk_X509_INFO_num(inf))); i++)
+        for (i = 0; ((s == NATS_OK) && (i < (int)sk_X509_INFO_num(inf))); i++)
         {
             X509_INFO *itmp = sk_X509_INFO_value(inf, i);
             if (itmp->x509)
@@ -1189,8 +1188,6 @@ natsOptions_SetUserCredentialsCallbacks(natsOptions *opts,
                                         natsSignatureHandler    sigCB,
                                         void                    *sigClosure)
 {
-    natsStatus  s   = NATS_OK;
-
     // Callbacks can all be NULL (to unset), however, if one is set,
     // the other must be.
     LOCK_AND_CHECK_OPTIONS(opts,
@@ -1225,7 +1222,6 @@ natsOptions_SetNKey(natsOptions             *opts,
                     natsSignatureHandler    sigCB,
                     void                    *sigClosure)
 {
-    natsStatus  s   = NATS_OK;
     char        *nk = NULL;
 
     // If pubKey is not empty, then signature must be specified

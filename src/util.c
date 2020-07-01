@@ -633,7 +633,6 @@ nats_JSONParse(nats_JSON **newJSON, const char *jsonStr, int jsonLen)
     char            *ptr;
     char            *fieldName = NULL;
     int             state;
-    bool            gotEnd    = false;
     char            *copyStr  = NULL;
 
     if (jsonLen < 0)
@@ -1003,7 +1002,6 @@ nats_JSONGetDouble(nats_JSON *json, const char *fieldName, long double *value)
 natsStatus
 nats_JSONGetArrayField(nats_JSON *json, const char *fieldName, int fieldType, nats_JSONField **retField)
 {
-    natsStatus      s        = NATS_OK;
     nats_JSONField  *field   = NULL;
 
     field = (nats_JSONField*) natsStrHash_Get(json->fields, (char*) fieldName);
@@ -1109,7 +1107,6 @@ nats_Base32_Init(void)
 natsStatus
 nats_Base32_DecodeString(const char *src, char *dst, int dstMax, int *dstLen)
 {
-    natsStatus  s         = NATS_OK;
     char        *ptr      = (char*) src;
     int         n         = 0;
     bool        done      = false;

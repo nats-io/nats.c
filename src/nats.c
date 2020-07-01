@@ -205,7 +205,7 @@ nats_ReleaseThreadMemory(void)
     natsMutex_Unlock(gLib.lock);
 }
 
-#if _WIN32
+#if defined(_WIN32) && _WIN32
 #ifndef NATS_STATIC
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, // DLL module handle
      DWORD fdwReason,                   // reason called
@@ -1639,7 +1639,6 @@ _deliverMsgs(void *arg)
     uint64_t            max;
     natsMsg             *msg;
     bool                timerNeedReset = false;
-    bool                removeSub = false;
 
     natsMutex_Lock(dlv->lock);
 

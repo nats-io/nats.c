@@ -602,7 +602,6 @@ stanConnClose(stanConnection *sc, bool sendProto)
     int                 reqSize   = 0;
     char                *reqBytes = NULL;
     natsMsg             *replyMsg = NULL;
-    _pubAck             *pa       = NULL;
     natsConnection      *nc       = NULL;
     char                *cid      = NULL;
     char                *closeSubj= NULL;

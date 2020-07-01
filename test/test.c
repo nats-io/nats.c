@@ -5628,8 +5628,6 @@ test_AsyncINFO(void)
                                "INFO {\"connect_urls\":[]}\r\n"};
     const char      *wrong[] = {"IxNFO {}\r\n", "INxFO {}\r\n", "INFxO {}\r\n",
                                 "INFOx {}\r\n", "INFO{}\r\n", "INFO {}"};
-    const char      *allURLs[] = {"localhost:4222", "localhost:5222", "localhost:6222", "localhost:7222",
-                                  "localhost:8222", "localhost:9222", "localhost:10222", "localhost:11222"};
     const char      *lastErr = NULL;
 
     s = natsOptions_Create(&opts);
@@ -10587,7 +10585,6 @@ test_Stats(void)
     uint64_t            outBytes = 0;
     uint64_t            inMsgs = 0;
     uint64_t            inBytes = 0;
-    uint64_t            reconnects = 0;
 
     test("Check invalid arg: ");
     s = natsStatistics_GetCounts(NULL, NULL, NULL, NULL, NULL, NULL);
@@ -11189,7 +11186,6 @@ static void
 _slowConsErrCB(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
     struct threadArg *arg    = (struct threadArg*) closure;
-    int64_t          dropped = 0;
 
     natsMutex_Lock(arg->m);
     if (err == NATS_SLOW_CONSUMER)
@@ -11691,9 +11687,6 @@ test_AsyncSubscriptionPendingDrain(void)
     int                 total     = 100;
     int                 msgs      = 0;
     int                 bytes     = 0;
-    int                 mlen      = 10;
-    int                 totalSize = total * mlen;
-    uint64_t            queuedMsgs= 0;
     int64_t             delivered = 0;
     int                 i;
     struct threadArg    arg;
@@ -12243,7 +12236,6 @@ test_SubOnComplete(void)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsSubscription    *sub      = NULL;
-    natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
 
@@ -15168,7 +15160,6 @@ test_DrainSub(void)
     natsSubscription    *sub= NULL;
     natsSubscription    *sub2 = NULL;
     natsSubscription    *sub3 = NULL;
-    natsSubscription    *sub4 = NULL;
     natsPid             pid = NATS_INVALID_PID;
     struct threadArg    arg;
 
@@ -16105,7 +16096,6 @@ _sigCB(char **customErrTxt, unsigned char **psig, int *sigLen, const char* nonce
             104, 191, 138, 217, 227,   1,  92,  14,
     };
     unsigned char *sig = NULL;
-    unsigned char *ptr = NULL;
 
     if (closure != NULL)
     {
@@ -17658,7 +17648,6 @@ test_SSLMultithreads(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
-    natsConnection      *nc       = NULL;
     natsOptions         *opts     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     natsThread          *t[SSL_THREADS];
@@ -18457,7 +18446,6 @@ static void
 _stanPubAckHandler(const char *guid, const char *errTxt, void* closure)
 {
     struct threadArg *args= (struct threadArg*) closure;
-    char             *val = NULL;
 
     natsMutex_Lock(args->m);
     args->status = NATS_OK;

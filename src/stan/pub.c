@@ -273,7 +273,6 @@ _stanPublish(stanConnection *sc, const char *channel, const void *data, int data
     if (s == NATS_OK)
     {
         Pb__PubMsg  pubReq;
-        const void  *pubBytes = NULL;
         int         pubSize   = 0;
 
         pb__pub_msg__init(&pubReq);

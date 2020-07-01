@@ -32,6 +32,8 @@
 #include "nkeys.h"
 #include "crypto.h"
 
+static const char *inboxPrefix = "_INBOX.";
+
 #define WAIT_LIB_INITIALIZED \
         natsMutex_Lock(gLib.lock); \
         while (!(gLib.initialized) && !(gLib.initAborted)) \

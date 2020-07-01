@@ -112,7 +112,6 @@ int main(int argc, char **argv)
     stanSubOptions      *subOpts    = NULL;
     stanConnection      *sc         = NULL;
     stanSubscription    *sub        = NULL;
-    int64_t             last        = 0;
     bool                connLost    = false;
 
     opts = parseArgs(argc, argv, usage);

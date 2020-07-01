@@ -90,8 +90,7 @@
 #define _OK_OP_LEN_         (3)
 #define _ERR_OP_LEN_        (4)
 
-static const char *inboxPrefix = "_INBOX.";
-#define NATS_INBOX_PRE_LEN (7)
+#define NATS_INBOX_PRE_LEN  (7)
 
 #define NATS_REQ_ID_OFFSET  (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1)
 #define NATS_MAX_REQ_ID_LEN (19) // to display 2^63 number

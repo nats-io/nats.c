@@ -88,7 +88,6 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     struct addrinfo hints;
     struct addrinfo *servinfo = NULL;
     struct addrinfo *p;
-    bool            waitForConnect = false;
     bool            error = false;
     int             i;
     int             max = 1;

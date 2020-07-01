@@ -269,7 +269,6 @@ uvAsyncCb(uv_async_t *handle)
     natsLibuvEvents *nle    = (natsLibuvEvents*) handle->data;
     natsStatus      s       = NATS_OK;
     natsLibuvEvent  *event  = NULL;
-    bool            remove  = false;
     bool            more    = false;
 
     while (1)

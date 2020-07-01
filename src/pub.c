@@ -41,7 +41,6 @@ natsConn_publish(natsConnection *nc, const char *subj,
     int         subjLen = 0;
     int         replyLen = 0;
     int         sizeSize = 0;
-    int         pos = 0;
     bool        reconnecting = false;
 
     if (nc == NULL)
@@ -325,7 +324,6 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
                        const void *data, int dataLen, int64_t timeout)
 {
     natsStatus          s           = NATS_OK;
-    natsSubscription    *sub        = NULL;
     respInfo            *resp       = NULL;
     bool                createSub   = false;
     bool                needsRemoval= true;

@@ -1418,7 +1418,6 @@ _doReconnect(void *arg)
 {
     natsStatus                      s           = NATS_OK;
     natsConnection                  *nc         = (natsConnection*) arg;
-    int64_t                         elapsed     = 0;
     natsSrvPool                     *pool       = NULL;
     int64_t                         sleepTime   = 0;
     struct threadsToJoin            ttj;
@@ -1689,7 +1688,6 @@ _readProto(natsConnection *nc, natsBuffer **proto)
 {
 	natsStatus	s 			= NATS_OK;
 	char		protoEnd	= '\n';
-	int			i			= 0;
 	natsBuffer	*buf		= NULL;
 	char		oneChar[1]  = { '\0' };
 
@@ -1900,7 +1898,6 @@ _connect(natsConnection *nc)
     natsStatus  s     = NATS_OK;
     natsStatus  retSts= NATS_OK;
     natsSrvPool *pool = NULL;
-    bool        done  = false;
     int         i = 0;
     int         l = 0;
     int         max = 0;
@@ -3356,8 +3353,6 @@ natsStatus
 natsConnection_FlushTimeout(natsConnection *nc, int64_t timeout)
 {
     natsStatus  s       = NATS_OK;
-    int64_t     target  = 0;
-    natsPong    *pong   = NULL;
 
     if (nc == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);

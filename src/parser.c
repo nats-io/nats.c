@@ -86,7 +86,6 @@ _processMsgArgs(natsConnection *nc, char *buf, int bufLen)
 {
     natsStatus      s       = NATS_OK;
     int             start   = -1;
-    int             len     = 0;
     int             index   = 0;
     int             i;
     char            b;

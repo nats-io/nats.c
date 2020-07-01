@@ -22,7 +22,6 @@ int main(int argc, char **argv)
     natsConnection  *conn  = NULL;
     natsStatistics  *stats = NULL;
     natsOptions     *opts  = NULL;
-    int64_t         last   = 0;
     natsStatus      s;
     int             dataLen=0;
 

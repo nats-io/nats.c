@@ -156,7 +156,6 @@ stanSubscription_AckMsg(stanSubscription *sub, stanMsg *msg)
 {
     natsStatus      s       = NATS_OK;
     natsConnection  *nc     = NULL;
-    char            *ackBuf = NULL;
     bool            flush   = false;
     char            *ackSub = NULL;
     int             ackSize = 0;

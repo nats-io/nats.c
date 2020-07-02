@@ -72,6 +72,7 @@ _freeConn(stanConnection *sc)
     natsTimer_Destroy(sc->pingTimer);
     natsMutex_Destroy(sc->pingMu);
     natsMutex_Destroy(sc->mu);
+    NATS_FREE(sc->clusterID);
     NATS_FREE(sc->clientID);
     NATS_FREE(sc->connID);
     NATS_FREE(sc->pubPrefix);
@@ -147,6 +148,14 @@ _closeDueToPing(stanConnection *sc, const char* errTxt)
 
     if (s == NATS_OK)
         natsAsyncCb_PostStanConnLostHandler(sc);
+}
+
+void
+stanConn_defaultConnLostHandler(stanConnection *sc, const char* errorTxt, void *closure)
+{
+    stanConn_Lock(sc);
+    fprintf(stderr, "Connection permanently lost: clusterID=%s clientID=%s error=%s\n", sc->clusterID, sc->clientID, errorTxt);
+    stanConn_Unlock(sc);
 }
 
 static void
@@ -329,6 +338,7 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
 
     // Make a copy of user provided clientID
     IF_OK_DUP_STRING(s, sc->clientID, clientID);
+    IF_OK_DUP_STRING(s, sc->clusterID, clusterID);
 
     if (s == NATS_OK)
     {

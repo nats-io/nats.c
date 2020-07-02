@@ -197,6 +197,7 @@ StanDurableQueueSubscription
 StanCheckReceivedMsg
 StanSubscriptionAckMsg
 StanPings
+StanConnectionLostHandlerNotSet
 StanPingsUnblockPublishCalls
 StanGetNATSConnection
 StanNoRetryOnFailedConnect

@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "conn.h"
 #include "copts.h"
 #include "../opts.h"
 
@@ -57,6 +58,7 @@ stanConnOptions_Create(stanConnOptions **newOpts)
         opts->maxPubAcksInFlightPercentage = STAN_CONN_OPTS_DEFAULT_MAX_PUB_ACKS_INFLIGHT_PERCENTAGE;
         opts->pingInterval = STAN_CONN_OPTS_DEFAULT_PING_INTERVAL;
         opts->pingMaxOut = STAN_CONN_OPTS_DEFAULT_PING_MAX_OUT;
+        opts->connectionLostCB = stanConn_defaultConnLostHandler;
     }
 
     if (s == NATS_OK)

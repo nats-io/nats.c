@@ -42,6 +42,9 @@ stanConn_retain(stanConnection *nc);
 void
 stanConn_release(stanConnection *nc);
 
+void
+stanConn_defaultConnLostHandler(stanConnection *sc, const char* errorTxt, void *closure);
+
 natsStatus
 stanConnClose(stanConnection *sc, bool sendProto);
 

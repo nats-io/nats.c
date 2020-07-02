@@ -119,6 +119,7 @@ struct __stanConnection
 
     natsConnection      *nc;
 
+    char                *clusterID;
     char                *clientID;
     char                *connID;
     int                 connIDLen;

@@ -1378,8 +1378,12 @@ connectionLostCB(stanConnection *sc, const char *errTxt, void *closure)
 }
 ```
 
-Note that the only way to be notified is to set the callback. If the callback is not set, PINGs are still sent and the connection
-will be closed if needed, but the application won't know if it has only subscriptions.
+Note that the only way to be notified in your application is to set the callback. If the callback is not set, PINGs are still sent and the connection
+will be closed if needed, but the application won't know if it has only subscriptions. A default callback is used to simply
+print to standard error the clusterID, the clientID and the error that caused the connection to be lost:
+```
+Connection permanently lost: clusterID=test-cluster clientID=client error=connection lost due to PING failure
+```
 
 When the connection is lost, your application would have to re-create it and all subscriptions if any.
 

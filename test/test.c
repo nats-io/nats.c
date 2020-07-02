@@ -17950,7 +17950,7 @@ test_StanConnOptions(void)
     test("Has default values: ");
     testCond(
             (opts->connTimeout == STAN_CONN_OPTS_DEFAULT_CONN_TIMEOUT) &&
-            (opts->connectionLostCB == NULL) &&
+            (opts->connectionLostCB == stanConn_defaultConnLostHandler) &&
             (opts->connectionLostCBClosure == NULL) &&
             (strcmp(opts->discoveryPrefix, STAN_CONN_OPTS_DEFAULT_DISCOVERY_PREFIX) == 0) &&
             (opts->maxPubAcksInFlightPercentage == STAN_CONN_OPTS_DEFAULT_MAX_PUB_ACKS_INFLIGHT_PERCENTAGE) &&
@@ -19451,6 +19451,68 @@ test_StanPings(void)
 }
 
 static void
+test_StanConnectionLostHandlerNotSet(void)
+{
+    natsStatus          s;
+    natsPid             pid = NATS_INVALID_PID;
+    stanConnection      *sc = NULL;
+    stanConnOptions     *opts = NULL;
+    natsOptions         *nOpts = NULL;
+    struct threadArg    arg;
+
+    testAllowMillisecInPings = true;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&nOpts));
+    IFOK(s, natsOptions_SetClosedCB(nOpts, _closedCb, (void*)&arg));
+    IFOK(s, stanConnOptions_Create(&opts));
+    IFOK(s, stanConnOptions_SetNATSOptions(opts, nOpts));
+    IFOK(s, stanConnOptions_SetPings(opts, -50, 5));
+    if (s != NATS_OK)
+    {
+        _destroyDefaultThreadArgs(&arg);
+        stanConnOptions_Destroy(opts);
+        testAllowMillisecInPings = false;
+        FAIL("Unable to setup test");
+    }
+
+    pid = _startStreamingServer("nats://127.0.0.1:4222", NULL, true);
+    if (pid == NATS_INVALID_PID)
+    {
+        testAllowMillisecInPings = false;
+        FAIL("Unable to start server");
+    }
+
+    test("Connect: ");
+    IFOK(s, stanConnection_Connect(&sc, clusterName, clientName, opts));
+    testCond(s == NATS_OK);
+
+    // Stop server and wait for closed notification
+    _stopServer(pid);
+
+    test("Connection closed: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Connection closed: ");
+    natsMutex_Lock(sc->mu);
+    s = (sc->closed ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(sc->mu);
+    testCond(s == NATS_OK);
+
+    stanConnClose(sc, false);
+    stanConnection_Destroy(sc);
+    stanConnOptions_Destroy(opts);
+    natsOptions_Destroy(nOpts);
+    testAllowMillisecInPings = false;
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 test_StanPingsUnblockPubCalls(void)
 {
     natsStatus          s;
@@ -20116,6 +20178,7 @@ static testInfo allTests[] =
     {"StanCheckReceivedMsg",            test_StanCheckReceivedvMsg},
     {"StanSubscriptionAckMsg",          test_StanSubscriptionAckMsg},
     {"StanPings",                       test_StanPings},
+    {"StanConnectionLostHandlerNotSet", test_StanConnectionLostHandlerNotSet},
     {"StanPingsUnblockPublishCalls",    test_StanPingsUnblockPubCalls},
     {"StanGetNATSConnection",           test_StanGetNATSConnection},
     {"StanNoRetryOnFailedConnect",      test_StanNoRetryOnFailedConnect},

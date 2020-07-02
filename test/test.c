@@ -6189,7 +6189,9 @@ test_SimplifiedURLs(void)
     natsStatus          s         = NATS_OK;
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
+#if defined(NATS_HAS_TLS)
     natsOptions         *opts     = NULL;
+#endif
     const char          *urls[] = {
         "nats://127.0.0.1:4222",
         "nats://127.0.0.1:",

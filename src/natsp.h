@@ -548,6 +548,9 @@ natsLib_Retain(void);
 void
 natsLib_Release(void);
 
+int64_t
+nats_setTargetTime(int64_t timeout);
+
 void
 nats_resetTimer(natsTimer *t, int64_t newInterval);
 

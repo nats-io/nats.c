@@ -889,6 +889,17 @@ testBroadcast(void *arg)
 }
 
 static void
+_unblockLongWait(void *closure)
+{
+    struct threadArg *args = (struct threadArg*) closure;
+
+    nats_Sleep(500);
+    natsMutex_Lock(args->m);
+    natsCondition_Signal(args->c);
+    natsMutex_Unlock(args->m);
+}
+
+static void
 test_natsCondition(void)
 {
     natsStatus          s;
@@ -957,7 +968,7 @@ test_natsCondition(void)
 
     test("Wait absolute time: ");
     before = nats_Now();
-    target = nats_Now() + 1000;
+    target = nats_setTargetTime(1000);
     s = natsCondition_AbsoluteTimedWait(c1, m, target);
     diff = (nats_Now() - before);
     testCond((s == NATS_TIMEOUT)
@@ -965,11 +976,33 @@ test_natsCondition(void)
 
     test("Wait absolute time in the past: ");
     before = nats_Now();
-    target = nats_Now() - 1000;
+    target = nats_setTargetTime(-1000);
     s = natsCondition_AbsoluteTimedWait(c1, m, target);
     diff = (nats_Now() - before);
     testCond((s == NATS_TIMEOUT)
              && (diff >= 0) && (diff <= 10));
+
+    test("Wait absolute time with very large value: ");
+    tArgs.control = 0;
+    s = natsThread_Create(&t1, _unblockLongWait, &tArgs);
+    if (s != NATS_OK)
+    {
+        natsMutex_Unlock(m);
+        FAIL("Unable to run test_natsCondition because got an error while creating thread!");
+    }
+    if (s == NATS_OK)
+    {
+        before = nats_Now();
+        target = nats_setTargetTime(0x7FFFFFFFFFFFFFFF);
+        s = natsCondition_AbsoluteTimedWait(c1, m, target);
+        diff = (nats_Now() - before);
+    }
+    testCond((s == NATS_OK)
+             && (diff >= 400) && (diff <= 600));
+
+    natsThread_Join(t1);
+    natsThread_Destroy(t1);
+    t1 = NULL;
 
     test("Signal before wait: ");
     tArgs.control = 0;
@@ -1266,6 +1299,23 @@ test_natsTimer(void)
     natsMutex_Unlock(t->mu);
     natsMutex_Lock(tArg.m);
     testCond((tArg.timerFired == 1)
+             && (tArg.timerStopped == 1)
+             && (refs == 1)
+             && (nats_getTimersCount() == 0));
+    natsMutex_Unlock(tArg.m);
+
+    tArg.control        = 4;
+    tArg.timerFired     = 0;
+    tArg.timerStopped   = 0;
+    test("Use very large timeout: ");
+    natsTimer_Reset(t, 0x7FFFFFFFFFFFFFFF);
+    nats_Sleep(200);
+    natsTimer_Stop(t);
+    natsMutex_Lock(t->mu);
+    refs = t->refs;
+    natsMutex_Unlock(t->mu);
+    natsMutex_Lock(tArg.m);
+    testCond((tArg.timerFired == 0)
              && (tArg.timerStopped == 1)
              && (refs == 1)
              && (nats_getTimersCount() == 0));

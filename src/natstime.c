@@ -62,7 +62,7 @@ void
 natsDeadline_Init(natsDeadline *deadline, int64_t timeout)
 {
     deadline->active          = true;
-    deadline->absoluteTime    = nats_Now() + timeout;
+    deadline->absoluteTime    = nats_setTargetTime(timeout);
 }
 
 void

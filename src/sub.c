@@ -600,7 +600,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
                && !(sub->draining))
         {
             if (target == 0)
-                target = nats_Now() + timeout;
+                target = nats_setTargetTime(timeout);
 
             s = natsCondition_AbsoluteTimedWait(sub->cond, sub->mu, target);
             if (s != NATS_OK)
@@ -803,7 +803,7 @@ natsSubscription_WaitForDrainCompletion(natsSubscription *sub, int64_t timeout)
     natsSub_Unlock(sub);
 
     if (timeout > 0)
-        deadline = nats_Now() + timeout;
+        deadline = nats_setTargetTime(timeout);
 
     while (natsSubscription_IsValid(sub))
     {

@@ -3307,7 +3307,7 @@ _flushTimeout(natsConnection *nc, int64_t timeout)
         // Send the ping (and add the pong to the list)
         _sendPing(nc, pong);
 
-        target = nats_Now() + timeout;
+        target = nats_setTargetTime(timeout);
 
         // When the corresponding PONG is received, the PONG processing code
         // will set pong->id to 0 and do a broadcast. This will allow this
@@ -3529,7 +3529,7 @@ _drain(natsConnection *nc, int64_t timeout)
 
     nc->status = NATS_CONN_STATUS_DRAINING_SUBS;
     if (timeout > 0)
-        nc->drainDeadline = nats_Now() + timeout;
+        nc->drainDeadline = nats_setTargetTime(timeout);
     _retain(nc);
 
     natsConn_Unlock(nc);

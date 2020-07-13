@@ -47,7 +47,9 @@ natsCondition_TimedWait(natsCondition *cond, natsMutex *mutex, int64_t timeout)
         if (GetLastError() == ERROR_TIMEOUT)
             return NATS_TIMEOUT;
 
-        abort();
+        return nats_setError(NATS_SYS_ERROR,
+                             "SleepConditionVariableCS error: %d",
+                             GetLastError());
     }
 
     return NATS_OK;

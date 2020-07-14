@@ -470,6 +470,15 @@ _removeTimer(natsLibTimers *timers, natsTimer *t)
     timers->count--;
 }
 
+int64_t
+nats_setTargetTime(int64_t timeout)
+{
+    int64_t target = nats_Now() + timeout;
+    if (target < 0)
+        target = 0x7FFFFFFFFFFFFFFF;
+    return target;
+}
+
 void
 nats_resetTimer(natsTimer *t, int64_t newInterval)
 {
@@ -497,7 +506,7 @@ nats_resetTimer(natsTimer *t, int64_t newInterval)
     // the timer's callback.
     if (!(t->inCallback))
     {
-        t->absoluteTime = nats_Now() + t->interval;
+        t->absoluteTime = nats_setTargetTime(t->interval);
         _insertTimer(t);
     }
 
@@ -602,7 +611,7 @@ _timerThread(void *arg)
         if (t == NULL)
         {
             // No timer, fire in an hour...
-            target = nats_Now() + 3600 * 1000;
+            target = nats_setTargetTime(3600 * 1000);
         }
         else
         {
@@ -665,7 +674,7 @@ _timerThread(void *arg)
             // because:
             // 1- the callback may have taken longer than it should
             // 2- the user may have called Reset() with a new interval
-            t->absoluteTime = nats_Now() + t->interval;
+            t->absoluteTime = nats_setTargetTime(t->interval);
             _insertTimer(t);
         }
 

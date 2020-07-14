@@ -341,7 +341,7 @@ _stanPublish(stanConnection *sc, const char *channel, const void *data, int data
                 if (s == NATS_OK)
                 {
                     // Compute absolute time based on current time and the pub ack timeout.
-                    ackTimeout = nats_Now() + sc->opts->pubAckTimeout;
+                    ackTimeout = nats_setTargetTime(sc->opts->pubAckTimeout);
 
                     // For Publish() calls, store in map, no need to copy keep since it is in pa.
                     if (isSync)

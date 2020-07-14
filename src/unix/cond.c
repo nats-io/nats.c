@@ -55,7 +55,7 @@ _timedWait(natsCondition *cond, natsMutex *mutex, bool isAbsolute, int64_t timeo
     if (timeout <= 0)
         return NATS_TIMEOUT;
 
-    target = (isAbsolute ? timeout : (nats_Now() + timeout));
+    target = (isAbsolute ? timeout : nats_setTargetTime(timeout));
 
     ts.tv_sec = target / 1000;
     ts.tv_nsec = (target % 1000) * 1000000;

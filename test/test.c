@@ -4148,23 +4148,23 @@ test_natsSock_IPOrder(void)
 
     test("Server listen to IPv4: ");
     serverPid = _startServer("", "-a 127.0.0.1 -p 4222", false);
+    testCond(true);
+    test("IPv4 only: ");
     s = _checkStart("nats://localhost:4222", 4, 5);
-    if (s == NATS_OK)
-        s = _checkStart("nats://localhost:4222", 46, 5);
-    if (s == NATS_OK)
-        s = _checkStart("nats://localhost:4222", 64, 5);
-    if (s == NATS_OK)
-        s = _checkStart("nats://localhost:4222", 0, 5);
-    if (s == NATS_OK)
-    {
-        // This one should fail.
-        s = _checkStart("nats://localhost:4222", 6, 5);
-        if (s == NATS_OK)
-            s = NATS_ERR;
-        else
-            s = NATS_OK;
-    }
     testCond(s == NATS_OK);
+    test("IPv4+v6: ");
+    s = _checkStart("nats://localhost:4222", 46, 5);
+    testCond(s == NATS_OK);
+    test("IPv6+v4: ");
+    s = _checkStart("nats://localhost:4222", 64, 5);
+    testCond(s == NATS_OK);
+    test("IP any: ");
+    s = _checkStart("nats://localhost:4222", 0, 5);
+    testCond(s == NATS_OK);
+    // This one should fail.
+    test("IPv6 only: ");
+    s = _checkStart("nats://localhost:4222", 6, 5);
+    testCond(s != NATS_OK);
     _stopServer(serverPid);
     serverPid = NATS_INVALID_PID;
 
@@ -4172,24 +4172,28 @@ test_natsSock_IPOrder(void)
     {
         test("Server listen to IPv6: ");
         serverPid = _startServer("", "-a :: -p 4222", false);
+        testCond(true);
+        test("IPv6 only: ");
         s = _checkStart("nats://localhost:4222", 6, 5);
+        testCond(s == NATS_OK);
+        test("IPv4+v6: ");
+        s = _checkStart("nats://localhost:4222", 46, 5);
+        testCond(s == NATS_OK);
+        test("IPv6+v4: ");
+        s = _checkStart("nats://localhost:4222", 64, 5);
+        testCond(s == NATS_OK);
+        test("IP any: ");
+        s = _checkStart("nats://localhost:4222", 0, 5);
+        testCond(s == NATS_OK);
+        // This one should fail, but the server when listening
+        // to [::] is actually accepting IPv4 connections,
+        // so be tolerant of that.
+        test("IPv4 only: ");
+        s = _checkStart("nats://localhost:4222", 4, 5);
         if (s == NATS_OK)
-            s = _checkStart("nats://localhost:4222", 46, 5);
-        if (s == NATS_OK)
-            s = _checkStart("nats://localhost:4222", 64, 5);
-        if (s == NATS_OK)
-            s = _checkStart("nats://localhost:4222", 0, 5);
-        if (s == NATS_OK)
-        {
-            // This one should fail, but the server when listening
-            // to [::] is actually accepting IPv4 connections,
-            // so be tolerant of that.
-            s = _checkStart("nats://localhost:4222", 4, 5);
-            if (s == NATS_OK)
-                fprintf(stderr, ">>>> IPv4 to [::] should have failed, but server accepted it\n");
-            else
-                s = NATS_OK;
-        }
+            fprintf(stderr, ">>>> IPv4 to [::] should have failed, but server accepted it\n");
+        else
+            s = NATS_OK;
         testCond(s == NATS_OK);
         _stopServer(serverPid);
     }
@@ -6259,7 +6263,7 @@ test_IPResolutionOrder(void)
     if (s == NATS_OK)
         s = natsOptions_SetURL(opts, "nats://localhost:4222");
     if (s == NATS_OK)
-        s = natsOptions_SetTimeout(opts, 2000);
+        s = natsOptions_SetTimeout(opts, 500);
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -12560,6 +12564,8 @@ test_BasicClusterReconnect(void)
     s = natsOptions_Create(&opts);
     if (s == NATS_OK)
         s = natsOptions_IPResolutionOrder(opts, 4);
+    if (s == NATS_OK)
+        s = natsOptions_SetTimeout(opts, 500);
     if (s == NATS_OK)
         s = natsOptions_SetNoRandomize(opts, true);
     if (s == NATS_OK)

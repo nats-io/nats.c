@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -17,6 +17,11 @@
 #include "status.h"
 #include "gc.h"
 
+#define HDR_LINE_PRE        "NATS/1.0"
+#define HDR_LINE_PRE_LEN    (8)
+#define HDR_LINE            HDR_LINE_PRE _CRLF_
+#define HDR_LINE_LEN        (10)
+
 struct __natsMsg;
 
 struct __natsMsg
@@ -24,12 +29,17 @@ struct __natsMsg
     natsGCItem          gc;
 
     // The message is allocated as a single memory block that contains
-    // this structure and enough space for the payload. The msg payload
-    // starts after the 'next' pointer.
+    // this structure and enough space for the headers/payload.
+    // Headers, if any, start after the 'next' pointer, followed by
+    // the message payload.
     const char          *subject;
     const char          *reply;
+    char                *hdr;
+    int                 hdrLen;
+    bool                hdrLift;
     const char          *data;
     int                 dataLen;
+    natsStrHash         *headers;
 
     // subscription (needed when delivery done by connection)
     struct __natsSubscription *sub;
@@ -37,15 +47,36 @@ struct __natsMsg
     // Must be last field!
     struct __natsMsg    *next;
 
-    // Nothing after this: the message payload goes there.
+    // Nothing after this: the message headers/payload goes there.
 
 };
+
+struct __natsHeaderValue;
+
+typedef struct __natsHeaderValue
+{
+    char                        *value;
+    bool                        needFree;
+    struct __natsHeaderValue    *next;
+
+} natsHeaderValue;
+
+int
+natsMsgHeader_encodedLen(natsMsg *msg);
+
+natsStatus
+natsMsgHeader_encode(natsBuffer *buf, natsMsg *msg);
+
+void
+natsMsg_init(natsMsg *msg,
+             const char *subject, const char *reply,
+             const char *data, int dataLen);
 
 natsStatus
 natsMsg_create(natsMsg **newMsg,
                const char *subject, int subjLen,
                const char *reply, int replyLen,
-               const char *buf, int bufLen);
+               const char *buf, int bufLen, int hdrLen);
 
 // This needs to follow the nats_FreeObjectCb prototype (see gc.h)
 void

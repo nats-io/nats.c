@@ -1,4 +1,4 @@
-// Copyright 2018 The NATS Authors
+// Copyright 2018-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -136,7 +136,12 @@ _stanProcessMsg(natsConnection *nc, natsSubscription *ignored, natsMsg *msg, voi
 
                 packedSize = (int) pb__ack__pack(&ack, (uint8_t*) ackBuf);
                 if (ackSize == packedSize)
-                    natsConn_publish(nc, ackSubject, NULL, (const void*) ackBuf, ackSize, flush);
+                {
+                    natsMsg msg;
+
+                    natsMsg_init(&msg, (const char*) ackSubject, NULL, (const char*) ackBuf, ackSize);
+                    natsConn_publish(nc, &msg, flush);
+                }
             }
         }
         else
@@ -230,7 +235,12 @@ stanSubscription_AckMsg(stanSubscription *sub, stanMsg *msg)
                 s = nats_setError(NATS_ERR, "message acknowledgment protocol computed packed size is %d, got %d",
                         ackSize, packedSize);
             else
-                s = natsConn_publish(nc, ackSub, NULL, (const void*) ackBuf, ackSize, flush);
+            {
+                natsMsg msg;
+
+                natsMsg_init(&msg, ackSub, NULL, (const void*) ackBuf, ackSize);
+                s = natsConn_publish(nc, &msg, flush);
+            }
 
             if (needFree)
                 NATS_FREE(ackBytes);

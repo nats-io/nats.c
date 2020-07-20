@@ -1,4 +1,4 @@
-// Copyright 2018 The NATS Authors
+// Copyright 2018-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -404,8 +404,12 @@ _stanPublish(stanConnection *sc, const char *channel, const void *data, int data
                 }
                 else
                 {
+                    natsMsg msg;
+
+                    natsMsg_init(&msg, (const char*) sc->pubSubjBuf, (const char*) sc->ackSubject,
+                                 (const char*) sc->pubMsgBuf, pubSize);
                     // Use private function to cause flush of buffer in place if sync call
-                    s = natsConn_publish(sc->nc, sc->pubSubjBuf, sc->ackSubject, sc->pubMsgBuf, pubSize, isSync);
+                    s = natsConn_publish(sc->nc, &msg, isSync);
                 }
                 if ((s != NATS_OK) && (pa != NULL))
                 {

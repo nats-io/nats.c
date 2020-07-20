@@ -24,6 +24,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
     * [Important Changes](#important-changes)
 	* [Getting Started](#getting-started)
 	* [Basic Usage](#basic-usage)
+    * [Headers](#headers)
 	* [Wildcard Subscriptions](#wildcard-subscriptions)
 	* [Queue Groups](#queue-groups)
 	* [TLS](#tls)
@@ -360,7 +361,7 @@ natsConnection_PublishString(nc, "foo", "hello world");
 char data[] = {1, 2, 0, 4, 5};
 natsConnection_Publish(nc, "foo", (const void*) data, 5);
 
-// Simple asynchronous subscriber on subject foo, invoking message 
+// Simple asynchronous subscriber on subject foo, invoking message
 // handler 'onMsg' when messages are received, and not providing a closure.
 natsConnection_Subscribe(&sub, nc, "foo", onMsg, NULL);
 
@@ -415,6 +416,28 @@ onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
     natsMsg_Destroy(msg);
 }
 ```
+
+## Headers
+
+Headers are available when connecting to servers at version 2.2.0+.
+
+They closely resemble http headers. They are a map of key/value pairs, the value being an array of strings.
+
+Headers allow users to add meta information about a message without interfering with the message payload.
+
+Note that if an application attempts to send a message with a header when connected to a server that does not understand them, the publish call will return the error `NATS_NO_SERVER_SUPPORT`.
+
+There is an API to know if the server currently connected to supports headers:
+```c
+natsStatus s = natsConnection_HasHeaderSupport(conn);
+if (s == NATS_NO_SERVER_SUPPORT)
+    // deal with server not supporting this feature.
+```
+
+If the server understands headers but is about to deliver the message to a client that doesn't, the headers are stripped off so that the older clients can still receive the messsage.
+It is important to have all client and servers to a version that support headers if applications rely on headers.
+
+For more details on the headers API, please get the example: `examples/getstarted/headers.c`.
 
 ## Wildcard Subscriptions
 
@@ -618,11 +641,11 @@ else if (s == NATS_TIMEOUT)
     printf("Flushed timed out!\n");
 else
     printf("Error during flush: %d - %s\n", s, natsStatus_GetText(s));
-```    
+```
 
 Auto-unsubscribe allows a subscription to be automatically removed when the subscriber has received a given number of messages. This is used internally by the `natsConnection_Request()` call.
 
-```c   
+```c
 // Auto-unsubscribe after 100 messages received
 natsConnection_Subscribe(&sub, nc, "foo", onMsg, NULL);
 natsSubscription_AutoUnsubscribe(sub, 100);
@@ -719,7 +742,7 @@ main(int argc, char **argv)
 
     // Create the connection and subscriber.
     (...)
-    
+
     // Say that we are done subscribing, we could check the number of errors:
     if (asyncErrors.count > 1000)
     {
@@ -728,7 +751,7 @@ main(int argc, char **argv)
 
     (...)
 }
-``` 
+```
 
 The callback would use the closure this way:
 ```c
@@ -796,7 +819,7 @@ happen in the event the server is not consuming fast enough.
 static char *servers[] = { "nats://localhost:1222",
                            "nats://localhost:1223",
                            "nats://localhost:1224"};
-                           
+
 // Setup options to include all servers in the cluster.
 // We first created an options object, and pass the list of servers, specifying
 // the number of servers on that list.

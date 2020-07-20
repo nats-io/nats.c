@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -125,9 +125,7 @@ void
 natsConn_destroyRespPool(natsConnection *nc);
 
 natsStatus
-natsConn_publish(natsConnection *nc, const char *subj,
-         const char *reply, const void *data, int dataLen,
-         bool directFlush);
+natsConn_publish(natsConnection *nc, natsMsg *msg, bool directFlush);
 
 natsStatus
 natsConn_userFromFile(char **userJWT, char **customErrTxt, void *closure);

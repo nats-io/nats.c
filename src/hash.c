@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -480,7 +480,7 @@ _shrinkStr(natsStrHash *hash)
 
 
 static natsStrHashEntry*
-_createStrEntry(uint32_t hk, char *key, bool copyKey, void *data)
+_createStrEntry(uint32_t hk, char *key, bool copyKey, bool freeKey, void *data)
 {
     natsStrHashEntry *e = (natsStrHashEntry*) NATS_MALLOC(sizeof(natsStrHashEntry));
 
@@ -489,7 +489,7 @@ _createStrEntry(uint32_t hk, char *key, bool copyKey, void *data)
 
     e->hk       = hk;
     e->key      = (copyKey ? NATS_STRDUP(key) : key);
-    e->freeKey  = copyKey;
+    e->freeKey  = freeKey;
     e->data     = data;
     e->next     = NULL;
 
@@ -502,9 +502,11 @@ _createStrEntry(uint32_t hk, char *key, bool copyKey, void *data)
     return e;
 }
 
+// Note that it would be invalid to call with copyKey:true and freeKey:false,
+// since this would lead to a memory leak.
 natsStatus
-natsStrHash_Set(natsStrHash *hash, char *key, bool copyKey,
-                void *data, void **oldData)
+natsStrHash_SetEx(natsStrHash *hash, char *key, bool copyKey, bool freeKey,
+                  void *data, void **oldData)
 {
     natsStatus          s         = NATS_OK;
     uint32_t            hk        = 0;
@@ -530,16 +532,32 @@ natsStrHash_Set(natsStrHash *hash, char *key, bool copyKey,
                 *oldData = e->data;
             e->data  = data;
 
+            // Need to care for situations where previous call
+            // for same key hash was with different pointers and or
+            // "config" values (copyKey/freeKey).
+
+            // But if nothing has changed (same pointers and config) we
+            // can bail early.
+            if ((key == e->key) && (freeKey == e->freeKey))
+                return NATS_OK;
+
+            oldKey = e->key;
+            // First try to dup the key if required.
             if (copyKey)
             {
-                oldKey = e->key;
-                e->key = NATS_STRDUP(key);
+                char *newKey = NATS_STRDUP(key);
+                if (newKey == NULL)
+                    return nats_setDefaultError(NATS_NO_MEMORY);
 
-                if (e->freeKey)
-                    NATS_FREE(oldKey);
-
-                e->freeKey = true;
+                e->key = newKey;
             }
+            // If old config say that we had ownership, then free the
+            // old key now.
+            if (e->freeKey)
+                NATS_FREE(oldKey);
+
+            // Keep track of ownership of this key (copied or not).
+            e->freeKey = freeKey;
             return NATS_OK;
         }
 
@@ -547,7 +565,7 @@ natsStrHash_Set(natsStrHash *hash, char *key, bool copyKey,
     }
 
     // We have a new entry here
-    newEntry = _createStrEntry(hk, key, copyKey, data);
+    newEntry = _createStrEntry(hk, key, copyKey, freeKey, data);
     if (newEntry == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 

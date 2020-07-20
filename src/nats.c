@@ -1873,7 +1873,7 @@ natsLib_msgDeliveryPostControlMsg(natsSubscription *sub)
     natsMsgDlvWorker    *worker = (sub->libDlvWorker);
 
     // Create a "end" message and post it to the delivery worker
-    s = natsMsg_create(&controlMsg, NULL, 0, NULL, 0, NULL, 0);
+    s = natsMsg_create(&controlMsg, NULL, 0, NULL, 0, NULL, 0, -1);
     if (s == NATS_OK)
     {
         natsMsgList *l;

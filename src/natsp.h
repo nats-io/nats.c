@@ -66,11 +66,10 @@
 
 #define _CRLF_      "\r\n"
 #define _SPC_       " "
-#define _PUB_P_     "PUB "
+#define _HPUB_P_    "HPUB "
 
 #define _PING_PROTO_         "PING\r\n"
 #define _PONG_PROTO_         "PONG\r\n"
-#define _PUB_PROTO_          "PUB %s %s %d\r\n"
 #define _SUB_PROTO_          "SUB %s %s %d\r\n"
 #define _UNSUB_PROTO_        "UNSUB %" PRId64 " %d\r\n"
 #define _UNSUB_NO_MAX_PROTO_ "UNSUB %" PRId64 " \r\n"
@@ -82,7 +81,7 @@
 
 #define _CRLF_LEN_          (2)
 #define _SPC_LEN_           (1)
-#define _PUB_P_LEN_         (4)
+#define _HPUB_P_LEN_        (5)
 #define _PING_OP_LEN_       (4)
 #define _PONG_OP_LEN_       (4)
 #define _PING_PROTO_LEN_    (6)
@@ -159,6 +158,7 @@ typedef struct __natsServerInfo
     char        *nonce;
     char        *clientIP;
     bool        lameDuckMode;
+    bool        headers;
 
 } natsServerInfo;
 

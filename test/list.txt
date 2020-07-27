@@ -35,6 +35,8 @@ natsReadFile
 natsGetJWTOrSeed
 natsHostIsIP
 natsWaitReady
+HeadersLift
+HeadersAPIs
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize
@@ -150,6 +152,8 @@ UserCredsFromFiles
 NKey
 ConnSign
 WriteDeadline
+HeadersNotSupported
+HeadersBasic
 SSLBasic
 SSLVerify
 SSLCAFromMemory

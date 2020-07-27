@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -23,36 +23,60 @@
 
 static const char *digits = "0123456789";
 
-#define _publish(n, s, r, d, l) natsConn_publish((n), (s), (r), (d), (l), false)
+#define _publishMsg(n, m) natsConn_publish((n), (m), false)
+
+#define GETBYTES_SIZE(len, b, i) {\
+    if ((len) > 0)\
+    {\
+        int l;\
+        for (l = (len); l > 0; l /= 10)\
+        {\
+            (i) -= 1;\
+            (b)[(i)] = digits[l%10];\
+        }\
+    }\
+    else\
+    {\
+        (i) -= 1;\
+        (b)[(i)] = digits[0];\
+    }\
+}
+
+// This represents the maximum size of a byte array containing the
+// string representation of a hdr/msg size. See GETBYTES_SIZE.
+#define BYTES_SIZE_MAX (12)
 
 // _publish is the internal function to publish messages to a nats server.
 // Sends a protocol data message by queueing into the bufio writer
 // and kicking the flusher thread. These writes should be protected.
 natsStatus
-natsConn_publish(natsConnection *nc, const char *subj,
-         const char *reply, const void *data, int dataLen,
-         bool directFlush)
+natsConn_publish(natsConnection *nc, natsMsg *msg, bool directFlush)
 {
-    natsStatus  s = NATS_OK;
-    int         msgHdSize = 0;
-    char        b[12];
-    int         bSize = sizeof(b);
-    int         i = bSize;
-    int         subjLen = 0;
-    int         replyLen = 0;
-    int         sizeSize = 0;
-    bool        reconnecting = false;
+    natsStatus  s               = NATS_OK;
+    int         msgHdSize       = 0;
+    char        dlb[BYTES_SIZE_MAX];
+    int         dli             = BYTES_SIZE_MAX;
+    int         dlSize          = 0;
+    char        hlb[BYTES_SIZE_MAX];
+    int         hli             = BYTES_SIZE_MAX;
+    int         hlSize          = 0;
+    int         subjLen         = 0;
+    int         replyLen        = 0;
+    bool        reconnecting    = false;
+    int         ppo             = 1; // pub proto offset
+    int         hdrl            = 0;
+    int         totalLen        = 0;
 
     if (nc == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if ((subj == NULL)
-        || ((subjLen = (int) strlen(subj)) == 0))
+    if ((msg->subject == NULL)
+        || ((subjLen = (int) strlen(msg->subject)) == 0))
     {
         return nats_setDefaultError(NATS_INVALID_SUBJECT);
     }
 
-    replyLen = ((reply != NULL) ? (int) strlen(reply) : 0);
+    replyLen = ((msg->reply != NULL) ? (int) strlen(msg->reply) : 0);
 
     natsConn_Lock(nc);
 
@@ -70,13 +94,35 @@ natsConn_publish(natsConnection *nc, const char *subj,
         return nats_setDefaultError(NATS_DRAINING);
     }
 
-    if (!nc->initc && ((int64_t) dataLen > nc->info.maxPayload))
+    // We can have headers NULL but hdrLift==true which means we are in special
+    // situation where a message was received and is sent back without the user
+    // accessing the headers. It should still be considered having headers.
+    if ((msg->headers != NULL) || msg->hdrLift)
+    {
+        if (!nc->info.headers)
+        {
+            natsConn_Unlock(nc);
+
+            return nats_setDefaultError(NATS_NO_SERVER_SUPPORT);
+        }
+
+        hdrl = natsMsgHeader_encodedLen(msg);
+        if (hdrl > 0)
+        {
+            GETBYTES_SIZE(hdrl, hlb, hli)
+            hlSize = (BYTES_SIZE_MAX - hli);
+            ppo = 0;
+            totalLen = hdrl;
+        }
+    }
+
+    if (!nc->initc && ((int64_t) msg->dataLen > nc->info.maxPayload))
     {
         natsConn_Unlock(nc);
 
         return nats_setError(NATS_MAX_PAYLOAD,
                              "Payload %d greater than maximum allowed: %" PRId64,
-                             dataLen, nc->info.maxPayload);
+                             msg->dataLen, nc->info.maxPayload);
     }
 
     // Check if we are reconnecting, and if so check if
@@ -91,30 +137,18 @@ natsConn_publish(natsConnection *nc, const char *subj,
         }
     }
 
-    if (dataLen > 0)
-    {
-        int l;
+    totalLen += msg->dataLen;
+    GETBYTES_SIZE(totalLen, dlb, dli)
+    dlSize = (BYTES_SIZE_MAX - dli);
 
-        for (l = dataLen; l > 0; l /= 10)
-        {
-            i -= 1;
-            b[i] = digits[l%10];
-        }
-    }
-    else
-    {
-        i -= 1;
-        b[i] = digits[0];
-    }
-
-    sizeSize = (bSize - i);
-
-    msgHdSize = _PUB_P_LEN_
+    // We include the NATS headers in the message header scratch.
+    msgHdSize = (_HPUB_P_LEN_ - ppo)
                 + subjLen + 1
                 + (replyLen > 0 ? replyLen + 1 : 0)
-                + sizeSize + _CRLF_LEN_;
+                + (hdrl > 0 ? hlSize + 1 + hdrl : 0)
+                + dlSize + _CRLF_LEN_;
 
-    natsBuf_MoveTo(nc->scratch, _PUB_P_LEN_);
+    natsBuf_MoveTo(nc->scratch, _HPUB_P_LEN_);
 
     if (natsBuf_Capacity(nc->scratch) < msgHdSize)
     {
@@ -125,19 +159,27 @@ natsConn_publish(natsConnection *nc, const char *subj,
     }
 
     if (s == NATS_OK)
-        s = natsBuf_Append(nc->scratch, subj, subjLen);
+        s = natsBuf_Append(nc->scratch, msg->subject, subjLen);
     if (s == NATS_OK)
         s = natsBuf_Append(nc->scratch, _SPC_, _SPC_LEN_);
-    if ((s == NATS_OK) && (reply != NULL))
+    if ((s == NATS_OK) && (msg->reply != NULL))
     {
-        s = natsBuf_Append(nc->scratch, reply, replyLen);
+        s = natsBuf_Append(nc->scratch, msg->reply, replyLen);
+        if (s == NATS_OK)
+            s = natsBuf_Append(nc->scratch, _SPC_, _SPC_LEN_);
+    }
+    if ((s == NATS_OK) && (hdrl > 0))
+    {
+        s = natsBuf_Append(nc->scratch, (hlb+hli), hlSize);
         if (s == NATS_OK)
             s = natsBuf_Append(nc->scratch, _SPC_, _SPC_LEN_);
     }
     if (s == NATS_OK)
-        s = natsBuf_Append(nc->scratch, (b+i), sizeSize);
+        s = natsBuf_Append(nc->scratch, (dlb+dli), dlSize);
     if (s == NATS_OK)
         s = natsBuf_Append(nc->scratch, _CRLF_, _CRLF_LEN_);
+    if ((s == NATS_OK) && hdrl > 0)
+        s = natsMsgHeader_encode(nc->scratch, msg);
 
     if (s == NATS_OK)
     {
@@ -148,10 +190,10 @@ natsConn_publish(natsConnection *nc, const char *subj,
         else
             SET_WRITE_DEADLINE(nc);
 
-        s = natsConn_bufferWrite(nc, natsBuf_Data(nc->scratch), msgHdSize);
+        s = natsConn_bufferWrite(nc, natsBuf_Data(nc->scratch)+ppo, msgHdSize);
 
         if (s == NATS_OK)
-            s = natsConn_bufferWrite(nc, data, dataLen);
+            s = natsConn_bufferWrite(nc, msg->data, msg->dataLen);
 
         if (s == NATS_OK)
             s = natsConn_bufferWrite(nc, _CRLF_, _CRLF_LEN_);
@@ -171,7 +213,7 @@ natsConn_publish(natsConnection *nc, const char *subj,
     if (s == NATS_OK)
     {
         nc->stats.outMsgs  += 1;
-        nc->stats.outBytes += dataLen;
+        nc->stats.outBytes += totalLen;
     }
 
     natsConn_Unlock(nc);
@@ -187,7 +229,11 @@ natsStatus
 natsConnection_Publish(natsConnection *nc, const char *subj,
                        const void *data, int dataLen)
 {
-    natsStatus s = _publish(nc, subj, NULL, data, dataLen);
+    natsStatus s;
+    natsMsg    msg;
+
+    natsMsg_init(&msg, subj, NULL, (const char*) data, dataLen);
+    s = _publishMsg(nc, &msg);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -203,8 +249,15 @@ natsStatus
 natsConnection_PublishString(natsConnection *nc, const char *subj,
                              const char *str)
 {
-    natsStatus s = _publish(nc, subj, NULL, (const void*) str,
-                            (str != NULL ? (int) strlen(str) : 0));
+    natsStatus s;
+    natsMsg    msg;
+    int        dataLen = 0;
+
+    if (str != NULL)
+        dataLen = (int) strlen(str);
+
+    natsMsg_init(&msg, subj, NULL, str, dataLen);
+    s = _publishMsg(nc, &msg);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -216,8 +269,7 @@ natsConnection_PublishString(natsConnection *nc, const char *subj,
 natsStatus
 natsConnection_PublishMsg(natsConnection *nc, natsMsg *msg)
 {
-    natsStatus s = _publish(nc, msg->subject, msg->reply,
-                            msg->data, msg->dataLen);
+    natsStatus s = _publishMsg(nc, msg);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -232,11 +284,13 @@ natsConnection_PublishRequest(natsConnection *nc, const char *subj,
                               const char *reply, const void *data, int dataLen)
 {
     natsStatus s;
+    natsMsg    msg;
 
     if ((reply == NULL) || (strlen(reply) == 0))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = _publish(nc, subj, reply, data, dataLen);
+    natsMsg_init(&msg, subj, reply, (const char*) data, dataLen);
+    s = _publishMsg(nc, &msg);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -255,19 +309,25 @@ natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
                                     const char *reply, const char *str)
 {
     natsStatus s;
+    natsMsg    msg;
+    int        dataLen = 0;
 
     if ((reply == NULL) || (strlen(reply) == 0))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = _publish(nc, subj, reply, (const void*) str, (int) strlen(str));
+    if (str != NULL)
+        dataLen = (int) strlen(str);
+
+    natsMsg_init(&msg, subj, reply, str, dataLen);
+    s = _publishMsg(nc, &msg);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 // Old way of sending a request...
 static natsStatus
-_oldRequest(natsMsg **replyMsg, natsConnection *nc, const char *subj,
-                    const void *data, int dataLen, int64_t timeout)
+_oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
+               natsMsg *requestMsg, int64_t timeout)
 {
     natsStatus          s       = NATS_OK;
     natsSubscription    *sub    = NULL;
@@ -279,7 +339,10 @@ _oldRequest(natsMsg **replyMsg, natsConnection *nc, const char *subj,
     if (s == NATS_OK)
         s = natsSubscription_AutoUnsubscribe(sub, 1);
     if (s == NATS_OK)
-        s = natsConn_publish(nc, subj, inbox, data, dataLen, true);
+    {
+        requestMsg->reply = (const char*) inbox;
+        s = natsConn_publish(nc, requestMsg, true);
+    }
     if (s == NATS_OK)
         s = natsSubscription_NextMsg(replyMsg, sub, timeout);
 
@@ -320,8 +383,8 @@ _respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clos
  * This is optimized for the case of multiple responses.
  */
 natsStatus
-natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
-                       const void *data, int dataLen, int64_t timeout)
+natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
+                          natsMsg *m, int64_t timeout)
 {
     natsStatus          s           = NATS_OK;
     respInfo            *resp       = NULL;
@@ -331,7 +394,7 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
     char                ginbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1 + 1 + 1]; // _INBOX.<nuid>.*
     char                respInbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1 + NATS_MAX_REQ_ID_LEN + 1]; // _INBOX.<nuid>.<reqId>
 
-    if ((replyMsg == NULL) || (nc == NULL))
+    if ((replyMsg == NULL) || (nc == NULL) || (m == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsConn_Lock(nc);
@@ -343,7 +406,7 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
     if (nc->opts->useOldRequestStyle)
     {
         natsConn_Unlock(nc);
-        return _oldRequest(replyMsg, nc, subj, data, dataLen, timeout);
+        return _oldRequestMsg(replyMsg, nc, m, timeout);
     }
 
     // Since we are going to release the lock and connection
@@ -376,7 +439,8 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
 
     if (s == NATS_OK)
     {
-        s = natsConn_publish(nc, subj, respInbox, data, dataLen, true);
+        m->reply = (const char*) respInbox;
+        s = natsConn_publish(nc, m, true);
         if (s == NATS_OK)
         {
             natsMutex_Lock(resp->mu);
@@ -432,10 +496,23 @@ natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
                              int64_t timeout)
 {
     natsStatus s;
+    natsMsg    msg;
 
-    s = natsConnection_Request(replyMsg, nc, subj, (const void*) str,
-                               (str == NULL ? 0 : (int) strlen(str)),
-                               timeout);
+    natsMsg_init(&msg, subj, NULL, str, (str == NULL ? 0 : (int) strlen(str)));
+    s = natsConnection_RequestMsg(replyMsg, nc, &msg, timeout);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
+                       const void *data, int dataLen, int64_t timeout)
+{
+    natsStatus s;
+    natsMsg    msg;
+
+    natsMsg_init(&msg, subj, NULL, (const char*) data, dataLen);
+    s = natsConnection_RequestMsg(replyMsg, nc, &msg, timeout);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

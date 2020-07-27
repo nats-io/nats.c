@@ -529,6 +529,8 @@ _processInfo(natsConnection *nc, char *info, int len)
         s = nats_JSONGetStr(json, "client_ip", &(nc->info.clientIP));
     if (s == NATS_OK)
         s = nats_JSONGetBool(json, "ldm", &(nc->info.lameDuckMode));
+    if (s == NATS_OK)
+        s = nats_JSONGetBool(json, "headers", &(nc->info.headers));
 
     // The array could be empty/not present on initial connect,
     // if advertise is disabled on that server, or servers that
@@ -958,7 +960,8 @@ _connectProto(natsConnection *nc, char **proto)
     {
         res = nats_asprintf(proto,
                             "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\"tls_required\":%s," \
-                            "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\",\"protocol\":%d,\"echo\":%s}%s",
+                            "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\",\"protocol\":%d,\"echo\":%s," \
+                            "\"headers\":true}%s",
                             nats_GetBoolStr(opts->verbose),
                             nats_GetBoolStr(opts->pedantic),
                             (nkey != NULL ? "\"nkey\":\"" : ""),
@@ -1051,6 +1054,7 @@ _resendSubscriptions(natsConnection *nc)
             {
                 subs[count++] = (natsSubscription*) p;
             }
+            natsHashIter_Done(&iter);
         }
     }
     natsMutex_Unlock(nc->subsMu);
@@ -1409,6 +1413,7 @@ _clearPendingRequestCalls(natsConnection *nc)
         natsMutex_Unlock(val->mu);
         natsStrHashIter_RemoveCurrent(&iter);
     }
+    natsStrHashIter_Done(&iter);
 }
 
 // Try to reconnect using the option parameters.
@@ -2353,6 +2358,7 @@ _removeAllSubscriptions(natsConnection *nc)
 
         natsSub_release(sub);
     }
+    natsHashIter_Done(&iter);
     natsMutex_Unlock(nc->subsMu);
 }
 
@@ -2476,7 +2482,7 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
 }
 
 static natsStatus
-_createMsg(natsMsg **newMsg, natsConnection *nc, char *buf, int bufLen)
+_createMsg(natsMsg **newMsg, natsConnection *nc, char *buf, int bufLen, int hdrLen)
 {
     natsStatus  s        = NATS_OK;
     int         subjLen  = 0;
@@ -2494,7 +2500,7 @@ _createMsg(natsMsg **newMsg, natsConnection *nc, char *buf, int bufLen)
     s = natsMsg_create(newMsg,
                        (const char*) natsBuf_Data(nc->ps->ma.subject), subjLen,
                        (const char*) reply, replyLen,
-                       (const char*) buf, bufLen);
+                       (const char*) buf, bufLen, hdrLen);
     return s;
 }
 
@@ -2522,7 +2528,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     // Do this outside of sub's lock, even if we end-up having to destroy
     // it because we have reached the maxPendingMsgs count. This reduces
     // lock contention.
-    s = _createMsg(&msg, nc, buf, bufLen);
+    s = _createMsg(&msg, nc, buf, bufLen, nc->ps->ma.hdr);
     if (s != NATS_OK)
     {
         natsMutex_Unlock(nc->subsMu);
@@ -3068,7 +3074,7 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     {
         s = natsBuf_Create(&(nc->scratch), DEFAULT_SCRATCH_SIZE);
         if (s == NATS_OK)
-            s = natsBuf_Append(nc->scratch, _PUB_P_, _PUB_P_LEN_);
+            s = natsBuf_Append(nc->scratch, _HPUB_P_, _HPUB_P_LEN_);
     }
     if (s == NATS_OK)
         s = natsCondition_Create(&(nc->flusherCond));
@@ -3516,6 +3522,7 @@ _drain(natsConnection *nc, int64_t timeout)
                     natsSub_retain(sub);
                     subs[numSubs++] = sub;
                 }
+                natsHashIter_Done(&iter);
             }
         }
         natsMutex_Unlock(nc->subsMu);
@@ -4131,4 +4138,22 @@ natsConnection_GetRTT(natsConnection *nc, int64_t *rtt)
     natsConn_Unlock(nc);
 
     return s;
+}
+
+natsStatus
+natsConnection_HasHeaderSupport(natsConnection *nc)
+{
+    bool headers = false;
+
+    if (nc == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+    headers = nc->info.headers;
+    natsConn_Unlock(nc);
+
+    if (headers)
+        return NATS_OK;
+
+    return NATS_NO_SERVER_SUPPORT;
 }

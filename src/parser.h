@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -39,6 +39,7 @@ typedef enum
     MSG_ARG,
     MSG_PAYLOAD,
     MSG_END,
+    OP_H,
     OP_P,
     OP_PI,
     OP_PIN,
@@ -62,6 +63,7 @@ typedef struct __natsMsgArg
     natsBuffer  replyRec;
     natsBuffer  *reply;
     int64_t     sid;
+    int         hdr;
     int         size;
 
 } natsMsgArg;
@@ -73,6 +75,7 @@ typedef struct __natsParser
     natsOp      state;
     int         afterSpace;
     int         drop;
+    int         hdr;
     natsMsgArg  ma;
     natsBuffer  argBufRec;
     natsBuffer  *argBuf;

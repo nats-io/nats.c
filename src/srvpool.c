@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -321,6 +321,7 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, in
             }
             s = _addURLToPool(pool, url, true, tlsName);
         }
+        natsStrHashIter_Done(&iter);
         if ((s == NATS_OK) && added && pool->randomize)
             _shufflePool(pool, 1);
     }

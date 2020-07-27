@@ -2007,6 +2007,7 @@ test_natsStrHash(void)
     const char  *t1 = "this is a test";
     const char  *t2 = "this is another test";
     void        *oldval = NULL;
+    char        *myKey = NULL;
     int         lastNumBkts = 0;
     int         i;
     char        *key;
@@ -2218,6 +2219,15 @@ test_natsStrHash(void)
               && (hash->bkts[hk & hash->mask]->hk == hk)
               && (hash->bkts[hk & hash->mask]->freeKey == false)
               && (strcmp(hash->bkts[hk & hash->mask]->key, "keychanged") == 0));
+
+    test("Key not copied, but asking to free when destroyed: ");
+    myKey = strdup("mykey");
+    hk = natsStrHash_Hash(myKey, (int) strlen(myKey));
+    s = natsStrHash_SetEx(hash, myKey, false, true, (void*) t1, &oldval);
+    testCond((s == NATS_OK)
+              && (oldval == NULL)
+              && (hash->bkts[hk & hash->mask]->hk == hk)
+              && (hash->bkts[hk & hash->mask]->freeKey == true));
 
     test("Destroy: ");
     natsStrHash_Destroy(hash);
@@ -3885,6 +3895,353 @@ test_natsWaitReady(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
+static void
+_testHeader(const char *testName, char *buf, natsStatus expected, const char *errTxt,
+            const char *key, const char *value)
+{
+    natsStatus  s    = NATS_OK;
+    natsMsg     *msg = NULL;
+    const char  *val = NULL;
+    const char  *k   = (key == NULL ? "k" : key);
+
+    test(testName);
+    s = natsMsg_create(&msg, "foo", 3, NULL, 0, buf, (int)strlen(buf), (int) strlen(buf));
+    IFOK(s, natsMsgHeader_Get(msg, k, &val));
+    if (expected == NATS_OK)
+    {
+        testCond((s == NATS_OK) && (val != NULL) && (strcmp(val, value) == 0));
+    }
+    else
+    {
+        const char *le = nats_GetLastError(&s);
+        testCond((s == expected) && (strstr(le, errTxt) != NULL));
+        nats_clearLastError();
+    }
+
+    natsMsg_Destroy(msg);
+}
+
+static void
+test_natsMsgHeadersLift(void)
+{
+    char buf[512];
+
+    snprintf(buf, sizeof(buf), "%sk:v\r\n\r\n", HDR_LINE);
+    _testHeader("Valid simple header: ", buf, NATS_OK, "", "k", "v");
+
+    snprintf(buf, sizeof(buf), "%sk e y:v\r\n\r\n", HDR_LINE);
+    _testHeader("Key with spaces ok: ", buf, NATS_OK, "", "k e y", "v");
+
+    snprintf(buf, sizeof(buf), "%sk e y  :v\r\n\r\n", HDR_LINE);
+    _testHeader("Key with spaces (including traling) ok: ", buf, NATS_OK, "", "k e y  ", "v");
+
+    snprintf(buf, sizeof(buf), "%sk:  v   \r\n\r\n", HDR_LINE);
+    _testHeader("Trim spaces for value: ", buf, NATS_OK, "", "k", "v");
+
+    snprintf(buf, sizeof(buf), "%sk: a\r\n   bc\r\n def\r\n\r\n", HDR_LINE);
+    _testHeader("Multiline values: ", buf, NATS_OK, "", "k", "a bc def");
+
+    snprintf(buf, sizeof(buf), "%s", "NATS\r\nk:v\r\n\r\n");
+    _testHeader("NATS header missing: ", buf, NATS_PROTOCOL_ERROR, "header prefix missing", NULL, NULL);
+
+    snprintf(buf, sizeof(buf), "%s", HDR_LINE);
+    _testHeader("NATS header missing CRLF: ", buf, NATS_PROTOCOL_ERROR, "early termination of headers", NULL, NULL);
+
+    snprintf(buf, sizeof(buf), "%sk:v\r\n\rbad\r\n", HDR_LINE);
+    _testHeader("Invalid key start: ", buf, NATS_PROTOCOL_ERROR, "invalid start of a key", NULL, NULL);
+
+    snprintf(buf, sizeof(buf), "%s k:v\r\n\r\n", HDR_LINE);
+    _testHeader("Space in key name: ", buf, NATS_PROTOCOL_ERROR, "key cannot start with a space", NULL, NULL);
+
+    snprintf(buf, sizeof(buf), "%sk\r\n\r\n", HDR_LINE);
+    _testHeader("Column missing: ", buf, NATS_PROTOCOL_ERROR, "column delimiter not found", NULL, NULL);
+
+    snprintf(buf, sizeof(buf), "%sk:\r\n\r\n", HDR_LINE);
+    _testHeader("No value: ", buf, NATS_PROTOCOL_ERROR, "no value found for key", NULL, NULL);
+
+    snprintf(buf, sizeof(buf), "%sk:       \r\n\r\n", HDR_LINE);
+    _testHeader("No value (extra spaces): ", buf, NATS_PROTOCOL_ERROR, "no value found for key", NULL, NULL);
+}
+
+static void
+test_natsMsgHeaderAPIs(void)
+{
+    natsStatus  s        = NATS_OK;
+    natsMsg     *msg     = NULL;
+    const char  *val     = NULL;
+    const char* *values  = NULL;
+    const char* *keys    = NULL;
+    int         count    = 0;
+    const char  *longKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    test("Create message: ");
+    s = natsMsg_Create(&msg, "foo", NULL, "body", 4);
+    testCond(s == NATS_OK);
+
+    test("Key cannot be NULL: ");
+    IFOK(s, natsMsgHeader_Set(msg, NULL, "value"));
+    testCond(s == NATS_INVALID_ARG);
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Key cannot be empty: ");
+    IFOK(s, natsMsgHeader_Set(msg, "", "value"));
+    testCond(s == NATS_INVALID_ARG);
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Set msg cannot be NULL: ");
+    IFOK(s, natsMsgHeader_Set(NULL, "key", "value"));
+    testCond(s == NATS_INVALID_ARG);
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Set value: ");
+    IFOK(s, natsMsgHeader_Set(msg, "my-key", "value1"));
+    testCond(s == NATS_OK);
+
+    test("Get msg cannot be NULL: ");
+    IFOK(s, natsMsgHeader_Get(NULL, "my-key", &val));
+    testCond(s == NATS_INVALID_ARG);
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Get must provide mem location: ");
+    IFOK(s, natsMsgHeader_Get(msg, "my-key", NULL));
+    testCond(s == NATS_INVALID_ARG);
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Get: ");
+    IFOK(s, natsMsgHeader_Get(msg, "my-key", &val));
+    testCond((s == NATS_OK) &&
+                (val != NULL) &&
+                (strcmp(val, "value1") == 0));
+    val = NULL;
+
+    test("Get value with different case: ");
+    IFOK(s, natsMsgHeader_Get(msg, "my-Key", &val));
+    testCond((s == NATS_OK) &&
+                (val != NULL) &&
+                (strcmp(val, "value1") == 0));
+    val = NULL;
+
+    test("Key not found: ");
+    IFOK(s, natsMsgHeader_Get(msg, "unknown-key", &val));
+    testCond((s == NATS_NOT_FOUND) && (val == NULL));
+    if (s == NATS_NOT_FOUND)
+        s = NATS_OK;
+    val = NULL;
+
+    test("Set value replace old: ");
+    IFOK(s, natsMsgHeader_Set(msg, "my-key", "value2"));
+    testCond(s == NATS_OK);
+
+    test("Get value: ");
+    IFOK(s, natsMsgHeader_Get(msg, "My-KEy", &val));
+    testCond((s == NATS_OK) &&
+                (val != NULL) &&
+                (strcmp(val, "value2") == 0));
+    val = NULL;
+
+    test("Set NULL value: ");
+    IFOK(s, natsMsgHeader_Set(msg, "my-key", NULL));
+    testCond(s == NATS_OK);
+
+    test("Get value: ");
+    IFOK(s, natsMsgHeader_Get(msg, "my-key", &val));
+    testCond((s == NATS_OK) && (val == NULL));
+    val = NULL;
+
+    test("Set empty value: ");
+    IFOK(s, natsMsgHeader_Set(msg, "my-key", ""));
+    testCond(s == NATS_OK);
+
+    test("Get value: ");
+    IFOK(s, natsMsgHeader_Get(msg, "my-key", &val));
+    testCond((s == NATS_OK) && (val != NULL) && (val[0] == '\0'));
+    val = NULL;
+
+    test("Add msg cannot be NULL: ");
+    IFOK(s, natsMsgHeader_Add(NULL, "key", "value"));
+    testCond(s == NATS_INVALID_ARG);
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Add first: ");
+    IFOK(s, natsMsgHeader_Add(msg, "two-fields", "val1"));
+    testCond(s == NATS_OK);
+
+    test("Add second: ");
+    IFOK(s, natsMsgHeader_Add(msg, "two-fields", "val2"));
+    testCond(s == NATS_OK);
+
+    test("Get should return first: ");
+    IFOK(s, natsMsgHeader_Get(msg, "two-fields", &val));
+    testCond((s == NATS_OK) &&
+                (val != NULL) &&
+                (strcmp(val, "val1") == 0));
+    val = NULL;
+
+    test("Values: ");
+    IFOK(s, natsMsgHeader_Values(msg, "two-fields", &values, &count));
+    testCond((s == NATS_OK) && (values != NULL) && (count == 2) &&
+                (strcmp(values[0], "val1") == 0) &&
+                (strcmp(values[1], "val2") == 0));
+
+    if (values != NULL)
+        free((void*) values);
+    values = NULL;
+    count  = 0;
+
+    test("Add after a Set: ");
+    IFOK(s, natsMsgHeader_Set(msg, "my-other-key", "val3"));
+    IFOK(s, natsMsgHeader_Add(msg, "my-other-key", "val4"));
+    IFOK(s, natsMsgHeader_Values(msg, "my-other-key", &values, &count));
+    testCond((s == NATS_OK) && (values != NULL) && (count == 2) &&
+                (strcmp(values[0], "val3") == 0) &&
+                (strcmp(values[1], "val4") == 0));
+
+    if (values != NULL)
+        free((void*) values);
+    values = NULL;
+    count  = 0;
+
+    test("Keys msg cannot be NULL: ");
+    IFOK(s, natsMsgHeader_Keys(NULL, &keys, &count));
+    testCond((s == NATS_INVALID_ARG) && (keys == NULL) && (count == 0));
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Keys keys cannot be NULL: ");
+    IFOK(s, natsMsgHeader_Keys(msg, NULL, &count));
+    testCond((s == NATS_INVALID_ARG) && (keys == NULL) && (count == 0));
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Keys count cannot be NULL: ");
+    IFOK(s, natsMsgHeader_Keys(msg, &keys, NULL));
+    testCond((s == NATS_INVALID_ARG) && (keys == NULL) && (count == 0));
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Keys: ");
+    IFOK(s, natsMsgHeader_Keys(msg, &keys, &count));
+    if ((s == NATS_OK) && ((keys == NULL) || (count != 3)))
+    {
+        s = NATS_ERR;
+    }
+    else
+    {
+        int i;
+        bool ok1 = false;
+        bool ok2 = false;
+        bool ok3 = false;
+
+        for (i=0; i<count; i++)
+        {
+            if (strcmp(keys[i], "My-Key") == 0)
+                ok1 = true;
+            else if (strcmp(keys[i], "Two-Fields") == 0)
+                ok2 = true;
+            else if (strcmp(keys[i], "My-Other-Key") == 0)
+                ok3 = true;
+        }
+        if (!ok1 || !ok2 || !ok3)
+            s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+    if (keys != NULL)
+        free((void*) keys);
+    count = 0;
+
+    test("Set with long key: ");
+    IFOK(s, natsMsgHeader_Set(msg, longKey, "val1"));
+    testCond(s == NATS_OK);
+
+    test("Add with long key: ");
+    IFOK(s, natsMsgHeader_Add(msg, longKey, "val2"));
+    testCond(s == NATS_OK);
+
+    test("Get with long key: ");
+    IFOK(s, natsMsgHeader_Get(msg, longKey, &val));
+    testCond((s == NATS_OK) && (val != NULL) && (strcmp(val, "val1") == 0));
+
+    test("Values with long key: ");
+    IFOK(s, natsMsgHeader_Values(msg, longKey, &values, &count));
+    testCond((s == NATS_OK) && (values != NULL) && (count == 2) &&
+                (strcmp(values[0], "val1") == 0) &&
+                (strcmp(values[1], "val2") == 0));
+    free((void*) values);
+    count = 0;
+
+    test("Delete msg cannot be NULL: ");
+    IFOK(s, natsMsgHeader_Delete(NULL, "key"));
+    testCond(s == NATS_INVALID_ARG);
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Delete key cannot be NULL: ");
+    IFOK(s, natsMsgHeader_Delete(msg, NULL));
+    testCond(s == NATS_INVALID_ARG);
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Delete key cannot be empty: ");
+    IFOK(s, natsMsgHeader_Delete(msg, ""));
+    testCond(s == NATS_INVALID_ARG);
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Delete: ");
+    IFOK(s, natsMsgHeader_Delete(msg, "my-other-key"));
+    testCond(s == NATS_OK);
+
+    test("Should be gone: ");
+    IFOK(s, natsMsgHeader_Get(msg, "my-other-key", &val));
+    testCond((s == NATS_NOT_FOUND) && (val == NULL));
+    if (s == NATS_NOT_FOUND)
+        s = NATS_OK;
+
+    natsMsg_Destroy(msg);
+}
+
 static natsStatus
 _checkStart(const char *url, int orderIP, int maxAttempts)
 {
@@ -5471,18 +5828,80 @@ test_ProcessMsgArgs(void)
 
     test("Parsing MSG with too many arguments: ")
     // parsing: 'MSG a'
-    s = natsParser_Parse(nc, buf, 5);
+    natsParser_Parse(nc, buf, 5);
     // parse the rest..
-    if (s == NATS_OK)
-        s = natsParser_Parse(nc, buf + 5, 10);
+    natsParser_Parse(nc, buf + 5, 10);
+    s = natsConnection_GetLastError(nc, &le);
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
                 && (nc->ps->ma.subject == NULL)
-                && (nc->ps->ma.reply == NULL));
-    test("Connection last error properly set: ");
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "wrong number of arguments") != NULL));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "MSG foo 1\r\n");
+    test("Parsing MSG with not enough arguments: ")
+    natsParser_Parse(nc, buf, (int) strlen(buf));
     s = natsConnection_GetLastError(nc, &le);
-    testCond(s == NATS_PROTOCOL_ERROR);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "wrong number of arguments") != NULL));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "MSG foo abc 2\r\n");
+    test("Parsing MSG with bad sid: ")
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_GetLastError(nc, &le);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "Bad or Missing Sid") != NULL));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "MSG foo 1 abc\r\n");
+    test("Parsing MSG with bad size: ")
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_GetLastError(nc, &le);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "Bad or Missing Size") != NULL));
+
+    snprintf(buf, sizeof(buf), "%s", "MSG foo 1 bar abc\r\n");
+    test("Parsing MSG with bad size (with reply): ")
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_GetLastError(nc, &le);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "Bad or Missing Size") != NULL));
 
     // Test extra spaces first without reply
 
@@ -5583,6 +6002,145 @@ test_ProcessMsgArgs(void)
                 && (natsBuf_Len(nc->ps->ma.reply) == 3)
                 && (strncmp(natsBuf_Data(nc->ps->ma.reply), "daa", 3) == 0)
                 && (nc->ps->ma.size == 9));
+
+    // Test HMSG
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 bar 2 3\r\n");
+    test("Parsing HMSG: ");
+    s = natsParser_Parse(nc, buf, (int) strlen(buf));
+    testCond((s == NATS_OK)
+                && (natsBuf_Len(nc->ps->ma.subject) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.subject), "foo", 3) == 0)
+                && (nc->ps->ma.sid == 1)
+                && (natsBuf_Len(nc->ps->ma.reply) == 3)
+                && (strncmp(natsBuf_Data(nc->ps->ma.reply), "bar", 3) == 0)
+                && (nc->ps->ma.hdr == 2)
+                && (nc->ps->ma.size == 3));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 3\r\n");
+    test("Parsing HMSG not enough args: ");
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_GetLastError(nc, &le);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "wrong number of arguments") != NULL));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "HMSG a b c d e f\r\n");
+    test("Parsing HMSG too many args: ");
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_GetLastError(nc, &le);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "wrong number of arguments") != NULL));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "HMSG foo abc 2 4\r\n");
+    test("Parsing HMSG with bad sid: ");
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_GetLastError(nc, &le);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "Bad or Missing Sid") != NULL));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 baz 10\r\n");
+    test("Parsing HMSG with bad header size: ");
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_GetLastError(nc, &le);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "Bad or Missing Header Size") != NULL));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 bar baz 10\r\n");
+    test("Parsing HMSG with bad header size (with reply): ");
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_GetLastError(nc, &le);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "Bad or Missing Header Size") != NULL));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 10 4\r\n");
+    test("Parsing HMSG with bad header size (out of range): ");
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_GetLastError(nc, &le);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "Bad or Missing Header Size") != NULL));
+
+    natsParser_Destroy(nc->ps);
+    s = natsParser_Create(&(nc->ps));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 bar 10 4\r\n");
+    test("Parsing HMSG with bad header size (out of range with reply): ");
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_GetLastError(nc, &le);
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (le != NULL)
+                && (strstr(le, "Bad or Missing Header Size") != NULL));
 
     natsConnection_Destroy(nc);
 }
@@ -10111,6 +10669,7 @@ test_Request(void)
     natsConnection      *nc       = NULL;
     natsSubscription    *sub      = NULL;
     natsMsg             *msg      = NULL;
+    natsMsg             *req      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
 
@@ -10134,15 +10693,11 @@ test_Request(void)
         s = natsConnection_RequestString(&msg, nc, "foo", "help", 50);
 
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK)
-           && !arg.msgReceived)
-    {
+    while ((s == NATS_OK) && !arg.msgReceived)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-    }
-    natsMutex_Unlock(arg.m);
-
     if (s == NATS_OK)
         s = arg.status;
+    natsMutex_Unlock(arg.m);
 
     testCond((s == NATS_OK)
              && (msg != NULL)
@@ -10151,6 +10706,30 @@ test_Request(void)
                          natsMsg_GetDataLength(msg)) == 0));
 
     natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Create req message: ");
+    IFOK(s, natsMsg_Create(&req, "foo", NULL, "help", 4));
+    testCond(s == NATS_OK);
+
+    test("Test RequestMsg: ");
+    IFOK(s, natsConnection_RequestMsg(&msg, nc, req, 50));
+
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.msgReceived)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    if (s == NATS_OK)
+        s = arg.status;
+    natsMutex_Unlock(arg.m);
+
+    testCond((s == NATS_OK)
+             && (msg != NULL)
+             && (strncmp(arg.string,
+                         natsMsg_GetData(msg),
+                         natsMsg_GetDataLength(msg)) == 0));
+
+    natsMsg_Destroy(msg);
+    natsMsg_Destroy(req);
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
 
@@ -13408,15 +13987,15 @@ test_GetServers(void)
     char                **servers = NULL;
     int                 count     = 0;
 
-    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:5222", true);
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:5222 -cluster_name abc", true);
     CHECK_SERVER_STARTED(s1Pid);
 
-    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://127.0.0.1:5223 -routes nats://127.0.0.1:5222", true);
+    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://127.0.0.1:5223 -cluster_name abc -routes nats://127.0.0.1:5222", true);
     if (s2Pid == NATS_INVALID_PID)
         _stopServer(s1Pid);
     CHECK_SERVER_STARTED(s2Pid);
 
-    s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats://127.0.0.1:5224 -routes nats://127.0.0.1:5222", true);
+    s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats://127.0.0.1:5224 -cluster_name abc -routes nats://127.0.0.1:5222", true);
     if (s3Pid == NATS_INVALID_PID)
     {
         _stopServer(s1Pid);
@@ -13494,10 +14073,10 @@ test_GetDiscoveredServers(void)
     char                **servers = NULL;
     int                 count     = 0;
 
-    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:5222", true);
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:5222 -cluster_name abc", true);
     CHECK_SERVER_STARTED(s1Pid);
 
-    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://127.0.0.1:5223 -routes nats://127.0.0.1:5222", true);
+    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://127.0.0.1:5223 -cluster_name abc -routes nats://127.0.0.1:5222", true);
     if (s2Pid == NATS_INVALID_PID)
         _stopServer(s1Pid);
     CHECK_SERVER_STARTED(s2Pid);
@@ -13567,10 +14146,10 @@ test_DiscoveredServersCb(void)
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
-    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats-route://127.0.0.1:5222", true);
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats-route://127.0.0.1:5222 -cluster_name abc", true);
     CHECK_SERVER_STARTED(s1Pid);
 
-    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats-route://127.0.0.1:5223 -routes nats-route://127.0.0.1:5222", true);
+    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats-route://127.0.0.1:5223 -cluster_name abc -routes nats-route://127.0.0.1:5222", true);
     if (s2Pid == NATS_INVALID_PID)
         _stopServer(s1Pid);
     CHECK_SERVER_STARTED(s2Pid);
@@ -13585,7 +14164,7 @@ test_DiscoveredServersCb(void)
     testCond((s == NATS_TIMEOUT) && (invoked == 0));
     s = NATS_OK;
 
-    s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats-route://127.0.0.1:5224 -routes nats-route://127.0.0.1:5222", true);
+    s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats-route://127.0.0.1:5224 -cluster_name abc -routes nats-route://127.0.0.1:5222", true);
     if (s3Pid == NATS_INVALID_PID)
     {
         _stopServer(s1Pid);
@@ -13824,14 +14403,14 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
         FAIL("Unable to create reconnect options!");
     }
 
-    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:6222 -routes nats://127.0.0.1:6223,nats://127.0.0.1:6224", true);
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:6222 -cluster_name abc -routes nats://127.0.0.1:6223,nats://127.0.0.1:6224", true);
     CHECK_SERVER_STARTED(s1Pid);
 
     test("Connect ok: ");
     s = natsConnection_Connect(&conn, opts);
     testCond(s == NATS_OK);
 
-    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6224", true);
+    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://127.0.0.1:6223 -cluster_name abc -routes nats://127.0.0.1:6222,nats://127.0.0.1:6224", true);
     if (s2Pid == NATS_INVALID_PID)
         _stopServer(s1Pid);
     CHECK_SERVER_STARTED(s2Pid);
@@ -13856,7 +14435,7 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
 
     if (s == NATS_OK)
     {
-        s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats://127.0.0.1:6224 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223", true);
+        s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats://127.0.0.1:6224 -cluster_name abc -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223", true);
         if (s3Pid == NATS_INVALID_PID)
         {
             _stopServer(s1Pid);
@@ -13956,14 +14535,14 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
 
         if (restartS2)
         {
-            s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6224", true);
+            s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://127.0.0.1:6223 -cluster_name abc -routes nats://127.0.0.1:6222,nats://127.0.0.1:6224", true);
             if (s2Pid == NATS_INVALID_PID)
                 _stopServer(s3Pid);
             CHECK_SERVER_STARTED(s2Pid);
         }
         else
         {
-            s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats://127.0.0.1:6224 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223", true);
+            s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats://127.0.0.1:6224 -cluster_name abc -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223", true);
             if (s3Pid == NATS_INVALID_PID)
                 _stopServer(s2Pid);
             CHECK_SERVER_STARTED(s3Pid);
@@ -13982,7 +14561,7 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
     conn = NULL;
 
     // Restart s1
-    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:6222 -routes nats://127.0.0.1:6223,nats://127.0.0.1:6224", true);
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:6222 -cluster_name abc -routes nats://127.0.0.1:6223,nats://127.0.0.1:6224", true);
     if (s1Pid == NATS_INVALID_PID)
     {
         _stopServer(s2Pid);
@@ -15841,7 +16420,7 @@ test_GetClientID(void)
         testCond(true);
         return;
     }
-    pid1 = _startServer("nats://127.0.0.1:4222", "-cluster nats://127.0.0.1:6222", true);
+    pid1 = _startServer("nats://127.0.0.1:4222", "-cluster nats://127.0.0.1:6222 -cluster_name abc", true);
     CHECK_SERVER_STARTED(pid1);
 
     test("Create nc1: ");
@@ -15862,7 +16441,7 @@ test_GetClientID(void)
     testCond((s == NATS_OK) && (cid != 0));
 
     test("Wait for discovered callback: ");
-    pid2 = _startServer("nats://127.0.0.1:4223", "-p 4223 -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222", true);
+    pid2 = _startServer("nats://127.0.0.1:4223", "-p 4223 -cluster nats://127.0.0.1:6223 -cluster_name abc -routes nats://127.0.0.1:6222", true);
     CHECK_SERVER_STARTED(pid2);
     if (s == NATS_OK)
     {
@@ -15893,7 +16472,7 @@ test_GetClientID(void)
     {
         natsMutex_Lock(arg.m);
         while ((s != NATS_TIMEOUT) && !arg.reconnected)
-            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+            s = natsCondition_TimedWait(arg.c, arg.m, 4000);
         s = (arg.reconnected ? NATS_OK : NATS_ERR);
         natsMutex_Unlock(arg.m);
     }
@@ -17042,6 +17621,170 @@ test_NoPartialOnReconnect(void)
 
     _destroyDefaultThreadArgs(&arg);
 
+    _stopServer(pid);
+}
+
+static void
+test_HeadersNotSupported(void)
+{
+    natsStatus          s;
+    natsConnection      *conn = NULL;
+    natsMsg             *msg  = NULL;
+    natsMsg             *reply= NULL;
+    natsThread          *t    = NULL;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        // Set this to error, the mock server should set it to OK
+        // if it can start successfully.
+        arg.status = NATS_ERR;
+        arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576}\r\n";
+        s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
+    }
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+    if (s != NATS_OK)
+    {
+        if (t != NULL)
+        {
+            natsThread_Join(t);
+            natsThread_Destroy(t);
+        }
+        _destroyDefaultThreadArgs(&arg);
+        FAIL("Unable to setup test");
+    }
+
+    test("Headers not supported with old server: ");
+    s = natsConnection_ConnectTo(&conn, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_HasHeaderSupport(conn));
+    testCond(s == NATS_NO_SERVER_SUPPORT);
+    if (s == NATS_NO_SERVER_SUPPORT)
+        s = NATS_OK;
+
+    test("Create msg with heades: ");
+    IFOK(s, natsMsg_Create(&msg, "foo", NULL, "body", 4));
+    IFOK(s, natsMsgHeader_Set(msg, "Header", "Hello Headers!"));
+    testCond(s == NATS_OK);
+
+    test("Publish fails: ");
+    IFOK(s, natsConnection_PublishMsg(conn, msg));
+    testCond(s == NATS_NO_SERVER_SUPPORT);
+    if (s == NATS_NO_SERVER_SUPPORT)
+        s = NATS_OK;
+
+    test("Request fails: ");
+    IFOK(s, natsConnection_RequestMsg(&reply, conn, msg, 1000));
+    testCond((s == NATS_NO_SERVER_SUPPORT) && (reply == NULL));
+    if (s == NATS_NO_SERVER_SUPPORT)
+        s = NATS_OK;
+
+    natsConnection_Destroy(conn);
+
+    // Notify mock server we are done
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+
+    natsMsg_Destroy(msg);
+    natsMsg_Destroy(reply);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
+test_HeadersBasic(void)
+{
+    natsStatus          s;
+    natsConnection      *nc     = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+    natsMsg             *msg    = NULL;
+    natsMsg             *rmsg   = NULL;
+    natsSubscription    *sub    = NULL;
+    const char          *val    = NULL;
+
+    if (!serverVersionAtLeast(2, 2, 0))
+    {
+        char txt[200];
+
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.2.0, got %s: ", serverVersion);
+        test(txt);
+        testCond(true);
+        return;
+    }
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect ok: ");
+    s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4222");
+    testCond(s == NATS_OK);
+
+    test("Headers supported: ");
+    IFOK(s, natsConnection_HasHeaderSupport(nc));
+    testCond(s == NATS_OK);
+
+    test("Create sub: ");
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    testCond(s == NATS_OK);
+
+    test("Create msg with headers: ");
+    IFOK(s, natsMsg_Create(&msg, "foo", NULL, "body", 4));
+    IFOK(s, natsMsgHeader_Set(msg, "Headers", "Hello Headers!"))
+    testCond(s == NATS_OK);
+
+    test("Publish with headers ok: ");
+    IFOK(s, natsConnection_PublishMsg(nc, msg));
+    testCond(s == NATS_OK);
+
+    test("Receive msg: ")
+    IFOK(s, natsSubscription_NextMsg(&rmsg, sub, 1000));
+    testCond((s == NATS_OK) && (rmsg != NULL));
+
+    test("Resend msg without lift: ");
+    IFOK(s, natsConnection_PublishMsg(nc, rmsg));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(rmsg);
+    rmsg = NULL;
+
+    test("Receive msg: ")
+    IFOK(s, natsSubscription_NextMsg(&rmsg, sub, 1000));
+    testCond((s == NATS_OK) && (rmsg != NULL));
+
+    test("Check headers: ");
+    IFOK(s, natsMsgHeader_Get(rmsg, "Headers", &val));
+    testCond((s == NATS_OK)
+                && (val != NULL) && (strcmp(val, "Hello Headers!") == 0)
+                && (natsMsg_GetDataLength(rmsg) == 4)
+                && (strncmp(natsMsg_GetData(msg), "body", 4) == 0));
+
+    natsMsg_Destroy(rmsg);
+    rmsg = NULL;
+    test("Value with CRLFs replaced with spaces: ");
+    IFOK(s, natsMsgHeader_Set(msg, "Headers", "value1\r\nvalue2\r\nvalue3"));
+    IFOK(s, natsConnection_PublishMsg(nc, msg));
+    IFOK(s, natsSubscription_NextMsg(&rmsg, sub, 1000));
+    IFOK(s, natsMsgHeader_Get(rmsg, "Headers", &val));
+    testCond((s == NATS_OK)
+                && (val != NULL) && (strcmp(val, "value1  value2  value3") == 0)
+                && (natsMsg_GetDataLength(rmsg) == 4)
+                && (strncmp(natsMsg_GetData(msg), "body", 4) == 0));
+
+    natsMsg_Destroy(msg);
+    natsMsg_Destroy(rmsg);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
     _stopServer(pid);
 }
 
@@ -20059,6 +20802,8 @@ static testInfo allTests[] =
     {"natsGetJWTOrSeed",                test_natsGetJWTOrSeed},
     {"natsHostIsIP",                    test_natsHostIsIP},
     {"natsWaitReady",                   test_natsWaitReady},
+    {"HeadersLift",                     test_natsMsgHeadersLift},
+    {"HeadersAPIs",                     test_natsMsgHeaderAPIs},
 
     // Package Level Tests
 
@@ -20182,6 +20927,8 @@ static testInfo allTests[] =
     {"NKey",                            test_NKey},
     {"ConnSign",                        test_ConnSign},
     {"WriteDeadline",                   test_WriteDeadline},
+    {"HeadersNotSupported",             test_HeadersNotSupported},
+    {"HeadersBasic",                    test_HeadersBasic},
     {"SSLBasic",                        test_SSLBasic},
     {"SSLVerify",                       test_SSLVerify},
     {"SSLCAFromMemory",                 test_SSLLoadCAFromMemory},

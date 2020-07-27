@@ -2186,6 +2186,146 @@ natsMsg_GetData(const natsMsg *msg);
 NATS_EXTERN int
 natsMsg_GetDataLength(const natsMsg *msg);
 
+/** \brief Set the header entries associated with `key` to the single element `value`.
+ *
+ * It will replace any existing value associated with `key`.
+ *
+ * \note The `key` will be store in its canonical form, that is, the key "my-key"
+ * is stored as "My-Key".
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads. The internal structure
+ * of `natsMsg` may possible be altered during this call.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param key the key under which the `value` will be stored. It can't ne `NULL` or empty.
+ * @param value the string to store under the given `key`. The value can be `NULL` or empty string.
+ */
+NATS_EXTERN natsStatus
+natsMsgHeader_Set(natsMsg *msg, const char *key, const char *value);
+
+/** \brief Add `value` to the header associated with `key`.
+ *
+ * It will append to any existing values associated with `key`.
+ *
+ * \note The `key` will be store in its canonical form, that is, the key "my-key"
+ * is stored as "My-Key".
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads. The internal structure
+ * of `natsMsg` may possible be altered during this call.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param key the key under which the `value` will be stored. It can't ne `NULL` or empty.
+ * @param value the string to add to the values associated with the given `key`. The value can be `NULL` or empty string.
+ */
+NATS_EXTERN natsStatus
+natsMsgHeader_Add(natsMsg *msg, const char *key, const char *value);
+
+/** \brief Get the header entry associated with `key`.
+ *
+ * If more than one entry for the `key` is available, the first is returned.
+ * The returned value is owned by the library and MUST not be freed or altered.
+ *
+ * \note The `key` will be store as its canonical form, that is, the key "my-key"
+ * is stored as "My-Key".
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads. The internal structure
+ * of `natsMsg` may possible be altered during this call.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param key the key for which the value is requested.
+ * @param value the memory location where the library will store the pointer to the first
+ * value (if more than one is found) associated with the `key`.
+ * @return NATS_NOT_FOUND if `key` is not present in the headers.
+ */
+NATS_EXTERN natsStatus
+natsMsgHeader_Get(natsMsg *msg, const char *key, const char **value);
+
+/** \brief Get all header values associated with `key`.
+ *
+ * The returned strings are own by the library and MUST not be freed or altered.
+ * However, the returned array `values` MUST be freed by the user.
+ *
+ * \code{.c}
+ * const char* *values = NULL;
+ * int         count   = 0;
+ *
+ * s = natsMsgHeader_Values(msg, "My-Key", &values, &count);
+ * if (s == NATS_OK)
+ * {
+ *      // do something with the values
+ *
+ *      // then free the array of pointers.
+ *      free((void*) values);
+ * }
+ * \endcode
+ *
+ * \note The `key` will be store as its canonical form, that is, the key "my-key"
+ * is stored as "My-Key".
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads. The internal structure
+ * of `natsMsg` may possible be altered during this call.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param key the key for which the values are requested.
+ * @param values the memory location where the library will store the pointer to the array
+ * of values.
+ * @param count the memory location where the library will store the number of values returned.
+ * @return NATS_NOT_FOUND if `key` is not present in the headers.
+ */
+NATS_EXTERN natsStatus
+natsMsgHeader_Values(natsMsg *msg, const char *key, const char* **values, int *count);
+
+/** \brief Get all header keys.
+ *
+ * The returned strings are own by the library and MUST not be freed or altered.
+ * However, the returned array `keys` MUST be freed by the user.
+ *
+ * \code{.c}
+ * const char* *keys = NULL;
+ * int         count   = 0;
+ *
+ * s = natsMsgHeader_Keys(msg, &keys, &count);
+ * if (s == NATS_OK)
+ * {
+ *      // do something with the keys
+ *
+ *      // then free the array of pointers.
+ *      free((void*) keys);
+ * }
+ * \endcode
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads. The internal structure
+ * of `natsMsg` may possible be altered during this call.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param keys the memory location where the library will store the pointer to the array
+ * of keys.
+ * @param count the memory location where the library will store the number of keys returned.
+ * @return NATS_NOT_FOUND if no key is present.
+ */
+NATS_EXTERN natsStatus
+natsMsgHeader_Keys(natsMsg *msg, const char* **keys, int *count);
+
+/** \brief Delete the value(s) associated with `key`.
+ *
+ * \note The canonical form of `key` is used for looking up and then deleting the entry.
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads. The internal structure
+ * of `natsMsg` may possible be altered during this call.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param key the key to delete from the headers map.
+ * @return NATS_NOT_FOUND if `key` is not present in the headers.
+ */
+NATS_EXTERN natsStatus
+natsMsgHeader_Delete(natsMsg *msg, const char *key);
+
 /** \brief Destroys the message object.
  *
  * Destroys the message, freeing memory.
@@ -2650,6 +2790,16 @@ natsConnection_GetClientIP(natsConnection *nc, char **ip);
 NATS_EXTERN natsStatus
 natsConnection_GetRTT(natsConnection *nc, int64_t *rtt);
 
+/** \brief Returns if the connection to current server supports headers.
+ *
+ * Returns NATS_OK if the server this client is currently connected to
+ * supports headers, NATS_NO_SERVER_SUPPORT otherwise.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ */
+NATS_EXTERN natsStatus
+natsConnection_HasHeaderSupport(natsConnection *nc);
+
 /** \brief Closes the connection.
  *
  * Closes the connection to the server. This call will release all blocking
@@ -2803,6 +2953,22 @@ NATS_EXTERN natsStatus
 natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
                              const char *subj, const char *str,
                              int64_t timeout);
+
+/** \brief Sends a request based on the given `requestMsg` and waits for a reply.
+ *
+ * Similar to #natsConnection_Request but uses `requestMsg` to extract subject,
+ * and payload to send.
+ *
+ * @param replyMsg the location where to store the pointer to the received
+ * #natsMsg reply.
+ * @param nc the pointer to the #natsConnection object.
+ * @param requestMsg the message used for the request.
+ * @param timeout in milliseconds, before this call returns #NATS_TIMEOUT
+ * if no response is received in this alloted time.
+ */
+NATS_EXTERN natsStatus
+natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
+                          natsMsg *requestMsg, int64_t timeout);
 
 /** @} */ // end of connPubGroup
 

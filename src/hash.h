@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2020 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -120,9 +120,11 @@ natsStrHash_Create(natsStrHash **newHash, int initialSize);
 uint32_t
 natsStrHash_Hash(const char *data, int dataLen);
 
+#define natsStrHash_Set(h, k, c, d, o) natsStrHash_SetEx((h), (k), (c), ((c) ? true : false), (d), (o))
+
 natsStatus
-natsStrHash_Set(natsStrHash *hash, char *key, bool copyKey,
-                void *data, void **oldData);
+natsStrHash_SetEx(natsStrHash *hash, char *key, bool copyKey, bool freeKey,
+                  void *data, void **oldData);
 
 void*
 natsStrHash_Get(natsStrHash *hash, char *key);

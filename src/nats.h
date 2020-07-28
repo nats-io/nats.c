@@ -2915,7 +2915,19 @@ natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
  *
  * Sends a request payload and delivers the first response message,
  * or an error, including a timeout if no message was received properly.
- * This is optimized for the case of multiple responses.
+ *
+ * \note If connected to a NATS Server v2.2.0+ with no responder running
+ * when the request is received, this call will return a #NATS_TIMEOUT error
+ * possibly well before the given timeout value. The rationale is that if
+ * there was no responder running, the request will have necessarily failed with a #NATS_TIMEOUT error at
+ * the end of the `timeout` interval. If the server v2.2.0+ notifies
+ * the library that there is no responder, there is no need for the
+ * application to be waiting for the actual `timeout` interval and is
+ * better to fail the request right away. A new status error code could have
+ * been added and returned here, but that would have possibly break
+ * applications that treated #NATS_TIMEOUT as an "expected" error
+ * as opposed to any other error code that could have been treated as
+ * a "fatal" error.
  *
  * @param replyMsg the location where to store the pointer to the received
  * #natsMsg reply.
@@ -2941,6 +2953,8 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
  * natsConnection_Request(replyMsg, nc, subj, (const void*) myString, (int) strlen(myString));
  * \endcode
  *
+ * \note See note about no responders in #natsConnection_Request().
+ *
  * @param replyMsg the location where to store the pointer to the received
  * #natsMsg reply.
  * @param nc the pointer to the #natsConnection object.
@@ -2958,6 +2972,8 @@ natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
  *
  * Similar to #natsConnection_Request but uses `requestMsg` to extract subject,
  * and payload to send.
+ *
+ * \note See note about no responders in #natsConnection_Request().
  *
  * @param replyMsg the location where to store the pointer to the received
  * #natsMsg reply.

@@ -419,6 +419,8 @@ stanConn_subscribe(stanSubscription **newSub, stanConnection *sc,
                     s = natsConnection_Request(&replyMsg, nc, rSubj, (const void*) reqBytes, reqSize, timeout);
                     if (s == NATS_TIMEOUT)
                         NATS_UPDATE_ERR_TXT("%s", STAN_ERR_SUBSCRIBE_REQUEST_TIMEOUT);
+                    else if (s == NATS_NO_RESPONDERS)
+                        NATS_UPDATE_ERR_TXT("%s", STAN_ERR_SUBSCRIBE_REQUEST_NO_RESP);
                 }
 
                 NATS_FREE(reqBytes);
@@ -565,6 +567,8 @@ _closeOrUnsubscribeStanSub(stanSubscription *sub, bool doClose)
                 s = natsConnection_Request(&replyMsg, nc, reqSubj, (const void*) usrBytes, usrSize, timeout);
                 if (s == NATS_TIMEOUT)
                     NATS_UPDATE_ERR_TXT("%s", (doClose ? STAN_ERR_CLOSE_REQUEST_TIMEOUT : STAN_ERR_UNSUBSCRIBE_REQUEST_TIMEOUT));
+                else if (s == NATS_NO_RESPONDERS)
+                    NATS_UPDATE_ERR_TXT("%s", (doClose ? STAN_ERR_CLOSE_REQUEST_NO_RESP : STAN_ERR_UNSUBSCRIBE_REQUEST_NO_RESP));
             }
 
             NATS_FREE(usrBytes);

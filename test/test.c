@@ -10668,7 +10668,7 @@ test_RequestTimeout(void)
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
     if (s == NATS_OK)
         s = natsConnection_RequestString(&msg, nc, "foo", "bar", 10);
-    testCond((s == NATS_TIMEOUT) && (msg == NULL));
+    testCond(((s == NATS_TIMEOUT) || (s == NATS_NO_RESPONDERS)) && (msg == NULL));
 
     natsConnection_Destroy(nc);
 
@@ -13804,7 +13804,7 @@ test_StopReconnectAfterTwoAuthErr(void)
              && (stats != NULL)
              && (stats->reconnects == 2));
 
-    // Disconncet CB only from disconnect from server 1.
+    // Disconnect CB only from disconnect from server 1.
     test("Disconnected should have been called once: ");
     testCond((s == NATS_OK) && arg.disconnects == 1);
 
@@ -19121,10 +19121,17 @@ test_StanServerNotReachable(void)
     if (s == NATS_OK)
         s = stanConnection_Connect(&sc, clusterName, clientName, opts);
     elapsed = nats_Now()-now;
-    testCond((s == NATS_TIMEOUT) &&
-            (strstr(nats_GetLastError(NULL), STAN_ERR_CONNECT_REQUEST_TIMEOUT) != NULL) &&
-            (elapsed < 2000)
-            );
+    if (serverVersionAtLeast(2, 2, 0))
+    {
+        testCond((s == NATS_NO_RESPONDERS) &&
+                 (strstr(nats_GetLastError(NULL), STAN_ERR_CONNECT_REQUEST_NO_RESP) != NULL));
+    }
+    else
+    {
+        testCond((s == NATS_TIMEOUT) &&
+                 (strstr(nats_GetLastError(NULL), STAN_ERR_CONNECT_REQUEST_TIMEOUT) != NULL) &&
+                 (elapsed < 2000));
+    }
 
     stanConnOptions_Destroy(opts);
 
@@ -19679,9 +19686,16 @@ test_StanSubscriptionCloseAndUnsubscribe(void)
         if (s != NATS_OK)
             s = stanSubscription_Unsubscribe(sub2);
     }
-    testCond((s == NATS_TIMEOUT) &&
-            (strstr(nats_GetLastError(NULL), "request timeout") != NULL));
-
+    if (serverVersionAtLeast(2, 2, 0))
+    {
+        testCond((s == NATS_NO_RESPONDERS) &&
+                 (strstr(nats_GetLastError(NULL), "no streaming server was listening") != NULL));
+    }
+    else
+    {
+        testCond((s == NATS_TIMEOUT) &&
+                 (strstr(nats_GetLastError(NULL), "request timeout") != NULL));
+    }
     stanSubscription_Destroy(sub);
     stanSubscription_Destroy(sub2);
 

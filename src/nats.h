@@ -2916,18 +2916,8 @@ natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
  * Sends a request payload and delivers the first response message,
  * or an error, including a timeout if no message was received properly.
  *
- * \note If connected to a NATS Server v2.2.0+ with no responder running
- * when the request is received, this call will return a #NATS_TIMEOUT error
- * possibly well before the given timeout value. The rationale is that if
- * there was no responder running, the request will have necessarily failed with a #NATS_TIMEOUT error at
- * the end of the `timeout` interval. If the server v2.2.0+ notifies
- * the library that there is no responder, there is no need for the
- * application to be waiting for the actual `timeout` interval and is
- * better to fail the request right away. A new status error code could have
- * been added and returned here, but that would have possibly break
- * applications that treated #NATS_TIMEOUT as an "expected" error
- * as opposed to any other error code that could have been treated as
- * a "fatal" error.
+ * \warning If connected to a NATS Server v2.2.0+ with no responder running
+ * when the request is received, this call will return a #NATS_NO_RESPONDER error.
  *
  * @param replyMsg the location where to store the pointer to the received
  * #natsMsg reply.
@@ -2953,7 +2943,7 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
  * natsConnection_Request(replyMsg, nc, subj, (const void*) myString, (int) strlen(myString));
  * \endcode
  *
- * \note See note about no responders in #natsConnection_Request().
+ * \warning See warning about no responders in #natsConnection_Request().
  *
  * @param replyMsg the location where to store the pointer to the received
  * #natsMsg reply.
@@ -2973,7 +2963,7 @@ natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
  * Similar to #natsConnection_Request but uses `requestMsg` to extract subject,
  * and payload to send.
  *
- * \note See note about no responders in #natsConnection_Request().
+ * \warning See warning about no responders in #natsConnection_Request().
  *
  * @param replyMsg the location where to store the pointer to the received
  * #natsMsg reply.
@@ -3480,6 +3470,10 @@ natsSubscription_Destroy(natsSubscription *sub);
  * this option enabled, no error is returned, but if the connection cannot
  * be established "right away", the connect call will return an error.
  *
+ * \warning If connecting to a NATS Server v2.2.0+ and there is no Streaming server
+ * listening on the connect request subject, this call will return #NATS_NO_RESPONDERS,
+ * not #NATS_TIMEOUT.
+ *
  * @see #stanConnOptions
  * @see #stanConnection_Destroy()
  *
@@ -3551,6 +3545,8 @@ stanConnection_ReleaseNATSConnection(stanConnection *sc);
  * Closes the connection to the server. This call will release all blocking
  * calls. The connection object is still usable until the call to
  * #stanConnection_Destroy().
+ *
+ * \warning See warning about connecting to a NATS Server v2.2.0+ in #stanConnection_Connect().
  *
  * @param sc the pointer to the #stanConnection object.
  */
@@ -3630,6 +3626,8 @@ stanConnection_PublishAsync(stanConnection *sc, const char *channel,
  * Expresses interest in the given subject. The subject can NOT have wildcards.
  * Messages will be delivered to the associated #stanMsgHandler.
  *
+ * \warning See warning about connecting to a NATS Server v2.2.0+ in #stanConnection_Connect().
+ *
  * @param sub the location where to store the pointer to the newly created
  * #natsSubscription object.
  * @param sc the pointer to the #natsConnection object.
@@ -3650,6 +3648,8 @@ stanConnection_Subscribe(stanSubscription **sub, stanConnection *sc,
  * All subscribers with the same queue name will form the queue group and
  * only one member of the group will be selected to receive any given
  * message asynchronously.
+ *
+ * \warning See warning about connecting to a NATS Server v2.2.0+ in #stanConnection_Connect().
  *
  * @param sub the location where to store the pointer to the newly created
  * #natsSubscription object.
@@ -3728,6 +3728,8 @@ stanSubscription_AckMsg(stanSubscription *sub, stanMsg *msg);
  * the same durable name creates a brand new durable subscription, instead
  * of simply resuming delivery.
  *
+ * \warning See warning about connecting to a NATS Server v2.2.0+ in #stanConnection_Connect().
+ *
  * @param sub the pointer to the #stanSubscription object.
  */
 NATS_EXTERN natsStatus
@@ -3738,6 +3740,8 @@ stanSubscription_Unsubscribe(stanSubscription *sub);
  * Similar to #stanSubscription_Unsubscribe() except that durable interest
  * is not removed in the server. The durable subscription can therefore be
  * resumed.
+ *
+ * \warning See warning about connecting to a NATS Server v2.2.0+ in #stanConnection_Connect().
  *
  * @param sub the pointer to the #stanSubscription object.
  */

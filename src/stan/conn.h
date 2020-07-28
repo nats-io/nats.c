@@ -31,7 +31,9 @@ void stanConn_Unlock(stanConnection *sc);
 #endif // DEV_MODE
 
 #define STAN_ERR_CONNECT_REQUEST_TIMEOUT    "connect request timeout"
+#define STAN_ERR_CONNECT_REQUEST_NO_RESP    "no streaming server was listening for this connect request"
 #define STAN_ERR_CLOSE_REQUEST_TIMEOUT      "close request timeout"
+#define STAN_ERR_CLOSE_REQUEST_NO_RESP      "no streaming server was listening for this close request"
 #define STAN_ERR_MAX_PINGS                  "connection lost due to PING failure"
 
 extern int MEMALIGN;

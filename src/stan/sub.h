@@ -31,7 +31,9 @@ void stanSub_Unlock(stanSubscription *sub);
 #endif // DEV_MODE
 
 #define STAN_ERR_SUBSCRIBE_REQUEST_TIMEOUT      "subscribe request timeout"
+#define STAN_ERR_SUBSCRIBE_REQUEST_NO_RESP      "no streaming server was listening for this subscribe request"
 #define STAN_ERR_UNSUBSCRIBE_REQUEST_TIMEOUT    "unsubscribe request timeout"
+#define STAN_ERR_UNSUBSCRIBE_REQUEST_NO_RESP    "no streaming server was listening for this unsubscribe request"
 #define STAN_ERR_MANUAL_ACK                     "cannot manually ack in auto-ack mode"
 #define STAN_ERR_SUB_CLOSE_NOT_SUPPORTED        "server does not support subscription close"
 #define STAN_ERR_SUB_NOT_OWNER                  "subscription is not the owner of this message"

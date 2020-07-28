@@ -441,6 +441,8 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
                 s = natsConnection_Request(&replyMsg, sc->nc, discoverySubj, reqBytes, reqSize, sc->opts->connTimeout);
                 if (s == NATS_TIMEOUT)
                     NATS_UPDATE_ERR_TXT("%s", STAN_ERR_CONNECT_REQUEST_TIMEOUT);
+                else if (s == NATS_NO_RESPONDERS)
+                    NATS_UPDATE_ERR_TXT("%s", STAN_ERR_CONNECT_REQUEST_NO_RESP);
             }
             NATS_FREE(reqBytes);
         }
@@ -689,6 +691,8 @@ stanConnClose(stanConnection *sc, bool sendProto)
                     s = natsConnection_Request(&replyMsg, nc, closeSubj, reqBytes, reqSize, timeout);
                     if (s == NATS_TIMEOUT)
                         NATS_UPDATE_ERR_TXT("%s", STAN_ERR_CLOSE_REQUEST_TIMEOUT);
+                    else if (s == NATS_NO_RESPONDERS)
+                        NATS_UPDATE_ERR_TXT("%s", STAN_ERR_CLOSE_REQUEST_NO_RESP);
                 }
 
                 NATS_FREE(reqBytes);

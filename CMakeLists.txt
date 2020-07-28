@@ -153,7 +153,7 @@ if(UNIX)
   set(MEMORYCHECK_COMMAND_OPTIONS ${NATS_MEMCHECK_CMD_OPTS} CACHE INTERNAL "")
 
   set(NATS_COMMON_C_FLAGS "-std=c99 -pedantic")
-  
+
   # Some compiler hardening flags.
   if(NATS_COMPILER_HARDENING)
      set(NATS_COMMON_C_FLAGS "${NATS_COMMON_C_FLAGS} -fPIE -fstack-protector-all -D_FORTIFY_SOURCE=2 -O1")
@@ -165,7 +165,7 @@ if(UNIX)
 
   set(NATS_WARNINGS "-fstrict-aliasing -Wall -W -Wno-unused-parameter -Wno-unused-function -Wstrict-prototypes -Wwrite-strings")
   set(NATS_PLATFORM_INCLUDE "unix")
-  
+
   if(APPLE)
     set(CMAKE_MACOSX_RPATH OFF)
     set(NATS_OS "DARWIN")
@@ -181,11 +181,11 @@ if(UNIX)
       message("apt-get install libc6-dev-i386")
       message("-----------------------------------------------------------")
     endif(NOT APPLE)
-      
+
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
     set(CMAKE_C_LINKER_FLAGS "${CMAKE_C_LINKER_FLAGS} -m32")
   endif(${NATS_BUILD_ARCH} MATCHES "32")
-  
+
 elseif(WIN32)
   set(NATS_LIBDIR "lib")
   set(NATS_INCLUDE_DIR "include")
@@ -231,11 +231,11 @@ endif(NATS_BUILD_WITH_TLS)
 # Versionning and Doc
 
 set(NATS_VERSION_MAJOR  2)
-set(NATS_VERSION_MINOR  1)
+set(NATS_VERSION_MINOR  2)
 set(NATS_VERSION_PATCH  0)
 set(NATS_VERSION_SUFFIX "")
 
-set(NATS_VERSION_REQUIRED_NUMBER 0x020100)
+set(NATS_VERSION_REQUIRED_NUMBER 0x020200)
 
 if(NATS_UPDATE_VERSION OR NATS_UPDATE_DOC)
 configure_file(

@@ -388,10 +388,7 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
 {
     natsStatus          s           = NATS_OK;
     respInfo            *resp       = NULL;
-    bool                createSub   = false;
     bool                needsRemoval= true;
-    bool                waitForSub  = false;
-    char                ginbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1 + 1 + 1]; // _INBOX.<nuid>.*
     char                respInbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1 + NATS_MAX_REQ_ID_LEN + 1]; // _INBOX.<nuid>.<reqId>
 
     if ((replyMsg == NULL) || (nc == NULL) || (m == NULL))
@@ -414,28 +411,13 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     // the connection object.
     natsConn_retain(nc);
 
-    // Setup only once
-    if (nc->respReady == NULL)
-    {
-        s = natsConn_initResp(nc, ginbox, sizeof(ginbox));
-        createSub = (s == NATS_OK);
-    }
+    // Setup only once (but could be more if natsConn_initResp() returns != OK)
+    if (nc->respMux == NULL)
+        s = natsConn_initResp(nc, _respHandler);
     if (s == NATS_OK)
         s = natsConn_addRespInfo(&resp, nc, respInbox, sizeof(respInbox));
 
-    // If multiple requests are performed in parallel, only
-    // one will create the wildcard subscriptions, but the
-    // others need to wait for the subscription to be setup
-    // before publishing the message.
-    if (s == NATS_OK)
-        waitForSub = (nc->respMux == NULL);
-
     natsConn_Unlock(nc);
-
-    if ((s == NATS_OK) && createSub)
-        s = natsConn_createRespMux(nc, ginbox, _respHandler);
-    else if ((s == NATS_OK) && waitForSub)
-        s = natsConn_waitForRespMux(nc);
 
     if (s == NATS_OK)
     {

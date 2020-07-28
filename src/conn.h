@@ -73,18 +73,19 @@ natsConn_processPing(natsConnection *nc);
 void
 natsConn_processPong(natsConnection *nc);
 
-#define natsConn_subscribeNoPool(sub, nc, subj, cb, closure)                            natsConn_subscribeImpl((sub), (nc), (subj), NULL, 0, (cb), (closure), true)
+#define natsConn_subscribeNoPool(sub, nc, subj, cb, closure)                            natsConn_subscribeImpl((sub), (nc), true, (subj), NULL, 0, (cb), (closure), true)
+#define natsConn_subscribeNoPoolNoLock(sub, nc, subj, cb, closure)                      natsConn_subscribeImpl((sub), (nc), false, (subj), NULL, 0, (cb), (closure), true)
 #define natsConn_subscribeSyncNoPool(sub, nc, subj)                                     natsConn_subscribeNoPool((sub), (nc), (subj), NULL, NULL)
-#define natsConn_subscribeWithTimeout(sub, nc, subj, timeout, cb, closure)              natsConn_subscribeImpl((sub), (nc), (subj), NULL, (timeout), (cb), (closure), false)
+#define natsConn_subscribeWithTimeout(sub, nc, subj, timeout, cb, closure)              natsConn_subscribeImpl((sub), (nc), true, (subj), NULL, (timeout), (cb), (closure), false)
 #define natsConn_subscribe(sub, nc, subj, cb, closure)                                  natsConn_subscribeWithTimeout((sub), (nc), (subj), 0, (cb), (closure))
 #define natsConn_subscribeSync(sub, nc, subj)                                           natsConn_subscribe((sub), (nc), (subj), NULL, NULL)
-#define natsConn_queueSubscribeWithTimeout(sub, nc, subj, queue, timeout, cb, closure)  natsConn_subscribeImpl((sub), (nc), (subj), (queue), (timeout), (cb), (closure), false)
+#define natsConn_queueSubscribeWithTimeout(sub, nc, subj, queue, timeout, cb, closure)  natsConn_subscribeImpl((sub), (nc), true, (subj), (queue), (timeout), (cb), (closure), false)
 #define natsConn_queueSubscribe(sub, nc, subj, queue, cb, closure)                      natsConn_queueSubscribeWithTimeout((sub), (nc), (subj), (queue), 0, (cb), (closure))
 #define natsConn_queueSubscribeSync(sub, nc, subj, queue)                               natsConn_queueSubscribe((sub), (nc), (subj), (queue), NULL, NULL)
 
 natsStatus
 natsConn_subscribeImpl(natsSubscription **newSub,
-                       natsConnection *nc, const char *subj, const char *queue,
+                       natsConnection *nc, bool lock, const char *subj, const char *queue,
                        int64_t timeout, natsMsgHandler cb, void *cbClosure,
                        bool preventUseOfLibDlvPool);
 
@@ -113,13 +114,7 @@ void
 natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock);
 
 natsStatus
-natsConn_createRespMux(natsConnection *nc, char *ginbox, natsMsgHandler cb);
-
-natsStatus
-natsConn_waitForRespMux(natsConnection *nc);
-
-natsStatus
-natsConn_initResp(natsConnection *nc, char *ginbox, int ginboxSize);
+natsConn_initResp(natsConnection *nc, natsMsgHandler cb);
 
 void
 natsConn_destroyRespPool(natsConnection *nc);

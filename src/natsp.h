@@ -520,7 +520,6 @@ struct __natsConnection
     int                 respIdVal;
     char                *respSub;   // The wildcard subject
     natsSubscription    *respMux;   // A single response subscription
-    natsCondition       *respReady; // For race when initializing the wildcard subscription
     natsStrHash         *respMap;   // Request map for the response msg
     respInfo            **respPool;
     int                 respPoolSize;

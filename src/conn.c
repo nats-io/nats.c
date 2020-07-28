@@ -199,7 +199,6 @@ _freeConn(natsConnection *nc)
     natsConn_destroyRespPool(nc);
     natsInbox_Destroy(nc->respSub);
     natsStrHash_Destroy(nc->respMap);
-    natsCondition_Destroy(nc->respReady);
     natsCondition_Destroy(nc->reconnectCond);
     natsMutex_Destroy(nc->subsMu);
     natsTimer_Destroy(nc->drainTimer);
@@ -1323,72 +1322,34 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox, in
 // Initialize some of the connection's fields used for request/reply mapping.
 // Connection's lock is held on entry.
 natsStatus
-natsConn_initResp(natsConnection *nc, char *ginbox, int ginboxSize)
+natsConn_initResp(natsConnection *nc, natsMsgHandler cb)
 {
     natsStatus s = NATS_OK;
+    char       ginbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1 + 1 + 1]; // _INBOX.<nuid>.*
 
     nc->respPool = NATS_CALLOC(RESP_INFO_POOL_MAX_SIZE, sizeof(respInfo*));
     if (nc->respPool == NULL)
         s = nats_setDefaultError(NATS_NO_MEMORY);
     if (s == NATS_OK)
-        s = natsCondition_Create(&nc->respReady);
-    if (s == NATS_OK)
         s = natsStrHash_Create(&nc->respMap, 4);
     if (s == NATS_OK)
         s = natsInbox_Create(&nc->respSub);
     if (s == NATS_OK)
-        snprintf(ginbox, ginboxSize, "%s.*", nc->respSub);
+    {
+        snprintf(ginbox, sizeof(ginbox), "%s.*", nc->respSub);
+        s = natsConn_subscribeNoPoolNoLock(&(nc->respMux), nc, ginbox, cb, (void*) nc);
+    }
+    if (s != NATS_OK)
+    {
+        natsInbox_Destroy(nc->respSub);
+        nc->respSub = NULL;
+        natsStrHash_Destroy(nc->respMap);
+        nc->respMap = NULL;
+        NATS_FREE(nc->respPool);
+        nc->respPool = NULL;
+    }
 
     return NATS_UPDATE_ERR_STACK(s);
-}
-
-natsStatus
-natsConn_createRespMux(natsConnection *nc, char *ginbox, natsMsgHandler cb)
-{
-    natsStatus          s    = NATS_OK;
-    natsSubscription    *sub = NULL;
-
-    s = natsConn_subscribeNoPool(&sub, nc, ginbox, cb, (void*) nc);
-    if (s == NATS_OK)
-    {
-        // Between a successful creation of the subscription and
-        // the time we get the connection lock, the connection could
-        // have been closed. If that is the case, we need to
-        // release the subscription, otherwise keep track of it.
-        natsConn_Lock(nc);
-        if (natsConn_isClosed(nc))
-        {
-            natsSub_release(sub);
-            s = NATS_CONNECTION_CLOSED;
-        }
-        else
-        {
-            nc->respMux = sub;
-        }
-        // Signal possible threads waiting for the subscription
-        // to be ready.
-        natsCondition_Broadcast(nc->respReady);
-        natsConn_Unlock(nc);
-    }
-    return s;
-}
-
-natsStatus
-natsConn_waitForRespMux(natsConnection *nc)
-{
-    natsStatus s = NATS_OK;
-
-    natsConn_Lock(nc);
-
-    while (!natsConn_isClosed(nc) && (nc->respMux == NULL))
-        natsCondition_Wait(nc->respReady, nc->mu);
-
-    if (natsConn_isClosed(nc))
-        s = NATS_CONNECTION_CLOSED;
-
-    natsConn_Unlock(nc);
-
-    return s;
 }
 
 // This will clear any pending Request calls.
@@ -2829,11 +2790,10 @@ _badQueue(const char *queue)
     return _checkSubjOrQueue(queue, false);
 }
 
-// subscribe is the internal subscribe function that indicates interest in a
-// subject.
+// subscribe is the internal subscribe function that indicates interest in a subject.
 natsStatus
 natsConn_subscribeImpl(natsSubscription **newSub,
-                       natsConnection *nc, const char *subj, const char *queue,
+                       natsConnection *nc, bool lock, const char *subj, const char *queue,
                        int64_t timeout, natsMsgHandler cb, void *cbClosure,
                        bool preventUseOfLibDlvPool)
 {
@@ -2849,18 +2809,21 @@ natsConn_subscribeImpl(natsSubscription **newSub,
     if ((queue != NULL) && ((strlen(subj) == 0) || _badQueue(queue)))
         return nats_setDefaultError(NATS_INVALID_QUEUE_NAME);
 
-    natsConn_Lock(nc);
+    if (lock)
+        natsConn_Lock(nc);
 
     if (natsConn_isClosed(nc))
     {
-        natsConn_Unlock(nc);
+        if (lock)
+            natsConn_Unlock(nc);
 
         return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
     if (natsConn_isDraining(nc))
     {
-        natsConn_Unlock(nc);
+        if (lock)
+            natsConn_Unlock(nc);
 
         return nats_setDefaultError(NATS_DRAINING);
     }
@@ -2926,7 +2889,8 @@ natsConn_subscribeImpl(natsSubscription **newSub,
         natsSub_release(sub);
     }
 
-    natsConn_Unlock(nc);
+    if (lock)
+        natsConn_Unlock(nc);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

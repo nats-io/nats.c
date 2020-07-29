@@ -124,6 +124,8 @@ typedef enum
 
     NATS_INVALID_QUEUE_NAME,            ///< An invalid queue name was passed when creating a queue subscription.
 
+    NATS_NO_RESPONDERS,                 ///< No responders were running when the server received the request.
+
 } natsStatus;
 
 #ifdef __cplusplus

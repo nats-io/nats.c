@@ -957,10 +957,13 @@ _connectProto(natsConnection *nc, char **proto)
 
     if (s == NATS_OK)
     {
+        // If our server does not support headers then we can't do them or no responders.
+        const char *hdrsAndNoResponders = nats_GetBoolStr(nc->info.headers);
+
         res = nats_asprintf(proto,
                             "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\"tls_required\":%s," \
                             "\"name\":\"%s\",\"lang\":\"%s\",\"version\":\"%s\",\"protocol\":%d,\"echo\":%s," \
-                            "\"headers\":true}%s",
+                            "\"headers\":%s,\"no_responders\":%s}%s",
                             nats_GetBoolStr(opts->verbose),
                             nats_GetBoolStr(opts->pedantic),
                             (nkey != NULL ? "\"nkey\":\"" : ""),
@@ -986,6 +989,8 @@ _connectProto(natsConnection *nc, char **proto)
                             CString, NATS_VERSION_STRING,
                             CLIENT_PROTO_INFO,
                             nats_GetBoolStr(!opts->noEcho),
+                            hdrsAndNoResponders,
+                            hdrsAndNoResponders,
                             _CRLF_);
         if (res < 0)
             s = nats_setDefaultError(NATS_NO_MEMORY);

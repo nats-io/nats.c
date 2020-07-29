@@ -414,7 +414,16 @@ _liftHeaders(natsMsg *msg)
     ptr = sts;
     ptr = _moveToLF(endPtr, ptr);
     if (ptr != endPtr)
+    {
+        char *stsEnd = ptr;
+
         ptr++;
+        while ((stsEnd != sts) && (*stsEnd != '\r'))
+            stsEnd--;
+
+        // Terminate the status.
+        *stsEnd = '\0';
+    }
 
     if (ptr == endPtr)
         return nats_setError(NATS_PROTOCOL_ERROR, "early termination of headers: %s", msg->hdr);
@@ -423,7 +432,21 @@ _liftHeaders(natsMsg *msg)
         s = _processKeyValue(i, msg, endPtr, &ptr, &lk);
 
     if (s == NATS_OK)
+    {
+        // At this point we have had no protocol error lifting the header
+        // so we clear this flag so that we don't attempt to lift again.
         msg->hdrLift = false;
+
+        // Furthermore, we need the flag to be cleared should we need to
+        // add the no responders header (otherwise we would recursively
+        // try to lift headers).
+        // If adding the field fails, it is likely due to memory issue,
+        // so it is fine to keep "hdrLift" as false.
+
+        // Check if we have an inlined status.
+        if ((sts != NULL) && (*sts != '\0'))
+            s = natsMsgHeader_Set(msg, STATUS_HDR, (const char*) sts);
+    }
 
     return NATS_UPDATE_ERR_STACK(s);
 }

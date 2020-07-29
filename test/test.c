@@ -6483,6 +6483,7 @@ test_RequestPool(void)
     natsPid             pid = NATS_INVALID_PID;
     int                 i;
     natsConnection      *nc = NULL;
+    natsSubscription    *sub = NULL;
     natsMsg             *msg = NULL;
     int                 numThreads = RESP_INFO_POOL_MAX_SIZE+5;
     natsThread          *threads[RESP_INFO_POOL_MAX_SIZE+5];
@@ -6493,6 +6494,17 @@ test_RequestPool(void)
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
+
+    // For part of this test, we really need to have the requestor
+    // timeout with the given timeout value (to increase number)
+    // of parallel requests. So we create a sync subscription that
+    // will not send a response back.
+    s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    if (s != NATS_OK)
+    {
+        natsConnection_Destroy(nc);
+        FAIL("Unable to setup test!");
+    }
 
     // With current implementation, the pool should not
     // increase at all.
@@ -6523,6 +6535,7 @@ test_RequestPool(void)
     testCond((s == NATS_OK) && (nc->respPoolSize == RESP_INFO_POOL_MAX_SIZE));
     natsMutex_Unlock(nc->mu);
 
+    natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
     _stopServer(pid);
 }
@@ -10655,7 +10668,7 @@ test_RequestTimeout(void)
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
     if (s == NATS_OK)
         s = natsConnection_RequestString(&msg, nc, "foo", "bar", 10);
-    testCond((s == NATS_TIMEOUT) && (msg == NULL));
+    testCond(((s == NATS_TIMEOUT) || (s == NATS_NO_RESPONDERS)) && (msg == NULL));
 
     natsConnection_Destroy(nc);
 
@@ -10950,6 +10963,7 @@ test_RequestClose(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
     natsMsg             *msg      = NULL;
     natsThread          *t        = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
@@ -10957,10 +10971,16 @@ test_RequestClose(void)
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
+    // Because of no responders, we would get an immediate timeout.
+    // So we need to create a sync subscriber that is simply not
+    // going to send a reply back.
+
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
     test("Test Request is kicked out with a connection close: ")
     if (s == NATS_OK)
         s = natsThread_Create(&t, _closeConnWithDelay, (void*) nc);
+    if (s == NATS_OK)
+        s = natsConnection_SubscribeSync(&sub, nc, "foo");
     if (s == NATS_OK)
         s = natsConnection_RequestString(&msg, nc, "foo", "help", 2000);
 
@@ -10973,6 +10993,7 @@ test_RequestClose(void)
              && (msg == NULL));
 
     natsMsg_Destroy(msg);
+    natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
 
     _stopServer(serverPid);
@@ -13783,7 +13804,7 @@ test_StopReconnectAfterTwoAuthErr(void)
              && (stats != NULL)
              && (stats->reconnects == 2));
 
-    // Disconncet CB only from disconnect from server 1.
+    // Disconnect CB only from disconnect from server 1.
     test("Disconnected should have been called once: ");
     testCond((s == NATS_OK) && arg.disconnects == 1);
 
@@ -19100,10 +19121,17 @@ test_StanServerNotReachable(void)
     if (s == NATS_OK)
         s = stanConnection_Connect(&sc, clusterName, clientName, opts);
     elapsed = nats_Now()-now;
-    testCond((s == NATS_TIMEOUT) &&
-            (strstr(nats_GetLastError(NULL), STAN_ERR_CONNECT_REQUEST_TIMEOUT) != NULL) &&
-            (elapsed < 2000)
-            );
+    if (serverVersionAtLeast(2, 2, 0))
+    {
+        testCond((s == NATS_NO_RESPONDERS) &&
+                 (strstr(nats_GetLastError(NULL), STAN_ERR_CONNECT_REQUEST_NO_RESP) != NULL));
+    }
+    else
+    {
+        testCond((s == NATS_TIMEOUT) &&
+                 (strstr(nats_GetLastError(NULL), STAN_ERR_CONNECT_REQUEST_TIMEOUT) != NULL) &&
+                 (elapsed < 2000));
+    }
 
     stanConnOptions_Destroy(opts);
 
@@ -19658,9 +19686,16 @@ test_StanSubscriptionCloseAndUnsubscribe(void)
         if (s != NATS_OK)
             s = stanSubscription_Unsubscribe(sub2);
     }
-    testCond((s == NATS_TIMEOUT) &&
-            (strstr(nats_GetLastError(NULL), "request timeout") != NULL));
-
+    if (serverVersionAtLeast(2, 2, 0))
+    {
+        testCond((s == NATS_NO_RESPONDERS) &&
+                 (strstr(nats_GetLastError(NULL), "no streaming server was listening") != NULL));
+    }
+    else
+    {
+        testCond((s == NATS_TIMEOUT) &&
+                 (strstr(nats_GetLastError(NULL), "request timeout") != NULL));
+    }
     stanSubscription_Destroy(sub);
     stanSubscription_Destroy(sub2);
 

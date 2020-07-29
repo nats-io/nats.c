@@ -66,6 +66,8 @@ static const char *statusText[] = {
     "Draining in progress",
 
     "Invalid queue name",
+
+    "No responders available for request",
 };
 
 const char*

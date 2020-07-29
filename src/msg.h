@@ -21,6 +21,9 @@
 #define HDR_LINE_PRE_LEN    (8)
 #define HDR_LINE            HDR_LINE_PRE _CRLF_
 #define HDR_LINE_LEN        (10)
+#define STATUS_HDR          "Status"
+#define NO_RESP_STATUS      "503"
+#define NO_RESP_STATUS_LEN  (3)
 
 struct __natsMsg;
 

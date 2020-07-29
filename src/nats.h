@@ -2917,7 +2917,7 @@ natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
  * or an error, including a timeout if no message was received properly.
  *
  * \warning If connected to a NATS Server v2.2.0+ with no responder running
- * when the request is received, this call will return a #NATS_NO_RESPONDER error.
+ * when the request is received, this call will return a #NATS_NO_RESPONDERS error.
  *
  * @param replyMsg the location where to store the pointer to the received
  * #natsMsg reply.

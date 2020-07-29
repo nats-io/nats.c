@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.1.0</span>
+   &#160;<span id="projectnumber">2.2.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -157,6 +157,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga0408c9b6e4ad4078ac0267656ace222d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d">natsSubscription_WaitForDrainCompletion</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int64_t timeout)</td></tr>
 <tr class="memdesc:ga0408c9b6e4ad4078ac0267656ace222d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Blocks until the drain operation completes.  <a href="#ga0408c9b6e4ad4078ac0267656ace222d">More...</a><br /></td></tr>
 <tr class="separator:ga0408c9b6e4ad4078ac0267656ace222d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaea632f845d473e7461b134c0e7bf4077"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#gaea632f845d473e7461b134c0e7bf4077">natsSubscription_SetOnCompleteCB</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, <a class="el" href="group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a">natsOnCompleteCB</a> cb, void *closure)</td></tr>
+<tr class="memdesc:gaea632f845d473e7461b134c0e7bf4077"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets a completion callback.  <a href="#gaea632f845d473e7461b134c0e7bf4077">More...</a><br /></td></tr>
+<tr class="separator:gaea632f845d473e7461b134c0e7bf4077"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga50a95dd96e9b714201679a015d62832f"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga50a95dd96e9b714201679a015d62832f">natsSubscription_Destroy</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub)</td></tr>
 <tr class="memdesc:ga50a95dd96e9b714201679a015d62832f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys the subscription.  <a href="#ga50a95dd96e9b714201679a015d62832f">More...</a><br /></td></tr>
 <tr class="separator:ga50a95dd96e9b714201679a015d62832f"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -745,6 +748,54 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object </td></tr>
     <tr><td class="paramname">timeout</td><td>how long to wait for the operation to complete, expressed in milliseconds. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="gaea632f845d473e7461b134c0e7bf4077"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsSubscription_SetOnCompleteCB </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *&#160;</td>
+          <td class="paramname"><em>sub</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a">natsOnCompleteCB</a>&#160;</td>
+          <td class="paramname"><em>cb</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>closure</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>In order to make sure that an asynchronous subscription's message handler is no longer invoked once the subscription is closed (<a class="el" href="group__sub_group.html#gaee87f8be0e6c2a4693ba2cea070583ba" title="Unsubscribes. ">natsSubscription_Unsubscribe</a>), the subscription should be closed from the message handler itslef.</p>
+<p>If the application closes the subscription from a different thread and immediately frees resources needed in the message handler, there is a risk of a crash since the subscription's message handler may still be invoked one last time or already in the process of executing.</p>
+<p>To address this, the user can set a callback that will be invoked after the subscription is closed and the message handler has returned. This applies to asynchronous subscriptions using their own dispatcher or using the library's delivery thread pool.</p>
+<dl class="section note"><dt>Note</dt><dd>You don't need to call this function if you are not freeing resources needed in the message handler or if you always close the subscription from the message handler itself.</dd>
+<dd>
+If you plan on calling this function, you should do so before calling <a class="el" href="group__sub_group.html#ga09f285de2746a6e27fc66efd60bd3116" title="Auto-Unsubscribes. ">natsSubscription_AutoUnsubscribe</a>, since there is a risk that the subscription be removed as soon as <a class="el" href="group__sub_group.html#ga09f285de2746a6e27fc66efd60bd3116" title="Auto-Unsubscribes. ">natsSubscription_AutoUnsubscribe</a> returns.</dd></dl>
+<p>Calling this function on a synchronous or closed subscription will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a273e92a0ff3b7eaf946b4b7fa6cc6c6c">NATS_INVALID_SUBSCRIPTION</a>.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a" title="Callback used to notify that an object lifecycle is complete. ">natsOnCompleteCB</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object </td></tr>
+    <tr><td class="paramname">cb</td><td>the callback to invoke when the last message of a closed subscription has been dispatched </td></tr>
+    <tr><td class="paramname">closure</td><td>the pointer to a user defined object (possibly <code>NULL</code>) that will be passed to the callback </td></tr>
   </table>
   </dd>
 </dl>

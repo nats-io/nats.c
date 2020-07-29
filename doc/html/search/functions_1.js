@@ -20,11 +20,11 @@ var searchData=
   ['stanconnoptions_5fsetpubackwait',['stanConnOptions_SetPubAckWait',['../group__stan_conn_opts_group.html#ga36f2ee441562dcf619d6e020b823fc96',1,'nats.h']]],
   ['stanconnoptions_5fseturl',['stanConnOptions_SetURL',['../group__stan_conn_opts_group.html#ga3c6d511fc1e1febcdf5344960de5a0b3',1,'nats.h']]],
   ['stanmsg_5fdestroy',['stanMsg_Destroy',['../group__stan_msg_group.html#gacd0059fb499963f5b2eae18053e5f74f',1,'nats.h']]],
-  ['stanmsg_5fgetdata',['stanMsg_GetData',['../group__stan_msg_group.html#ga2cee54b6bfadf5b82a95caf75bfaf7d8',1,'nats.h']]],
-  ['stanmsg_5fgetdatalength',['stanMsg_GetDataLength',['../group__stan_msg_group.html#gad02b6e994991e0c6e15a33df3ec31908',1,'nats.h']]],
-  ['stanmsg_5fgetsequence',['stanMsg_GetSequence',['../group__stan_msg_group.html#gac9883bb19b4d260bbc63af671b7a0ec6',1,'nats.h']]],
-  ['stanmsg_5fgettimestamp',['stanMsg_GetTimestamp',['../group__stan_msg_group.html#ga0a9a64532ee20ed4fcef5ee9bbd6dfb5',1,'nats.h']]],
-  ['stanmsg_5fisredelivered',['stanMsg_IsRedelivered',['../group__stan_msg_group.html#ga350ce955c7ff80a4ea771eb43fe6acaa',1,'nats.h']]],
+  ['stanmsg_5fgetdata',['stanMsg_GetData',['../group__stan_msg_group.html#ga27477570a712b0d6315a823fc400b038',1,'nats.h']]],
+  ['stanmsg_5fgetdatalength',['stanMsg_GetDataLength',['../group__stan_msg_group.html#ga7d1e394a686bc25ab7376b7f28b9e777',1,'nats.h']]],
+  ['stanmsg_5fgetsequence',['stanMsg_GetSequence',['../group__stan_msg_group.html#ga98b66ff73447e1d7e329edbfcde782b5',1,'nats.h']]],
+  ['stanmsg_5fgettimestamp',['stanMsg_GetTimestamp',['../group__stan_msg_group.html#ga2fa524b11e9621cf46ca9b1a3ca66452',1,'nats.h']]],
+  ['stanmsg_5fisredelivered',['stanMsg_IsRedelivered',['../group__stan_msg_group.html#ga8e537d014b89d9d7da7906b2ee75d5c0',1,'nats.h']]],
   ['stansuboptions_5fcreate',['stanSubOptions_Create',['../group__stan_sub_opts_group.html#gad87a2cef4f4ddf64696f9864773c37cf',1,'nats.h']]],
   ['stansuboptions_5fdeliverallavailable',['stanSubOptions_DeliverAllAvailable',['../group__stan_sub_opts_group.html#gab09b81358e93199a4631eb06f1ec179f',1,'nats.h']]],
   ['stansuboptions_5fdestroy',['stanSubOptions_Destroy',['../group__stan_sub_opts_group.html#ga1b56877d0a6729e148c9c288e2b88e3f',1,'nats.h']]],
@@ -39,5 +39,6 @@ var searchData=
   ['stansubscription_5fackmsg',['stanSubscription_AckMsg',['../group__stan_sub_group.html#ga3a1cca9fa3ea54fcf7a43fd1335a26d3',1,'nats.h']]],
   ['stansubscription_5fclose',['stanSubscription_Close',['../group__stan_sub_group.html#gacfa3a7b4fa333c84acfa7521fbbb5bcc',1,'nats.h']]],
   ['stansubscription_5fdestroy',['stanSubscription_Destroy',['../group__stan_sub_group.html#ga3f6ce924f6a1830a55e30e9910aad4ba',1,'nats.h']]],
+  ['stansubscription_5fsetoncompletecb',['stanSubscription_SetOnCompleteCB',['../group__stan_sub_group.html#ga7b039908ec45cfc2c16ec61ba8daca9d',1,'nats.h']]],
   ['stansubscription_5funsubscribe',['stanSubscription_Unsubscribe',['../group__stan_sub_group.html#gafa428a7e0f6800216cb06fd738bd235e',1,'nats.h']]]
 ];

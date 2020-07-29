@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.1.0</span>
+   &#160;<span id="projectnumber">2.2.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -154,6 +154,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga5698f020e8eb3e7440eb073fe08ef62c"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga5698f020e8eb3e7440eb073fe08ef62c">natsOptions_SetCiphers</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *ciphers)</td></tr>
 <tr class="memdesc:ga5698f020e8eb3e7440eb073fe08ef62c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the list of available ciphers.  <a href="#ga5698f020e8eb3e7440eb073fe08ef62c">More...</a><br /></td></tr>
 <tr class="separator:ga5698f020e8eb3e7440eb073fe08ef62c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga2b7f144b011d8ce62941b608a8f324f0"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga2b7f144b011d8ce62941b608a8f324f0">natsOptions_SetCipherSuites</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *ciphers)</td></tr>
+<tr class="memdesc:ga2b7f144b011d8ce62941b608a8f324f0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the list of available ciphers for TLSv1.3.  <a href="#ga2b7f144b011d8ce62941b608a8f324f0">More...</a><br /></td></tr>
+<tr class="separator:ga2b7f144b011d8ce62941b608a8f324f0"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga0ba43ba9930df385e4781b12be9f2851"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga0ba43ba9930df385e4781b12be9f2851">natsOptions_SetExpectedHostname</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *hostname)</td></tr>
 <tr class="memdesc:ga0ba43ba9930df385e4781b12be9f2851"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the server certificate's expected hostname.  <a href="#ga0ba43ba9930df385e4781b12be9f2851">More...</a><br /></td></tr>
 <tr class="separator:ga0ba43ba9930df385e4781b12be9f2851"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -184,6 +187,12 @@ Functions</h2></td></tr>
 <tr class="memitem:ga2730f4e16e318a2ef8de98dbf6ede807"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga2730f4e16e318a2ef8de98dbf6ede807">natsOptions_SetReconnectWait</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int64_t reconnectWait)</td></tr>
 <tr class="memdesc:ga2730f4e16e318a2ef8de98dbf6ede807"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the time between reconnect attempts.  <a href="#ga2730f4e16e318a2ef8de98dbf6ede807">More...</a><br /></td></tr>
 <tr class="separator:ga2730f4e16e318a2ef8de98dbf6ede807"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga8f3df57ed8ae418d3ae6678ae5e2a5d2"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga8f3df57ed8ae418d3ae6678ae5e2a5d2">natsOptions_SetReconnectJitter</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int64_t jitter, int64_t jitterTLS)</td></tr>
+<tr class="memdesc:ga8f3df57ed8ae418d3ae6678ae5e2a5d2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Set the upper bound of a random delay added to reconnect wait.  <a href="#ga8f3df57ed8ae418d3ae6678ae5e2a5d2">More...</a><br /></td></tr>
+<tr class="separator:ga8f3df57ed8ae418d3ae6678ae5e2a5d2"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga3593165aa113d6736e0226ddc56b3e9d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga3593165aa113d6736e0226ddc56b3e9d">natsOptions_SetCustomReconnectDelay</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, <a class="el" href="group__callbacks_group.html#ga3353d4b92851c52121f65aaf0684cba4">natsCustomReconnectDelayHandler</a> cb, void *closure)</td></tr>
+<tr class="memdesc:ga3593165aa113d6736e0226ddc56b3e9d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the handler to invoke when the library needs to wait before the next reconnect attempts.  <a href="#ga3593165aa113d6736e0226ddc56b3e9d">More...</a><br /></td></tr>
+<tr class="separator:ga3593165aa113d6736e0226ddc56b3e9d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaa0d4b7ece8477cb9879f0dafff3456a5"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gaa0d4b7ece8477cb9879f0dafff3456a5">natsOptions_SetReconnectBufSize</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int reconnectBufSize)</td></tr>
 <tr class="memdesc:gaa0d4b7ece8477cb9879f0dafff3456a5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the size of the backing buffer used during reconnect.  <a href="#gaa0d4b7ece8477cb9879f0dafff3456a5">More...</a><br /></td></tr>
 <tr class="separator:gaa0d4b7ece8477cb9879f0dafff3456a5"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -205,6 +214,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gab5baab507c974402ab0d8c5e8227ee65"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gab5baab507c974402ab0d8c5e8227ee65">natsOptions_SetDiscoveredServersCB</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, <a class="el" href="group__callbacks_group.html#gacdef6aff3e47953f19e35857ab8e274c">natsConnectionHandler</a> discoveredServersCb, void *closure)</td></tr>
 <tr class="memdesc:gab5baab507c974402ab0d8c5e8227ee65"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the callback to be invoked when new servers are discovered.  <a href="#gab5baab507c974402ab0d8c5e8227ee65">More...</a><br /></td></tr>
 <tr class="separator:gab5baab507c974402ab0d8c5e8227ee65"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga54dea2ffeb33779771652a7a14fc4adc"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga54dea2ffeb33779771652a7a14fc4adc">natsOptions_SetLameDuckModeCB</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, <a class="el" href="group__callbacks_group.html#gacdef6aff3e47953f19e35857ab8e274c">natsConnectionHandler</a> lameDuckCb, void *closure)</td></tr>
+<tr class="memdesc:ga54dea2ffeb33779771652a7a14fc4adc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the callback to be invoked when server enters lame duck mode.  <a href="#ga54dea2ffeb33779771652a7a14fc4adc">More...</a><br /></td></tr>
+<tr class="separator:ga54dea2ffeb33779771652a7a14fc4adc"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gab09491bad908dedcb323c780280733ff"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gab09491bad908dedcb323c780280733ff">natsOptions_SetEventLoop</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, void *loop, <a class="el" href="group__callbacks_group.html#ga245eab0a01a485e40fba267f84ec037f">natsEvLoop_Attach</a> attachCb, <a class="el" href="group__callbacks_group.html#gaea4c125ecfb43eaf43da20e8444c2aaa">natsEvLoop_ReadAddRemove</a> readCb, <a class="el" href="group__callbacks_group.html#ga2bb5dd2d821ca5bbc0488f7e6aceed17">natsEvLoop_WriteAddRemove</a> writeCb, <a class="el" href="group__callbacks_group.html#gab63dee7f7012ba11ae20b76dbc36f2d0">natsEvLoop_Detach</a> detachCb)</td></tr>
 <tr class="memdesc:gab09491bad908dedcb323c780280733ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the external event loop and associated callbacks.  <a href="#gab09491bad908dedcb323c780280733ff">More...</a><br /></td></tr>
 <tr class="separator:gab09491bad908dedcb323c780280733ff"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -819,9 +831,48 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Sets the list of available ciphers. Check <a href="https://www.openssl.org/docs/manmaster/apps/ciphers.html">https://www.openssl.org/docs/manmaster/apps/ciphers.html</a> for the proper syntax. Here is an example:</p>
+<dl class="section note"><dt>Note</dt><dd>This function does not impact TLSv1.3 ciphersuites.</dd></dl>
+<p>Sets the list of available ciphers. Check <a href="https://www.openssl.org/docs/man1.1.1/man1/ciphers.html">https://www.openssl.org/docs/man1.1.1/man1/ciphers.html</a> for the proper syntax. Here is an example:</p>
 <blockquote class="doxtable">
 <p>"-ALL:HIGH" </p>
+</blockquote>
+<p>See <a class="el" href="group__opts_group.html#ga2cd6563694a439b3949a31fd81103099" title="Loads the trusted CA certificates from a file. ">natsOptions_LoadCATrustedCertificates</a> regarding error reports.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">ciphers</td><td>the ciphers suite. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga2b7f144b011d8ce62941b608a8f324f0"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetCipherSuites </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>ciphers</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Sets the list of available ciphers. Check <a href="https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_ciphersuites.html">https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_ciphersuites.html</a> for the proper syntax. Here is an example:</p>
+<blockquote class="doxtable">
+<p>"TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256" </p>
 </blockquote>
 <p>See <a class="el" href="group__opts_group.html#ga2cd6563694a439b3949a31fd81103099" title="Loads the trusted CA certificates from a file. ">natsOptions_LoadCATrustedCertificates</a> regarding error reports.</p>
 <dl class="params"><dt>Parameters</dt><dd>
@@ -1178,6 +1229,93 @@ Functions</h2></td></tr>
 
 </div>
 </div>
+<a class="anchor" id="ga8f3df57ed8ae418d3ae6678ae5e2a5d2"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetReconnectJitter </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>jitter</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>jitterTLS</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>After a disconnect, the library will try to reconnect to any server URLs in its list (the URLs are either provided by the user or discovered through gossip protocol).</p>
+<p>After the library failed to reconnect to every server in the list, it will wait for <code>reconnectWait</code> as specified with <a class="el" href="group__opts_group.html#ga2730f4e16e318a2ef8de98dbf6ede807" title="Sets the time between reconnect attempts. ">natsOptions_SetReconnectWait()</a>. This option adds some random jitter to the reconnect wait delay.</p>
+<p>This will help minimize the thundering herd phenomenon. For instance, suppose a server has 1000 connections, all were created at different times, but have the same reconnect wait option. If this server suddenly stops, then all connections will detect the failure and initiate a reconnect at the same time. The issue is even greater when those connections are TLS because of the added cost of the TLS handshake.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga2730f4e16e318a2ef8de98dbf6ede807" title="Sets the time between reconnect attempts. ">natsOptions_SetReconnectWait()</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">jitter</td><td>the jitter in milliseconds for non TLS connections. </td></tr>
+    <tr><td class="paramname">jitterTLS</td><td>the jitter in milliseconds for TLS connections. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga3593165aa113d6736e0226ddc56b3e9d"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetCustomReconnectDelay </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__callbacks_group.html#ga3353d4b92851c52121f65aaf0684cba4">natsCustomReconnectDelayHandler</a>&#160;</td>
+          <td class="paramname"><em>cb</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>closure</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This callback is invoked after the library tried every URL in the server list and failed to reconnect. It passes to the user the current number of attempts. This function shall return the amount of time the library will sleep before attempting to reconnect again.</p>
+<p>It is strongly recommended that this value contains some jitter to prevent all connections to attempt reconnecting at the same time.</p>
+<dl class="section note"><dt>Note</dt><dd>When using this approach, the reconnect wait as specified by <a class="el" href="group__opts_group.html#ga2730f4e16e318a2ef8de98dbf6ede807" title="Sets the time between reconnect attempts. ">natsOptions_SetReconnectWait()</a> is ignored.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">cb</td><td>the custom reconnect delay handler to invoke. </td></tr>
+    <tr><td class="paramname">closure</td><td>a pointer to an user defined object (can be <code>NULL</code>). See the <a class="el" href="group__callbacks_group.html#ga3353d4b92851c52121f65aaf0684cba4" title="Callback used to specify how long to wait between reconnects. ">natsCustomReconnectDelayHandler</a> prototype. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
 <a class="anchor" id="gaa0d4b7ece8477cb9879f0dafff3456a5"></a>
 <div class="memitem">
 <div class="memproto">
@@ -1359,7 +1497,7 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Specifies the callback to invoke when a connection to the <code>NATS Server</code> is lost. There could be two instances of the callback when reconnection is allowed: one before attempting the reconnect attempts, and one when all reconnect attempts have failed and the connection is going to be permanently closed.</p>
+<p>Specifies the callback to invoke when a connection to the <code>NATS Server</code> is lost.</p>
 <dl class="section warning"><dt>Warning</dt><dd>Invocation of this callback is asynchronous, which means that the state of the connection may have changed when this callback is invoked.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
@@ -1449,6 +1587,48 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
     <tr><td class="paramname">discoveredServersCb</td><td>the callback to be invoked when new servers have been discovered. </td></tr>
+    <tr><td class="paramname">closure</td><td>a pointer to an user object that will be passed to the callback. <code>closure</code> can be <code>NULL</code>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga54dea2ffeb33779771652a7a14fc4adc"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetLameDuckModeCB </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__callbacks_group.html#gacdef6aff3e47953f19e35857ab8e274c">natsConnectionHandler</a>&#160;</td>
+          <td class="paramname"><em>lameDuckCb</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>closure</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Specifies the callback to invoke when the server notifies the connection that it entered lame duck mode, that is, going to gradually disconnect all its connections before shuting down. This is often used in deployments when upgrading NATS Servers.</p>
+<dl class="section warning"><dt>Warning</dt><dd>Invocation of this callback is asynchronous, which means that the state may have changed when this callback is invoked.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">lameDuckCb</td><td>the callback to be invoked when server enters lame duck mode. </td></tr>
     <tr><td class="paramname">closure</td><td>a pointer to an user object that will be passed to the callback. <code>closure</code> can be <code>NULL</code>. </td></tr>
   </table>
   </dd>

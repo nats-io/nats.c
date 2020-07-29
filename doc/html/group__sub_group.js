@@ -16,5 +16,6 @@ var group__sub_group =
     [ "natsSubscription_IsValid", "group__sub_group.html#ga5e6454bbc7a90b9694112d45bd8de903", null ],
     [ "natsSubscription_Drain", "group__sub_group.html#ga26c9736289d326fb7d6df7e2a0df72ab", null ],
     [ "natsSubscription_WaitForDrainCompletion", "group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d", null ],
+    [ "natsSubscription_SetOnCompleteCB", "group__sub_group.html#gaea632f845d473e7461b134c0e7bf4077", null ],
     [ "natsSubscription_Destroy", "group__sub_group.html#ga50a95dd96e9b714201679a015d62832f", null ]
 ];

@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.1.0</span>
+   &#160;<span id="projectnumber">2.2.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -166,6 +166,7 @@ Functions</h2></td></tr>
 <p>Attempts to connect to a <code>NATS Streaming Server</code>.</p>
 <p>This call is cloning the <a class="el" href="group__types_group.html#ga13d64411878ba13a6ca39c915f2447c1" title="Way to configure a stanConnection. ">stanConnOptions</a> object, if given. Once this call returns, changes made to the <code>options</code> will not have an effect to this connection. The <code>options</code> can however be changed prior to be passed to another <a class="el" href="group__stan_conn_mgt_group.html#ga35e0e6e5e3b7f3818a3ac3600efb8f8f" title="Connects to a NATS Streaming Server using the provided options. ">stanConnection_Connect()</a> call if desired.</p>
 <dl class="section note"><dt>Note</dt><dd>The Streaming connection does not honor the NATS Connection option <a class="el" href="group__opts_group.html#ga20946800d024b7089e73d63454d1c19f" title="Indicates if initial connect failure should be retried or not. ">natsOptions_SetRetryOnFailedConnect()</a>. If you pass NATS Options with this option enabled, no error is returned, but if the connection cannot be established "right away", the connect call will return an error.</dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd>If connecting to a NATS Server v2.2.0+ and there is no Streaming server listening on the connect request subject, this call will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80aab97324e40ccfe1360080c651c330e62" title="No responders were running when the server received the request. ">NATS_NO_RESPONDERS</a>, not <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a>.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__types_group.html#ga13d64411878ba13a6ca39c915f2447c1" title="Way to configure a stanConnection. ">stanConnOptions</a> </dd>
 <dd>
 <a class="el" href="group__stan_conn_mgt_group.html#gaea095eec18fdf04e06de16711f8b1a04" title="Destroys the connection object. ">stanConnection_Destroy()</a></dd></dl>
@@ -260,6 +261,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Closes the connection to the server. This call will release all blocking calls. The connection object is still usable until the call to <a class="el" href="group__stan_conn_mgt_group.html#gaea095eec18fdf04e06de16711f8b1a04" title="Destroys the connection object. ">stanConnection_Destroy()</a>.</p>
+<dl class="section warning"><dt>Warning</dt><dd>See warning about connecting to a NATS Server v2.2.0+ in <a class="el" href="group__stan_conn_mgt_group.html#ga35e0e6e5e3b7f3818a3ac3600efb8f8f" title="Connects to a NATS Streaming Server using the provided options. ">stanConnection_Connect()</a>.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sc</td><td>the pointer to the <a class="el" href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c" title="A connection to a NATS Streaming Server. ">stanConnection</a> object. </td></tr>

@@ -1617,7 +1617,7 @@ natsOptions_SetUserCredentialsCallbacks(natsOptions *opts,
                                         natsSignatureHandler    sigCB,
                                         void                    *sigClosure);
 
-/** \brief Sets the file(s) to use to fetch user JWT and see required to sign nonce.
+/** \brief Sets the file(s) to use to fetch user JWT and seed required to sign nonce.
  *
  * This is a convenient option that specifies the files(s) to use to fetch
  * the user JWT and the user seed to be used to sign the server's nonce.

@@ -175,7 +175,7 @@ natsLibevent_Read(void *userData, bool add)
     if (add)
         res = event_add(nle->read, NULL);
     else
-        res = event_del(nle->read);
+        res = event_del_noblock(nle->read);
 
     return (res == 0 ? NATS_OK : NATS_ERR);
 }
@@ -197,7 +197,7 @@ natsLibevent_Write(void *userData, bool add)
     if (add)
         res = event_add(nle->write, NULL);
     else
-        res = event_del(nle->write);
+        res = event_del_noblock(nle->write);
 
     return (res == 0 ? NATS_OK : NATS_ERR);
 }

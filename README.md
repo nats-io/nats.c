@@ -21,6 +21,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
     * [Testing](#testing)
 - [Documentation](#documentation)
 - [NATS Client](#nats-client)
+    * [JetStream](#jetstream)
     * [Important Changes](#important-changes)
 	* [Getting Started](#getting-started)
 	* [Basic Usage](#basic-usage)
@@ -306,6 +307,14 @@ Go [here](http://nats-io.github.io/nats.c) for the online documentation.
 The source code is also quite documented.
 
 # NATS Client
+
+## JetStream
+
+In order to use the NATS C client to interact with JetStream, you need to add the option:
+```c
+natsOptions_UseOldRequestStyle(opts, true);
+```
+before creating the connection issuing requests to JetStream server.
 
 ## Important Changes
 

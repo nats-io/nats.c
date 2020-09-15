@@ -842,11 +842,8 @@ natsMsg_create(natsMsg **newMsg,
     if (replyLen > 0)
     {
         msg->reply = (const char*) ptr;
-        if (replyLen > 0)
-        {
-            memcpy(ptr, reply, replyLen);
-            ptr += replyLen;
-        }
+        memcpy(ptr, reply, replyLen);
+        ptr += replyLen;
         *(ptr++) = '\0';
     }
     else

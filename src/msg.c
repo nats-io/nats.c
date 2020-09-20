@@ -214,8 +214,7 @@ _canonicalKey(const char *key, char *keyStack, int keyStackLen, char **cKey, boo
     }
     else
     {
-        strncpy(keyStack, key, lenKey);
-        keyStack[lenKey] = '\0';
+        strlcpy(keyStack, key, lenKey + 1);
         k = keyStack;
     }
     // Move directly to character that we know needs change.

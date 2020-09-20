@@ -9129,7 +9129,7 @@ test_AuthViolation(void)
     {
         char info[1024];
 
-        strncpy(info,
+        strlcpy(info,
                 "INFO {\"server_id\":\"foobar\",\"version\":\"latest\",\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 
@@ -11086,7 +11086,7 @@ test_ReleaseFlush(void)
         char buffer[1024];
         char info[1024];
 
-        strncpy(info,
+        strlcpy(info,
                 "INFO {\"server_id\":\"foobar\",\"version\":\"latest\",\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 
@@ -11168,7 +11168,7 @@ test_FlushErrOnDisconnect(void)
     {
         char info[1024];
 
-        strncpy(info,
+        strlcpy(info,
                 "INFO {\"server_id\":\"foobar\",\"version\":\"latest\",\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 
@@ -15430,7 +15430,7 @@ test_StaleConnection(void)
         {
             char info[1024];
 
-            strncpy(info,
+            strlcpy(info,
                     "INFO {\"server_id\":\"foobar\",\"version\":\"latest\",\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                     sizeof(info));
 
@@ -15563,7 +15563,7 @@ test_ServerErrorClosesConnection(void)
     {
         char info[1024];
 
-        strncpy(info,
+        strlcpy(info,
                 "INFO {\"server_id\":\"foobar\",\"version\":\"latest\",\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,\"auth_required\":false,\"tls_required\":false,\"max_payload\":1048576}\r\n",
                 sizeof(info));
 

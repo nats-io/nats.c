@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 2.8)
 project(cnats)
 include(CTest)
 include(FindPackageHandleStandardArgs)
+include(CheckFunctionExists)
+
+check_function_exists(strlcpy HAVE_STRLCPY)
 
 # Uncomment to have the build process verbose
 #set(CMAKE_VERBOSE_MAKEFILE TRUE)

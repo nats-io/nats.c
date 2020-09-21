@@ -214,7 +214,7 @@ _canonicalKey(const char *key, char *keyStack, int keyStackLen, char **cKey, boo
     }
     else
     {
-        strncpy(keyStack, key, lenKey);
+        memcpy((void*) keyStack, (const void*) key, (size_t) lenKey);
         keyStack[lenKey] = '\0';
         k = keyStack;
     }

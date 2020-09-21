@@ -179,14 +179,14 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
                 *pwd = '\0';
 
                 if (url->password == NULL)
-                    return nats_setDefaultError(NATS_NO_MEMORY);
+                    s = nats_setDefaultError(NATS_NO_MEMORY);
             }
 
             if ((s == NATS_OK) && (strlen(ptr) > 0))
             {
                 url->username = NATS_STRDUP(ptr);
                 if (url->username == NULL)
-                    return nats_setDefaultError(NATS_NO_MEMORY);
+                    s = nats_setDefaultError(NATS_NO_MEMORY);
             }
         }
     }

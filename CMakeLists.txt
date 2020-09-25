@@ -186,6 +186,8 @@ if(UNIX)
     set(CMAKE_C_LINKER_FLAGS "${CMAKE_C_LINKER_FLAGS} -m32")
   endif(${NATS_BUILD_ARCH} MATCHES "32")
 
+
+
 elseif(WIN32)
   set(NATS_LIBDIR "lib")
   set(NATS_INCLUDE_DIR "include")
@@ -248,6 +250,20 @@ configure_file(
 	${CMAKE_SOURCE_DIR}/doc/DoxyFile.NATS.Client
 	@ONLY)
 endif(NATS_UPDATE_VERSION OR NATS_UPDATE_DOC)
+#------------
+
+#------------
+# pkg-config
+if(UNIX)
+  configure_file(
+    ${PROJECT_SOURCE_DIR}/src/libnats.pc.in
+    ${PROJECT_BINARY_DIR}/libnats.pc
+    @ONLY
+  )
+  install (
+    FILES "${PROJECT_BINARY_DIR}/libnats.pc"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+endif(UNIX)
 #------------
 
 #----------------------------

@@ -186,8 +186,6 @@ if(UNIX)
     set(CMAKE_C_LINKER_FLAGS "${CMAKE_C_LINKER_FLAGS} -m32")
   endif(${NATS_BUILD_ARCH} MATCHES "32")
 
-
-
 elseif(WIN32)
   set(NATS_LIBDIR "lib")
   set(NATS_INCLUDE_DIR "include")

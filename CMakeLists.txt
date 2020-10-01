@@ -250,6 +250,20 @@ configure_file(
 endif(NATS_UPDATE_VERSION OR NATS_UPDATE_DOC)
 #------------
 
+#------------
+# pkg-config
+if(UNIX)
+  configure_file(
+    ${PROJECT_SOURCE_DIR}/src/libnats.pc.in
+    ${PROJECT_BINARY_DIR}/libnats.pc
+    @ONLY
+  )
+  install (
+    FILES "${PROJECT_BINARY_DIR}/libnats.pc"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+endif(UNIX)
+#------------
+
 #----------------------------
 # Add the project directories
 

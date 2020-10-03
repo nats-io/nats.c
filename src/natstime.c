@@ -25,7 +25,7 @@ nats_Now(void)
     struct _timeb now;
     _ftime_s(&now);
     return (((int64_t)now.time) * 1000 + now.millitm);
-#elif defined CLOCK_MONOTONIC
+#elif defined CLOCK_REALTIME
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
         abort();
@@ -45,7 +45,7 @@ nats_NowInNanoSeconds(void)
     struct _timeb now;
     _ftime_s(&now);
     return (((int64_t)now.time) * 1000 + now.millitm) * 1000000L;
-#elif defined CLOCK_MONOTONIC
+#elif defined CLOCK_REALTIME
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
         abort();

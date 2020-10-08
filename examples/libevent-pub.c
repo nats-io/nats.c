@@ -52,7 +52,7 @@ pubThread(void *arg)
     natsStatus  s     = NATS_OK;
 
     for (count = 0; (s == NATS_OK) && (count < total); count++)
-        s = natsConnection_PublishString(info->conn, subj, txt);
+        s = natsConnection_PublishString(info->conn, subj, payload);
 
     if (s == NATS_OK)
         s = natsConnection_Flush(info->conn);
@@ -123,7 +123,7 @@ int main(int argc, char **argv)
 
     if (s == NATS_OK)
     {
-        printPerf("Sent", count, start, elapsed);
+        printPerf("Sent");
     }
     else
     {

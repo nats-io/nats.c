@@ -20,21 +20,18 @@ natsMutex_Create(natsMutex **newMutex)
     natsStatus          s = NATS_OK;
     pthread_mutexattr_t attr;
     natsMutex           *m = NATS_CALLOC(1, sizeof(natsMutex));
-    bool                noAttrDestroy = false;
 
     if (m == NULL)
-        s = nats_setDefaultError(NATS_NO_MEMORY);
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
-    if ((s == NATS_OK)
-        && (pthread_mutexattr_init(&attr) != 0)
-        && (noAttrDestroy = true))
+    if (pthread_mutexattr_init(&attr) != 0)
     {
-        s = nats_setError(NATS_SYS_ERROR, "pthread_mutexattr_init error: %d",
-                          errno);
+        NATS_FREE(m);
+        return nats_setError(NATS_SYS_ERROR, "pthread_mutexattr_init error: %d",
+                             errno);
     }
 
-    if ((s == NATS_OK)
-        && (pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE) != 0))
+    if (pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE) != 0)
     {
         s = nats_setError(NATS_SYS_ERROR, "pthread_mutexattr_settype error: %d",
                           errno);
@@ -47,13 +44,13 @@ natsMutex_Create(natsMutex **newMutex)
                           errno);
     }
 
-    if (!noAttrDestroy)
-        pthread_mutexattr_destroy(&attr);
-
     if (s == NATS_OK)
         *newMutex = m;
     else
+    {
         NATS_FREE(m);
+        pthread_mutexattr_destroy(&attr);
+    }
 
     return s;
 }

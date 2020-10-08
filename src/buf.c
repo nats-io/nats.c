@@ -176,7 +176,7 @@ natsBuf_Append(natsBuffer *buf, const char* data, int dataLen)
         newSize = (n + (extra < 64 ? 64 : extra));
 
         // Overrun.
-        if ((newSize < 0) || (newSize >= 0x7FFFFFFF))
+        if (newSize >= 0x7FFFFFFF)
             return nats_setDefaultError(NATS_NO_MEMORY);
 
         s = natsBuf_Expand(buf, (int) newSize);

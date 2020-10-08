@@ -194,7 +194,7 @@ int main(int argc, char **argv)
             nats_Sleep(15);
 
         if (!connLost)
-            printPerf("Received", count, start, elapsed);
+            printPerf("Received");
     }
 
     // If test was interrupted before receiving all expected messages,

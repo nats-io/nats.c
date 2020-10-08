@@ -102,7 +102,7 @@ int main(int argc, char **argv)
 
     if (s == NATS_OK)
     {
-        printPerf("Received", count, start, elapsed);
+        printPerf("Received");
     }
     else
     {

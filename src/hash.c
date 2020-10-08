@@ -362,19 +362,19 @@ natsStrHash_Hash(const char *data, int dataLen)
     }
 
     // Cases: 0,1,2,3,4,5,6,7
-    if ((dlen & _DWSZ) > 0)
+    if ((dlen & _DWSZ) != 0)
     {
         memcpy(&k1, &(data[i]), sizeof(k1));
         h32 = (uint32_t) ((((uint64_t) h32) ^ k1) * _YP32);
         i += _DWSZ;
     }
-    if ((dlen & _WSZ) > 0)
+    if ((dlen & _WSZ) != 0)
     {
         memcpy(&k3, &(data[i]), sizeof(k3));
         h32 = (uint32_t) ((((uint64_t) h32) ^ (uint64_t) k3) * _YP32);
         i += _WSZ;
     }
-    if ((dlen & 1) > 0)
+    if ((dlen & 1) != 0)
     {
         h32 = (h32 ^ (uint32_t)(data[i])) * _YP32;
     }

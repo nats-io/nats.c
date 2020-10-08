@@ -37,9 +37,9 @@ int main(int argc, char **argv)
     if (s == NATS_OK)
         start = nats_Now();
 
-    dataLen = (int) strlen(txt);
+    dataLen = (int) strlen(payload);
     for (count = 0; (s == NATS_OK) && (count < total); count++)
-        s = natsConnection_Publish(conn, subj, (const void*) txt, dataLen);
+        s = natsConnection_Publish(conn, subj, (const void*) payload, dataLen);
 
     if (s == NATS_OK)
         s = natsConnection_FlushTimeout(conn, 1000);
@@ -47,7 +47,7 @@ int main(int argc, char **argv)
     if (s == NATS_OK)
     {
         printStats(STATS_OUT, conn, NULL, stats);
-        printPerf("Sent", total, start, elapsed);
+        printPerf("Sent");
     }
     else
     {

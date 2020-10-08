@@ -137,10 +137,10 @@ _stanProcessMsg(natsConnection *nc, natsSubscription *ignored, natsMsg *msg, voi
                 packedSize = (int) pb__ack__pack(&ack, (uint8_t*) ackBuf);
                 if (ackSize == packedSize)
                 {
-                    natsMsg msg;
+                    natsMsg ackMsg;
 
-                    natsMsg_init(&msg, (const char*) ackSubject, NULL, (const char*) ackBuf, ackSize);
-                    natsConn_publish(nc, &msg, flush);
+                    natsMsg_init(&ackMsg, (const char*) ackSubject, NULL, (const char*) ackBuf, ackSize);
+                    natsConn_publish(nc, &ackMsg, flush);
                 }
             }
         }
@@ -236,10 +236,10 @@ stanSubscription_AckMsg(stanSubscription *sub, stanMsg *msg)
                         ackSize, packedSize);
             else
             {
-                natsMsg msg;
+                natsMsg ackMsg;
 
-                natsMsg_init(&msg, ackSub, NULL, (const void*) ackBuf, ackSize);
-                s = natsConn_publish(nc, &msg, flush);
+                natsMsg_init(&ackMsg, ackSub, NULL, (const void*) ackBuf, ackSize);
+                s = natsConn_publish(nc, &ackMsg, flush);
             }
 
             if (needFree)

@@ -86,8 +86,8 @@ int main(int argc, char **argv)
         {
             // Say we want to bind the data that we are going to send
             // to some unique ID that we know about this message.
-            pubMsg->payload = txt;
-            pubMsg->size    = (int)strlen(txt);
+            pubMsg->payload = payload;
+            pubMsg->size    = (int)strlen(payload);
             snprintf(pubMsg->ID, sizeof(pubMsg->ID), "%s:%d", "xyz", 234);
         }
     }

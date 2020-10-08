@@ -40,7 +40,7 @@ int main(int argc, char **argv)
 
     for (count = 0; (s == NATS_OK) && (count < total); count++)
     {
-        s = natsConnection_RequestString(&reply, conn, subj, txt, 1000);
+        s = natsConnection_RequestString(&reply, conn, subj, payload, 1000);
         if (s != NATS_OK)
             break;
 
@@ -67,7 +67,7 @@ int main(int argc, char **argv)
     if (s == NATS_OK)
     {
         printStats(STATS_OUT, conn, NULL, stats);
-        printPerf("Sent", total, start, elapsed);
+        printPerf("Sent");
     }
     else
     {

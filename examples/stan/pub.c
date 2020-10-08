@@ -53,7 +53,7 @@ int main(int argc, char **argv)
     bool            connLost = false;
 
     opts = parseArgs(argc, argv, usage);
-    len = (int) strlen(txt);
+    len = (int) strlen(payload);
 
     printf("Sending %" PRId64 " messages to channel '%s'\n", total, subj);
 
@@ -90,9 +90,9 @@ int main(int argc, char **argv)
     for (count = 0; (s == NATS_OK) && (count < total); count++)
     {
         if (async)
-            s = stanConnection_PublishAsync(sc, subj, (const void*) txt, len, _pubAckHandler, NULL);
+            s = stanConnection_PublishAsync(sc, subj, (const void*) payload, len, _pubAckHandler, NULL);
         else
-            s = stanConnection_Publish(sc, subj, (const void*) txt, len);
+            s = stanConnection_Publish(sc, subj, (const void*) payload, len);
     }
 
     if (!connLost && (s == NATS_OK))
@@ -103,7 +103,7 @@ int main(int argc, char **argv)
                 nats_Sleep(15);
         }
 
-        printPerf("Sent", total, start, elapsed);
+        printPerf("Sent");
         printf("Publish ack received: %d - with error: %d\n", ackCount, errCount);
     }
 

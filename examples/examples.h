@@ -34,7 +34,7 @@
 
 bool        async   = true;
 const char  *subj   = "foo";
-const char  *txt    = "hello";
+const char  *payload= "hello";
 const char  *name   = "worker";
 int64_t     total   = 1000000;
 
@@ -71,7 +71,7 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
     uint64_t    reconnected = 0;
     int         pending     = 0;
     int64_t     delivered   = 0;
-    int64_t     dropped     = 0;
+    int64_t     sdropped    = 0;
 
     s = natsConnection_GetStats(conn, stats);
     if (s == NATS_OK)
@@ -80,7 +80,7 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
     if ((s == NATS_OK) && (sub != NULL))
     {
         s = natsSubscription_GetStats(sub, &pending, NULL, NULL, NULL,
-                                      &delivered, &dropped);
+                                      &delivered, &sdropped);
 
         // Since we use AutoUnsubscribe(), when the max has been reached,
         // the subscription is automatically closed, so this call would
@@ -108,7 +108,7 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
         {
             printf("Delivered: %9" PRId64 " - ", delivered);
             printf("Pending: %5d - ", pending);
-            printf("Dropped: %5" PRId64 " - ", dropped);
+            printf("Dropped: %5" PRId64 " - ", sdropped);
         }
         printf("Reconnected: %3" PRIu64 "\n", reconnected);
     }
@@ -117,7 +117,7 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
 }
 
 static void
-printPerf(const char *txt, int64_t count, int64_t start, int64_t elapsed)
+printPerf(const char *perfTxt)
 {
     if ((start > 0) && (elapsed == 0))
         elapsed = nats_Now() - start;
@@ -127,7 +127,7 @@ printPerf(const char *txt, int64_t count, int64_t start, int64_t elapsed)
     else
         printf("\n%s %" PRId64 " messages in "\
                "%" PRId64 " milliseconds (%d msgs/sec)\n",
-               txt, count, elapsed, (int)((count * 1000) / elapsed));
+               perfTxt, count, elapsed, (int)((count * 1000) / elapsed));
 }
 
 static void
@@ -157,10 +157,10 @@ printUsageAndExit(const char *progName, const char *usage)
 }
 
 static natsStatus
-parseUrls(const char *urls, natsOptions *opts)
+parseUrls(const char *urls, natsOptions *gopts)
 {
     char        *serverUrls[MAX_SERVERS];
-    int         count     = 0;
+    int         num       = 0;
     natsStatus  s         = NATS_OK;
     char        *urlsCopy = NULL;
     char        *commaPos = NULL;
@@ -176,13 +176,13 @@ parseUrls(const char *urls, natsOptions *opts)
 
     do
     {
-        if (count == MAX_SERVERS)
+        if (num == MAX_SERVERS)
         {
             s = NATS_INSUFFICIENT_BUFFER;
             break;
         }
 
-        serverUrls[count++] = ptr;
+        serverUrls[num++] = ptr;
         commaPos = strchr(ptr, ',');
         if (commaPos != NULL)
         {
@@ -196,7 +196,7 @@ parseUrls(const char *urls, natsOptions *opts)
     } while (ptr != NULL);
 
     if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, (const char**) serverUrls, count);
+        s = natsOptions_SetServers(gopts, (const char**) serverUrls, num);
 
     free(urlsCopy);
 
@@ -307,7 +307,7 @@ parseArgs(int argc, char **argv, const char *usage)
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            txt = argv[++i];
+            payload = argv[++i];
         }
         else if (strcasecmp(argv[i], "-timeout") == 0)
         {

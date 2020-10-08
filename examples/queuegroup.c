@@ -123,7 +123,7 @@ int main(int argc, char **argv)
     if (s == NATS_OK)
     {
         printStats(STATS_IN|STATS_COUNT,conn, sub, stats);
-        printPerf("Received", total, start, elapsed);
+        printPerf("Received");
     }
     else
     {

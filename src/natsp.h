@@ -286,7 +286,7 @@ struct __natsOptions
 
     // If user has invoked natsOptions_SetUserCredentialsFromFiles, this
     // will be set and points to userOrChainedFile and possibly seedFile.
-    userCreds               *userCreds;
+    struct __userCreds      *userCreds;
 
     // Reconnect jitter added to reconnect wait
     int64_t                 reconnectJitter;

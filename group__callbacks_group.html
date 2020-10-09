@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.1.0</span>
+   &#160;<span id="projectnumber">2.2.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -139,6 +139,12 @@ Typedefs</h2></td></tr>
 <tr class="memitem:ga7d93a74068ac6e5f4406d70b7c1f0094"><td class="memItemLeft" align="right" valign="top">typedef const char *(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094">natsTokenHandler</a>) (void *closure)</td></tr>
 <tr class="memdesc:ga7d93a74068ac6e5f4406d70b7c1f0094"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to build a token on connections and reconnections.  <a href="#ga7d93a74068ac6e5f4406d70b7c1f0094">More...</a><br /></td></tr>
 <tr class="separator:ga7d93a74068ac6e5f4406d70b7c1f0094"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga245131e64f1d0dff7edc8ed874a07e9a"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a">natsOnCompleteCB</a>) (void *closure)</td></tr>
+<tr class="memdesc:ga245131e64f1d0dff7edc8ed874a07e9a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify that an object lifecycle is complete.  <a href="#ga245131e64f1d0dff7edc8ed874a07e9a">More...</a><br /></td></tr>
+<tr class="separator:ga245131e64f1d0dff7edc8ed874a07e9a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga3353d4b92851c52121f65aaf0684cba4"><td class="memItemLeft" align="right" valign="top">typedef int64_t(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga3353d4b92851c52121f65aaf0684cba4">natsCustomReconnectDelayHandler</a>) (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, int attempts, void *closure)</td></tr>
+<tr class="memdesc:ga3353d4b92851c52121f65aaf0684cba4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to specify how long to wait between reconnects.  <a href="#ga3353d4b92851c52121f65aaf0684cba4">More...</a><br /></td></tr>
+<tr class="separator:ga3353d4b92851c52121f65aaf0684cba4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gad5d6a685731b3bf635995b7375af4d18"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gad5d6a685731b3bf635995b7375af4d18">stanPubAckHandler</a>) (const char *guid, const char *error, void *closure)</td></tr>
 <tr class="memdesc:gad5d6a685731b3bf635995b7375af4d18"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify of an asynchronous publish result.  <a href="#gad5d6a685731b3bf635995b7375af4d18">More...</a><br /></td></tr>
 <tr class="separator:gad5d6a685731b3bf635995b7375af4d18"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -334,6 +340,43 @@ Typedefs</h2></td></tr>
 <p>This is the function that one provides to build a different token at each reconnect.</p>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga23a3b1f022112e98ddccb18b247b4426" title="Sets the tokenCb to use whenever a token is needed. ">natsOptions_SetTokenHandler()</a></dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>Such callback is invoked synchronously from the connection thread. </dd></dl>
+
+</div>
+</div>
+<a class="anchor" id="ga245131e64f1d0dff7edc8ed874a07e9a"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef void(* natsOnCompleteCB) (void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Currently used for asynchronous <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> objects. When set, this callback will be invoked after the subscription is closed and the message handler has returned.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__sub_group.html#gaea632f845d473e7461b134c0e7bf4077" title="Sets a completion callback. ">natsSubscription_SetOnCompleteCB()</a> </dd></dl>
+
+</div>
+</div>
+<a class="anchor" id="ga3353d4b92851c52121f65aaf0684cba4"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef int64_t(* natsCustomReconnectDelayHandler) (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, int attempts, void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This callback is used to get from the user the desired delay the library should pause before attempting to reconnect again. Note that this is invoked after the library tried the whole list of URLs and failed to reconnect.</p>
+<dl class="section note"><dt>Note</dt><dd>This callback is invoked from the connection reconnect thread and waits for user input. It should not block and instead quickly return the desired reconnect delay. The state of the connection is disconnected when this callback is invoked. Not much can be done with the passed connection, but user can call <a class="el" href="group__conn_mgt_group.html#ga19e204d27a232e2d4334301fc002b2ed" title="Closes the connection. ">natsConnection_Close()</a> if desired. This will abort the reconnect attempts and close the connection.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server. ">natsConnection</a> invoking this handler. </td></tr>
+    <tr><td class="paramname">attempts</td><td>the number of times the library tried the whole list of server URLs. </td></tr>
+    <tr><td class="paramname">closure</td><td>an optional pointer to a user defined object that was specified when registering the callback. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>the number of milliseconds to wait before trying to reconnect. </dd></dl>
 
 </div>
 </div>

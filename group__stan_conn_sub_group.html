@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.1.0</span>
+   &#160;<span id="projectnumber">2.2.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -167,6 +167,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Expresses interest in the given subject. The subject can NOT have wildcards. Messages will be delivered to the associated <a class="el" href="group__callbacks_group.html#gaf7456e37fa14f1834d9048d3789e9409" title="Callback used to deliver messages to the application. ">stanMsgHandler</a>.</p>
+<dl class="section warning"><dt>Warning</dt><dd>See warning about connecting to a NATS Server v2.2.0+ in <a class="el" href="group__stan_conn_mgt_group.html#ga35e0e6e5e3b7f3818a3ac3600efb8f8f" title="Connects to a NATS Streaming Server using the provided options. ">stanConnection_Connect()</a>.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the location where to store the pointer to the newly created <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
@@ -235,6 +236,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Creates a queue subscriber on the given channel. All subscribers with the same queue name will form the queue group and only one member of the group will be selected to receive any given message asynchronously.</p>
+<dl class="section warning"><dt>Warning</dt><dd>See warning about connecting to a NATS Server v2.2.0+ in <a class="el" href="group__stan_conn_mgt_group.html#ga35e0e6e5e3b7f3818a3ac3600efb8f8f" title="Connects to a NATS Streaming Server using the provided options. ">stanConnection_Connect()</a>.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the location where to store the pointer to the newly created <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>

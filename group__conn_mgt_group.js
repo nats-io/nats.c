@@ -22,6 +22,9 @@ var group__conn_mgt_group =
     [ "natsConnection_Drain", "group__conn_mgt_group.html#ga59bdc4ad9fea2053f5d3841f6b83f88b", null ],
     [ "natsConnection_DrainTimeout", "group__conn_mgt_group.html#gae06fe6f5933f216d6d93645a122a7dd4", null ],
     [ "natsConnection_Sign", "group__conn_mgt_group.html#ga6960cfdbaac3b8759784f352d4c264f8", null ],
+    [ "natsConnection_GetClientIP", "group__conn_mgt_group.html#gadafcfeeeac2733c7119981ab97b7103d", null ],
+    [ "natsConnection_GetRTT", "group__conn_mgt_group.html#gaa3fd27e6e7d8131e679d4f10e201c435", null ],
+    [ "natsConnection_HasHeaderSupport", "group__conn_mgt_group.html#gad765b80ae8e1a06a7a942cccf29f042a", null ],
     [ "natsConnection_Close", "group__conn_mgt_group.html#ga19e204d27a232e2d4334301fc002b2ed", null ],
     [ "natsConnection_Destroy", "group__conn_mgt_group.html#gafda2f702276fb0ac301efac10df09495", null ]
 ];

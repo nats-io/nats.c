@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.1.0</span>
+   &#160;<span id="projectnumber">2.2.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -109,6 +109,9 @@ $(document).ready(function(){initNavTree('group__stan_sub_group.html','');});
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:ga7b039908ec45cfc2c16ec61ba8daca9d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__stan_sub_group.html#ga7b039908ec45cfc2c16ec61ba8daca9d">stanSubscription_SetOnCompleteCB</a> (<a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5">stanSubscription</a> *sub, <a class="el" href="group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a">natsOnCompleteCB</a> cb, void *closure)</td></tr>
+<tr class="memdesc:ga7b039908ec45cfc2c16ec61ba8daca9d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets a completion callback.  <a href="#ga7b039908ec45cfc2c16ec61ba8daca9d">More...</a><br /></td></tr>
+<tr class="separator:ga7b039908ec45cfc2c16ec61ba8daca9d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga3a1cca9fa3ea54fcf7a43fd1335a26d3"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__stan_sub_group.html#ga3a1cca9fa3ea54fcf7a43fd1335a26d3">stanSubscription_AckMsg</a> (<a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5">stanSubscription</a> *sub, <a class="el" href="group__types_group.html#ga2cf5db7703b42d97abe56a3e83b2a87d">stanMsg</a> *msg)</td></tr>
 <tr class="memdesc:ga3a1cca9fa3ea54fcf7a43fd1335a26d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Acknowledge a message.  <a href="#ga3a1cca9fa3ea54fcf7a43fd1335a26d3">More...</a><br /></td></tr>
 <tr class="separator:ga3a1cca9fa3ea54fcf7a43fd1335a26d3"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -125,6 +128,51 @@ Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>NATS Streaming Subscriptions. </p>
 <h2 class="groupheader">Function Documentation</h2>
+<a class="anchor" id="ga7b039908ec45cfc2c16ec61ba8daca9d"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> stanSubscription_SetOnCompleteCB </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5">stanSubscription</a> *&#160;</td>
+          <td class="paramname"><em>sub</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a">natsOnCompleteCB</a>&#160;</td>
+          <td class="paramname"><em>cb</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *&#160;</td>
+          <td class="paramname"><em>closure</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>In order to make sure that an asynchronous subscription's message handler is no longer invoked once the subscription is closed (or unsubscribed) (<a class="el" href="group__stan_sub_group.html#gacfa3a7b4fa333c84acfa7521fbbb5bcc" title="Closes the subscription. ">stanSubscription_Close</a>, <a class="el" href="group__stan_sub_group.html#gafa428a7e0f6800216cb06fd738bd235e" title="Permanently remove a subscription. ">stanSubscription_Unsubscribe</a>), the subscription should be closed from the message handler itslef.</p>
+<p>If the application closes the subscription from a different thread and immediately frees resources needed in the message handler, there is a risk of a crash since the subscription's message handler may still be invoked one last time or already in the process of executing.</p>
+<p>To address this, the user can set a callback that will be invoked after the subscription is closed and the message handler has returned.</p>
+<dl class="section note"><dt>Note</dt><dd>You don't need to call this function if you are not freeing resources needed in the message handler or if you always close the subscription from the message handler itself.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a" title="Callback used to notify that an object lifecycle is complete. ">natsOnCompleteCB</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5" title="Interest on a given channel. ">stanSubscription</a> object </td></tr>
+    <tr><td class="paramname">cb</td><td>the callback to invoke when the last message of a closed subscription has been dispatched </td></tr>
+    <tr><td class="paramname">closure</td><td>the pointer to a user defined object (possibly <code>NULL</code>) that will be passed to the callback </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
 <a class="anchor" id="ga3a1cca9fa3ea54fcf7a43fd1335a26d3"></a>
 <div class="memitem">
 <div class="memproto">
@@ -175,6 +223,7 @@ Functions</h2></td></tr>
 <p>Removes interest on the channel. The subscription may still have a callback in progress, in that case, the subscription will still be valid until the callback returns.</p>
 <p>For non-durable subscriptions, <a class="el" href="group__stan_sub_group.html#gafa428a7e0f6800216cb06fd738bd235e" title="Permanently remove a subscription. ">stanSubscription_Unsubscribe</a> and <a class="el" href="group__stan_sub_group.html#gacfa3a7b4fa333c84acfa7521fbbb5bcc" title="Closes the subscription. ">stanSubscription_Close</a> have the same effect.</p>
 <p>For durable subscriptions, calling this function causes the server to remove the durable subscription (instead of simply suspending it). It means that once this call is made, calling <a class="el" href="group__stan_conn_sub_group.html#gae545358fdc493baf6d29429a8156781f" title="Creates a subscription. ">stanConnection_Subscribe()</a> with the same durable name creates a brand new durable subscription, instead of simply resuming delivery.</p>
+<dl class="section warning"><dt>Warning</dt><dd>See warning about connecting to a NATS Server v2.2.0+ in <a class="el" href="group__stan_conn_mgt_group.html#ga35e0e6e5e3b7f3818a3ac3600efb8f8f" title="Connects to a NATS Streaming Server using the provided options. ">stanConnection_Connect()</a>.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5" title="Interest on a given channel. ">stanSubscription</a> object. </td></tr>
@@ -198,6 +247,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Similar to <a class="el" href="group__stan_sub_group.html#gafa428a7e0f6800216cb06fd738bd235e" title="Permanently remove a subscription. ">stanSubscription_Unsubscribe()</a> except that durable interest is not removed in the server. The durable subscription can therefore be resumed.</p>
+<dl class="section warning"><dt>Warning</dt><dd>See warning about connecting to a NATS Server v2.2.0+ in <a class="el" href="group__stan_conn_mgt_group.html#ga35e0e6e5e3b7f3818a3ac3600efb8f8f" title="Connects to a NATS Streaming Server using the provided options. ">stanConnection_Connect()</a>.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5" title="Interest on a given channel. ">stanSubscription</a> object. </td></tr>

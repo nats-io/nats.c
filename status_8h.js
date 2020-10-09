@@ -43,6 +43,7 @@ var status_8h =
       [ "NATS_NO_SERVER_SUPPORT", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a4e298931ba0698a72e397b1b57c885", null ],
       [ "NATS_NOT_YET_CONNECTED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a49a1ea653ce112b3c53eedebcd60811d", null ],
       [ "NATS_DRAINING", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a07fdbda44f43cef9866a75b25053c2ae", null ],
-      [ "NATS_INVALID_QUEUE_NAME", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a0d239cfdfa30fe730afea65941779b", null ]
+      [ "NATS_INVALID_QUEUE_NAME", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a0d239cfdfa30fe730afea65941779b", null ],
+      [ "NATS_NO_RESPONDERS", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80aab97324e40ccfe1360080c651c330e62", null ]
     ] ]
 ];

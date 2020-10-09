@@ -26,6 +26,7 @@ var searchData=
   ['nats_5fmax_5fdelivered_5fmsgs',['NATS_MAX_DELIVERED_MSGS',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9a6f40b7803639ac18bdf532e93e5ad5',1,'status.h']]],
   ['nats_5fmax_5fpayload',['NATS_MAX_PAYLOAD',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80af820300473609092a3e97a71b5af9ff9',1,'status.h']]],
   ['nats_5fno_5fmemory',['NATS_NO_MEMORY',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a62ff6f5cc64399631defc0119731b514',1,'status.h']]],
+  ['nats_5fno_5fresponders',['NATS_NO_RESPONDERS',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80aab97324e40ccfe1360080c651c330e62',1,'status.h']]],
   ['nats_5fno_5fserver',['NATS_NO_SERVER',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a47034d8889521bbd300f45fdc19e1127',1,'status.h']]],
   ['nats_5fno_5fserver_5fsupport',['NATS_NO_SERVER_SUPPORT',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a4e298931ba0698a72e397b1b57c885',1,'status.h']]],
   ['nats_5fnot_5ffound',['NATS_NOT_FOUND',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80ad0229a12b17d3d12a28efed6213720d8',1,'status.h']]],

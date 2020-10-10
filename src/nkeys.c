@@ -124,3 +124,34 @@ natsKeys_Sign(const char *encodedSeed, const unsigned char *input, int inputLen,
 
     return NATS_UPDATE_ERR_STACK(s);
 }
+
+natsStatus
+nats_Sign(const char    *encodedSeed,
+          const char    *input,
+          unsigned char **signature,
+          int           *signatureLength)
+{
+    natsStatus      s;
+    unsigned char   sig[NATS_CRYPTO_SIGN_BYTES];
+
+    if (nats_IsStringEmpty(encodedSeed))
+        return nats_setError(NATS_INVALID_ARG, "%s", "seed cannot be empty");
+
+    if (nats_IsStringEmpty(input))
+        return nats_setError(NATS_INVALID_ARG, "%s", "input cannot be empty");
+
+    if ((signature == NULL) || (signatureLength == NULL))
+        return nats_setError(NATS_INVALID_ARG, "%s", "signature and/or signatureLength cannot be NULL");
+
+    s = natsKeys_Sign(encodedSeed, (const unsigned char*) input, (int) strlen(input), sig);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    *signature = (unsigned char*) NATS_MALLOC(NATS_CRYPTO_SIGN_BYTES);
+    if (*signature == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    memcpy(*signature, sig, NATS_CRYPTO_SIGN_BYTES);
+    *signatureLength = NATS_CRYPTO_SIGN_BYTES;
+    return NATS_OK;
+}

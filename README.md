@@ -599,6 +599,20 @@ if (s == NATS_OK)
     s = natsConnection_Connect(&nc, opts);
 ```
 
+For NKey authentication, it is possible to specify the public NKey and the file containing the corresponding NKey seed. On connect, the library will load this file to look for the NKey seed and use it to sign the nonce sent by the server. The library takes care of clearing the memory where the seed is copied as soon
+as the nonce is signed.
+
+```c
+s = natsOptions_SetNKeyFromSeed(opts, "UDXU4RCSJNZOIQHZNWXHXORDPRTGNJAHAHFRGZNEEJCPQTT2M7NLCNF4", "seed.nk");
+if (s == NATS_OK)
+    s = natsConnection_Connect(&nc, opts);
+```
+The "seed.nk" file contains the NKey seed (private key). Here is an example:
+```
+$ more seed.nk
+SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXIEDNPPQYYYCU3VY
+```
+
 Finally, it is possible to specify the public NKey and the signature callback. The public key will be sent to the server and the provided callback is responsible for signing the server's nonce. When the server receives the signed nonce, it can check that it was signed poperly using the provided public key.
 
 ```c
@@ -611,6 +625,23 @@ Finally, it is possible to specify the public NKey and the signature callback. T
 s = natsOptions_SetNKey(opts, myPublicKey, mySignatureCb, NULL);
 if (s == NATS_OK)
     s = natsConnection_Connect(&nc, opts);
+```
+The signature callback can use any crypto library to sign the nonce, but also the provided `nats_Sign()` function.
+```c
+natsStatus
+mySignatureCb(
+    char            **customErrTxt,
+    unsigned char   **signature,
+    int             *signatureLength,
+    const char      *nonce,
+    void            *closure)
+{
+    // This approach requires to provide the seed (private key).
+    // Hardcoding it in the application (like in this example) may not be really safe.
+    return nats_Sign(
+        "SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXIEDNPPQYYYCU3VY",
+        nonce, signature, signatureLength);
+}
 ```
 
 You can sign any content and get the signature in return. The connection must have been created with the `natsOptions_SetUserCredentialsFromFiles()` option for that to work.

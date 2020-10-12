@@ -2661,6 +2661,25 @@ test_natsOptions(void)
                 && (opts->sigHandler == NULL)
                 && (opts->sigClosure == NULL));
 
+    test("Set NKeyFromSeed: ");
+    s = natsOptions_SetNKeyFromSeed(opts, "pubkey", "seed.file");
+    testCond((s == NATS_OK)
+                && (opts->nkey != NULL)
+                && (strcmp(opts->nkey, "pubkey") == 0)
+                && (opts->sigHandler == natsConn_signatureHandler)
+                && (opts->sigClosure == (void*) opts->userCreds)
+                && (opts->userCreds != NULL)
+                && (opts->userCreds->seedFile != NULL)
+                && (strcmp(opts->userCreds->seedFile, "seed.file") == 0));
+
+    test("Remove NKeyFromSeed: ");
+    s = natsOptions_SetNKeyFromSeed(opts, NULL, NULL);
+    testCond((s == NATS_OK)
+                && (opts->nkey == NULL)
+                && (opts->sigHandler == NULL)
+                && (opts->sigClosure == NULL)
+                && (opts->userCreds == NULL));
+
     // Prepare some values for the clone check
     s = natsOptions_SetURL(opts, "url");
     IFOK(s, natsOptions_SetServers(opts, servers, 3));
@@ -3893,6 +3912,50 @@ test_natsWaitReady(void)
     }
 
     _destroyDefaultThreadArgs(&arg);
+}
+
+static void
+test_natsSign(void)
+{
+    unsigned char   *sig   = NULL;
+    int             sigLen = 0;
+    char            *sig64 = NULL;
+    natsStatus      s;
+
+    test("nats_Sign invalid param 1: ");
+    s = nats_Sign(NULL, "nonce", &sig, &sigLen);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("nats_Sign invalid param 2: ");
+    s = nats_Sign("seed", NULL, &sig, &sigLen);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("nats_Sign invalid param 3: ");
+    s = nats_Sign("seed", "nonce", NULL, &sigLen);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("nats_Sign invalid param 4: ");
+    s = nats_Sign("seed", "nonce", &sig, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    nats_clearLastError();
+
+    test("Sign ok: ");
+    s = nats_Sign(
+        "SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXIEDNPPQYYYCU3VY",
+        "nonce", &sig, &sigLen);
+    if (s == NATS_OK)
+        s = nats_Base64RawURL_EncodeString((const unsigned char*) sig, sigLen, &sig64);
+    testCond((s == NATS_OK)
+        && (sig != NULL)
+        && (sig64 != NULL)
+        && (sigLen == NATS_CRYPTO_SIGN_BYTES)
+        && (memcmp((void*) sig64,
+                   (void*) "AVfpO7Pw3rc56hoO1OJcFxXUCfBmO2qouchBchSlL45Fuur9zS15UzytEI1QC5wwVG7uiHIdqyfmOS6uPrwqCg",
+                   NATS_CRYPTO_SIGN_BYTES) == 0));
+
+    free(sig);
+    free(sig64);
 }
 
 static void
@@ -8302,7 +8365,7 @@ test_RetryOnFailedConnect(void)
 
     test("Retried: ")
 #ifdef _WIN32
-    testCond((((end-start) >= 1000) && ((end-start) <= 2500)));
+    testCond((((end-start) >= 1000) && ((end-start) <= 2600)));
 #else
     testCond((((end-start) >= 300) && ((end-start) <= 1500)));
 #endif
@@ -17376,6 +17439,162 @@ test_NKey(void)
     natsOptions_Destroy(opts);
 }
 
+static natsStatus
+_checkNKeyFromSeed(char *buffer)
+{
+    // NKey should have been included
+    if (strstr(buffer, "UDXU4RCSJNZOIQHZNWXHXORDPRTGNJAHAHFRGZNEEJCPQTT2M7NLCNF4") == NULL)
+        return NATS_ERR;
+
+    // The server is sending the nonce "nonce" and we
+    // use a seed that should have produced a signature
+    // that converted to base64 should be:
+    if (strstr(buffer, "AVfpO7Pw3rc56hoO1OJcFxXUCfBmO2qouchBchSlL45Fuur9zS15UzytEI1QC5wwVG7uiHIdqyfmOS6uPrwqCg") == NULL)
+        return NATS_ERR;
+
+    return NATS_OK;
+}
+
+static void
+test_NKeyFromSeed(void)
+{
+    natsStatus          s;
+    natsOptions         *opts  = NULL;
+    natsOptions         *opts2 = NULL;
+    natsConnection      *nc    = NULL;
+    natsThread          *t     = NULL;
+    FILE                *f     = NULL;
+    struct threadArg    arg;
+
+    s = natsOptions_Create(&opts);
+    if (s != NATS_OK)
+        FAIL("Failed to setup test");
+
+    test("Invalid arg 1: ");
+    s = natsOptions_SetNKeyFromSeed(NULL, "pubkey", "seed.file");
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Invalid arg 2: ");
+    s = natsOptions_SetNKeyFromSeed(opts, "pubkey", NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    nats_clearLastError();
+
+    test("Clone: ");
+    s = natsOptions_SetNKeyFromSeed(opts, "pubkey", "seed.file");
+    if (s == NATS_OK)
+    {
+        opts2 = natsOptions_clone(opts);
+        if (opts2 == NULL)
+            s = NATS_NO_MEMORY;
+    }
+    if (s == NATS_OK)
+        s = natsOptions_SetNKeyFromSeed(opts, NULL, NULL);
+    testCond((s == NATS_OK)
+                && (opts2->nkey != NULL)
+                && (strcmp(opts2->nkey, "pubkey") == 0)
+                && (opts2->sigHandler == natsConn_signatureHandler)
+                && (opts2->sigClosure == (void*) opts2->userCreds)
+                && (opts2->userCreds != NULL)
+                && (opts2->userCreds->seedFile != NULL)
+                && (strcmp(opts2->userCreds->seedFile, "seed.file") == 0));
+    natsOptions_Destroy(opts2);
+
+    test("NKeyFromSeed erase JWT: ");
+    s = natsOptions_SetUserCredentialsFromFiles(opts, "foo", "bar");
+    if (s == NATS_OK)
+        s = natsOptions_SetNKeyFromSeed(opts, "pubkey2", "seed.file");
+    testCond((s == NATS_OK)
+                && (opts->nkey != NULL)
+                && (strcmp(opts->nkey, "pubkey2") == 0)
+                && (opts->userJWTHandler == NULL)
+                && (opts->userJWTClosure == NULL)
+                && (opts->sigHandler == natsConn_signatureHandler)
+                && (opts->sigClosure == (void*) opts->userCreds)
+                && (opts->userCreds != NULL)
+                && (opts->userCreds->seedFile != NULL)
+                && (strcmp(opts->userCreds->seedFile, "seed.file") == 0));
+
+    test("UserCreds erase NKeyFromSeed: ");
+    s = natsOptions_SetUserCredentialsFromFiles(opts, "foo", NULL);
+    testCond((s == NATS_OK)
+                && (opts->nkey == NULL)
+                && (opts->userJWTHandler == natsConn_userFromFile)
+                && (opts->userJWTClosure == (void*) opts->userCreds)
+                && (opts->sigHandler == natsConn_signatureHandler)
+                && (opts->sigClosure == (void*) opts->userCreds)
+                && (opts->userCreds != NULL)
+                && (opts->userCreds->seedFile == NULL));
+
+    // Start fake server that will send predefined "nonce" so we can check
+    // that connection is sending appropriate jwt and signature.
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        // Set this to error, the mock server should set it to OK
+        // if it can start successfully.
+        arg.done = false;
+        arg.status = NATS_ERR;
+        arg.checkInfoCB = _checkNKeyFromSeed;
+        arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576,\"nonce\":\"nonce\"}\r\n";
+        s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
+    }
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+    if (s != NATS_OK)
+    {
+        if (t != NULL)
+        {
+            natsThread_Join(t);
+            natsThread_Destroy(t);
+        }
+        natsOptions_Destroy(opts);
+        _destroyDefaultThreadArgs(&arg);
+        FAIL("Unable to setup test");
+    }
+
+    test("NKeyFromSeed works ok: ");
+    f = fopen("seed.file", "w");
+    if (f == NULL)
+        s = NATS_ERR;
+    else
+    {
+        fputs("SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXIEDNPPQYYYCU3VY\n", f);
+        fclose(f);
+        f = NULL;
+    }
+    if (s == NATS_OK)
+        s = natsOptions_SetNKeyFromSeed(opts, "UDXU4RCSJNZOIQHZNWXHXORDPRTGNJAHAHFRGZNEEJCPQTT2M7NLCNF4", "seed.file");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    // Notify mock server we are done
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    t = NULL;
+
+    _destroyDefaultThreadArgs(&arg);
+
+    natsOptions_Destroy(opts);
+
+    remove("seed.file");
+}
+
 static void
 test_ConnSign(void)
 {
@@ -20837,6 +21056,7 @@ static testInfo allTests[] =
     {"natsGetJWTOrSeed",                test_natsGetJWTOrSeed},
     {"natsHostIsIP",                    test_natsHostIsIP},
     {"natsWaitReady",                   test_natsWaitReady},
+    {"natsSign",                        test_natsSign},
     {"HeadersLift",                     test_natsMsgHeadersLift},
     {"HeadersAPIs",                     test_natsMsgHeaderAPIs},
 
@@ -20960,6 +21180,7 @@ static testInfo allTests[] =
     {"UserCredsCallbacks",              test_UserCredsCallbacks},
     {"UserCredsFromFiles",              test_UserCredsFromFiles},
     {"NKey",                            test_NKey},
+    {"NKeyFromSeed",                    test_NKeyFromSeed},
     {"ConnSign",                        test_ConnSign},
     {"WriteDeadline",                   test_WriteDeadline},
     {"HeadersNotSupported",             test_HeadersNotSupported},

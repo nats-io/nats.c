@@ -1095,7 +1095,7 @@ _freeUserCreds(userCreds *uc)
 }
 
 static natsStatus
-_createUserCreds(userCreds **puc, const char *uocf, const char *sf)
+_createUserCreds(userCreds **puc, bool onlySeedFile, const char *uocf, const char *sf)
 {
     natsStatus  s   = NATS_OK;
     userCreds   *uc = NULL;
@@ -1104,9 +1104,12 @@ _createUserCreds(userCreds **puc, const char *uocf, const char *sf)
     if (uc == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    uc->userOrChainedFile = NATS_STRDUP(uocf);
-    if (uc->userOrChainedFile == NULL)
-        s = nats_setDefaultError(NATS_NO_MEMORY);
+    if (!onlySeedFile)
+    {
+        uc->userOrChainedFile = NATS_STRDUP(uocf);
+        if (uc->userOrChainedFile == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
     if ((s == NATS_OK) && sf != NULL)
     {
         uc->seedFile = NATS_STRDUP(sf);
@@ -1139,7 +1142,7 @@ natsOptions_SetUserCredentialsFromFiles(natsOptions *opts, const char *userOrCha
 
     if (!nats_IsStringEmpty(userOrChainedFile))
     {
-        s = _createUserCreds(&uc, userOrChainedFile, seedFile);
+        s = _createUserCreds(&uc, false, userOrChainedFile, seedFile);
         if (s != NATS_OK)
         {
             UNLOCK_OPTS(opts);
@@ -1258,6 +1261,52 @@ natsOptions_SetNKey(natsOptions             *opts,
         opts->userJWTHandler = NULL;
         opts->userJWTClosure = NULL;
     }
+    UNLOCK_OPTS(opts);
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_SetNKeyFromSeed(natsOptions *opts,
+                            const char  *pubKey,
+                            const char  *seedFile)
+{
+    natsStatus  s;
+    char        *nk = NULL;
+    userCreds   *uc = NULL;
+
+    LOCK_AND_CHECK_OPTIONS(opts,
+        (!nats_IsStringEmpty(pubKey) && nats_IsStringEmpty(seedFile)));
+
+    if (!nats_IsStringEmpty(pubKey))
+    {
+        nk = NATS_STRDUP(pubKey);
+        if (nk == NULL)
+        {
+            UNLOCK_OPTS(opts);
+            return nats_setDefaultError(NATS_NO_MEMORY);
+        }
+        s = _createUserCreds(&uc, true, NULL, seedFile);
+        if (s != NATS_OK)
+        {
+            NATS_FREE(nk);
+            UNLOCK_OPTS(opts);
+            return NATS_UPDATE_ERR_STACK(s);
+        }
+    }
+
+    // Free previous values
+    NATS_FREE(opts->nkey);
+    _freeUserCreds(opts->userCreds);
+
+    // Set new values
+    opts->nkey       = nk;
+    opts->sigHandler = (nk == NULL ? NULL : natsConn_signatureHandler);
+    opts->sigClosure = (nk == NULL ? NULL : (void*) uc);
+    opts->userCreds  = (nk == NULL ? NULL : uc);
+    // NKey and JWT mutually exclusive
+    opts->userJWTHandler = NULL;
+    opts->userJWTClosure = NULL;
+
     UNLOCK_OPTS(opts);
     return NATS_OK;
 }
@@ -1393,12 +1442,18 @@ natsOptions_clone(natsOptions *opts)
         cloned->sslCtx = natsSSLCtx_retain(opts->sslCtx);
 
     if ((s == NATS_OK) && (opts->nkey != NULL))
-        s = natsOptions_SetNKey(cloned, opts->nkey, opts->sigHandler, opts->sigClosure);
-
-    if ((s == NATS_OK) && (opts->userCreds != NULL))
+    {
+        if (opts->userCreds != NULL)
+            s = natsOptions_SetNKeyFromSeed(cloned, opts->nkey, opts->userCreds->seedFile);
+        else
+            s = natsOptions_SetNKey(cloned, opts->nkey, opts->sigHandler, opts->sigClosure);
+    }
+    else if ((s == NATS_OK) && (opts->userCreds != NULL))
+    {
         s = natsOptions_SetUserCredentialsFromFiles(cloned,
                                                     opts->userCreds->userOrChainedFile,
                                                     opts->userCreds->seedFile);
+    }
 
     if (s != NATS_OK)
     {

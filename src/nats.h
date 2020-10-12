@@ -604,6 +604,36 @@ nats_SetMessageDeliveryPoolSize(int max);
 NATS_EXTERN void
 nats_ReleaseThreadMemory(void);
 
+/** \brief Signs a given text using the provided private key.
+ *
+ * The key is the encoded string representation of the private key, or seed.
+ * This is what you get when generating an NKey using NATS tooling.
+ *
+ * The input is a string, generally the nonce sent by the server when
+ * accepting a connection.
+ *
+ * This function signs the input and returns the signature through the
+ * output arguments. This call allocates memory necessary to hold
+ * the signature. If this is used as part of the signature callback
+ * passed to #natsOptions_SetNKey(), then the memory will be automatically
+ * freed by the library after the signature has been inserted in the CONNECT
+ * protocol.
+ * If this function is used outside of this context, it is the user responsibility
+ * to free the allocated memory when no longer needed.
+ *
+ * @see natsOptions_SetNKey()
+ *
+ * @param encodedSeed the string encoded private key, also known as seed.
+ * @param input the input to be signed.
+ * @param signature the memory location of allocated memory containing the signed input.
+ * @param signatureLength the size of the allocated signature.
+ */
+NATS_EXTERN natsStatus
+nats_Sign(const char    *encodedSeed,
+          const char    *input,
+          unsigned char **signature,
+          int           *signatureLength);
+
 /** \brief Tear down the library.
  *
  * Releases memory used by the library.
@@ -1666,7 +1696,7 @@ natsOptions_SetUserCredentialsFromFiles(natsOptions *opts,
  * in response sends an `INFO` protocol. That `INFO` protocol, for NATS Server
  * at v2.0.0+, may include a `nonce` for the client to sign.
  *
- * If this option is set, the library will add the NKey publick key `pubKey`
+ * If this option is set, the library will add the NKey public key `pubKey`
  * to the `CONNECT` protocol along with the server's nonce signature resulting
  * from the invocation of the signature handler `sigCB`.
  *
@@ -1688,6 +1718,35 @@ natsOptions_SetNKey(natsOptions             *opts,
                     const char              *pubKey,
                     natsSignatureHandler    sigCB,
                     void                    *sigClosure);
+
+/** \brief Sets the NKey public key and its seed file.
+ *
+ * Any time the library creates a TCP connection to the server, the server
+ * in response sends an `INFO` protocol. That `INFO` protocol, for NATS Server
+ * at v2.0.0+, may include a `nonce` for the client to sign.
+ *
+ * If this option is set, the library will add the NKey public key `pubKey`
+ * to the `CONNECT` protocol along with the server's nonce signature signed
+ * using the private key from the provided seed file. The library takes care
+ * of clearing the memory holding the private key read from the file as soon
+ * as it is no longer needed.
+ *
+ * \note natsOptions_SetNKeyFromSeed() and natsOptions_SetUserCredentialsCallbacks()
+ * or natsOptions_SetUserCredentialsFromFiles() are mutually exclusive.
+ * Calling this function will remove the user JWT callback and replace the
+ * signature handler, that was set with one of the user credentials options,
+ * with this one.
+ *
+ * @see natsSignatureHandler
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param pubKey the user NKey public key.
+ * @param seedFile the name of the file containing the user NKey seed.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetNKeyFromSeed(natsOptions *opts,
+                            const char  *pubKey,
+                            const char  *seedFile);
 
 /** \brief Sets the write deadline.
  *

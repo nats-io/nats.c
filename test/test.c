@@ -20504,6 +20504,64 @@ test_StanPings(void)
 }
 
 static void
+test_StanPingsNoResponder(void)
+{
+    natsStatus          s;
+    natsPid             nPid = NATS_INVALID_PID;
+    natsPid             sPid = NATS_INVALID_PID;
+    stanConnection      *sc = NULL;
+    stanConnOptions     *opts = NULL;
+    struct threadArg    arg;
+
+    nPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(nPid);
+
+    sPid = _startStreamingServer("nats://127.0.0.1:4222", "-ns nats://127.0.0.1:4222", true);
+    CHECK_SERVER_STARTED(sPid);
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        testAllowMillisecInPings = true;
+        s = stanConnOptions_Create(&opts);
+    }
+    if (s == NATS_OK)
+        s = stanConnOptions_SetPings(opts, -50, 5);
+    if (s == NATS_OK)
+        s = stanConnOptions_SetConnectionLostHandler(opts, _stanConnLostCB, (void*) &arg);
+    if (s != NATS_OK)
+    {
+        _destroyDefaultThreadArgs(&arg);
+        stanConnOptions_Destroy(opts);
+        testAllowMillisecInPings = false;
+        FAIL("Unable to setup test");
+    }
+
+    // Connect to Stan
+    test("Connects ok: ")
+    s = stanConnection_Connect(&sc, clusterName, clientName, opts);
+    testCond(s == NATS_OK);
+
+    // Shutdown the streaming server, but not NATS Server
+    _stopServer(sPid);
+
+    // We should get the connection lost callback invoked.
+    test("Connection lost: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    stanConnection_Destroy(sc);
+    stanConnOptions_Destroy(opts);
+    testAllowMillisecInPings = false;
+
+    _stopServer(nPid);
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 test_StanConnectionLostHandlerNotSet(void)
 {
     natsStatus          s;
@@ -21237,6 +21295,7 @@ static testInfo allTests[] =
     {"StanCheckReceivedMsg",            test_StanCheckReceivedvMsg},
     {"StanSubscriptionAckMsg",          test_StanSubscriptionAckMsg},
     {"StanPings",                       test_StanPings},
+    {"StanPingsNoResponder",            test_StanPingsNoResponder},
     {"StanConnectionLostHandlerNotSet", test_StanConnectionLostHandlerNotSet},
     {"StanPingsUnblockPublishCalls",    test_StanPingsUnblockPubCalls},
     {"StanGetNATSConnection",           test_StanGetNATSConnection},

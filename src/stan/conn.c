@@ -161,7 +161,8 @@ stanConn_defaultConnLostHandler(stanConnection *sc, const char* errorTxt, void *
 static void
 _processPingResponse(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    stanConnection *sc = (stanConnection*) closure;
+    stanConnection  *sc  = (stanConnection*) closure;
+    const char      *val = NULL;
 
     if (natsMsg_GetDataLength(msg) > 0)
     {
@@ -183,6 +184,14 @@ _processPingResponse(natsConnection *nc, natsSubscription *sub, natsMsg *msg, vo
             natsMsg_Destroy(msg);
             return;
         }
+    }
+    // Check for no responders
+    else if ((natsMsgHeader_Get(msg, STATUS_HDR, &val) == NATS_OK)
+                && (val != NULL)
+                && (strcmp(val, NO_RESP_STATUS) == 0))
+    {
+        natsMsg_Destroy(msg);
+        return;
     }
     // Do not attempt to decrement, simply reset to 0.
     natsMutex_Lock(sc->pingMu);

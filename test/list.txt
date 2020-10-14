@@ -203,6 +203,7 @@ StanDurableQueueSubscription
 StanCheckReceivedMsg
 StanSubscriptionAckMsg
 StanPings
+StanPingsNoResponder
 StanConnectionLostHandlerNotSet
 StanPingsUnblockPublishCalls
 StanGetNATSConnection

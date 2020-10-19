@@ -111,7 +111,6 @@ struct threadArg
     testCheckInfoCB checkInfoCB;
     natsSock        sock;
 
-
     natsSubscription *sub;
     natsOptions      *opts;
     natsConnection   *nc;
@@ -122,6 +121,12 @@ struct threadArg
     const char*      channel;
     stanMsg          *sMsg;
 #endif
+
+    int              attached;
+    int              detached;
+    bool             evStop;
+    bool             doRead;
+    bool             doWrite;
 
 };
 
@@ -18028,6 +18033,193 @@ test_HeadersBasic(void)
     _stopServer(pid);
 }
 
+static natsStatus
+_evLoopAttach(void **userData, void *loop, natsConnection *nc, natsSock socket)
+{
+    struct threadArg *arg = (struct threadArg *) loop;
+
+    natsMutex_Lock(arg->m);
+    *userData = arg;
+    arg->nc = nc;
+    arg->sock = socket;
+    arg->attached++;
+    arg->doRead = true;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+
+    return NATS_OK;
+}
+
+static natsStatus
+_evLoopRead(void *userData, bool add)
+{
+    struct threadArg *arg = (struct threadArg *) userData;
+
+    natsMutex_Lock(arg->m);
+    arg->doRead = add;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+
+    return NATS_OK;
+}
+
+static natsStatus
+_evLoopWrite(void *userData, bool add)
+{
+    struct threadArg *arg = (struct threadArg *) userData;
+
+    natsMutex_Lock(arg->m);
+    arg->doWrite = add;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+
+    return NATS_OK;
+}
+
+static natsStatus
+_evLoopDetach(void *userData)
+{
+    struct threadArg *arg = (struct threadArg *) userData;
+
+    natsMutex_Lock(arg->m);
+    arg->detached++;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+
+    return NATS_OK;
+}
+
+static void
+_eventLoop(void *closure)
+{
+    struct threadArg *arg = (struct threadArg *) closure;
+    natsSock         sock = NATS_SOCK_INVALID;
+    natsConnection   *nc  = NULL;
+    bool             read = false;
+    bool             write= false;
+    bool             stop = false;
+
+    while (!stop)
+    {
+        nats_Sleep(100);
+        natsMutex_Lock(arg->m);
+        while (!arg->evStop && ((sock = arg->sock) == NATS_SOCK_INVALID))
+            natsCondition_Wait(arg->c, arg->m);
+        stop = arg->evStop;
+        nc = arg->nc;
+        read = arg->doRead;
+        write = arg->doWrite;
+        natsMutex_Unlock(arg->m);
+
+        if (read)
+            natsConnection_ProcessReadEvent(nc);
+        if (write)
+            natsConnection_ProcessWriteEvent(nc);
+    }
+}
+
+static void
+test_EventLoop(void)
+{
+    natsStatus          s;
+    natsConnection      *nc         = NULL;
+    natsOptions         *opts       = NULL;
+    natsSubscription    *sub        = NULL;
+    natsMsg             *msg        = NULL;
+    natsPid             pid         = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    test("Set options: ");
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 100));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 50));
+    IFOK(s, natsOptions_SetEventLoop(opts, (void*) &arg,
+                                     _evLoopAttach,
+                                     _evLoopRead,
+                                     _evLoopWrite,
+                                     _evLoopDetach));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    testCond(s == NATS_OK);
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Start event loop: ");
+    natsMutex_Lock(arg.m);
+    arg.sock = NATS_SOCK_INVALID;
+    natsMutex_Unlock(arg.m);
+    s = natsThread_Create(&arg.t, _eventLoop, (void*) &arg);
+    testCond(s == NATS_OK);
+
+    test("Connect: ");
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK)
+
+    test("Create sub: ");
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    testCond(s == NATS_OK);
+
+    test("Stop server and wait for disconnect: ");
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Restart server: ");
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(s == NATS_OK);
+
+    test("Wait for reconnect: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Publish: ");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "bar"));
+    testCond(s == NATS_OK);
+
+    test("Check msg received: ");
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+
+    test("Close and wait for close cb: ");
+    natsConnection_Close(nc);
+    _waitForConnClosed(&arg);
+    testCond(s == NATS_OK);
+
+    natsMutex_Lock(arg.m);
+    arg.evStop = true;
+    natsCondition_Broadcast(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsThread_Join(arg.t);
+    natsThread_Destroy(arg.t);
+
+    test("Check ev loop: ");
+    natsMutex_Lock(arg.m);
+    if (arg.attached != 2 || !arg.detached)
+        s = NATS_ERR;
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(pid);
+}
+
 static void
 test_SSLBasic(void)
 {
@@ -18821,6 +19013,67 @@ test_SSLConnectVerboseOption(void)
         nats_Sleep(900);
 
     _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
+#if defined(NATS_HAS_TLS)
+static natsStatus
+_elDummyAttach(void **userData, void *loop, natsConnection *nc, natsSock socket) { return NATS_OK; }
+
+static natsStatus
+_elDummyRead(void *userData, bool add) { return NATS_OK; }
+
+static natsStatus
+_elDummyWrite(void *userData, bool add) { return NATS_OK; }
+
+static natsStatus
+_elDummyDetach(void *userData) { return NATS_OK; }
+#endif
+
+static void
+test_SSLSocketLeakWithEventLoop(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+    {
+        // Not really using a real event loop, just setting the option.
+        s = natsOptions_SetEventLoop(opts, (void*) 1,
+                                     _elDummyAttach,
+                                     _elDummyRead,
+                                     _elDummyWrite,
+                                     _elDummyDetach);
+    }
+    if (s == NATS_OK)
+        s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
+    if (s == NATS_OK)
+        s = natsOptions_SetSecure(opts, true);
+    if (opts == NULL)
+        FAIL("Unable to setup test!");
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    // The options have not been set properly for a successful TLS connection.
+    test("Check that SSL fails: ");
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&nc, opts);
+    testCond(s != NATS_OK);
+
+    // Valgrind will tell us if we have leaked socket.
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
 
     _stopServer(serverPid);
 #else
@@ -21243,6 +21496,7 @@ static testInfo allTests[] =
     {"WriteDeadline",                   test_WriteDeadline},
     {"HeadersNotSupported",             test_HeadersNotSupported},
     {"HeadersBasic",                    test_HeadersBasic},
+    {"EventLoop",                       test_EventLoop},
     {"SSLBasic",                        test_SSLBasic},
     {"SSLVerify",                       test_SSLVerify},
     {"SSLCAFromMemory",                 test_SSLLoadCAFromMemory},
@@ -21252,6 +21506,7 @@ static testInfo allTests[] =
     {"SSLCiphers",                      test_SSLCiphers},
     {"SSLMultithreads",                 test_SSLMultithreads},
     {"SSLConnectVerboseOption",         test_SSLConnectVerboseOption},
+    {"SSLSocketLeakEventLoop",          test_SSLSocketLeakWithEventLoop},
 
     // Clusters Tests
 

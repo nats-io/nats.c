@@ -157,6 +157,7 @@ WriteDeadline
 HeadersNotSupported
 HeadersBasic
 EventLoop
+EventLoopRetryOnFailedConnect
 SSLBasic
 SSLVerify
 SSLCAFromMemory

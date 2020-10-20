@@ -18221,6 +18221,94 @@ test_EventLoop(void)
 }
 
 static void
+test_EventLoopRetryOnFailedConnect(void)
+{
+    natsStatus          s;
+    natsConnection      *nc         = NULL;
+    natsOptions         *opts       = NULL;
+    natsSubscription    *sub        = NULL;
+    natsMsg             *msg        = NULL;
+    natsPid             pid         = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    test("Set options: ");
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 100));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 50));
+    IFOK(s, natsOptions_SetRetryOnFailedConnect(opts,
+                                                true,
+                                                _connectedCb,
+                                                (void*) &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetEventLoop(opts, (void*) &arg,
+                                     _evLoopAttach,
+                                     _evLoopRead,
+                                     _evLoopWrite,
+                                     _evLoopDetach));
+    testCond(s == NATS_OK);
+
+    test("Start event loop: ");
+    natsMutex_Lock(arg.m);
+    arg.sock = NATS_SOCK_INVALID;
+    natsMutex_Unlock(arg.m);
+    s = natsThread_Create(&arg.t, _eventLoop, (void*) &arg);
+    testCond(s == NATS_OK);
+
+    test("Start connect: ");
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_NOT_YET_CONNECTED);
+    if (s == NATS_NOT_YET_CONNECTED)
+        s = NATS_OK;
+
+    test("Create sub: ");
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    testCond(s == NATS_OK);
+
+    test("Start server: ");
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(s == NATS_OK);
+
+    test("Check connected: ");
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.connected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Publish: ");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "bar"));
+    testCond(s == NATS_OK);
+
+    test("Check msg received: ");
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+
+    test("Close and wait for close cb: ");
+    natsConnection_Close(nc);
+    _waitForConnClosed(&arg);
+    testCond(s == NATS_OK);
+
+    natsMutex_Lock(arg.m);
+    arg.evStop = true;
+    natsCondition_Broadcast(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsThread_Join(arg.t);
+    natsThread_Destroy(arg.t);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(pid);
+}
+
+static void
 test_SSLBasic(void)
 {
 #if defined(NATS_HAS_TLS)
@@ -21497,6 +21585,7 @@ static testInfo allTests[] =
     {"HeadersNotSupported",             test_HeadersNotSupported},
     {"HeadersBasic",                    test_HeadersBasic},
     {"EventLoop",                       test_EventLoop},
+    {"EventLoopRetryOnFailedConnect",   test_EventLoopRetryOnFailedConnect},
     {"SSLBasic",                        test_SSLBasic},
     {"SSLVerify",                       test_SSLVerify},
     {"SSLCAFromMemory",                 test_SSLLoadCAFromMemory},

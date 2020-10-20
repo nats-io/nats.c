@@ -1412,7 +1412,9 @@ _doReconnect(void *arg)
     natsConn_Lock(nc);
 
     // For external event loop, wait for the socket to be closed.
-    while ((nc->opts->evLoop != NULL) && !nc->el.sockClosed)
+    // However, if we are here on initial connect failure (with option
+    // RetryOnFailedConnect) then there was no opened socket, so no need to wait.
+    while (!nc->initc && (nc->opts->evLoop != NULL) && !nc->el.sockClosed)
         natsCondition_Wait(nc->el.cond, nc->mu);
 
     // Kick out all calls to natsConnection_Flush[Timeout]().

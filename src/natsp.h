@@ -531,6 +531,8 @@ struct __natsConnection
         bool            writeAdded;
         void            *buffer;
         void            *data;
+        natsCondition   *cond;
+        bool            sockClosed;
     } el;
 };
 

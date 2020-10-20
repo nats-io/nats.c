@@ -156,6 +156,8 @@ ConnSign
 WriteDeadline
 HeadersNotSupported
 HeadersBasic
+EventLoop
+EventLoopRetryOnFailedConnect
 SSLBasic
 SSLVerify
 SSLCAFromMemory
@@ -165,6 +167,7 @@ SSLSkipServerVerification
 SSLCiphers
 SSLMultithreads
 SSLConnectVerboseOption
+SSLSocketLeakEventLoop
 ServersOption
 AuthServers
 AuthFailToReconnect

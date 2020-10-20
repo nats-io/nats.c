@@ -203,7 +203,6 @@ _freeConn(natsConnection *nc)
     natsMutex_Destroy(nc->subsMu);
     natsTimer_Destroy(nc->drainTimer);
     natsMutex_Destroy(nc->mu);
-    natsCondition_Destroy(nc->el.cond);
 
     NATS_FREE(nc);
 
@@ -1411,12 +1410,6 @@ _doReconnect(void *arg)
 
     natsConn_Lock(nc);
 
-    // For external event loop, wait for the socket to be closed.
-    // However, if we are here on initial connect failure (with option
-    // RetryOnFailedConnect) then there was no opened socket, so no need to wait.
-    while (!nc->initc && (nc->opts->evLoop != NULL) && !nc->el.sockClosed)
-        natsCondition_Wait(nc->el.cond, nc->mu);
-
     // Kick out all calls to natsConnection_Flush[Timeout]().
     _clearPendingFlushRequests(nc);
 
@@ -1846,7 +1839,6 @@ _processConnInit(natsConnection *nc)
             // Set this first in case the event loop triggers the first READ
             // event just after this call returns.
             nc->sockCtx.useEventLoop = true;
-            _retain(nc);
 
             s = nc->opts->evCbs.attach(&(nc->el.data),
                                        nc->opts->evLoop,
@@ -1859,7 +1851,6 @@ _processConnInit(natsConnection *nc)
             else
             {
                 nc->sockCtx.useEventLoop = false;
-                _release(nc);
 
                 nats_setError(s,
                               "Error attaching to the event loop: %d - %s",
@@ -1979,6 +1970,20 @@ _connect(natsConnection *nc)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_evStopPolling(natsConnection *nc)
+{
+    natsStatus s;
+
+    nc->sockCtx.useEventLoop = false;
+    nc->el.writeAdded = false;
+    s = nc->opts->evCbs.read(nc->el.data, NATS_EVENT_ACTION_REMOVE);
+    if (s == NATS_OK)
+        s = nc->opts->evCbs.write(nc->el.data, NATS_EVENT_ACTION_REMOVE);
+
+    return s;
+}
+
 // _processOpError handles errors from reading or parsing the protocol.
 // The lock should not be held entering this function.
 static bool
@@ -2021,13 +2026,9 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
         // on the socket since we are going to reconnect.
         if (nc->el.attached)
         {
-            // Stop polling for WRITE events on that socket. However,
-            // keep the READ event because this will be used to close
-            // the socket and notify the reconnect thread.
-            nc->sockCtx.useEventLoop = false;
-            nc->el.sockClosed = false;
-            nc->el.writeAdded = false;
-            ls = nc->opts->evCbs.write(nc->el.data, NATS_EVENT_ACTION_REMOVE);
+            ls = _evStopPolling(nc);
+            natsSock_Close(nc->sockCtx.fd);
+            nc->sockCtx.fd = NATS_SOCK_INVALID;
         }
 
         // Create the pending buffer to hold all write requests while we try
@@ -2339,16 +2340,6 @@ _removeAllSubscriptions(natsConnection *nc)
     natsMutex_Unlock(nc->subsMu);
 }
 
-static void
-_evLoopSignalReconnectThread(natsConnection *nc)
-{
-    if (nc->opts->evLoop != NULL)
-    {
-        nc->el.sockClosed = true;
-        natsCondition_Signal(nc->el.cond);
-    }
-}
-
 // Low level close call that will do correct cleanup and set
 // desired status. Also controls whether user defined callbacks
 // will be triggered. The lock should not be held entering this
@@ -2406,12 +2397,15 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     // Go ahead and make sure we have flushed the outbound buffer.
     if (nc->sockCtx.fdActive)
     {
-        // If there is no readLoop, then it is our responsibility to close
-        // the socket. Otherwise, _readLoop is the one doing it.
-        // This is also the case if we use an external event loop but the
-        // connection is closed before the event loop is attached.
-        if ((ttj.readLoop == NULL) && ((nc->opts->evLoop == NULL) || !nc->el.attached))
+        // If there is no readLoop (or using external event loop), then it is
+        // our responsibility to close the socket. Otherwise, _readLoop is the
+        // one doing it.
+        if (ttj.readLoop == NULL)
         {
+            // If event loop attached, stop polling...
+            if (nc->el.attached)
+                _evStopPolling(nc);
+
             natsSock_Close(nc->sockCtx.fd);
             nc->sockCtx.fd = NATS_SOCK_INVALID;
 
@@ -2437,10 +2431,6 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
 
     sub = nc->respMux;
     nc->respMux = NULL;
-
-    // If we use an external event loop, make sure that we release the reconnect
-    // thread that is possibly waiting to be notified that the socket is closed.
-    _evLoopSignalReconnectThread(nc);
 
     natsConn_Unlock(nc);
 
@@ -3077,8 +3067,6 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
         s = natsCondition_Create(&(nc->pongs.cond));
     if (s == NATS_OK)
         s = natsCondition_Create(&(nc->reconnectCond));
-    if ((s == NATS_OK) && (nc->opts->evLoop != NULL))
-        s = natsCondition_Create(&(nc->el.cond));
 
     if (s == NATS_OK)
         *newConn = nc;
@@ -3834,37 +3822,9 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
 
     natsConn_Lock(nc);
 
-    if (!nc->el.attached || natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
+    if (!(nc->el.attached) || (nc->sockCtx.fd == NATS_SOCK_INVALID))
     {
-        bool release = false;
-
-        // When the library shuts down the socket, the external event loop library
-        // will invoke this function. It is now safe to close the socket.
-        if (nc->sockCtx.fd != NATS_SOCK_INVALID)
-        {
-            natsSock_Close(nc->sockCtx.fd);
-            nc->sockCtx.fd = NATS_SOCK_INVALID;
-            release = true;
-        }
-        // If we are reconnecting, signal the reconnect thread that we are
-        // now ready to proceed with the reconnect.
-        if (natsConn_isReconnecting(nc) && !nc->el.sockClosed)
-        {
-            nc->opts->evCbs.read(nc->el.data, NATS_EVENT_ACTION_REMOVE);
-            _evLoopSignalReconnectThread(nc);
-        }
-        // If this is the final close for this connection, we need to
-        // cleanup some things if the connection was SSL. This would
-        // normally be done at the end of the _readLoop for clients that
-        // don't use an external event loop.
-        if (natsConn_isClosed(nc) && (nc->sockCtx.ssl != NULL))
-            natsConn_clearSSL(nc);
-
         natsConn_Unlock(nc);
-
-        if (release)
-            natsConn_release(nc);
-
         return;
     }
 

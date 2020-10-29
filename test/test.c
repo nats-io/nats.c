@@ -3990,6 +3990,27 @@ _testHeader(const char *testName, char *buf, natsStatus expected, const char *er
 }
 
 static void
+_testStatus(const char *testName, char *buf, const char *expectedStatus, const char *expectedDescription)
+{
+    natsStatus  s     = NATS_OK;
+    natsMsg     *msg  = NULL;
+    const char  *sts  = NULL;
+    const char  *desc = NULL;
+
+    test(testName);
+    s = natsMsg_create(&msg, "foo", 3, NULL, 0, buf, (int)strlen(buf), (int) strlen(buf));
+    IFOK(s, natsMsgHeader_Get(msg, STATUS_HDR, &sts));
+    IFOK(s, natsMsgHeader_Get(msg, DESCRIPTION_HDR, &desc));
+    testCond((s == (expectedDescription == NULL ? NATS_NOT_FOUND : NATS_OK)
+            && ((sts != NULL) && (strcmp(sts, expectedStatus) == 0))
+            && (expectedDescription == NULL
+                    ? desc == NULL
+                    : ((desc != NULL) && (strcmp(desc, expectedDescription) == 0)))));
+
+    natsMsg_Destroy(msg);
+}
+
+static void
 test_natsMsgHeadersLift(void)
 {
     char buf[512];
@@ -4029,6 +4050,17 @@ test_natsMsgHeadersLift(void)
 
     snprintf(buf, sizeof(buf), "%sk:       \r\n\r\n", HDR_LINE);
     _testHeader("No value (extra spaces): ", buf, NATS_PROTOCOL_ERROR, "no value found for key", NULL, NULL);
+
+    // Check status description in header line prefix...
+
+    snprintf(buf, sizeof(buf), "%s 503\r\n\r\n", HDR_LINE_PRE);
+    _testStatus("Status no description: ", buf, "503", NULL);
+
+    snprintf(buf, sizeof(buf), "%s 503 No Responders\r\n\r\n", HDR_LINE_PRE);
+    _testStatus("Status with description: ", buf, "503", "No Responders");
+
+    snprintf(buf, sizeof(buf), "%s   404    No Messages  \r\n\r\n", HDR_LINE_PRE);
+    _testStatus("Status with description (extra spaces): ", buf, "404", "No Messages");
 }
 
 static void

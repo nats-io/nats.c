@@ -342,7 +342,7 @@ _checkNoResponder(natsMsg *m)
     // from user and will be returned to caller.
     if ((s != NATS_OK)
         || (val == NULL)
-        || ((int) strlen(val) != NO_RESP_STATUS_LEN)
+        || ((int) strlen(val) != HDR_STATUS_LEN)
         || (strcmp(val, NO_RESP_STATUS) != 0))
     {
         return NATS_OK;

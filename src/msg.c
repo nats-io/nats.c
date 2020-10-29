@@ -445,7 +445,39 @@ _liftHeaders(natsMsg *msg)
 
         // Check if we have an inlined status.
         if ((sts != NULL) && (*sts != '\0'))
-            s = natsMsgHeader_Set(msg, STATUS_HDR, (const char*) sts);
+        {
+            char *desc = NULL;
+
+            // There could be a description...
+            if (strlen(sts) > HDR_STATUS_LEN)
+            {
+                char descByte = 0;
+                char *endDesc = NULL;
+
+                descByte = *(sts + HDR_STATUS_LEN);
+                *(sts + HDR_STATUS_LEN) = '\0';
+
+                s = natsMsgHeader_Set(msg, STATUS_HDR, (const char*) sts);
+                if (s == NATS_OK)
+                {
+                    *(sts + HDR_STATUS_LEN) = descByte;
+
+                    desc = sts + HDR_STATUS_LEN;
+                    while ((*desc != '\0') && isspace((int) *desc))
+                        desc++;
+
+                    endDesc = (char*) (desc + (int) strlen(desc) - 1);
+                    while ((endDesc != desc) && isspace((int) *endDesc))
+                    {
+                        *endDesc = '\0';
+                        endDesc--;
+                    }
+                    s = natsMsgHeader_Set(msg, DESCRIPTION_HDR, (const char*) desc);
+                }
+            }
+            else
+                s = natsMsgHeader_Set(msg, STATUS_HDR, (const char*) sts);
+        }
     }
 
     return NATS_UPDATE_ERR_STACK(s);

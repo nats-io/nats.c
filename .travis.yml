@@ -6,8 +6,6 @@ cache:
   directories:
   - $HOME/deps
 
-sudo: false
-
 compiler:
   - gcc
   - clang
@@ -24,7 +22,7 @@ before_script:
 env:
   - DO_COVERAGE="coverage" BUILD_OPT="-DNATS_COVERAGE=ON -DNATS_BUILD_ARCH=64 -DNATS_BUILD_TYPE=Debug -DNATS_COVERAGE_UPLOAD=ON -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON -DCMAKE_BUILD_TYPE=Debug"
 
-matrix:
+jobs:
   include:
 
     - name: "gcc-9 - TLS OFF"

@@ -4056,10 +4056,19 @@ test_natsMsgHeadersLift(void)
     snprintf(buf, sizeof(buf), "%s 503\r\n\r\n", HDR_LINE_PRE);
     _testStatus("Status no description: ", buf, "503", NULL);
 
+    snprintf(buf, sizeof(buf), "%s  503 \r\n\r\n", HDR_LINE_PRE);
+    _testStatus("Status no description (extra space): ", buf, "503", NULL);
+
+    snprintf(buf, sizeof(buf), "%s  503  \r\n\r\n", HDR_LINE_PRE);
+    _testStatus("Status no description (extra spaces): ", buf, "503", NULL);
+
     snprintf(buf, sizeof(buf), "%s 503 No Responders\r\n\r\n", HDR_LINE_PRE);
     _testStatus("Status with description: ", buf, "503", "No Responders");
 
-    snprintf(buf, sizeof(buf), "%s   404    No Messages  \r\n\r\n", HDR_LINE_PRE);
+    snprintf(buf, sizeof(buf), "%s 404 No Messages \r\n\r\n", HDR_LINE_PRE);
+    _testStatus("Status with description (extra space): ", buf, "404", "No Messages");
+
+    snprintf(buf, sizeof(buf), "%s  404   No Messages   \r\n\r\n", HDR_LINE_PRE);
     _testStatus("Status with description (extra spaces): ", buf, "404", "No Messages");
 }
 

@@ -446,33 +446,43 @@ _liftHeaders(natsMsg *msg)
         // Check if we have an inlined status.
         if ((sts != NULL) && (*sts != '\0'))
         {
-            char *desc = NULL;
-
             // There could be a description...
             if (strlen(sts) > HDR_STATUS_LEN)
             {
-                char descByte = 0;
-                char *endDesc = NULL;
+                char *desc = (char*) (sts + HDR_STATUS_LEN);
+                char descb = 0;
 
-                descByte = *(sts + HDR_STATUS_LEN);
-                *(sts + HDR_STATUS_LEN) = '\0';
+                // Save byte that starts the description
+                descb = *desc;
+                // Replace with '\0' to end the status.
+                *desc = '\0';
 
+                // Set status value (this will make a copy)
                 s = natsMsgHeader_Set(msg, STATUS_HDR, (const char*) sts);
                 if (s == NATS_OK)
                 {
-                    *(sts + HDR_STATUS_LEN) = descByte;
+                    char *desce = NULL;
 
-                    desc = sts + HDR_STATUS_LEN;
+                    // Restore character of starting description
+                    *desc = descb;
+                    // Trim left spaces
                     while ((*desc != '\0') && isspace((int) *desc))
                         desc++;
 
-                    endDesc = (char*) (desc + (int) strlen(desc) - 1);
-                    while ((endDesc != desc) && isspace((int) *endDesc))
+                    // If we are not at the end of description
+                    if (*desc != '\0')
                     {
-                        *endDesc = '\0';
-                        endDesc--;
+                        // Go to end of description and walk back to trim right.
+                        desce = (char*) (desc + (int) strlen(desc) - 1);
+                        while ((desce != desc) && isspace((int) *desce))
+                        {
+                            *desce = '\0';
+                            desce--;
+                        }
                     }
-                    s = natsMsgHeader_Set(msg, DESCRIPTION_HDR, (const char*) desc);
+                    // If there is a description, set the value (this will make a copy)
+                    if (*desc != '\0')
+                        s = natsMsgHeader_Set(msg, DESCRIPTION_HDR, (const char*) desc);
                 }
             }
             else

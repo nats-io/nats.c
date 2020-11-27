@@ -163,7 +163,7 @@ natsLibevent_Attach(void **userData, void *loop, natsConnection *nc, natsSock so
  * This callback is invoked to notify that the event library should start
  * or stop polling for READ events.
  *
- * @param userData the user object created in #natsLibuv_Attach
+ * @param userData the user object created in #natsLibevent_Attach
  * @param add `true` if the library needs to start polling, `false` otherwise.
  */
 natsStatus
@@ -185,7 +185,7 @@ natsLibevent_Read(void *userData, bool add)
  * This callback is invoked to notify that the event library should start
  * or stop polling for WRITE events.
  *
- * @param userData the user object created in #natsLibuv_Attach
+ * @param userData the user object created in #natsLibevent_Attach
  * @param add `true` if the library needs to start polling, `false` otherwise.
  */
 natsStatus
@@ -208,7 +208,7 @@ natsLibevent_Write(void *userData, bool add)
  * callback will be invoked. This is the opportunity to cleanup the state
  * maintained by the adapter for this connection.
  *
- * @param userData the user object created in #natsLibuv_Attach
+ * @param userData the user object created in #natsLibevent_Attach
  */
 natsStatus
 natsLibevent_Detach(void *userData)

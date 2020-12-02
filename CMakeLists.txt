@@ -51,8 +51,8 @@ if(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
   set(NATS_BUILD_TLS_USE_OPENSSL_1_1_API ON)
 endif(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
 
-set(LIBUV_DIR "/usr/local/" CACHE PATH "Libuv install directory")
-set(LIBEVENT_DIR "/usr/local/" CACHE PATH "Libevent install directory")
+set(LIBUV_DIR "" CACHE PATH "Libuv install directory")
+set(LIBEVENT_DIR "" CACHE PATH "Libevent install directory")
 
 set(NATS_DOC_PROJECT_NAME "NATS C Client")
 if(NATS_BUILD_STREAMING)

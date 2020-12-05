@@ -7209,6 +7209,29 @@ test_ConnectToWithMultipleURLs(void)
     _stopServer(serverPid);
 }
 
+static void
+test_ConnectionToWithNullURLs(void)
+{
+    natsStatus      s;
+    natsConnection  *nc       = NULL;
+    natsPid         serverPid = NATS_INVALID_PID;
+    char            buf[256];
+
+    test("Check NULL URLs: ");
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_ConnectTo(&nc, NULL);
+    if (s == NATS_OK)
+        s = natsConnection_Flush(nc);
+    if (s == NATS_OK)
+        s = natsConnection_GetConnectedUrl(nc, buf, sizeof(buf));
+
+    testCond((s == NATS_OK) && (strcmp(buf, NATS_DEFAULT_URL) == 0));
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
 
 static void
 test_ConnectionWithNullOptions(void)
@@ -21525,6 +21548,7 @@ static testInfo allTests[] =
     {"UseDefaultURLIfNoServerSpecified",test_UseDefaultURLIfNoServerSpecified},
     {"ConnectToWithMultipleURLs",       test_ConnectToWithMultipleURLs},
     {"ConnectionWithNULLOptions",       test_ConnectionWithNullOptions},
+    {"ConnectionToWithNullURLs",        test_ConnectionToWithNullURLs},
     {"ConnectionStatus",                test_ConnectionStatus},
     {"ConnClosedCB",                    test_ConnClosedCB},
     {"CloseDisconnectedCB",             test_CloseDisconnectedCB},

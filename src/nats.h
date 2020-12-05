@@ -2545,6 +2545,8 @@ natsConnection_ProcessWriteEvent(natsConnection *nc);
  * @param nc the location where to store the pointer to the newly created
  * #natsConnection object.
  * @param urls the URL to connect to, or the list of URLs to chose from.
+ * If `NULL` this call is equivalent to #natsConnection_ConnectTo()
+ * with #NATS_DEFAULT_URL
  */
 NATS_EXTERN natsStatus
 natsConnection_ConnectTo(natsConnection **nc, const char *urls);

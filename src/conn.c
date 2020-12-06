@@ -3117,11 +3117,14 @@ _processUrlString(natsOptions *opts, const char *urls)
     char        *ptr         = NULL;
     int         len;
 
-    ptr = (char*) urls;
-    while ((ptr = strchr(ptr, ',')) != NULL)
+    if (urls != NULL)
     {
-        ptr++;
-        count++;
+        ptr = (char*) urls;
+        while ((ptr = strchr(ptr, ',')) != NULL)
+        {
+            ptr++;
+            count++;
+        }
     }
     if (count == 0)
         return natsOptions_SetURL(opts, urls);

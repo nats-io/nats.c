@@ -3026,16 +3026,18 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     natsConnection  *nc = NULL;
 
     s = nats_Open(-1);
+    if (s == NATS_OK)
+    {
+        nc = NATS_CALLOC(1, sizeof(natsConnection));
+        if (nc == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
     if (s != NATS_OK)
-        return s;
-
-    nc = NATS_CALLOC(1, sizeof(natsConnection));
-    if (nc == NULL)
     {
         // options have been cloned or created for the connection,
         // which was supposed to take ownership, so destroy it now.
         natsOptions_Destroy(options);
-        return nats_setDefaultError(NATS_NO_MEMORY);
+        return NATS_UPDATE_ERR_STACK(s);
     }
 
     natsLib_Retain();
@@ -3182,7 +3184,13 @@ natsConnection_ConnectTo(natsConnection **newConn, const char *url)
 
     s = natsOptions_Create(&opts);
     if (s == NATS_OK)
+    {
         s = _processUrlString(opts, url);
+        // We still own the options at this point (until the call to natsConn_create())
+        // so if there was an error, we need to destroy the options now.
+        if (s != NATS_OK)
+            natsOptions_Destroy(opts);
+    }
     if (s == NATS_OK)
         s = natsConn_create(&nc, opts);
     if (s == NATS_OK)

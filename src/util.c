@@ -15,8 +15,10 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <limits.h>
 
 #include "util.h"
 #include "mem.h"
@@ -64,13 +66,15 @@ static uint16_t crc16tab[256] = {
     0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0,
 };
 
-// parseInt64 expects decimal positive numbers. We
-// return -1 to signal error
+// parseInt64 expects decimal positive numbers.
+// Leading and trailing white-spaces not allowed.
+// returns -1 to signal error.
 int64_t
 nats_ParseInt64(const char *d, int dLen)
 {
     int     i;
     char    dec;
+    int64_t k;
     int64_t n = 0;
 
     if (dLen == 0)
@@ -82,10 +86,44 @@ nats_ParseInt64(const char *d, int dLen)
         if ((dec < ASCII_0) || (dec > ASCII_9))
             return -1;
 
-        n = (n * 10) + ((int64_t)dec - ASCII_0);
+        k = ((int64_t)dec - ASCII_0);
+
+        // Overflow
+        if (((n * 10) > (INT64_MAX - k)) || (n > (INT64_MAX / 10)))
+            return -1;
+
+        n = (n * 10) + k;
     }
 
     return n;
+}
+
+// nats_ParseInt expects decimal integer numbers.
+// Discard white-spaces if any
+// returns false to signal errors
+bool
+nats_ParseInt(const char *d, int *val)
+{
+    char *end;
+    long ret;
+
+    errno = 0;
+    ret = strtol(d, &end, 10);
+
+#if (INT_MAX != LONG_MAX) && (INT_MIN != LONG_MIN)
+    if ((ret > INT_MAX) || (ret < INT_MIN))
+        errno = ERANGE;
+#endif
+    // Discard trailing spaces
+    while ((*end != '\0') && isspace(*end))
+        end++;
+
+    // Not parsed, some remaining char or out of range
+    if ((d == end) || (*end != '\0') || (errno != 0))
+        return false;
+
+    *val = (int)ret;
+    return true;
 }
 
 natsStatus

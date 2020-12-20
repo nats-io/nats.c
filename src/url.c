@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include "mem.h"
+#include "util.h"
 
 void
 natsUrl_Destroy(natsUrl *url)
@@ -40,7 +41,10 @@ _parseHostAndPort(natsUrl *url, char *host, bool uInfo)
     if (sport != NULL)
     {
         if (sport[1] != '\0')
-            url->port = atoi(sport + 1);
+        {
+            if (!nats_ParseInt(sport + 1, &(url->port)))
+                return nats_setDefaultError(NATS_INVALID_ARG);
+        }
 
         *sport = '\0';
     }

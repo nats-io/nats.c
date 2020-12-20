@@ -69,6 +69,9 @@ typedef struct
 int64_t
 nats_ParseInt64(const char *d, int dLen);
 
+bool
+nats_ParseInt(const char *d, int *val);
+
 natsStatus
 nats_ParseControl(natsControl *control, const char *line);
 

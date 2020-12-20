@@ -583,6 +583,26 @@ test_natsParseInt64(void)
     n = nats_ParseInt64("12", 2);
     testCond(n == 12);
 
+    test("Parse with '-12': ");
+    n = nats_ParseInt64("-12", 3);
+    testCond(n == -1);
+
+    test("Parse with trailing spaces: ");
+    n = nats_ParseInt64("12 ", 3);
+    testCond(n == -1);
+
+    test("Parse with leading spaces: ");
+    n = nats_ParseInt64(" 12", 3);
+    testCond(n == -1);
+
+    test("Parse with 'INT64_MAX': ");
+    n = nats_ParseInt64("9223372036854775807", 19);
+    testCond(n == INT64_MAX);
+
+    test("Parse with overflow: ");
+    n = nats_ParseInt64("9223372036854775809", 19);
+    testCond(n == -1);
+
     test("Parse with '12345': ");
     n = nats_ParseInt64("12345", 5);
     testCond(n == 12345);
@@ -590,6 +610,38 @@ test_natsParseInt64(void)
     test("Parse with '123.45': ");
     n = nats_ParseInt64("123.45", 6);
     testCond(n == -1);
+}
+
+static void
+test_natsParseInt(void)
+{
+    int val = 0;
+
+    test("Parse with non numeric: ");
+    testCond(!nats_ParseInt("a", &val));
+
+    test("Parse with numeric and not numeric: ");
+    testCond(!nats_ParseInt("123a", &val));
+
+    test("Parse with numeric, not numeric and space: ");
+    testCond(!nats_ParseInt("123 a", &val));
+
+    test("Parse with '123.45': ");
+    testCond(!nats_ParseInt("123.45", &val));
+
+    test("Parse with overflow: ");
+    testCond(!nats_ParseInt("9223372036854775808123", &val));
+
+    test("Parse with underflow: ");
+    testCond(!nats_ParseInt("-9223372036854775808123", &val));
+
+    test("Parse with trailing spaces: ");
+    testCond(nats_ParseInt("123 ", &val));
+    testCond(val == 123);
+
+    test("Parse with leading spaces: ");
+    testCond(nats_ParseInt(" 456", &val));
+    testCond(val == 456);
 }
 
 static void
@@ -21468,6 +21520,7 @@ static testInfo allTests[] =
     {"natsSnprintf",                    test_natsSnprintf},
     {"natsBuffer",                      test_natsBuffer},
     {"natsParseInt64",                  test_natsParseInt64},
+    {"natsParseInt",                    test_natsParseInt},
     {"natsParseControl",                test_natsParseControl},
     {"natsNormalizeErr",                test_natsNormalizeErr},
     {"natsMutex",                       test_natsMutex},

@@ -575,6 +575,10 @@ test_natsParseInt64(void)
     n = nats_ParseInt64("whatever", 0);
     testCond(n == -1);
 
+    test("Parse with '0': ");
+    n = nats_ParseInt64("0", 1);
+    testCond(n == 0);
+
     test("Parse with '1': ");
     n = nats_ParseInt64("1", 1);
     testCond(n == 1);
@@ -582,6 +586,30 @@ test_natsParseInt64(void)
     test("Parse with '12': ");
     n = nats_ParseInt64("12", 2);
     testCond(n == 12);
+
+    test("Parse with '-12': ");
+    n = nats_ParseInt64("-12", 3);
+    testCond(n == -1);
+
+    test("Parse with trailing spaces: ");
+    n = nats_ParseInt64("12 ", 3);
+    testCond(n == -1);
+
+    test("Parse with leading spaces: ");
+    n = nats_ParseInt64(" 12", 3);
+    testCond(n == -1);
+
+    test("Parse with 'INT64_MAX': ");
+    n = nats_ParseInt64("9223372036854775807", 19);
+    testCond(n == INT64_MAX);
+
+    test("Parse with overflow(1): ");
+    n = nats_ParseInt64("9223372036854775809", 19);
+    testCond(n == -1);
+
+    test("Parse with overflow(2): ");
+    n = nats_ParseInt64("92233720368547758099223372036854775809", 38);
+    testCond(n == -1);
 
     test("Parse with '12345': ");
     n = nats_ParseInt64("12345", 5);
@@ -1356,7 +1384,7 @@ test_natsUrl(void)
 
     nats_clearLastError();
 
-    test("tcp://localhost:4222 ");
+    test("'tcp://localhost:4222':");
     s = natsUrl_Create(&u, "tcp://localhost:4222");
     testCond((s == NATS_OK)
             && (u != NULL)
@@ -1368,7 +1396,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://localhost ");
+    test("'tcp://localhost':");
     s = natsUrl_Create(&u, "tcp://localhost");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1380,7 +1408,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("localhost ");
+    test("'localhost':");
     s = natsUrl_Create(&u, "localhost");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1392,7 +1420,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://[::1]:4222 ");
+    test("'tcp://[::1]:4222':");
     s = natsUrl_Create(&u, "tcp://[::1]:4222");
     testCond((s == NATS_OK)
             && (u != NULL)
@@ -1404,7 +1432,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://[::1]: ");
+    test("'tcp://[::1]:':");
     s = natsUrl_Create(&u, "tcp://[::1]:");
     testCond((s == NATS_OK)
             && (u != NULL)
@@ -1416,7 +1444,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://[::1] ");
+    test("'tcp://[::1]':");
     s = natsUrl_Create(&u, "tcp://[::1]");
     testCond((s == NATS_OK)
             && (u != NULL)
@@ -1428,7 +1456,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp:// ");
+    test("'tcp://':");
     s = natsUrl_Create(&u, "tcp://");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1440,7 +1468,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://: ");
+    test("'tcp://:':");
     s = natsUrl_Create(&u, "tcp://:");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1452,7 +1480,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://ivan:localhost:4222 ");
+    test("'tcp://ivan:localhost:4222':");
     s = natsUrl_Create(&u, "tcp://ivan:localhost:4222");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1464,7 +1492,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://ivan:pwd:localhost:4222 ");
+    test("'tcp://ivan:pwd:localhost:4222':");
     s = natsUrl_Create(&u, "tcp://ivan:pwd:localhost:4222");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1476,7 +1504,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://ivan@localhost:4222 ");
+    test("'tcp://ivan@localhost:4222':");
     s = natsUrl_Create(&u, "tcp://ivan@localhost:4222");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1489,7 +1517,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://ivan:pwd@localhost:4222 ");
+    test("'tcp://ivan:pwd@localhost:4222':");
     s = natsUrl_Create(&u, "tcp://ivan:pwd@localhost:4222");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1503,7 +1531,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://@localhost:4222 ");
+    test("'tcp://@localhost:4222':");
     s = natsUrl_Create(&u, "tcp://@localhost:4222");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1515,7 +1543,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://@@localhost:4222 ");
+    test("'tcp://@@localhost:4222':");
     s = natsUrl_Create(&u, "tcp://@@localhost:4222");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1528,7 +1556,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://a:b:c@localhost:4222 ");
+    test("'tcp://a:b:c@localhost:4222':");
     s = natsUrl_Create(&u, "tcp://a:b:c@localhost:4222");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1542,7 +1570,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://::a:b:c@localhost:4222 ");
+    test("'tcp://::a:b:c@localhost:4222':");
     s = natsUrl_Create(&u, "tcp://::a:b:c@localhost:4222");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1555,7 +1583,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://a:b@[::1]:4222 ");
+    test("'tcp://a:b@[::1]:4222':");
     s = natsUrl_Create(&u, "tcp://a:b@[::1]:4222");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1569,7 +1597,7 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("tcp://a@[::1]:4222 ");
+    test("'tcp://a@[::1]:4222':");
     s = natsUrl_Create(&u, "tcp://a@[::1]:4222");
     testCond((s == NATS_OK)
               && (u != NULL)
@@ -1581,6 +1609,62 @@ test_natsUrl(void)
               && (u->port == 4222));
     natsUrl_Destroy(u);
     u = NULL;
+
+    test("' tcp://localhost:4222':");
+    s = natsUrl_Create(&u, " tcp://localhost:4222");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "localhost") == 0)
+              && (u->username == NULL)
+              && (u->password == NULL)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("'tcp://localhost:4222 ':");
+    s = natsUrl_Create(&u, "tcp://localhost:4222 ");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "localhost") == 0)
+              && (u->username == NULL)
+              && (u->password == NULL)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("' tcp://localhost:4222 ':");
+    s = natsUrl_Create(&u, " tcp://localhost:4222 ");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "localhost") == 0)
+              && (u->username == NULL)
+              && (u->password == NULL)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("'tcp://localhost: 4222':");
+    s = natsUrl_Create(&u, "tcp://localhost: 4222");
+    testCond((s == NATS_INVALID_ARG)
+              && (u == NULL)
+              && (strstr(nats_GetLastError(NULL), "invalid port ' 4222'") != NULL));
+    nats_clearLastError();
+
+    test("'tcp://localhost:a4222':");
+    s = natsUrl_Create(&u, "tcp://localhost:a4222");
+    testCond((s == NATS_INVALID_ARG)
+              && (u == NULL)
+              && (strstr(nats_GetLastError(NULL), "invalid port 'a4222'") != NULL));
+    nats_clearLastError();
+
+    test("'tcp://localhost:2147483648':");
+    s = natsUrl_Create(&u, "tcp://localhost:2147483648");
+    testCond((s == NATS_INVALID_ARG)
+              && (u == NULL)
+              && (strstr(nats_GetLastError(NULL), "invalid port '2147483648'") != NULL));
 }
 
 static void
@@ -2280,6 +2364,8 @@ test_natsOptions(void)
     natsOptions *cloned = NULL;
     const char  *servers[] = {"1", "2", "3"};
     const char  *servers2[] = {"1", "2", "3", "4"};
+    const char  *servers3[] = {" nats://localhost:4222", "nats://localhost:4223 ", " nats://localhost:4224 "};
+    const char  *servers3t[] = {"nats://localhost:4222", "nats://localhost:4223", "nats://localhost:4224"};
 
     test("Create options: ");
     s = natsOptions_Create(&opts);
@@ -2315,6 +2401,12 @@ test_natsOptions(void)
               && (opts->url != NULL)
               && (strcmp(opts->url, "test2") == 0));
 
+    test("URL trimmed: ");
+    s = natsOptions_SetURL(opts, "   nats://localhost:4222   ");
+    testCond((s == NATS_OK)
+              && (opts->url != NULL)
+              && (strcmp(opts->url, "nats://localhost:4222") == 0));
+
     test("Remove URL: ");
     s = natsOptions_SetURL(opts, NULL);
     testCond((s == NATS_OK)
@@ -2339,6 +2431,21 @@ test_natsOptions(void)
         for (int i=0; i<4; i++)
         {
             if (strcmp(opts->servers[i], servers2[i]) != 0)
+            {
+                s = NATS_ERR;
+                break;
+            }
+        }
+    }
+    testCond(s == NATS_OK);
+
+    test("Trimmed servers: ")
+    s = natsOptions_SetServers(opts, servers3, 3);
+    if ((s == NATS_OK) && (opts->servers != NULL) && (opts->serversCount == 3))
+    {
+        for (int i=0; i<3; i++)
+        {
+            if (strcmp(opts->servers[i], servers3t[i]) != 0)
             {
                 s = NATS_ERR;
                 break;

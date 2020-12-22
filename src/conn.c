@@ -3117,7 +3117,6 @@ _processUrlString(natsOptions *opts, const char *urls)
     char        *urlsCopy    = NULL;
     char        *commaPos    = NULL;
     char        *ptr         = NULL;
-    int         len;
 
     if (urls != NULL)
     {
@@ -3149,8 +3148,6 @@ _processUrlString(natsOptions *opts, const char *urls)
 
     do
     {
-        while (*ptr == ' ')
-            ptr++;
         serverUrls[count++] = ptr;
 
         commaPos = strchr(ptr, ',');
@@ -3159,10 +3156,6 @@ _processUrlString(natsOptions *opts, const char *urls)
             ptr = (char*)(commaPos + 1);
             *(commaPos) = '\0';
         }
-
-        len = (int) strlen(ptr);
-        while ((len > 0) && (ptr[len-1] == ' '))
-            ptr[--len] = '\0';
 
     } while (commaPos != NULL);
 

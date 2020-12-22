@@ -64,14 +64,13 @@ static uint16_t crc16tab[256] = {
     0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0,
 };
 
-// parseInt64 expects decimal positive numbers. We
-// return -1 to signal error
-int64_t
-nats_ParseInt64(const char *d, int dLen)
+static int64_t
+parseInt64(const char *d, int dLen)
 {
     int     i;
     char    dec;
-    int64_t n = 0;
+    int64_t pn = 0;
+    int64_t n  = 0;
 
     if (dLen == 0)
         return -1;
@@ -82,10 +81,70 @@ nats_ParseInt64(const char *d, int dLen)
         if ((dec < ASCII_0) || (dec > ASCII_9))
             return -1;
 
-        n = (n * 10) + ((int64_t)dec - ASCII_0);
+        n = (n * 10) + (int64_t)(dec - ASCII_0);
+
+        // Check overflow..
+        if (n < pn)
+            return -1;
+
+        pn = n;
     }
 
     return n;
+}
+
+// parseInt64 expects decimal positive numbers. We
+// return -1 to signal error
+int64_t
+nats_ParseInt64(const char *d, int dLen)
+{
+    return parseInt64(d, dLen);
+}
+
+natsStatus
+nats_ParsePort(int *port, const char *sport)
+{
+    natsStatus  s    = NATS_OK;
+    int64_t     n    = 0;
+
+    n = parseInt64(sport, (int) strlen(sport));
+    if ((n < 0) || (n > INT32_MAX))
+        s = nats_setError(NATS_INVALID_ARG, "invalid port '%s'", sport);
+    else
+        *port = (int) n;
+
+    return s;
+}
+
+natsStatus
+nats_Trim(char **pres, const char *s)
+{
+    int     len    = 0;
+    char    *res   = NULL;
+    char    *ptr   = (char*) s;
+    char    *start = (char*) s;
+
+    while ((*ptr != '\0') && isspace(*ptr))
+        ptr++;
+
+    start = ptr;
+    ptr = (char*) (s + strlen(s) - 1);
+    while ((ptr != start) && isspace(*ptr))
+        ptr--;
+
+    // Compute len of trimmed string
+    len = (int) (ptr-start) + 1;
+
+    // Allocate for copy (add 1 for terminating 0)
+    res = NATS_MALLOC(len+1);
+    if (res == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    memcpy(res, start, (size_t) len);
+    res[len] = '\0';
+    *pres = res;
+
+    return NATS_OK;
 }
 
 natsStatus

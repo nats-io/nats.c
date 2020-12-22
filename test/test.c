@@ -20900,9 +20900,16 @@ test_StanSubscriptionAckMsg(void)
         s = stanConnection_Subscribe(&sub2, sc, "foo", _dummyStanMsgHandler, NULL, opts);
     testCond(s == NATS_OK);
 
+    test("NULL Sub should fail: ");
+    s = stanSubscription_AckMsg(NULL, args.sMsg);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("NULL Msg should fail: ");
+    s = stanSubscription_AckMsg(sub2, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
     test("Sub acking not own message fails: ");
-    if (s == NATS_OK)
-        s = stanSubscription_AckMsg(sub2, args.sMsg);
+    s = stanSubscription_AckMsg(sub2, args.sMsg);
     testCond((s == NATS_ILLEGAL_STATE)
                 && (nats_GetLastError(NULL) != NULL)
                 && (strstr(nats_GetLastError(NULL), STAN_ERR_SUB_NOT_OWNER) != NULL));

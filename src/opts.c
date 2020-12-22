@@ -34,15 +34,11 @@ natsOptions_SetURL(natsOptions *opts, const char* url)
     }
 
     if (url != NULL)
-    {
-        opts->url = NATS_STRDUP(url);
-        if (opts->url == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-    }
+        s = nats_Trim(&(opts->url), url);
 
     UNLOCK_OPTS(opts);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static void
@@ -82,10 +78,8 @@ natsOptions_SetServers(natsOptions *opts, const char** servers, int serversCount
 
         for (i = 0; (s == NATS_OK) && (i < serversCount); i++)
         {
-            opts->servers[i] = (char*) NATS_STRDUP(servers[i]);
-            if (opts->servers[i] == NULL)
-                s = nats_setDefaultError(NATS_NO_MEMORY);
-            else
+            s = nats_Trim(&(opts->servers[i]), servers[i]);
+            if (s == NATS_OK)
                 opts->serversCount++;
         }
     }
@@ -95,7 +89,7 @@ natsOptions_SetServers(natsOptions *opts, const char** servers, int serversCount
 
     UNLOCK_OPTS(opts);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus

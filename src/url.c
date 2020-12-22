@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "natsp.h"
+#include "util.h"
 
 #include <string.h>
 
@@ -39,8 +40,9 @@ _parseHostAndPort(natsUrl *url, char *host, bool uInfo)
     sport = strrchr(host, ':');
     if (sport != NULL)
     {
-        if (sport[1] != '\0')
-            url->port = atoi(sport + 1);
+        s = nats_ParsePort(&(url->port), (const char*) (sport+1));
+        if (s != NATS_OK)
+            return NATS_UPDATE_ERR_STACK(s);
 
         *sport = '\0';
     }
@@ -63,7 +65,7 @@ _parseHostAndPort(natsUrl *url, char *host, bool uInfo)
             s = nats_setDefaultError(NATS_NO_MEMORY);
     }
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -84,9 +86,7 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
     if (url == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    copy = NATS_STRDUP(urlStr);
-    if (copy == NULL)
-        s = nats_setDefaultError(NATS_NO_MEMORY);
+    s = nats_Trim(&copy, urlStr);
 
     // Add scheme if missing.
     if ((s == NATS_OK) && (strstr(copy, "://") == NULL))

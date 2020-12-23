@@ -166,10 +166,7 @@ stanSubscription_AckMsg(stanSubscription *sub, stanMsg *msg)
     int             ackSize = 0;
     Pb__Ack         ack;
 
-    if (sub == NULL)
-        return NATS_OK;
-
-    if (msg == NULL)
+    if ((sub == NULL) || (msg == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     stanSub_Lock(sub);

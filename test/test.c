@@ -39,8 +39,8 @@
 #include "stan/sopts.h"
 #endif
 
-static int tests = 0;
-static int fails = 0;
+static int  tests  = 0;
+static bool failed = false;
 
 static bool keepServerOutput    = false;
 static bool valgrind            = false;
@@ -51,17 +51,22 @@ static const char *serverVersion = NULL;
 
 static const char *natsStreamingServerExe = "nats-streaming-server";
 
+static natsMutex *slMu  = NULL;
+static natsHash  *slMap = NULL;
+
 #define test(s)         { printf("#%02d ", ++tests); printf("%s", (s)); fflush(stdout); }
 #ifdef _WIN32
-#define NATS_INVALID_PID  (NULL)
-#define testCond(c)     if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); fails++; }
+#define NATS_INVALID_PID    (NULL)
+#define testCond(c)         if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; return; }
+#define testCondNoReturn(c) if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; }
 #define LOGFILE_NAME    "wserver.log"
 #else
-#define NATS_INVALID_PID  (-1)
-#define testCond(c)     if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); fails++; }
+#define NATS_INVALID_PID    (-1)
+#define testCond(c)         if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; return; }
+#define testCondNoReturn(c) if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; }
 #define LOGFILE_NAME    "server.log"
 #endif
-#define FAIL(m)         { printf("@@ %s @@\n", (m)); fails++; return; }
+#define FAIL(m)         { printf("@@ %s @@\n", (m)); failed=true; return; }
 #define IFOK(s, c)      if (s == NATS_OK) { s = (c); }
 
 #define CHECK_SERVER_STARTED(p) if ((p) == NATS_INVALID_PID) FAIL("Unable to start or verify that the server was started!")
@@ -269,19 +274,15 @@ static void test_natsBuffer(void)
              && (natsBuf_Capacity(buf) == 1));
 
     test("Append less than capacity does not expand buffer: ");
-    IFOK(s, natsBuf_Append(buf, "a", 1));
+    s = natsBuf_Append(buf, "a", 1);
     testCond((s == NATS_OK)
             && (natsBuf_Len(buf) == 1)
             && (natsBuf_Capacity(buf) == 1)
             && (natsBuf_Available(buf) == 0));
 
     test("Appending one more (AppendByte) increases capacity: ");
-    if (s == NATS_OK)
-    {
-        oldCapacity = natsBuf_Capacity(buf);
-
-        s = natsBuf_AppendByte(buf, 'b');
-    }
+    oldCapacity = natsBuf_Capacity(buf);
+    s = natsBuf_AppendByte(buf, 'b');
     testCond((s == NATS_OK)
              && (natsBuf_Len(buf) == 2)
              && (natsBuf_Capacity(buf) > oldCapacity)
@@ -298,8 +299,7 @@ static void test_natsBuffer(void)
     oldCapacity = 0;
     test("Appending one more byte increases capacity: ");
     s = natsBuf_Create(&buf, 1);
-    if (s == NATS_OK)
-        s = natsBuf_Append(buf, "a", 1);
+    IFOK(s, natsBuf_Append(buf, "a", 1));
     if (s == NATS_OK)
     {
         oldCapacity = natsBuf_Capacity(buf);
@@ -326,7 +326,7 @@ static void test_natsBuffer(void)
              && (natsBuf_Capacity(buf) == 5));
 
     test("Check that changes are reflected in backend")
-    IFOK(s, natsBuf_Append(buf, "abcd", 4));
+    s = natsBuf_Append(buf, "abcd", 4);
     testCond((s == NATS_OK)
             && (natsBuf_Len(buf) == 4)
             && (natsBuf_Capacity(buf) == 5)
@@ -339,14 +339,13 @@ static void test_natsBuffer(void)
              && (natsBuf_Data(buf)[1] == 'x'));
 
     test("Append less than capacity does not expand buffer: ");
-    IFOK(s, natsBuf_AppendByte(buf, 'e'));
+    s = natsBuf_AppendByte(buf, 'e');
     testCond((s == NATS_OK)
             && (natsBuf_Len(buf) == 5)
             && (natsBuf_Capacity(buf) == 5)
             && (natsBuf_Available(buf) == 0));
 
     test("Check natsBuf_Expand returns error for invalid arguments: ");
-    if (s == NATS_OK)
     {
         natsStatus ls;
 
@@ -360,7 +359,7 @@ static void test_natsBuffer(void)
 
     test("Adding more causes expand: ");
     oldCapacity = natsBuf_Capacity(buf);
-    IFOK(s, natsBuf_Append(buf, "fghij", 5));
+    s = natsBuf_Append(buf, "fghij", 5);
     testCond((s == NATS_OK)
             && (natsBuf_Len(buf) == 10)
             && (natsBuf_Capacity(buf) > oldCapacity));
@@ -375,14 +374,9 @@ static void test_natsBuffer(void)
              && (strncmp(natsBuf_Data(buf), "axcdefghij", 10) == 0));
 
     test("Destroying buffer does not affect backend: ");
-    if (s == NATS_OK)
-    {
-        natsBuf_Destroy(buf);
-        buf = NULL;
-
-        testCond(strcmp(backend, "axcde") == 0);
-    }
-
+    natsBuf_Destroy(buf);
+    buf = NULL;
+    testCond(strcmp(backend, "axcde") == 0);
 
     printf("\n== Buffer Init without data ==\n");
 
@@ -394,23 +388,19 @@ static void test_natsBuffer(void)
              && (natsBuf_Capacity(buf) == 10));
 
     test("Append less than capacity does not expand buffer: ");
-    IFOK(s, natsBuf_Append(buf, "abcdefghij", 10));
+    s = natsBuf_Append(buf, "abcdefghij", 10);
     testCond((s == NATS_OK)
             && (natsBuf_Len(buf) == 10)
             && (natsBuf_Capacity(buf) == 10)
             && (natsBuf_Available(buf) == 0));
 
     test("Appending one more increases capacity: ");
-    if (s == NATS_OK)
-    {
-        oldCapacity = natsBuf_Capacity(buf);
-
-        s = natsBuf_AppendByte(buf, 'k');
-        testCond((s == NATS_OK)
-                 && (natsBuf_Len(buf) == 11)
-                 && (natsBuf_Capacity(buf) > oldCapacity)
-                 && (natsBuf_Available(buf) > 0));
-    }
+    oldCapacity = natsBuf_Capacity(buf);
+    s = natsBuf_AppendByte(buf, 'k');
+    testCond((s == NATS_OK)
+              && (natsBuf_Len(buf) == 11)
+              && (natsBuf_Capacity(buf) > oldCapacity)
+              && (natsBuf_Available(buf) > 0));
 
     test("Checking content: ");
     testCond((s == NATS_OK)
@@ -418,15 +408,12 @@ static void test_natsBuffer(void)
              && (strncmp(natsBuf_Data(buf), "abcdefghijk", 11) == 0));
 
     test("Destroying buffer: ");
-    if (s == NATS_OK)
-    {
-        natsBuf_Destroy(buf);
-        testCond((natsBuf_Data(buf) == NULL)
-                 && (natsBuf_Len(buf) == 0)
-                 && (natsBuf_Capacity(buf) == 0)
-                 && (natsBuf_Available(buf) == 0));
-        buf = NULL;
-    }
+    natsBuf_Destroy(buf);
+    testCond((natsBuf_Data(buf) == NULL)
+                && (natsBuf_Len(buf) == 0)
+                && (natsBuf_Capacity(buf) == 0)
+                && (natsBuf_Available(buf) == 0));
+    buf = NULL;
 
     printf("\n== Buffer Init with data ==\n");
 
@@ -440,7 +427,7 @@ static void test_natsBuffer(void)
              && (natsBuf_Capacity(buf) == 5));
 
     test("Check that changes are reflected in backend: ")
-    IFOK(s, natsBuf_Append(buf, "abcd", 4));
+    s = natsBuf_Append(buf, "abcd", 4);
     testCond((s == NATS_OK)
             && (natsBuf_Len(buf) == 4)
             && (natsBuf_Capacity(buf) == 5)
@@ -453,14 +440,14 @@ static void test_natsBuffer(void)
              && (natsBuf_Data(buf)[1] == 'x'));
 
     test("Append less than capacity does not expand buffer: ");
-    IFOK(s, natsBuf_AppendByte(buf, 'e'));
+    s = natsBuf_AppendByte(buf, 'e');
     testCond((s == NATS_OK)
             && (natsBuf_Len(buf) == 5)
             && (natsBuf_Capacity(buf) == 5)
             && (natsBuf_Available(buf) == 0));
 
     test("Adding more causes expand: ");
-    IFOK(s, natsBuf_Append(buf, "fghij", 5));
+    s = natsBuf_Append(buf, "fghij", 5);
     testCond((s == NATS_OK)
             && (natsBuf_Len(buf) == 10)
             && (natsBuf_Capacity(buf) >= 10));
@@ -475,11 +462,8 @@ static void test_natsBuffer(void)
              && (strncmp(natsBuf_Data(buf), "axcdefghij", 10) == 0));
 
     test("Destroying buffer does not affect backend: ");
-    if (s == NATS_OK)
-    {
-        natsBuf_Destroy(buf);
-        testCond(strcmp(backend, "axcde") == 0);
-    }
+    natsBuf_Destroy(buf);
+    testCond(strcmp(backend, "axcde") == 0);
 
     test("Destroyed buffer state is clean: ");
     testCond((s == NATS_OK)
@@ -492,10 +476,8 @@ static void test_natsBuffer(void)
 
     test("Check maximum size: ");
     s = natsBuf_Create(&buf, 5);
-    if (s == NATS_OK)
-        s = natsBuf_Append(buf, "abcd", 4);
-    if (s == NATS_OK)
-        s = natsBuf_Append(buf, "fake size that goes over int max size", 0x7FFFFFFC);
+    IFOK(s, natsBuf_Append(buf, "abcd", 4));
+    IFOK(s, natsBuf_Append(buf, "fake size that goes over int max size", 0x7FFFFFFC));
     testCond(s == NATS_NO_MEMORY);
 
     test("Check maximum size (append byte): ");
@@ -508,8 +490,7 @@ static void test_natsBuffer(void)
 
     test("Consume half: ");
     s = natsBuf_Create(&buf, 10);
-    if (s == NATS_OK)
-        s = natsBuf_Append(buf, "abcdefghij", 10);
+    IFOK(s, natsBuf_Append(buf, "abcdefghij", 10));
     if (s == NATS_OK)
         natsBuf_Consume(buf, 5);
     testCond((s == NATS_OK)
@@ -519,8 +500,7 @@ static void test_natsBuffer(void)
              && (*(buf->pos) == 'f'));
 
     test("Consume rest: ");
-    if (s == NATS_OK)
-        natsBuf_Consume(buf, 5);
+    natsBuf_Consume(buf, 5);
     testCond((s == NATS_OK)
              && (natsBuf_Len(buf) == 0)
              && (natsBuf_Available(buf) == 10)
@@ -538,18 +518,14 @@ static void test_natsBuffer(void)
         memcpy(natsBuf_Data(buf)+14, " of move by", 11);
         natsBuf_MoveTo(buf, 14+11);
     }
-    if (s == NATS_OK)
-        s = natsBuf_AppendByte(buf, '\0');
+    IFOK(s, natsBuf_AppendByte(buf, '\0'));
     testCond((s == NATS_OK)
                 && (natsBuf_Len(buf) == 26)
                 && (strcmp(natsBuf_Data(buf), "this is a test of move by") == 0));
 
     test("MoveTo (backward): ");
-    if (s == NATS_OK)
-    {
-        natsBuf_MoveTo(buf, 14);
-        s = natsBuf_AppendByte(buf, '\0');
-    }
+    natsBuf_MoveTo(buf, 14);
+    s = natsBuf_AppendByte(buf, '\0');
     testCond((s == NATS_OK)
             && (natsBuf_Len(buf) == 15)
             && (strcmp(natsBuf_Data(buf), "this is a test") == 0));
@@ -819,14 +795,12 @@ test_natsThread(void)
     if (valgrind)
         NUM_THREADS = 100;
 
+    test("Create threads array: ");
     threads = (natsThread**) calloc(NUM_THREADS, sizeof(natsThread*));
     if (threads == NULL)
         s = NATS_NO_MEMORY;
-
-    if (s == NATS_OK)
-        s = natsMutex_Create(&m);
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    IFOK(s, natsMutex_Create(&m));
+    testCond(s == NATS_OK);
 
     natsMutex_Lock(m);
 
@@ -946,14 +920,13 @@ test_natsCondition(void)
     int64_t             diff   = 0;
     int64_t             target = 0;
 
+    test("Create mutex: ");
     s = natsMutex_Create(&m);
-    if (s != NATS_OK)
-        FAIL("Unable to run test_natsCondition because got an error while creating mutex!");
+    testCond(s == NATS_OK);
 
     test("Create condition variables: ");
     s = natsCondition_Create(&c1);
-    if (s == NATS_OK)
-        s = natsCondition_Create(&c2);
+    IFOK(s, natsCondition_Create(&c2));
     testCond(s == NATS_OK);
 
     natsMutex_Lock(m);
@@ -962,12 +935,9 @@ test_natsCondition(void)
     tArgs.c       = c1;
     tArgs.control = 0;
 
+    test("Create thread: ");
     s = natsThread_Create(&t1, testSignal, &tArgs);
-    if (s != NATS_OK)
-    {
-        natsMutex_Unlock(m);
-        FAIL("Unable to run test_natsCondition because got an error while creating thread!");
-    }
+    testCond(s == NATS_OK);
 
     test("Wait for signal: ");
     while (tArgs.control != 1)
@@ -1018,11 +988,6 @@ test_natsCondition(void)
     test("Wait absolute time with very large value: ");
     tArgs.control = 0;
     s = natsThread_Create(&t1, _unblockLongWait, &tArgs);
-    if (s != NATS_OK)
-    {
-        natsMutex_Unlock(m);
-        FAIL("Unable to run test_natsCondition because got an error while creating thread!");
-    }
     if (s == NATS_OK)
     {
         before = nats_Now();
@@ -1040,12 +1005,9 @@ test_natsCondition(void)
     test("Signal before wait: ");
     tArgs.control = 0;
 
+    test("Create thread: ");
     s = natsThread_Create(&t1, testSignal, &tArgs);
-    if (s != NATS_OK)
-    {
-        natsMutex_Unlock(m);
-        FAIL("Unable to run test_natsCondition because got an error while creating thread!");
-    }
+    testCond(s == NATS_OK);
 
     while (tArgs.control == 0)
     {
@@ -1067,8 +1029,7 @@ test_natsCondition(void)
     tArgs.b       = c2;
 
     s = natsThread_Create(&t1, testBroadcast, &tArgs);
-    if (s == NATS_OK)
-        s = natsThread_Create(&t2, testBroadcast, &tArgs);
+    IFOK(s, natsThread_Create(&t2, testBroadcast, &tArgs));
     if (s != NATS_OK)
     {
         natsMutex_Unlock(m);
@@ -1161,9 +1122,9 @@ test_natsTimer(void)
     struct threadArg    tArg;
     int                 refs;
 
+    test("Setup test: ");
     s = _createDefaultThreadArgsForCbTests(&tArg);
-    if (s != NATS_OK)
-        FAIL("Unable to setup natsTimer test!");
+    testCond(s == NATS_OK);
 
     tArg.control      = 0;
     tArg.timerFired   = 0;
@@ -1679,18 +1640,18 @@ test_natsCreateStringFromBuffer(void)
     testCond((s == NATS_OK)
              && (str == NULL))
 
+    test("Init buffer: ");
     s = natsBuf_Init(&buf, 10);
-    if (s != NATS_OK)
-        FAIL("Unable to test createStringFromBuffer due to error creating buffer!");
+    testCond(s == NATS_OK);
 
     test("Empty buffer: ");
     s = nats_CreateStringFromBuffer(&str, &buf);
     testCond((s == NATS_OK)
              && (str == NULL))
 
+    test("Append to buf: ");
     s = natsBuf_Append(&buf, "123", 3);
-    if (s != NATS_OK)
-        FAIL("Unable to test createStringFromBuffer due to error creating buffer!");
+    testCond(s == NATS_OK);
 
     test("Buffer containing '123': ");
     s = nats_CreateStringFromBuffer(&str, &buf);
@@ -2549,22 +2510,17 @@ test_natsOptions(void)
     s = natsOptions_SetPingInterval(opts, -1000);
     if ((s == NATS_OK) && (opts->pingInterval != -1000))
         s = NATS_ERR;
-    if (s == NATS_OK)
-        s = natsOptions_SetPingInterval(opts, 0);
+    IFOK(s, natsOptions_SetPingInterval(opts, 0));
     if ((s == NATS_OK) && (opts->pingInterval != 0))
         s = NATS_ERR;
-    if (s == NATS_OK)
-        s = natsOptions_SetPingInterval(opts, 1000);
+    IFOK(s, natsOptions_SetPingInterval(opts, 1000));
     testCond((s == NATS_OK) && (opts->pingInterval == 1000));
 
     test("Set MaxPingsOut: ");
     s = natsOptions_SetMaxPingsOut(opts, -2);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxPingsOut(opts, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxPingsOut(opts, 1);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxPingsOut(opts, 10);
+    IFOK(s, natsOptions_SetMaxPingsOut(opts, 0));
+    IFOK(s, natsOptions_SetMaxPingsOut(opts, 1));
+    IFOK(s, natsOptions_SetMaxPingsOut(opts, 10));
     testCond((s == NATS_OK) && (opts->maxPingsOut == 10));
 
     test("Set IOBufSize: ");
@@ -2587,12 +2543,10 @@ test_natsOptions(void)
     s = natsOptions_SetMaxReconnect(opts, -10);
     if ((s == NATS_OK) && (opts->maxReconnect != -10))
         s = NATS_ERR;
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 0);
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 0));
     if ((s == NATS_OK) && (opts->maxReconnect != 0))
         s = NATS_ERR;
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 10);
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 10));
     testCond((s == NATS_OK) && (opts->maxReconnect == 10));
 
     test("Set Reconnect Wait (invalid args: ");
@@ -2982,8 +2936,7 @@ test_natsJSON(void)
     // Check values
     test("Empty string: ");
     s = nats_JSONParse(&json, "{}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetInt(json, "test", &intVal);
+    IFOK(s, nats_JSONGetInt(json, "test", &intVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -2994,8 +2947,7 @@ test_natsJSON(void)
 
     test("Single field, string: ");
     s = nats_JSONParse(&json, "{\"test\":\"abc\"}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetStr(json, "test", &strVal);
+    IFOK(s, nats_JSONGetStr(json, "test", &strVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3008,8 +2960,7 @@ test_natsJSON(void)
 
     test("Single field, int: ");
     s = nats_JSONParse(&json, "{\"test\":1234}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetInt(json, "test", &intVal);
+    IFOK(s, nats_JSONGetInt(json, "test", &intVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3021,8 +2972,7 @@ test_natsJSON(void)
 
     test("Single field, long: ");
     s = nats_JSONParse(&json, "{\"test\":1234}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetLong(json, "test", &longVal);
+    IFOK(s, nats_JSONGetLong(json, "test", &longVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3034,8 +2984,7 @@ test_natsJSON(void)
 
     test("Single field, ulong: ");
     s = nats_JSONParse(&json, "{\"test\":1234}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetULong(json, "test", &ulongVal);
+    IFOK(s, nats_JSONGetULong(json, "test", &ulongVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3047,8 +2996,7 @@ test_natsJSON(void)
 
     test("Single field, double: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5e3}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3060,8 +3008,7 @@ test_natsJSON(void)
 
     test("Single field, double negative: ");
     s = nats_JSONParse(&json, "{\"test\":-1234}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3073,8 +3020,7 @@ test_natsJSON(void)
 
     test("Single field, double exp negative 1: ");
     s = nats_JSONParse(&json, "{\"test\":1234e-3}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test",&doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test",&doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3086,8 +3032,7 @@ test_natsJSON(void)
 
     test("Single field, double exp negative 2: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5e-3}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3099,8 +3044,7 @@ test_natsJSON(void)
 
     test("Single field, double exp negative 3: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5e-1}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3112,8 +3056,7 @@ test_natsJSON(void)
 
     test("Single field, double exp negative 4: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5e-0}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3125,8 +3068,7 @@ test_natsJSON(void)
 
     test("Single field, double exp positive 1: ");
     s = nats_JSONParse(&json, "{\"test\":1234e+3}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3138,8 +3080,7 @@ test_natsJSON(void)
 
     test("Single field, double exp positive 2: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5e+3}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3151,8 +3092,7 @@ test_natsJSON(void)
 
     test("Single field, double exp positive 3: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5678e+2}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3164,8 +3104,7 @@ test_natsJSON(void)
 
     test("Single field, double exp positive 4: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5678e+4}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3177,8 +3116,7 @@ test_natsJSON(void)
 
     test("Single field, double exp positive 5: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5678e+5}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3190,8 +3128,7 @@ test_natsJSON(void)
 
     test("Single field, double exp positive 6: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5678e+0}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3203,8 +3140,7 @@ test_natsJSON(void)
 
     test("Single field, double exp positive 6: ");
     s = nats_JSONParse(&json, "{\"test\":1234.5678e1}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "test", &doubleVal);
+    IFOK(s, nats_JSONGetDouble(json, "test", &doubleVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3216,8 +3152,7 @@ test_natsJSON(void)
 
     test("Single field, bool: ");
     s = nats_JSONParse(&json, "{\"test\":true}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetBool(json, "test", &boolVal);
+    IFOK(s, nats_JSONGetBool(json, "test", &boolVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3229,8 +3164,7 @@ test_natsJSON(void)
 
     test("Single field, string array: ");
     s = nats_JSONParse(&json, "{\"test\":[\"a\",\"b\",\"c\",\"d\",\"e\"]}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetArrayStr(json, "test", &arrVal, &arrCount);
+    IFOK(s, nats_JSONGetArrayStr(json, "test", &arrVal, &arrCount));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3251,18 +3185,12 @@ test_natsJSON(void)
 
     test("All field types: ");
     s = nats_JSONParse(&json, "{\"bool\":true,\"str\":\"abc\",\"int\":123,\"long\":456,\"double\":123.5,\"array\":[\"a\"]}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetBool(json, "bool", &boolVal);
-    if (s == NATS_OK)
-        s = nats_JSONGetStr(json, "str", &strVal);
-    if (s == NATS_OK)
-        s = nats_JSONGetInt(json, "int", &intVal);
-    if (s == NATS_OK)
-        s = nats_JSONGetLong(json, "long", &longVal);
-    if (s == NATS_OK)
-        s = nats_JSONGetDouble(json, "double", &doubleVal);
-    if (s == NATS_OK)
-        s = nats_JSONGetArrayStr(json, "array", &arrVal, &arrCount);
+    IFOK(s, nats_JSONGetBool(json, "bool", &boolVal));
+    IFOK(s, nats_JSONGetStr(json, "str", &strVal));
+    IFOK(s, nats_JSONGetInt(json, "int", &intVal));
+    IFOK(s, nats_JSONGetLong(json, "long", &longVal));
+    IFOK(s, nats_JSONGetDouble(json, "double", &doubleVal));
+    IFOK(s, nats_JSONGetArrayStr(json, "array", &arrVal, &arrCount));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3294,8 +3222,7 @@ test_natsJSON(void)
 
     test("Ask for wrong type: ");
     s = nats_JSONParse(&json, "{\"test\":true}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetInt(json, "test", &intVal);
+    IFOK(s, nats_JSONGetInt(json, "test", &intVal));
     testCond((s != NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3306,8 +3233,7 @@ test_natsJSON(void)
 
     test("Ask for wrong type (array): ");
     s = nats_JSONParse(&json, "{\"test\":[\"a\", \"b\"]}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetArrayField(json, "test", TYPE_INT, &f);
+    IFOK(s, nats_JSONGetArrayField(json, "test", TYPE_INT, &f));
     testCond((s != NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3319,8 +3245,7 @@ test_natsJSON(void)
 
     test("Ask for unknown type: ");
     s = nats_JSONParse(&json, "{\"test\":true}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetField(json, "test", 9999, &f);
+    IFOK(s, nats_JSONGetField(json, "test", 9999, &f));
     testCond((s == NATS_INVALID_ARG)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3330,8 +3255,7 @@ test_natsJSON(void)
 
     test("Ask for unknown type (array): ");
     s = nats_JSONParse(&json, "{\"test\":true}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetArrayField(json, "test", 9999, &f);
+    IFOK(s, nats_JSONGetArrayField(json, "test", 9999, &f));
     testCond((s == NATS_INVALID_ARG)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3352,18 +3276,12 @@ test_natsJSON(void)
         arrVal = (char**)initStrArr;
         arrCount = 2;
         s = nats_JSONParse(&json, "{\"test\":true}", -1);
-        if (s == NATS_OK)
-            s = nats_JSONGetStr(json, "str", &strVal);
-        if (s == NATS_OK)
-            s = nats_JSONGetInt(json, "int", &intVal);
-        if (s == NATS_OK)
-            s = nats_JSONGetLong(json, "long", &longVal);
-        if (s == NATS_OK)
-            s = nats_JSONGetBool(json, "bool", &boolVal);
-        if (s == NATS_OK)
-            s = nats_JSONGetDouble(json, "bool", &doubleVal);
-        if (s == NATS_OK)
-            s = nats_JSONGetArrayStr(json, "array", &arrVal, &arrCount);
+        IFOK(s, nats_JSONGetStr(json, "str", &strVal));
+        IFOK(s, nats_JSONGetInt(json, "int", &intVal));
+        IFOK(s, nats_JSONGetLong(json, "long", &longVal));
+        IFOK(s, nats_JSONGetBool(json, "bool", &boolVal));
+        IFOK(s, nats_JSONGetDouble(json, "bool", &doubleVal));
+        IFOK(s, nats_JSONGetArrayStr(json, "array", &arrVal, &arrCount));
         testCond((s == NATS_OK)
                     && (strcmp(strVal, initStr) == 0)
                     && boolVal
@@ -3380,8 +3298,7 @@ test_natsJSON(void)
     test("Wrong string type: ");
     strVal = NULL;
     s = nats_JSONParse(&json, "{\"test\":12345678901112}", -1);
-    if (s == NATS_OK)
-        s = nats_JSONGetStr(json, "test", &strVal);
+    IFOK(s, nats_JSONGetStr(json, "test", &strVal));
     testCond((s == NATS_INVALID_ARG)
                 && (json != NULL)
                 && (json->fields != NULL)
@@ -3397,8 +3314,7 @@ test_natsJSON(void)
     test("Field reused: ");
     {
         s = nats_JSONParse(&json, "{\"field\":1,\"field\":2}", -1);
-        if (s == NATS_OK)
-            s = nats_JSONGetInt(json, "field", &intVal);
+        IFOK(s, nats_JSONGetInt(json, "field", &intVal));
         testCond((s == NATS_OK) && (intVal == 2));
         nats_JSONDestroy(json);
         json = NULL;
@@ -3551,18 +3467,12 @@ test_natsBase32Decode(void)
                 && (memcmp((void*) expected, (void*) dst, dstLen) == 0));
 
     test("Dest too small: ");
-    if (s == NATS_OK)
-        s = nats_Base32_DecodeString((char*) src, dst, 10, &dstLen);
+    s = nats_Base32_DecodeString((char*) src, dst, 10, &dstLen);
     testCond((s == NATS_INSUFFICIENT_BUFFER) && (dstLen == 0));
-    if (s == NATS_INSUFFICIENT_BUFFER)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Invalid string: ");
-    if (s == NATS_OK)
-        s = nats_Base32_DecodeString((char*)"This is invalid content", dst, (int) sizeof(dst), &dstLen);
+    s = nats_Base32_DecodeString((char*)"This is invalid content", dst, (int) sizeof(dst), &dstLen);
     testCond((s == NATS_ERR)
                 && (nats_GetLastError(NULL) != NULL)
                 && (strstr(nats_GetLastError(NULL), "invalid") != NULL));
@@ -3893,10 +3803,8 @@ _testWaitReadyServer(void *closure)
         if (sock == NATS_SOCK_INVALID)
             s = NATS_SYS_ERROR;
 
-        if (s == NATS_OK)
-            s = natsSock_SetCommonTcpOptions(sock);
-        if (s == NATS_OK)
-            s = natsSock_SetBlocking(sock, true);
+        IFOK(s, natsSock_SetCommonTcpOptions(sock));
+        IFOK(s, natsSock_SetBlocking(sock, true));
     }
     if ((s == NATS_OK)
         && (bind(sock, servinfo->ai_addr, (natsSockLen) servinfo->ai_addrlen) == NATS_SOCK_ERROR))
@@ -3972,8 +3880,7 @@ test_natsWaitReady(void)
 
     test("Set non blocking: ");
     s = natsSock_SetCommonTcpOptions(ctx.fd);
-    if (s == NATS_OK)
-        s = natsSock_SetBlocking(ctx.fd, false);
+    IFOK(s, natsSock_SetBlocking(ctx.fd, false));
     testCond(s == NATS_OK);
 
     // Ensure that we get a would_block on read..
@@ -4056,8 +3963,7 @@ test_natsSign(void)
     s = nats_Sign(
         "SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXIEDNPPQYYYCU3VY",
         "nonce", &sig, &sigLen);
-    if (s == NATS_OK)
-        s = nats_Base64RawURL_EncodeString((const unsigned char*) sig, sigLen, &sig64);
+    IFOK(s, nats_Base64RawURL_EncodeString((const unsigned char*) sig, sigLen, &sig64));
     testCond((s == NATS_OK)
         && (sig != NULL)
         && (sig64 != NULL)
@@ -4195,130 +4101,104 @@ test_natsMsgHeaderAPIs(void)
     testCond(s == NATS_OK);
 
     test("Key cannot be NULL: ");
-    IFOK(s, natsMsgHeader_Set(msg, NULL, "value"));
+    s = natsMsgHeader_Set(msg, NULL, "value");
     testCond(s == NATS_INVALID_ARG);
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Key cannot be empty: ");
-    IFOK(s, natsMsgHeader_Set(msg, "", "value"));
+    s = natsMsgHeader_Set(msg, "", "value");
     testCond(s == NATS_INVALID_ARG);
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Set msg cannot be NULL: ");
-    IFOK(s, natsMsgHeader_Set(NULL, "key", "value"));
+    s = natsMsgHeader_Set(NULL, "key", "value");
     testCond(s == NATS_INVALID_ARG);
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Set value: ");
-    IFOK(s, natsMsgHeader_Set(msg, "my-key", "value1"));
+    s = natsMsgHeader_Set(msg, "my-key", "value1");
     testCond(s == NATS_OK);
 
     test("Get msg cannot be NULL: ");
-    IFOK(s, natsMsgHeader_Get(NULL, "my-key", &val));
+    s = natsMsgHeader_Get(NULL, "my-key", &val);
     testCond(s == NATS_INVALID_ARG);
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Get must provide mem location: ");
-    IFOK(s, natsMsgHeader_Get(msg, "my-key", NULL));
+    s = natsMsgHeader_Get(msg, "my-key", NULL);
     testCond(s == NATS_INVALID_ARG);
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Get: ");
-    IFOK(s, natsMsgHeader_Get(msg, "my-key", &val));
+    s = natsMsgHeader_Get(msg, "my-key", &val);
     testCond((s == NATS_OK) &&
                 (val != NULL) &&
                 (strcmp(val, "value1") == 0));
     val = NULL;
 
     test("Get value with different case: ");
-    IFOK(s, natsMsgHeader_Get(msg, "my-Key", &val));
+    s = natsMsgHeader_Get(msg, "my-Key", &val);
     testCond((s == NATS_OK) &&
                 (val != NULL) &&
                 (strcmp(val, "value1") == 0));
     val = NULL;
 
     test("Key not found: ");
-    IFOK(s, natsMsgHeader_Get(msg, "unknown-key", &val));
+    s = natsMsgHeader_Get(msg, "unknown-key", &val);
     testCond((s == NATS_NOT_FOUND) && (val == NULL));
-    if (s == NATS_NOT_FOUND)
-        s = NATS_OK;
     val = NULL;
 
     test("Set value replace old: ");
-    IFOK(s, natsMsgHeader_Set(msg, "my-key", "value2"));
+    s = natsMsgHeader_Set(msg, "my-key", "value2");
     testCond(s == NATS_OK);
 
     test("Get value: ");
-    IFOK(s, natsMsgHeader_Get(msg, "My-KEy", &val));
+    s = natsMsgHeader_Get(msg, "My-KEy", &val);
     testCond((s == NATS_OK) &&
                 (val != NULL) &&
                 (strcmp(val, "value2") == 0));
     val = NULL;
 
     test("Set NULL value: ");
-    IFOK(s, natsMsgHeader_Set(msg, "my-key", NULL));
+    s = natsMsgHeader_Set(msg, "my-key", NULL);
     testCond(s == NATS_OK);
 
     test("Get value: ");
-    IFOK(s, natsMsgHeader_Get(msg, "my-key", &val));
+    s = natsMsgHeader_Get(msg, "my-key", &val);
     testCond((s == NATS_OK) && (val == NULL));
     val = NULL;
 
     test("Set empty value: ");
-    IFOK(s, natsMsgHeader_Set(msg, "my-key", ""));
+    s = natsMsgHeader_Set(msg, "my-key", "");
     testCond(s == NATS_OK);
 
     test("Get value: ");
-    IFOK(s, natsMsgHeader_Get(msg, "my-key", &val));
+    s = natsMsgHeader_Get(msg, "my-key", &val);
     testCond((s == NATS_OK) && (val != NULL) && (val[0] == '\0'));
     val = NULL;
 
     test("Add msg cannot be NULL: ");
-    IFOK(s, natsMsgHeader_Add(NULL, "key", "value"));
+    s = natsMsgHeader_Add(NULL, "key", "value");
     testCond(s == NATS_INVALID_ARG);
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Add first: ");
-    IFOK(s, natsMsgHeader_Add(msg, "two-fields", "val1"));
+    s = natsMsgHeader_Add(msg, "two-fields", "val1");
     testCond(s == NATS_OK);
 
     test("Add second: ");
-    IFOK(s, natsMsgHeader_Add(msg, "two-fields", "val2"));
+    s = natsMsgHeader_Add(msg, "two-fields", "val2");
     testCond(s == NATS_OK);
 
     test("Get should return first: ");
-    IFOK(s, natsMsgHeader_Get(msg, "two-fields", &val));
+    s = natsMsgHeader_Get(msg, "two-fields", &val);
     testCond((s == NATS_OK) &&
                 (val != NULL) &&
                 (strcmp(val, "val1") == 0));
     val = NULL;
 
     test("Values: ");
-    IFOK(s, natsMsgHeader_Values(msg, "two-fields", &values, &count));
+    s = natsMsgHeader_Values(msg, "two-fields", &values, &count);
     testCond((s == NATS_OK) && (values != NULL) && (count == 2) &&
                 (strcmp(values[0], "val1") == 0) &&
                 (strcmp(values[1], "val2") == 0));
@@ -4329,7 +4209,7 @@ test_natsMsgHeaderAPIs(void)
     count  = 0;
 
     test("Add after a Set: ");
-    IFOK(s, natsMsgHeader_Set(msg, "my-other-key", "val3"));
+    s = natsMsgHeader_Set(msg, "my-other-key", "val3");
     IFOK(s, natsMsgHeader_Add(msg, "my-other-key", "val4"));
     IFOK(s, natsMsgHeader_Values(msg, "my-other-key", &values, &count));
     testCond((s == NATS_OK) && (values != NULL) && (count == 2) &&
@@ -4342,7 +4222,7 @@ test_natsMsgHeaderAPIs(void)
     count  = 0;
 
     test("Keys msg cannot be NULL: ");
-    IFOK(s, natsMsgHeader_Keys(NULL, &keys, &count));
+    s = natsMsgHeader_Keys(NULL, &keys, &count);
     testCond((s == NATS_INVALID_ARG) && (keys == NULL) && (count == 0));
     if (s == NATS_INVALID_ARG)
     {
@@ -4351,25 +4231,17 @@ test_natsMsgHeaderAPIs(void)
     }
 
     test("Keys keys cannot be NULL: ");
-    IFOK(s, natsMsgHeader_Keys(msg, NULL, &count));
+    s = natsMsgHeader_Keys(msg, NULL, &count);
     testCond((s == NATS_INVALID_ARG) && (keys == NULL) && (count == 0));
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Keys count cannot be NULL: ");
-    IFOK(s, natsMsgHeader_Keys(msg, &keys, NULL));
+    s = natsMsgHeader_Keys(msg, &keys, NULL);
     testCond((s == NATS_INVALID_ARG) && (keys == NULL) && (count == 0));
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Keys: ");
-    IFOK(s, natsMsgHeader_Keys(msg, &keys, &count));
+    s = natsMsgHeader_Keys(msg, &keys, &count);
     if ((s == NATS_OK) && ((keys == NULL) || (count != 3)))
     {
         s = NATS_ERR;
@@ -4399,19 +4271,19 @@ test_natsMsgHeaderAPIs(void)
     count = 0;
 
     test("Set with long key: ");
-    IFOK(s, natsMsgHeader_Set(msg, longKey, "val1"));
+    s = natsMsgHeader_Set(msg, longKey, "val1");
     testCond(s == NATS_OK);
 
     test("Add with long key: ");
-    IFOK(s, natsMsgHeader_Add(msg, longKey, "val2"));
+    s = natsMsgHeader_Add(msg, longKey, "val2");
     testCond(s == NATS_OK);
 
     test("Get with long key: ");
-    IFOK(s, natsMsgHeader_Get(msg, longKey, &val));
+    s = natsMsgHeader_Get(msg, longKey, &val);
     testCond((s == NATS_OK) && (val != NULL) && (strcmp(val, "val1") == 0));
 
     test("Values with long key: ");
-    IFOK(s, natsMsgHeader_Values(msg, longKey, &values, &count));
+    s = natsMsgHeader_Values(msg, longKey, &values, &count);
     testCond((s == NATS_OK) && (values != NULL) && (count == 2) &&
                 (strcmp(values[0], "val1") == 0) &&
                 (strcmp(values[1], "val2") == 0));
@@ -4419,41 +4291,27 @@ test_natsMsgHeaderAPIs(void)
     count = 0;
 
     test("Delete msg cannot be NULL: ");
-    IFOK(s, natsMsgHeader_Delete(NULL, "key"));
+    s = natsMsgHeader_Delete(NULL, "key");
     testCond(s == NATS_INVALID_ARG);
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Delete key cannot be NULL: ");
-    IFOK(s, natsMsgHeader_Delete(msg, NULL));
+    s = natsMsgHeader_Delete(msg, NULL);
     testCond(s == NATS_INVALID_ARG);
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Delete key cannot be empty: ");
-    IFOK(s, natsMsgHeader_Delete(msg, ""));
+    s = natsMsgHeader_Delete(msg, "");
     testCond(s == NATS_INVALID_ARG);
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Delete: ");
-    IFOK(s, natsMsgHeader_Delete(msg, "my-other-key"));
+    s = natsMsgHeader_Delete(msg, "my-other-key");
     testCond(s == NATS_OK);
 
     test("Should be gone: ");
-    IFOK(s, natsMsgHeader_Get(msg, "my-other-key", &val));
+    s = natsMsgHeader_Get(msg, "my-other-key", &val);
     testCond((s == NATS_NOT_FOUND) && (val == NULL));
-    if (s == NATS_NOT_FOUND)
-        s = NATS_OK;
 
     natsMsg_Destroy(msg);
 }
@@ -4506,10 +4364,8 @@ _checkStreamingStart(const char *url, int maxAttempts)
     int             attempts = 0;
 
     s = stanConnOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetURL(opts, url);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetConnectionWait(opts, 250);
+    IFOK(s, stanConnOptions_SetURL(opts, url));
+    IFOK(s, stanConnOptions_SetConnectionWait(opts, 250));
     if (s == NATS_OK)
     {
         while (((s = stanConnection_Connect(&sc, clusterName, "checkStart", opts)) != NATS_OK)
@@ -4546,6 +4402,10 @@ _stopServer(natsPid pid)
 
     CloseHandle(pid->hProcess);
     CloseHandle(pid->hThread);
+
+    natsMutex_Lock(slMu);
+    natsHash_Remove(slMap, (int64_t) pid);
+    natsMutex_Unlock(slMu);
 
     free(pid);
 }
@@ -4648,6 +4508,10 @@ _startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts
         }
     }
 
+    natsMutex_Lock(slMu);
+    natsHash_Set(slMap, (int64_t) pid, NULL, NULL);
+    natsMutex_Unlock(slMu);
+
     return (natsPid) pid;
 }
 
@@ -4673,6 +4537,10 @@ _stopServer(natsPid pid)
     }
 
     waitpid(pid, &status, 0);
+
+    natsMutex_Lock(slMu);
+    natsHash_Remove(slMap, (int64_t) pid);
+    natsMutex_Unlock(slMu);
 }
 
 static natsPid
@@ -4745,6 +4613,10 @@ _startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts
             return NATS_INVALID_PID;
         }
     }
+
+    natsMutex_Lock(slMu);
+    natsHash_Set(slMap, (int64_t) pid, NULL, NULL);
+    natsMutex_Unlock(slMu);
 
     // parent, return the child's PID back.
     return pid;
@@ -4847,16 +4719,11 @@ _createReconnectOptions(void)
     natsOptions *opts = NULL;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:22222");
-    if (s == NATS_OK)
-        s = natsOptions_SetAllowReconnect(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 10);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:22222"));
+    IFOK(s, natsOptions_SetAllowReconnect(opts, true));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 10));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
     if (s == NATS_OK)
 #ifdef WIN32
         s = natsOptions_SetTimeout(opts, 500);
@@ -4915,10 +4782,8 @@ test_ReconnectServerStats(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsOptions_SetDisconnectedCB(opts, _reconnectedCb, &args);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_Flush(nc));
 
     _stopServer(serverPid);
     serverPid = NATS_INVALID_PID;
@@ -4929,12 +4794,11 @@ test_ReconnectServerStats(void)
         CHECK_SERVER_STARTED(serverPid);
 
         natsMutex_Lock(args.m);
-        while ((s == NATS_OK) && !args.reconnected)
+        while ((s != NATS_TIMEOUT) && !args.reconnected)
             s = natsCondition_TimedWait(args.c, args.m, 5000);
         natsMutex_Unlock(args.m);
 
-        if (s == NATS_OK)
-            s = natsConnection_FlushTimeout(nc, 5000);
+        IFOK(s, natsConnection_FlushTimeout(nc, 5000));
     }
 
     if (s == NATS_OK)
@@ -4948,10 +4812,8 @@ test_ReconnectServerStats(void)
 
     test("Tracking Reconnects stats: ");
     s = natsStatistics_Create(&stats);
-    if (s == NATS_OK)
-        s = natsConnection_GetStats(nc, stats);
-    if (s == NATS_OK)
-        s = natsStatistics_GetCounts(stats, NULL, NULL, NULL, NULL, &reconnects);
+    IFOK(s, natsConnection_GetStats(nc, stats));
+    IFOK(s, natsStatistics_GetCounts(stats, NULL, NULL, NULL, NULL, &reconnects));
     testCond((s == NATS_OK) && (reconnects == 1));
 
     natsStatistics_Destroy(stats);
@@ -5155,10 +5017,8 @@ test_ParseStateReconnectFunctionality(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, &arg));
+    IFOK(s, natsConnection_Flush(nc));
 
     if (s == NATS_OK)
     {
@@ -5174,13 +5034,12 @@ test_ParseStateReconnectFunctionality(void)
     if (s == NATS_OK)
     {
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.disconnected)
+        while ((s != NATS_TIMEOUT) && !arg.disconnected)
             s = natsCondition_TimedWait(arg.c, arg.m, 500);
         natsMutex_Unlock(arg.m);
     }
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", arg.string);
+    IFOK(s, natsConnection_PublishString(nc, "foo", arg.string));
 
     if (s == NATS_OK)
     {
@@ -5188,13 +5047,12 @@ test_ParseStateReconnectFunctionality(void)
         CHECK_SERVER_STARTED(serverPid);
     }
 
-    if (s == NATS_OK)
-        s = natsConnection_FlushTimeout(nc, 5000);
+    IFOK(s, natsConnection_FlushTimeout(nc, 5000));
 
     if (s == NATS_OK)
     {
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.msgReceived)
+        while ((s != NATS_TIMEOUT) && !arg.msgReceived)
             s = natsCondition_TimedWait(arg.c, arg.m, 1500);
         natsMutex_Unlock(arg.m);
 
@@ -5228,8 +5086,7 @@ test_ServersRandomize(void)
     test("Server Pool with Randomize: ");
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, testServers, serversCount);
+    IFOK(s, natsOptions_SetServers(opts, testServers, serversCount));
     if (s == NATS_OK)
     {
         int same = 0;
@@ -5264,8 +5121,7 @@ test_ServersRandomize(void)
     // Now test that we do not randomize if proper flag is set.
     test("Server Pool With NoRandomize: ")
     s = natsOptions_SetNoRandomize(opts, true);
-    if (s == NATS_OK)
-        s = natsConn_create(&nc, natsOptions_clone(opts));
+    IFOK(s, natsConn_create(&nc, natsOptions_clone(opts)));
     if (s == NATS_OK)
     {
         for (int i=0; i<serversCount; i++)
@@ -5286,10 +5142,8 @@ test_ServersRandomize(void)
     // is enabled. So make sure that this is still the case.
     test("If Options.URL is set, it should be first: ")
     s = natsOptions_SetNoRandomize(opts, false);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConn_create(&nc, natsOptions_clone(opts));
+    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+    IFOK(s, natsConn_create(&nc, natsOptions_clone(opts)));
     if (s == NATS_OK)
     {
         int same = 0;
@@ -5330,12 +5184,9 @@ test_SelectNextServer(void)
 
     test("Test default server pool selection: ");
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, testServers, serversCount);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoRandomize(opts, true);
-    if (s == NATS_OK)
-        s = natsConn_create(&nc, natsOptions_clone(opts));
+    IFOK(s, natsOptions_SetServers(opts, testServers, serversCount));
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsConn_create(&nc, natsOptions_clone(opts)));
     testCond((s == NATS_OK)
              && (nc->cur->url == nc->srvPool->srvrs[0]->url));
 
@@ -5457,12 +5308,9 @@ test_ParserPing(void)
     char            ping[64];
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsConn_create(&nc, opts);
-    if (s == NATS_OK)
-        s = natsParser_Create(&(nc->ps));
-    if (s == NATS_OK)
-        s = natsBuf_Create(&(nc->pending), 1000);
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
+    IFOK(s, natsBuf_Create(&(nc->pending), 1000));
     if (s == NATS_OK)
         nc->usePending = true;
     if (s != NATS_OK)
@@ -5528,12 +5376,9 @@ test_ParserErr(void)
     int             len;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsConn_create(&nc, opts);
-    if (s == NATS_OK)
-        s = natsParser_Create(&(nc->ps));
-    if (s == NATS_OK)
-        s = natsBuf_Create(&(nc->pending), 1000);
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
+    IFOK(s, natsBuf_Create(&(nc->pending), 1000));
     if (s == NATS_OK)
     {
         nc->usePending = true;
@@ -5616,10 +5461,8 @@ test_ParserOK(void)
     char            okProto[256];
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsConn_create(&nc, opts);
-    if (s == NATS_OK)
-        s = natsParser_Create(&(nc->ps));
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -5656,10 +5499,8 @@ test_ParserShouldFail(void)
     char            buf[64];
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsConn_create(&nc, opts);
-    if (s == NATS_OK)
-        s = natsParser_Create(&(nc->ps));
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -5670,186 +5511,139 @@ test_ParserShouldFail(void)
     s = natsParser_Parse(nc, buf, (int)strlen(buf));
     testCond(s != NATS_OK);
 
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "POO");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "Px");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "PIx");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "PINx");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "POO");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
 
-        // Stop here because 'PING' protos are tolerant for anything between PING and \n
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "POx");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "PONx");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "Px");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
 
-        // Stop here because 'PONG' protos are tolerant for anything between PONG and \n
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "ZOO");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "Mx\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "MSx\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "MSGx\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "MSG  foo\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "MSG \r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "MSG foo 1\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "MSG foo bar 1\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "MSG foo bar 1 baz\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "MSG foo 1 bar baz\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "+x\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "+Ox\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "-x\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "-Ex\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "-ERx\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
-    if (s != NATS_OK)
-    {
-        PARSER_START_TEST;
-        nc->ps->state = OP_START;
-        snprintf(buf, sizeof(buf), "%s", "-ERRx\r\n");
-        s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        testCond(s != NATS_OK);
-    }
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "PIx");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "PINx");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+    // Stop here because 'PING' protos are tolerant for anything between PING and \n
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "POx");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "PONx");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+    // Stop here because 'PONG' protos are tolerant for anything between PONG and \n
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "ZOO");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "Mx\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "MSx\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "MSGx\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "MSG  foo\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "MSG \r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "MSG foo 1\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "MSG foo bar 1\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "MSG foo bar 1 baz\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "MSG foo 1 bar baz\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "+x\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "+Ox\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "-x\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "-Ex\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "-ERx\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
+
+    PARSER_START_TEST;
+    nc->ps->state = OP_START;
+    snprintf(buf, sizeof(buf), "%s", "-ERRx\r\n");
+    s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    testCond(s != NATS_OK);
 
     natsConnection_Destroy(nc);
 }
@@ -5866,10 +5660,8 @@ test_ParserSplitMsg(void)
     int             msgSize, start, i;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsConn_create(&nc, opts);
-    if (s == NATS_OK)
-        s = natsParser_Create(&(nc->ps));
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -5995,21 +5787,16 @@ test_ParserSplitMsg(void)
              && (nc->ps->state == MSG_PAYLOAD));
 
     // Verify content
+    PARSER_START_TEST;
+    s = ((strncmp(nc->ps->msgBuf->data, "foo", 3) == 0) ? NATS_OK : NATS_ERR);
     if (s == NATS_OK)
     {
-        PARSER_START_TEST;
-        s = ((strncmp(nc->ps->msgBuf->data, "foo", 3) == 0) ? NATS_OK : NATS_ERR);
-        if (s == NATS_OK)
-        {
-            int k;
+        int k;
 
-            for (k=3; (s == NATS_OK) && (k<nc->ps->ma.size); k++)
-                s = (nc->ps->msgBuf->data[k] == (char)('a' + ((k-3) % 26)) ? NATS_OK : NATS_ERR);
-        }
-        testCond(s == NATS_OK)
-        if (s != NATS_OK)
-            printf("Wrong content: %.*s\n", nc->ps->msgBuf->len, nc->ps->msgBuf->data);
+        for (k=3; (s == NATS_OK) && (k<nc->ps->ma.size); k++)
+            s = (nc->ps->msgBuf->data[k] == (char)('a' + ((k-3) % 26)) ? NATS_OK : NATS_ERR);
     }
+    testCond(s == NATS_OK)
 
     PARSER_START_TEST;
     s = natsParser_Parse(nc, buf + (int)strlen(buf) - 2, 2);
@@ -6023,6 +5810,12 @@ test_ParserSplitMsg(void)
     natsConnection_Destroy(nc);
 }
 
+#define RECREATE_PARSER \
+    natsParser_Destroy(nc->ps); \
+    s = natsParser_Create(&(nc->ps)); \
+    if (s != NATS_OK) \
+        FAIL("Unable to setup test"); \
+
 static void
 test_ProcessMsgArgs(void)
 {
@@ -6033,10 +5826,8 @@ test_ProcessMsgArgs(void)
     const char*     le = NULL;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsConn_create(&nc, opts);
-    if (s == NATS_OK)
-        s = natsParser_Create(&(nc->ps));
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -6056,10 +5847,7 @@ test_ProcessMsgArgs(void)
                 && (le != NULL)
                 && (strstr(le, "wrong number of arguments") != NULL));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "MSG foo 1\r\n");
     test("Parsing MSG with not enough arguments: ")
@@ -6073,10 +5861,7 @@ test_ProcessMsgArgs(void)
                 && (le != NULL)
                 && (strstr(le, "wrong number of arguments") != NULL));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "MSG foo abc 2\r\n");
     test("Parsing MSG with bad sid: ")
@@ -6090,10 +5875,7 @@ test_ProcessMsgArgs(void)
                 && (le != NULL)
                 && (strstr(le, "Bad or Missing Sid") != NULL));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "MSG foo 1 abc\r\n");
     test("Parsing MSG with bad size: ")
@@ -6121,10 +5903,7 @@ test_ProcessMsgArgs(void)
 
     // Test extra spaces first without reply
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "MSG foo  1 2\r\n");
     test("Parsing MSG with extra space before sid: ")
@@ -6136,10 +5915,7 @@ test_ProcessMsgArgs(void)
                 && (nc->ps->ma.reply == NULL)
                 && (nc->ps->ma.size == 2));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "MSG bar 1  2\r\n");
     test("Parsing MSG with extra space before size: ")
@@ -6153,10 +5929,7 @@ test_ProcessMsgArgs(void)
 
     // Test extra spaces first with reply
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "MSG baz  3 bat 4\r\n");
     test("Parsing MSG with extra space before sid: ")
@@ -6169,10 +5942,7 @@ test_ProcessMsgArgs(void)
                 && (strncmp(natsBuf_Data(nc->ps->ma.reply), "bat", 3) == 0)
                 && (nc->ps->ma.size == 4));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "MSG boo 5  baa 6\r\n");
     test("Parsing MSG with extra space before reply: ")
@@ -6185,10 +5955,7 @@ test_ProcessMsgArgs(void)
                 && (strncmp(natsBuf_Data(nc->ps->ma.reply), "baa", 3) == 0)
                 && (nc->ps->ma.size == 6));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "MSG coo 7 caa  8\r\n");
     test("Parsing MSG with extra space before size: ")
@@ -6203,10 +5970,7 @@ test_ProcessMsgArgs(void)
 
     // Test with extra space everywhere
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "MSG  doo  8  daa   9  \r\n");
     test("Parsing MSG with extra space everywhere: ")
@@ -6221,10 +5985,7 @@ test_ProcessMsgArgs(void)
 
     // Test HMSG
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 bar 2 3\r\n");
     test("Parsing HMSG: ");
@@ -6238,10 +5999,7 @@ test_ProcessMsgArgs(void)
                 && (nc->ps->ma.hdr == 2)
                 && (nc->ps->ma.size == 3));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 3\r\n");
     test("Parsing HMSG not enough args: ");
@@ -6255,10 +6013,7 @@ test_ProcessMsgArgs(void)
                 && (le != NULL)
                 && (strstr(le, "wrong number of arguments") != NULL));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "HMSG a b c d e f\r\n");
     test("Parsing HMSG too many args: ");
@@ -6273,10 +6028,7 @@ test_ProcessMsgArgs(void)
                 && (le != NULL)
                 && (strstr(le, "wrong number of arguments") != NULL));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "HMSG foo abc 2 4\r\n");
     test("Parsing HMSG with bad sid: ");
@@ -6290,10 +6042,7 @@ test_ProcessMsgArgs(void)
                 && (le != NULL)
                 && (strstr(le, "Bad or Missing Sid") != NULL));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 baz 10\r\n");
     test("Parsing HMSG with bad header size: ");
@@ -6307,10 +6056,7 @@ test_ProcessMsgArgs(void)
                 && (le != NULL)
                 && (strstr(le, "Bad or Missing Header Size") != NULL));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 bar baz 10\r\n");
     test("Parsing HMSG with bad header size (with reply): ");
@@ -6324,10 +6070,7 @@ test_ProcessMsgArgs(void)
                 && (le != NULL)
                 && (strstr(le, "Bad or Missing Header Size") != NULL));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 10 4\r\n");
     test("Parsing HMSG with bad header size (out of range): ");
@@ -6341,10 +6084,7 @@ test_ProcessMsgArgs(void)
                 && (le != NULL)
                 && (strstr(le, "Bad or Missing Header Size") != NULL));
 
-    natsParser_Destroy(nc->ps);
-    s = natsParser_Create(&(nc->ps));
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
+    RECREATE_PARSER;
 
     snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 bar 10 4\r\n");
     test("Parsing HMSG with bad header size (out of range with reply): ");
@@ -6459,10 +6199,8 @@ test_AsyncINFO(void)
     const char      *lastErr = NULL;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsConn_create(&nc, opts);
-    if (s == NATS_OK)
-        s = natsParser_Create(&(nc->ps));
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -6559,8 +6297,7 @@ test_AsyncINFO(void)
         snprintf(buf, sizeof(buf), "Test with good INFO proto number %d: ", (i+1));
         test(buf);
         s = natsParser_Create(&(nc->ps));
-        if (s == NATS_OK)
-            s = natsParser_Parse(nc, (char*) good[i], (int)strlen(good[i]));
+        IFOK(s, natsParser_Parse(nc, (char*) good[i], (int)strlen(good[i])));
         testCond((s == NATS_OK)
                     && (nc->ps->state == OP_START)
                     && (nc->ps->argBuf == NULL));
@@ -6574,8 +6311,7 @@ test_AsyncINFO(void)
         snprintf(buf, sizeof(buf), "Test with wrong INFO proto number %d: ", (i+1));
         test(buf);
         s = natsParser_Create(&(nc->ps));
-        if (s == NATS_OK)
-            s = natsParser_Parse(nc, (char*) wrong[i], (int)strlen(wrong[i]));
+        IFOK(s, natsParser_Parse(nc, (char*) wrong[i], (int)strlen(wrong[i])));
         testCond(!((s == NATS_OK) && (nc->ps->state == OP_START)));
         natsParser_Destroy(nc->ps);
         nc->ps = NULL;
@@ -6589,10 +6325,8 @@ test_AsyncINFO(void)
     nc = NULL;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsConn_create(&nc, opts);
-    if (s == NATS_OK)
-        s = natsParser_Create(&(nc->ps));
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -6646,16 +6380,12 @@ test_AsyncINFO(void)
             "\"impH:4222\", \"impI:4222\", \"impJ:4222\"";
 
         s = natsOptions_Create(&opts);
-        if (s == NATS_OK)
-            s = natsOptions_SetNoRandomize(opts, false);
-        if (s == NATS_OK)
-            s = natsOptions_SetServers(opts, testServers, sizeof(testServers)/sizeof(char*));
-        if (s == NATS_OK)
-            s = natsConn_create(&nc, opts);
-        if (s == NATS_OK)
-            s = natsParser_Create(&(nc->ps));
+        IFOK(s, natsOptions_SetNoRandomize(opts, false));
+        IFOK(s, natsOptions_SetServers(opts, testServers, sizeof(testServers)/sizeof(char*)));
+        IFOK(s, natsConn_create(&nc, opts));
+        IFOK(s, natsParser_Create(&(nc->ps)));
         // Capture the pool sequence after randomization
-        s = natsConnection_GetServers(nc, &urlsAfterPoolSetup, &initialPoolSize);
+        IFOK(s, natsConnection_GetServers(nc, &urlsAfterPoolSetup, &initialPoolSize));
         if (s != NATS_OK)
             FAIL("Unable to setup test");
 
@@ -6663,8 +6393,7 @@ test_AsyncINFO(void)
         snprintf(buf, sizeof(buf), "INFO {\"connect_urls\":[%s]}\r\n", newURLs);
         test("New URLs are added randomly: ");
         s = natsParser_Parse(nc, buf, (int)strlen(buf));
-        if (s == NATS_OK)
-            s = checkNewURLsAddedRandomly(nc, urlsAfterPoolSetup, initialPoolSize);
+        IFOK(s, checkNewURLsAddedRandomly(nc, urlsAfterPoolSetup, initialPoolSize));
         testCond((s == NATS_OK) && (nc->ps->state == OP_START));
 
         test("First URL should not have been changed: ")
@@ -6785,33 +6514,26 @@ test_NoFlusherIfSendAsap(void)
 
     test("Connect/subscribe ok: ");
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK);
 
-    for (i=0; (s == NATS_OK) && (i<2); i++)
+    for (i=0; i<2; i++)
     {
-        if (s == NATS_OK)
-        {
-            test("Send ok: ");
-            s = natsConnection_PublishString(nc, "foo", "test");
-            natsMutex_Lock(arg.m);
-            while ((s == NATS_OK) && !arg.msgReceived)
-                s = natsCondition_TimedWait(arg.c, arg.m, 1500);
-            natsMutex_Unlock(arg.m);
-            testCond(s == NATS_OK);
-        }
+        test("Send ok: ");
+        s = natsConnection_PublishString(nc, "foo", "test");
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+            s = natsCondition_TimedWait(arg.c, arg.m, 1500);
+        natsMutex_Unlock(arg.m);
+        testCond(s == NATS_OK);
 
-        if (s == NATS_OK)
-        {
-            test("Flusher does not exist: ");
-            natsMutex_Lock(nc->mu);
-            s = (nc->flusherThread == NULL ? NATS_OK : NATS_ERR);
-            natsMutex_Unlock(nc->mu);
-            testCond(s == NATS_OK);
-        }
+        test("Flusher does not exist: ");
+        natsMutex_Lock(nc->mu);
+        s = (nc->flusherThread == NULL ? NATS_OK : NATS_ERR);
+        natsMutex_Unlock(nc->mu);
+        testCond(s == NATS_OK);
+
         if (i == 0)
         {
             _stopServer(pid);
@@ -6895,12 +6617,9 @@ test_LibMsgDelivery(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        natsOptions_UseGlobalMessageDelivery(opts, true);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&s1, nc, "foo", _dummyMsgHandler, NULL);
+    IFOK(s, natsOptions_UseGlobalMessageDelivery(opts, true));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_Subscribe(&s1, nc, "foo", _dummyMsgHandler, NULL));
     if (s == NATS_OK)
     {
         natsMutex_Lock(s1->mu);
@@ -6912,8 +6631,7 @@ test_LibMsgDelivery(void)
     testCond((s == NATS_OK) && (psize == 1) && (lmd1 != NULL)
              && (pidx == 1) && (pwks != NULL) && (lmd1 == pwks[0]));
 
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&s2, nc, "foo", _dummyMsgHandler, NULL);
+    s = natsConnection_Subscribe(&s2, nc, "foo", _dummyMsgHandler, NULL);
     if (s == NATS_OK)
     {
         natsMutex_Lock(s2->mu);
@@ -6925,8 +6643,7 @@ test_LibMsgDelivery(void)
     testCond((s == NATS_OK) && (psize == 2) && (lmd2 != lmd1)
              && (pidx == 0) && (pwks != NULL) && (lmd2 == pwks[1]));
 
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&s3, nc, "foo", _dummyMsgHandler, NULL);
+    s = natsConnection_Subscribe(&s3, nc, "foo", _dummyMsgHandler, NULL);
     if (s == NATS_OK)
     {
         natsMutex_Lock(s3->mu);
@@ -6939,15 +6656,13 @@ test_LibMsgDelivery(void)
              && (pidx == 1) && (pwks != NULL) && (lmd3 == pwks[0]));
 
     // Bump the pool size to 4
-    if (s == NATS_OK)
-        s = nats_SetMessageDeliveryPoolSize(4);
+    s = nats_SetMessageDeliveryPoolSize(4);
     natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
     test("Check increase of pool size: ");
     testCond((s == NATS_OK) && (psize == 2) && (pidx == 1)
              && (pmaxSize == 4) && (pwks != NULL));
 
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&s4, nc, "foo", _dummyMsgHandler, NULL);
+    s = natsConnection_Subscribe(&s4, nc, "foo", _dummyMsgHandler, NULL);
     if (s == NATS_OK)
     {
         natsMutex_Lock(s4->mu);
@@ -6959,8 +6674,7 @@ test_LibMsgDelivery(void)
     testCond((s == NATS_OK) && (psize == 2) && (lmd4 == lmd2)
              && (pidx == 2) && (pwks != NULL) && (lmd4 == pwks[1]));
 
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&s5, nc, "foo", _dummyMsgHandler, NULL);
+    s = natsConnection_Subscribe(&s5, nc, "foo", _dummyMsgHandler, NULL);
     if (s == NATS_OK)
     {
         natsMutex_Lock(s5->mu);
@@ -6998,8 +6712,7 @@ test_DefaultConnection(void)
     natsOptions         *opts     = NULL;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetTimeout(opts, 500);
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -7066,15 +6779,13 @@ test_SimplifiedURLs(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SkipServerVerification(opts, true);
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
 
     test("Test simplified URLs to TLS server: ");
     for (i=0; ((s == NATS_OK) && (i<urlsCount)); i++)
     {
         s = natsOptions_SetURL(opts, urls[i]);
-        if (s == NATS_OK)
-            s = natsConnection_Connect(&nc, opts);
+        IFOK(s, natsConnection_Connect(&nc, opts));
         if (s == NATS_OK)
         {
             natsConnection_Destroy(nc);
@@ -7097,10 +6808,8 @@ test_IPResolutionOrder(void)
     natsOptions         *opts     = NULL;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://localhost:4222");
-    if (s == NATS_OK)
-        s = natsOptions_SetTimeout(opts, 500);
+    IFOK(s, natsOptions_SetURL(opts, "nats://localhost:4222"));
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -7111,8 +6820,7 @@ test_IPResolutionOrder(void)
 
     test("Order: 4: ");
     s = natsOptions_IPResolutionOrder(opts, 4);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     if (s == NATS_OK)
     {
         natsConnection_Destroy(nc);
@@ -7122,8 +6830,7 @@ test_IPResolutionOrder(void)
 
     test("Order: 46: ");
     s = natsOptions_IPResolutionOrder(opts, 46);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     if (s == NATS_OK)
     {
         natsConnection_Destroy(nc);
@@ -7134,8 +6841,7 @@ test_IPResolutionOrder(void)
 
     test("Order: 64: ");
     s = natsOptions_IPResolutionOrder(opts, 64);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     if (s == NATS_OK)
     {
         natsConnection_Destroy(nc);
@@ -7145,8 +6851,7 @@ test_IPResolutionOrder(void)
 
     test("Order: 0: ");
     s = natsOptions_IPResolutionOrder(opts, 0);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     if (s == NATS_OK)
     {
         natsConnection_Destroy(nc);
@@ -7185,8 +6890,7 @@ test_IPResolutionOrder(void)
 
         test("Order: 6: ");
         s = natsOptions_IPResolutionOrder(opts, 6);
-        if (s == NATS_OK)
-            s = natsConnection_Connect(&nc, opts);
+        IFOK(s, natsConnection_Connect(&nc, opts));
         if (s == NATS_OK)
         {
             natsConnection_Destroy(nc);
@@ -7196,8 +6900,7 @@ test_IPResolutionOrder(void)
 
         test("Order: 46: ");
         s = natsOptions_IPResolutionOrder(opts, 46);
-        if (s == NATS_OK)
-            s = natsConnection_Connect(&nc, opts);
+        IFOK(s, natsConnection_Connect(&nc, opts));
         if (s == NATS_OK)
         {
             natsConnection_Destroy(nc);
@@ -7207,8 +6910,7 @@ test_IPResolutionOrder(void)
 
         test("Order: 64: ");
         s = natsOptions_IPResolutionOrder(opts, 64);
-        if (s == NATS_OK)
-            s = natsConnection_Connect(&nc, opts);
+        IFOK(s, natsConnection_Connect(&nc, opts));
         if (s == NATS_OK)
         {
             natsConnection_Destroy(nc);
@@ -7218,8 +6920,7 @@ test_IPResolutionOrder(void)
 
         test("Order: 0: ");
         s = natsOptions_IPResolutionOrder(opts, 0);
-        if (s == NATS_OK)
-            s = natsConnection_Connect(&nc, opts);
+        IFOK(s, natsConnection_Connect(&nc, opts));
         if (s == NATS_OK)
         {
             natsConnection_Destroy(nc);
@@ -7295,20 +6996,16 @@ test_ConnectToWithMultipleURLs(void)
 
     test("Check multiple URLs work: ");
     s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4444,nats://127.0.0.1:4443,nats://127.0.0.1:4222");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
-    if (s == NATS_OK)
-        s = natsConnection_GetConnectedUrl(nc, buf, sizeof(buf));
+    IFOK(s, natsConnection_Flush(nc));
+    IFOK(s, natsConnection_GetConnectedUrl(nc, buf, sizeof(buf)));
     testCond((s == NATS_OK)
              && (strcmp(buf, "nats://127.0.0.1:4222") == 0));
     natsConnection_Destroy(nc);
 
     test("Check multiple URLs work, even with spaces: ");
     s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4444 , nats://127.0.0.1:4443  ,  nats://127.0.0.1:4222   ");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
-    if (s == NATS_OK)
-        s = natsConnection_GetConnectedUrl(nc, buf, sizeof(buf));
+    IFOK(s, natsConnection_Flush(nc));
+    IFOK(s, natsConnection_GetConnectedUrl(nc, buf, sizeof(buf)));
     testCond((s == NATS_OK)
              && (strcmp(buf, "nats://127.0.0.1:4222") == 0));
     natsConnection_Destroy(nc);
@@ -7329,10 +7026,8 @@ test_ConnectionToWithNullURLs(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NULL);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
-    if (s == NATS_OK)
-        s = natsConnection_GetConnectedUrl(nc, buf, sizeof(buf));
+    IFOK(s, natsConnection_Flush(nc));
+    IFOK(s, natsConnection_GetConnectedUrl(nc, buf, sizeof(buf)));
 
     testCond((s == NATS_OK) && (strcmp(buf, NATS_DEFAULT_URL) == 0));
     natsConnection_Destroy(nc);
@@ -7417,7 +7112,7 @@ test_ConnClosedCB(void)
 
     natsMutex_Lock(arg.m);
     s = NATS_OK;
-    while ((s == NATS_OK) && !arg.closed)
+    while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
 
@@ -7463,7 +7158,7 @@ test_CloseDisconnectedCB(void)
 
     natsMutex_Lock(arg.m);
     s = NATS_OK;
-    while ((s == NATS_OK) && !arg.closed)
+    while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
 
@@ -7509,7 +7204,7 @@ test_ServerStopDisconnectedCB(void)
 
     natsMutex_Lock(arg.m);
     s = NATS_OK;
-    while ((s == NATS_OK) && !arg.closed)
+    while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
 
@@ -7535,8 +7230,7 @@ test_ClosedConnections(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&goodsub, nc, "foo");
+    IFOK(s, natsConnection_SubscribeSync(&goodsub, nc, "foo"));
     if (s == NATS_OK)
         natsConnection_Close(nc);
 
@@ -7548,8 +7242,7 @@ test_ClosedConnections(void)
 
     test("PublishMsg on closed should fail: ")
     s = natsMsg_Create(&msg, "foo", NULL, NULL, 0);
-    if (s == NATS_OK)
-        s = natsConnection_PublishMsg(nc, msg);
+    IFOK(s, natsConnection_PublishMsg(nc, msg));
     testCond(s == NATS_CONNECTION_CLOSED);
 
     natsMsg_Destroy(msg);
@@ -7609,10 +7302,8 @@ test_ConnectVerboseOption(void)
         if (opts == NULL)
             s = NATS_ERR;
     }
-    if (s == NATS_OK)
-        s = natsOptions_SetVerbose(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+    IFOK(s, natsOptions_SetVerbose(opts, true));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -7622,8 +7313,7 @@ test_ConnectVerboseOption(void)
     test("Check connect OK with Verbose option: ");
 
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     testCond(s == NATS_OK)
 
@@ -7634,12 +7324,11 @@ test_ConnectVerboseOption(void)
     test("Check reconnect OK with Verbose option: ");
 
     natsMutex_Lock(args.m);
-    while ((s == NATS_OK) && !(args.reconnected))
+    while ((s != NATS_TIMEOUT) && !args.reconnected)
         s = natsCondition_TimedWait(args.c, args.m, 5000);
     natsMutex_Unlock(args.m);
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     testCond(s == NATS_OK);
 
@@ -7680,7 +7369,7 @@ test_ReconnectThreadLeak(void)
     s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK);
 
-    for (i=0; (s == NATS_OK) && (i<10); i++)
+    for (i=0; i<10; i++)
     {
         natsMutex_Lock(nc->mu);
         natsSock_Shutdown(nc->sockCtx.fd);
@@ -7688,7 +7377,7 @@ test_ReconnectThreadLeak(void)
 
         test("Waiting for disconnect: ");
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && (!arg.disconnected))
+        while ((s != NATS_TIMEOUT) && !arg.disconnected)
             s = natsCondition_TimedWait(arg.c, arg.m, 2000);
         arg.disconnected = false;
         natsMutex_Unlock(arg.m);
@@ -7696,7 +7385,7 @@ test_ReconnectThreadLeak(void)
 
         test("Waiting for reconnect: ");
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && (!arg.reconnected))
+        while ((s != NATS_TIMEOUT) && !arg.reconnected)
             s = natsCondition_TimedWait(arg.c, arg.m, 2000);
         arg.reconnected = false;
         natsMutex_Unlock(arg.m);
@@ -7741,16 +7430,11 @@ test_ReconnectDisallowedFlags(void)
 
     test("Connect: ");
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:22222");
-    if (s == NATS_OK)
-        s = natsOptions_SetAllowReconnect(opts, false);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:22222"));
+    IFOK(s, natsOptions_SetAllowReconnect(opts, false));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
 
     _stopServer(serverPid);
@@ -7780,31 +7464,24 @@ test_ReconnectAllowedFlags(void)
     serverPid = _startServer("nats://127.0.0.1:22222", "-p 22222", true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Create options and connect: ");
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:22222");
-    if (s == NATS_OK)
-        s = natsOptions_SetAllowReconnect(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 2);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 1000);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:22222"));
+    IFOK(s, natsOptions_SetAllowReconnect(opts, true));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 2));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 1000));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
 
     _stopServer(serverPid);
 
     test("Test reconnecting in progress: ");
 
     natsMutex_Lock(arg.m);
-    s = NATS_OK;
-    while ((s == NATS_OK) && !arg.closed)
+    while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 500);
     natsMutex_Unlock(arg.m);
 
@@ -7815,7 +7492,7 @@ test_ReconnectAllowedFlags(void)
     natsConnection_Close(nc);
     natsMutex_Lock(arg.m);
     s = NATS_OK;
-    while ((s == NATS_OK) && !arg.closed)
+    while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 500);
     natsMutex_Unlock(arg.m);
 
@@ -7850,12 +7527,9 @@ test_ConnCloseBreaksReconnectLoop(void)
         if (opts == NULL)
             s = NATS_NO_MEMORY;
     }
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 1000);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg);
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 1000));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, &arg));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -7864,14 +7538,13 @@ test_ConnCloseBreaksReconnectLoop(void)
 
     test("Connection close breaks out reconnect loop: ");
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     // Shutdown the server
     _stopServer(serverPid);
 
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.disconnected)
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 3000);
     natsMutex_Unlock(arg.m);
 
@@ -7888,7 +7561,7 @@ test_ConnCloseBreaksReconnectLoop(void)
     // we should be able to break the reconnect loop with the following
     // timeout.
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.closed)
+    while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 3000);
     natsMutex_Unlock(arg.m);
 
@@ -7936,47 +7609,37 @@ test_BasicReconnectFunctionality(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, &arg));
+    IFOK(s, natsConnection_Flush(nc));
 
     _stopServer(serverPid);
     serverPid = NATS_INVALID_PID;
 
     test("Disconnected CB invoked: ");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.disconnected)
-            s = natsCondition_TimedWait(arg.c, arg.m, 500);
-        natsMutex_Unlock(arg.m);
-    }
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 500);
+    natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.disconnected);
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", arg.string);
-
+    test("Publish message: ");
+    s = natsConnection_PublishString(nc, "foo", arg.string);
     if (s == NATS_OK)
     {
         serverPid = _startServer("nats://127.0.0.1:22222", "-p 22222", true);
         CHECK_SERVER_STARTED(serverPid);
     }
-
-    if (s == NATS_OK)
-        s = natsConnection_FlushTimeout(nc, 5000);
+    IFOK(s, natsConnection_FlushTimeout(nc, 5000));
+    testCond(s == NATS_OK);
 
     test("Check message received after reconnect: ");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.msgReceived)
-            s = natsCondition_TimedWait(arg.c, arg.m, 1500);
-        natsMutex_Unlock(arg.m);
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+        s = natsCondition_TimedWait(arg.c, arg.m, 1500);
+    natsMutex_Unlock(arg.m);
 
-        if (s == NATS_OK)
-            s = arg.status;
-    }
+    if (s == NATS_OK)
+        s = arg.status;
     testCond((s == NATS_OK) && (nc->stats.reconnects == 1));
 
     natsSubscription_Destroy(sub);
@@ -8037,80 +7700,57 @@ test_ExtendedReconnectFunctionality(void)
     serverPid = _startServer("nats://127.0.0.1:22222", "-p 22222", true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Setup: ");
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub2, nc, "foobar", _recvTestString, &arg);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", arg.string);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, &arg));
+    IFOK(s, natsConnection_Subscribe(&sub2, nc, "foobar", _recvTestString, &arg));
+    IFOK(s, natsConnection_PublishString(nc, "foo", arg.string));
+    IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
 
     _stopServer(serverPid);
     serverPid = NATS_INVALID_PID;
 
     test("Disconnected CB invoked: ");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.disconnected)
-            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-        natsMutex_Unlock(arg.m);
-    }
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.disconnected);
 
+    test("Some protos while disconnected: ");
     // Sub while disconnected
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub3, nc, "bar", _recvTestString, &arg);
+    s = natsConnection_Subscribe(&sub3, nc, "bar", _recvTestString, &arg);
 
     // Unsubscribe foo and bar while disconnected
-    if (s == NATS_OK)
-        s = natsSubscription_Unsubscribe(sub2);
+    IFOK(s, natsSubscription_Unsubscribe(sub2));
+    IFOK(s, natsConnection_PublishString(nc, "foo", arg.string));
+    IFOK(s, natsConnection_PublishString(nc, "bar", arg.string));
+    testCond(s == NATS_OK);
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", arg.string);
-
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "bar", arg.string);
-
-    if (s == NATS_OK)
-    {
-        serverPid = _startServer("nats://127.0.0.1:22222", "-p 22222", true);
-        CHECK_SERVER_STARTED(serverPid);
-    }
+    serverPid = _startServer("nats://127.0.0.1:22222", "-p 22222", true);
+    CHECK_SERVER_STARTED(serverPid);
 
     // Server is restarted, wait for reconnect
     test("Check reconnected: ");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.reconnected)
-            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-        natsMutex_Unlock(arg.m);
-    }
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.reconnected);
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foobar", arg.string);
-
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", arg.string);
-
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub4, nc, "done", _doneCb, &arg);
-
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "done", "done");
+    test("Publish more: ");
+    s = natsConnection_PublishString(nc, "foobar", arg.string);
+    IFOK(s, natsConnection_PublishString(nc, "foo", arg.string));
+    IFOK(s, natsConnection_Subscribe(&sub4, nc, "done", _doneCb, &arg));
+    IFOK(s, natsConnection_PublishString(nc, "done", "done"));
+    testCond(s == NATS_OK);
 
     test("Done msg received: ")
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.done)
-            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-        natsMutex_Unlock(arg.m);
-    }
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.done);
 
     nats_Sleep(50);
@@ -8163,14 +7803,11 @@ test_QueueSubsOnReconnect(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_QueueSubscribe(&sub1, nc, "foo.bar", "workers",
-                                          _recvTestString, &arg);
-    if (s == NATS_OK)
-        s = natsConnection_QueueSubscribe(&sub2, nc, "foo.bar", "workers",
-                                          _recvTestString, &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_QueueSubscribe(&sub1, nc, "foo.bar", "workers",
+                                          _recvTestString, &arg));
+    IFOK(s, natsConnection_QueueSubscribe(&sub2, nc, "foo.bar", "workers",
+                                          _recvTestString, &arg));
+    IFOK(s, natsConnection_Flush(nc));
 
     for (int i=0; (s == NATS_OK) && (i < 10); i++)
     {
@@ -8180,8 +7817,7 @@ test_QueueSubsOnReconnect(void)
         s = natsConnection_PublishString(nc, "foo.bar", seq);
     }
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     nats_Sleep(50);
 
@@ -8191,8 +7827,7 @@ test_QueueSubsOnReconnect(void)
         if (arg.results[i] != 1)
             s = NATS_ERR;
     }
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
 
     memset(&arg.results, 0, sizeof(arg.results));
     natsMutex_Unlock(arg.m);
@@ -8208,7 +7843,7 @@ test_QueueSubsOnReconnect(void)
 
     test("Reconnects: ")
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.reconnected)
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.reconnected);
@@ -8221,8 +7856,7 @@ test_QueueSubsOnReconnect(void)
         s = natsConnection_PublishString(nc, "foo.bar", seq);
     }
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     nats_Sleep(50);
 
@@ -8232,8 +7866,7 @@ test_QueueSubsOnReconnect(void)
         if (arg.results[i] != 1)
             s = NATS_ERR;
     }
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
 
     memset(&arg.results, 0, sizeof(arg.results));
     natsMutex_Unlock(arg.m);
@@ -8298,31 +7931,20 @@ test_IsReconnectingAndStatus(void)
     serverPid = _startServer("nats://127.0.0.1:22222", "-p 22222", true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Check reconnecting state: ");
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:22222");
-    if (s == NATS_OK)
-        s = natsOptions_SetAllowReconnect(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 10000);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:22222"));
+    IFOK(s, natsOptions_SetAllowReconnect(opts, true));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 10000));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
 
     // Connect, verify initial reconnecting state check, then stop the server
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-
-    test("Check reconnecting state: ");
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond((s == NATS_OK) && !natsConnection_IsReconnecting(nc));
 
     test("Check status: ");
@@ -8334,7 +7956,7 @@ test_IsReconnectingAndStatus(void)
     // Wait until we get the disconnected callback
     test("Check we are disconnected: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.disconnected)
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.disconnected);
@@ -8351,7 +7973,7 @@ test_IsReconnectingAndStatus(void)
     // Wait until we get the reconnect callback
     test("Check we are reconnected: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.reconnected)
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.reconnected);
@@ -8423,33 +8045,28 @@ test_ReconnectBufSize(void)
 
     // For this test, set to a low value.
     s = natsOptions_SetReconnectBufSize(opts, 32);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_Flush(nc));
 
     _stopServer(serverPid);
 
     // Wait until we get the disconnected callback
     test("Check we are disconnected: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.disconnected)
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.disconnected);
 
     // Publish 2 messages, they should be accepted
     test("Can publish while server is down: ");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "abcd");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "abcd");
+    s = natsConnection_PublishString(nc, "foo", "abcd");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "abcd"));
     testCond(s == NATS_OK);
 
     // This publish should fail
     test("Exhausted buffer should return an error: ");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "abcd");
+    s = natsConnection_PublishString(nc, "foo", "abcd");
     testCond(s == NATS_INSUFFICIENT_BUFFER);
 
     natsOptions_Destroy(opts);
@@ -8510,21 +8127,15 @@ test_RetryOnFailedConnect(void)
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetRetryOnFailedConnect(opts, true, NULL, NULL);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 10);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetRetryOnFailedConnect(opts, true, NULL, NULL));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 10));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
 #ifdef _WIN32
     // Windows takes the full timeout to report connect failure, so reduce
     // timeout here.
-    if (s == NATS_OK)
-        s = natsOptions_SetTimeout(opts, 100);
+    IFOK(s, natsOptions_SetTimeout(opts, 100));
 #endif
     if (s != NATS_OK)
     {
@@ -8548,10 +8159,8 @@ test_RetryOnFailedConnect(void)
 
     test("Connects ok: ");
     s = natsOptions_SetMaxReconnect(opts, 20);
-    if (s == NATS_OK)
-        s = natsThread_Create(&t, _startServerForRetryOnConnect, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsThread_Create(&t, _startServerForRetryOnConnect, (void*) &arg));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
 
     // close to avoid reconnect when shutting down server.
@@ -8574,14 +8183,10 @@ test_RetryOnFailedConnect(void)
     s = natsOptions_SetRetryOnFailedConnect(opts, true, _connectedCb, (void*)&arg);
     // Set disconnected/reconnected to make sure that these are not
     // invoked as part of async connect.
-    if (s == NATS_OK)
-        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, -1);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, -1));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond((s == NATS_NOT_YET_CONNECTED) && (nc != NULL));
     nats_clearLastError();
 
@@ -8643,7 +8248,7 @@ test_RetryOnFailedConnect(void)
         s = NATS_OK;
 
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.closed)
+    while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
@@ -8678,11 +8283,9 @@ _connectToMockupServer(void *closure)
     if (opts == NULL)
     {
         s = natsOptions_Create(&opts);
-        if (s == NATS_OK)
-            s = natsOptions_SetAllowReconnect(opts, false);
+        IFOK(s, natsOptions_SetAllowReconnect(opts, false));
     }
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
 
     natsOptions_Destroy(opts);
 
@@ -8700,13 +8303,13 @@ _connectToMockupServer(void *closure)
             payload = natsConnection_GetMaxPayload(nc);
             if (payload != 10)
                 s = NATS_ERR;
-            testCond(s == NATS_OK);
+            testCondNoReturn(s == NATS_OK);
         }
         if (s == NATS_OK)
         {
             test("Expect getting an error when publish more than max payload: ");
             s = natsConnection_PublishString(nc, "hello", "Hello World!");
-            testCond(s != NATS_OK);
+            testCondNoReturn(s != NATS_OK);
 
             // reset status
             s = NATS_OK;
@@ -8715,7 +8318,7 @@ _connectToMockupServer(void *closure)
         {
             test("Expect success if publishing less than max payload: ");
             s = natsConnection_PublishString(nc, "hello", "a");
-            testCond(s == NATS_OK);
+            testCondNoReturn(s == NATS_OK);
         }
 
         natsMutex_Lock(arg->m);
@@ -8744,7 +8347,7 @@ _connectToMockupServer(void *closure)
     {
         // Wait for disconnect Cb
         natsMutex_Lock(arg->m);
-        while ((s == NATS_OK) && !(arg->disconnected))
+        while ((s != NATS_TIMEOUT) && !arg->disconnected)
             s = natsCondition_TimedWait(arg->c, arg->m, 5000);
         natsMutex_Unlock(arg->m);
 
@@ -8752,7 +8355,7 @@ _connectToMockupServer(void *closure)
         {
             // Should reconnect
             natsMutex_Lock(arg->m);
-            while ((s == NATS_OK) && !(arg->reconnected))
+            while ((s != NATS_TIMEOUT) && !arg->reconnected)
                 s = natsCondition_TimedWait(arg->c, arg->m, 5000);
             natsMutex_Unlock(arg->m);
 
@@ -8762,7 +8365,7 @@ _connectToMockupServer(void *closure)
         {
             // Wait that we are closed, then check nc's last error.
             natsMutex_Lock(arg->m);
-            while ((s == NATS_OK) && !(arg->closed))
+            while ((s != NATS_TIMEOUT) && !arg->closed)
                 s = natsCondition_TimedWait(arg->c, arg->m, 5000);
             natsMutex_Unlock(arg->m);
             if (s == NATS_OK)
@@ -8778,7 +8381,7 @@ _connectToMockupServer(void *closure)
     else if (control == 7)
     {
         natsMutex_Lock(arg->m);
-        while ((s == NATS_OK) && !(arg->done))
+        while ((s != NATS_TIMEOUT) && !arg->done)
             s = natsCondition_TimedWait(arg->c, arg->m, 5000);
         natsMutex_Unlock(arg->m);
     }
@@ -8821,10 +8424,8 @@ _startMockupServer(natsSock *serverSock, const char *host, const char *port)
         if (sock == NATS_SOCK_INVALID)
             s = NATS_SYS_ERROR;
 
-        if (s == NATS_OK)
-            s = natsSock_SetCommonTcpOptions(sock);
-        if (s == NATS_OK)
-            s = natsSock_SetBlocking(sock, true);
+        IFOK(s, natsSock_SetCommonTcpOptions(sock));
+        IFOK(s, natsSock_SetBlocking(sock, true));
     }
     if ((s == NATS_OK)
         && (bind(sock, servinfo->ai_addr, (natsSockLen) servinfo->ai_addrlen) == NATS_SOCK_ERROR))
@@ -8870,8 +8471,7 @@ test_ErrOnConnectAndDeadlock(void)
     s = _startMockupServer(&sock, "localhost", "4222");
 
     // Start the thread that will try to connect to our server...
-    if (s == NATS_OK)
-        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
+    IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
 
     if ((s == NATS_OK)
         && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
@@ -8892,7 +8492,7 @@ test_ErrOnConnectAndDeadlock(void)
     {
         natsMutex_Lock(arg.m);
 
-        while ((s == NATS_OK) && (arg.status == NATS_OK))
+        while ((s != NATS_TIMEOUT) && (arg.status == NATS_OK))
             s = natsCondition_TimedWait(arg.c, arg.m, 3000);
 
         natsMutex_Unlock(arg.m);
@@ -8936,8 +8536,7 @@ test_ErrOnMaxPayloadLimit(void)
         s = NATS_SYS_ERROR;
 
     // Start the thread that will try to connect to our server...
-    if (s == NATS_OK)
-        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
+    IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
 
     if ((s == NATS_OK)
         && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
@@ -8963,17 +8562,15 @@ test_ErrOnMaxPayloadLimit(void)
 
             // Read connect and ping commands sent from the client
             s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
-            if (s == NATS_OK)
-                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
         }
         // Send PONG
-        if (s == NATS_OK)
-            s = natsSock_WriteFully(&ctx, _PONG_PROTO_, _PONG_PROTO_LEN_);
+        IFOK(s, natsSock_WriteFully(&ctx, _PONG_PROTO_, _PONG_PROTO_LEN_));
     }
 
     // Wait for the client to be about to close the connection.
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !(arg.closed))
+    while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 3000);
     natsMutex_Unlock(arg.m);
 
@@ -9023,12 +8620,9 @@ test_Auth(void)
     // Use Options
     test("Connect using SetUserInfo: ");
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:8232");
-    if (s == NATS_OK)
-        s = natsOptions_SetUserInfo(opts, "ivan", "foo");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:8232"));
+    IFOK(s, natsOptions_SetUserInfo(opts, "ivan", "foo"));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
     natsConnection_Destroy(nc);
     nc = NULL;
@@ -9036,10 +8630,8 @@ test_Auth(void)
     // Verify that credentials in URL take precedence.
     test("URL takes precedence: ");
     s = natsOptions_SetURL(opts, "nats://ivan:foo@127.0.0.1:8232");
-    if (s == NATS_OK)
-        s = natsOptions_SetUserInfo(opts, "foo", "bar");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetUserInfo(opts, "foo", "bar"));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
@@ -9070,14 +8662,13 @@ test_AuthFailNoDisconnectCB(void)
 
     test("Connect should fail: ");
     s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s != NATS_OK);
 
     test("DisconnectCb should not be invoked on auth failure: ");
     natsMutex_Lock(arg.m);
     s = NATS_OK;
-    while ((s == NATS_OK) && !arg.disconnected)
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_TIMEOUT) && !arg.disconnected);
@@ -9115,12 +8706,9 @@ test_AuthToken(void)
     // Use Options
     test("Connect using SetUserInfo: ");
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:8232");
-    if (s == NATS_OK)
-        s = natsOptions_SetToken(opts, "testSecret");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:8232"));
+    IFOK(s, natsOptions_SetToken(opts, "testSecret"));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
     natsConnection_Destroy(nc);
     nc = NULL;
@@ -9128,10 +8716,8 @@ test_AuthToken(void)
     // Verify that token in URL take precedence.
     test("URL takes precedence: ");
     s = natsOptions_SetURL(opts, "nats://testSecret@127.0.0.1:8232");
-    if (s == NATS_OK)
-        s = natsOptions_SetToken(opts, "badtoken");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetToken(opts, "badtoken"));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
@@ -9159,38 +8745,29 @@ test_AuthTokenHandler(void)
 
     test("Connect using SetTokenHandler: ");
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:8232");
-    if (s == NATS_OK)
-        s = natsOptions_SetTokenHandler(opts, _tokenHandler, (char*) "testSecret");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:8232"));
+    IFOK(s, natsOptions_SetTokenHandler(opts, _tokenHandler, (char*) "testSecret"));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
     natsConnection_Destroy(nc);
     nc = NULL;
 
     test("cannot set a tokenHandler when token set: ");
     s = natsOptions_SetTokenHandler(opts, NULL, NULL);
-    if (s == NATS_OK)
-        s = natsOptions_SetToken(opts, "token");
-    if (s == NATS_OK)
-        s = natsOptions_SetTokenHandler(opts, _tokenHandler, (char*) "testSecret");
+    IFOK(s, natsOptions_SetToken(opts, "token"));
+    IFOK(s, natsOptions_SetTokenHandler(opts, _tokenHandler, (char*) "testSecret"));
     testCond(s == NATS_ILLEGAL_STATE);
-    s = natsOptions_SetToken(opts, NULL);
 
     test("cannot set a token when tokenHandler set: ");
-    if (s == NATS_OK)
-        s = natsOptions_SetTokenHandler(opts, _tokenHandler, (char*) "testSecret");
-    if (s == NATS_OK)
-        s = natsOptions_SetToken(opts, "token");
+    s = natsOptions_SetToken(opts, NULL);
+    IFOK(s, natsOptions_SetTokenHandler(opts, _tokenHandler, (char*) "testSecret"));
+    IFOK(s, natsOptions_SetToken(opts, "token"));
     testCond(s == NATS_ILLEGAL_STATE);
 
     test("token in URL not valid with tokenHandler: ");
     s = natsOptions_SetURL(opts, "nats://testSecret@127.0.0.1:8232");
-    if (s == NATS_OK)
-        s = natsOptions_SetTokenHandler(opts, _dummyTokenHandler, NULL);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetTokenHandler(opts, _dummyTokenHandler, NULL));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_ILLEGAL_STATE);
 
     natsConnection_Destroy(nc);
@@ -9244,10 +8821,8 @@ test_PermViolation(void)
         args.string = PERMISSIONS_ERR;
         s = natsOptions_Create(&opts);
     }
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://ivan:pwd@127.0.0.1:8232");
-    if (s == NATS_OK)
-        s = natsOptions_SetErrorHandler(opts, _permsViolationHandler, &args);
+    IFOK(s, natsOptions_SetURL(opts, "nats://ivan:pwd@127.0.0.1:8232"));
+    IFOK(s, natsOptions_SetErrorHandler(opts, _permsViolationHandler, &args));
     if (s != NATS_OK)
         FAIL("Error setting up test");
 
@@ -9263,7 +8838,7 @@ test_PermViolation(void)
     s = natsConnection_Connect(&conn, opts);
     testCond(s == NATS_OK);
 
-    for (i=0; (s == NATS_OK) && (i<2); i++)
+    for (i=0; i<2; i++)
     {
         cbCalled = false;
 
@@ -9336,14 +8911,10 @@ test_AuthViolation(void)
     memset(&ctx, 0, sizeof(natsSockCtx));
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&(arg.opts));
-    if (s == NATS_OK)
-        s = natsOptions_SetAllowReconnect(arg.opts, false);
-    if (s == NATS_OK)
-        s = natsOptions_SetErrorHandler(arg.opts, _authViolationHandler, &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(arg.opts, _closedCb, &arg);
+    IFOK(s, natsOptions_Create(&(arg.opts)));
+    IFOK(s, natsOptions_SetAllowReconnect(arg.opts, false));
+    IFOK(s, natsOptions_SetErrorHandler(arg.opts, _authViolationHandler, &arg));
+    IFOK(s, natsOptions_SetClosedCB(arg.opts, _closedCb, &arg));
     if (s != NATS_OK)
         FAIL("@@ Unable to setup test!");
 
@@ -9355,8 +8926,7 @@ test_AuthViolation(void)
     s = _startMockupServer(&sock, "localhost", "4222");
 
     // Start the thread that will try to connect to our server...
-    if (s == NATS_OK)
-        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
+    IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
 
     if ((s == NATS_OK)
         && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
@@ -9382,13 +8952,11 @@ test_AuthViolation(void)
 
             // Read connect and ping commands sent from the client
             s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
-            if (s == NATS_OK)
-                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
         }
         // Send PONG
-        if (s == NATS_OK)
-            s = natsSock_WriteFully(&ctx,
-                                    _PONG_PROTO_, _PONG_PROTO_LEN_);
+        IFOK(s, natsSock_WriteFully(&ctx,
+                                    _PONG_PROTO_, _PONG_PROTO_LEN_));
 
         if (s == NATS_OK)
         {
@@ -9403,7 +8971,7 @@ test_AuthViolation(void)
     {
         // Wait for the client to process the async err
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !(arg.done))
+        while ((s != NATS_TIMEOUT) && !arg.done)
             s = natsCondition_TimedWait(arg.c, arg.m, 5000);
         natsMutex_Unlock(arg.m);
 
@@ -9471,8 +9039,7 @@ _startServerSendErrThread(void *closure)
 
                 // Read connect and ping commands sent from the client
                 s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
-                if (s == NATS_OK)
-                    s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+                IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
             }
         }
         if ((s == NATS_OK) && connect == 1)
@@ -9550,18 +9117,12 @@ test_AuthenticationExpired(void)
     memset(&ctx, 0, sizeof(natsSockCtx));
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, -1);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 25);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetErrorHandler(opts, _authExpiredHandler, &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, &arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, -1));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 25));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetErrorHandler(opts, _authExpiredHandler, &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, &arg));
     if (s != NATS_OK)
         FAIL("@@ Unable to setup test!");
 
@@ -9652,8 +9213,7 @@ _startServerSendErr2Thread(void *closure)
 
                 // Read connect and ping commands sent from the client
                 s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
-                if (s == NATS_OK)
-                    s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+                IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
             }
             if (s == NATS_OK)
             {
@@ -9696,20 +9256,13 @@ test_AuthenticationExpiredReconnect(void)
     memset(&ctx, 0, sizeof(natsSockCtx));
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 2);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 25);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetErrorHandler(opts, _authExpiredHandler, &arg);
-    if (s == NATS_OK)
-        s= natsOptions_SetReconnectedCB(opts, _reconnectedCb, &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, &arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 2));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 25));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetErrorHandler(opts, _authExpiredHandler, &arg));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, &arg));
     if (s != NATS_OK)
         FAIL("@@ Unable to setup test!");
 
@@ -9792,8 +9345,7 @@ test_ConnectedServer(void)
 
     test("Verify ConnectedUrl is correct: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
+    IFOK(s, natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer)));
     testCond((s == NATS_OK)
              && (buffer[0] != '\0')
              && (strcmp(buffer, NATS_DEFAULT_URL) == 0));
@@ -9801,25 +9353,20 @@ test_ConnectedServer(void)
     buffer[0] = '\0';
 
     test("Verify ConnectedServerId is not null: ")
-    if (s == NATS_OK)
-        s = natsConnection_GetConnectedServerId(nc, buffer, sizeof(buffer));
+    s = natsConnection_GetConnectedServerId(nc, buffer, sizeof(buffer));
     testCond((s == NATS_OK)  && (buffer[0] != '\0'));
 
     buffer[0] = '\0';
 
     test("Verify ConnectedUrl is empty after disconnect: ")
-    if (s == NATS_OK)
-    {
-        natsConnection_Close(nc);
-        s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
-    }
+    natsConnection_Close(nc);
+    s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
     testCond((s == NATS_OK) && (buffer[0] == '\0'));
 
     buffer[0] = '\0';
 
     test("Verify ConnectedServerId is empty after disconnect: ")
-    if (s == NATS_OK)
-        s = natsConnection_GetConnectedServerId(nc, buffer, sizeof(buffer));
+    s = natsConnection_GetConnectedServerId(nc, buffer, sizeof(buffer));
     testCond((s == NATS_OK)  && (buffer[0] == '\0'));
 
     natsConnection_Destroy(nc);
@@ -9869,11 +9416,9 @@ test_SimplePublish(void)
 
     test("Test simple publish: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "Hello world!");
-    if (s == NATS_OK)
-        s = natsConnection_Publish(nc, "foo", (const void*) "Hello world!",
-                                   (int) strlen("Hello world!"));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "Hello world!"));
+    IFOK(s, natsConnection_Publish(nc, "foo", (const void*) "Hello world!",
+                                   (int) strlen("Hello world!")));
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
@@ -9893,12 +9438,9 @@ test_SimplePublishNoData(void)
 
     test("Test simple publish with no data: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", NULL);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "");
-    if (s == NATS_OK)
-        s = natsConnection_Publish(nc, "foo", NULL, 0);
+    IFOK(s, natsConnection_PublishString(nc, "foo", NULL));
+    IFOK(s, natsConnection_PublishString(nc, "foo", ""));
+    IFOK(s, natsConnection_Publish(nc, "foo", NULL, 0));
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
@@ -9929,28 +9471,24 @@ test_PublishMsg(void)
 
     test("Test simple publishMsg: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, &arg));
+    IFOK(s, natsConnection_Flush(nc));
     if (s == NATS_OK)
     {
         const char  data[] = {104, 101, 108, 108, 111, 33};
         natsMsg     *msg   = NULL;
 
         s = natsMsg_Create(&msg, "foo", NULL, data, sizeof(data));
-        if (s == NATS_OK)
-            s = natsConnection_PublishMsg(nc, msg);
+        IFOK(s, natsConnection_PublishMsg(nc, msg));
 
         natsMsg_Destroy(msg);
     }
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     if (s == NATS_OK)
     {
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.msgReceived)
+        while ((s != NATS_TIMEOUT) && !arg.msgReceived)
             s = natsCondition_TimedWait(arg.c, arg.m, 1500);
         natsMutex_Unlock(arg.m);
     }
@@ -10150,20 +9688,16 @@ test_AsyncSubscribe(void)
 
     test("Test async subscriber: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString,
-                                     (void*) &arg);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", arg.string);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString,
+                                     (void*) &arg));
+    IFOK(s, natsConnection_PublishString(nc, "foo", arg.string));
 
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.msgReceived)
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
         s = natsCondition_TimedWait(arg.c, arg.m, 1500);
     natsMutex_Unlock(arg.m);
 
-    if (s == NATS_OK)
-        s = arg.status;
-
+    IFOK(s, arg.status);
     testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
@@ -10276,10 +9810,8 @@ test_AsyncSubscribeTimeout(void)
         memset(&arg, 0, sizeof(struct threadArg));
 
         s = natsOptions_Create(&opts);
-        if (s == NATS_OK)
-            s = natsOptions_UseGlobalMessageDelivery(opts, useLibDlv);
-        if (s == NATS_OK)
-            s = _createDefaultThreadArgsForCbTests(&arg);
+        IFOK(s, natsOptions_UseGlobalMessageDelivery(opts, useLibDlv));
+        IFOK(s, _createDefaultThreadArgsForCbTests(&arg));
         if ( s != NATS_OK)
             FAIL("Unable to setup test!");
 
@@ -10304,12 +9836,11 @@ test_AsyncSubscribeTimeout(void)
                 s = natsConnection_QueueSubscribeTimeout(&sub, nc, "foo", "group",
                                                          timeout, _asyncTimeoutCb, (void*) &ai);
         }
-        if (s == NATS_OK)
-            s = natsConnection_PublishString(nc, "foo", "msg1");
+        IFOK(s, natsConnection_PublishString(nc, "foo", "msg1"));
 
         // Wait to be notified that sub timed-out 2 times
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && (arg.timerFired != 1))
+        while ((s != NATS_TIMEOUT) && (arg.timerFired != 1))
             s = natsCondition_TimedWait(arg.c, arg.m, 5000);
         natsMutex_Unlock(arg.m);
 
@@ -10317,30 +9848,25 @@ test_AsyncSubscribeTimeout(void)
         nats_Sleep(timeout/2);
 
         // Send the second message. This should reset the timeout timer.
-        if (s == NATS_OK)
-            s = natsConnection_PublishString(nc, "foo", "msg2");
-        if (s == NATS_OK)
-            s = natsConnection_Flush(nc);
+        IFOK(s, natsConnection_PublishString(nc, "foo", "msg2"));
+        IFOK(s, natsConnection_Flush(nc));
 
         // Wait for 2nd timeout
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && (arg.timerStopped == 0))
+        while ((s != NATS_TIMEOUT) && (arg.timerStopped == 0))
             s = natsCondition_TimedWait(arg.c, arg.m, 5000);
         natsMutex_Unlock(arg.m);
 
         // Send two more messages, only one should be received since the
         // subscription will be unsubscribed/closed when receiving the
         // first.
-        if (s == NATS_OK)
-            s = natsConnection_PublishString(nc, "foo", "msg3");
-        if (s == NATS_OK)
-            s = natsConnection_PublishString(nc, "foo", "msg4");
-        if (s == NATS_OK)
-            s = natsConnection_Flush(nc);
+        IFOK(s, natsConnection_PublishString(nc, "foo", "msg3"));
+        IFOK(s, natsConnection_PublishString(nc, "foo", "msg4"));
+        IFOK(s, natsConnection_Flush(nc));
 
         // Wait for end of test
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.done)
+        while ((s != NATS_TIMEOUT) && !arg.done)
             s = natsCondition_TimedWait(arg.c, arg.m, 5000);
         natsMutex_Unlock(arg.m);
 
@@ -10385,12 +9911,9 @@ test_SyncSubscribe(void)
 
     test("Test sync subscriber: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", string);
-    if (s == NATS_OK)
-        s = natsSubscription_NextMsg(&msg, sub, 1000);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    IFOK(s, natsConnection_PublishString(nc, "foo", string));
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
     testCond((s == NATS_OK)
              && (msg != NULL)
              && (strncmp(string, natsMsg_GetData(msg), natsMsg_GetDataLength(msg)) == 0));
@@ -10417,12 +9940,9 @@ test_PubSubWithReply(void)
 
     test("Test PubSub with reply: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
-    if (s == NATS_OK)
-        s = natsConnection_PublishRequestString(nc, "foo", "bar", string);
-    if (s == NATS_OK)
-        s = natsSubscription_NextMsg(&msg, sub, 1000);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    IFOK(s, natsConnection_PublishRequestString(nc, "foo", "bar", string));
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
     testCond((s == NATS_OK)
              && (msg != NULL)
              && (strncmp(string, natsMsg_GetData(msg), natsMsg_GetDataLength(msg)) == 0));
@@ -10474,14 +9994,10 @@ test_Flush(void)
     int64_t             elapsed = 0;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetPingInterval(opts, 100);
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetPingInterval(opts, 100));
 
     if (s != NATS_OK)
         FAIL("Unable to setup test");
@@ -10493,8 +10009,7 @@ test_Flush(void)
     s = natsConnection_Connect(&nc, opts);
     for (int i=0; (s == NATS_OK) && (i < 1000); i++)
         s = natsConnection_PublishString(nc, "flush", string);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
     testCond((s == NATS_OK)
              && natsConnection_Buffered(nc) == 0);
 
@@ -10535,10 +10050,8 @@ test_Flush(void)
 
     test("Check Flush while in doReconnect: ")
     s = natsOptions_SetReconnectWait(opts, 3000);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     if (s == NATS_OK)
     {
         // Capture the moment we connected
@@ -10612,15 +10125,11 @@ test_ConnCloseDoesFlush(void)
     for (iter=0; (s == NATS_OK) && (iter<10); iter++)
     {
         s = natsConnection_ConnectTo(&nc1, NATS_DEFAULT_URL);
-        if (s == NATS_OK)
-            s = natsConnection_SubscribeSync(&sub, nc1, "foo");
-        if (s == NATS_OK)
-            s = natsSubscription_SetPendingLimits(sub, -1, -1);
-        if (s == NATS_OK)
-            s = natsConnection_Flush(nc1);
+        IFOK(s, natsConnection_SubscribeSync(&sub, nc1, "foo"));
+        IFOK(s, natsSubscription_SetPendingLimits(sub, -1, -1));
+        IFOK(s, natsConnection_Flush(nc1));
 
-        if (s == NATS_OK)
-            s = natsConnection_ConnectTo(&nc2, NATS_DEFAULT_URL);
+        IFOK(s, natsConnection_ConnectTo(&nc2, NATS_DEFAULT_URL));
 
         for (i=0; (s == NATS_OK) && (i<tc); i++)
             s = natsConnection_PublishString(nc2, "foo", "hello");
@@ -10667,45 +10176,33 @@ test_QueueSubscriber(void)
 
     test("Test QueueSubscriber receive correct amount: ");
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_QueueSubscribeSync(&s1, nc, "foo", "bar");
-    if (s == NATS_OK)
-        s = natsConnection_QueueSubscribeSync(&s2, nc, "foo", "bar");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", string);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
-    if (s == NATS_OK)
-        s = natsSubscription_QueuedMsgs(s1, &r1);
-    if (s == NATS_OK)
-        s = natsSubscription_QueuedMsgs(s2, &r2);
+    IFOK(s, natsConnection_QueueSubscribeSync(&s1, nc, "foo", "bar"));
+    IFOK(s, natsConnection_QueueSubscribeSync(&s2, nc, "foo", "bar"));
+    IFOK(s, natsConnection_PublishString(nc, "foo", string));
+    IFOK(s, natsConnection_Flush(nc));
+    IFOK(s, natsSubscription_QueuedMsgs(s1, &r1));
+    IFOK(s, natsSubscription_QueuedMsgs(s2, &r2));
     testCond((s == NATS_OK)
              && (r1 + r2 == 1));
 
-    if (s == NATS_OK)
-    {
-        (void)natsSubscription_NextMsg(&msg, s1, 0);
-        natsMsg_Destroy(msg);
-        msg = NULL;
+    (void)natsSubscription_NextMsg(&msg, s1, 0);
+    natsMsg_Destroy(msg);
+    msg = NULL;
 
-        (void)natsSubscription_NextMsg(&msg, s2, 0);
-        natsMsg_Destroy(msg);
-        msg = NULL;
-    }
+    (void)natsSubscription_NextMsg(&msg, s2, 0);
+    natsMsg_Destroy(msg);
+    msg = NULL;
 
     test("Test correct amount when more messages are sent: ");
     for (int i=0; (s == NATS_OK) && (i<1000); i++)
         s = natsConnection_PublishString(nc, "foo", string);
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     r1 = r2 = 0;
 
-    if (s == NATS_OK)
-        s = natsSubscription_QueuedMsgs(s1, &r1);
-    if (s == NATS_OK)
-        s = natsSubscription_QueuedMsgs(s2, &r2);
+    IFOK(s, natsSubscription_QueuedMsgs(s1, &r1));
+    IFOK(s, natsSubscription_QueuedMsgs(s2, &r2));
 
     testCond((s == NATS_OK) && (r1 + r2 == 1000));
 
@@ -10749,19 +10246,16 @@ test_ReplyArg(void)
 
     test("Test for correct Reply arg in callback: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString,
-                                     (void*) &arg);
-    if (s == NATS_OK)
-        s = natsConnection_PublishRequestString(nc, "foo", "bar", "hello");
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString,
+                                     (void*) &arg));
+    IFOK(s, natsConnection_PublishRequestString(nc, "foo", "bar", "hello"));
 
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.msgReceived)
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
         s = natsCondition_TimedWait(arg.c, arg.m, 1500);
     natsMutex_Unlock(arg.m);
 
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
 
     testCond(s == NATS_OK);
 
@@ -10787,12 +10281,9 @@ test_SyncReplyArg(void)
 
     test("Test for correct Reply arg in msg: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
-    if (s == NATS_OK)
-        s = natsConnection_PublishRequestString(nc, "foo", "bar", "hello");
-    if (s == NATS_OK)
-        s = natsSubscription_NextMsg(&msg, sub, 1000);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    IFOK(s, natsConnection_PublishRequestString(nc, "foo", "bar", "hello"));
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
 
     testCond((s == NATS_OK)
              && (msg != NULL)
@@ -10829,24 +10320,22 @@ test_Unsubscribe(void)
 
     test("Test for Unsubscribe in callback: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString,
-                                     (void*) &arg);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString,
+                                     (void*) &arg));
     for (int i=0; (s == NATS_OK) && (i<20); i++)
         s = natsConnection_PublishString(nc, "foo", "hello");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+
+    IFOK(s, natsConnection_Flush(nc));
 
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK)
+    while ((s != NATS_TIMEOUT)
            && !arg.msgReceived)
     {
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     }
     natsMutex_Unlock(arg.m);
 
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
 
     // See if the callback still fires
     nats_Sleep(500);
@@ -10875,10 +10364,8 @@ test_DoubleUnsubscribe(void)
 
     test("Test Double Unsubscribe should report an error: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
-    if (s == NATS_OK)
-        s = natsSubscription_Unsubscribe(sub);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    IFOK(s, natsSubscription_Unsubscribe(sub));
     if (s != NATS_OK)
         FAIL("Unable to test Double Unsubscribe!");
 
@@ -10905,8 +10392,7 @@ test_RequestTimeout(void)
 
     test("Test Request should timeout: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_RequestString(&msg, nc, "foo", "bar", 10);
+    IFOK(s, natsConnection_RequestString(&msg, nc, "foo", "bar", 10));
     testCond(((s == NATS_TIMEOUT) || (s == NATS_NO_RESPONDERS)) && (msg == NULL));
 
     natsConnection_Destroy(nc);
@@ -10936,19 +10422,18 @@ test_Request(void)
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Connect and subscribe: ");
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    testCond(s == NATS_OK);
 
     test("Test Request: ")
-    if (s == NATS_OK)
-        s = natsConnection_RequestString(&msg, nc, "foo", "help", 50);
+    s = natsConnection_RequestString(&msg, nc, "foo", "help", 50);
 
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.msgReceived)
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
     natsMutex_Unlock(arg.m);
 
     testCond((s == NATS_OK)
@@ -10961,17 +10446,16 @@ test_Request(void)
     msg = NULL;
 
     test("Create req message: ");
-    IFOK(s, natsMsg_Create(&req, "foo", NULL, "help", 4));
+    s = natsMsg_Create(&req, "foo", NULL, "help", 4);
     testCond(s == NATS_OK);
 
     test("Test RequestMsg: ");
-    IFOK(s, natsConnection_RequestMsg(&msg, nc, req, 50));
+    s = natsConnection_RequestMsg(&msg, nc, req, 50);
 
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.msgReceived)
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
     natsMutex_Unlock(arg.m);
 
     testCond((s == NATS_OK)
@@ -11011,24 +10495,23 @@ test_RequestNoBody(void)
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Connect and subscribe: ");
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    testCond(s == NATS_OK);
 
     test("Test Request with no body content: ")
-    if (s == NATS_OK)
-        s = natsConnection_RequestString(&msg, nc, "foo", NULL, 50);
+    s = natsConnection_RequestString(&msg, nc, "foo", NULL, 50);
 
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK)
+    while ((s != NATS_TIMEOUT)
            && !arg.msgReceived)
     {
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     }
     natsMutex_Unlock(arg.m);
 
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
 
     testCond((s == NATS_OK)
              && (msg != NULL)
@@ -11067,28 +10550,25 @@ test_OldRequest(void)
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Setup: ");
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_UseOldRequestStyle(opts, true);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+    IFOK(s, natsOptions_UseOldRequestStyle(opts, true));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    testCond(s == NATS_OK);
 
     test("Test Old Request Style: ")
-    if (s == NATS_OK)
-        s = natsConnection_RequestString(&msg, nc, "foo", "help", 50);
+    s = natsConnection_RequestString(&msg, nc, "foo", "help", 50);
 
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK)
+    while ((s != NATS_TIMEOUT)
            && !arg.msgReceived)
     {
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     }
     natsMutex_Unlock(arg.m);
 
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
 
     testCond((s == NATS_OK)
              && (msg != NULL)
@@ -11216,20 +10696,16 @@ test_RequestClose(void)
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
     test("Test Request is kicked out with a connection close: ")
-    if (s == NATS_OK)
-        s = natsThread_Create(&t, _closeConnWithDelay, (void*) nc);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
-    if (s == NATS_OK)
-        s = natsConnection_RequestString(&msg, nc, "foo", "help", 2000);
+    IFOK(s, natsThread_Create(&t, _closeConnWithDelay, (void*) nc));
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    IFOK(s, natsConnection_RequestString(&msg, nc, "foo", "help", 2000));
 
     if (t != NULL)
     {
         natsThread_Join(t);
         natsThread_Destroy(t);
     }
-    testCond((s == NATS_CONNECTION_CLOSED)
-             && (msg == NULL));
+    testCond((s == NATS_CONNECTION_CLOSED) && (msg == NULL));
 
     natsMsg_Destroy(msg);
     natsSubscription_Destroy(sub);
@@ -11257,24 +10733,20 @@ test_FlushInCb(void)
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
-
     test("Test Flush in callback: ")
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "hello");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "hello"));
 
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK)
+    while ((s != NATS_TIMEOUT)
            && !arg.msgReceived)
     {
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     }
     natsMutex_Unlock(arg.m);
 
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
 
     testCond(s == NATS_OK);
 
@@ -11310,8 +10782,7 @@ test_ReleaseFlush(void)
     s = _startMockupServer(&sock, "localhost", "4222");
 
     // Start the thread that will try to connect to our server...
-    if (s == NATS_OK)
-        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
+    IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
 
     if ((s == NATS_OK)
         && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
@@ -11337,17 +10808,13 @@ test_ReleaseFlush(void)
 
             // Read connect and ping commands sent from the client
             s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
-            if (s == NATS_OK)
-                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
         }
         // Send PONG
-        if (s == NATS_OK)
-            s = natsSock_WriteFully(&ctx,
-                                    _PONG_PROTO_, _PONG_PROTO_LEN_);
+        IFOK(s, natsSock_WriteFully(&ctx, _PONG_PROTO_, _PONG_PROTO_LEN_));
 
         // Get the PING
-        if (s == NATS_OK)
-            s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+        IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
     }
 
     // Now wait for the client to close the connection...
@@ -11394,8 +10861,7 @@ test_FlushErrOnDisconnect(void)
     s = _startMockupServer(&sock, "localhost", "4222");
 
     // Start the thread that will try to connect to our server...
-    if (s == NATS_OK)
-        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
+    IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
 
     if ((s == NATS_OK)
         && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
@@ -11421,13 +10887,10 @@ test_FlushErrOnDisconnect(void)
 
             // Read connect and ping commands sent from the client
             s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
-            if (s == NATS_OK)
-                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
         }
         // Send PONG
-        if (s == NATS_OK)
-            s = natsSock_WriteFully(&ctx,
-                                    _PONG_PROTO_, _PONG_PROTO_LEN_);
+        IFOK(s, natsSock_WriteFully(&ctx, _PONG_PROTO_, _PONG_PROTO_LEN_));
     }
 
     // Wait a bit and kill the server.
@@ -11493,12 +10956,9 @@ test_Stats(void)
     for (int i=0; (s == NATS_OK) && (i<iter); i++)
         s = natsConnection_PublishString(nc, "foo", data);
 
-    if (s == NATS_OK)
-        s = natsStatistics_Create(&stats);
-    if (s == NATS_OK)
-        s = natsConnection_GetStats(nc, stats);
-    if (s == NATS_OK)
-        s = natsStatistics_GetCounts(stats, NULL, NULL, &outMsgs, &outBytes, NULL);
+    IFOK(s, natsStatistics_Create(&stats));
+    IFOK(s, natsConnection_GetStats(nc, stats));
+    IFOK(s, natsStatistics_GetCounts(stats, NULL, NULL, &outMsgs, &outBytes, NULL));
 
     test("Tracking OutMsgs properly: ");
     testCond((s == NATS_OK) && (outMsgs == (uint64_t) iter));
@@ -11507,21 +10967,16 @@ test_Stats(void)
     testCond((s == NATS_OK) && (outBytes == (uint64_t) (iter * strlen(data))));
 
     // Test both sync and async versions of subscribe.
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&s1, nc, "foo", _dummyMsgHandler, NULL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&s2, nc, "foo");
+    s = natsConnection_Subscribe(&s1, nc, "foo", _dummyMsgHandler, NULL);
+    IFOK(s, natsConnection_SubscribeSync(&s2, nc, "foo"));
 
     for (int i=0; (s == NATS_OK) && (i<iter); i++)
         s = natsConnection_PublishString(nc, "foo", data);
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
-    if (s == NATS_OK)
-        s = natsConnection_GetStats(nc, stats);
-    if (s == NATS_OK)
-        s = natsStatistics_GetCounts(stats, &inMsgs, &inBytes, NULL, NULL, NULL);
+    IFOK(s, natsConnection_GetStats(nc, stats));
+    IFOK(s, natsStatistics_GetCounts(stats, &inMsgs, &inBytes, NULL, NULL, NULL));
 
     test("Tracking inMsgs properly: ");
     testCond((s == NATS_OK) && (inMsgs == (uint64_t)(2 * iter)));
@@ -11547,11 +11002,12 @@ test_BadSubject(void)
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Connect: ");
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
 
     test("Should get an error with empty subject: ");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "", "hello");
+    s = natsConnection_PublishString(nc, "", "hello");
     testCond(s != NATS_OK);
 
     test("Error should be NATS_INVALID_SUBJECT: ");
@@ -11637,16 +11093,13 @@ test_ClientAsyncAutoUnsub(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsSubscription_AutoUnsubscribe(sub, 10);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    IFOK(s, natsSubscription_AutoUnsubscribe(sub, 10));
 
     for (int i=0; (s == NATS_OK) && (i<100); i++)
         s = natsConnection_PublishString(nc, "foo", "hello");
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     // Wait for the subscription to become invalid
     checks = 0;
@@ -11683,16 +11136,13 @@ test_ClientSyncAutoUnsub(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
-    if (s == NATS_OK)
-        s = natsSubscription_AutoUnsubscribe(sub, 10);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    IFOK(s, natsSubscription_AutoUnsubscribe(sub, 10));
 
     for (int i=0; (s == NATS_OK) && (i<100); i++)
         s = natsConnection_PublishString(nc, "foo", "hello");
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     test("Get correct error: ");
     for (int i=0; (s == NATS_OK) && (i<100); i++)
@@ -11746,16 +11196,13 @@ test_ClientAutoUnsubAndReconnect(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsSubscription_AutoUnsubscribe(sub, 10);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    IFOK(s, natsSubscription_AutoUnsubscribe(sub, 10));
 
     // Send less than the max
     for (int i=0; (s == NATS_OK) && (i<5); i++)
         s = natsConnection_PublishString(nc, "foo", "hello");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     // Restart the server
     _stopServer(serverPid);
@@ -11764,15 +11211,14 @@ test_ClientAutoUnsubAndReconnect(void)
 
     // Wait for reconnect
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.reconnected)
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 5000);
     natsMutex_Unlock(arg.m);
 
     // Now send more than the max
     for (int i=0; (s == NATS_OK) && (i<50); i++)
         s = natsConnection_PublishString(nc, "foo", "hello");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     nats_Sleep(10);
 
@@ -11801,15 +11247,14 @@ test_NextMsgOnClosedSub(void)
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Setup: ");
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
-    if (s == NATS_OK)
-        s = natsSubscription_Unsubscribe(sub);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    IFOK(s, natsSubscription_Unsubscribe(sub));
+    testCond(s == NATS_OK);
 
     test("Get correct error: ");
-    if (s == NATS_OK)
-        s = natsSubscription_NextMsg(&msg, sub, 1000);
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond(s == NATS_INVALID_SUBSCRIPTION);
 
     natsSubscription_Destroy(sub);
@@ -11843,16 +11288,14 @@ test_CloseSubRelease(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
 
     for (i=0; i<3; i++)
         s = natsThread_Create(&(subs[i]), _nextMsgKickedOut, (void*) sub);
 
     start = nats_Now();
 
-    if (s == NATS_OK)
-        s = natsThread_Create(&t, _closeConnWithDelay, (void*) nc);
+    IFOK(s, natsThread_Create(&t, _closeConnWithDelay, (void*) nc));
 
     for (i=0; i<3; i++)
     {
@@ -11891,32 +11334,30 @@ test_IsValidSubscriber(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
 
     test("Sub is valid: ");
-    testCond((s == NATS_OK)
-             && natsSubscription_IsValid(sub));
+    testCond((s == NATS_OK) && natsSubscription_IsValid(sub));
 
+    test("Publish some msgs: ");
     for (int i=0; (s == NATS_OK) && (i<10); i++)
         s = natsConnection_PublishString(nc, "foo", "hello");
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
 
     test("Received msg ok: ")
-    if (s == NATS_OK)
-        s = natsSubscription_NextMsg(&msg, sub, 200);
+    s = natsSubscription_NextMsg(&msg, sub, 200);
     testCond((s == NATS_OK) && (msg != NULL));
 
     natsMsg_Destroy(msg);
 
-    if (s == NATS_OK)
-        s = natsSubscription_Unsubscribe(sub);
+    test("Unsub: ");
+    s = natsSubscription_Unsubscribe(sub);
+    testCond(s == NATS_OK);
 
     test("Received msg should fail after unsubscribe: ")
-    if (s == NATS_OK)
-        s = natsSubscription_NextMsg(&msg, sub, 200);
+    s = natsSubscription_NextMsg(&msg, sub, 200);
     testCond(s != NATS_OK);
 
     natsSubscription_Destroy(sub);
@@ -11946,15 +11387,16 @@ test_SlowSubscriber(void)
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Setup: ");
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
 
     for (int i=0;
         (s == NATS_OK) && (i < total + 100); i++)
     {
         s = natsConnection_PublishString(nc, "foo", "hello");
     }
+    testCond(s == NATS_OK);
 
     test("Check flush returns before timeout: ");
     start = nats_Now();
@@ -11965,11 +11407,9 @@ test_SlowSubscriber(void)
 
     testCond((end - start) < 5000);
 
-    // Make sure NextMsg returns an error to indicate slow consumer
-    if (s == NATS_OK)
-        s = natsSubscription_NextMsg(&msg, sub, 200);
-
     test("NextMsg should report error: ");
+    // Make sure NextMsg returns an error to indicate slow consumer
+    s = natsSubscription_NextMsg(&msg, sub, 200);
     testCond(s != NATS_OK);
 
     natsMsg_Destroy(msg);
@@ -11994,8 +11434,7 @@ test_SlowAsyncSubscriber(void)
     struct threadArg    arg;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxPendingMsgs(opts, total);
+    IFOK(s, natsOptions_SetMaxPendingMsgs(opts, total));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -12010,8 +11449,7 @@ test_SlowAsyncSubscriber(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
 
     for (int i=0;
         (s == NATS_OK) && (i < (total + 100)); i++)
@@ -12037,7 +11475,7 @@ test_SlowAsyncSubscriber(void)
     // Make sure the callback blocks before checking for slow consumer
     natsMutex_Lock(arg.m);
 
-    while ((s == NATS_OK) && !(arg.msgReceived))
+    while ((s != NATS_TIMEOUT) && !(arg.msgReceived))
         s = natsCondition_TimedWait(arg.c, arg.m, 5000);
 
     natsMutex_Unlock(arg.m);
@@ -12126,7 +11564,7 @@ test_SlowConsumerCB(void)
 
     test("Error handler invoked: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && (arg.sum != 1))
+    while ((s != NATS_TIMEOUT) && (arg.sum != 1))
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
@@ -12138,7 +11576,7 @@ test_SlowConsumerCB(void)
     test("Check handler is not invoked: ");
     nats_Sleep(50);
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && (arg.sum != 1))
+    while ((s != NATS_TIMEOUT) && (arg.sum != 1))
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
@@ -12179,8 +11617,7 @@ test_PendingLimitsDeliveredAndDropped(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
 
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
@@ -12245,13 +11682,12 @@ test_PendingLimitsDeliveredAndDropped(void)
     {
         s = natsConnection_PublishString(nc, "foo", "hello");
     }
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     // Make sure the callback blocks before checking for slow consumer
     natsMutex_Lock(arg.m);
 
-    while ((s == NATS_OK) && !(arg.msgReceived))
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
         s = natsCondition_TimedWait(arg.c, arg.m, 5000);
 
     natsMutex_Unlock(arg.m);
@@ -12401,10 +11837,8 @@ test_PendingLimitsWithSyncSub(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
-    if (s == NATS_OK)
-        s = natsSubscription_SetPendingLimits(sub, 10000, 10);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    IFOK(s, natsSubscription_SetPendingLimits(sub, 10000, 10));
 
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
@@ -12415,10 +11849,8 @@ test_PendingLimitsWithSyncSub(void)
 
     test("Can publish: ");
     s = natsConnection_PublishString(nc, "foo", "abcde");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "abcdefghijklmnopqrstuvwxyz");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "abcdefghijklmnopqrstuvwxyz"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK);
 
     // Check the pending values
@@ -12433,8 +11865,7 @@ test_PendingLimitsWithSyncSub(void)
 
     test("Can publish small: ");
     s = natsConnection_PublishString(nc, "foo", "abc");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK);
 
     test("Receive first msg: ");
@@ -12482,8 +11913,7 @@ test_AsyncSubscriptionPending(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
 
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
@@ -12495,22 +11925,19 @@ test_AsyncSubscriptionPending(void)
 
     test("Call MaxPending with invalid args: other NULL params OK: ");
     s = natsSubscription_GetMaxPending(sub, NULL, &bytes);
-    if (s == NATS_OK)
-        s = natsSubscription_GetMaxPending(sub, &msgs, NULL);
-    if (s == NATS_OK)
-        s = natsSubscription_GetMaxPending(sub, NULL, NULL);
+    IFOK(s, natsSubscription_GetMaxPending(sub, &msgs, NULL));
+    IFOK(s, natsSubscription_GetMaxPending(sub, NULL, NULL));
     testCond(s == NATS_OK);
 
     for (i = 0; (s == NATS_OK) && (i < total); i++)
         s = natsConnection_PublishString(nc, "foo", "0123456789");
 
-    if (s == NATS_OK)
-        natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     // Wait that a message is received, so checks are safe
     natsMutex_Lock(arg.m);
 
-    while ((s == NATS_OK) && !(arg.msgReceived))
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
         s = natsCondition_TimedWait(arg.c, arg.m, 5000);
 
     natsMutex_Unlock(arg.m);
@@ -12598,8 +12025,7 @@ test_AsyncSubscriptionPendingDrain(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
 
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
@@ -12607,8 +12033,7 @@ test_AsyncSubscriptionPendingDrain(void)
     for (i = 0; (s == NATS_OK) && (i < total); i++)
         s = natsConnection_PublishString(nc, "foo", arg.string);
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     test("Wait for all delivered: ");
     msgs = 0;
@@ -12659,8 +12084,7 @@ test_SyncSubscriptionPending(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
 
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
@@ -12672,17 +12096,14 @@ test_SyncSubscriptionPending(void)
 
     test("Call MaxPending with invalid args: other NULL params OK: ");
     s = natsSubscription_GetMaxPending(sub, NULL, &bytes);
-    if (s == NATS_OK)
-        s = natsSubscription_GetMaxPending(sub, &msgs, NULL);
-    if (s == NATS_OK)
-        s = natsSubscription_GetMaxPending(sub, NULL, NULL);
+    IFOK(s, natsSubscription_GetMaxPending(sub, &msgs, NULL));
+    IFOK(s, natsSubscription_GetMaxPending(sub, NULL, NULL));
     testCond(s == NATS_OK);
 
     for (i = 0; (s == NATS_OK) && (i < total); i++)
         s = natsConnection_PublishString(nc, "foo", "0123456789");
 
-    if (s == NATS_OK)
-        natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     // Test old way
     test("Test queued msgs old way: ");
@@ -12708,8 +12129,7 @@ test_SyncSubscriptionPending(void)
 
     test("Check ClearMaxPending: ");
     s = natsSubscription_ClearMaxPending(sub);
-    if (s == NATS_OK)
-        s = natsSubscription_GetMaxPending(sub, &msgs, &bytes);
+    IFOK(s, natsSubscription_GetMaxPending(sub, &msgs, &bytes));
     testCond((s == NATS_OK) && (msgs == 0) && (bytes == 0));
 
     // Drain all but one
@@ -12748,8 +12168,7 @@ test_SyncSubscriptionPendingDrain(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
 
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
@@ -12757,8 +12176,7 @@ test_SyncSubscriptionPendingDrain(void)
     for (i = 0; (s == NATS_OK) && (i < total); i++)
         s = natsConnection_PublishString(nc, "foo", "0123456789");
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     test("Wait for all delivered: ");
     do
@@ -12843,12 +12261,9 @@ test_AsyncErrHandler(void)
     arg.control= 7;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxPendingMsgs(opts, 10);
-    if (s == NATS_OK)
-        s = natsOptions_SetErrorHandler(opts, _asyncErrCb, (void*) &arg);
+    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+    IFOK(s, natsOptions_SetMaxPendingMsgs(opts, 10));
+    IFOK(s, natsOptions_SetErrorHandler(opts, _asyncErrCb, (void*) &arg));
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test AsyncErrHandler");
@@ -12857,8 +12272,7 @@ test_AsyncErrHandler(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "async_test", _recvTestString, (void*) &arg);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "async_test", _recvTestString, (void*) &arg));
 
     natsMutex_Lock(arg.m);
     arg.sub = sub;
@@ -12869,12 +12283,11 @@ test_AsyncErrHandler(void)
     {
         s = natsConnection_PublishString(nc, "async_test", "hello");
     }
-    if (s == NATS_OK)
-        (void) natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     // Wait for async err callback
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.done)
+    while ((s != NATS_TIMEOUT) && !arg.done)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
 
@@ -12919,10 +12332,8 @@ _startCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
     natsMutex_Lock(arg->m);
 
     s = natsInbox_Create(&response);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&(arg->sub), nc, response, _responseCb, (void*) arg);
-    if (s == NATS_OK)
-        s = natsConnection_PublishRequestString(nc, "helper", response, "Help Me!");
+    IFOK(s, natsConnection_Subscribe(&(arg->sub), nc, response, _responseCb, (void*) arg));
+    IFOK(s, natsConnection_PublishRequestString(nc, "helper", response, "Help Me!"));
 
     if (s != NATS_OK)
         arg->status = s;
@@ -12957,21 +12368,17 @@ test_AsyncSubscriberStarvation(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "helper",
-                                     _recvTestString, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub2, nc, "start",
-                                     _startCb, (void*) &arg);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "helper",
+                                     _recvTestString, (void*) &arg));
+    IFOK(s, natsConnection_Subscribe(&sub2, nc, "start",
+                                     _startCb, (void*) &arg));
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "start", "Begin");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_PublishString(nc, "start", "Begin"));
+    IFOK(s, natsConnection_Flush(nc));
 
     // Wait for end of test
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.done)
+    while ((s != NATS_TIMEOUT) && !arg.done)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
 
@@ -13013,15 +12420,13 @@ test_AsyncSubscriberOnClose(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo",
-                                     _recvTestString, (void*) &arg);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo",
+                                     _recvTestString, (void*) &arg));
 
     for (int i=0; (s == NATS_OK) && (i < 10); i++)
         s = natsConnection_PublishString(nc, "foo", "Hello World");
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     // Wait to receive the first message
     test("Wait for first message: ");
@@ -13076,13 +12481,13 @@ test_NextMsgCallOnAsyncSub(void)
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Setup: ");
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, NULL);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, NULL))
+    testCond(s == NATS_OK);
 
     test("NextMsg should fail for async sub: ");
-    if (s == NATS_OK)
-        s = natsSubscription_NextMsg(&msg, sub, 1000);
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond((s != NATS_OK) && (msg == NULL));
 
     natsSubscription_Destroy(sub);
@@ -13145,12 +12550,13 @@ test_SubOnComplete(void)
     s = natsSubscription_SetOnCompleteCB(NULL, testSubOnComplete, NULL);
     testCond(s == NATS_INVALID_ARG);
 
+    test("Connect + sub: ");
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    testCond(s == NATS_OK);
+
     test("Invalid sub (NULL): ");
-    if (s == NATS_OK)
-        s= natsSubscription_SetOnCompleteCB(sub, testSubOnComplete, NULL);
+    s= natsSubscription_SetOnCompleteCB(sub, testSubOnComplete, NULL);
     testCond(s == NATS_INVALID_SUBSCRIPTION);
 
     natsSubscription_Unsubscribe(sub);
@@ -13161,14 +12567,12 @@ test_SubOnComplete(void)
     natsSubscription_Destroy(sub);
     sub = NULL;
     arg.status = NATS_ERR;
-    s = natsConnection_Subscribe(&sub, nc, "foo", testOnCompleteMsgHandler, &arg);
     test("SetOnCompleteCB ok: ");
-    if (s == NATS_OK)
-        s = natsSubscription_SetOnCompleteCB(sub, testSubOnComplete, &arg);
+    s = natsConnection_Subscribe(&sub, nc, "foo", testOnCompleteMsgHandler, &arg);
+    IFOK(s, natsSubscription_SetOnCompleteCB(sub, testSubOnComplete, &arg));
     testCond(s == NATS_OK);
     test("SetOnCompleteCB to NULL ok: ");
-    if (s == NATS_OK)
-        s = natsSubscription_SetOnCompleteCB(sub, NULL, NULL);
+    s = natsSubscription_SetOnCompleteCB(sub, NULL, NULL);
     if (s == NATS_OK)
     {
         natsSub_Lock(sub);
@@ -13177,12 +12581,9 @@ test_SubOnComplete(void)
     }
     testCond(s == NATS_OK);
     test("OnComplete invoked after last message: ");
-    if (s == NATS_OK)
-        s = natsSubscription_SetOnCompleteCB(sub, testSubOnComplete, &arg);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "hello");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    s = natsSubscription_SetOnCompleteCB(sub, testSubOnComplete, &arg);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "hello"));
+    IFOK(s, natsConnection_Flush(nc));
     if (s == NATS_OK)
     {
         // Wait for message handler to be invoked
@@ -13191,8 +12592,7 @@ test_SubOnComplete(void)
             s = natsCondition_TimedWait(arg.c, arg.m, 2000);
         natsMutex_Unlock(arg.m);
     }
-    if (s == NATS_OK)
-        s = natsSubscription_Unsubscribe(sub);
+    IFOK(s, natsSubscription_Unsubscribe(sub));
     if (s == NATS_OK)
     {
         // Now wait for the onComplete to return.
@@ -13227,8 +12627,7 @@ test_ServersOption(void)
     serversCount = sizeof(testServers) / sizeof(char *);
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoRandomize(opts, true);
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -13239,8 +12638,7 @@ test_ServersOption(void)
 
     test("Connect with list of servers should fail with NATS_NO_SERVER: ");
     s = natsOptions_SetServers(opts, testServers, serversCount);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond((nc == NULL) && (s == NATS_NO_SERVER));
 
     serverPid = _startServer("nats://127.0.0.1:1222", "-p 1222", true);
@@ -13249,8 +12647,7 @@ test_ServersOption(void)
     buffer[0] = '\0';
     test("Can connect to first: ")
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
+    IFOK(s, natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer)));
     testCond((s == NATS_OK)
              && (buffer[0] != '\0')
              && (strcmp(buffer, testServers[0]) == 0));
@@ -13268,8 +12665,7 @@ test_ServersOption(void)
     buffer[0] = '\0';
     test("Can connect to second: ")
     s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
+    IFOK(s, natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer)));
     testCond((s == NATS_OK)
              && (buffer[0] != '\0')
              && (strcmp(buffer, testServers[1]) == 0));
@@ -13296,10 +12692,8 @@ test_AuthServers(void)
     int serversCount = 2;
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoRandomize(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, plainServers, serversCount);
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetServers(opts, plainServers, serversCount));
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -13321,8 +12715,7 @@ test_AuthServers(void)
     buffer[0] = '\0';
     test("Connect succeeds with correct servers list: ")
     s = natsOptions_SetServers(opts, authServers, serversCount);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond((s == NATS_OK)
              && (nc != NULL)
              && (natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer)) == NATS_OK)
@@ -13353,20 +12746,13 @@ test_AuthFailToReconnect(void)
     int serversCount = 3;
 
     s = _createDefaultThreadArgsForCbTests(&args);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoRandomize(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, servers, serversCount);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &args);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 10);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetServers(opts, servers, serversCount));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &args));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 10));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
 
     if (s != NATS_OK)
         FAIL("Unable to setup test");
@@ -13404,7 +12790,7 @@ test_AuthFailToReconnect(void)
     // Wait for the reconnect CB.
     test("Reconnect callback should be triggered: ")
     natsMutex_Lock(args.m);
-    while ((s == NATS_OK)
+    while ((s != NATS_TIMEOUT)
            && !(args.reconnected))
     {
         s = natsCondition_TimedWait(args.c, args.m, 5000);
@@ -13416,9 +12802,8 @@ test_AuthFailToReconnect(void)
     testCond(natsConnection_IsClosed(nc) == false);
 
     buffer[0] = '\0';
-    s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
-
     test("Should have connected to third server: ");
+    s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
     testCond((s == NATS_OK) && (buffer[0] != '\0')
              && (strcmp(buffer, servers[2]) == 0));
 
@@ -13451,24 +12836,15 @@ test_BasicClusterReconnect(void)
     serversCount = sizeof(testServers) / sizeof(char*);
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_IPResolutionOrder(opts, 4);
-    if (s == NATS_OK)
-        s = natsOptions_SetTimeout(opts, 500);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoRandomize(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, testServers, serversCount);
-    if (s == NATS_OK)
-        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    IFOK(s, natsOptions_IPResolutionOrder(opts, 4));
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetServers(opts, testServers, serversCount));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -13481,13 +12857,14 @@ test_BasicClusterReconnect(void)
         _stopServer(serverPid1);
     CHECK_SERVER_STARTED(serverPid2);
 
+    test("Check connected to the right server: ");
     s = natsConnection_Connect(&nc, opts);
 
     _stopServer(serverPid1);
 
     // wait for disconnect
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.disconnected)
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
 
@@ -13495,11 +12872,10 @@ test_BasicClusterReconnect(void)
 
     // wait for reconnect
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.reconnected)
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 3000);
     natsMutex_Unlock(arg.m);
 
-    test("Check connected to the right server: ");
     testCond((s == NATS_OK)
              && (natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer)) == NATS_OK)
              && (strcmp(buffer, testServers[2]) == 0));
@@ -13562,22 +12938,14 @@ test_ReconnectWithTokenHandler(void)
     args.tokens[1] = "badtoken";
     args.tokens[2] = "token3";
 
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoRandomize(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, servers, serversCount);
-    if (s == NATS_OK)
-        s = natsOptions_SetTokenHandler(opts, _reconnectTokenHandler, (void*) &args);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &args);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 10);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetServers(opts, servers, serversCount));
+    IFOK(s, natsOptions_SetTokenHandler(opts, _reconnectTokenHandler, (void*) &args));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &args));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 10));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
 
     if (s != NATS_OK)
         FAIL("Unable to setup test");
@@ -13613,7 +12981,7 @@ test_ReconnectWithTokenHandler(void)
     // Wait for the reconnect CB.
     test("Reconnect callback should be triggered: ")
     natsMutex_Lock(args.m);
-    while ((s == NATS_OK)
+    while ((s != NATS_TIMEOUT)
            && !(args.reconnected))
     {
         s = natsCondition_TimedWait(args.c, args.m, 5000);
@@ -13625,9 +12993,8 @@ test_ReconnectWithTokenHandler(void)
     testCond(natsConnection_IsClosed(nc) == false);
 
     buffer[0] = '\0';
-    s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
-
     test("Should have connected to third server: ");
+    s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
     testCond((s == NATS_OK) && (buffer[0] != '\0')
              && (strcmp(buffer, servers[2]) == 0));
 
@@ -13672,8 +13039,7 @@ test_HotSpotReconnect(void)
     memset(nc, 0, sizeof(nc));
 
     s = natsStrHash_Create(&cs, 4);
-    if (s == NATS_OK)
-        s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, _createDefaultThreadArgsForCbTests(&arg));
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
 
@@ -13683,18 +13049,15 @@ test_HotSpotReconnect(void)
     CHECK_SERVER_STARTED(serverPid1);
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, testServers, serversCount);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
+    IFOK(s, natsOptions_SetServers(opts, testServers, serversCount))
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg));
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
 
     for (int i=0; (s == NATS_OK) && (i<NUM_CLIENTS); i++)
     {
         s = natsConnection_Connect(&(nc[i]), opts);
-        if (s == NATS_OK)
-            s = natsConnection_GetConnectedUrl(nc[i], buffer, sizeof(buffer));
+        IFOK(s, natsConnection_GetConnectedUrl(nc[i], buffer, sizeof(buffer)));
         if ((s == NATS_OK)
             && (strcmp(buffer, testServers[0]) != 0))
         {
@@ -13721,7 +13084,7 @@ test_HotSpotReconnect(void)
     // Wait on all reconnects
     test("Check all reconnected: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && (arg.reconnects != NUM_CLIENTS))
+    while ((s != NATS_TIMEOUT) && (arg.reconnects != NUM_CLIENTS))
         s = natsCondition_TimedWait(arg.c, arg.m, 10000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.reconnects == NUM_CLIENTS);
@@ -13829,14 +13192,10 @@ test_ProperReconnectDelay(void)
     serversCount = sizeof(testServers) / sizeof(char*);
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoRandomize(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, testServers, serversCount);
-    if (s == NATS_OK)
-        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetServers(opts, testServers, serversCount));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -13844,14 +13203,16 @@ test_ProperReconnectDelay(void)
     serverPid = _startServer("nats://127.0.0.1:1222", "-p 1222", true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Connect: ");
     s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
 
     _stopServer(serverPid);
 
     // wait for disconnect
     test("Wait for disconnect: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.disconnected)
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.disconnected);
@@ -13873,11 +13234,7 @@ test_ProperReconnectDelay(void)
 
     // Now that the connection is destroyed, the callback will be invoked.
     // Make sure that we wait until then before destroying 'arg'.
-    natsMutex_Lock(arg.m);
-    s = NATS_OK;
-    while ((s == NATS_OK) && !arg.closed)
-        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-    natsMutex_Unlock(arg.m);
+    _waitForConnClosed(&arg);
 
     _destroyDefaultThreadArgs(&arg);
 }
@@ -13905,20 +13262,13 @@ test_ProperFalloutAfterMaxAttempts(void)
     serversCount = sizeof(testServers) / sizeof(char*);
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoRandomize(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 5);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 25);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, testServers, serversCount);
-    if (s == NATS_OK)
-        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 5));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 25));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetServers(opts, testServers, serversCount));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -13926,14 +13276,16 @@ test_ProperFalloutAfterMaxAttempts(void)
     serverPid = _startServer("nats://127.0.0.1:1222", "-p 1222", true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Connect: ");
     s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
 
     _stopServer(serverPid);
 
     // wait for disconnect
     test("Wait for disconnected: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.disconnected)
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.disconnected);
@@ -13941,7 +13293,7 @@ test_ProperFalloutAfterMaxAttempts(void)
     // wait for closed
     test("Wait for closed: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.closed)
+    while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.closed);
@@ -13985,27 +13337,17 @@ test_StopReconnectAfterTwoAuthErr(void)
     serversCount = sizeof(servers) / sizeof(char*);
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoRandomize(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, -1);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 25);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, servers, serversCount);
-    if (s == NATS_OK)
-        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, -1));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 25));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetServers(opts, servers, serversCount));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
 #if _WIN32
-    if (s == NATS_OK)
-        s = natsOptions_SetTimeout(opts, 500);
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
 #endif
-
-    if (s == NATS_OK)
-        s = natsStatistics_Create(&stats);
+    IFOK(s, natsStatistics_Create(&stats));
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -14018,14 +13360,16 @@ test_StopReconnectAfterTwoAuthErr(void)
         _stopServer(serverPid);
     CHECK_SERVER_STARTED(serverPid2);
 
+    test("Connect: ");
     s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
 
     _stopServer(serverPid);
 
     // wait for disconnect
     test("Wait for disconnected: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.disconnected)
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.disconnected);
@@ -14037,8 +13381,7 @@ test_StopReconnectAfterTwoAuthErr(void)
 
     // Make sure we have not exceeded MaxReconnect
     test("Check reconnect twice: ");
-    if (s == NATS_OK)
-        natsConnection_GetStats(nc, stats);
+    s = natsConnection_GetStats(nc, stats);
     testCond((s == NATS_OK)
              && (stats != NULL)
              && (stats->reconnects == 2));
@@ -14085,20 +13428,13 @@ test_TimeoutOnNoServer(void)
 
     // 1000 milliseconds total time wait
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoRandomize(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(opts, 10);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, testServers, serversCount);
-    if (s == NATS_OK)
-        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 10));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetServers(opts, testServers, serversCount));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -14106,14 +13442,16 @@ test_TimeoutOnNoServer(void)
     serverPid = _startServer("nats://127.0.0.1:1222", "-p 1222", true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Connect: ");
     s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
 
     _stopServer(serverPid);
 
     // wait for disconnect
     test("Wait for disconnected: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.disconnected)
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.disconnected);
@@ -14123,7 +13461,7 @@ test_TimeoutOnNoServer(void)
     // wait for closed
     test("Wait for closed: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.closed)
+    while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000 + serversCount*50);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.closed);
@@ -14170,24 +13508,15 @@ test_PingReconnect(void)
     serversCount = sizeof(testServers) / sizeof(char*);
 
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoRandomize(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 200);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetPingInterval(opts, 50);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxPingsOut(opts, -1);
-    if (s == NATS_OK)
-        s = natsOptions_SetServers(opts, testServers, serversCount);
-    if (s == NATS_OK)
-        s = natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 200));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetPingInterval(opts, 50));
+    IFOK(s, natsOptions_SetMaxPingsOut(opts, -1));
+    IFOK(s, natsOptions_SetServers(opts, testServers, serversCount));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -14195,11 +13524,13 @@ test_PingReconnect(void)
     serverPid = _startServer("nats://127.0.0.1:1222", "-p 1222", true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Connect: ");
     s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
 
     test("Pings cause reconnects: ")
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && (arg.reconnects != 4))
+    while ((s != NATS_TIMEOUT) && (arg.reconnects != 4))
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && (arg.reconnects == 4));
@@ -14265,8 +13596,7 @@ test_GetServers(void)
 
     test("Get Servers: ");
     s = natsConnection_ConnectTo(&conn, "nats://127.0.0.1:4222");
-    if (s == NATS_OK)
-        s = natsConnection_GetServers(conn, &servers, &count);
+    IFOK(s, natsConnection_GetServers(conn, &servers, &count));
     if (s == NATS_OK)
     {
         int i;
@@ -14305,8 +13635,7 @@ test_GetServers(void)
 
     test("Get Servers does not return credentials: ");
     s = natsConnection_ConnectTo(&conn, "nats://ivan:password@127.0.0.1:4222");
-    if (s == NATS_OK)
-        s = natsConnection_GetServers(conn, &servers, &count);
+    IFOK(s, natsConnection_GetServers(conn, &servers, &count));
     if (s == NATS_OK)
     {
         if (count != 1)
@@ -14343,8 +13672,7 @@ test_GetDiscoveredServers(void)
 
     test("GetDiscoveredServers: ");
     s = natsConnection_ConnectTo(&conn, "nats://127.0.0.1:4222");
-    if (s == NATS_OK)
-        s = natsConnection_GetDiscoveredServers(conn, &servers, &count);
+    IFOK(s, natsConnection_GetDiscoveredServers(conn, &servers, &count));
     if (s == NATS_OK)
     {
         int i;
@@ -14397,12 +13725,9 @@ test_DiscoveredServersCb(void)
     int                 invoked = 0;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");
-    if (s == NATS_OK)
-        s = natsOptions_SetDiscoveredServersCB(opts, _discoveredServersCb, &arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetDiscoveredServersCB(opts, _discoveredServersCb, &arg));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -14417,7 +13742,7 @@ test_DiscoveredServersCb(void)
     test("DiscoveredServersCb not triggered on initial connect: ");
     s = natsConnection_Connect(&conn, opts);
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && (arg.sum == 0))
+    while ((s != NATS_TIMEOUT) && (arg.sum == 0))
         s = natsCondition_TimedWait(arg.c, arg.m, 500);
     invoked = arg.sum;
     natsMutex_Unlock(arg.m);
@@ -14434,7 +13759,7 @@ test_DiscoveredServersCb(void)
 
     test("DiscoveredServersCb triggered on new server joining the cluster: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && (arg.sum == 0))
+    while ((s != NATS_TIMEOUT) && (arg.sum == 0))
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     invoked = arg.sum;
     natsMutex_Unlock(arg.m);
@@ -14491,8 +13816,7 @@ _serverSendsINFOAfterPONG(void *closure)
 
         // Read connect and ping commands sent from the client
         s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
-        if (s == NATS_OK)
-            s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+        IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
     }
     // Send PONG + INFO
     if (s == NATS_OK)
@@ -14525,12 +13849,9 @@ test_ReceiveINFORightAfterFirstPONG(void)
     struct threadArg arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");
-    if (s == NATS_OK)
-        s = natsOptions_SetAllowReconnect(opts, false);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetAllowReconnect(opts, false));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -14545,8 +13866,7 @@ test_ReceiveINFORightAfterFirstPONG(void)
         s = arg.status;
         natsMutex_Unlock(arg.m);
     }
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     if (s == NATS_OK)
     {
         int     i, j;
@@ -14677,14 +13997,13 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
 
     test("DiscoveredServersCb triggered: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && (arg.sum == 0))
+    while ((s != NATS_TIMEOUT) && (arg.sum == 0))
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     invoked = arg.sum;
     arg.sum = 0;
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && (invoked == 1));
 
-    if (s == NATS_OK)
     {
         const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223"};
 
@@ -14693,54 +14012,43 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
         testCond(s == NATS_OK);
     }
 
-    if (s == NATS_OK)
+    s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats://127.0.0.1:6224 -cluster_name abc -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223", true);
+    if (s3Pid == NATS_INVALID_PID)
     {
-        s3Pid = _startServer("nats://127.0.0.1:4224", "-a 127.0.0.1 -p 4224 -cluster nats://127.0.0.1:6224 -cluster_name abc -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223", true);
-        if (s3Pid == NATS_INVALID_PID)
-        {
-            _stopServer(s1Pid);
-            _stopServer(s2Pid);
-        }
-        CHECK_SERVER_STARTED(s3Pid);
-    }
-
-    if (s == NATS_OK)
-    {
-        test("DiscoveredServersCb triggered: ");
-        natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && (arg.sum == 0))
-            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-        invoked = arg.sum;
-        arg.sum = 0;
-        natsMutex_Unlock(arg.m);
-        testCond((s == NATS_OK) && (invoked == 1));
-    }
-
-    if (s == NATS_OK)
-    {
-        const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223", "127.0.0.1:4224"};
-        test("Check pool: ");
-        s = _checkPool(conn, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
-        testCond(s == NATS_OK);
-    }
-
-    if (s == NATS_OK)
-    {
-        // Stop s1. Since this was passed to the Connect() call, this one should
-        // still be present.
         _stopServer(s1Pid);
-        s1Pid = NATS_INVALID_PID;
+        _stopServer(s2Pid);
+    }
+    CHECK_SERVER_STARTED(s3Pid);
 
-        test("Wait for reconnect: ");
-        natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.reconnected)
-            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-        arg.reconnected = false;
-        natsMutex_Unlock(arg.m);
+    test("DiscoveredServersCb triggered: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && (arg.sum == 0))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    invoked = arg.sum;
+    arg.sum = 0;
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && (invoked == 1));
+
+    {
+        const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223", "127.0.0.1:4224"};
+        test("Check pool: ");
+        s = _checkPool(conn, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
         testCond(s == NATS_OK);
     }
 
-    if (s == NATS_OK)
+    // Stop s1. Since this was passed to the Connect() call, this one should
+    // still be present.
+    _stopServer(s1Pid);
+    s1Pid = NATS_INVALID_PID;
+
+    test("Wait for reconnect: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    arg.reconnected = false;
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
     {
         const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223", "127.0.0.1:4224"};
 
@@ -14749,7 +14057,6 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
         testCond(s == NATS_OK);
     }
 
-    if (s == NATS_OK)
     {
         const char *urls[] = {"127.0.0.1:4222", ""};
         int port = 0;
@@ -14775,7 +14082,7 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
 
         test("Wait for reconnect: ");
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.reconnected)
+        while ((s != NATS_TIMEOUT) && !arg.reconnected)
             s = natsCondition_TimedWait(arg.c, arg.m, 2000);
         arg.reconnected = false;
         natsMutex_Unlock(arg.m);
@@ -14789,7 +14096,7 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
             testCond(s == NATS_OK);
         }
     }
-    if (s == NATS_OK)
+
     {
         const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223", "127.0.0.1:4224"};
 
@@ -14834,7 +14141,6 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
     s = natsConnection_Connect(&conn, opts);
     testCond(s == NATS_OK);
 
-    if (s == NATS_OK)
     {
         int     i;
         natsSrv *srvrs[3];
@@ -14845,14 +14151,11 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
         natsMutex_Unlock(conn->mu);
         testCond(s == NATS_OK);
 
-        if (s == NATS_OK)
-        {
-            // Save references to servers from pool
-            natsMutex_Lock(conn->mu);
-            for (i=0; i<3; i++)
-                srvrs[i] = conn->srvPool->srvrs[i];
-            natsMutex_Unlock(conn->mu);
-        }
+        // Save references to servers from pool
+        natsMutex_Lock(conn->mu);
+        for (i=0; i<3; i++)
+            srvrs[i] = conn->srvPool->srvrs[i];
+        natsMutex_Unlock(conn->mu);
 
         for (i=0; (s == NATS_OK) && (i<9); i++)
         {
@@ -14862,14 +14165,13 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
 
             test("Wait for reconnect: ");
             natsMutex_Lock(arg.m);
-            while ((s == NATS_OK) && !arg.reconnected)
+            while ((s != NATS_TIMEOUT) && !arg.reconnected)
                 s = natsCondition_TimedWait(arg.c, arg.m, 2000);
             arg.reconnected = false;
             natsMutex_Unlock(arg.m);
             testCond(s == NATS_OK);
         }
 
-        if (s == NATS_OK)
         {
             int j;
 
@@ -14963,7 +14265,7 @@ test_ReconnectJitter(void)
 
     test("Check jitter: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.reconnected)
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     if (s == NATS_OK)
         dur = nats_Now() - start;
@@ -14995,7 +14297,7 @@ test_ReconnectJitter(void)
 
     test("Wait for closed: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.closed)
+    while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
@@ -15079,7 +14381,7 @@ test_CustomReconnectDelay(void)
 	// Wait on error or completion of test.
     test("Check custom delay cb: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.closed && (arg.status == NATS_OK))
+    while ((s != NATS_TIMEOUT) && !arg.closed && (arg.status == NATS_OK))
         s = natsCondition_TimedWait(arg.c, arg.m, 5000);
     IFOK(s, arg.status);
     if (s == NATS_OK)
@@ -15234,7 +14536,7 @@ test_LameDuckMode(void)
 
         test("Lame duck callback invoked: ");
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !arg.disconnected)
+        while ((s != NATS_TIMEOUT) && !arg.disconnected)
             s = natsCondition_TimedWait(arg.c, arg.m, 2000);
         natsMutex_Unlock(arg.m);
         testCond(s == NATS_OK);
@@ -15243,7 +14545,7 @@ test_LameDuckMode(void)
         {
             test("Discovered not invoked: ");
             natsMutex_Lock(arg.m);
-            while ((s == NATS_OK) && !arg.done)
+            while ((s != NATS_TIMEOUT) && !arg.done)
                 s = natsCondition_TimedWait(arg.c, arg.m, 200);
             if ((arg.status == NATS_OK) && (s == NATS_TIMEOUT))
                 s = NATS_OK;
@@ -15254,10 +14556,9 @@ test_LameDuckMode(void)
         {
             test("Discovered servers ok: ");
             natsMutex_Lock(arg.m);
-            while ((s == NATS_OK) && !arg.done)
+            while ((s != NATS_TIMEOUT) && !arg.done)
                 s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-            if (s == NATS_OK)
-                s = arg.status;
+            IFOK(s, arg.status);
             natsMutex_Unlock(arg.m);
             testCond(s == NATS_OK);
         }
@@ -15388,18 +14689,12 @@ test_OpenCloseAndWait(void)
     for (i=0;i<2;i++)
     {
         s = nats_Open(-1);
-        if (s == NATS_OK)
-            s = natsOptions_Create(&opts);
-        if (s == NATS_OK)
-            s = natsOptions_SetClosedCB(opts, _openCloseAndWaitConnClosedCB, (void*)&arg);
-        if (s == NATS_OK)
-            s = natsConnection_Connect(&nc, opts);
-        if (s == NATS_OK)
-            s = natsConnection_Subscribe(&sub, nc, "foo", _openCloseAndWaitMsgCB, (void*)&arg);
-        if (s == NATS_OK)
-            s = natsConnection_PublishString(nc, "foo", "hello");
-        if (s == NATS_OK)
-            s = natsConnection_Flush(nc);
+        IFOK(s, natsOptions_Create(&opts));
+        IFOK(s, natsOptions_SetClosedCB(opts, _openCloseAndWaitConnClosedCB, (void*)&arg));
+        IFOK(s, natsConnection_Connect(&nc, opts));
+        IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _openCloseAndWaitMsgCB, (void*)&arg));
+        IFOK(s, natsConnection_PublishString(nc, "foo", "hello"));
+        IFOK(s, natsConnection_Flush(nc));
         if (s == NATS_OK)
         {
             for (;;)
@@ -15456,13 +14751,9 @@ test_OpenCloseAndWait(void)
     testCond(s == NATS_OK);
 
     test("No timeout: ");
-    if (s == NATS_OK)
-    {
-        natsLib_Retain();
-        s = natsThread_Create(&t, _openCloseAndWaitThread, NULL);
-    }
-    if (s == NATS_OK)
-        s = nats_CloseAndWait(0);
+    natsLib_Retain();
+    s = natsThread_Create(&t, _openCloseAndWaitThread, NULL);
+    IFOK(s, nats_CloseAndWait(0));
     testCond(s == NATS_OK);
 
     natsThread_Join(t);
@@ -15471,13 +14762,9 @@ test_OpenCloseAndWait(void)
     nats_Open(-1);
 
     test("Timeout: ");
-    if (s == NATS_OK)
-    {
-        natsLib_Retain();
-        s = natsThread_Create(&t, _openCloseAndWaitThread, NULL);
-    }
-    if (s == NATS_OK)
-        s = nats_CloseAndWait(100);
+    natsLib_Retain();
+    s = natsThread_Create(&t, _openCloseAndWaitThread, NULL);
+    IFOK(s, nats_CloseAndWait(100));
     testCond(s == NATS_TIMEOUT);
 
     // Now wait for thread to exit
@@ -15631,20 +14918,13 @@ test_StaleConnection(void)
     memset(&ctx, 0, sizeof(natsSockCtx));
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&(arg.opts));
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(arg.opts, 20);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(arg.opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(arg.opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetDisconnectedCB(arg.opts, _disconnectedCb, &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(arg.opts, _reconnectedCb, &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(arg.opts, _closedCb, &arg);
+    IFOK(s, natsOptions_Create(&(arg.opts)));
+    IFOK(s, natsOptions_SetReconnectWait(arg.opts, 20));
+    IFOK(s, natsOptions_SetReconnectJitter(arg.opts, 0, 0));
+    IFOK(s, natsOptions_SetMaxReconnect(arg.opts, 100));
+    IFOK(s, natsOptions_SetDisconnectedCB(arg.opts, _disconnectedCb, &arg));
+    IFOK(s, natsOptions_SetReconnectedCB(arg.opts, _reconnectedCb, &arg));
+    IFOK(s, natsOptions_SetClosedCB(arg.opts, _closedCb, &arg));
     if (s != NATS_OK)
         FAIL("@@ Unable to setup test!");
 
@@ -15655,8 +14935,7 @@ test_StaleConnection(void)
     s = _startMockupServer(&sock, "localhost", "4222");
 
     // Start the thread that will try to connect to our server...
-    if (s == NATS_OK)
-        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
+    IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
 
     for (i = 0; (i < 2) && (s == NATS_OK); i++)
     {
@@ -15683,13 +14962,10 @@ test_StaleConnection(void)
 
                 // Read connect and ping commands sent from the client
                 s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
-                if (s == NATS_OK)
-                    s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+                IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
             }
             // Send PONG
-            if (s == NATS_OK)
-                s = natsSock_WriteFully(&ctx,
-                                        _PONG_PROTO_, _PONG_PROTO_LEN_);
+            IFOK(s, natsSock_WriteFully(&ctx, _PONG_PROTO_, _PONG_PROTO_LEN_));
 
             if ((s == NATS_OK) && (i == 0))
             {
@@ -15701,7 +14977,7 @@ test_StaleConnection(void)
                 // The client should try to reconnect. When getting the
                 // disconnected callback, wait for the disconnect cb
                 natsMutex_Lock(arg.m);
-                while ((s == NATS_OK) && !(arg.disconnected))
+                while ((s != NATS_TIMEOUT) && !(arg.disconnected))
                     s = natsCondition_TimedWait(arg.c, arg.m, 5000);
                 natsMutex_Unlock(arg.m);
             }
@@ -15714,7 +14990,7 @@ test_StaleConnection(void)
                 // exit, which it would not because fd shutdown is not
                 // causing a socket error if the server is not closing
                 // its side.
-                while ((s == NATS_OK) && (arg.disconnects != 2))
+                while ((s != NATS_TIMEOUT) && (arg.disconnects != 2))
                     s = natsCondition_TimedWait(arg.c, arg.m, 5000);
                 natsMutex_Unlock(arg.m);
             }
@@ -15732,15 +15008,13 @@ test_StaleConnection(void)
     }
 
     natsMutex_Lock(arg.m);
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
     if (s == NATS_OK)
     {
         // Wait for closed CB
-        while ((s == NATS_OK) && !(arg.closed))
+        while ((s != NATS_TIMEOUT) && !(arg.closed))
             s = natsCondition_TimedWait(arg.c, arg.m, 5000);
-        if (s == NATS_OK)
-            s = arg.status;
+        IFOK(s, arg.status);
     }
     natsMutex_Unlock(arg.m);
 
@@ -15764,20 +15038,13 @@ test_ServerErrorClosesConnection(void)
     memset(&ctx, 0, sizeof(natsSockCtx));
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&(arg.opts));
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(arg.opts, 20);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(arg.opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxReconnect(arg.opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetDisconnectedCB(arg.opts, _disconnectedCb, &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(arg.opts, _reconnectedCb, &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(arg.opts, _closedCb, &arg);
+    IFOK(s, natsOptions_Create(&(arg.opts)));
+    IFOK(s, natsOptions_SetReconnectWait(arg.opts, 20));
+    IFOK(s, natsOptions_SetReconnectJitter(arg.opts, 0, 0));
+    IFOK(s, natsOptions_SetMaxReconnect(arg.opts, 100));
+    IFOK(s, natsOptions_SetDisconnectedCB(arg.opts, _disconnectedCb, &arg));
+    IFOK(s, natsOptions_SetReconnectedCB(arg.opts, _reconnectedCb, &arg));
+    IFOK(s, natsOptions_SetClosedCB(arg.opts, _closedCb, &arg));
     if (s != NATS_OK)
         FAIL("@@ Unable to setup test!");
 
@@ -15789,8 +15056,7 @@ test_ServerErrorClosesConnection(void)
     s = _startMockupServer(&sock, "localhost", "4222");
 
     // Start the thread that will try to connect to our server...
-    if (s == NATS_OK)
-        s = natsThread_Create(&t, _connectToMockupServer, (void*) &arg);
+    IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
 
     if ((s == NATS_OK)
         && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
@@ -15816,13 +15082,10 @@ test_ServerErrorClosesConnection(void)
 
             // Read connect and ping commands sent from the client
             s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
-            if (s == NATS_OK)
-                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
         }
         // Send PONG
-        if (s == NATS_OK)
-            s = natsSock_WriteFully(&ctx,
-                                    _PONG_PROTO_, _PONG_PROTO_LEN_);
+        IFOK(s, natsSock_WriteFully(&ctx, _PONG_PROTO_, _PONG_PROTO_LEN_));
 
         if (s == NATS_OK)
         {
@@ -15835,7 +15098,7 @@ test_ServerErrorClosesConnection(void)
 
         // Wait for the client to be done.
         natsMutex_Lock(arg.m);
-        while ((s == NATS_OK) && !(arg.closed))
+        while ((s != NATS_TIMEOUT) && !(arg.closed))
             s = natsCondition_TimedWait(arg.c, arg.m, 5000);
         natsMutex_Unlock(arg.m);
 
@@ -15854,10 +15117,9 @@ test_ServerErrorClosesConnection(void)
     if (s == NATS_OK)
     {
         // Wait for closed CB
-        while ((s == NATS_OK) && !(arg.closed))
+        while ((s != NATS_TIMEOUT) && !(arg.closed))
             s = natsCondition_TimedWait(arg.c, arg.m, 5000);
-        if (s == NATS_OK)
-            s = arg.status;
+        IFOK(s, arg.status);
     }
     natsMutex_Unlock(arg.m);
 
@@ -15880,12 +15142,9 @@ test_NoEcho(void)
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");
-    if (s == NATS_OK)
-        s = natsOptions_SetNoEcho(opts, true);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetNoEcho(opts, true));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -15896,25 +15155,18 @@ test_NoEcho(void)
     arg.string = "test";
     test("Setup: ");
     s = natsConnection_Connect(&conn, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, conn, "foo", _recvTestString, (void*)&arg);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(conn, "foo", arg.string);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(conn);
+    IFOK(s, natsConnection_Subscribe(&sub, conn, "foo", _recvTestString, (void*)&arg));
+    IFOK(s, natsConnection_PublishString(conn, "foo", arg.string));
+    IFOK(s, natsConnection_Flush(conn));
     // repeat
-    if (s == NATS_OK)
-        s = natsConnection_Flush(conn);
+    IFOK(s, natsConnection_Flush(conn));
     testCond(s == NATS_OK);
 
     test("NoEcho: ");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        while ((s != NATS_TIMEOUT) && !arg.msgReceived)
-            s = natsCondition_TimedWait(arg.c, arg.m, 500);
-        natsMutex_Unlock(arg.m);
-    }
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+        s = natsCondition_TimedWait(arg.c, arg.m, 500);
+    natsMutex_Unlock(arg.m);
     // Message should not be received.
     testCond(s == NATS_TIMEOUT);
 
@@ -15968,13 +15220,10 @@ _startMockupServerThread(void *closure)
             s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
             if ((s == NATS_OK) && (checkInfoCB != NULL))
                 s = (*checkInfoCB)(buffer);
-            if (s == NATS_OK)
-                s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
         }
         // Send PONG
-        if (s == NATS_OK)
-            s = natsSock_WriteFully(&ctx,
-                                    _PONG_PROTO_, _PONG_PROTO_LEN_);
+        IFOK(s, natsSock_WriteFully(&ctx, _PONG_PROTO_, _PONG_PROTO_LEN_));
 
         if (s == NATS_OK)
         {
@@ -16000,10 +15249,8 @@ test_NoEchoOldServer(void)
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetNoEcho(opts, true);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetNoEcho(opts, true));
     if (s == NATS_OK)
     {
         // Set this to error, the mock server should set it to OK
@@ -16071,90 +15318,58 @@ test_DrainSub(void)
 
     test("Connect and create subscriptions: ");
     s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4222");
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub2, nc, "foo");
-    if (s == NATS_OK)
-        s = natsConnection_SubscribeSync(&sub3, nc, "foo");
-    if (s == NATS_OK)
-        s = natsSubscription_AutoUnsubscribe(sub3, 2);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    IFOK(s, natsConnection_SubscribeSync(&sub2, nc, "foo"));
+    IFOK(s, natsConnection_SubscribeSync(&sub3, nc, "foo"));
+    IFOK(s, natsSubscription_AutoUnsubscribe(sub3, 2));
     testCond(s == NATS_OK);
 
     test("WaitForDrainCompletion returns invalid arg: ");
-    if (s == NATS_OK)
-        s = natsSubscription_WaitForDrainCompletion(NULL, 2000);
+    s = natsSubscription_WaitForDrainCompletion(NULL, 2000);
     testCond(s == NATS_INVALID_ARG);
-    if (s == NATS_INVALID_ARG)
-    {
-        nats_clearLastError();
-        s = NATS_OK;
-    }
+    nats_clearLastError();
 
     test("WaitForDrainCompletion returns illegal state: ");
-    if (s == NATS_OK)
-        s = natsSubscription_WaitForDrainCompletion(sub, 2000);
+    s = natsSubscription_WaitForDrainCompletion(sub, 2000);
     testCond(s == NATS_ILLEGAL_STATE);
-    if (s == NATS_ILLEGAL_STATE)
-    {
-        nats_clearLastError();
-        s = NATS_OK;
-    }
+    nats_clearLastError();
 
     test("Send 2 messages: ");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "msg");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "msg");
+    s = natsConnection_PublishString(nc, "foo", "msg");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "msg"));
     testCond(s == NATS_OK);
 
     test("Call Drain on subscription: ");
-    if (s == NATS_OK)
-        s = natsSubscription_Drain(sub);
+    s = natsSubscription_Drain(sub);
     testCond(s == NATS_OK);
 
     test("Call Drain a second time is ok: ");
-    if (s == NATS_OK)
-        s = natsSubscription_Drain(sub);
+    s = natsSubscription_Drain(sub);
     testCond(s == NATS_OK);
 
     test("Drain sync subs: ");
-    if (s == NATS_OK)
-        s = natsSubscription_Drain(sub2);
-    if (s == NATS_OK)
-        s = natsSubscription_Drain(sub3);
+    s = natsSubscription_Drain(sub2);
+    IFOK(s, natsSubscription_Drain(sub3));
     testCond(s == NATS_OK);
 
     test("Call Unsubscribe fails: ");
-    if (s == NATS_OK)
-    {
-        s = natsSubscription_Unsubscribe(sub);
-        if (s == NATS_DRAINING)
-            s = natsSubscription_Unsubscribe(sub2);
-        if (s == NATS_DRAINING)
-            s = natsSubscription_Unsubscribe(sub3);
-    }
-    testCond(s == NATS_DRAINING);
+    s = natsSubscription_Unsubscribe(sub);
     if (s == NATS_DRAINING)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+        s = natsSubscription_Unsubscribe(sub2);
+    if (s == NATS_DRAINING)
+        s = natsSubscription_Unsubscribe(sub3);
+    testCond(s == NATS_DRAINING);
+    nats_clearLastError();
 
     test("Wait for Drain times out: ");
-    if (s == NATS_OK)
-    {
-        s = natsSubscription_WaitForDrainCompletion(sub, 10);
-        if (s == NATS_TIMEOUT)
-            s = natsSubscription_WaitForDrainCompletion(sub2, 10);
-    }
+    s = natsSubscription_WaitForDrainCompletion(sub, 10);
+    if (s == NATS_TIMEOUT)
+        s = natsSubscription_WaitForDrainCompletion(sub2, 10);
     testCond(s == NATS_TIMEOUT);
     nats_clearLastError();
-    s = NATS_OK;
 
     test("Send 1 more message: ");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "msg");
+    s = natsConnection_PublishString(nc, "foo", "msg");
     testCond(s == NATS_OK);
 
     // Unblock the callback.
@@ -16164,8 +15379,7 @@ test_DrainSub(void)
     natsMutex_Unlock(arg.m);
 
     test("Wait for Drain to complete: ");
-    if (s == NATS_OK)
-        s = natsSubscription_WaitForDrainCompletion(sub, -1);
+    s = natsSubscription_WaitForDrainCompletion(sub, -1);
     testCond(s == NATS_OK);
 
     // Wait a bit and make sure that we did not receive the 3rd msg
@@ -16178,21 +15392,16 @@ test_DrainSub(void)
     testCond(s == NATS_OK);
 
     test("Drain on closed sub fails: ");
-    if (s == NATS_OK)
-        s = natsSubscription_Drain(sub);
+    s = natsSubscription_Drain(sub);
     testCond(s == NATS_INVALID_SUBSCRIPTION);
-    if (s == NATS_INVALID_SUBSCRIPTION)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Consume sync messages: ");
-    if (s == NATS_OK)
     {
         natsMsg *msg = NULL;
         int     i;
 
+        s = NATS_OK;
         for (i=0; (s == NATS_OK) && (i<2); i++)
         {
             s = natsSubscription_NextMsg(&msg, sub2, 2000);
@@ -16209,10 +15418,8 @@ test_DrainSub(void)
     testCond(s == NATS_OK);
 
     test("Wait for drain to complete: ");
-    if (s == NATS_OK)
-        s = natsSubscription_WaitForDrainCompletion(sub2, 1000);
-    if (s == NATS_OK)
-        s = natsSubscription_WaitForDrainCompletion(sub3, 1000);
+    s = natsSubscription_WaitForDrainCompletion(sub2, 1000);
+    IFOK(s, natsSubscription_WaitForDrainCompletion(sub3, 1000));
     testCond(s == NATS_OK);
 
     // Repeat async test with auto-unsubscribe
@@ -16224,27 +15431,21 @@ test_DrainSub(void)
     natsMutex_Unlock(arg.m);
 
     test("Async sub with auto-unsub: ");
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*)&arg);
-    if (s == NATS_OK)
-        s = natsSubscription_AutoUnsubscribe(sub, 2);
+    s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*)&arg);
+    IFOK(s, natsSubscription_AutoUnsubscribe(sub, 2));
     testCond(s == NATS_OK);
 
     test("Send 2 messages: ");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "msg");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "msg");
+    s = natsConnection_PublishString(nc, "foo", "msg");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "msg"));
     testCond(s == NATS_OK);
 
     test("Call Drain on subscription: ");
-    if (s == NATS_OK)
-        s = natsSubscription_Drain(sub);
+    s = natsSubscription_Drain(sub);
     testCond(s == NATS_OK);
 
     test("Send 1 more message: ");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "msg");
+    s = natsConnection_PublishString(nc, "foo", "msg");
     testCond(s == NATS_OK);
 
     // Unblock the callback.
@@ -16254,8 +15455,7 @@ test_DrainSub(void)
     natsMutex_Unlock(arg.m);
 
     test("Wait for Drain to complete: ");
-    if (s == NATS_OK)
-        s = natsSubscription_WaitForDrainCompletion(sub, -1);
+    s = natsSubscription_WaitForDrainCompletion(sub, -1);
     testCond(s == NATS_OK);
 
     // Wait a bit and make sure that we did not receive the 3rd msg
@@ -16271,14 +15471,11 @@ test_DrainSub(void)
     natsConnection_Close(nc);
 
     test("Drain on closed conn fails: ");
-    if (s == NATS_OK)
-    {
-        s = natsSubscription_Drain(sub);
-        if (s == NATS_CONNECTION_CLOSED)
-            s = natsSubscription_Drain(sub2);
-        if (s == NATS_CONNECTION_CLOSED)
-            s = natsSubscription_Drain(sub3);
-    }
+    s = natsSubscription_Drain(sub);
+    if (s == NATS_CONNECTION_CLOSED)
+        s = natsSubscription_Drain(sub2);
+    if (s == NATS_CONNECTION_CLOSED)
+        s = natsSubscription_Drain(sub3);
     testCond(s == NATS_CONNECTION_CLOSED);
 
     natsSubscription_Destroy(sub);
@@ -16362,12 +15559,9 @@ test_DrainConn(void)
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*)&arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetErrorHandler(opts, _drainConnErrHandler, (void*) &arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*)&arg));
+    IFOK(s, natsOptions_SetErrorHandler(opts, _drainConnErrHandler, (void*) &arg));
     if (s != NATS_OK)
     {
         _destroyDefaultThreadArgs(&arg);
@@ -16386,48 +15580,37 @@ test_DrainConn(void)
     testCond(s == NATS_OK);
 
     test("Drain with no sub/pub ok: ");
-    if (s == NATS_OK)
-        s = natsConnection_Drain(nc);
+    s = natsConnection_Drain(nc);
     testCond(s == NATS_OK);
 
     test("Closed CB invoked: ");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        while ((s != NATS_TIMEOUT) && !arg.closed)
-            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-        arg.closed = false;
-        natsMutex_Unlock(arg.m);
-    }
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    arg.closed = false;
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     test("No async error reported: ");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        s = (arg.done == false ? NATS_OK : NATS_ERR);
-        natsMutex_Unlock(arg.m);
-    }
+    natsMutex_Lock(arg.m);
+    s = (arg.done == false ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
     nc = NULL;
 
     test("Connect: ");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_ConnectTo(&nc2, "nats://127.0.0.1:4222");
+    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_ConnectTo(&nc2, "nats://127.0.0.1:4222"));
     testCond(s == NATS_OK);
 
     test("Create listener for responses on bar: ");
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub2, nc2, "bar", _drainConnBarSub, (void*) &arg);
+    s = natsConnection_Subscribe(&sub2, nc2, "bar", _drainConnBarSub, (void*) &arg);
     testCond(s == NATS_OK);
 
     test("Create slow consumer for responder: ");
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _drainConnFooSub, (void*) &arg);
+    s = natsConnection_Subscribe(&sub, nc, "foo", _drainConnFooSub, (void*) &arg);
     testCond(s == NATS_OK);
 
     test("Send messages: ");
@@ -16436,90 +15619,60 @@ test_DrainConn(void)
     testCond(s == NATS_OK);
 
     test("Drain connection: ");
-    if (s == NATS_OK)
-    {
-        start = nats_Now();
-        s = natsConnection_Drain(nc);
-    }
+    start = nats_Now();
+    s = natsConnection_Drain(nc);
     testCond(s == NATS_OK);
 
     test("Second drain ok: ");
-    if (s == NATS_OK)
-        s = natsConnection_Drain(nc);
+    s = natsConnection_Drain(nc);
     testCond(s == NATS_OK);
 
     test("Sub Unsubscribe fails: ")
-    if (s == NATS_OK)
-        s = natsSubscription_Unsubscribe(sub);
+    s = natsSubscription_Unsubscribe(sub);
     testCond(s == NATS_DRAINING);
-    if (s == NATS_DRAINING)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Cannot create new subs: ");
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub3, nc, "foo", _dummyMsgHandler, NULL);
+    s = natsConnection_Subscribe(&sub3, nc, "foo", _dummyMsgHandler, NULL);
     testCond(s == NATS_DRAINING);
-    if (s == NATS_DRAINING)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Publish should be ok: ");
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "baz", "should work");
+    s = natsConnection_PublishString(nc, "baz", "should work");
     testCond(s == NATS_OK);
 
     test("Closed CB should be invoked: ");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        while ((s != NATS_TIMEOUT) && !arg.closed)
-            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-        natsMutex_Unlock(arg.m);
-    }
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     test("Drain took as expected: ");
-    if (s == NATS_OK)
-        s = ((nats_Now() - start) >= 10*expected ? NATS_OK : NATS_ERR);
+    s = ((nats_Now() - start) >= 10*expected ? NATS_OK : NATS_ERR);
     testCond(s == NATS_OK);
 
     test("Received all messages: ");
+    natsMutex_Lock(arg.m);
+    s = ((arg.sum == expected) ? NATS_OK : NATS_ERR);
     if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        s = ((arg.sum == expected) ? NATS_OK : NATS_ERR);
-        if (s == NATS_OK)
-            s = arg.status;
-        natsMutex_Unlock(arg.m);
-    }
+        s = arg.status;
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     test("All responses received: ");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        while ((s != NATS_TIMEOUT) && !arg.done)
-            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-        if ((s == NATS_OK) && (arg.results[1] != expected))
-            s = NATS_ERR;
-        natsMutex_Unlock(arg.m);
-    }
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    if ((s == NATS_OK) && (arg.results[1] != expected))
+        s = NATS_ERR;
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     test("Drain after closed should fail: ");
-    if (s == NATS_OK)
-        s = natsConnection_DrainTimeout(nc, 1);
+    s = natsConnection_DrainTimeout(nc, 1);
     testCond(s == NATS_CONNECTION_CLOSED);
-    if (s == NATS_CONNECTION_CLOSED)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     natsSubscription_Destroy(sub);
     sub = NULL;
@@ -16533,17 +15686,14 @@ test_DrainConn(void)
     natsMutex_Unlock(arg.m);
 
     test("Drain timeout: ");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&sub, nc, "foo", _drainConnFooSub, (void*) &arg);
+    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _drainConnFooSub, (void*) &arg));
     if (s == NATS_OK)
     {
         for (i=0;i<25;i++)
             s = natsConnection_PublishString(nc, "foo", "hello");
     }
-    if (s == NATS_OK)
-        s = natsConnection_DrainTimeout(nc, 10);
+    IFOK(s, natsConnection_DrainTimeout(nc, 10));
     if (s == NATS_OK)
     {
         natsMutex_Lock(arg.m);
@@ -16554,8 +15704,7 @@ test_DrainConn(void)
     testCond(s == NATS_OK);
 
     test("Wait for subscription to drain: ");
-    if (s == NATS_OK)
-        s = natsSubscription_WaitForDrainCompletion(sub, -1);
+    s = natsSubscription_WaitForDrainCompletion(sub, -1);
     testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
@@ -16621,17 +15770,17 @@ test_NoDoubleConnClosedOnDrain(void)
     testCond(s == NATS_OK);
 
     test("Create sub: ");
-    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _noDoubleCbSubCb, (void*)&arg));
+    s = natsConnection_Subscribe(&sub, nc, "foo", _noDoubleCbSubCb, (void*)&arg);
     testCond(s == NATS_OK);
 
     test("Publish msg: ");
-    IFOK(s, natsConnection_PublishString(nc, "foo", "hello"));
+    s = natsConnection_PublishString(nc, "foo", "hello");
     testCond(s == NATS_OK);
 
     // Wait a bit and issue a drain
     nats_Sleep(100);
     test("Drain: ");
-    IFOK(s, natsConnection_Drain(nc));
+    s = natsConnection_Drain(nc);
     testCond(s == NATS_OK);
 
     nats_Sleep(200);
@@ -16641,13 +15790,10 @@ test_NoDoubleConnClosedOnDrain(void)
 
     // Now wait for connection close and make sure it was invoked once.
     test("Check closeCb invoked once: ")
-    if (s == NATS_OK)
-    {
-        nats_Sleep(300);
-        natsMutex_Lock(arg.m);
-        s = (arg.sum == 1 ? NATS_OK : NATS_ERR);
-        natsMutex_Unlock(arg.m);
-    }
+    nats_Sleep(300);
+    natsMutex_Lock(arg.m);
+    s = (arg.sum == 1 ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
@@ -16685,42 +15831,33 @@ test_GetClientID(void)
 
     test("Create nc1: ");
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetDiscoveredServersCB(opts, _discoveredServersCb, (void*)&arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*)&arg);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc1, opts);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetDiscoveredServersCB(opts, _discoveredServersCb, (void*)&arg));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*)&arg));
+    IFOK(s, natsConnection_Connect(&nc1, opts));
     testCond(s == NATS_OK);
 
     test("GetClientID for nc1: ");
-    if (s == NATS_OK)
-        s = natsConnection_GetClientID(nc1, &cid);
+    s = natsConnection_GetClientID(nc1, &cid);
     testCond((s == NATS_OK) && (cid != 0));
 
     test("Wait for discovered callback: ");
     pid2 = _startServer("nats://127.0.0.1:4223", "-p 4223 -cluster nats://127.0.0.1:6223 -cluster_name abc -routes nats://127.0.0.1:6222", true);
     CHECK_SERVER_STARTED(pid2);
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        while ((s != NATS_TIMEOUT) && (arg.sum != 1))
-            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-        s = (arg.sum == 1 ? NATS_OK: NATS_ERR);
-        natsMutex_Unlock(arg.m);
-    }
+
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && (arg.sum != 1))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    s = (arg.sum == 1 ? NATS_OK: NATS_ERR);
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     test("Check CID same: ");
-    if (s == NATS_OK)
-        s = natsConnection_GetClientID(nc1, &newcid);
+    s = natsConnection_GetClientID(nc1, &newcid);
     testCond((s == NATS_OK) && (newcid == cid));
 
     test("Connect to server 2: ");
-    if (s == NATS_OK)
-        s = natsConnection_ConnectTo(&nc2, "nats://127.0.0.1:4223");
+    s = natsConnection_ConnectTo(&nc2, "nats://127.0.0.1:4223");
     testCond(s == NATS_OK);
 
     test("Stop server 1: ");
@@ -16728,19 +15865,15 @@ test_GetClientID(void)
     testCond(s == NATS_OK);
 
     test("Wait for nc1 to reconnect: ");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(arg.m);
-        while ((s != NATS_TIMEOUT) && !arg.reconnected)
-            s = natsCondition_TimedWait(arg.c, arg.m, 4000);
-        s = (arg.reconnected ? NATS_OK : NATS_ERR);
-        natsMutex_Unlock(arg.m);
-    }
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 4000);
+    s = (arg.reconnected ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     test("Check CID is different: ");
-    if (s == NATS_OK)
-        s = natsConnection_GetClientID(nc1, &newcid);
+    s = natsConnection_GetClientID(nc1, &newcid);
     testCond((s == NATS_OK) && (newcid != cid));
 
     // Stop clients and remaining server
@@ -16748,9 +15881,6 @@ test_GetClientID(void)
     natsConnection_Destroy(nc2);
     natsOptions_Destroy(opts);
     _stopServer(pid2);
-
-    if (s != NATS_OK)
-        return;
 
     // Now have dummy server that returns no CID and check we get expected error.
     nc1 = NULL;
@@ -16780,8 +15910,7 @@ test_GetClientID(void)
 
     test("CID not supported: ");
     s = natsConnection_ConnectTo(&nc1, NATS_DEFAULT_URL);
-    if (s == NATS_OK)
-        s = natsConnection_GetClientID(nc1, &cid);
+    IFOK(s, natsConnection_GetClientID(nc1, &cid));
     testCond((s == NATS_NO_SERVER_SUPPORT) && (cid == 0));
 
     // Notify mock server we are done
@@ -16916,12 +16045,9 @@ test_GetRTT(void)
 
     test("Connect: ");
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 10);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetReconnectWait(opts, 10));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
 
     test("Get RTT - no conn: ");
@@ -17054,8 +16180,7 @@ test_UserCredsCallbacks(void)
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_Create(&opts));
     if (s != NATS_OK)
         FAIL("Unable to create options for test UserCredsCallbacks");
 
@@ -17064,7 +16189,6 @@ test_UserCredsCallbacks(void)
     testCond(s == NATS_INVALID_ARG);
 
     test("Invalid arg 2: ");
-    s = NATS_OK;
     s = natsOptions_SetUserCredentialsCallbacks(opts, NULL, NULL, _dummySigCb, NULL);
     testCond(s == NATS_INVALID_ARG);
 
@@ -17076,8 +16200,7 @@ test_UserCredsCallbacks(void)
         if (opts2 == NULL)
             s = NATS_NO_MEMORY;
     }
-    if (s == NATS_OK)
-        s = natsOptions_SetUserCredentialsCallbacks(opts, NULL, NULL, NULL, NULL);
+    IFOK(s, natsOptions_SetUserCredentialsCallbacks(opts, NULL, NULL, NULL, NULL));
     testCond((s == NATS_OK)
                 && (opts2->userJWTHandler == _dummyUserJWTCb)
                 && (opts2->userJWTClosure == (void*) 1)
@@ -17100,8 +16223,7 @@ test_UserCredsCallbacks(void)
     arg.nc = NULL;
     natsMutex_Unlock(arg.m);
     s = natsOptions_SetUserCredentialsCallbacks(opts, _userJWTCB, (void*) &arg, _sigCB, NULL);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond((s == NATS_ERR)
                 && (strstr(nats_GetLastError(NULL), "some jwt error") != NULL));
 
@@ -17113,8 +16235,7 @@ test_UserCredsCallbacks(void)
     arg.nc = NULL;
     natsMutex_Unlock(arg.m);
     s = natsOptions_SetUserCredentialsCallbacks(opts, _userJWTCB, NULL, _sigCB, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond((s == NATS_ERR)
                 && (strstr(nats_GetLastError(NULL), "some sig error") != NULL));
 
@@ -17127,14 +16248,10 @@ test_UserCredsCallbacks(void)
     arg.closed = false;
     natsMutex_Unlock(arg.m);
     s = natsOptions_SetUserCredentialsCallbacks(opts, _userJWTCB, (void*) &arg, _sigCB, NULL);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     if (s == NATS_OK)
     {
         natsMutex_Lock(arg.m);
@@ -17146,7 +16263,7 @@ test_UserCredsCallbacks(void)
         CHECK_SERVER_STARTED(pid);
     }
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && (!arg.closed))
+    while ((s != NATS_TIMEOUT) && (!arg.closed))
         s = natsCondition_TimedWait(arg.c, arg.m, 5000);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
@@ -17162,14 +16279,10 @@ test_UserCredsCallbacks(void)
     arg.closed = false;
     natsMutex_Unlock(arg.m);
     s = natsOptions_SetUserCredentialsCallbacks(opts, _userJWTCB, NULL, _sigCB, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectWait(opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectJitter(opts, 0, 0);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     if (s == NATS_OK)
     {
         natsMutex_Lock(arg.m);
@@ -17181,7 +16294,7 @@ test_UserCredsCallbacks(void)
         CHECK_SERVER_STARTED(pid);
     }
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && (!arg.closed))
+    while ((s != NATS_TIMEOUT) && (!arg.closed))
         s = natsCondition_TimedWait(arg.c, arg.m, 5000);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
@@ -17192,15 +16305,13 @@ test_UserCredsCallbacks(void)
 
     // Start fake server that will send predefined "nonce" so we can check
     // that connection is sending appropriate jwt and signature.
-    if (s == NATS_OK)
-    {
-        // Set this to error, the mock server should set it to OK
-        // if it can start successfully.
-        arg.status = NATS_ERR;
-        arg.checkInfoCB = _checkJWTAndSigCB;
-        arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576,\"nonce\":\"nonce\"}\r\n";
-        s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
-    }
+
+    // Set this to error, the mock server should set it to OK
+    // if it can start successfully.
+    arg.status = NATS_ERR;
+    arg.checkInfoCB = _checkJWTAndSigCB;
+    arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576,\"nonce\":\"nonce\"}\r\n";
+    s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
     if (s == NATS_OK)
     {
         // Wait for server to be ready
@@ -17221,15 +16332,12 @@ test_UserCredsCallbacks(void)
         FAIL("Unable to setup test");
     }
 
-    s = NATS_OK;
     test("Connect sends proper JWT and Signature: ");
     natsOptions_Destroy(opts);
     opts = NULL;
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetUserCredentialsCallbacks(opts, _userJWTCB, NULL, _sigCB, NULL);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetUserCredentialsCallbacks(opts, _userJWTCB, NULL, _sigCB, NULL));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
 
     // Notify mock server we are done
@@ -17335,12 +16443,10 @@ test_UserCredsFromFiles(void)
     testCond(s == NATS_INVALID_ARG);
 
     test("Invalid arg 2: ");
-    s = NATS_OK;
     s = natsOptions_SetUserCredentialsFromFiles(opts, NULL, "bar");
     testCond(s == NATS_INVALID_ARG);
 
     test("Invalid arg 3: ");
-    s = NATS_OK;
     s = natsOptions_SetUserCredentialsFromFiles(opts, "", "bar");
     testCond(s == NATS_INVALID_ARG);
 
@@ -17352,8 +16458,7 @@ test_UserCredsFromFiles(void)
         if (opts2 == NULL)
             s = NATS_NO_MEMORY;
     }
-    if (s == NATS_OK)
-        s = natsOptions_SetUserCredentialsFromFiles(opts, NULL, NULL);
+    IFOK(s, natsOptions_SetUserCredentialsFromFiles(opts, NULL, NULL));
     testCond((s == NATS_OK)
                 && (opts2->userCreds != NULL)
                 && (opts2->userJWTHandler == natsConn_userFromFile)
@@ -17366,19 +16471,15 @@ test_UserCredsFromFiles(void)
     CHECK_SERVER_STARTED(pid);
 
     test("UserOrChainedFile not found: ");
-    s = NATS_OK;
     s = natsOptions_SetUserCredentialsFromFiles(opts, "userCredsNotFound", NULL);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond((s == NATS_ERR)
                 && (strstr(nats_GetLastError(NULL), "error opening file 'userCredsNotFound'") != NULL));
 
     // Use a file that contains no userJWT..
     test("UserOrChainedFile has no JWT: ");
-    s = NATS_OK;
     s = natsOptions_SetUserCredentialsFromFiles(opts, "list.txt", NULL);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     // Since we return the whole content of the file when we don't find
     // the key for the user, but we don't for seed, the error we'll get
     // is about no user seed found.
@@ -17386,19 +16487,15 @@ test_UserCredsFromFiles(void)
                 && (strstr(nats_GetLastError(NULL), "no nkey user seed found") != NULL));
 
     test("SeedFile not found: ");
-    s = NATS_OK;
     s = natsOptions_SetUserCredentialsFromFiles(opts, ucfn, "seedFileNotFound");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond((s == NATS_ERR)
                 && (strstr(nats_GetLastError(NULL), "error opening file 'seedFileNotFound'") != NULL));
 
     // Use a seed file that contains no seed..
     test("SeedFile has no seed: ");
-    s = NATS_OK;
     s = natsOptions_SetUserCredentialsFromFiles(opts, ucfn, "list.txt");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond((s == NATS_ERR)
                 && (strstr(nats_GetLastError(NULL), "no nkey user seed found") != NULL));
 
@@ -17455,8 +16552,7 @@ test_UserCredsFromFiles(void)
             test("Connect with user and seed files (seed does not contain header): ");
             s = natsOptions_SetUserCredentialsFromFiles(opts, ucfn, snhfn);
         }
-        if (s == NATS_OK)
-            s = natsConnection_Connect(&nc, opts);
+        IFOK(s, natsConnection_Connect(&nc, opts));
         testCond(s == NATS_OK);
 
         // Notify mock server we are done
@@ -17528,8 +16624,7 @@ test_NKey(void)
         if (opts2 == NULL)
             s = NATS_NO_MEMORY;
     }
-    if (s == NATS_OK)
-        s = natsOptions_SetNKey(opts, NULL, NULL, NULL);
+    IFOK(s, natsOptions_SetNKey(opts, NULL, NULL, NULL));
     testCond((s == NATS_OK)
                 && (opts2->nkey != NULL)
                 && (strcmp(opts2->nkey, "pubkey") == 0)
@@ -17539,8 +16634,7 @@ test_NKey(void)
 
     test("NKey erase JWT: ");
     s = natsOptions_SetUserCredentialsFromFiles(opts, "foo", "bar");
-    if (s == NATS_OK)
-        s = natsOptions_SetNKey(opts, "pubkey2", _dummySigCb, (void*) 2);
+    IFOK(s, natsOptions_SetNKey(opts, "pubkey2", _dummySigCb, (void*) 2));
     testCond((s == NATS_OK)
                 && (opts->nkey != NULL)
                 && (strcmp(opts->nkey, "pubkey2") == 0)
@@ -17593,8 +16687,7 @@ test_NKey(void)
 
     test("NKey works ok: ");
     s = natsOptions_SetNKey(opts, "pubKey", _sigCB, NULL);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
 
     // Notify mock server we are done
@@ -17664,8 +16757,7 @@ test_NKeyFromSeed(void)
         if (opts2 == NULL)
             s = NATS_NO_MEMORY;
     }
-    if (s == NATS_OK)
-        s = natsOptions_SetNKeyFromSeed(opts, NULL, NULL);
+    IFOK(s, natsOptions_SetNKeyFromSeed(opts, NULL, NULL));
     testCond((s == NATS_OK)
                 && (opts2->nkey != NULL)
                 && (strcmp(opts2->nkey, "pubkey") == 0)
@@ -17678,8 +16770,7 @@ test_NKeyFromSeed(void)
 
     test("NKeyFromSeed erase JWT: ");
     s = natsOptions_SetUserCredentialsFromFiles(opts, "foo", "bar");
-    if (s == NATS_OK)
-        s = natsOptions_SetNKeyFromSeed(opts, "pubkey2", "seed.file");
+    IFOK(s, natsOptions_SetNKeyFromSeed(opts, "pubkey2", "seed.file"));
     testCond((s == NATS_OK)
                 && (opts->nkey != NULL)
                 && (strcmp(opts->nkey, "pubkey2") == 0)
@@ -17745,10 +16836,8 @@ test_NKeyFromSeed(void)
         fclose(f);
         f = NULL;
     }
-    if (s == NATS_OK)
-        s = natsOptions_SetNKeyFromSeed(opts, "UDXU4RCSJNZOIQHZNWXHXORDPRTGNJAHAHFRGZNEEJCPQTT2M7NLCNF4", "seed.file");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetNKeyFromSeed(opts, "UDXU4RCSJNZOIQHZNWXHXORDPRTGNJAHAHFRGZNEEJCPQTT2M7NLCNF4", "seed.file"));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
 
     // Notify mock server we are done
@@ -17823,15 +16912,12 @@ test_ConnSign(void)
             s = NATS_ERR;
         f = NULL;
     }
-    if (s == NATS_OK)
-        s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetUserCredentialsFromFiles(opts, ucfn, ucfn);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetUserCredentialsFromFiles(opts, ucfn, ucfn));
     testCond(s == NATS_OK);
 
     test("Connect ok: ");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK);
 
     test("Sign with NULL message: ");
@@ -17864,8 +16950,7 @@ test_WriteDeadline(void)
 
     test("Create options: ");
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetAllowReconnect(opts, false);
+    IFOK(s, natsOptions_SetAllowReconnect(opts, false));
     testCond(s == NATS_OK);
 
     test("Set invalid write deadline: ");
@@ -17892,12 +16977,9 @@ test_WriteDeadline(void)
 
     test("Write deadline kicks publish out: ");
     s = natsOptions_SetIOBufSize(opts, 100);
-    if (s == NATS_OK)
-        s = natsOptions_SetClosedCB(opts, _closedCb, &arg);
-    if (s == NATS_OK)
-        s = natsOptions_SetWriteDeadline(opts, 1);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, &arg));
+    IFOK(s, natsOptions_SetWriteDeadline(opts, 1));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     while (s == NATS_OK)
         s = natsConnection_Publish(nc, "foo", data, sizeof(data));
     testCond(s == NATS_TIMEOUT);
@@ -17989,11 +17071,11 @@ test_NoPartialOnReconnect(void)
     testCond(s == NATS_OK);
 
     test("Connect: ");
-    IFOK(s, natsConnection_Connect(&nc, opts));
+    s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK)
 
     test("Start Publish: ");
-    IFOK(s, natsThread_Create(&t2, _publish, (void*) nc));
+    s = natsThread_Create(&t2, _publish, (void*) nc);
     testCond(s == NATS_OK);
 
     nats_Sleep(1000);
@@ -18007,7 +17089,7 @@ test_NoPartialOnReconnect(void)
 
     test("Wait for reconnect: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !(arg.reconnected))
+    while ((s != NATS_TIMEOUT) && !(arg.reconnected))
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
@@ -18019,7 +17101,6 @@ test_NoPartialOnReconnect(void)
     }
 
     test("Check no proto error: ");
-    if (s == NATS_OK)
     {
         const char *le = NULL;
         s = natsConnection_GetLastError(nc, &le);
@@ -18082,25 +17163,19 @@ test_HeadersNotSupported(void)
     s = natsConnection_ConnectTo(&conn, NATS_DEFAULT_URL);
     IFOK(s, natsConnection_HasHeaderSupport(conn));
     testCond(s == NATS_NO_SERVER_SUPPORT);
-    if (s == NATS_NO_SERVER_SUPPORT)
-        s = NATS_OK;
 
     test("Create msg with heades: ");
-    IFOK(s, natsMsg_Create(&msg, "foo", NULL, "body", 4));
+    s = natsMsg_Create(&msg, "foo", NULL, "body", 4);
     IFOK(s, natsMsgHeader_Set(msg, "Header", "Hello Headers!"));
     testCond(s == NATS_OK);
 
     test("Publish fails: ");
-    IFOK(s, natsConnection_PublishMsg(conn, msg));
+    s = natsConnection_PublishMsg(conn, msg);
     testCond(s == NATS_NO_SERVER_SUPPORT);
-    if (s == NATS_NO_SERVER_SUPPORT)
-        s = NATS_OK;
 
     test("Request fails: ");
-    IFOK(s, natsConnection_RequestMsg(&reply, conn, msg, 1000));
+    s = natsConnection_RequestMsg(&reply, conn, msg, 1000);
     testCond((s == NATS_NO_SERVER_SUPPORT) && (reply == NULL));
-    if (s == NATS_NO_SERVER_SUPPORT)
-        s = NATS_OK;
 
     natsConnection_Destroy(conn);
 
@@ -18148,38 +17223,38 @@ test_HeadersBasic(void)
     testCond(s == NATS_OK);
 
     test("Headers supported: ");
-    IFOK(s, natsConnection_HasHeaderSupport(nc));
+    s = natsConnection_HasHeaderSupport(nc);
     testCond(s == NATS_OK);
 
     test("Create sub: ");
-    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    s = natsConnection_SubscribeSync(&sub, nc, "foo");
     testCond(s == NATS_OK);
 
     test("Create msg with headers: ");
-    IFOK(s, natsMsg_Create(&msg, "foo", NULL, "body", 4));
+    s = natsMsg_Create(&msg, "foo", NULL, "body", 4);
     IFOK(s, natsMsgHeader_Set(msg, "Headers", "Hello Headers!"))
     testCond(s == NATS_OK);
 
     test("Publish with headers ok: ");
-    IFOK(s, natsConnection_PublishMsg(nc, msg));
+    s = natsConnection_PublishMsg(nc, msg);
     testCond(s == NATS_OK);
 
     test("Receive msg: ")
-    IFOK(s, natsSubscription_NextMsg(&rmsg, sub, 1000));
+    s = natsSubscription_NextMsg(&rmsg, sub, 1000);
     testCond((s == NATS_OK) && (rmsg != NULL));
 
     test("Resend msg without lift: ");
-    IFOK(s, natsConnection_PublishMsg(nc, rmsg));
+    s = natsConnection_PublishMsg(nc, rmsg);
     testCond(s == NATS_OK);
     natsMsg_Destroy(rmsg);
     rmsg = NULL;
 
     test("Receive msg: ")
-    IFOK(s, natsSubscription_NextMsg(&rmsg, sub, 1000));
+    s = natsSubscription_NextMsg(&rmsg, sub, 1000);
     testCond((s == NATS_OK) && (rmsg != NULL));
 
     test("Check headers: ");
-    IFOK(s, natsMsgHeader_Get(rmsg, "Headers", &val));
+    s = natsMsgHeader_Get(rmsg, "Headers", &val);
     testCond((s == NATS_OK)
                 && (val != NULL) && (strcmp(val, "Hello Headers!") == 0)
                 && (natsMsg_GetDataLength(rmsg) == 4)
@@ -18188,7 +17263,7 @@ test_HeadersBasic(void)
     natsMsg_Destroy(rmsg);
     rmsg = NULL;
     test("Value with CRLFs replaced with spaces: ");
-    IFOK(s, natsMsgHeader_Set(msg, "Headers", "value1\r\nvalue2\r\nvalue3"));
+    s = natsMsgHeader_Set(msg, "Headers", "value1\r\nvalue2\r\nvalue3");
     IFOK(s, natsConnection_PublishMsg(nc, msg));
     IFOK(s, natsSubscription_NextMsg(&rmsg, sub, 1000));
     IFOK(s, natsMsgHeader_Get(rmsg, "Headers", &val));
@@ -18326,11 +17401,11 @@ test_EventLoop(void)
     testCond(s == NATS_OK);
 
     test("Connect: ");
-    IFOK(s, natsConnection_Connect(&nc, opts));
+    s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK)
 
     test("Create sub: ");
-    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    s = natsConnection_SubscribeSync(&sub, nc, "foo");
     testCond(s == NATS_OK);
 
     test("Stop server and wait for disconnect: ");
@@ -18355,11 +17430,11 @@ test_EventLoop(void)
     testCond(s == NATS_OK);
 
     test("Publish: ");
-    IFOK(s, natsConnection_PublishString(nc, "foo", "bar"));
+    s = natsConnection_PublishString(nc, "foo", "bar");
     testCond(s == NATS_OK);
 
     test("Check msg received: ");
-    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond(s == NATS_OK);
     natsMsg_Destroy(msg);
 
@@ -18427,13 +17502,13 @@ test_EventLoopRetryOnFailedConnect(void)
     testCond(s == NATS_OK);
 
     test("Start connect: ");
-    IFOK(s, natsConnection_Connect(&nc, opts));
+    s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_NOT_YET_CONNECTED);
     if (s == NATS_NOT_YET_CONNECTED)
         s = NATS_OK;
 
     test("Create sub: ");
-    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    s = natsConnection_SubscribeSync(&sub, nc, "foo");
     testCond(s == NATS_OK);
 
     test("Start server: ");
@@ -18443,23 +17518,23 @@ test_EventLoopRetryOnFailedConnect(void)
 
     test("Check connected: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.connected)
+    while ((s != NATS_TIMEOUT) && !arg.connected)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     test("Publish: ");
-    IFOK(s, natsConnection_PublishString(nc, "foo", "bar"));
+    s = natsConnection_PublishString(nc, "foo", "bar");
     testCond(s == NATS_OK);
 
     test("Check msg received: ");
-    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond(s == NATS_OK);
     natsMsg_Destroy(msg);
 
     test("Close and wait for close cb: ");
     natsConnection_Close(nc);
-    _waitForConnClosed(&arg);
+    s = _waitForConnClosed(&arg);
     testCond(s == NATS_OK);
 
     natsMutex_Lock(arg.m);
@@ -18501,10 +17576,8 @@ test_SSLBasic(void)
     test("Check that connect switches to TLS automatically: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
     // For this test skip server verification
-    if (s == NATS_OK)
-        s = natsOptions_SkipServerVerification(opts, true);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
@@ -18512,18 +17585,13 @@ test_SSLBasic(void)
 
     test("Check connects OK with SSL options: ");
     s = natsOptions_SetSecure(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
 
     // For test purposes, we provide the CA trusted certs
-    if (s == NATS_OK)
-        s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK)
 
     test("Check reconnects OK: ");
@@ -18535,14 +17603,12 @@ test_SSLBasic(void)
     CHECK_SERVER_STARTED(serverPid);
 
     natsMutex_Lock(args.m);
-    while ((s == NATS_OK) && !(args.reconnected))
+    while ((s != NATS_TIMEOUT) && !(args.reconnected))
         s = natsCondition_TimedWait(args.c, args.m, 2000);
     natsMutex_Unlock(args.m);
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK)
 
     natsConnection_Destroy(nc);
@@ -18578,27 +17644,20 @@ test_SSLVerify(void)
 
     test("Check that connect fails if no SSL certs: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetSecure(opts, true);
+    IFOK(s, natsOptions_SetSecure(opts, true));
     // For test purposes, we provide the CA trusted certs
-    if (s == NATS_OK)
-        s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s != NATS_OK);
 
     test("Check that connect succeeds with proper certs: ");
     s = natsOptions_LoadCertificatesChain(opts,
                                           "certs/client-cert.pem",
                                           "certs/client-key.pem");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK);
 
     test("Check reconnects OK: ");
@@ -18610,14 +17669,12 @@ test_SSLVerify(void)
     CHECK_SERVER_STARTED(serverPid);
 
     natsMutex_Lock(args.m);
-    while ((s == NATS_OK) && !(args.reconnected))
+    while ((s != NATS_TIMEOUT) && !(args.reconnected))
         s = natsCondition_TimedWait(args.c, args.m, 2000);
     natsMutex_Unlock(args.m);
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK)
 
     natsConnection_Destroy(nc);
@@ -18644,8 +17701,7 @@ test_SSLLoadCAFromMemory(void)
     struct threadArg    args;
 
     s = nats_ReadFile(&certBuf, 10000, "certs/ca.pem");
-    if (s == NATS_OK)
-        s = _createDefaultThreadArgsForCbTests(&args);
+    IFOK(s, _createDefaultThreadArgsForCbTests(&args));
     if (s == NATS_OK)
         opts = _createReconnectOptions();
     if (opts == NULL)
@@ -18668,10 +17724,8 @@ test_SSLLoadCAFromMemory(void)
 
     test("Check that connect succeeds with proper certs: ");
     s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://localhost:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetSecure(opts, true);
+    IFOK(s, natsOptions_SetURL(opts, "nats://localhost:4443"));
+    IFOK(s, natsOptions_SetSecure(opts, true));
     // For test purposes, we provide the CA trusted certs
     if (s == NATS_OK)
     {
@@ -18679,16 +17733,12 @@ test_SSLLoadCAFromMemory(void)
         // Demonstrate that we can free the memory after this call..
         natsBuf_Destroy(certBuf);
     }
-    if (s == NATS_OK)
-        s = natsOptions_LoadCertificatesChain(opts,
+    IFOK(s, natsOptions_LoadCertificatesChain(opts,
                                               "certs/client-cert.pem",
-                                              "certs/client-key.pem");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+                                              "certs/client-key.pem"));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK);
 
     test("Check reconnects OK: ");
@@ -18700,14 +17750,12 @@ test_SSLLoadCAFromMemory(void)
     CHECK_SERVER_STARTED(serverPid);
 
     natsMutex_Lock(args.m);
-    while ((s == NATS_OK) && !(args.reconnected))
+    while ((s != NATS_TIMEOUT) && !(args.reconnected))
         s = natsCondition_TimedWait(args.c, args.m, 2000);
     natsMutex_Unlock(args.m);
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK)
 
     natsConnection_Destroy(nc);
@@ -18735,10 +17783,8 @@ test_SSLCertAndKeyFromMemory(void)
     struct threadArg    args;
 
     s = nats_ReadFile(&certBuf, 10000, "certs/client-cert.pem");
-    if (s == NATS_OK)
-        s = nats_ReadFile(&keyBuf, 10000, "certs/client-key.pem");
-    if (s == NATS_OK)
-        s = _createDefaultThreadArgsForCbTests(&args);
+    IFOK(s, nats_ReadFile(&keyBuf, 10000, "certs/client-key.pem"));
+    IFOK(s, _createDefaultThreadArgsForCbTests(&args));
     if (s == NATS_OK)
         opts = _createReconnectOptions();
     if (opts == NULL)
@@ -18773,27 +17819,20 @@ test_SSLCertAndKeyFromMemory(void)
 
     test("Check that connect succeeds with proper certs: ");
     s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://localhost:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetSecure(opts, true);
+    IFOK(s, natsOptions_SetURL(opts, "nats://localhost:4443"));
+    IFOK(s, natsOptions_SetSecure(opts, true));
     // For test purposes, we provide the CA trusted certs
-    if (s == NATS_OK)
-        s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
-    if (s == NATS_OK)
-        s = natsOptions_SetCertificatesChain(opts,
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsOptions_SetCertificatesChain(opts,
                                              (const char*) natsBuf_Data(certBuf),
-                                             (const char*) natsBuf_Data(keyBuf));
+                                             (const char*) natsBuf_Data(keyBuf)));
     // Demonstrate that we can free the memory after this call..
     natsBuf_Destroy(certBuf);
     natsBuf_Destroy(keyBuf);
 
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK);
 
     test("Check reconnects OK: ");
@@ -18805,14 +17844,12 @@ test_SSLCertAndKeyFromMemory(void)
     CHECK_SERVER_STARTED(serverPid);
 
     natsMutex_Lock(args.m);
-    while ((s == NATS_OK) && !(args.reconnected))
+    while ((s != NATS_TIMEOUT) && !(args.reconnected))
         s = natsCondition_TimedWait(args.c, args.m, 2000);
     natsMutex_Unlock(args.m);
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK)
 
     natsConnection_Destroy(nc);
@@ -18848,45 +17885,33 @@ test_SSLVerifyHostname(void)
 
     test("Check that connect fails if url is IP: ");
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetSecure(opts, true);
+    IFOK(s, natsOptions_SetSecure(opts, true));
     // For test purposes, we provide the CA trusted certs
-    if (s == NATS_OK)
-        s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_SSL_ERROR);
 
     test("Check that connect fails if wrong expected hostname: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetExpectedHostname(opts, "foo");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetExpectedHostname(opts, "foo"));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_SSL_ERROR);
 
     test("Check that connect succeeds if hostname ok and no expected hostname set: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetExpectedHostname(opts, NULL);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetExpectedHostname(opts, NULL));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK)
     natsConnection_Destroy(nc);
     nc = NULL;
 
     test("Check that connect succeeds with proper expected hostname: ");
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetExpectedHostname(opts, "localhost");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsOptions_SetExpectedHostname(opts, "localhost"));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK);
 
     test("Check reconnects OK: ");
@@ -18898,14 +17923,12 @@ test_SSLVerifyHostname(void)
     CHECK_SERVER_STARTED(serverPid);
 
     natsMutex_Lock(args.m);
-    while ((s == NATS_OK) && !(args.reconnected))
+    while ((s != NATS_TIMEOUT) && !(args.reconnected))
         s = natsCondition_TimedWait(args.c, args.m, 2000);
     natsMutex_Unlock(args.m);
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK)
 
     natsConnection_Destroy(nc);
@@ -18941,18 +17964,14 @@ test_SSLSkipServerVerification(void)
 
     test("Check that connect fails due to server verification: ");
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetSecure(opts, true);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_SSL_ERROR);
 
     test("Check that connect succeeds with server verification disabled: ");
     s = natsOptions_SkipServerVerification(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
 
     test("Check reconnects OK: ");
@@ -18964,14 +17983,12 @@ test_SSLSkipServerVerification(void)
     CHECK_SERVER_STARTED(serverPid);
 
     natsMutex_Lock(args.m);
-    while ((s == NATS_OK) && !(args.reconnected))
+    while ((s != NATS_TIMEOUT) && !(args.reconnected))
         s = natsCondition_TimedWait(args.c, args.m, 2000);
     natsMutex_Unlock(args.m);
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK)
 
     natsConnection_Destroy(nc);
@@ -19015,35 +18032,25 @@ test_SSLCiphers(void)
 
     test("Check that connect fails if improper ciphers: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
-    if (s == NATS_OK)
-        s = natsOptions_SetSecure(opts, true);
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
+    IFOK(s, natsOptions_SetSecure(opts, true));
     // For test purposes, we provide the CA trusted certs
-    if (s == NATS_OK)
-        s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
-    if (s == NATS_OK)
-        s = natsOptions_SetCiphers(opts, "-ALL:RSA");
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsOptions_SetCiphers(opts, "-ALL:RSA"));
 #if defined(NATS_USE_OPENSSL_1_1)
-    if (s == NATS_OK)
-        s = natsOptions_SetCipherSuites(opts, "");
+    IFOK(s, natsOptions_SetCipherSuites(opts, ""));
 #endif
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s != NATS_OK);
 
     test("Check connects OK with proper ciphers: ");
     s = natsOptions_SetCiphers(opts, "-ALL:HIGH");
 #if defined(NATS_USE_OPENSSL_1_1)
-    if (s == NATS_OK)
-        s = natsOptions_SetCipherSuites(opts, "TLS_AES_128_GCM_SHA256");
+    IFOK(s, natsOptions_SetCipherSuites(opts, "TLS_AES_128_GCM_SHA256"));
 #endif
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK)
 
     test("Check reconnects OK: ");
@@ -19055,14 +18062,12 @@ test_SSLCiphers(void)
     CHECK_SERVER_STARTED(serverPid);
 
     natsMutex_Lock(args.m);
-    while ((s == NATS_OK) && !(args.reconnected))
+    while ((s != NATS_TIMEOUT) && !(args.reconnected))
         s = natsCondition_TimedWait(args.c, args.m, 2000);
     natsMutex_Unlock(args.m);
 
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "test");
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK)
 
     natsConnection_Destroy(nc);
@@ -19103,12 +18108,9 @@ _sslMT(void *closure)
     for (i=0; (s == NATS_OK) && (i < count); i++)
     {
         s = natsConnection_Connect(&nc, args->opts);
-        if (s == NATS_OK)
-            s = natsConnection_SubscribeSync(&sub, nc, subj);
-        if (s == NATS_OK)
-            s = natsConnection_PublishString(nc, subj, msgPayload);
-        if (s == NATS_OK)
-            s = natsSubscription_NextMsg(&msg, sub, 2000);
+        IFOK(s, natsConnection_SubscribeSync(&sub, nc, subj));
+        IFOK(s, natsConnection_PublishString(nc, subj, msgPayload));
+        IFOK(s, natsSubscription_NextMsg(&msg, sub, 2000));
         if (s == NATS_OK)
         {
             if (strcmp(natsMsg_GetData(msg), msgPayload) != 0)
@@ -19155,14 +18157,13 @@ test_SSLMultithreads(void)
     serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Create options: ");
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetSecure(opts, true);
+    IFOK(s, natsOptions_SetSecure(opts, true));
     // For test purposes, we provide the CA trusted certs
-    if (s == NATS_OK)
-        s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
-    if (s == NATS_OK)
-        s = natsOptions_SetExpectedHostname(opts, "localhost");
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsOptions_SetExpectedHostname(opts, "localhost"));
+    testCond(s == NATS_OK);
 
     args.opts = opts;
 
@@ -19185,7 +18186,7 @@ test_SSLMultithreads(void)
     }
 
     natsMutex_Lock(args.m);
-    s = args.status;
+    IFOK(s, args.status);
     natsMutex_Unlock(args.m);
 
     testCond(s == NATS_OK);
@@ -19221,31 +18222,24 @@ test_SSLConnectVerboseOption(void)
         if (opts == NULL)
             s = NATS_ERR;
     }
-    if (s == NATS_OK)
-        s = natsOptions_SetVerbose(opts, true);
-    if (s == NATS_OK)
-        s = natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args);
-    if (opts == NULL)
+    IFOK(s, natsOptions_SetVerbose(opts, true));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
+    if (s != NATS_OK)
         FAIL("Unable to setup test!");
 
     serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetSecure(opts, true);
+    IFOK(s, natsOptions_SetSecure(opts, true));
     // For test purposes, we provide the CA trusted certs
-    if (s == NATS_OK)
-        s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem");
-    if (s == NATS_OK)
-        s = natsOptions_SetExpectedHostname(opts, "localhost");
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsOptions_SetExpectedHostname(opts, "localhost"));
 
     test("Check that SSL connect OK when Verbose set: ");
 
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_Flush(nc));
 
     testCond(s == NATS_OK);
 
@@ -19256,12 +18250,11 @@ test_SSLConnectVerboseOption(void)
     test("Check that SSL reconnect OK when Verbose set: ");
 
     natsMutex_Lock(args.m);
-    while ((s == NATS_OK) && !args.reconnected)
+    while ((s != NATS_TIMEOUT) && !args.reconnected)
         s = natsCondition_TimedWait(args.c, args.m, 5000);
     natsMutex_Unlock(args.m);
 
-    if (s == NATS_OK)
-        s = natsConnection_Flush(nc);
+    IFOK(s, natsConnection_Flush(nc));
 
     testCond(s == NATS_OK);
 
@@ -19313,11 +18306,9 @@ test_SSLSocketLeakWithEventLoop(void)
                                      _elDummyWrite,
                                      _elDummyDetach);
     }
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
-    if (s == NATS_OK)
-        s = natsOptions_SetSecure(opts, true);
-    if (opts == NULL)
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4443"));
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    if (s != NATS_OK)
         FAIL("Unable to setup test!");
 
     serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
@@ -19325,8 +18316,7 @@ test_SSLSocketLeakWithEventLoop(void)
 
     // The options have not been set properly for a successful TLS connection.
     test("Check that SSL fails: ");
-    if (s == NATS_OK)
-        s = natsConnection_Connect(&nc, opts);
+    s = natsConnection_Connect(&nc, opts);
     testCond(s != NATS_OK);
 
     // Valgrind will tell us if we have leaked socket.
@@ -19495,9 +18485,6 @@ test_StanConnOptions(void)
     s = stanConnOptions_Create(&opts);
     testCond(s == NATS_OK);
 
-    if (s != NATS_OK)
-        return;
-
     test("Has default values: ");
     testCond(
             (opts->connTimeout == STAN_CONN_OPTS_DEFAULT_CONN_TIMEOUT) &&
@@ -19561,18 +18548,12 @@ test_StanConnOptions(void)
 
     test("Set values: ");
     s = stanConnOptions_SetConnectionWait(opts, 10000);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetDiscoveryPrefix(opts, "myPrefix");
-    if (s == NATS_OK)
-        s = stanConnOptions_SetMaxPubAcksInflight(opts, 10, (float) 0.8);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetPings(opts, 1, 10);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetPubAckWait(opts, 2000);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetURL(opts, "nats://me:1");
-    if (s == NATS_OK)
-        s = stanConnOptions_SetConnectionLostHandler(opts, _stanConnLostCB, (void*) 1);
+    IFOK(s, stanConnOptions_SetDiscoveryPrefix(opts, "myPrefix"));
+    IFOK(s, stanConnOptions_SetMaxPubAcksInflight(opts, 10, (float) 0.8));
+    IFOK(s, stanConnOptions_SetPings(opts, 1, 10));
+    IFOK(s, stanConnOptions_SetPubAckWait(opts, 2000));
+    IFOK(s, stanConnOptions_SetURL(opts, "nats://me:1"));
+    IFOK(s, stanConnOptions_SetConnectionLostHandler(opts, _stanConnLostCB, (void*) 1));
     testCond((s == NATS_OK) &&
             (opts->connTimeout == 10000) &&
             (strcmp(opts->discoveryPrefix, "myPrefix") == 0) &&
@@ -19588,14 +18569,11 @@ test_StanConnOptions(void)
 
     test("Set NATS options: ");
     s = natsOptions_Create(&no);
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxPendingMsgs(no, 1000);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetNATSOptions(opts, no);
+    IFOK(s, natsOptions_SetMaxPendingMsgs(no, 1000));
+    IFOK(s, stanConnOptions_SetNATSOptions(opts, no));
     // change value from no after setting to stan opts
     // check options were cloned.
-    if (s == NATS_OK)
-        s = natsOptions_SetMaxPendingMsgs(no, 2000);
+    IFOK(s, natsOptions_SetMaxPendingMsgs(no, 2000));
     testCond((s == NATS_OK) &&
             (opts->ncOpts != NULL) && // set
             (opts->ncOpts != no) &&   // not a reference
@@ -19606,22 +18584,14 @@ test_StanConnOptions(void)
     s = stanConnOptions_clone(&clone, opts);
     // Change values from original, check that clone
     // keeps original values.
-    if (s == NATS_OK)
-        s = stanConnOptions_SetConnectionWait(opts, 3000);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetDiscoveryPrefix(opts, "xxxxx");
-    if (s == NATS_OK)
-        s = stanConnOptions_SetMaxPubAcksInflight(opts, 100, (float) 0.2);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetPings(opts, 10, 20);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetPubAckWait(opts, 3000);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetURL(opts, "nats://metoo:1");
-    if (s == NATS_OK)
-        s = stanConnOptions_SetConnectionLostHandler(opts, NULL, NULL);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetNATSOptions(opts, NULL);
+    IFOK(s, stanConnOptions_SetConnectionWait(opts, 3000));
+    IFOK(s, stanConnOptions_SetDiscoveryPrefix(opts, "xxxxx"));
+    IFOK(s, stanConnOptions_SetMaxPubAcksInflight(opts, 100, (float) 0.2));
+    IFOK(s, stanConnOptions_SetPings(opts, 10, 20));
+    IFOK(s, stanConnOptions_SetPubAckWait(opts, 3000));
+    IFOK(s, stanConnOptions_SetURL(opts, "nats://metoo:1"));
+    IFOK(s, stanConnOptions_SetConnectionLostHandler(opts, NULL, NULL));
+    IFOK(s, stanConnOptions_SetNATSOptions(opts, NULL));
     testCond((s == NATS_OK) &&
             (clone != opts) &&
             (clone->connTimeout == 10000) &&
@@ -19683,9 +18653,6 @@ test_StanSubOptions(void)
     s = stanSubOptions_Create(&opts);
     testCond(s == NATS_OK);
 
-    if (s != NATS_OK)
-        return;
-
     test("Default values: ");
     testCond(
             (opts->ackWait == STAN_SUB_OPTS_DEFAULT_ACK_WAIT) &&
@@ -19728,12 +18695,9 @@ test_StanSubOptions(void)
 
     test("Check set values: ");
     s = stanSubOptions_SetAckWait(opts, 1000);
-    if (s == NATS_OK)
-        s = stanSubOptions_SetDurableName(opts, "myDurable");
-    if (s == NATS_OK)
-        s = stanSubOptions_SetManualAckMode(opts, true);
-    if (s == NATS_OK)
-        s = stanSubOptions_SetMaxInflight(opts, 200);
+    IFOK(s, stanSubOptions_SetDurableName(opts, "myDurable"));
+    IFOK(s, stanSubOptions_SetManualAckMode(opts, true));
+    IFOK(s, stanSubOptions_SetMaxInflight(opts, 200));
     testCond((s == NATS_OK) &&
             (opts->ackWait == 1000) &&
             (strcmp(opts->durableName, "myDurable") == 0) &&
@@ -19772,16 +18736,11 @@ test_StanSubOptions(void)
     s = stanSubOptions_clone(&clone, opts);
     // Change values of opts to show that this does not affect
     // the clone
-    if (s == NATS_OK)
-        s = stanSubOptions_SetAckWait(opts, 20000);
-    if (s == NATS_OK)
-        s = stanSubOptions_SetDurableName(opts, NULL);
-    if (s == NATS_OK)
-        s = stanSubOptions_SetManualAckMode(opts, false);
-    if (s == NATS_OK)
-        s = stanSubOptions_SetMaxInflight(opts, 4000);
-    if (s == NATS_OK)
-        s = stanSubOptions_StartAtSequence(opts, 100);
+    IFOK(s, stanSubOptions_SetAckWait(opts, 20000));
+    IFOK(s, stanSubOptions_SetDurableName(opts, NULL));
+    IFOK(s, stanSubOptions_SetManualAckMode(opts, false));
+    IFOK(s, stanSubOptions_SetMaxInflight(opts, 4000));
+    IFOK(s, stanSubOptions_StartAtSequence(opts, 100));
     testCond((s == NATS_OK) &&
             (clone != opts) &&
             (clone->ackWait == 1000) &&
@@ -19837,10 +18796,8 @@ test_StanServerNotReachable(void)
     int64_t         elapsed = 0;
 
     s = stanConnOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetURL(opts, "nats://127.0.0.1:4222");
-    if (s == NATS_OK)
-        s = stanConnOptions_SetConnectionWait(opts, 250);
+    IFOK(s, stanConnOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, stanConnOptions_SetConnectionWait(opts, 250));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -19849,8 +18806,7 @@ test_StanServerNotReachable(void)
 
     test("Connect fails if no streaming server running: ");
     now = nats_Now();
-    if (s == NATS_OK)
-        s = stanConnection_Connect(&sc, clusterName, clientName, opts);
+    s = stanConnection_Connect(&sc, clusterName, clientName, opts);
     elapsed = nats_Now()-now;
     if (serverVersionAtLeast(2, 2, 0))
     {
@@ -19904,10 +18860,8 @@ test_StanBasicConnect(void)
 
     test("Connect with non default stan URL: ");
     s = stanConnOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetURL(opts, "nats://127.0.0.1:4223");
-    if (s == NATS_OK)
-        s = stanConnection_Connect(&sc, clusterName, clientName, opts);
+    IFOK(s, stanConnOptions_SetURL(opts, "nats://127.0.0.1:4223"));
+    IFOK(s, stanConnection_Connect(&sc, clusterName, clientName, opts));
     testCond(s == NATS_OK);
 
     stanConnection_Destroy(sc);
@@ -19915,12 +18869,9 @@ test_StanBasicConnect(void)
 
     test("stan URL takes precedence: ");
     s = natsOptions_Create(&nopts);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(nopts, "nats://127.0.0.1:4224"); // wrong URL
-    if (s == NATS_OK)
-        s = stanConnOptions_SetNATSOptions(opts, nopts);
-    if (s == NATS_OK)
-        s = stanConnection_Connect(&sc, clusterName, clientName, opts);
+    IFOK(s, natsOptions_SetURL(nopts, "nats://127.0.0.1:4224")); // wrong URL
+    IFOK(s, stanConnOptions_SetNATSOptions(opts, nopts));
+    IFOK(s, stanConnection_Connect(&sc, clusterName, clientName, opts));
     // Should connect because it should use the one from stanConnOptions_SetURL.
     testCond(s == NATS_OK);
 
@@ -19929,12 +18880,9 @@ test_StanBasicConnect(void)
 
     test("If no stan URL set, uses NATS URL: ");
     s = stanConnOptions_SetURL(opts, NULL);
-    if (s == NATS_OK)
-        s = natsOptions_SetURL(nopts, "nats://127.0.0.1:4223");
-    if (s == NATS_OK)
-        s = stanConnOptions_SetNATSOptions(opts, nopts);
-    if (s == NATS_OK)
-        s = stanConnection_Connect(&sc, clusterName, clientName, opts);
+    IFOK(s, natsOptions_SetURL(nopts, "nats://127.0.0.1:4223"));
+    IFOK(s, stanConnOptions_SetNATSOptions(opts, nopts));
+    IFOK(s, stanConnection_Connect(&sc, clusterName, clientName, opts));
     // Should connect because it should use the one from StanURL.
     testCond(s == NATS_OK);
 
@@ -19959,19 +18907,15 @@ test_StanConnectError(void)
 
     test("Check connect response error: ");
     s = stanConnection_Connect(&sc, clusterName, clientName, NULL);
-    if (s == NATS_OK)
-        s = stanConnection_Connect(&sc2, clusterName, clientName, NULL);
+    IFOK(s, stanConnection_Connect(&sc2, clusterName, clientName, NULL));
     testCond((s == NATS_ERR) &&
             (strstr(nats_GetLastError(NULL), "clientID already registered") != NULL));
 
     test("Check wrong discovery prefix: ");
     s = stanConnOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetDiscoveryPrefix(opts, "wrongprefix");
-    if (s == NATS_OK)
-        s = stanConnOptions_SetConnectionWait(opts, 100);
-    if (s == NATS_OK)
-        s = stanConnection_Connect(&sc2, clusterName, "newClient", opts);
+    IFOK(s, stanConnOptions_SetDiscoveryPrefix(opts, "wrongprefix"));
+    IFOK(s, stanConnOptions_SetConnectionWait(opts, 100));
+    IFOK(s, stanConnection_Connect(&sc2, clusterName, "newClient", opts));
     testCond(s == NATS_TIMEOUT);
 
     stanConnection_Destroy(sc);
@@ -19993,8 +18937,7 @@ test_StanBasicPublish(void)
 
     test("Basic publish: ");
     s = stanConnection_Connect(&sc, clusterName, clientName, NULL);
-    if (s == NATS_OK)
-        s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
+    IFOK(s, stanConnection_Publish(sc, "foo", (const void*) "hello", 5));
     testCond(s == NATS_OK);
 
     stanConnection_Destroy(sc);
@@ -20040,17 +18983,15 @@ test_StanBasicPublishAsync(void)
 
     test("Basic publish async: ");
     s = stanConnection_Connect(&sc, clusterName, clientName, NULL);
-    if (s == NATS_OK)
-        s = stanConnection_PublishAsync(sc, "foo", (const void*) "hello", 5,
-                                        _stanPubAckHandler, (void*) &args);
+    IFOK(s, stanConnection_PublishAsync(sc, "foo", (const void*) "hello", 5,
+                                        _stanPubAckHandler, (void*) &args));
     testCond(s == NATS_OK);
 
     test("PubAck callback report no error: ");
     natsMutex_Lock(args.m);
     while ((s != NATS_TIMEOUT) && !args.msgReceived)
         s = natsCondition_TimedWait(args.c, args.m, 2000);
-    if (s == NATS_OK)
-        s = args.status;
+    IFOK(s, args.status);
     natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
@@ -20072,10 +19013,8 @@ test_StanPublishTimeout(void)
     stanConnOptions     *opts = NULL;
 
     s = _createDefaultThreadArgsForCbTests(&args);
-    if (s == NATS_OK)
-        s = stanConnOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetPubAckWait(opts, 50);
+    IFOK(s, stanConnOptions_Create(&opts));
+    IFOK(s, stanConnOptions_SetPubAckWait(opts, 50));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -20107,8 +19046,7 @@ test_StanPublishTimeout(void)
     natsMutex_Lock(args.m);
     while ((s != NATS_TIMEOUT) && !args.msgReceived)
         s = natsCondition_TimedWait(args.c, args.m, 2000);
-    if (s == NATS_OK)
-        s = args.status;
+    IFOK(s, args.status);
     natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
@@ -20160,10 +19098,8 @@ test_StanPublishMaxAcksInflight(void)
         pts[i] = NULL;
 
     s = _createDefaultThreadArgsForCbTests(&args);
-    if (s == NATS_OK)
-        s = stanConnOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetMaxPubAcksInflight(opts, 5, 1.0);
+    IFOK(s, stanConnOptions_Create(&opts));
+    IFOK(s, stanConnOptions_SetMaxPubAcksInflight(opts, 5, 1.0));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -20175,8 +19111,7 @@ test_StanPublishMaxAcksInflight(void)
 
     // First connect, then once that's done, shutdown streaming server
     s = stanConnection_Connect(&sc1, clusterName, clientName, opts);
-    if (s == NATS_OK)
-        s = stanConnection_Connect(&sc2, clusterName, "otherClient", opts);
+    IFOK(s, stanConnection_Connect(&sc2, clusterName, "otherClient", opts));
     if (s != NATS_OK)
     {
         stanConnection_Destroy(sc1);
@@ -20347,8 +19282,7 @@ test_StanSubscriptionCloseAndUnsubscribe(void)
     stanConnOptions     *opts = NULL;
 
     s = stanConnOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetConnectionWait(opts, 250);
+    IFOK(s, stanConnOptions_SetConnectionWait(opts, 250));
     if (s != NATS_OK)
         FAIL("Unable to setup test");
 
@@ -20368,8 +19302,7 @@ test_StanSubscriptionCloseAndUnsubscribe(void)
 
     test("Unsubscribe: ");
     s = stanConnection_Subscribe(&sub, sc, "foo", _dummyStanMsgHandler, NULL, NULL);
-    if (s == NATS_OK)
-        s = stanSubscription_Unsubscribe(sub);
+    IFOK(s, stanSubscription_Unsubscribe(sub));
     testCond(s == NATS_OK);
 
     stanSubscription_Destroy(sub);
@@ -20377,8 +19310,7 @@ test_StanSubscriptionCloseAndUnsubscribe(void)
 
     test("Close: ");
     s = stanConnection_Subscribe(&sub, sc, "foo", _dummyStanMsgHandler, NULL, NULL);
-    if (s == NATS_OK)
-        s = stanSubscription_Close(sub);
+    IFOK(s, stanSubscription_Close(sub));
     testCond(s == NATS_OK);
 
     stanSubscription_Destroy(sub);
@@ -20391,8 +19323,7 @@ test_StanSubscriptionCloseAndUnsubscribe(void)
     sc->subCloseRequests = NULL;
     natsMutex_Unlock(sc->mu);
     s = stanConnection_Subscribe(&sub, sc, "foo", _dummyStanMsgHandler, NULL, NULL);
-    if (s == NATS_OK)
-        s = stanSubscription_Close(sub);
+    IFOK(s, stanSubscription_Close(sub));
     testCond((s == NATS_NO_SERVER_SUPPORT) &&
             (strstr(nats_GetLastError(NULL), STAN_ERR_SUB_CLOSE_NOT_SUPPORTED) != NULL));
 
@@ -20405,8 +19336,7 @@ test_StanSubscriptionCloseAndUnsubscribe(void)
 
     test("Close/Unsub timeout: ");
     s = stanConnection_Subscribe(&sub, sc, "foo", _dummyStanMsgHandler, NULL, NULL);
-    if (s == NATS_OK)
-        s = stanConnection_Subscribe(&sub2, sc, "foo", _dummyStanMsgHandler, NULL, NULL);
+    IFOK(s, stanConnection_Subscribe(&sub2, sc, "foo", _dummyStanMsgHandler, NULL, NULL));
 
     // Stop the serer
     _stopServer(spid);
@@ -20469,12 +19399,9 @@ test_StanDurableSubscription(void)
 
     test("Basic durable subscibe: ");
     s = stanSubOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = stanSubOptions_SetDurableName(opts, "dur");
-    if (s == NATS_OK)
-        s = stanSubOptions_DeliverAllAvailable(opts);
-    if (s == NATS_OK)
-        s = stanConnection_Subscribe(&dur, sc, "foo", _stanMsgHandlerBumpSum, &args, opts);
+    IFOK(s, stanSubOptions_SetDurableName(opts, "dur"));
+    IFOK(s, stanSubOptions_DeliverAllAvailable(opts));
+    IFOK(s, stanConnection_Subscribe(&dur, sc, "foo", _stanMsgHandlerBumpSum, &args, opts));
     testCond(s == NATS_OK);
 
     test("Check 3 messages received: ");
@@ -20507,8 +19434,7 @@ test_StanDurableSubscription(void)
 
     test("Recreate durable with start seq 1: ");
     s = stanSubOptions_StartAtSequence(opts, 1);
-    if (s == NATS_OK)
-        s = stanConnection_Subscribe(&dur, sc, "foo", _stanMsgHandlerBumpSum, &args, opts);
+    IFOK(s, stanConnection_Subscribe(&dur, sc, "foo", _stanMsgHandlerBumpSum, &args, opts));
     testCond(s == NATS_OK);
 
     test("Check 5 messages total are received: ");
@@ -20557,18 +19483,15 @@ test_StanBasicQueueSubscription(void)
 
     test("Basic queue subscibe: ");
     s = stanConnection_QueueSubscribe(&qsub1, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, NULL);
-    if (s == NATS_OK)
-        s = stanConnection_QueueSubscribe(&qsub2, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, NULL);
+    IFOK(s, stanConnection_QueueSubscribe(&qsub2, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, NULL));
     testCond(s == NATS_OK);
 
     // Test that durable and non durable queue subscribers with
     // same name can coexist and they both receive the same message.
     test("New durable queue sub with same queue name: ");
     s = stanSubOptions_Create(&opts);
-    if (s == NATS_OK)
-        stanSubOptions_SetDurableName(opts, "durable-queue-sub");
-    if (s == NATS_OK)
-        s = stanConnection_QueueSubscribe(&qsub3, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, opts);
+    IFOK(s, stanSubOptions_SetDurableName(opts, "durable-queue-sub"));
+    IFOK(s, stanConnection_QueueSubscribe(&qsub3, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, opts));
     testCond(s == NATS_OK);
 
     test("Check published message ok: ");
@@ -20625,12 +19548,9 @@ test_StanDurableQueueSubscription(void)
 
     test("Basic durable subscibe: ");
     s = stanSubOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = stanSubOptions_SetDurableName(opts, "dur");
-    if (s == NATS_OK)
-        s = stanSubOptions_DeliverAllAvailable(opts);
-    if (s == NATS_OK)
-        s = stanConnection_QueueSubscribe(&dur, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, opts);
+    IFOK(s, stanSubOptions_SetDurableName(opts, "dur"));
+    IFOK(s, stanSubOptions_DeliverAllAvailable(opts));
+    IFOK(s, stanConnection_QueueSubscribe(&dur, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, opts));
     testCond(s == NATS_OK);
 
     test("Check 3 messages received: ");
@@ -20663,8 +19583,7 @@ test_StanDurableQueueSubscription(void)
 
     test("Recreate durable with start seq 1: ");
     s = stanSubOptions_StartAtSequence(opts, 1);
-    if (s == NATS_OK)
-        s = stanConnection_QueueSubscribe(&dur, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, opts);
+    IFOK(s, stanConnection_QueueSubscribe(&dur, sc, "foo", "bar", _stanMsgHandlerBumpSum, &args, opts));
     testCond(s == NATS_OK);
 
     test("Check 5 messages total are received: ");
@@ -20809,10 +19728,8 @@ test_StanSubscriptionAckMsg(void)
     struct threadArg    args;
 
     s = _createDefaultThreadArgsForCbTests(&args);
-    if (s == NATS_OK)
-        s = stanSubOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = stanSubOptions_SetManualAckMode(opts, true);
+    IFOK(s, stanSubOptions_Create(&opts));
+    IFOK(s, stanSubOptions_SetManualAckMode(opts, true));
     if (s != NATS_OK)
         FAIL("Error setting up test");
 
@@ -20832,20 +19749,16 @@ test_StanSubscriptionAckMsg(void)
     testCond(s == NATS_OK);
 
     test("Publish message: ");
-    if (s == NATS_OK)
-        s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
+    s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
     testCond(s == NATS_OK);
 
     test("Check manual ack fails: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != 1))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
     if (s == NATS_OK)
-    {
-        natsMutex_Lock(args.m);
-        while ((s != NATS_TIMEOUT) && (args.sum != 1))
-            s = natsCondition_TimedWait(args.c, args.m, 2000);
-        if (s == NATS_OK)
-            s = args.status;
-        natsMutex_Unlock(args.m);
-    }
+        s = args.status;
+    natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
     stanSubscription_Destroy(sub);
@@ -20857,35 +19770,28 @@ test_StanSubscriptionAckMsg(void)
     natsMutex_Unlock(args.m);
 
     test("Create sub with manual ack: ");
-    if (s == NATS_OK)
-        s = stanConnection_Subscribe(&sub, sc, "foo", _stanManualAck, (void*) &args, opts);
+    s = stanConnection_Subscribe(&sub, sc, "foo", _stanManualAck, (void*) &args, opts);
     testCond(s == NATS_OK);
 
     test("Publish message: ");
-    if (s == NATS_OK)
-        s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
+    s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
     testCond(s == NATS_OK);
 
     test("Check manual ack ok: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != 1))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
     if (s == NATS_OK)
-    {
-        natsMutex_Lock(args.m);
-        while ((s != NATS_TIMEOUT) && (args.sum != 1))
-            s = natsCondition_TimedWait(args.c, args.m, 2000);
-        if (s == NATS_OK)
-            s = args.status;
-        natsMutex_Unlock(args.m);
-    }
+        s = args.status;
+    natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
     stanSubscription_Destroy(sub);
     sub = NULL;
 
     test("Create sub and get message: ");
-    if (s == NATS_OK)
-        s = stanConnection_Subscribe(&sub, sc, "foo", _stanGetMsg, (void*) &args, NULL);
-    if (s == NATS_OK)
-        s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
+    s = stanConnection_Subscribe(&sub, sc, "foo", _stanGetMsg, (void*) &args, NULL);
+    IFOK(s, stanConnection_Publish(sc, "foo", (const void*) "hello", 5));
     if (s == NATS_OK)
     {
         natsMutex_Lock(args.m);
@@ -20896,8 +19802,7 @@ test_StanSubscriptionAckMsg(void)
     testCond(s == NATS_OK)
 
     test("Create sub with manual ack: ");
-    if (s == NATS_OK)
-        s = stanConnection_Subscribe(&sub2, sc, "foo", _dummyStanMsgHandler, NULL, opts);
+    s = stanConnection_Subscribe(&sub2, sc, "foo", _dummyStanMsgHandler, NULL, opts);
     testCond(s == NATS_OK);
 
     test("NULL Sub should fail: ");
@@ -20946,8 +19851,7 @@ test_StanPings(void)
         testAllowMillisecInPings = true;
         s = stanConnOptions_Create(&opts);
     }
-    if (s == NATS_OK)
-        s = stanConnOptions_SetPings(opts, -50, 5);
+    IFOK(s, stanConnOptions_SetPings(opts, -50, 5));
     if (s == NATS_OK)
     {
         arg.string = STAN_ERR_MAX_PINGS;
@@ -20983,8 +19887,7 @@ test_StanPings(void)
     }
 
     // Connect to Stan
-    if (s == NATS_OK)
-        s = stanConnection_Connect(&sc, clusterName, clientName, opts);
+    IFOK(s, stanConnection_Connect(&sc, clusterName, clientName, opts));
 
     // We should start receiving PINGs
     natsMutex_Lock(arg.m);
@@ -21003,8 +19906,7 @@ test_StanPings(void)
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
@@ -21044,10 +19946,8 @@ test_StanPingsNoResponder(void)
         testAllowMillisecInPings = true;
         s = stanConnOptions_Create(&opts);
     }
-    if (s == NATS_OK)
-        s = stanConnOptions_SetPings(opts, -50, 5);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetConnectionLostHandler(opts, _stanConnLostCB, (void*) &arg);
+    IFOK(s, stanConnOptions_SetPings(opts, -50, 5));
+    IFOK(s, stanConnOptions_SetConnectionLostHandler(opts, _stanConnLostCB, (void*) &arg));
     if (s != NATS_OK)
     {
         _destroyDefaultThreadArgs(&arg);
@@ -21114,7 +20014,7 @@ test_StanConnectionLostHandlerNotSet(void)
     }
 
     test("Connect: ");
-    IFOK(s, stanConnection_Connect(&sc, clusterName, clientName, opts));
+    s = stanConnection_Connect(&sc, clusterName, clientName, opts);
     testCond(s == NATS_OK);
 
     // Stop server and wait for closed notification
@@ -21158,10 +20058,8 @@ test_StanPingsUnblockPubCalls(void)
         testAllowMillisecInPings = true;
         s = stanConnOptions_Create(&opts);
     }
-    if (s == NATS_OK)
-        s = stanConnOptions_SetMaxPubAcksInflight(opts, 1, 1.0);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetPings(opts, -100, 5);
+    IFOK(s, stanConnOptions_SetMaxPubAcksInflight(opts, 1, 1.0));
+    IFOK(s, stanConnOptions_SetPings(opts, -100, 5));
     if (s == NATS_OK)
     {
         arg.string = STAN_ERR_MAX_PINGS;
@@ -21208,8 +20106,7 @@ test_StanPingsUnblockPubCalls(void)
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-    if (s == NATS_OK)
-        s = arg.status;
+    IFOK(s, arg.status);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
@@ -21252,105 +20149,70 @@ test_StanGetNATSConnection(void)
     testCond(s == NATS_OK);
 
     test("Create sub: ");
-    if (s == NATS_OK)
-        stanConnection_Subscribe(&ssub, sc, "foo", _stanMsgHandlerBumpSum, (void*) &args, NULL);
+    s = stanConnection_Subscribe(&ssub, sc, "foo", _stanMsgHandlerBumpSum, (void*) &args, NULL);
     testCond(s == NATS_OK);
 
     test("Get NATS Connection: ");
-    if (s == NATS_OK)
-        s = stanConnection_GetNATSConnection(sc, &nc);
+    s = stanConnection_GetNATSConnection(sc, &nc);
     testCond((s == NATS_OK) && (nc != NULL));
 
     test("Create sub & pub with NATS OK: ");
-    if (s == NATS_OK)
-        s = natsConnection_Subscribe(&nsub, nc, "foo", _dummyMsgHandler, NULL);
-    if (s == NATS_OK)
-        s = natsConnection_PublishString(nc, "foo", "hello");
+    s = natsConnection_Subscribe(&nsub, nc, "foo", _dummyMsgHandler, NULL);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "hello"));
     testCond(s == NATS_OK);
 
     test("Invalid to drain: ");
-    if (s == NATS_OK)
+    s = natsConnection_Drain(nc);
+    if (s == NATS_ILLEGAL_STATE)
+        s = natsConnection_DrainTimeout(nc, 1000);
+    if ((s == NATS_ILLEGAL_STATE)
+            && (nats_GetLastError(NULL) != NULL)
+            && (strstr(nats_GetLastError(NULL), "owned") != NULL))
     {
-        s = natsConnection_Drain(nc);
-        if (s == NATS_ILLEGAL_STATE)
-            s = natsConnection_DrainTimeout(nc, 1000);
-        if ((s == NATS_ILLEGAL_STATE)
-                && (nats_GetLastError(NULL) != NULL)
-                && (strstr(nats_GetLastError(NULL), "owned") != NULL))
-        {
-            s = NATS_OK;
-            nats_clearLastError();
-        }
+        s = NATS_OK;
+        nats_clearLastError();
     }
     testCond(s == NATS_OK);
 
     test("Closing NATS Conn has no effect: ");
-    if (s == NATS_OK)
-    {
-        natsConnection_Close(nc);
-        s = stanConnection_Publish(sc, "foo", (const void*)"hello", 5);
-    }
+    natsConnection_Close(nc);
+    s = stanConnection_Publish(sc, "foo", (const void*)"hello", 5);
     testCond(s == NATS_OK);
 
     test("Destroying NATS Conn has no effect: ");
-    if (s == NATS_OK)
-    {
-        natsConnection_Destroy(nc);
-        s = stanConnection_Publish(sc, "foo", (const void*)"hello", 5);
-    }
+    natsConnection_Destroy(nc);
+    s = stanConnection_Publish(sc, "foo", (const void*)"hello", 5);
     testCond(s == NATS_OK);
 
     test("Calling release more than get does not crash: ");
-    if (s == NATS_OK)
-    {
-        stanConnection_ReleaseNATSConnection(sc);
-        stanConnection_ReleaseNATSConnection(sc);
-        s = stanConnection_Publish(sc, "foo", (const void*)"hello", 5);
-    }
+    stanConnection_ReleaseNATSConnection(sc);
+    stanConnection_ReleaseNATSConnection(sc);
+    s = stanConnection_Publish(sc, "foo", (const void*)"hello", 5);
     testCond(s == NATS_OK);
 
     test("Should have received 3 messages: ");
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(args.m);
-        while ((s != NATS_TIMEOUT) && (args.sum != 3))
-            s = natsCondition_TimedWait(args.c, args.m, 2000);
-        natsMutex_Unlock(args.m);
-    }
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != 3))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
     nc2 = NULL;
     test("Invalid arg (sc == NULL): ");
-    if (s == NATS_OK)
-        s = stanConnection_GetNATSConnection(NULL, &nc2);
+    s = stanConnection_GetNATSConnection(NULL, &nc2);
     testCond((s == NATS_INVALID_ARG) && (nc2 == NULL));
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("Invalid arg (nc == NULL): ");
-    if (s == NATS_OK)
-        s = stanConnection_GetNATSConnection(sc, NULL);
+    s = stanConnection_GetNATSConnection(sc, NULL);
     testCond((s == NATS_INVALID_ARG) && (nc2 == NULL));
-    if (s == NATS_INVALID_ARG)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     test("GetNATSConnection on closed connection fails: ");
-    if (s == NATS_OK)
-        s = stanConnection_Close(sc);
-    if (s == NATS_OK)
-        s = stanConnection_GetNATSConnection(sc, &nc2);
+    s = stanConnection_Close(sc);
+    IFOK(s, stanConnection_GetNATSConnection(sc, &nc2));
     testCond(s == NATS_CONNECTION_CLOSED);
-    if (s == NATS_CONNECTION_CLOSED)
-    {
-        s = NATS_OK;
-        nats_clearLastError();
-    }
+    nats_clearLastError();
 
     natsSubscription_Destroy(nsub);
     stanSubscription_Destroy(ssub);
@@ -21373,14 +20235,10 @@ test_StanNoRetryOnFailedConnect(void)
 
     test("RetryOnFailedConnect not supported: ");
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_SetRetryOnFailedConnect(opts, true, _dummyConnHandler, (void*)1);
-    if (s == NATS_OK)
-        s = stanConnOptions_Create(&sopts);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetNATSOptions(sopts, opts);
-    if (s == NATS_OK)
-        s = stanConnection_Connect(&sc, clusterName, clientName, sopts);
+    IFOK(s, natsOptions_SetRetryOnFailedConnect(opts, true, _dummyConnHandler, (void*)1));
+    IFOK(s, stanConnOptions_Create(&sopts));
+    IFOK(s, stanConnOptions_SetNATSOptions(sopts, opts));
+    IFOK(s, stanConnection_Connect(&sc, clusterName, clientName, sopts));
     testCond(s == NATS_NO_SERVER);
 
     natsOptions_Destroy(opts);
@@ -21416,33 +20274,25 @@ test_StanInternalSubsNotPooled(void)
 
     test("Can connet: ");
     s = natsOptions_Create(&opts);
-    if (s == NATS_OK)
-        s = natsOptions_UseGlobalMessageDelivery(opts, true);
-    if (s == NATS_OK)
-        s = stanConnOptions_Create(&sopts);
-    if (s == NATS_OK)
-        s = stanConnOptions_SetNATSOptions(sopts, opts);
-    if (s == NATS_OK)
-        s = stanConnection_Connect(&sc, clusterName, clientName, sopts);
+    IFOK(s, natsOptions_UseGlobalMessageDelivery(opts, true));
+    IFOK(s, stanConnOptions_Create(&sopts));
+    IFOK(s, stanConnOptions_SetNATSOptions(sopts, opts));
+    IFOK(s, stanConnection_Connect(&sc, clusterName, clientName, sopts));
     testCond(s == NATS_OK);
 
     test("Create sub: ");
-    if (s == NATS_OK)
-        s = stanConnection_Subscribe(&sub, sc, "foo", _dummyStanMsgHandler, NULL, NULL);
+    s = stanConnection_Subscribe(&sub, sc, "foo", _dummyStanMsgHandler, NULL, NULL);
     testCond(s == NATS_OK);
 
-    if (s == NATS_OK)
-    {
-        stanConn_Lock(sc);
-        hbSub   = sc->hbSubscription;
-        ackSub  = sc->ackSubscription;
-        pingSub = sc->pingSub;
-        stanConn_Unlock(sc);
+    stanConn_Lock(sc);
+    hbSub   = sc->hbSubscription;
+    ackSub  = sc->ackSubscription;
+    pingSub = sc->pingSub;
+    stanConn_Unlock(sc);
 
-        stanSub_Lock(sub);
-        inboxSub = sub->inboxSub;
-        stanSub_Unlock(sub);
-    }
+    stanSub_Lock(sub);
+    inboxSub = sub->inboxSub;
+    stanSub_Unlock(sub);
 
     test("HBSub not pooled: ");
     testCond((s == NATS_OK) && !_subDlvThreadPooled(hbSub));
@@ -21549,13 +20399,12 @@ test_StanSubOnComplete(void)
     testCond(s == NATS_OK);
 
     test("Publish msg: ");
-    if (s == NATS_OK)
-        s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
+    s = stanConnection_Publish(sc, "foo", (const void*) "hello", 5);
     testCond(s == NATS_OK);
 
     test("Wait for message to be received: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.msgReceived)
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
@@ -21566,7 +20415,7 @@ test_StanSubOnComplete(void)
 
     test("Ensure onComplete invoked after cb returned: ");
     natsMutex_Lock(arg.m);
-    while ((s == NATS_OK) && !arg.done)
+    while ((s != NATS_TIMEOUT) && !arg.done)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
@@ -21926,8 +20775,20 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (natsMutex_Create(&slMu) != NATS_OK)
+    {
+        printf("@@ Unable to create lock for servers map\n");
+        return 1;
+    }
+    if (natsHash_Create(&slMap, 4) != NATS_OK)
+    {
+        natsMutex_Destroy(slMu);
+        printf("@@ Unable to create lock for servers map\n");
+        return 1;
+    }
+
     // Execute tests
-    for (i=testStart; i<=testEnd; i++)
+    for (i=testStart; (i<=testEnd) && !failed; i++)
     {
 #ifdef _WIN32
         printf("\n== %s ==\n", allTests[i].name);
@@ -21947,12 +20808,27 @@ int main(int argc, char **argv)
     remove(LOGFILE_NAME);
 #endif
 
-    // Makes valgrind happy
-    nats_CloseAndWait(2000);
-
-    if (fails)
+    // Shutdown servers that are still running likely due to failed test
     {
-        printf("*** %d TEST%s FAILED ***\n", fails, (fails > 1 ? "S" : ""));
+        natsHashIter iter;
+        int64_t      key;
+
+        natsMutex_Lock(slMu);
+        natsHashIter_Init(&iter, slMap);
+
+        while (natsHashIter_Next(&iter, &key, NULL))
+            _stopServer((natsPid) key);
+
+        natsHash_Destroy(slMap);
+        natsMutex_Destroy(slMu);
+    }
+
+    // Makes valgrind happy
+    nats_CloseAndWait((failed ? 1 : 2000));
+
+    if (failed)
+    {
+        printf("*** TEST FAILED ***\n");
         return 1;
     }
 

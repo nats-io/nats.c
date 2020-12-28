@@ -1203,6 +1203,7 @@ natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock)
             natsConn_Lock(nc);
 
         resp->closed = false;
+        resp->closedSts = NATS_OK;
         resp->removed = false;
         resp->msg = NULL;
 
@@ -1360,7 +1361,7 @@ natsConn_initResp(natsConnection *nc, natsMsgHandler cb)
 // This will clear any pending Request calls.
 // Lock is assumed to be held by the caller.
 static void
-_clearPendingRequestCalls(natsConnection *nc)
+_clearPendingRequestCalls(natsConnection *nc, natsStatus reason)
 {
     natsStrHashIter iter;
     void            *p = NULL;
@@ -1374,6 +1375,7 @@ _clearPendingRequestCalls(natsConnection *nc)
         respInfo *val = (respInfo*) p;
         natsMutex_Lock(val->mu);
         val->closed = true;
+        val->closedSts = reason;
         val->removed = true;
         natsCondition_Signal(val->cond);
         natsMutex_Unlock(val->mu);
@@ -1409,9 +1411,6 @@ _doReconnect(void *arg)
     _joinThreads(&ttj);
 
     natsConn_Lock(nc);
-
-    // Kick out all calls to natsConnection_Flush[Timeout]().
-    _clearPendingFlushRequests(nc);
 
     // Clear any error.
     nc->err         = NATS_OK;
@@ -2031,6 +2030,13 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
             nc->sockCtx.fd = NATS_SOCK_INVALID;
         }
 
+        // Fail pending flush requests.
+        if (ls == NATS_OK)
+            _clearPendingFlushRequests(nc);
+        // If option set, also fail pending requests.
+        if ((ls == NATS_OK) && nc->opts->failRequestsOnDisconnect)
+            _clearPendingRequestCalls(nc, NATS_CONNECTION_DISCONNECTED);
+
         // Create the pending buffer to hold all write requests while we try
         // to reconnect.
         if (ls == NATS_OK)
@@ -2382,7 +2388,7 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     _clearPendingFlushRequests(nc);
 
     // Kick out any queued and blocking requests.
-    _clearPendingRequestCalls(nc);
+    _clearPendingRequestCalls(nc, NATS_CONNECTION_CLOSED);
 
     if (nc->ptmr != NULL)
         natsTimer_Stop(nc->ptmr);

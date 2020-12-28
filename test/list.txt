@@ -78,6 +78,7 @@ IsReconnectingAndStatus
 ReconnectBufSize
 RetryOnFailedConnect
 NoPartialOnReconnect
+ReconnectFailsPendingRequests
 ErrOnConnectAndDeadlock
 ErrOnMaxPayloadLimit
 Auth

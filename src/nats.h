@@ -1534,6 +1534,23 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap);
 NATS_EXTERN natsStatus
 natsOptions_UseOldRequestStyle(natsOptions *opts, bool useOldStyle);
 
+/** \brief Fails pending requests on disconnect event.
+ *
+ * If this option is enabled, all pending #natsConnection_Request() family
+ * calls will fail with the #NATS_CONNECTION_DISCONNECTED status.
+ *
+ * \note This does not apply to requests from connections that use the
+ * old style requests.
+ *
+ * @see natsOptions_UseOldRequestStyle
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param failRequests a boolean indicating if pending requests should fail
+ * when a disconnect event occurs.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetFailRequestsOnDisconnect(natsOptions *opts, bool failRequests);
+
 /** \brief Sets if connection receives its own messages.
  *
  * This configures whether the server will echo back messages

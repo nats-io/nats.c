@@ -17122,6 +17122,70 @@ test_NoPartialOnReconnect(void)
 }
 
 static void
+_stopServerInThread(void *closure)
+{
+    natsPid pid = *((natsPid*) closure);
+
+    nats_Sleep(150);
+    _stopServer(pid);
+}
+
+static void
+test_ReconnectFailsPendingRequest(void)
+{
+    natsStatus          s;
+    natsOptions         *opts = NULL;
+    natsConnection      *nc   = NULL;
+    natsSubscription    *sub  = NULL;
+    natsMsg             *msg  = NULL;
+    natsThread          *t    = NULL;
+    natsPid             pid   = NATS_INVALID_PID;
+    bool                failr = false;
+    int                 iter;
+
+    for (iter=1; iter<=2; iter++)
+    {
+        failr = (iter == 2 ? true : false);
+
+        test("Create options: ");
+        s = natsOptions_Create(&opts);
+        IFOK(s, natsOptions_SetFailRequestsOnDisconnect(opts, failr));
+        testCond(s == NATS_OK);
+
+        test("Start server: ");
+        pid = _startServer("nats://127.0.0.1:4222", "-p 4222", true);
+        CHECK_SERVER_STARTED(pid);
+        testCond(true);
+
+        test("Connect: ");
+        s = natsConnection_Connect(&nc, opts);
+        testCond(s == NATS_OK);
+
+        test("Create service provider: ");
+        s = natsConnection_SubscribeSync(&sub, nc, "requests");
+        testCond(s == NATS_OK);
+
+        test("Start thread that will stop server: ");
+        s = natsThread_Create(&t, _stopServerInThread, (void*) &pid);
+        testCond(s == NATS_OK);
+
+        test((failr ? "Fails due to disconnect: " : "Fails due to timeout: "));
+        s = natsConnection_RequestString(&msg, nc, "requests", "help", 300);
+        testCond(s == (failr ? NATS_CONNECTION_DISCONNECTED : NATS_TIMEOUT));
+
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+        t = NULL;
+        natsSubscription_Destroy(sub);
+        sub = NULL;
+        natsConnection_Destroy(nc);
+        nc = NULL;
+        natsOptions_Destroy(opts);
+        opts = NULL;
+    }
+}
+
+static void
 test_HeadersNotSupported(void)
 {
     natsStatus          s;
@@ -20531,6 +20595,7 @@ static testInfo allTests[] =
     {"ReconnectBufSize",                test_ReconnectBufSize},
     {"RetryOnFailedConnect",            test_RetryOnFailedConnect},
     {"NoPartialOnReconnect",            test_NoPartialOnReconnect},
+    {"ReconnectFailsPendingRequests",   test_ReconnectFailsPendingRequest},
 
     {"ErrOnConnectAndDeadlock",         test_ErrOnConnectAndDeadlock},
     {"ErrOnMaxPayloadLimit",            test_ErrOnMaxPayloadLimit},

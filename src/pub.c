@@ -492,7 +492,7 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
             {
                 // Set the correct error status that we return to the user
                 if (resp->closed)
-                    s = NATS_CONNECTION_CLOSED;
+                    s = resp->closedSts;
                 else
                     s = NATS_TIMEOUT;
             }

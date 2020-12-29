@@ -1077,6 +1077,16 @@ natsOptions_UseOldRequestStyle(natsOptions *opts, bool useOldStype)
     return NATS_OK;
 }
 
+natsStatus
+natsOptions_SetFailRequestsOnDisconnect(natsOptions *opts, bool failRequests)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+    opts->failRequestsOnDisconnect = failRequests;
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
 static void
 _freeUserCreds(userCreds *uc)
 {

@@ -261,6 +261,10 @@ struct __natsOptions
     // not rely on the flusher.
     bool                    sendAsap;
 
+    // If set to true, pending requests will fail with NATS_CONNECTION_DISCONNECTED
+    // when the library detects a disconnection.
+    bool                    failRequestsOnDisconnect;
+
     // NoEcho configures whether the server will echo back messages
     // that are sent on this connection if we also have matching subscriptions.
     // Note this is supported on servers >= version 1.2. Proto 1 or greater.
@@ -451,6 +455,7 @@ typedef struct __respInfo
     natsCondition       *cond;
     natsMsg             *msg;
     bool                closed;
+    natsStatus          closedSts;
     bool                removed;
     bool                pooled;
 

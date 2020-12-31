@@ -44,6 +44,21 @@ void
 natsSub_setMax(natsSubscription *sub, uint64_t max);
 
 void
+natsSub_initDrain(natsSubscription *sub);
+
+natsStatus
+natsSub_startDrain(natsSubscription *sub, int64_t timeout);
+
+void
+natsSub_setDrainCompleteState(natsSubscription *sub);
+
+void
+natsSub_setDrainSkip(natsSubscription *sub, natsStatus s);
+
+void
+natsSub_updateDrainStatus(natsSubscription *sub, natsStatus s);
+
+void
 natsSub_drain(natsSubscription *sub);
 
 void

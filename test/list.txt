@@ -145,6 +145,7 @@ ServerErrorClosesConnection
 NoEcho
 NoEchoOldServer
 DrainSub
+DrainSubStops
 DrainConn
 NoDoubleCloseCbOnDrain
 GetClientID

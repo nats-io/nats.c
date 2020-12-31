@@ -353,8 +353,18 @@ struct __natsSubscription
     // The subscriber is closed (or closing).
     bool                        closed;
 
-    // Indicates if this subscription is in drained mode.
+    // Indicates if this subscription is actively draining.
     bool                        draining;
+    // This holds if draining has started and/or completed.
+    uint8_t                     drainState;
+    // Thread started to do the flush and wait for drain to complete.
+    natsThread                  *drainThread;
+    // Holds the status of the drain: if there was an error during the drain process.
+    natsStatus                  drainStatus;
+    // This is the timeout for the drain operation.
+    int64_t                     drainTimeout;
+    // This is set if the flush failed and will prevent the connection for pushing further messages.
+    bool                        drainSkip;
 
     // Same than draining but for the global delivery situation.
     // This boolean will be switched off when processed, as opposed
@@ -512,8 +522,9 @@ struct __natsConnection
 
     natsStatistics      stats;
 
-    natsTimer           *drainTimer;
-    int64_t             drainDeadline;
+    natsThread          *drainThread;
+    int64_t             drainTimeout;
+    bool                dontSendInPlace;
 
     // Set to true when owned by a Streaming connection,
     // which will prevent user from calling Close and/or Destroy.

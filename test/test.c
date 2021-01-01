@@ -10432,8 +10432,8 @@ test_SubRemovedWhileProcessingMsg(void)
     testCond(s == NATS_OK);
 
     test("Close sub: ");
-    natsSub_close(sub, false);
     natsSub_Unlock(sub);
+    natsSub_close(sub, false);
     testCond(s == NATS_OK);
 
     test("Check msg not given: ");
@@ -10464,14 +10464,16 @@ test_SubRemovedWhileProcessingMsg(void)
     testCond(s == NATS_OK);
 
     test("Close sub: ");
-    natsSub_close(sub, false);
     natsMutex_Unlock(sub->libDlvWorker->lock);
     natsSub_Unlock(sub);
+    natsSub_close(sub, false);
     testCond(s == NATS_OK);
 
     test("Check msg not given: ");
     natsSub_Lock(sub);
+    natsMutex_Lock(sub->libDlvWorker->lock);
     testCond(sub->msgList.msgs == 0);
+    natsMutex_Unlock(sub->libDlvWorker->lock);
     natsSub_Unlock(sub);
 
     natsSubscription_Destroy(sub);

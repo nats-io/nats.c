@@ -1107,6 +1107,15 @@ stopTimerCb(natsTimer *timer, void *arg)
     natsMutex_Unlock(tArg->m);
 }
 
+static void
+_dummyTimerCB(natsTimer *timer, void *arg) {}
+
+static void
+_timerStopCB(natsTimer *timer, void *arg)
+{
+    natsTimer_Release(timer);
+}
+
 #define STOP_TIMER_AND_WAIT_STOPPED \
         natsTimer_Stop(t); \
         natsMutex_Lock(tArg.m); \
@@ -1327,6 +1336,12 @@ test_natsTimer(void)
     natsTimer_Release(t);
 
     _destroyDefaultThreadArgs(&tArg);
+
+    // Create a timer that will not be stopped here to exercise
+    // code that cleans up timers when library is unloaded.
+    test("Create timer: ");
+    s = natsTimer_Create(&t, _dummyTimerCB, _timerStopCB, 1000, NULL);
+    testCond(s == NATS_OK);
 }
 
 static void
@@ -15602,7 +15617,7 @@ test_DrainSub(void)
     testCond(s == NATS_OK);
 
     test("Call Drain on subscriptions: ");
-    s = natsSubscription_DrainTimeout(sub, 1000);
+    s = natsSubscription_DrainTimeout(sub, 500);
     testCond(s == NATS_OK);
 
     // Unblock the callback.
@@ -15658,6 +15673,7 @@ test_DrainSub(void)
     testCond(s == NATS_OK);
 
     // Unblock the callback.
+    nats_Sleep(250);
     natsMutex_Lock(arg.m);
     arg.closed = true;
     natsCondition_Signal(arg.c);

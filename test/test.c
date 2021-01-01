@@ -10338,15 +10338,15 @@ test_Unsubscribe(void)
     testCond(s == NATS_OK);
 
     test("No more callback: ");
-    nats_Sleep(500);
+    nats_Sleep(250);
     natsMutex_Lock(arg.m);
     testCond((s == NATS_OK) && (arg.sum == 10));
     natsMutex_Unlock(arg.m);
-    testCond(s == NATS_OK);
 
-    test("Create new sub: ");
     natsSubscription_Destroy(sub);
     sub = NULL;
+
+    test("Create new sub: ");
     s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
     testCond(s == NATS_OK);
 
@@ -10387,6 +10387,81 @@ test_DoubleUnsubscribe(void)
 
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
+test_SubRemovedWhileProcessingMsg(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect and create sub: ")
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    testCond(s == NATS_OK);
+
+    // Lock the sub so that we can remove while the connection
+    // readLoop is trying to push to the sub.
+    natsSub_Lock(sub);
+
+    test("Send message: ");
+    s = natsConnection_PublishString(nc, "foo", "hello");
+    testCond(s == NATS_OK);
+
+    test("Close sub: ");
+    natsSub_close(sub, false);
+    natsSub_Unlock(sub);
+    testCond(s == NATS_OK);
+
+    test("Check msg not given: ");
+    natsSub_Lock(sub);
+    testCond(sub->msgList.msgs == 0);
+    natsSub_Unlock(sub);
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    // Repeat with global message delivery option.
+    test("Set global delivery option: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_UseGlobalMessageDelivery(opts, true));
+    testCond(s == NATS_OK);
+
+    test("Connect and create sub: ");
+    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _dummyMsgHandler, NULL));
+    testCond(s == NATS_OK);
+
+    natsSub_Lock(sub);
+    natsMutex_Lock(sub->libDlvWorker->lock);
+    test("Send message: ");
+    s = natsConnection_PublishString(nc, "foo", "hello");
+    testCond(s == NATS_OK);
+
+    test("Close sub: ");
+    natsSub_close(sub, false);
+    natsMutex_Unlock(sub->libDlvWorker->lock);
+    natsSub_Unlock(sub);
+    testCond(s == NATS_OK);
+
+    test("Check msg not given: ");
+    natsSub_Lock(sub);
+    testCond(sub->msgList.msgs == 0);
+    natsSub_Unlock(sub);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
 
     _stopServer(serverPid);
 }
@@ -15316,6 +15391,7 @@ test_DrainSub(void)
     natsSubscription    *sub= NULL;
     natsSubscription    *sub2 = NULL;
     natsSubscription    *sub3 = NULL;
+    natsOptions         *opts = NULL;
     natsPid             pid = NATS_INVALID_PID;
     struct threadArg    arg;
 
@@ -15353,7 +15429,8 @@ test_DrainSub(void)
     testCond(s == NATS_OK);
 
     test("Call Drain on subscription: ");
-    s = natsSubscription_Drain(sub);
+    // Pass 0 or negative value to represent "for ever" timeout.
+    s = natsSubscription_DrainTimeout(sub, -1);
     testCond(s == NATS_OK);
 
     test("Call Drain a second time is ok: ");
@@ -15445,6 +15522,11 @@ test_DrainSub(void)
     IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK);
 
+    test("Check drain status with invalid arg: ");
+    s = natsSubscription_DrainCompletionStatus(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
     test("Check drain status fails: ");
     s = natsSubscription_DrainCompletionStatus(sub);
     testCond(s == NATS_ILLEGAL_STATE);
@@ -15491,9 +15573,108 @@ test_DrainSub(void)
     testCond(s == NATS_CONNECTION_CLOSED);
 
     natsSubscription_Destroy(sub);
+    sub = NULL;
     natsSubscription_Destroy(sub2);
+    sub2 = NULL;
     natsSubscription_Destroy(sub3);
+    sub3 = NULL;
     natsConnection_Destroy(nc);
+    nc = NULL;
+
+    natsMutex_Lock(arg.m);
+    arg.sum    = 0;
+    arg.closed = false;
+    natsMutex_Unlock(arg.m);
+
+    test("Connect and create sub: ");
+    s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4222");
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    testCond(s == NATS_OK);
+
+    test("Send 2 messages: ");
+    s = natsConnection_PublishString(nc, "foo", "msg");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "msg"));
+    IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
+
+    test("Disconnect: ");
+    _stopServer(pid);
+    testCond(s == NATS_OK);
+
+    test("Call Drain on subscriptions: ");
+    s = natsSubscription_DrainTimeout(sub, 1000);
+    testCond(s == NATS_OK);
+
+    // Unblock the callback.
+    natsMutex_Lock(arg.m);
+    arg.closed = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    test("Wait for Drain to complete: ");
+    s = natsSubscription_WaitForDrainCompletion(sub, -1);
+    testCond(s == NATS_OK);
+
+    test("Check drain status: ");
+    s = natsSubscription_DrainCompletionStatus(sub);
+    // Since the flush has timed-out, this is what the status will be.
+    testCond(s == NATS_TIMEOUT);
+    s = NATS_OK;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    natsMutex_Lock(arg.m);
+    arg.sum    = 0;
+    arg.closed = false;
+    natsMutex_Unlock(arg.m);
+
+    test("Create options for global msg delivery: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_UseGlobalMessageDelivery(opts, true));
+    testCond(s == NATS_OK);
+
+    test("Connect and create sub: ");
+    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*)&arg));
+    IFOK(s, natsConnection_Subscribe(&sub2, nc, "foo", _recvTestString, (void*)&arg));
+    IFOK(s, natsSubscription_AutoUnsubscribe(sub, 2));
+    testCond(s == NATS_OK);
+
+    test("Send 2 messages: ");
+    s = natsConnection_PublishString(nc, "foo", "msg");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "msg"));
+    IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
+
+    test("Call Drain on subscriptions: ");
+    s = natsSubscription_Drain(sub);
+    IFOK(s, natsSubscription_Drain(sub2));
+    testCond(s == NATS_OK);
+
+    // Unblock the callback.
+    natsMutex_Lock(arg.m);
+    arg.closed = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    test("Wait for Drain to complete: ");
+    s = natsSubscription_WaitForDrainCompletion(sub, -1);
+    testCond(s == NATS_OK);
+
+    test("Check drain status: ");
+    s = natsSubscription_DrainCompletionStatus(sub);
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    natsSubscription_Destroy(sub2);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
 
     _destroyDefaultThreadArgs(&arg);
 
@@ -15741,6 +15922,11 @@ test_DrainConn(void)
     pid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(pid);
 
+    test("Drain with invalid NULL: ");
+    s = natsConnection_Drain(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
     test("Connect: ");
     s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK);
@@ -15787,7 +15973,12 @@ test_DrainConn(void)
 
     test("Drain connection: ");
     start = nats_Now();
-    s = natsConnection_Drain(nc);
+    // 0 or Negative means "wait for ever".
+    s = natsConnection_DrainTimeout(nc, -1);
+    testCond(s == NATS_OK);
+
+    test("Check IsDraining: ");
+    s = (natsConnection_IsDraining(nc) ? NATS_OK : NATS_ERR);
     testCond(s == NATS_OK);
 
     test("Second drain ok: ");
@@ -15833,6 +16024,10 @@ test_DrainConn(void)
 
     test("Check sub drain status: ");
     s = natsSubscription_DrainCompletionStatus(sub);
+    testCond(s == NATS_OK);
+
+    test("Check IsDraining: ");
+    s = (natsConnection_IsDraining(nc) ? NATS_ERR : NATS_OK);
     testCond(s == NATS_OK);
 
     test("Drain after closed should fail: ");
@@ -15884,11 +16079,67 @@ test_DrainConn(void)
     testCond(s == NATS_TIMEOUT);
 
     natsSubscription_Destroy(sub);
+    sub = NULL;
     natsSubscription_Destroy(sub2);
     natsSubscription_Destroy(sub3);
     natsConnection_Destroy(nc);
+    nc = NULL;
     natsConnection_Destroy(nc2);
+    nc2 = NULL;
     natsOptions_Destroy(opts);
+
+    natsMutex_Lock(arg.m);
+    arg.closed = false;
+    arg.sum    = 0;
+    arg.control= 8;
+    natsMutex_Unlock(arg.m);
+
+    test("Connect and create sub: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    IFOK(s, natsConnection_ConnectTo(&nc2, NATS_DEFAULT_URL));
+    testCond(s == NATS_OK);
+
+    test("Send messages: ");
+    s = natsConnection_PublishString(nc, "foo", "msg1");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "msg2"));
+    IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
+
+    test("Drain: ");
+    s = natsConnection_DrainTimeout(nc, 10000);
+    testCond(s == NATS_OK);
+
+    test("Disconnect: ");
+    _stopServer(pid);
+    testCond(s == NATS_OK);
+
+    nats_Sleep(100);
+
+    test("Drain while disconnected fails: ");
+    s = natsConnection_Drain(nc2);
+    testCond(s == NATS_ILLEGAL_STATE);
+    nats_clearLastError();
+    s = NATS_OK;
+
+    test("Release cb: ");
+    natsMutex_Lock(arg.m);
+    arg.closed = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Wait for completion: ");
+    s = natsSubscription_WaitForDrainCompletion(sub, 1000);
+    testCond(s == NATS_OK);
+
+    test("Check drain status: ");
+    s = natsSubscription_DrainCompletionStatus(sub);
+    testCond(s == NATS_CONNECTION_CLOSED);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    natsConnection_Destroy(nc2);
 
     // Since the drain timed-out and closed the connection,
     // the subscription will be closed but there is no guarantee
@@ -15897,8 +16148,6 @@ test_DrainConn(void)
     // destroying sub's closure.
     nats_Sleep(100);
     _destroyDefaultThreadArgs(&arg);
-
-    _stopServer(pid);
 }
 
 static void
@@ -20806,6 +21055,7 @@ static testInfo allTests[] =
     {"SyncReplyArg",                    test_SyncReplyArg},
     {"Unsubscribe",                     test_Unsubscribe},
     {"DoubleUnsubscribe",               test_DoubleUnsubscribe},
+    {"SubRemovedWhileProcessingMsg",    test_SubRemovedWhileProcessingMsg},
     {"RequestTimeout",                  test_RequestTimeout},
     {"Request",                         test_Request},
     {"RequestNoBody",                   test_RequestNoBody},

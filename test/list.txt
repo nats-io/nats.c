@@ -106,6 +106,7 @@ ReplyArg
 SyncReplyArg
 Unsubscribe
 DoubleUnsubscribe
+SubRemovedWhileProcessingMsg
 RequestTimeout
 Request
 RequestNoBody

@@ -3424,8 +3424,7 @@ _iterateSubsAndInvokeFunc(natsStatus callerSts, natsConnection *nc, subIterFunc 
     {
         sub = (natsSubscription*) p;
         ls = (f)(callerSts, nc, sub);
-        if ((ls != NATS_OK) && (s == NATS_OK))
-            s = ls;
+        s = (s == NATS_OK ? ls : s);
     }
     natsHashIter_Done(&iter);
     natsMutex_Unlock(nc->subsMu);
@@ -3519,11 +3518,10 @@ _flushAndDrain(void *closure)
         s = NATS_OK;
 
         // Now wait for the number of subscriptions to go down to 0, or deadline is reached.
-        while (deadline - nats_Now() > 0)
+        while ((timeout == 0) || (deadline - nats_Now() > 0))
         {
             natsConn_Lock(nc);
-            closed = natsConn_isClosed(nc);
-            if (!closed)
+            if (!(closed = natsConn_isClosed(nc)))
             {
                 natsMutex_Lock(nc->subsMu);
                 subsDone = (natsHash_Count(nc->subs) == 0 ? true : false);
@@ -3534,12 +3532,10 @@ _flushAndDrain(void *closure)
                 break;
             nats_Sleep(100);
         }
-        if (closed)
-        {
-            _iterateSubsAndInvokeFunc(NATS_CONNECTION_CLOSED, nc, _setSubDrainStatus);
-            _pushDrainErr(nc, NATS_CONNECTION_CLOSED, "connection closed while draining the subscriptions");
-        }
-        else if (!subsDone)
+        // If the connection has been closed, then the subscriptions will have
+        // be removed from the map. So only try to update the subs' drain status
+        // if we are here due to a NATS_TIMEOUT, not a NATS_CONNECTION_CLOSED.
+        if (!closed && !subsDone)
         {
             _iterateSubsAndInvokeFunc(NATS_TIMEOUT, nc, _setSubDrainStatus);
             _pushDrainErr(nc, NATS_TIMEOUT, "timeout waiting for subscriptions to drain");
@@ -3549,8 +3545,7 @@ _flushAndDrain(void *closure)
 
     // Now switch to draining PUBS, unless already closed.
     natsConn_Lock(nc);
-    closed = natsConn_isClosed(nc);
-    if (!closed)
+    if (!(closed = natsConn_isClosed(nc)))
         nc->status = NATS_CONN_STATUS_DRAINING_PUBS;
     natsConn_Unlock(nc);
 

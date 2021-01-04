@@ -43,11 +43,7 @@ void natsSub_Unlock(natsSubscription *sub)   { natsMutex_Unlock(sub->mu); }
 #define SUB_DLV_WORKER_UNLOCK(s)    if ((s)->libDlvWorker != NULL) \
                                         natsMutex_Unlock((s)->libDlvWorker->lock)
 
-#define SUB_DRAIN_STARTED     ((uint8_t) 1)
-#define SUB_DRAIN_COMPLETE    ((uint8_t) 2)
-
-#define natsSub_drainStarted(s)     (((s)->drainState & SUB_DRAIN_STARTED) != 0)
-#define natsSub_drainComplete(s)    (((s)->drainState & SUB_DRAIN_COMPLETE) != 0)
+bool testDrainAutoUnsubRace = false;
 
 static void
 _freeSubscription(natsSubscription *sub)
@@ -112,9 +108,9 @@ static void
 _setDrainCompleteState(natsSubscription *sub)
 {
     // It is possible that we are here without being in "drain in progress"
-    // due to auto-unsubscribe. So if the drain was initiated then consider
-    // the drain complete.
-    if (natsSub_drainStarted(sub) && !natsSub_drainComplete(sub))
+    // or event "started" due to auto-unsubscribe. So unless we already
+    // switched to "drain complete", swith the state.
+    if (!natsSub_drainComplete(sub))
     {
         // If drain status is not already set (could be done in _flushAndDrain
         // if flush fails, or timeout occurs), set it here to report if the
@@ -892,6 +888,9 @@ natsStatus
 natsSub_startDrain(natsSubscription *sub, int64_t timeout)
 {
     natsStatus s;
+
+    if (testDrainAutoUnsubRace)
+        nats_Sleep(1);
 
     natsSub_Lock(sub);
     if (natsSub_drainStarted(sub))

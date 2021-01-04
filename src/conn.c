@@ -1080,6 +1080,11 @@ _resendSubscriptions(natsConnection *nc)
 
         adjustedMax = 0;
         natsSub_Lock(sub);
+        if (natsSub_drainStarted(sub))
+        {
+            natsSub_Unlock(sub);
+            continue;
+        }
         if (sub->max > 0)
         {
             if (sub->delivered < sub->max)
@@ -1094,9 +1099,7 @@ _resendSubscriptions(natsConnection *nc)
                 continue;
             }
         }
-        natsSub_Unlock(sub);
 
-        // These sub's fields are immutable
         res = nats_asprintf(&proto, _SUB_PROTO_,
                             sub->subject,
                             (sub->queue == NULL ? "" : sub->queue),
@@ -1113,6 +1116,10 @@ _resendSubscriptions(natsConnection *nc)
 
         if ((s == NATS_OK) && (adjustedMax > 0))
             s = _sendUnsubProto(nc, sub->sid, adjustedMax);
+
+        // Hold the lock up to that point so we are sure not to resend
+        // any SUB/UNSUB for a subscription that is in draining mode.
+        natsSub_Unlock(sub);
     }
 
     NATS_FREE(subs);
@@ -3008,8 +3015,10 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max, bool dr
     }
     else if (drainMode)
     {
-        // Subscription is retained by caller, so we know reference is ok
-        s = natsSub_startDrain(sub, timeout);
+        if (natsConn_isDraining(nc))
+             s = nats_setError(NATS_DRAINING, "%s", "Illegal to drain a subscription while its connection is draining");
+        else
+            s = natsSub_startDrain(sub, timeout);
     }
 
     natsConn_Unlock(nc);

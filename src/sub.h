@@ -29,6 +29,14 @@ void natsSub_Unlock(natsSubscription *sub);
 
 #endif // DEV_MODE
 
+#define SUB_DRAIN_STARTED     ((uint8_t) 1)
+#define SUB_DRAIN_COMPLETE    ((uint8_t) 2)
+
+#define natsSub_drainStarted(s)     (((s)->drainState & SUB_DRAIN_STARTED) != 0)
+#define natsSub_drainComplete(s)    (((s)->drainState & SUB_DRAIN_COMPLETE) != 0)
+
+extern bool testDrainAutoUnsubRace;
+
 void
 natsSub_retain(natsSubscription *sub);
 

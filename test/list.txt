@@ -147,6 +147,8 @@ NoEcho
 NoEchoOldServer
 DrainSub
 DrainSubStops
+DrainSubRaceOnAutoUnsub
+DrainSubNotResentOnReconnect
 DrainConn
 NoDoubleCloseCbOnDrain
 GetClientID

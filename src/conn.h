@@ -90,7 +90,10 @@ natsConn_subscribeImpl(natsSubscription **newSub,
                        bool preventUseOfLibDlvPool);
 
 natsStatus
-natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max);
+natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max, bool drainMode, int64_t timeout);
+
+natsStatus
+natsConn_enqueueUnsubProto(natsConnection *nc, int64_t sid);
 
 natsStatus
 natsConn_drainSub(natsConnection *nc, natsSubscription *sub, bool checkConnDrainStatus);

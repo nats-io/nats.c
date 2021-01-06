@@ -106,6 +106,7 @@ ReplyArg
 SyncReplyArg
 Unsubscribe
 DoubleUnsubscribe
+SubRemovedWhileProcessingMsg
 RequestTimeout
 Request
 RequestNoBody
@@ -145,6 +146,9 @@ ServerErrorClosesConnection
 NoEcho
 NoEchoOldServer
 DrainSub
+DrainSubStops
+DrainSubRaceOnAutoUnsub
+DrainSubNotResentOnReconnect
 DrainConn
 NoDoubleCloseCbOnDrain
 GetClientID

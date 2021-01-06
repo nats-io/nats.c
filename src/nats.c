@@ -1705,12 +1705,16 @@ _deliverMsgs(void *arg)
                 // Subscription is draining, we are past the last message,
                 // remove the subscription. This will schedule another
                 // control message for the close.
+                natsSub_setDrainCompleteState(sub);
                 natsConn_removeSubscription(nc, sub);
             }
             else if (closed)
             {
                 natsOnCompleteCB cb         = NULL;
                 void             *closure   = NULL;
+
+                // Call this in case the subscription was draining.
+                natsSub_setDrainCompleteState(sub);
 
                 // Check for completion callback
                 natsSub_Lock(sub);
@@ -1791,6 +1795,8 @@ _deliverMsgs(void *arg)
         // the max (after the callback returns).
         if ((max > 0) && (delivered >= max))
         {
+            // Call this blindly, it will be a no-op if the subscription was not draining.
+            natsSub_setDrainCompleteState(sub);
             // If we have hit the max for delivered msgs, remove sub.
             natsConn_removeSubscription(nc, sub);
         }

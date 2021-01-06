@@ -3448,35 +3448,129 @@ natsSubscription_IsValid(natsSubscription *sub);
 
 /** \brief Drains the subscription with a default timeout.
  *
- * Drain will remove interest but continue callbacks until all messages
+ * Drain will remove interest but continue to invoke callbacks until all messages
  * have been processed.
+ *
+ * This call uses a default drain timeout of 30 seconds. See #natsSubscription_DrainTimeout
+ * for details on behavior when timeout elapses.
  *
  * \warning This function does not block waiting for the operation
  * to complete. To synchronously wait, see #natsSubscription_WaitForDrainCompletion
  *
+ * @see natsSubscription_DrainTimeout
  * @see natsSubscription_WaitForDrainCompletion
+ * @see natsSubscription_DrainCompletionStatus
  *
  * @param sub the pointer to the #natsSubscription object.
  */
 NATS_EXTERN natsStatus
 natsSubscription_Drain(natsSubscription *sub);
 
+/** \brief Drains the subscription with the specified timeout.
+ *
+ * Drain will remove interest but continue to invoke callbacks until all messages
+ * have been processed, or the specified timeout has elapsed. In that case, the
+ * subscription will be forcibly closed and remaining pending messages (if any)
+ * will not be processed.
+ *
+ * The timeout is expressed in milliseconds. Zero or negative value means that
+ * the call will not timeout, but see below for more details.
+ *
+ * When this call returns, the UNSUBSCRIBE protocol for this subscription has
+ * been enqueued to the outgoing connection buffer, but not sent to the server,
+ * ensuring that this call does not block.
+ *
+ * The library then asynchronously ensures that this protocol is sent and waits
+ * for a confirmation from the server. After that, it is guaranteed that no
+ * new message for this subscription will be received and the library can proceed
+ * with the rest of the draining.
+ *
+ * However, should the "flush" of the protocol fail, the library will ensure that
+ * no new message is added to the subscription (in the event the server did not
+ * receive the UNSUBSCRIBE protocol and still attempts to deliver messages), and
+ * will proceed with the draining of the pending messages. Users can check the
+ * status of the draining after it has completed by calling #natsSubscription_DrainCompletionStatus.
+ *
+ * If no timeout is specified (that is, value is zero or negative), a timeout
+ * will be used for the "flush" of the protocol. Again, even in case of failure,
+ * the draining will proceed.
+ *
+ * If a timeout is specified, the complete process: "flush" of the protocol
+ * and draining of messages, must happen before the timeout elapses otherwise the
+ * subscription will be forcibly closed, and not all message callbacks may be invoked.
+ *
+ * Regardless of the presence of a timeout or not, should the subscription or connection
+ * be closed while draining occurs, the draining process will stop. The
+ * #natsSubscription_WaitForDrainCompletion call will not report an error. To
+ * know if an error occured, the user can call #natsSubscription_DrainCompletionStatus
+ * after ensuring that the drain has completed.
+ *
+ * \warning This function does not block waiting for the operation
+ * to complete. To synchronously wait, see #natsSubscription_WaitForDrainCompletion
+ *
+ * @see natsSubscription_Drain
+ * @see natsSubscription_WaitForDrainCompletion
+ * @see natsSubscription_DrainCompletionStatus
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ * @param timeout how long to wait for the operation to complete, expressed in
+ * milliseconds. If the timeout elapses the subscription will be closed.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_DrainTimeout(natsSubscription *sub, int64_t timeout);
+
 /** \brief Blocks until the drain operation completes.
  *
  * This function blocks until the subscription is fully drained.
  * Returns no error if the subscription is drained or closed, otherwise
- * returns the error indicating why the wait returned before completion
- * or if the subscription was not in drained mode.
+ * returns the error if the subscription was not in drained mode (#NATS_ILLEGAL_STATE)
+ * or if this subscription was not drained or closed prior to the specified
+ * timeout (#NATS_TIMEOUT).
  *
  * The timeout is expressed in milliseconds. Zero or negative value
  * means that the call will not timeout.
  *
- * @param sub the pointer to the #natsSubscription object
+ * Note that if this call times-out, it does not mean that the drain stops.
+ * The drain will continue until its own timeout elapses.
+ *
+ * @see natsSubscription_Drain
+ * @see natsSubscription_DrainTimeout
+ * @see natsSubscription_DrainCompletionStatus
+ *
+ * @param sub the pointer to the #natsSubscription object.
  * @param timeout how long to wait for the operation to complete, expressed in
  * milliseconds.
  */
 NATS_EXTERN natsStatus
 natsSubscription_WaitForDrainCompletion(natsSubscription *sub, int64_t timeout);
+
+/** \brief Returns the status of the drain after completion.
+ *
+ * Once the drain has completed, users can use this function to know if the
+ * drain completed successfully or not.
+ *
+ * Possible return values (the list is not exhaustive):
+ *
+ * <c>NATS_OK</c> the library sent the UNSUBSCRIBE protocol and finished processing
+ * all messages that were pending.<br>
+ * <c>NATS_ILLEGAL_STATE</c> this call was made for a subscription that had not
+ * started draining or the draining is still in progress.<br>
+ * <c>NATS_INVALID_SUBSCRIPTION</c> the subscription was closed while draining,
+ * which means that some messages may not have been processed.<br>
+ * <c>NATS_CONNECTION_CLOSED</c> the connection was closed while draining, which
+ * means that some messages may not have been processed.
+ *
+ * \note This call does not wait for the drain completion (see #natsSubscription_WaitForDrainCompletion
+ * for that).
+ *
+ * @see natsSubscription_Drain
+ * @see natsSubscription_DrainTimeout
+ * @see natsSubscription_WaitForDrainCompletion
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_DrainCompletionStatus(natsSubscription *sub);
 
 /** \brief Sets a completion callback.
  *

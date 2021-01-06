@@ -43,6 +43,8 @@ void natsSub_Unlock(natsSubscription *sub)   { natsMutex_Unlock(sub->mu); }
 #define SUB_DLV_WORKER_UNLOCK(s)    if ((s)->libDlvWorker != NULL) \
                                         natsMutex_Unlock((s)->libDlvWorker->lock)
 
+bool testDrainAutoUnsubRace = false;
+
 static void
 _freeSubscription(natsSubscription *sub)
 {
@@ -100,6 +102,37 @@ natsSub_release(natsSubscription *sub)
 
     if (refs == 0)
         _freeSubscription(sub);
+}
+
+static void
+_setDrainCompleteState(natsSubscription *sub)
+{
+    // It is possible that we are here without being in "drain in progress"
+    // or event "started" due to auto-unsubscribe. So unless we already
+    // switched to "drain complete", swith the state.
+    if (!natsSub_drainComplete(sub))
+    {
+        // If drain status is not already set (could be done in _flushAndDrain
+        // if flush fails, or timeout occurs), set it here to report if the
+        // connection or subscription has been closed prior to drain completion.
+        if (sub->drainStatus == NATS_OK)
+        {
+            if (sub->connClosed)
+                sub->drainStatus = NATS_CONNECTION_CLOSED;
+            else if (sub->closed)
+                sub->drainStatus = NATS_INVALID_SUBSCRIPTION;
+        }
+        sub->drainState |= SUB_DRAIN_COMPLETE;
+        natsCondition_Broadcast(sub->cond);
+    }
+}
+
+void
+natsSub_setDrainCompleteState(natsSubscription *sub)
+{
+    natsSub_Lock(sub);
+    _setDrainCompleteState(sub);
+    natsSub_Unlock(sub);
 }
 
 // _deliverMsgs is used to deliver messages to asynchronous subscribers.
@@ -201,13 +234,15 @@ natsSub_deliverMsgs(void *arg)
             break;
         }
     }
-    if (rmSub)
-        natsConn_removeSubscription(nc, sub);
 
     natsSub_Lock(sub);
     onCompleteCB        = sub->onCompleteCB;
     onCompleteCBClosure = sub->onCompleteCBClosure;
+    _setDrainCompleteState(sub);
     natsSub_Unlock(sub);
+
+    if (rmSub)
+        natsConn_removeSubscription(nc, sub);
 
     if (onCompleteCB != NULL)
         (*onCompleteCB)(onCompleteCBClosure);
@@ -654,12 +689,14 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
             if (sub->draining && (sub->msgList.msgs == 0))
                 removeSub = true;
         }
+        if (removeSub)
+        {
+            _setDrainCompleteState(sub);
+            _retain(sub);
+        }
     }
     if (s == NATS_OK)
         *nextMsg = msg;
-
-    if (removeSub)
-        _retain(sub);
 
     natsSub_Unlock(sub);
 
@@ -673,7 +710,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
 }
 
 static natsStatus
-_unsubscribe(natsSubscription *sub, int max)
+_unsubscribe(natsSubscription *sub, int max, bool drainMode, int64_t timeout)
 {
     natsStatus      s   = NATS_OK;
     natsConnection  *nc = NULL;
@@ -682,29 +719,12 @@ _unsubscribe(natsSubscription *sub, int max)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsSub_Lock(sub);
-
-    if (sub->connClosed)
-        s = NATS_CONNECTION_CLOSED;
-    else if (sub->closed)
-        s = NATS_INVALID_SUBSCRIPTION;
-    else if (sub->draining)
-        s = NATS_DRAINING;
-
-    if (s != NATS_OK)
-    {
-        natsSub_Unlock(sub);
-        return nats_setDefaultError(s);
-    }
-
     nc = sub->conn;
     _retain(sub);
 
     natsSub_Unlock(sub);
 
-    if (natsConnection_IsDraining(nc))
-        s = nats_setDefaultError(NATS_DRAINING);
-    else
-        s = natsConn_unsubscribe(nc, sub, max);
+    s = natsConn_unsubscribe(nc, sub, max, drainMode, timeout);
 
     natsSub_release(sub);
 
@@ -714,14 +734,14 @@ _unsubscribe(natsSubscription *sub, int max)
 natsStatus
 natsSubscription_Unsubscribe(natsSubscription *sub)
 {
-    natsStatus s = _unsubscribe(sub, 0);
+    natsStatus s = _unsubscribe(sub, 0, false, 0);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max)
 {
-    natsStatus s = _unsubscribe(sub, max);
+    natsStatus s = _unsubscribe(sub, max, false, 0);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -730,6 +750,12 @@ natsSub_drain(natsSubscription *sub)
 {
     natsSub_Lock(sub);
     SUB_DLV_WORKER_LOCK(sub);
+    if (sub->closed)
+    {
+        SUB_DLV_WORKER_UNLOCK(sub);
+        natsSub_Unlock(sub);
+        return;
+    }
     sub->draining = true;
     if (sub->libDlvWorker != NULL)
     {
@@ -758,30 +784,151 @@ natsSub_drain(natsSubscription *sub)
     natsSub_Unlock(sub);
 }
 
-natsStatus
-natsSubscription_Drain(natsSubscription *sub)
+static void
+_updateDrainStatus(natsSubscription *sub, natsStatus s)
 {
-    natsStatus      s   = NATS_OK;
-    natsConnection  *nc = NULL;
+    // Do not override a drain status if already set.
+    if (sub->drainStatus == NATS_OK)
+        sub->drainStatus = s;
+}
 
-    if (sub == NULL)
-        return nats_setDefaultError(NATS_INVALID_ARG);
+void
+natsSub_updateDrainStatus(natsSubscription *sub, natsStatus s)
+{
+    natsSub_Lock(sub);
+    _updateDrainStatus(sub, s);
+    natsSub_Unlock(sub);
+}
+
+// Mark the subscription such that connection stops to try to push messages into its list.
+void
+natsSub_setDrainSkip(natsSubscription *sub, natsStatus s)
+{
+    natsSub_Lock(sub);
+    SUB_DLV_WORKER_LOCK(sub);
+    _updateDrainStatus(sub, s);
+    sub->drainSkip = true;
+    SUB_DLV_WORKER_UNLOCK(sub);
+    natsSub_Unlock(sub);
+}
+
+static void
+_flushAndDrain(void *closure)
+{
+    natsSubscription *sub     = (natsSubscription*) closure;
+    natsConnection   *nc      = NULL;
+    natsThread       *t       = NULL;
+    int64_t          timeout  = 0;
+    int64_t          deadline = 0;
+    natsStatus       s;
 
     natsSub_Lock(sub);
-    // If not closed and draining, return OK.
-    if (!sub->closed && sub->draining)
+    nc      = sub->conn;
+    t       = sub->drainThread;
+    timeout = sub->drainTimeout;
+    natsSub_Unlock(sub);
+
+    // Make sure that negative value is considered no timeout.
+    if (timeout < 0)
+        timeout = 0;
+    else
+        deadline = nats_setTargetTime(timeout);
+
+    // Flush to make sure server has processed UNSUB and no new messages are coming.
+    if (timeout == 0)
+        s = natsConnection_Flush(nc);
+    else
+        s = natsConnection_FlushTimeout(nc, timeout);
+
+    // If flush failed, update drain status and prevent connection from
+    // pushing new messages to this subscription.
+    if (s != NATS_OK)
+        natsSub_setDrainSkip(sub, s);
+
+    // Switch to drain regardless of status
+    natsSub_drain(sub);
+
+    // We are going to check for completion only if a timeout is specified.
+    // If that is the case, the library will forcibly close the subscription.
+    if (timeout > 0)
+    {
+        // Reset status from possibly failed flush. We are now checking for
+        // the drain timeout.
+        s = NATS_OK;
+        // Wait for drain to complete or deadline is reached.
+        natsSub_Lock(sub);
+        while ((s != NATS_TIMEOUT) && !natsSub_drainComplete(sub))
+            s = natsCondition_AbsoluteTimedWait(sub->cond, sub->mu, deadline);
+        natsSub_Unlock(sub);
+
+        if (s != NATS_OK)
+        {
+            natsSub_updateDrainStatus(sub, s);
+            natsConn_removeSubscription(nc, sub);
+        }
+    }
+
+    natsThread_Detach(t);
+    natsThread_Destroy(t);
+    natsSub_release(sub);
+}
+
+// Switch subscription's drain state to "started".
+void
+natsSub_initDrain(natsSubscription *sub)
+{
+    natsSub_Lock(sub);
+    sub->drainState |= SUB_DRAIN_STARTED;
+    natsSub_Unlock(sub);
+}
+
+// Initiates draining, unless already done.
+// Note that this runs under the associated connection lock.
+natsStatus
+natsSub_startDrain(natsSubscription *sub, int64_t timeout)
+{
+    natsStatus s;
+
+    if (testDrainAutoUnsubRace)
+        nats_Sleep(1);
+
+    natsSub_Lock(sub);
+    if (natsSub_drainStarted(sub))
     {
         natsSub_Unlock(sub);
         return NATS_OK;
     }
-    nc = sub->conn;
-    _retain(sub);
+    // Make sure that we just add to buffer but we don't flush it in place
+    // to make sure that this call will not block.
+    s = natsConn_enqueueUnsubProto(sub->conn, sub->sid);
+    if (s == NATS_OK)
+        s = natsThread_Create(&(sub->drainThread), _flushAndDrain, (void*) sub);
+    if (s == NATS_OK)
+    {
+        sub->drainTimeout = timeout;
+        sub->drainState |= SUB_DRAIN_STARTED;
+        _retain(sub);
+    }
     natsSub_Unlock(sub);
 
-    s = natsConn_drainSub(nc, sub, true);
+    return NATS_UPDATE_ERR_STACK(s);
+}
 
-    natsSub_release(sub);
+natsStatus
+natsSubscription_Drain(natsSubscription *sub)
+{
+    natsStatus s;
 
+    s = _unsubscribe(sub, 0, true, DEFAULT_DRAIN_TIMEOUT);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsSubscription_DrainTimeout(natsSubscription *sub, int64_t timeout)
+{
+    natsStatus s;
+
+    s = _unsubscribe(sub, 0, true, timeout);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -795,30 +942,46 @@ natsSubscription_WaitForDrainCompletion(natsSubscription *sub, int64_t timeout)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     natsSub_Lock(sub);
-    if (!sub->draining)
+    if (!natsSub_drainStarted(sub))
     {
         natsSub_Unlock(sub);
         return nats_setError(NATS_ILLEGAL_STATE, "%s", "Subscription not in draining mode");
     }
     _retain(sub);
-    natsSub_Unlock(sub);
 
     if (timeout > 0)
         deadline = nats_setTargetTime(timeout);
 
-    while (natsSubscription_IsValid(sub))
+    while ((s != NATS_TIMEOUT) && !natsSub_drainComplete(sub))
     {
-        nats_Sleep(100);
-        if (deadline > 0 && (nats_Now() >= deadline))
-        {
-            s = nats_setError(NATS_TIMEOUT,
-                    "The subscription's drain took more than the timeout of %" PRId64 "ms",
-                    timeout);
-            break;
-        }
+        if (timeout > 0)
+            s = natsCondition_AbsoluteTimedWait(sub->cond, sub->mu, deadline);
+        else
+            natsCondition_Wait(sub->cond, sub->mu);
     }
+    natsSub_Unlock(sub);
 
     natsSub_release(sub);
+
+    // Here, we return a status as a result, not as if there was something wrong
+    // with the execution of this function. So we do not update the error stack.
+    return s;
+}
+
+natsStatus
+natsSubscription_DrainCompletionStatus(natsSubscription *sub)
+{
+    natsStatus s;
+
+    if (sub == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsSub_Lock(sub);
+    if (!natsSub_drainComplete(sub))
+        s = NATS_ILLEGAL_STATE;
+    else
+        s = sub->drainStatus;
+    natsSub_Unlock(sub);
 
     return s;
 }

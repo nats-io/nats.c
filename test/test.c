@@ -15719,7 +15719,9 @@ test_DrainSub(void)
     natsMutex_Unlock(arg.m);
 
     test("Connect and create sub: ");
-    s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4222");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
     testCond(s == NATS_OK);
 
@@ -15731,6 +15733,13 @@ test_DrainSub(void)
 
     test("Disconnect: ");
     _stopServer(pid);
+    testCond(s == NATS_OK);
+
+    test("Wait for disconnect: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     test("Call Drain on subscriptions: ");
@@ -15753,13 +15762,15 @@ test_DrainSub(void)
     testCond(s == NATS_TIMEOUT);
     s = NATS_OK;
 
-    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
-    CHECK_SERVER_STARTED(pid);
-
     natsSubscription_Destroy(sub);
     sub = NULL;
     natsConnection_Destroy(nc);
     nc = NULL;
+    natsOptions_Destroy(opts);
+    opts = NULL;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
 
     natsMutex_Lock(arg.m);
     arg.sum    = 0;

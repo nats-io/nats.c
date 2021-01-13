@@ -391,33 +391,55 @@ _oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
 static void
 _respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    char     *rt   = (char *) (natsMsg_GetSubject(msg) + NATS_REQ_ID_OFFSET);
-    respInfo *resp = NULL;
-    bool     dmsg  = true;
-
-    if (rt == NULL)
-        return;
+    char        *rt   = NULL;
+    const char  *subj = NULL;
+    respInfo    *resp = NULL;
+    bool        dmsg  = true;
 
     natsConn_Lock(nc);
-    if (!natsConn_isClosed(nc))
+    if (natsConn_isClosed(nc))
     {
+        natsConn_Unlock(nc);
+        natsMsg_Destroy(msg);
+        return;
+    }
+    subj = natsMsg_GetSubject(msg);
+    // The subject could have been rewritten, so first make sure that the
+    // subscription's subject (without the lat '*') matches the beginning
+    // of the message subject.
+    if ((strlen(subj) > NATS_REQ_ID_OFFSET)
+        && (memcmp((const void*) sub->subject, (const void*) subj, strlen(sub->subject) - 1) == 0))
+    {
+        rt = (char*) (natsMsg_GetSubject(msg) + NATS_REQ_ID_OFFSET);
         resp = (respInfo*) natsStrHash_Remove(nc->respMap, rt);
-        if (resp != NULL)
+    }
+    // If the server has rewritten the subject, the response token (rt)
+    // will not match (could be the case with JetStream). If that is the
+    // case and there is a single entry, use that.
+    if ((resp == NULL) && (natsStrHash_Count(nc->respMap) == 1))
+    {
+        natsStrHashIter iter;
+        void            *value = NULL;
+
+        natsStrHashIter_Init(&iter, nc->respMap);
+        natsStrHashIter_Next(&iter, NULL, &value);
+        resp = (respInfo*) value;
+    }
+    if (resp != NULL)
+    {
+        natsMutex_Lock(resp->mu);
+        // Check for the race where the requestor has already timed-out.
+        // If so, resp->removed will be true, in which case simply discard
+        // the message.
+        if (!resp->removed)
         {
-            natsMutex_Lock(resp->mu);
-            // Check for the race where the requestor has already timed-out.
-            // If so, resp->removed will be true, in which case simply discard
-            // the message.
-            if (!resp->removed)
-            {
-                // Do not destroy the message since it is being used.
-                dmsg = false;
-                resp->msg = msg;
-                resp->removed = true;
-                natsCondition_Signal(resp->cond);
-            }
-            natsMutex_Unlock(resp->mu);
+            // Do not destroy the message since it is being used.
+            dmsg = false;
+            resp->msg = msg;
+            resp->removed = true;
+            natsCondition_Signal(resp->cond);
         }
+        natsMutex_Unlock(resp->mu);
     }
     natsConn_Unlock(nc);
 

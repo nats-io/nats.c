@@ -84,6 +84,9 @@ static const char *clusterName = "test-cluster";
 static const char *clientName  = "client";
 #endif
 
+// Forward declaration
+static void _startMockupServerThread(void *closure);
+
 typedef natsStatus (*testCheckInfoCB)(char *buffer);
 
 struct threadArg
@@ -10633,6 +10636,118 @@ test_RequestNoBody(void)
 }
 
 static void
+_serverForMuxWithMappedSubject(void *closure)
+{
+    natsStatus          s = NATS_OK;
+    natsSock            sock = NATS_SOCK_INVALID;
+    struct threadArg    *arg = (struct threadArg*) closure;
+    natsSockCtx         ctx;
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    s = _startMockupServer(&sock, "127.0.0.1", "4222");
+    natsMutex_Lock(arg->m);
+    arg->status = s;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+
+    if (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+            || (natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    if (s == NATS_OK)
+    {
+        char info[1024];
+
+        snprintf(info, sizeof(info), "%s", "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576}\r\n");
+
+        // Send INFO.
+        s = natsSock_WriteFully(&ctx, info, (int) strlen(info));
+    }
+    if (s == NATS_OK)
+    {
+        char buffer[1024];
+
+        memset(buffer, 0, sizeof(buffer));
+
+        // Read connect and ping commands sent from the client
+        s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+        IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
+
+        // Send PONG
+        IFOK(s, natsSock_WriteFully(&ctx, _PONG_PROTO_, _PONG_PROTO_LEN_));
+
+        // Now wait for the SUB proto and the Request
+        IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
+        IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
+
+        // Send the reply on a different subject
+        IFOK(s, natsSock_WriteFully(&ctx, "MSG bar 1 2\r\nok\r\n", 17));
+        if (s == NATS_OK)
+        {
+            // Wait for client to tell us it is done
+            natsMutex_Lock(arg->m);
+            while ((s != NATS_TIMEOUT) && !(arg->done))
+                s = natsCondition_TimedWait(arg->c, arg->m, 10000);
+            natsMutex_Unlock(arg->m);
+        }
+        natsSock_Close(ctx.fd);
+    }
+    natsSock_Close(sock);
+}
+
+static void
+test_RequestMuxWithMappedSubject(void)
+{
+    natsStatus          s;
+    natsConnection      *nc  = NULL;
+    natsMsg             *msg = NULL;
+    natsThread          *t   = NULL;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if ( s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    test("Start server: ");
+    arg.status = NATS_ERR;
+    s = natsThread_Create(&t, _serverForMuxWithMappedSubject, (void*) &arg);
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        s = arg.status;
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Request: ");
+    s = natsConnection_RequestString(&msg, nc, "foo", "help", 1000);
+    testCond(s == NATS_OK);
+
+    natsMsg_Destroy(msg);
+    natsConnection_Destroy(nc);
+
+    // Notify mock server we are done
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
 test_OldRequest(void)
 {
     natsStatus          s;
@@ -15604,7 +15719,9 @@ test_DrainSub(void)
     natsMutex_Unlock(arg.m);
 
     test("Connect and create sub: ");
-    s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4222");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsConnection_Connect(&nc, opts));
     IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
     testCond(s == NATS_OK);
 
@@ -15616,6 +15733,13 @@ test_DrainSub(void)
 
     test("Disconnect: ");
     _stopServer(pid);
+    testCond(s == NATS_OK);
+
+    test("Wait for disconnect: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     test("Call Drain on subscriptions: ");
@@ -15638,13 +15762,15 @@ test_DrainSub(void)
     testCond(s == NATS_TIMEOUT);
     s = NATS_OK;
 
-    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
-    CHECK_SERVER_STARTED(pid);
-
     natsSubscription_Destroy(sub);
     sub = NULL;
     natsConnection_Destroy(nc);
     nc = NULL;
+    natsOptions_Destroy(opts);
+    opts = NULL;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
 
     natsMutex_Lock(arg.m);
     arg.sum    = 0;
@@ -21228,6 +21354,7 @@ static testInfo allTests[] =
     {"RequestTimeout",                  test_RequestTimeout},
     {"Request",                         test_Request},
     {"RequestNoBody",                   test_RequestNoBody},
+    {"RequestMuxWithMappedSubject",     test_RequestMuxWithMappedSubject},
     {"OldRequest",                      test_OldRequest},
     {"SimultaneousRequests",            test_SimultaneousRequest},
     {"RequestClose",                    test_RequestClose},

@@ -156,7 +156,8 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     if (numIPs == 0)
     {
         for (i=0; i<numServInfo; i++)
-            freeaddrinfo(servInfos[i]);
+            if (servInfos[i])
+                freeaddrinfo(servInfos[i]);
 
         return NATS_UPDATE_ERR_STACK(NATS_NO_SERVER);
     }
@@ -240,7 +241,8 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
         }
     }
     for (i=0; i<numServInfo; i++)
-        freeaddrinfo(servInfos[i]);
+        if (servInfos[i])
+            freeaddrinfo(servInfos[i]);
 
     // If there was a deadline, reset the deadline with whatever is left.
     if (totalTimeout > 0)

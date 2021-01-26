@@ -1388,7 +1388,8 @@ nats_HostIsIP(const char *host)
     if (getaddrinfo(host, NULL, &hint, &res) != 0)
         isIP = false;
 
-    freeaddrinfo(res);
+    if (res)
+        freeaddrinfo(res);
 
     return isIP;
 }

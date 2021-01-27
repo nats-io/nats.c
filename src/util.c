@@ -1373,6 +1373,16 @@ nats_ReadFile(natsBuffer **buffer, int initBufSize, const char *fn)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+void
+nats_FreeAddrInfo(struct addrinfo *res)
+{
+    // Calling freeaddrinfo(NULL) is undefined behaviour.
+    if (res == NULL)
+        return;
+
+    freeaddrinfo(res);
+}
+
 bool
 nats_HostIsIP(const char *host)
 {
@@ -1388,8 +1398,7 @@ nats_HostIsIP(const char *host)
     if (getaddrinfo(host, NULL, &hint, &res) != 0)
         isIP = false;
 
-    if (res)
-        freeaddrinfo(res);
+    nats_FreeAddrInfo(res);
 
     return isIP;
 }

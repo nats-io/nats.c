@@ -3849,8 +3849,7 @@ _testWaitReadyServer(void *closure)
         }
     }
     natsSock_Close(sock);
-    if (servinfo)
-        freeaddrinfo(servinfo);
+    nats_FreeAddrInfo(servinfo);
 }
 
 static void
@@ -8460,8 +8459,7 @@ _startMockupServer(natsSock *serverSock, const char *host, const char *port)
     else
         natsSock_Close(sock);
 
-    if (servinfo)
-        freeaddrinfo(servinfo);
+    nats_FreeAddrInfo(servinfo);
 
     return s;
 }

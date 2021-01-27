@@ -144,4 +144,7 @@ nats_HostIsIP(const char *host);
 natsStatus
 nats_GetJWTOrSeed(char **val, const char *content, int item);
 
+void
+nats_FreeAddrInfo(struct addrinfo *res);
+
 #endif /* UTIL_H_ */

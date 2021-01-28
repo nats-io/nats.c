@@ -22,6 +22,7 @@
 #include "status.h"
 #include "comsock.h"
 #include "mem.h"
+#include "util.h"
 
 natsStatus
 natsSock_Init(natsSockCtx *ctx)
@@ -156,8 +157,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     if (numIPs == 0)
     {
         for (i=0; i<numServInfo; i++)
-            if (servInfos[i])
-                freeaddrinfo(servInfos[i]);
+            nats_FreeAddrInfo(servInfos[i]);
 
         return NATS_UPDATE_ERR_STACK(NATS_NO_SERVER);
     }
@@ -241,8 +241,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
         }
     }
     for (i=0; i<numServInfo; i++)
-        if (servInfos[i])
-            freeaddrinfo(servInfos[i]);
+        nats_FreeAddrInfo(servInfos[i]);
 
     // If there was a deadline, reset the deadline with whatever is left.
     if (totalTimeout > 0)

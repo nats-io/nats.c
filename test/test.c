@@ -16799,6 +16799,73 @@ test_GetRTT(void)
     natsOptions_Destroy(opts);
 }
 
+static void
+test_GetLocalIPAndPort(void)
+{
+    natsStatus          s;
+    natsConnection      *nc     = NULL;
+    natsOptions         *opts   = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+    char                *ip     = NULL;
+    int                 port    = 0;
+    struct threadArg    arg;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect: ");
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+
+    test("Get Local IP and Port - no conn: ");
+    s = natsConnection_GetLocalIPAndPort(NULL, &ip, &port);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Get Local IP and Port - no ip loc: ");
+    s = natsConnection_GetLocalIPAndPort(nc, NULL, &port);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Get Local IP and Port - no port loc: ");
+    s = natsConnection_GetLocalIPAndPort(nc, &ip, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    nats_clearLastError();
+    test("Get Local IP and Port: ");
+    s = natsConnection_GetLocalIPAndPort(nc, &ip, &port);
+    testCond((s == NATS_OK)
+                && ((ip != NULL) && (strcmp(ip, "127.0.0.1") == 0))
+                && (port != 0));
+    free(ip);
+
+    test("Wait for disconnect: ");
+    s = NATS_OK;
+    _stopServer(pid);
+    natsMutex_Lock(arg.m);
+    while ((s == NATS_OK) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Get Local IP and Port while disconnected: ");
+    s = natsConnection_GetLocalIPAndPort(nc, &ip, &port);
+    testCond(s == NATS_CONNECTION_DISCONNECTED);
+    nats_clearLastError();
+
+    // Close connection
+    natsConnection_Close(nc);
+    test("Get Local IP and Port with closed connection: ");
+    s = natsConnection_GetLocalIPAndPort(nc, &ip, &port);
+    testCond(s == NATS_CONNECTION_CLOSED);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+}
+
 static natsStatus
 _userJWTCB(char **userJWT, char **customErrTxt, void *closure)
 {
@@ -21399,6 +21466,7 @@ static testInfo allTests[] =
     {"GetClientID",                     test_GetClientID},
     {"GetClientIP",                     test_GetClientIP},
     {"GetRTT",                          test_GetRTT},
+    {"GetLocalIPAndPort",               test_GetLocalIPAndPort},
     {"UserCredsCallbacks",              test_UserCredsCallbacks},
     {"UserCredsFromFiles",              test_UserCredsFromFiles},
     {"NKey",                            test_NKey},

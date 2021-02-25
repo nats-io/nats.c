@@ -2878,6 +2878,26 @@ natsConnection_GetRTT(natsConnection *nc, int64_t *rtt);
 NATS_EXTERN natsStatus
 natsConnection_HasHeaderSupport(natsConnection *nc);
 
+/** \brief Returns the connection local IP and port.
+ *
+ * Unlike #natsConnection_GetClientIP, this function returns the
+ * connection's local IP and port.
+ *
+ * \note The user is responsible for freeing the memory allocated
+ * for the returned IP string.
+ *
+ * @param nc the pointer of the #natsConnection object.
+ * @param ip the memory location where to store the local IP string.
+ * The user is responsible from freeing this memory.
+ * @param port the memory location where to store the local port.
+ *
+ * @return #NATS_OK on success.
+ * @return #NATS_CONNECTION_DISCONNECTED if disconnected.
+ * @return #NATS_CONNECTION_CLOSED is connection is closed.
+ */
+natsStatus
+natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port);
+
 /** \brief Closes the connection.
  *
  * Closes the connection to the server. This call will release all blocking

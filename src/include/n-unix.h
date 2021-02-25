@@ -36,6 +36,7 @@
 #include <errno.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <poll.h>
 
 typedef pthread_t       natsThread;

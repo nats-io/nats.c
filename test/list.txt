@@ -155,6 +155,7 @@ NoDoubleCloseCbOnDrain
 GetClientID
 GetClientIP
 GetRTT
+GetLocalIPAndPort
 UserCredsCallbacks
 UserCredsFromFiles
 NKey

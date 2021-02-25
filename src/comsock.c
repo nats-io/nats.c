@@ -543,3 +543,39 @@ natsSock_InitDeadline(natsSockCtx *ctx, int64_t timeout)
     natsDeadline_Init(&ctx->readDeadline, timeout);
     natsDeadline_Init(&ctx->writeDeadline, timeout);
 }
+
+void
+natsSock_GetLocalIPAndPort(natsSockCtx *ctx, char **ip, int *port)
+{
+    struct sockaddr_storage addr;
+    natsSockLen             addrLen = (natsSockLen) sizeof(addr);
+    char                    localIP[64];
+    void                    *laddr = NULL;
+    int                     fam;
+
+    *ip = NULL;
+    *port = 0;
+
+    if (getsockname(ctx->fd, (struct sockaddr*) &addr, &addrLen) != 0)
+        return;
+
+    if (((struct sockaddr*) &addr)->sa_family == AF_INET)
+    {
+        struct sockaddr_in *addr4 = (struct sockaddr_in*) &addr;
+
+        fam = AF_INET;
+        laddr = &(addr4->sin_addr);
+        *port = (int) ntohs(addr4->sin_port);
+    }
+    else
+    {
+        struct sockaddr_in6 *addr6 = (struct sockaddr_in6*) &addr;
+
+        fam = AF_INET6;
+        laddr = &(addr6->sin6_addr);
+        *port = (int) ntohs(addr6->sin6_port);
+    }
+
+    if (inet_ntop(fam, laddr, localIP, sizeof(localIP)) != NULL)
+        *ip = NATS_STRDUP(localIP);
+}

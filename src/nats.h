@@ -2848,6 +2848,8 @@ natsConnection_Sign(natsConnection *nc,
  * #natsConnection_GetClientIP() with server below this version will
  * return the #NATS_NO_SERVER_SUPPORT error.
  *
+ * @see natsConnection_GetLocalIPAndPort to get the local IP and port instead.
+ *
  * @param nc the pointer to the #natsConnection object.
  * @param ip the memory location where to store the client's IP string.
  * The user is responsible from freeing this memory.
@@ -2894,6 +2896,8 @@ natsConnection_HasHeaderSupport(natsConnection *nc);
  * @return #NATS_OK on success.
  * @return #NATS_CONNECTION_DISCONNECTED if disconnected.
  * @return #NATS_CONNECTION_CLOSED is connection is closed.
+ * @return #NATS_SYS_ERROR if a system error getting the IP and port occurred.
+ * @return #NATS_NO_MEMORY if the library was unable to allocate memory for the returned IP string.
  */
 natsStatus
 natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port);

@@ -4212,8 +4212,8 @@ natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port)
     else if (!nc->sockCtx.fdActive)
         s = nats_setDefaultError(NATS_CONNECTION_DISCONNECTED);
     else
-        natsSock_GetLocalIPAndPort(&(nc->sockCtx), ip, port);
+        s = natsSock_GetLocalIPAndPort(&(nc->sockCtx), ip, port);
     natsConn_Unlock(nc);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }

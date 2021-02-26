@@ -87,4 +87,7 @@ natsSock_ClearDeadline(natsSockCtx *ctx);
 void
 natsSock_InitDeadline(natsSockCtx *ctx, int64_t timeout);
 
+natsStatus
+natsSock_GetLocalIPAndPort(natsSockCtx *ctx, char **ip, int *port);
+
 #endif /* SOCK_H_ */

@@ -4194,3 +4194,26 @@ natsConnection_HasHeaderSupport(natsConnection *nc)
 
     return NATS_NO_SERVER_SUPPORT;
 }
+
+natsStatus
+natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port)
+{
+    natsStatus s = NATS_OK;
+
+    if ((nc == NULL) || (ip == NULL) || (port == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    *ip = NULL;
+    *port = 0;
+
+    natsConn_Lock(nc);
+    if (natsConn_isClosed(nc))
+        s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    else if (!nc->sockCtx.fdActive)
+        s = nats_setDefaultError(NATS_CONNECTION_DISCONNECTED);
+    else
+        s = natsSock_GetLocalIPAndPort(&(nc->sockCtx), ip, port);
+    natsConn_Unlock(nc);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}

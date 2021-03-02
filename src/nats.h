@@ -1148,7 +1148,7 @@ natsOptions_SetPedantic(natsOptions *opts, bool pedantic);
  * protocols to the `NATS Server`.
  *
  * @param opts the pointer to the #natsOptions object.
- * @param interval the interval, in milliseconds, at which the connection
+ * @param interval the interval, in seconds, at which the connection
  * will send `PING` protocols to the server.
  */
 NATS_EXTERN natsStatus

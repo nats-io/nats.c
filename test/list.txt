@@ -45,6 +45,7 @@ SelectNextServer
 ParserPing
 ParserErr
 ParserOK
+ParseINFO
 ParserShouldFail
 ParserSplitMsg
 ProcessMsgArgs

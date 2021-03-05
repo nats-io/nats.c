@@ -5509,6 +5509,38 @@ test_ParserOK(void)
 }
 
 static void
+test_ParseINFO(void)
+{
+    natsConnection  *nc = NULL;
+    natsOptions     *opts = NULL;
+    natsStatus      s;
+    char            infoProto[256];
+
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    PARSER_START_TEST;
+    testCond(nc->ps->state == OP_START);
+
+    snprintf(infoProto, sizeof(infoProto), "INFO \t{\"server_id\": \"abc\"}\r\n");
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, infoProto, 7);
+    testCond((s == NATS_OK) && (nc->ps->state == INFO_ARG) && (infoProto[nc->ps->afterSpace] == '{'));
+
+    PARSER_START_TEST;
+    s = natsParser_Parse(nc, infoProto +7, (int)strlen(infoProto) - 7);
+    testCond((s == NATS_OK)
+                && (nc->ps->state == OP_START)
+                && (nc->info.id != NULL) && (strcmp(nc->info.id, "abc") == 0));
+
+    natsConnection_Destroy(nc);
+}
+
+static void
 test_ParserShouldFail(void)
 {
     natsConnection  *nc = NULL;
@@ -21351,6 +21383,7 @@ static testInfo allTests[] =
     {"ParserPing",                      test_ParserPing},
     {"ParserErr",                       test_ParserErr},
     {"ParserOK",                        test_ParserOK},
+    {"ParseINFO",                       test_ParseINFO},
     {"ParserShouldFail",                test_ParserShouldFail},
     {"ParserSplitMsg",                  test_ParserSplitMsg},
     {"ProcessMsgArgs",                  test_ProcessMsgArgs},

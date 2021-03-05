@@ -21298,7 +21298,8 @@ test_StanSubTimeout(void)
     natsSubscription    *ncSub      = NULL;
     const char          *closeSubj  = NULL;
     natsMsg             *resp       = NULL;
-    Pb__SubscriptionRequest *r = NULL;
+    int                 i           = 0;
+    Pb__SubscriptionRequest *r      = NULL;
 
     pid = _startStreamingServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(pid);
@@ -21318,15 +21319,25 @@ test_StanSubTimeout(void)
     s = natsConnection_SubscribeSync(&ncSub, nc, closeSubj);
     testCond(s == NATS_OK);
 
-    test("Subscribe should timeout: ");
     // Artificially lower the timeout to make sure it fails.
     natsMutex_Lock(sc->mu);
     sc->opts->connTimeout=1;
     natsMutex_Unlock(sc->mu);
-    s = stanConnection_Subscribe(&sub, sc, "foo", _dummyStanMsgHandler, NULL, NULL);
-    // But in case it does not timeout, then we can proceed with the test
+
+    test("Subscribe should timeout: ");
+    // Try to get the timeout...
+    for (i=0;i<50;i++)
+    {
+        s = stanConnection_Subscribe(&sub, sc, "foo", _dummyStanMsgHandler, NULL, NULL);
+        if (s == NATS_TIMEOUT)
+            break;
+        stanSubscription_Destroy(sub);
+        sub = NULL;
+    }
+    // We don't want to fail the thest if we did not get a timeout.
     testCond((s == NATS_OK) || (s == NATS_TIMEOUT));
 
+    // However, proceed with the rest of the test only if it was a timeout.
     if (s == NATS_TIMEOUT)
     {
         test("Check sub close request sent: ");

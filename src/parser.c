@@ -759,7 +759,7 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
                 switch (b)
                 {
                     case ' ':
-                    case 't':
+                    case '\t':
                         continue;
                     default:
                         nc->ps->state = INFO_ARG;

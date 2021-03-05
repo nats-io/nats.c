@@ -22,7 +22,7 @@
 #define STAN_CONN_OPTS_DEFAULT_MAX_PUB_ACKS_INFLIGHT              (16384)
 #define STAN_CONN_OPTS_DEFAULT_MAX_PUB_ACKS_INFLIGHT_PERCENTAGE   (float) (0.5)     // 50% of MaxPubAcksInflight
 #define STAN_CONN_OPTS_DEFAULT_PING_INTERVAL                      (5)               // 5 seconds
-#define STAN_CONN_OPTS_DEFAULT_PING_MAX_OUT                       (3)
+#define STAN_CONN_OPTS_DEFAULT_PING_MAX_OUT                       (88)
 
 natsStatus
 stanConnOptions_clone(stanConnOptions **clonedOpts, stanConnOptions *opts);

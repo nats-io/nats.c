@@ -221,3 +221,4 @@ StanGetNATSConnection
 StanNoRetryOnFailedConnect
 StanInternalSubsNotPooled
 StanSubOnComplete
+StanSubTimeout

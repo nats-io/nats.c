@@ -272,6 +272,38 @@ _releaseStanSubCB(void *closure)
     stanConn_release(sc);
 }
 
+// Sends a subscription close protocol with provided information.
+// Best effort: does not wait for the reply and ignore any error.
+static void
+_sendCloseSub(natsConnection *nc, char *closeSubj, char *cid, char *channel, char*inbox)
+{
+    Pb__UnsubscribeRequest  usr;
+    int                     usrSize   = 0;
+    char                    *usrBytes = NULL;
+    int                     packedSize= 0;
+
+    pb__unsubscribe_request__init(&usr);
+    usr.clientid = cid;
+    usr.subject  = channel;
+    usr.inbox    = inbox;
+
+    usrSize = (int) pb__unsubscribe_request__get_packed_size(&usr);
+    if (usrSize == 0)
+        return;
+
+    usrBytes = NATS_MALLOC(usrSize);
+    if (usrBytes == NULL)
+        return;
+
+    packedSize = (int) pb__unsubscribe_request__pack(&usr, (uint8_t*) usrBytes);
+    if (usrSize != packedSize)
+        return;
+
+    natsConnection_Publish(nc, closeSubj, (const void*) usrBytes, usrSize);
+
+    NATS_FREE(usrBytes);
+}
+
 static natsStatus
 stanConn_subscribe(stanSubscription **newSub, stanConnection *sc,
         const char *channel, const char *queue,
@@ -284,6 +316,7 @@ stanConn_subscribe(stanSubscription **newSub, stanConnection *sc,
     char                *cid   = NULL;
     char                *rSubj = NULL;
     int64_t             timeout= 0;
+    char                *closeSubj = NULL;
 
     if ((newSub == NULL)
             || (sc == NULL)
@@ -326,6 +359,7 @@ stanConn_subscribe(stanSubscription **newSub, stanConnection *sc,
     cid = sc->clientID;
     rSubj = sc->subRequests;
     timeout = sc->opts->connTimeout;
+    closeSubj = sc->subCloseRequests;
 
     stanConn_Unlock(sc);
 
@@ -444,7 +478,19 @@ stanConn_subscribe(stanSubscription **newSub, stanConnection *sc,
 
             // If there was an error, need to unsub.
             if (s != NATS_OK)
+            {
                 natsSubscription_Unsubscribe(sub->inboxSub);
+                if (s == NATS_TIMEOUT)
+                {
+                    // On timeout, we don't know if the server got the request or
+                    // not. So we will do best effort and send a "subscription close"
+                    // request. However, since we don't have the AckInbox that is
+                    // normally used to close a subscription, we will use the sub's
+                    // inbox. Newer servers will fallback to lookup by inbox if they
+                    // don't find the sub from the "AckInbox" lookup.
+                    _sendCloseSub(nc, closeSubj, cid, sub->channel, sub->inbox);
+                }
+            }
         }
     }
     stanSub_Unlock(sub);

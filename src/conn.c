@@ -1997,6 +1997,16 @@ _evStopPolling(natsConnection *nc)
     return s;
 }
 
+static void
+natsConn_clearSSL(natsConnection *nc)
+{
+    if (nc->sockCtx.ssl == NULL)
+        return;
+
+    SSL_free(nc->sockCtx.ssl);
+    nc->sockCtx.ssl = NULL;
+}
+
 // _processOpError handles errors from reading or parsing the protocol.
 // The lock should not be held entering this function.
 static bool
@@ -2042,6 +2052,10 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
             ls = _evStopPolling(nc);
             natsSock_Close(nc->sockCtx.fd);
             nc->sockCtx.fd = NATS_SOCK_INVALID;
+
+            // We need to cleanup some things if the connection was SSL.
+            if (nc->sockCtx.ssl != NULL)
+                natsConn_clearSSL(nc);
         }
 
         // Fail pending flush requests.
@@ -2085,16 +2099,6 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
     _close(nc, NATS_CONN_STATUS_CLOSED, false, true);
 
     return false;
-}
-
-static void
-natsConn_clearSSL(natsConnection *nc)
-{
-    if (nc->sockCtx.ssl == NULL)
-        return;
-
-    SSL_free(nc->sockCtx.ssl);
-    nc->sockCtx.ssl = NULL;
 }
 
 static void

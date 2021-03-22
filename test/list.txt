@@ -166,6 +166,7 @@ HeadersNotSupported
 HeadersBasic
 EventLoop
 EventLoopRetryOnFailedConnect
+EventLoopTLS
 SSLBasic
 SSLVerify
 SSLCAFromMemory

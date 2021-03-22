@@ -18213,10 +18213,13 @@ _eventLoop(void *closure)
         write = arg->doWrite;
         natsMutex_Unlock(arg->m);
 
-        if (read)
-            natsConnection_ProcessReadEvent(nc);
-        if (write)
-            natsConnection_ProcessWriteEvent(nc);
+        if (!stop)
+        {
+            if (read)
+                natsConnection_ProcessReadEvent(nc);
+            if (write)
+                natsConnection_ProcessWriteEvent(nc);
+        }
     }
 }
 
@@ -18408,6 +18411,97 @@ test_EventLoopRetryOnFailedConnect(void)
     _destroyDefaultThreadArgs(&arg);
 
     _stopServer(pid);
+}
+
+static void
+test_EventLoopTLS(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc         = NULL;
+    natsOptions         *opts       = NULL;
+    natsPid             pid         = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    test("Set options: ");
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://localhost:4443"));
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 100));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 50));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetEventLoop(opts, (void*) &arg,
+                                     _evLoopAttach,
+                                     _evLoopRead,
+                                     _evLoopWrite,
+                                     _evLoopDetach));
+    testCond(s == NATS_OK);
+
+    test("Start server: ");
+    pid = _startServer("nats://127.0.0.1:4443", "-config tls.conf -DV", true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(s == NATS_OK);
+
+    test("Start event loop: ");
+    natsMutex_Lock(arg.m);
+    arg.sock = NATS_SOCK_INVALID;
+    natsMutex_Unlock(arg.m);
+    s = natsThread_Create(&arg.t, _eventLoop, (void*) &arg);
+    testCond(s == NATS_OK);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Disconnect: ");
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Restart server: ");
+    pid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(s == NATS_OK);
+
+    test("Check reconnected: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Shutdown evLoop: ");
+    natsMutex_Lock(arg.m);
+    arg.evStop = true;
+    natsCondition_Broadcast(arg.c);
+    natsMutex_Unlock(arg.m);
+    natsThread_Join(arg.t);
+    natsThread_Destroy(arg.t);
+    testCond(s == NATS_OK);
+
+    test("Close and wait for close cb: ");
+    natsConnection_Close(nc);
+    s = _waitForConnClosed(&arg);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(pid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
 }
 
 static void
@@ -21477,6 +21571,7 @@ static testInfo allTests[] =
     {"HeadersBasic",                    test_HeadersBasic},
     {"EventLoop",                       test_EventLoop},
     {"EventLoopRetryOnFailedConnect",   test_EventLoopRetryOnFailedConnect},
+    {"EventLoopTLS",                    test_EventLoopTLS},
     {"SSLBasic",                        test_SSLBasic},
     {"SSLVerify",                       test_SSLVerify},
     {"SSLCAFromMemory",                 test_SSLLoadCAFromMemory},

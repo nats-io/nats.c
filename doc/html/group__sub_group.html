@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.3.0</span>
+   &#160;<span id="projectnumber">2.4.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -154,9 +154,15 @@ Functions</h2></td></tr>
 <tr class="memitem:ga26c9736289d326fb7d6df7e2a0df72ab"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga26c9736289d326fb7d6df7e2a0df72ab">natsSubscription_Drain</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub)</td></tr>
 <tr class="memdesc:ga26c9736289d326fb7d6df7e2a0df72ab"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drains the subscription with a default timeout.  <a href="#ga26c9736289d326fb7d6df7e2a0df72ab">More...</a><br /></td></tr>
 <tr class="separator:ga26c9736289d326fb7d6df7e2a0df72ab"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga9c26a3f9584e7804060a48ec1b7e2a68"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga9c26a3f9584e7804060a48ec1b7e2a68">natsSubscription_DrainTimeout</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int64_t timeout)</td></tr>
+<tr class="memdesc:ga9c26a3f9584e7804060a48ec1b7e2a68"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drains the subscription with the specified timeout.  <a href="#ga9c26a3f9584e7804060a48ec1b7e2a68">More...</a><br /></td></tr>
+<tr class="separator:ga9c26a3f9584e7804060a48ec1b7e2a68"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga0408c9b6e4ad4078ac0267656ace222d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d">natsSubscription_WaitForDrainCompletion</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, int64_t timeout)</td></tr>
 <tr class="memdesc:ga0408c9b6e4ad4078ac0267656ace222d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Blocks until the drain operation completes.  <a href="#ga0408c9b6e4ad4078ac0267656ace222d">More...</a><br /></td></tr>
 <tr class="separator:ga0408c9b6e4ad4078ac0267656ace222d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga9834bd02f67a25ac084d5ad71e146019"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga9834bd02f67a25ac084d5ad71e146019">natsSubscription_DrainCompletionStatus</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub)</td></tr>
+<tr class="memdesc:ga9834bd02f67a25ac084d5ad71e146019"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the status of the drain after completion.  <a href="#ga9834bd02f67a25ac084d5ad71e146019">More...</a><br /></td></tr>
+<tr class="separator:ga9834bd02f67a25ac084d5ad71e146019"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaea632f845d473e7461b134c0e7bf4077"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#gaea632f845d473e7461b134c0e7bf4077">natsSubscription_SetOnCompleteCB</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, <a class="el" href="group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a">natsOnCompleteCB</a> cb, void *closure)</td></tr>
 <tr class="memdesc:gaea632f845d473e7461b134c0e7bf4077"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets a completion callback.  <a href="#gaea632f845d473e7461b134c0e7bf4077">More...</a><br /></td></tr>
 <tr class="separator:gaea632f845d473e7461b134c0e7bf4077"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -707,12 +713,64 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Drain will remove interest but continue callbacks until all messages have been processed.</p>
+<p>Drain will remove interest but continue to invoke callbacks until all messages have been processed.</p>
+<p>This call uses a default drain timeout of 30 seconds. See <a class="el" href="group__sub_group.html#ga9c26a3f9584e7804060a48ec1b7e2a68" title="Drains the subscription with the specified timeout. ">natsSubscription_DrainTimeout</a> for details on behavior when timeout elapses.</p>
 <dl class="section warning"><dt>Warning</dt><dd>This function does not block waiting for the operation to complete. To synchronously wait, see <a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a></dd></dl>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a></dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__sub_group.html#ga9c26a3f9584e7804060a48ec1b7e2a68" title="Drains the subscription with the specified timeout. ">natsSubscription_DrainTimeout</a> </dd>
+<dd>
+<a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a> </dd>
+<dd>
+<a class="el" href="group__sub_group.html#ga9834bd02f67a25ac084d5ad71e146019" title="Returns the status of the drain after completion. ">natsSubscription_DrainCompletionStatus</a></dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga9c26a3f9584e7804060a48ec1b7e2a68"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsSubscription_DrainTimeout </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *&#160;</td>
+          <td class="paramname"><em>sub</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>timeout</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Drain will remove interest but continue to invoke callbacks until all messages have been processed, or the specified timeout has elapsed. In that case, the subscription will be forcibly closed and remaining pending messages (if any) will not be processed.</p>
+<p>The timeout is expressed in milliseconds. Zero or negative value means that the call will not timeout, but see below for more details.</p>
+<p>When this call returns, the UNSUBSCRIBE protocol for this subscription has been enqueued to the outgoing connection buffer, but not sent to the server, ensuring that this call does not block.</p>
+<p>The library then asynchronously ensures that this protocol is sent and waits for a confirmation from the server. After that, it is guaranteed that no new message for this subscription will be received and the library can proceed with the rest of the draining.</p>
+<p>However, should the "flush" of the protocol fail, the library will ensure that no new message is added to the subscription (in the event the server did not receive the UNSUBSCRIBE protocol and still attempts to deliver messages), and will proceed with the draining of the pending messages. Users can check the status of the draining after it has completed by calling <a class="el" href="group__sub_group.html#ga9834bd02f67a25ac084d5ad71e146019" title="Returns the status of the drain after completion. ">natsSubscription_DrainCompletionStatus</a>.</p>
+<p>If no timeout is specified (that is, value is zero or negative), a timeout will be used for the "flush" of the protocol. Again, even in case of failure, the draining will proceed.</p>
+<p>If a timeout is specified, the complete process: "flush" of the protocol and draining of messages, must happen before the timeout elapses otherwise the subscription will be forcibly closed, and not all message callbacks may be invoked.</p>
+<p>Regardless of the presence of a timeout or not, should the subscription or connection be closed while draining occurs, the draining process will stop. The <a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a> call will not report an error. To know if an error occured, the user can call <a class="el" href="group__sub_group.html#ga9834bd02f67a25ac084d5ad71e146019" title="Returns the status of the drain after completion. ">natsSubscription_DrainCompletionStatus</a> after ensuring that the drain has completed.</p>
+<dl class="section warning"><dt>Warning</dt><dd>This function does not block waiting for the operation to complete. To synchronously wait, see <a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a></dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__sub_group.html#ga26c9736289d326fb7d6df7e2a0df72ab" title="Drains the subscription with a default timeout. ">natsSubscription_Drain</a> </dd>
+<dd>
+<a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a> </dd>
+<dd>
+<a class="el" href="group__sub_group.html#ga9834bd02f67a25ac084d5ad71e146019" title="Returns the status of the drain after completion. ">natsSubscription_DrainCompletionStatus</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
+    <tr><td class="paramname">timeout</td><td>how long to wait for the operation to complete, expressed in milliseconds. If the timeout elapses the subscription will be closed. </td></tr>
   </table>
   </dd>
 </dl>
@@ -742,12 +800,52 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>This function blocks until the subscription is fully drained. Returns no error if the subscription is drained or closed, otherwise returns the error indicating why the wait returned before completion or if the subscription was not in drained mode.</p>
+<p>This function blocks until the subscription is fully drained. Returns no error if the subscription is drained or closed, otherwise returns the error if the subscription was not in drained mode (<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9bb78b4f245d2870040d25c450febd4b">NATS_ILLEGAL_STATE</a>) or if this subscription was not drained or closed prior to the specified timeout (<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a>).</p>
 <p>The timeout is expressed in milliseconds. Zero or negative value means that the call will not timeout.</p>
+<p>Note that if this call times-out, it does not mean that the drain stops. The drain will continue until its own timeout elapses.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__sub_group.html#ga26c9736289d326fb7d6df7e2a0df72ab" title="Drains the subscription with a default timeout. ">natsSubscription_Drain</a> </dd>
+<dd>
+<a class="el" href="group__sub_group.html#ga9c26a3f9584e7804060a48ec1b7e2a68" title="Drains the subscription with the specified timeout. ">natsSubscription_DrainTimeout</a> </dd>
+<dd>
+<a class="el" href="group__sub_group.html#ga9834bd02f67a25ac084d5ad71e146019" title="Returns the status of the drain after completion. ">natsSubscription_DrainCompletionStatus</a></dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object </td></tr>
+    <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
     <tr><td class="paramname">timeout</td><td>how long to wait for the operation to complete, expressed in milliseconds. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga9834bd02f67a25ac084d5ad71e146019"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsSubscription_DrainCompletionStatus </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *&#160;</td>
+          <td class="paramname"><em>sub</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Once the drain has completed, users can use this function to know if the drain completed successfully or not.</p>
+<p>Possible return values (the list is not exhaustive):</p>
+<p><code>NATS_OK</code> the library sent the UNSUBSCRIBE protocol and finished processing all messages that were pending.<br />
+ <code>NATS_ILLEGAL_STATE</code> this call was made for a subscription that had not started draining or the draining is still in progress.<br />
+ <code>NATS_INVALID_SUBSCRIPTION</code> the subscription was closed while draining, which means that some messages may not have been processed.<br />
+ <code>NATS_CONNECTION_CLOSED</code> the connection was closed while draining, which means that some messages may not have been processed.</p>
+<dl class="section note"><dt>Note</dt><dd>This call does not wait for the drain completion (see <a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a> for that).</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__sub_group.html#ga26c9736289d326fb7d6df7e2a0df72ab" title="Drains the subscription with a default timeout. ">natsSubscription_Drain</a> </dd>
+<dd>
+<a class="el" href="group__sub_group.html#ga9c26a3f9584e7804060a48ec1b7e2a68" title="Drains the subscription with the specified timeout. ">natsSubscription_DrainTimeout</a> </dd>
+<dd>
+<a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject. ">natsSubscription</a> object. </td></tr>
   </table>
   </dd>
 </dl>

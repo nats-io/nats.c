@@ -21413,6 +21413,84 @@ test_StanSubOnComplete(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
+static void
+test_StanSubTimeout(void)
+{
+    natsStatus          s;
+    natsPid             pid         = NATS_INVALID_PID;
+    stanConnection      *sc         = NULL;
+    stanSubscription    *sub        = NULL;
+    natsConnection      *nc         = NULL;
+    natsSubscription    *ncSub      = NULL;
+    const char          *closeSubj  = NULL;
+    natsMsg             *resp       = NULL;
+    int                 i           = 0;
+    Pb__SubscriptionRequest *r      = NULL;
+
+    pid = _startStreamingServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Can connect: ");
+    s = stanConnection_Connect(&sc, clusterName, clientName, NULL);
+    testCond(s == NATS_OK);
+
+    test("Get NATS subscription: ");
+    s = stanConnection_GetNATSConnection(sc, &nc);
+    testCond(s == NATS_OK);
+
+    test("Setup NATS sub: ");
+    natsMutex_Lock(sc->mu);
+    closeSubj = (const char*) sc->subCloseRequests;
+    natsMutex_Unlock(sc->mu);
+    s = natsConnection_SubscribeSync(&ncSub, nc, closeSubj);
+    testCond(s == NATS_OK);
+
+    // Artificially lower the timeout to make sure it fails.
+    natsMutex_Lock(sc->mu);
+    sc->opts->connTimeout=1;
+    natsMutex_Unlock(sc->mu);
+
+    test("Subscribe should timeout: ");
+    // Try to get the timeout...
+    for (i=0;i<50;i++)
+    {
+        s = stanConnection_Subscribe(&sub, sc, "foo", _dummyStanMsgHandler, NULL, NULL);
+        if (s == NATS_TIMEOUT)
+            break;
+        stanSubscription_Destroy(sub);
+        sub = NULL;
+    }
+    // We don't want to fail the thest if we did not get a timeout.
+    testCond((s == NATS_OK) || (s == NATS_TIMEOUT));
+
+    // However, proceed with the rest of the test only if it was a timeout.
+    if (s == NATS_TIMEOUT)
+    {
+        test("Check sub close request sent: ");
+        s = natsSubscription_NextMsg(&resp, ncSub, 1000);
+        testCond((s == NATS_OK) && (resp != NULL));
+
+        test("Check request: ");
+        r = pb__subscription_request__unpack(NULL,
+                                            (size_t) natsMsg_GetDataLength(resp),
+                                            (const uint8_t*) natsMsg_GetData(resp));
+        testCond((r != NULL)
+                    && (strcmp(r->clientid, clientName) == 0)
+                    && (strcmp(r->subject, "foo") == 0)
+                    && (r->inbox != NULL));
+        if (r != NULL)
+            pb__subscription_request__free_unpacked(r, NULL);
+
+        natsMsg_Destroy(resp);
+    }
+
+    natsSubscription_Destroy(ncSub);
+    stanSubscription_Destroy(sub);
+    stanConnection_ReleaseNATSConnection(sc);
+    stanConnection_Destroy(sc);
+    _stopServer(pid);
+}
+
 #endif
 
 typedef void (*testFunc)(void);
@@ -21665,6 +21743,7 @@ static testInfo allTests[] =
     {"StanNoRetryOnFailedConnect",      test_StanNoRetryOnFailedConnect},
     {"StanInternalSubsNotPooled",       test_StanInternalSubsNotPooled},
     {"StanSubOnComplete",               test_StanSubOnComplete},
+    {"StanSubTimeout",                  test_StanSubTimeout},
 
 #endif
 

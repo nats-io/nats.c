@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.3.0</span>
+   &#160;<span id="projectnumber">2.4.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -219,7 +219,7 @@ Functions</h2></td></tr>
 <p>This callback is invoked to notify that the event library should start or stop polling for READ events.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">userData</td><td>the user object created in <a class="el" href="group__libuv_functions.html#ga86ac71cffe752effd7397740d80c3c42" title="Attach a connection to the given event loop. ">natsLibuv_Attach</a> </td></tr>
+    <tr><td class="paramname">userData</td><td>the user object created in <a class="el" href="group__libevent_functions.html#ga30c00f21a5251ee9fde09c1f2b429cd2" title="Attach a connection to the given event loop. ">natsLibevent_Attach</a> </td></tr>
     <tr><td class="paramname">add</td><td><code>true</code> if the library needs to start polling, <code>false</code> otherwise. </td></tr>
   </table>
   </dd>
@@ -253,7 +253,7 @@ Functions</h2></td></tr>
 <p>This callback is invoked to notify that the event library should start or stop polling for WRITE events.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">userData</td><td>the user object created in <a class="el" href="group__libuv_functions.html#ga86ac71cffe752effd7397740d80c3c42" title="Attach a connection to the given event loop. ">natsLibuv_Attach</a> </td></tr>
+    <tr><td class="paramname">userData</td><td>the user object created in <a class="el" href="group__libevent_functions.html#ga30c00f21a5251ee9fde09c1f2b429cd2" title="Attach a connection to the given event loop. ">natsLibevent_Attach</a> </td></tr>
     <tr><td class="paramname">add</td><td><code>true</code> if the library needs to start polling, <code>false</code> otherwise. </td></tr>
   </table>
   </dd>
@@ -277,7 +277,7 @@ Functions</h2></td></tr>
 <p>When a connection is closed (not disconnected, pending a reconnect), this callback will be invoked. This is the opportunity to cleanup the state maintained by the adapter for this connection.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">userData</td><td>the user object created in <a class="el" href="group__libuv_functions.html#ga86ac71cffe752effd7397740d80c3c42" title="Attach a connection to the given event loop. ">natsLibuv_Attach</a> </td></tr>
+    <tr><td class="paramname">userData</td><td>the user object created in <a class="el" href="group__libevent_functions.html#ga30c00f21a5251ee9fde09c1f2b429cd2" title="Attach a connection to the given event loop. ">natsLibevent_Attach</a> </td></tr>
   </table>
   </dd>
 </dl>

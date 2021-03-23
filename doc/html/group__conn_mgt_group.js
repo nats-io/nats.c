@@ -25,6 +25,7 @@ var group__conn_mgt_group =
     [ "natsConnection_GetClientIP", "group__conn_mgt_group.html#gadafcfeeeac2733c7119981ab97b7103d", null ],
     [ "natsConnection_GetRTT", "group__conn_mgt_group.html#gaa3fd27e6e7d8131e679d4f10e201c435", null ],
     [ "natsConnection_HasHeaderSupport", "group__conn_mgt_group.html#gad765b80ae8e1a06a7a942cccf29f042a", null ],
+    [ "natsConnection_GetLocalIPAndPort", "group__conn_mgt_group.html#ga761095a42374b4dafa178df7d7652dd5", null ],
     [ "natsConnection_Close", "group__conn_mgt_group.html#ga19e204d27a232e2d4334301fc002b2ed", null ],
     [ "natsConnection_Destroy", "group__conn_mgt_group.html#gafda2f702276fb0ac301efac10df09495", null ]
 ];

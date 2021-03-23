@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.3.0</span>
+   &#160;<span id="projectnumber">2.4.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -232,6 +232,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga70aa85319933d78c0076cc862fa3e5a6"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga70aa85319933d78c0076cc862fa3e5a6">natsOptions_UseOldRequestStyle</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool useOldStyle)</td></tr>
 <tr class="memdesc:ga70aa85319933d78c0076cc862fa3e5a6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Switches the use of old style requests.  <a href="#ga70aa85319933d78c0076cc862fa3e5a6">More...</a><br /></td></tr>
 <tr class="separator:ga70aa85319933d78c0076cc862fa3e5a6"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gadef4376a5e608cbc8c1a9e2b6335dc79"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gadef4376a5e608cbc8c1a9e2b6335dc79">natsOptions_SetFailRequestsOnDisconnect</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool failRequests)</td></tr>
+<tr class="memdesc:gadef4376a5e608cbc8c1a9e2b6335dc79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fails pending requests on disconnect event.  <a href="#gadef4376a5e608cbc8c1a9e2b6335dc79">More...</a><br /></td></tr>
+<tr class="separator:gadef4376a5e608cbc8c1a9e2b6335dc79"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga4f694b87039cedaa65cd25656b14d1a3"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga4f694b87039cedaa65cd25656b14d1a3">natsOptions_SetNoEcho</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool noEcho)</td></tr>
 <tr class="memdesc:ga4f694b87039cedaa65cd25656b14d1a3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets if connection receives its own messages.  <a href="#ga4f694b87039cedaa65cd25656b14d1a3">More...</a><br /></td></tr>
 <tr class="separator:ga4f694b87039cedaa65cd25656b14d1a3"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1859,6 +1862,42 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
     <tr><td class="paramname">useOldStyle</td><td>a boolean indicating if old request style should be used. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="gadef4376a5e608cbc8c1a9e2b6335dc79"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetFailRequestsOnDisconnect </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool&#160;</td>
+          <td class="paramname"><em>failRequests</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>If this option is enabled, all pending <a class="el" href="group__conn_pub_group.html#gaf4b4a022f9c21fc269b87c000330c5a7" title="Sends a request and waits for a reply. ">natsConnection_Request()</a> family calls will fail with the <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80abef517217119e8446a8e3382e1f37eb3">NATS_CONNECTION_DISCONNECTED</a> status.</p>
+<dl class="section note"><dt>Note</dt><dd>This does not apply to requests from connections that use the old style requests.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga70aa85319933d78c0076cc862fa3e5a6" title="Switches the use of old style requests. ">natsOptions_UseOldRequestStyle</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection. ">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">failRequests</td><td>a boolean indicating if pending requests should fail when a disconnect event occurs. </td></tr>
   </table>
   </dd>
 </dl>

@@ -358,9 +358,6 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
             {
                 int sslErr = SSL_get_error(ctx->ssl, readBytes);
 
-                if (sslErr == SSL_ERROR_ZERO_RETURN)
-                    return nats_setDefaultError(NATS_CONNECTION_CLOSED);
-
                 if ((sslErr == SSL_ERROR_WANT_READ)
                         || (sslErr == SSL_ERROR_WANT_WRITE))
                 {
@@ -368,6 +365,10 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
                     // and size. We can't return until SSL_read returns
                     // success (bytes read) or a different error.
                     continue;
+                }
+                else if ((sslErr == SSL_ERROR_ZERO_RETURN) || (readBytes == 0))
+                {
+                    return nats_setDefaultError(NATS_CONNECTION_CLOSED);
                 }
                 else if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
                 {
@@ -440,9 +441,6 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
             {
                 int sslErr = SSL_get_error(ctx->ssl, bytes);
 
-                if (sslErr == SSL_ERROR_ZERO_RETURN)
-                    return nats_setDefaultError(NATS_CONNECTION_CLOSED);
-
                 if ((sslErr == SSL_ERROR_WANT_READ)
                         || (sslErr == SSL_ERROR_WANT_WRITE))
                 {
@@ -450,6 +448,10 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
                     // and size. We can't return until SSL_write returns
                     // success (bytes written) a different error.
                     continue;
+                }
+                else if ((sslErr == SSL_ERROR_ZERO_RETURN) || (bytes == 0))
+                {
+                    return nats_setDefaultError(NATS_CONNECTION_CLOSED);
                 }
                 else if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
                 {

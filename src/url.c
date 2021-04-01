@@ -32,6 +32,21 @@ natsUrl_Destroy(natsUrl *url)
 }
 
 static natsStatus
+_parsePort(int *port, const char *sport)
+{
+    natsStatus  s    = NATS_OK;
+    int64_t     n    = 0;
+
+    n = nats_ParseInt64(sport, (int) strlen(sport));
+    if ((n < 0) || (n > INT32_MAX))
+        s = nats_setError(NATS_INVALID_ARG, "invalid port '%s'", sport);
+    else
+        *port = (int) n;
+
+    return s;
+}
+
+static natsStatus
 _parseHostAndPort(natsUrl *url, char *host, bool uInfo)
 {
     natsStatus  s      = NATS_OK;
@@ -40,7 +55,13 @@ _parseHostAndPort(natsUrl *url, char *host, bool uInfo)
     sport = strrchr(host, ':');
     if (sport != NULL)
     {
-        s = nats_ParsePort(&(url->port), (const char*) (sport+1));
+        const char *startPort = (const char*) (sport+1);
+        char       *endPort   = strchr(startPort, '/');
+
+        if (endPort != NULL)
+            *endPort = '\0';
+
+        s = _parsePort(&(url->port), startPort);
         if (s != NATS_OK)
             return NATS_UPDATE_ERR_STACK(s);
 

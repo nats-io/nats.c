@@ -1625,6 +1625,18 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
+    test("'nats://localhost:4222/subject':");
+    s = natsUrl_Create(&u, " nats://localhost:4222/subject");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "localhost") == 0)
+              && (u->username == NULL)
+              && (u->password == NULL)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
     test("'tcp://localhost: 4222':");
     s = natsUrl_Create(&u, "tcp://localhost: 4222");
     testCond((s == NATS_INVALID_ARG)

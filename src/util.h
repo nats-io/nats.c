@@ -70,9 +70,6 @@ int64_t
 nats_ParseInt64(const char *d, int dLen);
 
 natsStatus
-nats_ParsePort(int *port, const char *sport);
-
-natsStatus
 nats_Trim(char **pres, const char *s);
 
 natsStatus

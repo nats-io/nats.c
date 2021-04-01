@@ -64,8 +64,10 @@ static uint16_t crc16tab[256] = {
     0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0,
 };
 
-static int64_t
-parseInt64(const char *d, int dLen)
+// parseInt64 expects decimal positive numbers. We
+// return -1 to signal error
+int64_t
+nats_ParseInt64(const char *d, int dLen)
 {
     int     i;
     char    dec;
@@ -91,29 +93,6 @@ parseInt64(const char *d, int dLen)
     }
 
     return n;
-}
-
-// parseInt64 expects decimal positive numbers. We
-// return -1 to signal error
-int64_t
-nats_ParseInt64(const char *d, int dLen)
-{
-    return parseInt64(d, dLen);
-}
-
-natsStatus
-nats_ParsePort(int *port, const char *sport)
-{
-    natsStatus  s    = NATS_OK;
-    int64_t     n    = 0;
-
-    n = parseInt64(sport, (int) strlen(sport));
-    if ((n < 0) || (n > INT32_MAX))
-        s = nats_setError(NATS_INVALID_ARG, "invalid port '%s'", sport);
-    else
-        *port = (int) n;
-
-    return s;
 }
 
 natsStatus

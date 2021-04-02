@@ -341,6 +341,7 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
     natsStatus  s         = NATS_OK;
     int         readBytes = 0;
     bool        needRead  = true;
+    bool        wouldBlock= false;
 
     while (needRead)
     {
@@ -351,7 +352,11 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
 #endif
             readBytes = recv(ctx->fd, buffer, (natsRecvLen) maxBufferSize, 0);
 
-        if ((readBytes == 0) || (readBytes == NATS_SOCK_ERROR))
+        if (readBytes == 0)
+        {
+            return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+        }
+        else if (readBytes < 0)
         {
 #if defined(NATS_HAS_TLS)
             if (ctx->ssl != NULL)
@@ -367,23 +372,22 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
                     // SSL requires that we go back with the same buffer
                     // and size. We can't return until SSL_read returns
                     // success (bytes read) or a different error.
-                    continue;
-                }
-                else if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
-                {
-                    return nats_setError(NATS_IO_ERROR, "SSL_read error: %s",
-                                         NATS_SSL_ERR_REASON_STRING);
+                    wouldBlock = true;
                 }
             }
-            else
 #endif
-            if (readBytes == 0)
-                return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+            wouldBlock = (wouldBlock || (NATS_SOCK_GET_ERROR == NATS_SOCK_WOULD_BLOCK));
 
-            if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
+            if (!wouldBlock)
             {
-                return nats_setError(NATS_IO_ERROR, "recv error: %d",
-                                     NATS_SOCK_GET_ERROR);
+#if defined(NATS_HAS_TLS)
+                if (ctx->ssl != NULL)
+                    return nats_setError(NATS_IO_ERROR, "SSL_read error: %s",
+                                        NATS_SSL_ERR_REASON_STRING);
+                else
+#endif
+                    return nats_setError(NATS_IO_ERROR, "recv error: %d",
+                                        NATS_SOCK_GET_ERROR);
             }
             else if (ctx->useEventLoop)
             {
@@ -419,6 +423,7 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
     natsStatus  s         = NATS_OK;
     int         bytes     = 0;
     bool        needWrite = true;
+    bool        wouldBlock= false;
 
     while (needWrite)
     {
@@ -433,7 +438,11 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
             bytes = send(ctx->fd, data, len, 0);
 #endif
 
-        if ((bytes == 0) || (bytes == NATS_SOCK_ERROR))
+        if (bytes == 0)
+        {
+            return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+        }
+        else if (bytes < 0)
         {
 #if defined(NATS_HAS_TLS)
             if (ctx->ssl != NULL)
@@ -449,23 +458,22 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
                     // SSL requires that we go back with the same buffer
                     // and size. We can't return until SSL_write returns
                     // success (bytes written) a different error.
-                    continue;
-                }
-                else if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
-                {
-                    return nats_setError(NATS_IO_ERROR, "SSL_write error: %s",
-                                         NATS_SSL_ERR_REASON_STRING);
+                    wouldBlock = true;
                 }
             }
-            else
 #endif
-            if (bytes == 0)
-                return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+            wouldBlock = (wouldBlock || (NATS_SOCK_GET_ERROR == NATS_SOCK_WOULD_BLOCK));
 
-            if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
+            if (!wouldBlock)
             {
-                return nats_setError(NATS_IO_ERROR, "send error: %d",
-                                     NATS_SOCK_GET_ERROR);
+#if defined(NATS_HAS_TLS)
+                if (ctx->ssl != NULL)
+                    return nats_setError(NATS_IO_ERROR, "SSL_write error: %s",
+                                         NATS_SSL_ERR_REASON_STRING);
+                else
+#endif
+                    return nats_setError(NATS_IO_ERROR, "send error: %d",
+                                         NATS_SOCK_GET_ERROR);
             }
             else if (ctx->useEventLoop)
             {

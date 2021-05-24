@@ -2518,6 +2518,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     natsMsg          *msg = NULL;
     natsMsgDlvWorker *ldw = NULL;
     bool             sc   = false;
+    int              dl   = 0;
 
     natsMutex_Lock(nc->subsMu);
 
@@ -2537,6 +2538,10 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     s = _createMsg(&msg, nc, buf, bufLen, nc->ps->ma.hdr);
     if (s != NATS_OK)
         return s;
+    // bufLen is the overall buffer len. In presence of headers, we need
+    // to capture the real message payload data length, which has been
+    // computed as the bufLen - header size.
+    dl = msg->dataLen;
 
     if ((ldw = sub->libDlvWorker) != NULL)
         natsMutex_Lock(ldw->lock);
@@ -2555,7 +2560,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     }
 
     sub->msgList.msgs++;
-    sub->msgList.bytes += bufLen;
+    sub->msgList.bytes += dl;
 
     if (((sub->msgsLimit > 0) && (sub->msgList.msgs > sub->msgsLimit))
         || ((sub->bytesLimit > 0) && (sub->msgList.bytes > sub->bytesLimit)))
@@ -2569,7 +2574,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
         // Undo stats from above.
         sub->msgList.msgs--;
-        sub->msgList.bytes -= bufLen;
+        sub->msgList.bytes -= dl;
     }
     else
     {

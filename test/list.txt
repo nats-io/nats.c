@@ -53,6 +53,7 @@ LibMsgDelivery
 AsyncINFO
 RequestPool
 NoFlusherIfSendAsapOption
+HeadersAndSubPendingBytes
 DefaultConnection
 SimplifiedURLs
 IPResolutionOrder

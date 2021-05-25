@@ -6617,6 +6617,77 @@ test_NoFlusherIfSendAsap(void)
 }
 
 static void
+test_HeadersAndSubPendingBytes(void)
+{
+    natsStatus          s;
+    natsPid             pid   = NATS_INVALID_PID;
+    natsConnection      *nc   = NULL;
+    natsSubscription    *sub1 = NULL;
+    natsSubscription    *sub2 = NULL;
+    natsMsg             *msg  = NULL;
+    natsMsg             *smsg = NULL;
+    int                 msgs  = 0;
+    int                 bytes = 0;
+    struct threadArg    arg;
+    int                 i;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+    arg.string = "test";
+
+    pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222", true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect/subscribe ok: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_Subscribe(&sub1, nc, "foo", _recvTestString, (void*) &arg));
+    IFOK(s, natsSubscription_SetPendingLimits(sub1, 1000, 100));
+    IFOK(s, natsConnection_SubscribeSync(&sub2, nc, "foo"));
+    IFOK(s, natsSubscription_SetPendingLimits(sub2, 1000, 100));
+    IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
+
+    test("Create message with header: ");
+    s = natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+    // Set a header with "large" value (50 bytes)
+    IFOK(s, natsMsgHeader_Set(msg, "Key", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    testCond(s == NATS_OK);
+
+    for (i=0; i<10; i++) {
+        test("Publish and receive message: ");
+        s = natsConnection_PublishMsg(nc, msg);
+        IFOK(s, natsSubscription_NextMsg(&smsg, sub2, 1000));
+        if (s == NATS_OK)
+        {
+            natsMutex_Lock(arg.m);
+            while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+                s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+            arg.msgReceived = false;
+            natsMutex_Unlock(arg.m);
+        }
+        natsMsg_Destroy(smsg);
+        smsg = NULL;
+        testCond(s == NATS_OK);
+    }
+
+    test("Check sub1's pending: ");
+    s = natsSubscription_GetPending(sub1, &msgs, &bytes);
+    testCond((s == NATS_OK) && (msgs == 0) && (bytes == 0));
+
+    test("Check sub2's pending: ");
+    s = natsSubscription_GetPending(sub1, &msgs, &bytes);
+    testCond((s == NATS_OK) && (msgs == 0) && (bytes == 0));
+
+    natsMsg_Destroy(msg);
+    natsSubscription_Destroy(sub1);
+    natsSubscription_Destroy(sub2);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(pid);
+}
+
+static void
 _dummyMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
                 void *closure)
 {
@@ -21575,6 +21646,7 @@ static testInfo allTests[] =
     {"AsyncINFO",                       test_AsyncINFO},
     {"RequestPool",                     test_RequestPool},
     {"NoFlusherIfSendAsapOption",       test_NoFlusherIfSendAsap},
+    {"HeadersAndSubPendingBytes",       test_HeadersAndSubPendingBytes},
 
     // Public API Tests
 

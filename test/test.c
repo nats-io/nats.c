@@ -1,4 +1,4 @@
-// Copyright 2015-2020 The NATS Authors
+// Copyright 2015-2021 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -137,6 +137,38 @@ struct threadArg
     bool             doWrite;
 
 };
+
+static bool
+serverVersionAtLeast(int major, int minor, int update)
+{
+    int     ma       = 0;
+    int     mi       = 0;
+    int     up       = 0;
+    char    *version = NULL;
+
+    if (serverVersion == NULL)
+        return false;
+
+    version = strstr(serverVersion, "version ");
+    if (version != NULL)
+    {
+        version += 8;
+    }
+    else
+    {
+        version = strstr(serverVersion, " v");
+        if (version == NULL)
+            return false;
+
+        version += 2;
+    }
+
+    sscanf(version, "%d.%d.%d", &ma, &mi, &up);
+    if ((ma > major) || ((ma == major) && (mi > minor)) || ((ma == major) && (mi == minor) && (up >= update)))
+        return true;
+
+    return false;
+}
 
 static natsStatus
 _createDefaultThreadArgsForCbTests(
@@ -4976,6 +5008,11 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
             while (!arg->closed)
                 natsCondition_Wait(arg->c, arg->m);
 
+            break;
+        }
+        case 10:
+        {
+            arg->status = (natsMsg_IsNoResponders(msg) ? NATS_OK : NATS_ERR);
             break;
         }
     }
@@ -10078,11 +10115,76 @@ test_PubSubWithReply(void)
     IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
     testCond((s == NATS_OK)
              && (msg != NULL)
-             && (strncmp(string, natsMsg_GetData(msg), natsMsg_GetDataLength(msg)) == 0));
+             && (strncmp(string, natsMsg_GetData(msg), natsMsg_GetDataLength(msg)) == 0)
+             && (strncmp(natsMsg_GetReply(msg), "bar", 3) == 0));
 
     natsMsg_Destroy(msg);
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+static void
+test_NoResponders(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    natsMsg             *msg      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    const char          *string   = "Hello World";
+    struct threadArg    arg;
+
+    if (!serverVersionAtLeast(2,2,0))
+    {
+        char txt[200];
+
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.2.0, got %s: ", serverVersion);
+        test(txt);
+        testCond(true);
+        return;
+    }
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if ( s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("No responders on NextMsg: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    IFOK(s, natsConnection_PublishRequestString(nc, "bar", "foo", string));
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond(NATS_NO_RESPONDERS);
+
+    natsMsg_Destroy(msg);
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    arg.status  = NATS_ERR;
+    arg.control = 10;
+
+    test("No responders in callback: ");
+    s = natsConnection_Subscribe(&sub, nc, "bar", _recvTestString, (void*)&arg);
+    IFOK(s, natsConnection_PublishRequestString(nc, "foo", "bar", string));
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        if (s == NATS_OK)
+            s = arg.status;
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
 
     _stopServer(serverPid);
 }
@@ -10614,8 +10716,8 @@ test_RequestTimeout(void)
 
     test("Test Request should timeout: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    IFOK(s, natsConnection_RequestString(&msg, nc, "foo", "bar", 10));
-    testCond(((s == NATS_TIMEOUT) || (s == NATS_NO_RESPONDERS)) && (msg == NULL));
+    IFOK(s, natsConnection_RequestString(&msg, nc, "foo", "bar", 500));
+    testCond(serverVersionAtLeast(2, 2, 0) ? (s == NATS_NO_RESPONDERS) : (s == NATS_TIMEOUT));
 
     natsConnection_Destroy(nc);
 
@@ -14248,38 +14350,6 @@ test_ReceiveINFORightAfterFirstPONG(void)
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
-}
-
-static bool
-serverVersionAtLeast(int major, int minor, int update)
-{
-    int     ma       = 0;
-    int     mi       = 0;
-    int     up       = 0;
-    char    *version = NULL;
-
-    if (serverVersion == NULL)
-        return false;
-
-    version = strstr(serverVersion, "version ");
-    if (version != NULL)
-    {
-        version += 8;
-    }
-    else
-    {
-        version = strstr(serverVersion, " v");
-        if (version == NULL)
-            return false;
-
-        version += 2;
-    }
-
-    sscanf(version, "%d.%d.%d", &ma, &mi, &up);
-    if ((ma > major) || ((ma == major) && (mi > minor)) || ((ma == major) && (mi == minor) && (up >= update)))
-        return true;
-
-    return false;
 }
 
 static void
@@ -19964,11 +20034,15 @@ test_StanConnectError(void)
     natsStatus          s;
     stanConnection      *sc = NULL;
     stanConnection      *sc2 = NULL;
-    natsPid             pid = NATS_INVALID_PID;
+    natsPid             nPid = NATS_INVALID_PID;
+    natsPid             sPid = NATS_INVALID_PID;
     stanConnOptions     *opts = NULL;
 
-    pid = _startStreamingServer("nats://127.0.0.1:4222", NULL, true);
-    CHECK_SERVER_STARTED(pid);
+    nPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(nPid);
+
+    sPid = _startStreamingServer("nats://127.0.0.1:4222", "-ns nats://127.0.0.1:4222", true);
+    CHECK_SERVER_STARTED(sPid);
 
     test("Check connect response error: ");
     s = stanConnection_Connect(&sc, clusterName, clientName, NULL);
@@ -19979,14 +20053,15 @@ test_StanConnectError(void)
     test("Check wrong discovery prefix: ");
     s = stanConnOptions_Create(&opts);
     IFOK(s, stanConnOptions_SetDiscoveryPrefix(opts, "wrongprefix"));
-    IFOK(s, stanConnOptions_SetConnectionWait(opts, 100));
+    IFOK(s, stanConnOptions_SetConnectionWait(opts, 500));
     IFOK(s, stanConnection_Connect(&sc2, clusterName, "newClient", opts));
-    testCond(s == NATS_TIMEOUT);
+    testCond(serverVersionAtLeast(2, 2, 0) ? (s == NATS_NO_RESPONDERS) : (s == NATS_TIMEOUT));
 
     stanConnection_Destroy(sc);
     stanConnOptions_Destroy(opts);
 
-    _stopServer(pid);
+    _stopServer(sPid);
+    _stopServer(nPid);
 }
 
 
@@ -21699,6 +21774,7 @@ static testInfo allTests[] =
     {"AsyncSubscribeTimeout",           test_AsyncSubscribeTimeout},
     {"SyncSubscribe",                   test_SyncSubscribe},
     {"PubSubWithReply",                 test_PubSubWithReply},
+    {"NoResponders",                    test_NoResponders},
     {"Flush",                           test_Flush},
     {"ConnCloseDoesFlush",              test_ConnCloseDoesFlush},
     {"QueueSubscriber",                 test_QueueSubscriber},

@@ -1,4 +1,4 @@
-// Copyright 2015-2020 The NATS Authors
+// Copyright 2015-2021 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -951,4 +951,18 @@ natsMsg_Create(natsMsg **newMsg, const char *subj, const char *reply,
                        data, dataLen, -1);
 
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+bool
+natsMsg_IsNoResponders(natsMsg *m)
+{
+    const char *val = NULL;
+
+    // To be a "no responders" message, it has to be of 0 length,
+    // and have a "Status" header with "503" as a value.
+    return ((m != NULL)
+                && (natsMsg_GetDataLength(m) == 0)
+                && (natsMsgHeader_Get(m, STATUS_HDR, &val) == NATS_OK)
+                && (val != NULL)
+                && (strncmp(val, NO_RESP_STATUS, HDR_STATUS_LEN) == 0));
 }

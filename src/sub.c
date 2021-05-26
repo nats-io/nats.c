@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2021 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -695,7 +695,12 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
             _retain(sub);
         }
     }
-    if (s == NATS_OK)
+    if ((s == NATS_OK) && natsMsg_IsNoResponders(msg))
+    {
+        natsMsg_Destroy(msg);
+        s = NATS_NO_RESPONDERS;
+    }
+    else if (s == NATS_OK)
         *nextMsg = msg;
 
     natsSub_Unlock(sub);

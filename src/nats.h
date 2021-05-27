@@ -1,4 +1,4 @@
-// Copyright 2015-2020 The NATS Authors
+// Copyright 2015-2021 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -186,8 +186,15 @@ typedef struct __stanSubOptions     stanSubOptions;
  * subscription. The library will invoke this callback for each message
  * arriving through the subscription's connection.
  *
+ * \warning If this callback is setup for a subject that is used as the reply
+ * subject to #natsConnection_PublishRequest calls (and its variants), it
+ * is possible to get an empty message with a header "Status" with value
+ * "503" that is sent by the server when there were no responders on the
+ * request's subject. Use #natsMsg_IsNoResponders to know if that is the case.
+ *
  * @see natsConnection_Subscribe()
  * @see natsConnection_QueueSubscribe()
+ * @see natsMsg_IsNoResponders()
  */
 typedef void (*natsMsgHandler)(
         natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
@@ -2402,6 +2409,34 @@ natsMsgHeader_Keys(natsMsg *msg, const char* **keys, int *count);
 NATS_EXTERN natsStatus
 natsMsgHeader_Delete(natsMsg *msg, const char *key);
 
+/** \brief Indicates if this message is a "no responders" message from the server.
+ *
+ * Starting with the NATS Server v2.2.0+ and the C client v2.2.0+ releases, which
+ * introduced support for message headers and the "no responders" feature, if a
+ * request is received by the server and there are no subscriptions on the
+ * request's subject, the server sends a message with no payload but with a header
+ * "Status" with value "503".
+ *
+ * The call #natsConnection_Request() and its variants intercept this special
+ * message and instead of returning it to the user, they return #NATS_NO_RESPONDERS.
+ *
+ * If a synchronous subscription is created on a subject used as a reply subject
+ * to a #natsConnection_PublishRequest call (and its variants), #natsSubscription_NextMsg
+ * also detects this message and returns #NATS_NO_RESPONDERS (but it was not from
+ * release v2.2.0 to v2.4.1).
+ *
+ * For asynchronous subscriptions, the user may want to know that the request
+ * failed because there are no responders. For that reason, the message is passed
+ * to the message callback, and this function can be used to detect that this
+ * is a "no responders" message from the server and act accordingly.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @return `true` if this message is a "no responders" message from the server,
+ * that is, has no payload and the "Status" header with "503" as the value.
+ */
+NATS_EXTERN bool
+natsMsg_IsNoResponders(natsMsg *msg);
+
 /** \brief Destroys the message object.
  *
  * Destroys the message, freeing memory.
@@ -3262,6 +3297,13 @@ natsSubscription_NoDeliveryDelay(natsSubscription *sub);
  * return the next message that was pending in the client, and #NATS_TIMEOUT
  * otherwise.
  *
+ * \note If you create a subscription for a subject used as the reply subject
+ * of a #natsConnection_PublishRequest call (or any of its variant), and there
+ * are no responders for the request subject, NATS Servers v2.2.0+ will return
+ * an empty message with a header "Status" and value "503". The library v2.2.0
+ * until v2.4.1 would return this message to the user, which was wrong.<br>
+ * The library now returns no message and #NATS_NO_RESPONDERS status.
+ *
  * @param nextMsg the location where to store the pointer to the next available
  * message.
  * @param sub the pointer to the #natsSubscription object.
@@ -3526,7 +3568,7 @@ natsSubscription_Drain(natsSubscription *sub);
  * Regardless of the presence of a timeout or not, should the subscription or connection
  * be closed while draining occurs, the draining process will stop. The
  * #natsSubscription_WaitForDrainCompletion call will not report an error. To
- * know if an error occured, the user can call #natsSubscription_DrainCompletionStatus
+ * know if an error occurred, the user can call #natsSubscription_DrainCompletionStatus
  * after ensuring that the drain has completed.
  *
  * \warning This function does not block waiting for the operation

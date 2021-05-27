@@ -162,7 +162,6 @@ static void
 _processPingResponse(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     stanConnection  *sc  = (stanConnection*) closure;
-    const char      *val = NULL;
 
     if (natsMsg_GetDataLength(msg) > 0)
     {
@@ -186,9 +185,7 @@ _processPingResponse(natsConnection *nc, natsSubscription *sub, natsMsg *msg, vo
         }
     }
     // Check for no responders
-    else if ((natsMsgHeader_Get(msg, STATUS_HDR, &val) == NATS_OK)
-                && (val != NULL)
-                && (strcmp(val, NO_RESP_STATUS) == 0))
+    else if (natsMsg_IsNoResponders(msg))
     {
         natsMsg_Destroy(msg);
         return;

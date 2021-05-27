@@ -1,4 +1,4 @@
-// Copyright 2015-2020 The NATS Authors
+// Copyright 2015-2021 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -1321,6 +1321,18 @@ natsOptions_SetWriteDeadline(natsOptions *opts, int64_t deadline)
     LOCK_AND_CHECK_OPTIONS(opts, (deadline < 0));
 
     opts->writeDeadline = deadline;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_DisableNoResponders(natsOptions *opts, bool disabled)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->disableNoResponders = disabled;
 
     UNLOCK_OPTS(opts);
 

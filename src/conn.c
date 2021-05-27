@@ -1,4 +1,4 @@
-// Copyright 2015-2020 The NATS Authors
+// Copyright 2015-2021 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -965,7 +965,8 @@ _connectProto(natsConnection *nc, char **proto)
     if (s == NATS_OK)
     {
         // If our server does not support headers then we can't do them or no responders.
-        const char *hdrsAndNoResponders = nats_GetBoolStr(nc->info.headers);
+        const char *hdrs = nats_GetBoolStr(nc->info.headers);
+        const char *noResponders = nats_GetBoolStr(nc->info.headers && !nc->opts->disableNoResponders);
 
         res = nats_asprintf(proto,
                             "CONNECT {\"verbose\":%s,\"pedantic\":%s,%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\"tls_required\":%s," \
@@ -996,8 +997,8 @@ _connectProto(natsConnection *nc, char **proto)
                             CString, NATS_VERSION_STRING,
                             CLIENT_PROTO_INFO,
                             nats_GetBoolStr(!opts->noEcho),
-                            hdrsAndNoResponders,
-                            hdrsAndNoResponders,
+                            hdrs,
+                            noResponders,
                             _CRLF_);
         if (res < 0)
             s = nats_setDefaultError(NATS_NO_MEMORY);

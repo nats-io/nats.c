@@ -2808,6 +2808,14 @@ test_natsOptions(void)
                 && (opts->sigClosure == NULL)
                 && (opts->userCreds == NULL));
 
+    test("Disable no responders: ");
+    s = natsOptions_DisableNoResponders(opts, true);
+    testCond((s == NATS_OK) && opts->disableNoResponders);
+
+    test("Enable no responders: ");
+    s = natsOptions_DisableNoResponders(opts, false);
+    testCond((s == NATS_OK) && !opts->disableNoResponders);
+
     // Prepare some values for the clone check
     s = natsOptions_SetURL(opts, "url");
     IFOK(s, natsOptions_SetServers(opts, servers, 3));
@@ -10132,6 +10140,7 @@ test_NoResponders(void)
     natsConnection      *nc       = NULL;
     natsSubscription    *sub      = NULL;
     natsMsg             *msg      = NULL;
+    natsOptions         *opts     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     const char          *string   = "Hello World";
     struct threadArg    arg;
@@ -10182,8 +10191,19 @@ test_NoResponders(void)
     testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
+    sub = NULL;
     natsConnection_Destroy(nc);
+    nc = NULL;
 
+    test("Disable no responders: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_DisableNoResponders(opts, true));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_RequestString(&msg, nc, "foo", string, 500));
+    testCond((s == NATS_TIMEOUT) && (msg == NULL));
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
 
     _stopServer(serverPid);

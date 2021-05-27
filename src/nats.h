@@ -1788,6 +1788,43 @@ natsOptions_SetNKeyFromSeed(natsOptions *opts,
 NATS_EXTERN natsStatus
 natsOptions_SetWriteDeadline(natsOptions *opts, int64_t deadline);
 
+/** \brief Enable/Disable the "no responders" feature.
+ *
+ * By default, when a connection to a NATS Server v2.2.0+ is made,
+ * the library signals to the server that it supports the "no responders"
+ * feature, which means that if a request is made, and there are
+ * no subscriptions on the request subject (no responders), then
+ * the server sends back an empty message with the header "Status"
+ * and value "503". The request APIs capture this message and
+ * instead return a #NATS_NO_RESPONDERS status, instead of waiting
+ * for the timeout to occur and return #NATS_TIMEOUT.
+ *
+ * In case where users set up their own asynchronous subscription
+ * on the reply subject and publish the request with #natsConnection_PublishRequest
+ * and the like, then the message callback may be invoked with this
+ * "no responders" message, which can be checked with #natsMsg_IsNoResponders.
+ *
+ * However, if users don't want to have to deal with that, it is
+ * possible to instruct the server to disable this feature for
+ * a given connection. If that is the case, requests will behave
+ * as with pre-v2.2.0 servers, in that the request will timeout
+ * when there are no responders.
+ *
+ * \note This function is to disable the feature that is normally
+ * enabled by default. Passing `false` means that it would enable
+ * it again if you had previously disable the option. However, the
+ * feature may still be disabled when connecting to a server that
+ * does not support it.
+ *
+ * @see natsMsg_IsNoResponders()
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param disabled the boolean to indicate if the feature should be
+ * disabled or not.
+ */
+NATS_EXTERN natsStatus
+natsOptions_DisableNoResponders(natsOptions *opts, bool disabled);
+
 /** \brief Destroys a #natsOptions object.
  *
  * Destroys the natsOptions object, freeing used memory. See the note in

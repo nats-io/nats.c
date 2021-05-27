@@ -381,7 +381,7 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
 }
 
 static natsStatus
-_liftHeaders(natsMsg *msg)
+_liftHeaders(natsMsg *msg, bool setOrAdd)
 {
     natsStatus s       = NATS_OK;
     char       *ptr    = NULL;
@@ -390,6 +390,12 @@ _liftHeaders(natsMsg *msg)
     char       *lk     = NULL;
     int        i;
 
+    // If there is no header map and hdrLift is false, and this is not
+    // an action to set or add a header, then simply return.
+    if (!setOrAdd && (msg->headers == NULL) && !msg->hdrLift)
+        return NATS_OK;
+
+    // For set or add operations, possibly create the headers map.
     if (msg->headers == NULL)
     {
         s = natsStrHash_Create(&(msg->headers), 4);
@@ -397,6 +403,7 @@ _liftHeaders(natsMsg *msg)
             return NATS_UPDATE_ERR_STACK(s);
     }
 
+    // In all cases, if there is no need to lift, we are done.
     if (!msg->hdrLift)
         return NATS_OK;
 
@@ -501,7 +508,7 @@ natsMsgHeader_Set(natsMsg *msg, const char *key, const char *value)
     if ((s = _checkMsgAndKey(msg, key)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
-    if ((s = _liftHeaders(msg)) != NATS_OK)
+    if ((s = _liftHeaders(msg, true)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
     if (s == NATS_OK)
@@ -544,7 +551,7 @@ natsMsgHeader_Add(natsMsg *msg, const char *key, const char *value)
     if ((s = _checkMsgAndKey(msg, key)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
-    if ((s = _liftHeaders(msg)) != NATS_OK)
+    if ((s = _liftHeaders(msg, true)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
     if (s == NATS_OK)
@@ -601,10 +608,10 @@ natsMsgHeader_Get(natsMsg *msg, const char *key, const char **value)
 
     *value = NULL;
 
-    if ((s = _liftHeaders(msg)) != NATS_OK)
+    if ((s = _liftHeaders(msg, false)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
-    if (natsStrHash_Count(msg->headers) == 0)
+    if ((msg->headers == NULL) || natsStrHash_Count(msg->headers) == 0)
         return NATS_NOT_FOUND; // normal error, so don't update error stack
 
     s = _canonicalKey(key, _ckey, sizeof(_ckey), &ckey, &strDuped);
@@ -639,10 +646,10 @@ natsMsgHeader_Values(natsMsg *msg, const char *key, const char* **values, int *c
     *values = NULL;
     *count  = 0;
 
-    if ((s = _liftHeaders(msg)) != NATS_OK)
+    if ((s = _liftHeaders(msg, false)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
-    if (natsStrHash_Count(msg->headers) == 0)
+    if ((msg->headers == NULL) || natsStrHash_Count(msg->headers) == 0)
         return NATS_NOT_FOUND; // normal error, so don't update error stack
 
     s = _canonicalKey(key, _ckey, sizeof(_ckey), &ckey, &strDuped);
@@ -695,10 +702,10 @@ natsMsgHeader_Keys(natsMsg *msg, const char* **keys, int *count)
     *keys  = NULL;
     *count = 0;
 
-    if ((s = _liftHeaders(msg)) != NATS_OK)
+    if ((s = _liftHeaders(msg, false)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
-    if ((c = natsStrHash_Count(msg->headers)) == 0)
+    if ((msg->headers == NULL) || (c = natsStrHash_Count(msg->headers)) == 0)
         return NATS_NOT_FOUND; // normal error, so don't update error stack
 
     strs = NATS_CALLOC(c, sizeof(char*));
@@ -734,10 +741,10 @@ natsMsgHeader_Delete(natsMsg *msg, const char *key)
     if ((s = _checkMsgAndKey(msg, key)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
-    if ((s = _liftHeaders(msg)) != NATS_OK)
+    if ((s = _liftHeaders(msg, false)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
-    if (natsStrHash_Count(msg->headers) == 0)
+    if ((msg->headers == NULL) || natsStrHash_Count(msg->headers) == 0)
         return NATS_NOT_FOUND; // normal error, so don't update error stack
 
     s = _canonicalKey(key, _ckey, sizeof(_ckey), &ckey, &strDuped);

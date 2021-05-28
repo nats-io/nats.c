@@ -59,6 +59,10 @@ if(NATS_BUILD_LIB_SHARED)
   set_property(TARGET nats PROPERTY DEBUG_POSTFIX d)
   target_include_directories(nats PUBLIC
         $<INSTALL_INTERFACE:include>)
+  if(NATS_BUILD_LIB_SHARED_STATIC)
+    target_link_options(nats PRIVATE
+	-static)
+  endif(NATS_BUILD_LIB_SHARED_STATIC)
   install(TARGETS nats EXPORT cnats-targets DESTINATION ${NATS_LIBDIR})
   install(EXPORT cnats-targets
         NAMESPACE cnats::

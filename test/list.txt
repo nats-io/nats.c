@@ -180,6 +180,7 @@ SSLCiphers
 SSLMultithreads
 SSLConnectVerboseOption
 SSLSocketLeakEventLoop
+SSLReconnectWithAuthError
 ServersOption
 AuthServers
 AuthFailToReconnect

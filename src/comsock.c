@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2021 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -341,7 +341,6 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
     natsStatus  s         = NATS_OK;
     int         readBytes = 0;
     bool        needRead  = true;
-    bool        wouldBlock= false;
 
     while (needRead)
     {
@@ -362,23 +361,27 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
             if (ctx->ssl != NULL)
             {
                 int sslErr = SSL_get_error(ctx->ssl, readBytes);
+                int waitMode = WAIT_FOR_READ;
 
                 if (sslErr == SSL_ERROR_ZERO_RETURN)
                     return nats_setDefaultError(NATS_CONNECTION_CLOSED);
 
                 if ((sslErr == SSL_ERROR_WANT_READ)
-                        || (sslErr == SSL_ERROR_WANT_WRITE))
+                        // Check want_write error and if so set appropriate waitMode
+                        || ((sslErr == SSL_ERROR_WANT_WRITE) && (waitMode = WAIT_FOR_WRITE)))
                 {
+                    if ((s = natsSock_WaitReady(waitMode, ctx)) != NATS_OK)
+                        return NATS_UPDATE_ERR_STACK(s);
+
                     // SSL requires that we go back with the same buffer
                     // and size. We can't return until SSL_read returns
                     // success (bytes read) or a different error.
-                    wouldBlock = true;
+                    continue;
                 }
             }
 #endif
-            wouldBlock = (wouldBlock || (NATS_SOCK_GET_ERROR == NATS_SOCK_WOULD_BLOCK));
 
-            if (!wouldBlock)
+            if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
             {
 #if defined(NATS_HAS_TLS)
                 if (ctx->ssl != NULL)
@@ -423,7 +426,6 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
     natsStatus  s         = NATS_OK;
     int         bytes     = 0;
     bool        needWrite = true;
-    bool        wouldBlock= false;
 
     while (needWrite)
     {
@@ -448,23 +450,27 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
             if (ctx->ssl != NULL)
             {
                 int sslErr = SSL_get_error(ctx->ssl, bytes);
+                int waitMode = WAIT_FOR_READ;
 
                 if (sslErr == SSL_ERROR_ZERO_RETURN)
                     return nats_setDefaultError(NATS_CONNECTION_CLOSED);
 
                 if ((sslErr == SSL_ERROR_WANT_READ)
-                        || (sslErr == SSL_ERROR_WANT_WRITE))
+                        // Check want_write error and if so set appropriate waitMode
+                        || ((sslErr == SSL_ERROR_WANT_WRITE) && (waitMode = WAIT_FOR_WRITE)))
                 {
+                    if ((s = natsSock_WaitReady(waitMode, ctx)) != NATS_OK)
+                        return NATS_UPDATE_ERR_STACK(s);
+
                     // SSL requires that we go back with the same buffer
                     // and size. We can't return until SSL_write returns
-                    // success (bytes written) a different error.
-                    wouldBlock = true;
+                    // success (bytes written) or a different error.
+                    continue;
                 }
             }
 #endif
-            wouldBlock = (wouldBlock || (NATS_SOCK_GET_ERROR == NATS_SOCK_WOULD_BLOCK));
 
-            if (!wouldBlock)
+            if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
             {
 #if defined(NATS_HAS_TLS)
                 if (ctx->ssl != NULL)

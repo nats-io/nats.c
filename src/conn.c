@@ -1399,6 +1399,16 @@ _clearPendingRequestCalls(natsConnection *nc, natsStatus reason)
     natsStrHashIter_Done(&iter);
 }
 
+static void
+_clearSSL(natsConnection *nc)
+{
+    if (nc->sockCtx.ssl == NULL)
+        return;
+
+    SSL_free(nc->sockCtx.ssl);
+    nc->sockCtx.ssl = NULL;
+}
+
 // Try to reconnect using the option parameters.
 // This function assumes we are allowed to reconnect.
 static void
@@ -1562,6 +1572,9 @@ _doReconnect(void *arg)
             // may go back to sleep and release the lock
             nc->usePending = true;
             natsBuf_Reset(nc->bw);
+
+            // We need to cleanup some things if the connection was SSL.
+            _clearSSL(nc);
 
             nc->status = NATS_CONN_STATUS_RECONNECTING;
             continue;
@@ -1998,16 +2011,6 @@ _evStopPolling(natsConnection *nc)
     return s;
 }
 
-static void
-natsConn_clearSSL(natsConnection *nc)
-{
-    if (nc->sockCtx.ssl == NULL)
-        return;
-
-    SSL_free(nc->sockCtx.ssl);
-    nc->sockCtx.ssl = NULL;
-}
-
 // _processOpError handles errors from reading or parsing the protocol.
 // The lock should not be held entering this function.
 static bool
@@ -2055,8 +2058,7 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
             nc->sockCtx.fd = NATS_SOCK_INVALID;
 
             // We need to cleanup some things if the connection was SSL.
-            if (nc->sockCtx.ssl != NULL)
-                natsConn_clearSSL(nc);
+            _clearSSL(nc);
         }
 
         // Fail pending flush requests.
@@ -2154,8 +2156,7 @@ _readLoop(void  *arg)
     nc->sockCtx.fdActive = false;
 
     // We need to cleanup some things if the connection was SSL.
-    if (nc->sockCtx.ssl != NULL)
-        natsConn_clearSSL(nc);
+    _clearSSL(nc);
 
     natsParser_Destroy(nc->ps);
     nc->ps = NULL;
@@ -2435,8 +2436,7 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
             nc->sockCtx.fd = NATS_SOCK_INVALID;
 
             // We need to cleanup some things if the connection was SSL.
-            if (nc->sockCtx.ssl != NULL)
-                natsConn_clearSSL(nc);
+            _clearSSL(nc);
         }
         else
         {

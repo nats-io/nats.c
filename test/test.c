@@ -10772,7 +10772,7 @@ test_Request(void)
     testCond(s == NATS_OK);
 
     test("Test Request: ")
-    s = natsConnection_RequestString(&msg, nc, "foo", "help", 50);
+    s = natsConnection_RequestString(&msg, nc, "foo", "help", 500);
 
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.msgReceived)
@@ -10794,7 +10794,7 @@ test_Request(void)
     testCond(s == NATS_OK);
 
     test("Test RequestMsg: ");
-    s = natsConnection_RequestMsg(&msg, nc, req, 50);
+    s = natsConnection_RequestMsg(&msg, nc, req, 500);
 
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.msgReceived)
@@ -10845,7 +10845,7 @@ test_RequestNoBody(void)
     testCond(s == NATS_OK);
 
     test("Test Request with no body content: ")
-    s = natsConnection_RequestString(&msg, nc, "foo", NULL, 50);
+    s = natsConnection_RequestString(&msg, nc, "foo", NULL, 500);
 
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT)
@@ -11014,7 +11014,7 @@ test_OldRequest(void)
     testCond(s == NATS_OK);
 
     test("Test Old Request Style: ")
-    s = natsConnection_RequestString(&msg, nc, "foo", "help", 50);
+    s = natsConnection_RequestString(&msg, nc, "foo", "help", 500);
 
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT)
@@ -19486,6 +19486,62 @@ test_SSLSocketLeakWithEventLoop(void)
 #endif
 }
 
+static void
+test_SSLReconnectWithAuthError(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc     = NULL;
+    natsOptions         *opts   = NULL;
+    natsPid             pid1    = NATS_INVALID_PID;
+    natsPid             pid2    = NATS_INVALID_PID;
+    struct threadArg    args;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
+    IFOK(s, natsOptions_SetTimeout(opts, 250));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 1000));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &args));
+    IFOK(s, natsOptions_SetURL(opts, "tls://user:pwd@127.0.0.1:4443"));
+    if (opts == NULL)
+        FAIL("Unable to create reconnect options!");
+
+    pid1 = _startServer("nats://127.0.0.1:4443", "-p 4443 -cluster_name abc -cluster nats://127.0.0.1:6222 -tls -tlscert certs/server-cert.pem -tlskey certs/server-key.pem -tlscacert certs/ca.pem -user user -pass pwd", true);
+    CHECK_SERVER_STARTED(pid1);
+
+    pid2 = _startServer("nats://127.0.0.1:4444", "-p 4444 -cluster_name abc -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222 -tls -tlscert certs/server-cert.pem -tlskey certs/server-key.pem -tlscacert certs/ca.pem -user user -pass pwd", true);
+    CHECK_SERVER_STARTED(pid2);
+
+    test("Connect to server1: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Stop server1: ");
+    _stopServer(pid1);
+    testCond(true);
+
+    test("Check that client stops after auth errors: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.closed)
+        s = natsCondition_TimedWait(args.c, args.m, 5000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(pid2);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -21660,6 +21716,9 @@ test_StanSubTimeout(void)
             pb__subscription_request__free_unpacked(r, NULL);
 
         natsMsg_Destroy(resp);
+
+        if (valgrind)
+            nats_Sleep(900);
     }
 
     natsSubscription_Destroy(ncSub);
@@ -21873,6 +21932,7 @@ static testInfo allTests[] =
     {"SSLMultithreads",                 test_SSLMultithreads},
     {"SSLConnectVerboseOption",         test_SSLConnectVerboseOption},
     {"SSLSocketLeakEventLoop",          test_SSLSocketLeakWithEventLoop},
+    {"SSLReconnectWithAuthError",       test_SSLReconnectWithAuthError},
 
     // Clusters Tests
 

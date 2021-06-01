@@ -11,5 +11,6 @@ var group__msg_group =
     [ "natsMsgHeader_Values", "group__msg_group.html#gae1ce9c9d82d151a3ea9dc03da048f66f", null ],
     [ "natsMsgHeader_Keys", "group__msg_group.html#ga6ee8a007111ada293dd24ff0bab02491", null ],
     [ "natsMsgHeader_Delete", "group__msg_group.html#gac78ca02dc93d05cae837ced6386408f1", null ],
+    [ "natsMsg_IsNoResponders", "group__msg_group.html#ga43aa4a8e4b93725b4876ee2677e19c7b", null ],
     [ "natsMsg_Destroy", "group__msg_group.html#ga9e9590018284939f43f60964283f33ae", null ]
 ];

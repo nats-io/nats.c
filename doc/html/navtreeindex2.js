@@ -1,5 +1,9 @@
 var NAVTREEINDEX2 =
 {
+"nats_8h.html#af798865ac824e5959987de0fe8d07383":[3,0,2,2],
+"nats_8h_source.html":[3,0,2],
+"pages.html":[],
+"status_8h.html":[3,0,3],
 "status_8h.html#a36c934157b663b7b5fb5d6609c897c80":[3,0,3,1],
 "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a07fdbda44f43cef9866a75b25053c2ae":[3,0,3,1,32],
 "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a0aa3d1e18a2a217149fa8b1a306c9b08":[3,0,3,1,8],

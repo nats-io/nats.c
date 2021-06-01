@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.4.1</span>
+   &#160;<span id="projectnumber">2.5.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -168,9 +168,12 @@ Typedefs</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>This is the callback that one provides when creating an asynchronous subscription. The library will invoke this callback for each message arriving through the subscription's connection.</p>
+<dl class="section warning"><dt>Warning</dt><dd>If this callback is setup for a subject that is used as the reply subject to <a class="el" href="group__conn_pub_group.html#gaaaa3d75ffec2dcdc6bf905cdb1eee59e" title="Publishes data on a subject expecting replies on the given reply. ">natsConnection_PublishRequest</a> calls (and its variants), it is possible to get an empty message with a header "Status" with value "503" that is sent by the server when there were no responders on the request's subject. Use <a class="el" href="group__msg_group.html#ga43aa4a8e4b93725b4876ee2677e19c7b" title="Indicates if this message is a &quot;no responders&quot; message from the server. ">natsMsg_IsNoResponders</a> to know if that is the case.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__conn_sub_group.html#gaefab965b5645798d47f9244f2b3fe3fb" title="Creates an asynchronous subscription. ">natsConnection_Subscribe()</a> </dd>
 <dd>
-<a class="el" href="group__conn_sub_group.html#ga3c9fee2775130786ef62f1cbeb191a48" title="Creates an asynchronous queue subscriber. ">natsConnection_QueueSubscribe()</a> </dd></dl>
+<a class="el" href="group__conn_sub_group.html#ga3c9fee2775130786ef62f1cbeb191a48" title="Creates an asynchronous queue subscriber. ">natsConnection_QueueSubscribe()</a> </dd>
+<dd>
+<a class="el" href="group__msg_group.html#ga43aa4a8e4b93725b4876ee2677e19c7b" title="Indicates if this message is a &quot;no responders&quot; message from the server. ">natsMsg_IsNoResponders()</a> </dd></dl>
 
 </div>
 </div>

@@ -33,7 +33,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.4.1</span>
+   &#160;<span id="projectnumber">2.5.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -227,6 +227,8 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Return the next message available to a synchronous subscriber or block until one is available. A timeout (expressed in milliseconds) can be used to return when no message has been delivered. If the value is zero, then this call will not wait and return the next message that was pending in the client, and <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> otherwise.</p>
+<dl class="section note"><dt>Note</dt><dd>If you create a subscription for a subject used as the reply subject of a <a class="el" href="group__conn_pub_group.html#gaaaa3d75ffec2dcdc6bf905cdb1eee59e" title="Publishes data on a subject expecting replies on the given reply. ">natsConnection_PublishRequest</a> call (or any of its variant), and there are no responders for the request subject, NATS Servers v2.2.0+ will return an empty message with a header "Status" and value "503". The library v2.2.0 until v2.4.1 would return this message to the user, which was wrong.<br />
+ The library now returns no message and <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80aab97324e40ccfe1360080c651c330e62" title="No responders were running when the server received the request. ">NATS_NO_RESPONDERS</a> status.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nextMsg</td><td>the location where to store the pointer to the next available message. </td></tr>
@@ -760,7 +762,7 @@ Functions</h2></td></tr>
 <p>However, should the "flush" of the protocol fail, the library will ensure that no new message is added to the subscription (in the event the server did not receive the UNSUBSCRIBE protocol and still attempts to deliver messages), and will proceed with the draining of the pending messages. Users can check the status of the draining after it has completed by calling <a class="el" href="group__sub_group.html#ga9834bd02f67a25ac084d5ad71e146019" title="Returns the status of the drain after completion. ">natsSubscription_DrainCompletionStatus</a>.</p>
 <p>If no timeout is specified (that is, value is zero or negative), a timeout will be used for the "flush" of the protocol. Again, even in case of failure, the draining will proceed.</p>
 <p>If a timeout is specified, the complete process: "flush" of the protocol and draining of messages, must happen before the timeout elapses otherwise the subscription will be forcibly closed, and not all message callbacks may be invoked.</p>
-<p>Regardless of the presence of a timeout or not, should the subscription or connection be closed while draining occurs, the draining process will stop. The <a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a> call will not report an error. To know if an error occured, the user can call <a class="el" href="group__sub_group.html#ga9834bd02f67a25ac084d5ad71e146019" title="Returns the status of the drain after completion. ">natsSubscription_DrainCompletionStatus</a> after ensuring that the drain has completed.</p>
+<p>Regardless of the presence of a timeout or not, should the subscription or connection be closed while draining occurs, the draining process will stop. The <a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a> call will not report an error. To know if an error occurred, the user can call <a class="el" href="group__sub_group.html#ga9834bd02f67a25ac084d5ad71e146019" title="Returns the status of the drain after completion. ">natsSubscription_DrainCompletionStatus</a> after ensuring that the drain has completed.</p>
 <dl class="section warning"><dt>Warning</dt><dd>This function does not block waiting for the operation to complete. To synchronously wait, see <a class="el" href="group__sub_group.html#ga0408c9b6e4ad4078ac0267656ace222d" title="Blocks until the drain operation completes. ">natsSubscription_WaitForDrainCompletion</a></dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__sub_group.html#ga26c9736289d326fb7d6df7e2a0df72ab" title="Drains the subscription with a default timeout. ">natsSubscription_Drain</a> </dd>
 <dd>

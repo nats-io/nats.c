@@ -92,7 +92,7 @@
 #define NATS_INBOX_PRE_LEN  (7)
 
 #define NATS_REQ_ID_OFFSET  (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1)
-#define NATS_MAX_REQ_ID_LEN (19) // to display 2^63 number
+#define NATS_MAX_REQ_ID_LEN (19) // to display 2^63-1 number
 
 #define WAIT_FOR_READ       (0)
 #define WAIT_FOR_WRITE      (1)
@@ -130,6 +130,10 @@
 #define NATS_CONN_STATUS_DRAINING_SUBS  DRAINING_SUBS
 #define NATS_CONN_STATUS_DRAINING_PUBS  DRAINING_PUBS
 #endif
+
+#define IFOK(s, c)      if (s == NATS_OK) { s = (c); }
+
+extern int jsonMaxNumSize;
 
 extern int64_t gLockSpinCount;
 

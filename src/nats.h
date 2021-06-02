@@ -136,6 +136,561 @@ typedef struct __natsOptions        natsOptions;
  */
 typedef char                        natsInbox;
 
+
+/**
+ * The JetStream context. Use for JetStream assets management and communication.
+ *
+ * \warning A context MUST not be destroyed concurrently with #jsCtx API calls
+ * (for instance #js_Publish or #js_PublishAsync, etc...). However, it
+ * is safe to destroy the context while a #jsPubAckErrHandler callback is
+ * running or while inside #js_PublishAsyncComplete.
+ */
+typedef struct __jsCtx              jsCtx;
+
+/**
+ * JetStream publish options.
+ *
+ * These are options that you can provide to JetStream publish APIs.
+ *
+ * The common usage will be to initialize a structure on the stack by
+ * calling #jsPubOptions_Init. Note that strings are owned by
+ * the application and need to be valid for the duration of the API
+ * call this object is passed to.
+ *
+ * \note It is the user responsibility to free the strings if they
+ * have been allocated.
+ *
+ * @see jsPubOptions_Init
+ */
+typedef struct jsPubOptions
+{
+        int64_t         MaxWait;                ///< Amount of time (in milliseconds) to wait for a publish response, default will the context's Wait value.
+        const char      *MsgId;                 ///< Message ID used for de-duplication.
+        const char      *ExpectStream;          ///< Expected stream to respond from the publish call.
+        const char      *ExpectLastMsgId;       ///< Expected last message ID in the stream.
+        uint64_t        ExpectLastSeq;          ///< Expected last message sequence in the stream.
+        uint64_t        ExpectLastSubjectSeq;   ///< Expected last message sequence for the subject in the stream.
+
+} jsPubOptions;
+
+/**
+ * Determines how messages in a set are retained.
+ */
+typedef enum
+{
+        js_LimitsPolicy = 0,    ///< Specifies that messages are retained until any given limit is reached, which could be one of MaxMsgs, MaxBytes, or MaxAge. This is the default.
+        js_InterestPolicy,      ///< Specifies that when all known observables have acknowledged a message it can be removed.
+        js_WorkQueuePolicy,     ///< Specifies that when the first worker or subscriber acknowledges the message it can be removed.
+
+} jsRetentionPolicy;
+
+/**
+ * Determines how to proceed when limits of messages or bytes are reached.
+ */
+typedef enum
+{
+        js_DiscardOld = 0,  ///< Will remove older messages to return to the limits. This is the default.
+        js_DiscardNew,      ///< Will fail to store new messages.
+
+} jsDiscardPolicy;
+
+/**
+ * Determines how messages are stored for retention.
+ */
+typedef enum
+{
+        js_FileStorage = 0, ///< Specifies on disk storage. It's the default.
+        js_MemoryStorage,   ///< Specifies in memory only.
+
+} jsStorageType;
+
+/**
+ * Determines how the consumer should select the first message to deliver.
+ */
+typedef enum
+{
+        js_DeliverAll = 0,          ///< Starts from the very beginning of a stream. This is the default.
+        js_DeliverLast,             ///< Starts with the last sequence received.
+	js_DeliverNew,              ///< Starts with messages sent after the consumer is created.
+        js_DeliverByStartSequence,  ///< Starts from a given sequence.
+	js_DeliverByStartTime,      ///< Starts from a given UTC time (number of nanoseconds since epoch)
+
+} jsDeliverPolicy;
+
+/**
+ * Determines how the consumer should acknowledge delivered messages.
+ */
+typedef enum
+{
+        js_AckNone = 0, ///< Requires no acks for delivered messages.
+        js_AckAll,      ///< When acking a sequence number, this implicitly acks all sequences below this one as well.
+        js_AckExplicit, ///< Requires ack or nack for all messages.
+
+} jsAckPolicy;
+
+/**
+ * Determines how the consumer should replay messages it already has queued in the stream.
+ */
+typedef enum
+{
+        js_ReplayInstant = 0,   ///< Replays messages as fast as possible.
+        js_ReplayOriginal,      ///< Maintains the same timing as the messages were received.
+
+} jsReplayPolicy;
+
+
+/**
+ * Used to guide placement of streams in clustered JetStream.
+ *
+ * Initialize the object with #jsPlacement_Init.
+ *
+ * \note The strings are applications owned and will not be freed by the library.
+ *
+ * See #jsStreamConfig for information on how to configure a stream.
+ *
+ * @see jsPlacement_Init
+ */
+typedef struct jsPlacement
+{
+        const char      *Cluster;       //`json:"cluster"`
+        const char      **Tags;         //`json:"tags,omitempty"`
+        int             TagsLen;
+
+} jsPlacement;
+
+/**
+ * Allows you to qualify access to a stream source in another account.
+ *
+ * Initialize the object with #jsExternalStream_Init.
+ *
+ * \note The strings are applications owned and will not be freed by the library.
+ *
+ * See #jsStreamConfig for information on how to configure a stream.
+ */
+typedef struct jsExternalStream
+{
+        const char      *APIPrefix;     //`json:"api"`
+        const char      *DeliverPrefix; //`json:"deliver"`
+
+} jsExternalStream;
+
+/**
+ * Dictates how streams can source from other streams.
+ *
+ * Initialize the object with #jsStreamSource_Init.
+ *
+ * \note The strings are applications owned and will not be freed by the library.
+ *
+ * \note The `OptStartTime` needs to be expressed as the number of nanoseconds
+ * passed since 00:00:00 UTC Thursday, 1 January 1970.
+ *
+ * See #jsStreamConfig for information on how to configure a stream.
+ */
+typedef struct jsStreamSource
+{
+        const char              *Name;          //`json:"name"`
+        uint64_t                OptStartSeq;    //`json:"opt_start_seq,omitempty"`
+        int64_t                 OptStartTime;   //`json:"opt_start_time,omitempty"`
+        const char              *FilterSubject; //`json:"filter_subject,omitempty"`
+        jsExternalStream        *External;      //`json:"external,omitempty"`
+
+} jsStreamSource;
+
+/**
+ * Configuration of a JetStream stream.
+ *
+ * There are sensible defaults for most. If no subjects are
+ * given the name will be used as the only subject.
+ *
+ * In order to add/update a stream, a configuration needs to be set.
+ * The typical usage would be to initialize all required objects on the stack
+ * and configure them, then pass the pointer to the configuration to
+ * #js_AddStream or #js_UpdateStream.
+ *
+ * \note The strings are applications owned and will not be freed by the library.
+ *
+ * @see jsStreamConfig_Init
+ *
+ * \code{.unparsed}
+ * jsStreamConfig   sc;
+ * jsPlacement      p;
+ * jsStreamSource   m;
+ * jsExternalStream esm;
+ * jsStreamSource   s1;
+ * jsStreamSource   s2;
+ * jsExternalStream esmS2;
+ * const char       *subjects[]     = {"foo", "bar"};
+ * const char       *tags[]         = {"tag1", "tag2"};
+ * jsStreamSource   *sources[]      = {&s1, &s2};
+ *
+ * jsStreamConfig_Init(&sc);
+ *
+ * jsPlacement_Init(&p);
+ * p.Cluster = "MyCluster";
+ * p.Tags = tags;
+ * p.TagsLen = 2;
+ *
+ * jsStreamSource_Init(&m);
+ * m.Name = "AStream";
+ * m.OptStartSeq = 100;
+ * m.FilterSubject = "foo";
+ * jsExternalStream_Init(&esm);
+ * esm.APIPrefix = "mirror.prefix.";
+ * esm.DeliverPrefix = "deliver.prefix.";
+ * m.External = &esm;
+ *
+ * jsStreamSource_Init(&s1);
+ * s1.Name = "StreamOne";
+ * s1.OptStartSeq = 10;
+ * s1.FilterSubject = "stream.one";
+ *
+ * jsStreamSource_Init(&s2);
+ * s2.Name = "StreamTwo";
+ * s2.FilterSubject = "stream.two";
+ * jsExternalStream_Init(&esmS2);
+ * esmS2.APIPrefix = "mirror.prefix.";
+ * esmS2.DeliverPrefix = "deliver.prefix.";
+ * s2.External = &esmS2;
+ *
+ * sc.Name = "MyStream";
+ * sc.Subjects = subjects;
+ * sc.SubjectsLen = 2;
+ * sc.Retention = js_InterestPolicy;
+ * sc.Replicas = 3;
+ * sc.Placement = &p;
+ * sc.Mirror = &m;
+ * sc.Sources = sources;
+ * sc.SourcesLen = 2;
+ *
+ * s = js_AddStream(&si, js, &sc, NULL, &jerr);
+ * \endcode
+ */
+typedef struct jsStreamConfig {
+        const char              *Name;              //`json:"name"`
+        const char              **Subjects;         //`json:"subjects,omitempty"`
+        int                     SubjectsLen;
+        jsRetentionPolicy       Retention;          //`json:"retention"`
+        int                     MaxConsumers;       //`json:"max_consumers"`
+        int64_t                 MaxMsgs;            //`json:"max_msgs"`
+        int64_t                 MaxBytes;           //`json:"max_bytes"`
+        int64_t                 MaxAge;             //`json:"max_age"`
+        int64_t                 MaxMsgsPerSubject;  //`json:"max_msgs_per_subject"`
+        int32_t                 MaxMsgSize;         //`json:"max_msg_size,omitempty"`
+        jsDiscardPolicy         Discard;            //`json:"discard"`
+        jsStorageType           Storage;            //`json:"storage"`
+        int                     Replicas;           //`json:"num_replicas"`
+        bool                    NoAck;              //`json:"no_ack,omitempty"`
+        const char              *Template;          //`json:"template_owner,omitempty"`
+        int64_t                 Duplicates;         //`json:"duplicate_window,omitempty"`
+        jsPlacement             *Placement;         //`json:"placement,omitempty"`
+        jsStreamSource          *Mirror;            //`json:"mirror,omitempty"`
+        jsStreamSource          **Sources;          //`json:"sources,omitempty"`
+        int                     SourcesLen;
+
+} jsStreamConfig;
+
+/**
+ * Information about messages that have been lost
+ */
+typedef struct jsLostStreamData
+{
+        uint64_t                *Msgs;          //`json:"msgs"`
+        int                     MsgsLen;
+        uint64_t                Bytes;          //`json:"bytes"`
+
+} jsLostStreamData;
+
+/**
+ * Information about the given stream
+ *
+ * \note `FirstTime` and `LastTime` are message timestamps expressed as the number
+ * of nanoseconds passed since 00:00:00 UTC Thursday, 1 January 1970.
+ */
+typedef struct jsStreamState
+{
+        uint64_t                Msgs;           //`json:"messages"`
+        uint64_t                Bytes;          //`json:"bytes"`
+        uint64_t                FirstSeq;       //`json:"first_seq"`
+        int64_t                 FirstTime;      //`json:"first_ts"`
+        uint64_t                LastSeq;        //`json:"last_seq"`
+        int64_t                 LastTime;       //`json:"last_ts"`
+        uint64_t                NumDeleted;     //`json:"num_deleted,omitempty"`
+        uint64_t                *Deleted;       //`json:"deleted,omitempty"`
+        int                     DeletedLen;
+        jsLostStreamData        *Lost;          //`json:"lost,omitempty"`
+        int                     Consumers;      //`json:"consumer_count"`
+
+} jsStreamState;
+
+/**
+ * Information about all the peers in the cluster that
+ * are supporting the stream or consumer.
+ */
+typedef struct jsPeerInfo
+{
+        char        *Name;      //`json:"name"`
+        bool        Current;    //`json:"current"`
+        bool        Offline;    //`json:"offline,omitempty"`
+        int64_t     Active;     //`json:"active"`
+        uint64_t    Lag;        //`json:"lag,omitempty"`
+
+} jsPeerInfo;
+
+/**
+ * Information about the underlying set of servers
+ * that make up the stream or consumer.
+ */
+typedef struct jsClusterInfo
+{
+        char            *Name;      //`json:"name,omitempty"`
+        char            *Leader;    //`json:"leader,omitempty"`
+        jsPeerInfo      **Replicas; //`json:"replicas,omitempty"`
+        int             ReplicasLen;
+
+} jsClusterInfo;
+
+/**
+ * Information about an upstream stream source.
+ */
+typedef struct jsStreamSourceInfo
+{
+        char                    *Name;          //`json:"name"`
+        jsExternalStream        *External;      //`json:"external,omitempty"`
+        uint64_t                Lag;            //`json:"lag"`
+        int64_t                 Active;         //`json:"active"`
+
+} jsStreamSourceInfo;
+
+/**
+ * Configuration and current state for this stream.
+ *
+ * \note `Created` is the timestamp when the stream was created, expressed as
+ * the number of nanoseconds passed since 00:00:00 UTC Thursday, 1 January 1970.
+ */
+typedef struct jsStreamInfo
+{
+        jsStreamConfig          *Config;    //`json:"config"`
+        int64_t                 Created;    //`json:"created"`
+        jsStreamState           State;      //`json:"state"`
+        jsClusterInfo           *Cluster;   //`json:"cluster,omitempty"`
+        jsStreamSourceInfo      *Mirror;    //`json:"mirror,omitempty"`
+        jsStreamSourceInfo      **Sources;  //`json:"sources,omitempty"`
+        int                     SourcesLen;
+
+} jsStreamInfo;
+
+/**
+ * Configuration of a JetStream consumer.
+ *
+ * In order to add a consumer, a configuration needs to be set.
+ * The typical usage would be to initialize all required objects on the stack
+ * and configure them, then pass the pointer to the configuration to
+ * #js_AddConsumer.
+ *
+ * \note `OptStartTime` needs to be expressed as the number of nanoseconds
+ * passed since 00:00:00 UTC Thursday, 1 January 1970.
+ *
+ * \note The strings are applications owned and will not be freed by the library.
+ *
+ * \note `SampleFrequency` is a sampling value, represented as a string such as "50"
+ * for 50%, that causes the server to produce advisories for consumer ack metrics.
+ * If the percent sign is in the string, and since `%` is an escape character, it
+ * needs to be doubled, such as `cfg.SampleFrequency = "50%%";`.
+ *
+ * @see jsConsumerConfig_Init
+ *
+ * \code{.unparsed}
+ * jsConsumerInfo   *ci = NULL;
+ * jsConsumerConfig cc;
+ *
+ * jsConsumerConfig_Init(&cc);
+ * cc.Durable = "MY_DURABLE";
+ * cc.DeliverSubject = "foo";
+ * cc.DeliverPolicy = js_DeliverNew;
+ *
+ * s = js_AddConsumer(&ci, js, &cc, NULL, &jerr);
+ * \endcode
+ */
+typedef struct jsConsumerConfig
+{
+        const char              *Durable;               //`json:"durable_name,omitempty"`
+        const char              *DeliverSubject;        //`json:"deliver_subject,omitempty"`
+        jsDeliverPolicy         DeliverPolicy;          //`json:"deliver_policy"`
+        uint64_t                OptStartSeq;            //`json:"opt_start_seq,omitempty"`
+        int64_t                 OptStartTime;           //`json:"opt_start_time,omitempty"`
+        jsAckPolicy             AckPolicy;              //`json:"ack_policy"`
+        int64_t                 AckWait;                //`json:"ack_wait,omitempty"`
+        int                     MaxDeliver;             //`json:"max_deliver,omitempty"`
+        const char              *FilterSubject;         //`json:"filter_subject,omitempty"`
+        jsReplayPolicy          ReplayPolicy;           //`json:"replay_policy"`
+        uint64_t                RateLimit;              //`json:"rate_limit_bps,omitempty"` // Bits per sec
+        const char              *SampleFrequency;       //`json:"sample_freq,omitempty"`
+        int                     MaxWaiting;             //`json:"max_waiting,omitempty"`
+        int                     MaxAckPending;          //`json:"max_ack_pending,omitempty"`
+        bool                    FlowControl;            //`json:"flow_control,omitempty"`
+        int64_t                 Heartbeat;              //`json:"idle_heartbeat,omitempty"`
+
+} jsConsumerConfig;
+
+/**
+ * Includes the consumer and stream sequence info from a JetStream consumer.
+ */
+typedef struct jsSequencePair
+{
+        uint64_t        Consumer;                       //`json:"consumer_seq"`
+        uint64_t        Stream;                         //`json:"stream_seq"`
+
+} jsSequencePair;
+
+/**
+ * Configuration and current state for this consumer.
+ *
+ * \note `Created` is the timestamp when the consumer was created, expressed as the number
+ * of nanoseconds passed since 00:00:00 UTC Thursday, 1 January 1970.
+ */
+typedef struct jsConsumerInfo
+{
+        char                    *Stream;                //`json:"stream_name"`
+        char                    *Name;                  //`json:"name"`
+        int64_t                 Created;                //`json:"created"`
+        jsConsumerConfig        *Config;                //`json:"config"`
+        jsSequencePair          Delivered;              //`json:"delivered"`
+        jsSequencePair          AckFloor;               //`json:"ack_floor"`
+        int                     NumAckPending;          //`json:"num_ack_pending"`
+        int                     NumRedelivered;         //`json:"num_redelivered"`
+        int                     NumWaiting;             //`json:"num_waiting"`
+        uint64_t                NumPending;             //`json:"num_pending"`
+        jsClusterInfo           *Cluster;               //`json:"cluster,omitempty"`
+
+} jsConsumerInfo;
+
+/**
+ * Reports on API calls to JetStream for this account.
+ */
+typedef struct jsAPIStats
+{
+        uint64_t Total;  //`json:"total"`
+        uint64_t Errors; //`json:"errors"`
+
+} jsAPIStats;
+
+/**
+ * Includes the JetStream limits of the current account.
+ */
+typedef struct  jsAccountLimits
+{
+        int64_t MaxMemory;      //`json:"max_memory"`
+        int64_t MaxStore;       //`json:"max_storage"`
+        int     MaxStreams;     //`json:"max_streams"`
+        int     MaxConsumers;   //`json:"max_consumers"`
+
+} jsAccountLimits;
+
+/**
+ * Information about the JetStream usage from the current account.
+ */
+typedef struct jsAccountInfo
+{
+        uint64_t                Memory;         //`json:"memory"`
+        uint64_t                Store;          //`json:"storage"`
+        int                     Streams;        //`json:"streams"`
+        int                     Consumers;      //`json:"consumers"`
+        char                    *Domain;        //`json:"domain,omitempty"`
+        jsAPIStats              API;            //`json:"api"`
+        jsAccountLimits         Limits;         //`json:"limits"`
+
+} jsAccountInfo;
+
+/**
+ * Ack received after successfully publishing a message.
+ */
+typedef struct jsPubAck
+{
+        char            *Stream;        //`json:"stream"`
+        uint64_t        Sequence;       //`json:"seq"`
+        bool            Duplicate;      //`json:"duplicate,omitempty"`
+
+} jsPubAck;
+
+/**
+ * Publish acknowledgment failure that will be passed to the optional
+ * #jsPubAckErrHandler callback.
+ */
+typedef struct jsPubAckErr
+{
+        natsMsg         *Msg;
+        natsStatus      Err;
+        jsErrCode       ErrCode;
+        const char      *ErrText;
+
+} jsPubAckErr;
+
+#ifndef BUILD_IN_DOXYGEN
+// Forward declaration
+typedef void (*jsPubAckErrHandler)(jsCtx *js, jsPubAckErr *pae, void *closure);
+#endif
+
+/**
+ * JetStream context options.
+ *
+ * Initialize the object with #jsOptions_Init.
+ */
+typedef struct jsOptions
+{
+        const char              *Prefix;                        ///< JetStream prefix, default is "$JS.API"
+        const char              *Domain;                        ///< Domain changes the domain part of JetSteam API prefix.
+        int64_t                 Wait;                           ///< Amount of time (in milliseconds) to wait for various JetStream API requests, default is 5000 ms (5 seconds).
+
+        /**
+         * Publish Async options
+         */
+        struct jsOptionsPublishAsync
+        {
+                int                     MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
+                jsPubAckErrHandler      ErrHandler;             ///< Callback invoked when error encountered publishing a given message.
+                void                    *ErrHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckErrHandler callback.
+                int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.
+
+        } PublishAsync;
+
+        /**
+         * Advanced stream options
+         *
+         * * `Purge` for advanced purge options.
+         * * `Info` for advanced information retrieval options.
+         */
+        struct jsOptionsStream
+        {
+                /**
+                 * Advanced stream purge options
+                 *
+                 * * `Subject` will filter the purge request to only messages that match the subject, which can have wildcards.<br>
+                 * * `Sequence` will purge up to but not including this sequence and can be combined with subject filtering.<br>
+                 * * `Keep` will specify how many messages to keep and can be combined with subject filtering.<br>
+                 *
+                 * \note `Sequence` and `Keep` are mutually exclusive, so both can not be set at the same time.
+                 */
+                struct jsOptionsStreamPurge
+                {
+                        const char      *Subject;       ///< This is the subject to match against messages for the purge command.
+                        uint64_t        Sequence;       ///< Purge up to but not including sequence.
+                        uint64_t        Keep;           ///< Number of messages to keep.
+
+                } Purge;                                ///< Optional stream purge options.
+
+                /**
+                 * Advance stream information retrieval options
+                 */
+                struct jsOptionsStreamInfo
+                {
+                        bool            DeletedDetails; ///< Get the list of deleted message sequences.
+
+                } Info;                                 ///< Optional stream information retrieval options.
+
+        } Stream;                                       ///< Optional stream options.
+
+} jsOptions;
+
 #if defined(NATS_HAS_STREAMING)
 /** \brief A connection to a `NATS Streaming Server`.
  *
@@ -381,6 +936,43 @@ typedef void (*natsOnCompleteCB)(void *closure);
  */
 typedef int64_t (*natsCustomReconnectDelayHandler)(natsConnection *nc, int attempts, void *closure);
 
+#ifdef BUILD_IN_DOXYGEN
+/** \brief Callback used to process asynchronous publish errors from JetStream.
+ *
+ * Callback used to process asynchronous publish errors from JetStream #js_PublishAsync
+ * and #js_PublishMsgAsync. The provided #jsPubAckErr gives the user
+ * access to the encountered error along with the original message sent to the server
+ * for possible restransmitting.
+ *
+ * \note If the message is resent, the library will not destroy the original
+ * message and once again take ownership of it. To resend the message, do the
+ * following so that the library knows no to destroy the message (since the
+ * call will clear the `Msg` field from the #jsPubAckErr object.
+ *
+ * \code{.unparsed}
+ * void myPAECallback(jsCtx *js, jsPubAckErr *pae, void* closure)
+ * {
+ *      ...
+ *      // Resend the message
+ *      js_PublishMsgAsync(js, &(pae->Msg), NULL);
+ * }
+ * \endcode
+ *
+ * \warning The #jsPubAckErr object and its content will be invalid as
+ * soon as the callback returns.
+ *
+ * \warning Unlike a NATS message callback, the user does not have to destroy
+ * the original NATS message (present in the #jsPubAckErr object), the
+ * library will do it.
+ *
+ * @param js the pointer to the #jsCtx object.
+ * @param pae the pointer to the #jsPubAckErr object.
+ * @param closure an optional pointer to a user defined object that was specified when
+ * registering the callback.
+ */
+typedef void (*jsPubAckErrHandler)(jsCtx *js, jsPubAckErr *pae, void *closure);
+#endif
+
 #if defined(NATS_HAS_STREAMING)
 /** \brief Callback used to notify of an asynchronous publish result.
  *
@@ -448,7 +1040,7 @@ NATS_EXTERN natsStatus
 nats_Open(int64_t lockSpinCount);
 
 
-/** \brief Returns the Library's version
+/** \brief Returns the Library's version.
  *
  * Returns the version of the library your application is linked with.
  */
@@ -4036,6 +4628,436 @@ stanSubscription_Destroy(stanSubscription *sub);
 
 /** @} */ // end of stanSubGroup
 #endif
+
+/** \defgroup jsGroup JetStream
+ *
+ *  JetStream.
+ *  @{
+ */
+
+/** \brief Initializes a streaming context options structure.
+ *
+ * Use this before setting specific stream context options and passing it
+ * to JetStream APIs.
+ *
+ * @param opts the pointer to the #jsOptions to initialize.
+ */
+NATS_EXTERN natsStatus
+jsOptions_Init(jsOptions *opts);
+
+/** \brief Returns a new JetStream context.
+ *
+ * A JetStream context is used for messaging and assets management.
+ *
+ * Since the underlying NATS connection is used for communication, the NATS connection
+ * should stay valid while using the JetStream context. That is, do not close/destroy
+ * the NATS connection before destroying the JetStream context.
+ *
+ * \note When done, the context should be destroyed to release memory.
+ *
+ * @param js the location where to store the pointer to the newly created #jsCtx object.
+ * @param nc the pointer to the #natsConnection object from which to get the JetStream context.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+natsConnection_JetStream(jsCtx **js, natsConnection *nc, jsOptions *opts);
+
+/** \brief Destroys the JetStream context.
+ *
+ * Releases memory used by the context object.
+ *
+ * @param js the pointer to the #jsCtx object to destroy.
+ */
+NATS_EXTERN void
+jsCtx_Destroy(jsCtx *js);
+
+/** \defgroup jsAssetsGroup JetStream Assets Management
+ *
+ *  JetStream Assets Management
+ *  @{
+ */
+
+/** \brief Initializes a streaming configuration structure.
+ *
+ * Use this before setting specific stream configuration options and passing this
+ * configuration to some of the stream management APIs.
+ *
+ * @param cfg the pointer to the #jsStreamConfig to initialize.
+ */
+NATS_EXTERN natsStatus
+jsStreamConfig_Init(jsStreamConfig *cfg);
+
+/** \brief Initializes a placement configuration structure.
+ *
+ * Use this before setting specific stream placement options.
+ *
+ * @param placement the pointer to the #jsPlacement to initialize.
+ */
+NATS_EXTERN natsStatus
+jsPlacement_Init(jsPlacement *placement);
+
+/** \brief Initializes a stream source configuration structure.
+ *
+ * Use this before setting specific stream source options.
+ *
+ * @param source the pointer to the #jsStreamSource to initialize.
+ */
+NATS_EXTERN natsStatus
+jsStreamSource_Init(jsStreamSource *source);
+
+/** \brief Initializes an external stream configuration structure.
+ *
+ * Use this before setting specific external stream options.
+ *
+ * @param external the pointer to the #jsExternalStream to initialize.
+ */
+NATS_EXTERN natsStatus
+jsExternalStream_Init(jsExternalStream *external);
+
+/** \brief Creates a stream.
+ *
+ * Creates a stream based on the provided configuration (that cannot be `NULL`).
+ * The name is mandatory and cannot contain <c>.</c> characters.
+ *
+ * \note If you do not need a #jsStreamInfo to be returned, you can pass `NULL`,
+ * otherwise, on success you are responsible for freeing this object.
+ *
+ * @see jsStreamConfig_Init
+ * @see jsStreamInfo_Destroy
+ *
+ * @param si the location where to store the pointer to the new #jsStreamInfo object in
+ * response to the creation request, or `NULL` if the stream information is not needed.
+ * @param js the pointer to the #jsCtx context.
+ * @param cfg the pointer to the #jsStreamConfig.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_AddStream(jsStreamInfo **si, jsCtx *js, jsStreamConfig *cfg, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Updates a stream.
+ *
+ * Updates a stream based on the provided configuration (that cannot be `NULL`).
+ * The name is mandatory and cannot contain <c>.</c> characters.
+ *
+ * \note If you do not need a #jsStreamInfo to be returned, you can pass `NULL`,
+ * otherwise, on success you are responsible for freeing this object.
+ *
+ * @see jsStreamConfig_Init
+ * @see jsStreamInfo_Destroy
+ *
+ * @param si the location where to store the pointer to the new #jsStreamInfo object in
+ * response to the creation request, or `NULL` if the stream information is not needed.
+ * @param js the pointer to the #jsCtx context.
+ * @param cfg the pointer to the #jsStreamConfig.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_UpdateStream(jsStreamInfo **si, jsCtx *js, jsStreamConfig *cfg, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Purges a stream.
+ *
+ * Purges the stream named <c>stream</c>.
+ *
+ * For more advanced purge options, you can specify them through #jsOptions.
+ *
+ * \code{.unparsed}
+ * jsOptions        o;
+ *
+ * jsOptions_Init(&o);
+ * o.Stream.Purge.Subject  = "foo";
+ * o.Stream.Purge.Sequence = 4;
+ *
+ * js_PurgeStream(js, "MY_STREAM", &o, &jerr);
+ * \endcode
+ *
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream to purge.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_PurgeStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Deletes a stream.
+ *
+ * Deletes the stream named <c>stream</c>.
+ *
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream to delete.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_DeleteStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Retreives information from a stream.
+ *
+ * Returns information about the stream named <c>stream</c>.
+ *
+ * \note You need to free the returned object.
+ *
+ * To get some detailed information about deleted messages, set this option:
+ *
+ * \code{.unparsed}
+ * jsOptions                o;
+ *
+ * jsOptions_Init(&o);
+ * o.Stream.Info.DeletedDetails = true;
+ * js_GetStreamInfo(&si, js, "MY_STREAM", &o, &jerr);
+ * \endcode
+ *
+ * @see jsStreamInfo_Destroy
+ *
+ * @param si the location where to store the pointer to the new #jsStreamInfo object in
+ * response to the creation request.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream which information is retrieved.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_GetStreamInfo(jsStreamInfo **si, jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the stream information object.
+ *
+ * Releases memory allocated for this stream information object.
+ *
+ * @param si the pointer to the #jsStreamInfo object.
+ */
+NATS_EXTERN void
+jsStreamInfo_Destroy(jsStreamInfo *si);
+
+/** \brief Initializes a consumer configuration structure.
+ *
+ * Use this before adding a consumer.
+ *
+ * @see #jsConsumerConfig
+ *
+ * @param cc the pointer to the #jsConsumerConfig to initialize.
+ */
+NATS_EXTERN natsStatus
+jsConsumerConfig_Init(jsConsumerConfig *cc);
+
+/** \brief Adds a JetStream consumer.
+ *
+ * Adds a consumer based on the provided configuration (that cannot be `NULL`).
+ *
+ * \note If you do not need a #jsConsumerInfo to be returned, you can pass `NULL`,
+ * otherwise, on success you are responsible for freeing this object.
+ *
+ * @see jsConsumerConfig_Init
+ * @see jsConsumerInfo_Destroy
+ *
+ * @param ci the location where to store the pointer to the new #jsConsumerInfo object in
+ * response to the creation request, or `NULL` if the consumer information is not needed.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param cfg the pointer to the #jsConsumerConfig.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_AddConsumer(jsConsumerInfo **ci, jsCtx *js,
+                   const char *stream, jsConsumerConfig *cfg,
+                   jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Retrieves information about a consumer.
+ *
+ * \note The returned object should be destroyed using #jsConsumerInfo_Destroy in order
+ * to free allocated memory.
+ *
+ * @param ci the location where to store the pointer to the new #jsConsumerInfo object.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param consumer the name of the consumer.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_GetConsumerInfo(jsConsumerInfo **ci, jsCtx *js,
+                       const char *stream, const char *consumer,
+                       jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Deletes a consumer.
+ *
+ * Deletes the consumer named <c>consumer</c> from stream named <c>stream</c>.
+ *
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param consumer the name of the consumer.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
+                      jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the consumer information object.
+ *
+ * Releases memory allocated for this consumer information object.
+ *
+ * @param ci the pointer to the #jsConsumerInfo object.
+ */
+NATS_EXTERN void
+jsConsumerInfo_Destroy(jsConsumerInfo *ci);
+
+/** \brief Retrieves information about the JetStream usage from an account.
+ *
+ * Retrieves information about the JetStream usage from an account.
+ *
+ * \note The returned object should be destroyed using #jsAccountInfo_Destroy in order
+ * to free allocated memory.
+ *
+ * @param js the pointer to the #jsCtx context.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param ai the location where to store the pointer to the new #jsAccountInfo object in
+ * response to the account information request.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_GetAccountInfo(jsAccountInfo **ai, jsCtx *js, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the account information object.
+ *
+ * Releases memory allocated for this account information object.
+ *
+ * @param ai the pointer to the #jsAccountInfo object.
+ */
+NATS_EXTERN void
+jsAccountInfo_Destroy(jsAccountInfo *ai);
+
+/** @} */ // end of jsAssetsGroup
+
+/** \defgroup jsPubGroup Publishing
+ *
+ *  Publishing functions
+ *  @{
+ */
+
+/** \brief Initializes a publish options structure.
+ *
+ * Use this before setting specific publish options and passing this
+ * configuration to the JetStream publish APIs.
+ *
+ * @param opts the pointer to the #jsPubOptions to initialize.
+ */
+NATS_EXTERN natsStatus
+jsPubOptions_Init(jsPubOptions *opts);
+
+/** \brief Publishes data on a subject to JetStream.
+ *
+ * Publishes the data to the given subject to JetStream.
+ *
+ * See #js_PublishMsg for details.
+ *
+ * @param pubAck the location where to store the pub acknowledgment, or `NULL` if not needed.
+ * @param js the pointer to the #jsCtx object.
+ * @param subj the subject the data is sent to.
+ * @param data the data to be sent, can be `NULL`.
+ * @param dataLen the length of the data to be sent.
+ * @param opts the publish options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_Publish(jsPubAck **pubAck, jsCtx *js, const char *subj, const void *data, int dataLen,
+           jsPubOptions *opts, jsErrCode *errCode);
+
+/** \brief Publishes a message to JetStream.
+ *
+ * Publishes the given message to JetStream.
+ *
+ * \note If you are not interested in inspecting the publish acknowledgment, you can
+ * pass `NULL`, but keep in mind that the publish acknowledgment is still sent by
+ * the server.
+ * \note The returned #jsPubAck object needs to be destroyed with #jsPubAck_Destroy
+ * when no longer needed.
+ *
+ * @see jsPubAck_Destroy
+ *
+ * @param pubAck the location where to store the pub acknowledgment, or `NULL` if not needed.
+ * @param js the pointer to the #jsCtx object.
+ * @param msg the pointer to the #natsMsg object to send.
+ * @param opts the publish options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_PublishMsg(jsPubAck **pubAck, jsCtx *js, natsMsg *msg,
+              jsPubOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the publish acknowledgment object.
+ *
+ * Releases memory allocated for this publish acknowledgment object.
+ *
+ * @param pubAck the #jsPubAck object to destroy.
+ */
+NATS_EXTERN void
+jsPubAck_Destroy(jsPubAck *pubAck);
+
+/** \brief Publishes data to JetStream but does not wait for a #jsPubAck.
+ *
+ * See #js_PublishMsgAsync for details.
+ *
+ * @param js the pointer to the #jsCtx object.
+ * @param subj the subject the data is sent to.
+ * @param data the data to be sent, can be `NULL`.
+ * @param dataLen the length of the data to be sent.
+ * @param opts the publish options, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+js_PublishAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
+                jsPubOptions *opts);
+
+/** \brief Publishes a message to JetStream but does not wait for a #jsPubAck.
+ *
+ * Publishes a message asynchronously to JetStream. User can call #js_PublishAsyncComplete
+ * to be notified when all publish acknowledgments for the pending publish calls
+ * have been received.
+ *
+ * \warning The message should not be destroyed by the caller. The library takes
+ * ownership and will either destroy it or pass it to the optional error callback.
+ *
+ * @see js_PublishAsyncComplete
+ * @see jsPubAckErrHandler
+ *
+ * @param js the pointer to the #jsCtx object.
+ * @param msg the memory location where the pointer to the #natsMsg object to send is located.
+ * If the library takes ownership of the message, this location will be cleared so a following
+ * call to #natsMsg_Destroy would have no effect.
+ * @param opts the publish options, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts);
+
+/** \brief Wait for all outstanding messages to be acknowledged.
+ *
+ * This call will block until the library has received acknowledgment for
+ * all outstanding published messages.
+ *
+ * To limit the wait, user can pass a #jsPubOptions with a `MaxWait` set to the
+ * maximum number of milliseconds that the call should block.
+ *
+ * @param js the pointer to the #jsCtx object.
+ * @param opts the publish options, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+js_PublishAsyncComplete(jsCtx *js, jsPubOptions *opts);
+
+/** @} */ // end of jsPubGroup
+
+/** @} */ // end of jsGroup
 
 /** @} */ // end of funcGroup
 

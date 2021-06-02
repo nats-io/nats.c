@@ -25,6 +25,7 @@ natsSock_ShuffleIPs
 natsSock_IPOrder
 natsSock_ReadLine
 natsJSON
+natsEncodeTimeUTC
 natsErrWithLongText
 natsErrStackMoreThanMaxFrames
 natsMsg
@@ -201,6 +202,16 @@ ServerPoolUpdatedOnClusterUpdate
 ReconnectJitter
 CustomReconnectDelay
 LameDuckMode
+JetStreamUnmarshalAccInfo
+JetStreamUnmarshalStreamState
+JetStreamUnmarshalStreamCfg
+JetStreamMarshalStreamCfg
+JetStreamContext
+JetStreamDomain
+JetStreamMgtStreams
+JetStreamMgtConsumers
+JetStreamPublish
+JetStreamPublishAsync
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

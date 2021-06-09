@@ -4292,9 +4292,7 @@ test_natsMsgHeaderAPIs(void)
 
     test("Get value with different case: ");
     s = natsMsgHeader_Get(msg, "my-Key", &val);
-    testCond((s == NATS_OK) &&
-                (val != NULL) &&
-                (strcmp(val, "value1") == 0));
+    testCond((s == NATS_NOT_FOUND) && (val == NULL));
     val = NULL;
 
     test("Key not found: ");
@@ -4307,7 +4305,7 @@ test_natsMsgHeaderAPIs(void)
     testCond(s == NATS_OK);
 
     test("Get value: ");
-    s = natsMsgHeader_Get(msg, "My-KEy", &val);
+    s = natsMsgHeader_Get(msg, "my-key", &val);
     testCond((s == NATS_OK) &&
                 (val != NULL) &&
                 (strcmp(val, "value2") == 0));
@@ -4409,11 +4407,11 @@ test_natsMsgHeaderAPIs(void)
 
         for (i=0; i<count; i++)
         {
-            if (strcmp(keys[i], "My-Key") == 0)
+            if (strcmp(keys[i], "my-key") == 0)
                 ok1 = true;
-            else if (strcmp(keys[i], "Two-Fields") == 0)
+            else if (strcmp(keys[i], "two-fields") == 0)
                 ok2 = true;
-            else if (strcmp(keys[i], "My-Other-Key") == 0)
+            else if (strcmp(keys[i], "my-other-key") == 0)
                 ok3 = true;
         }
         if (!ok1 || !ok2 || !ok3)

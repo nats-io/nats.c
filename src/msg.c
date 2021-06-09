@@ -173,63 +173,6 @@ natsHeaderValue_create(natsHeaderValue **retV, const char *value, bool makeCopy)
 }
 
 static natsStatus
-_canonicalKey(const char *key, char *keyStack, int keyStackLen, char **cKey, bool *strDuped)
-{
-    natsStatus  s       = NATS_OK;
-    int         i       = 0;
-    int         oi      = 0;
-    int         lenKey  = (int) strlen(key);
-    char        *k      = NULL;
-    bool        needed  = false;
-    bool        up;
-
-    *strDuped = false;
-
-    up = true;
-    for (oi=0; oi<lenKey; oi++)
-    {
-        char oc = key[oi];
-        char nc = (up ? toupper(oc) : tolower(oc));
-        if (oc != nc)
-        {
-            needed = true;
-            break;
-        }
-        up = (oc == '-' ? true : false);
-    }
-    if (!needed)
-    {
-        *cKey = (char*) key;
-        return NATS_OK;
-    }
-    // Do not reset value of 'up' since we will resume work down there...
-
-    if (lenKey >= keyStackLen)
-    {
-        DUP_STRING(s, k, key);
-        if (s != NATS_OK)
-            return NATS_UPDATE_ERR_STACK(s);
-
-        *strDuped = true;
-    }
-    else
-    {
-        memcpy((void*) keyStack, (const void*) key, (size_t) lenKey);
-        keyStack[lenKey] = '\0';
-        k = keyStack;
-    }
-    // Move directly to character that we know needs change.
-    // Do not reset 'up' to true because we are resuming.
-    for (i=oi; i<lenKey; i++)
-    {
-        k[i] = (up ? toupper(k[i]) : tolower(k[i]));
-        up = (k[i] == '-' ? true : false);
-    }
-    *cKey = k;
-    return NATS_OK;
-}
-
-static natsStatus
 _checkMsgAndKey(natsMsg *msg, const char *key)
 {
     if (msg == NULL)
@@ -266,9 +209,6 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
     bool            ml   = false;
     char            *start;
     char            *endval;
-    char            *k;
-    bool            up;
-    int             i;
 
     start = ptr;
     if (*ptr == '\r')
@@ -298,15 +238,6 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
         key = ptr;
         ptr = col+1;
         (*col) = '\0';
-
-        // Canonical-ize the key.
-        up = true;
-        k = key;
-        for (i=0; i<(int)strlen(key); i++)
-        {
-            k[i] = (up ? toupper(k[i]) : tolower(k[i]));
-            up = (k[i] == '-' ? true : false);
-        }
     }
 
     while ((ptr != endPtr) && (isspace(*ptr)))
@@ -367,7 +298,7 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
                 cur->next = v;
             }
             else
-                s = natsStrHash_Set(msg->headers, key, false, (void*) v, NULL);
+                s = natsStrHash_Set(msg->headers, (char*) key, false, (void*) v, NULL);
         }
     }
 
@@ -513,31 +444,21 @@ natsMsgHeader_Set(natsMsg *msg, const char *key, const char *value)
 
     if (s == NATS_OK)
     {
-        char _ckey[64];
-        char *ckey    = NULL;
-        bool strDuped = false;
+        natsHeaderValue *v = NULL;
 
-        s = _canonicalKey(key, _ckey, sizeof(_ckey), &ckey, &strDuped);
+        s = natsHeaderValue_create(&v, value, true);
         if (s == NATS_OK)
         {
-            natsHeaderValue *v = NULL;
+            void *p = NULL;
 
-            s = natsHeaderValue_create(&v, value, true);
-            if (s == NATS_OK)
+            s = natsStrHash_Set(msg->headers, (char*) key, true, (void*) v, &p);
+            if (s != NATS_OK)
+                natsHeaderValue_free(v, false);
+            else if (p != NULL)
             {
-                void *p = NULL;
-
-                s = natsStrHash_SetEx(msg->headers, ckey, !strDuped, true, (void*) v, &p);
-                if (s != NATS_OK)
-                    natsHeaderValue_free(v, false);
-                else if (p != NULL)
-                {
-                    natsHeaderValue *old = (natsHeaderValue*) p;
-                    natsHeaderValue_free(old, true);
-                }
+                natsHeaderValue *old = (natsHeaderValue*) p;
+                natsHeaderValue_free(old, true);
             }
-            if ((s != NATS_OK) && strDuped)
-                NATS_FREE(ckey);
         }
     }
     return NATS_UPDATE_ERR_STACK(s);
@@ -556,37 +477,21 @@ natsMsgHeader_Add(natsMsg *msg, const char *key, const char *value)
 
     if (s == NATS_OK)
     {
-        char _ckey[64];
-        char *ckey    = NULL;
-        bool strDuped = false;
+        natsHeaderValue *v = NULL;
 
-        s = _canonicalKey(key, _ckey, sizeof(_ckey), &ckey, &strDuped);
+        s = natsHeaderValue_create(&v, value, true);
         if (s == NATS_OK)
         {
-            natsHeaderValue *v = NULL;
-
-            s = natsHeaderValue_create(&v, value, true);
-            if (s == NATS_OK)
+            natsHeaderValue *cur = natsStrHash_Get(msg->headers, (char*) key);
+            if (cur != NULL)
             {
-                natsHeaderValue *cur = natsStrHash_Get(msg->headers, ckey);
-                if (cur != NULL)
-                {
-                    for (; cur->next != NULL; )
-                        cur = cur->next;
+                for (; cur->next != NULL; )
+                    cur = cur->next;
 
-                    cur->next = v;
-
-                    if (strDuped)
-                    {
-                        NATS_FREE(ckey);
-                        ckey = NULL;
-                    }
-                }
-                else
-                    s = natsStrHash_SetEx(msg->headers, ckey, !strDuped, true, (void*) v, NULL);
+                cur->next = v;
             }
-            if ((s != NATS_OK) && strDuped)
-                NATS_FREE(ckey);
+            else
+                s = natsStrHash_Set(msg->headers, (char*) key, true, (void*) v, NULL);
         }
     }
     return NATS_UPDATE_ERR_STACK(s);
@@ -595,10 +500,8 @@ natsMsgHeader_Add(natsMsg *msg, const char *key, const char *value)
 natsStatus
 natsMsgHeader_Get(natsMsg *msg, const char *key, const char **value)
 {
-    natsStatus  s  = NATS_OK;
-    char        _ckey[64];
-    char        *ckey    = NULL;
-    bool        strDuped = false;
+    natsStatus      s   = NATS_OK;
+    natsHeaderValue *v  = NULL;
 
     if ((s = _checkMsgAndKey(msg, key)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
@@ -614,17 +517,11 @@ natsMsgHeader_Get(natsMsg *msg, const char *key, const char **value)
     if ((msg->headers == NULL) || natsStrHash_Count(msg->headers) == 0)
         return NATS_NOT_FOUND; // normal error, so don't update error stack
 
-    s = _canonicalKey(key, _ckey, sizeof(_ckey), &ckey, &strDuped);
-    if (s == NATS_OK)
-    {
-        natsHeaderValue *v = natsStrHash_Get(msg->headers, ckey);
-        if (v == NULL)
-            return NATS_NOT_FOUND; // normal error, so don't update error stack
+    v = natsStrHash_Get(msg->headers, (char*) key);
+    if (v == NULL)
+        return NATS_NOT_FOUND; // normal error, so don't update error stack
 
-        *value = (const char*) v->value;
-    }
-    if (strDuped)
-        NATS_FREE(ckey);
+    *value = (const char*) v->value;
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -632,10 +529,11 @@ natsMsgHeader_Get(natsMsg *msg, const char *key, const char **value)
 natsStatus
 natsMsgHeader_Values(natsMsg *msg, const char *key, const char* **values, int *count)
 {
-    natsStatus  s  = NATS_OK;
-    char        _ckey[64];
-    char        *ckey    = NULL;
-    bool        strDuped = false;
+    natsStatus      s       = NATS_OK;
+    int             c       = 0;
+    natsHeaderValue *cur    = NULL;
+    const char*     *strs   = NULL;
+    natsHeaderValue *v      = NULL;
 
     if ((s = _checkMsgAndKey(msg, key)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
@@ -652,36 +550,26 @@ natsMsgHeader_Values(natsMsg *msg, const char *key, const char* **values, int *c
     if ((msg->headers == NULL) || natsStrHash_Count(msg->headers) == 0)
         return NATS_NOT_FOUND; // normal error, so don't update error stack
 
-    s = _canonicalKey(key, _ckey, sizeof(_ckey), &ckey, &strDuped);
-    if (s == NATS_OK)
-    {
-        int             c       = 0;
-        natsHeaderValue *cur    = NULL;
-        const char*     *strs   = NULL;
-        natsHeaderValue *v      = natsStrHash_Get(msg->headers, ckey);
+    v = natsStrHash_Get(msg->headers, (char*) key);
+    if (v == NULL)
+        return NATS_NOT_FOUND; // normal error, so don't update error stack
 
-        if (v == NULL)
-            return NATS_NOT_FOUND; // normal error, so don't update error stack
+    for (cur=v; cur != NULL; cur = cur->next)
+        c++;
+
+    strs = NATS_CALLOC(c, sizeof(char*));
+    if (strs == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    else
+    {
+        int i = 0;
 
         for (cur=v; cur != NULL; cur = cur->next)
-            c++;
+            strs[i++] = (const char*) cur->value;
 
-        strs = NATS_CALLOC(c, sizeof(char*));
-        if (strs == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-        else
-        {
-            int i = 0;
-
-            for (cur=v; cur != NULL; cur = cur->next)
-                strs[i++] = (const char*) cur->value;
-
-            *values = strs;
-            *count  = c;
-        }
+        *values = strs;
+        *count  = c;
     }
-    if (strDuped)
-        NATS_FREE(ckey);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -733,10 +621,8 @@ natsMsgHeader_Keys(natsMsg *msg, const char* **keys, int *count)
 natsStatus
 natsMsgHeader_Delete(natsMsg *msg, const char *key)
 {
-    natsStatus  s  = NATS_OK;
-    char        _ckey[64];
-    char        *ckey    = NULL;
-    bool        strDuped = false;
+    natsStatus      s  = NATS_OK;
+    natsHeaderValue *v = NULL;
 
     if ((s = _checkMsgAndKey(msg, key)) != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
@@ -747,17 +633,11 @@ natsMsgHeader_Delete(natsMsg *msg, const char *key)
     if ((msg->headers == NULL) || natsStrHash_Count(msg->headers) == 0)
         return NATS_NOT_FOUND; // normal error, so don't update error stack
 
-    s = _canonicalKey(key, _ckey, sizeof(_ckey), &ckey, &strDuped);
-    if (s == NATS_OK)
-    {
-        natsHeaderValue *v = natsStrHash_Remove(msg->headers, ckey);
-        if (v == NULL)
-            return NATS_NOT_FOUND; // normal error, so don't update error stack
+    v = natsStrHash_Remove(msg->headers, (char*) key);
+    if (v == NULL)
+        return NATS_NOT_FOUND; // normal error, so don't update error stack
 
-        natsHeaderValue_free(v, true);
-    }
-    if (strDuped)
-        NATS_FREE(ckey);
+    natsHeaderValue_free(v, true);
 
     return s;
 }

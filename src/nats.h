@@ -2310,8 +2310,8 @@ natsMsg_GetDataLength(const natsMsg *msg);
  *
  * It will replace any existing value associated with `key`.
  *
- * \note The `key` will be store in its canonical form, that is, the key "my-key"
- * is stored as "My-Key".
+ * \warning Prior to v3.0.0, the `key` was stored in its canonical form, this is no
+ * longer the case. Header keys are now case sensitive.
  *
  * \warning Headers are not thread-safe, that is, you must not set/add/get values or
  * delete keys for the same message from different threads. The internal structure
@@ -2328,8 +2328,8 @@ natsMsgHeader_Set(natsMsg *msg, const char *key, const char *value);
  *
  * It will append to any existing values associated with `key`.
  *
- * \note The `key` will be store in its canonical form, that is, the key "my-key"
- * is stored as "My-Key".
+ * \warning Prior to v3.0.0, the `key` was stored in its canonical form, this is no
+ * longer the case. Header keys are now case sensitive.
  *
  * \warning Headers are not thread-safe, that is, you must not set/add/get values or
  * delete keys for the same message from different threads. The internal structure
@@ -2347,8 +2347,8 @@ natsMsgHeader_Add(natsMsg *msg, const char *key, const char *value);
  * If more than one entry for the `key` is available, the first is returned.
  * The returned value is owned by the library and MUST not be freed or altered.
  *
- * \note The `key` will be store as its canonical form, that is, the key "my-key"
- * is stored as "My-Key".
+ * \warning Prior to v3.0.0, the `key` was stored in its canonical form, this is no
+ * longer the case. Header keys are now case sensitive.
  *
  * \warning Headers are not thread-safe, that is, you must not set/add/get values or
  * delete keys for the same message from different threads. The internal structure
@@ -2382,8 +2382,8 @@ natsMsgHeader_Get(natsMsg *msg, const char *key, const char **value);
  * }
  * \endcode
  *
- * \note The `key` will be store as its canonical form, that is, the key "my-key"
- * is stored as "My-Key".
+ * \warning Prior to v3.0.0, the `key` was stored in its canonical form, this is no
+ * longer the case. Header keys are now case sensitive.
  *
  * \warning Headers are not thread-safe, that is, you must not set/add/get values or
  * delete keys for the same message from different threads. The internal structure
@@ -2433,7 +2433,8 @@ natsMsgHeader_Keys(natsMsg *msg, const char* **keys, int *count);
 
 /** \brief Delete the value(s) associated with `key`.
  *
- * \note The canonical form of `key` is used for looking up and then deleting the entry.
+ * \warning Prior to v3.0.0, the `key` was stored in its canonical form, this is no
+ * longer the case. Header keys are now case sensitive.
  *
  * \warning Headers are not thread-safe, that is, you must not set/add/get values or
  * delete keys for the same message from different threads. The internal structure

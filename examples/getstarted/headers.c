@@ -1,4 +1,4 @@
-// Copyright 2020 The NATS Authors
+// Copyright 2020-2021 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -94,9 +94,7 @@ int main(int argc, char **argv)
 
         // Notice that calling natsMsgHeader_Get() on a key that has
         // several values will return the first entry.
-        // Notice also that "key1" will automatically be converted
-        // to its canonical form: "My-Key1".
-        s = natsMsgHeader_Get(rmsg, "my-key1", &val);
+        s = natsMsgHeader_Get(rmsg, "My-Key1", &val);
         if (s == NATS_OK)
             printf("For key 'My-Key1', got value: '%s'\n", val);
 

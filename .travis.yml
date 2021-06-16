@@ -15,7 +15,7 @@ before_install:
   - eval "${MATRIX_EVAL}"
 
 before_script:
-  - export PATH=$HOME/deps/nats-server:$HOME/deps/nats-streaming-server:$PATH
+  - export PATH=$HOME/deps/cmake-install:$HOME/deps/cmake-install/bin:$HOME/deps/nats-server:$HOME/deps/nats-streaming-server:$PATH
   - mkdir build && cd build
   - export COVERALLS_SERVICE_NAME=travis-ci
 

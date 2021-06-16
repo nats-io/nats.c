@@ -361,15 +361,14 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
             if (ctx->ssl != NULL)
             {
                 int sslErr = SSL_get_error(ctx->ssl, readBytes);
-                int waitMode = WAIT_FOR_READ;
 
                 if (sslErr == SSL_ERROR_ZERO_RETURN)
                     return nats_setDefaultError(NATS_CONNECTION_CLOSED);
 
-                if ((sslErr == SSL_ERROR_WANT_READ)
-                        // Check want_write error and if so set appropriate waitMode
-                        || ((sslErr == SSL_ERROR_WANT_WRITE) && (waitMode = WAIT_FOR_WRITE)))
+                if ((sslErr == SSL_ERROR_WANT_READ) || (sslErr == SSL_ERROR_WANT_WRITE))
                 {
+                    int waitMode = (sslErr == SSL_ERROR_WANT_READ ? WAIT_FOR_READ : WAIT_FOR_WRITE);
+
                     if ((s = natsSock_WaitReady(waitMode, ctx)) != NATS_OK)
                         return NATS_UPDATE_ERR_STACK(s);
 
@@ -450,15 +449,14 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
             if (ctx->ssl != NULL)
             {
                 int sslErr = SSL_get_error(ctx->ssl, bytes);
-                int waitMode = WAIT_FOR_READ;
 
                 if (sslErr == SSL_ERROR_ZERO_RETURN)
                     return nats_setDefaultError(NATS_CONNECTION_CLOSED);
 
-                if ((sslErr == SSL_ERROR_WANT_READ)
-                        // Check want_write error and if so set appropriate waitMode
-                        || ((sslErr == SSL_ERROR_WANT_WRITE) && (waitMode = WAIT_FOR_WRITE)))
+                if ((sslErr == SSL_ERROR_WANT_READ) || (sslErr == SSL_ERROR_WANT_WRITE))
                 {
+                    int waitMode = (sslErr == SSL_ERROR_WANT_READ ? WAIT_FOR_READ : WAIT_FOR_WRITE);
+
                     if ((s = natsSock_WaitReady(waitMode, ctx)) != NATS_OK)
                         return NATS_UPDATE_ERR_STACK(s);
 

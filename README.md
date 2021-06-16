@@ -11,6 +11,8 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 [![Coverage Status](https://coveralls.io/repos/github/nats-io/nats.c/badge.svg?branch=master)](https://coveralls.io/github/nats-io/nats.c?branch=master)
 [![Release](https://img.shields.io/badge/release-v2.5.0-blue.svg?style=flat)](https://github.com/nats-io/nats.c/releases/tag/v2.5.0)
 [![Documentation](https://img.shields.io/badge/doc-Doxygen-brightgreen.svg?style=flat)](http://nats-io.github.io/nats.c)
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/nats-io/nats.c.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/nats-io/nats.c/alerts/)
+[![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/nats-io/nats.c.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/nats-io/nats.c/context:cpp)
 
 # Table of Contents
 

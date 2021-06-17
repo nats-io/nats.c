@@ -327,8 +327,7 @@ natsConn_bufferWrite(natsConnection *nc, const char *buffer, int len)
 
     if (nc->dontSendInPlace)
     {
-        if (len > 0)
-            s = natsBuf_Append(nc->bw, buffer, len);
+        s = natsBuf_Append(nc->bw, buffer, len);
 
         return NATS_UPDATE_ERR_STACK(s);
     }

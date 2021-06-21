@@ -4969,9 +4969,11 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
         }
         case 4:
         {
-            arg->status = natsConnection_PublishString(nc,
+            arg->status = natsConnection_Publish(nc,
                                                        natsMsg_GetReply(msg),
-                                                       arg->string);
+                                                       natsMsg_GetData(msg),
+                                                       natsMsg_GetDataLength(msg));
+            arg->sum++;
             if (arg->status == NATS_OK)
                 arg->status = natsConnection_Flush(nc);
             break;
@@ -11051,7 +11053,7 @@ _sendRequest(void *closure)
 
     nats_Sleep(250);
 
-    s = natsConnection_RequestString(&msg, arg->nc, "foo", "Help!", 2000);
+    s = natsConnection_RequestString(&msg, arg->nc, "foo", arg->string, 2000);
     natsMutex_Lock(arg->m);
     if ((s == NATS_OK)
             && (msg != NULL)
@@ -11073,11 +11075,13 @@ static void
 test_SimultaneousRequest(void)
 {
     natsStatus          s;
+    const int            threadNum = 10;
      natsConnection      *nc       = NULL;
      natsSubscription    *sub      = NULL;
-     natsThread          *threads[10];
+     natsThread          *threads[threadNum];
      natsPid             serverPid = NATS_INVALID_PID;
      struct threadArg    arg;
+     struct threadArg**    sendThreadArgs = NULL;
      int                 i;
 
      s = _createDefaultThreadArgsForCbTests(&arg);
@@ -11098,14 +11102,32 @@ test_SimultaneousRequest(void)
          s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
      }
 
-     for (i=0; i<10; i++)
+     for (i=0; i<threadNum; i++)
          threads[i] = NULL;
 
      test("Test simultaneous requests: ")
-     for (i=0; (s == NATS_OK) && (i<10); i++)
-         s = natsThread_Create(&(threads[i]), _sendRequest, (void*) &arg);
+    
+     sendThreadArgs = malloc(sizeof(void*) * threadNum);
+     for (i=0; (s == NATS_OK) && (i<threadNum); i++)
+     {
+         struct threadArg *a = malloc(sizeof(struct threadArg));
+         s = _createDefaultThreadArgsForCbTests(a);
+         if( s != NATS_OK )
+            FAIL("Unable to setup test!");
+         a->status = NATS_OK;
+         a->control = 4;
+         a->nc = nc;
 
-     for (i=0; i<10; i++)
+         char *str = malloc(16);
+         memset(str, 0, 16);
+         sprintf(str, "thread-%d",i);
+         a->string = (const char*)str;
+
+         sendThreadArgs[i] = a;
+         s = natsThread_Create(&(threads[i]), _sendRequest, (void*)a);
+     }
+
+     for (i=0; i<threadNum; i++)
      {
          if (threads[i] != NULL)
          {
@@ -11117,18 +11139,25 @@ test_SimultaneousRequest(void)
      natsMutex_Lock(arg.m);
      if ((s != NATS_OK)
              || ((s = arg.status) != NATS_OK)
-             || (arg.sum != 10))
+             || (arg.sum != threadNum))
      {
          s = NATS_ERR;
      }
      natsMutex_Unlock(arg.m);
-
      testCond(s == NATS_OK);
 
      natsSubscription_Destroy(sub);
      natsConnection_Destroy(nc);
 
      _destroyDefaultThreadArgs(&arg);
+
+      for(i=0; i<threadNum; i++){
+          struct threadArg *a = sendThreadArgs[i];
+          NATS_FREE(a->string);
+          _destroyDefaultThreadArgs(a);
+          NATS_FREE(a);
+      }
+    NATS_FREE(sendThreadArgs);
 
      _stopServer(serverPid);
 }

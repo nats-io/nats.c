@@ -376,17 +376,13 @@ _respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clos
         rt = (char*) (natsMsg_GetSubject(msg) + NATS_REQ_ID_OFFSET);
         resp = (respInfo*) natsStrHash_Remove(nc->respMap, rt);
     }
-    else if ((resp == NULL) && (natsStrHash_Count(nc->respMap) == 1))
+    else if (natsStrHash_Count(nc->respMap) == 1)
     {
         // Only if the subject is completely different, we assume that it
         // could be the server that has rewritten the subject and so if there
         // is a single entry, use that.
-        natsStrHashIter iter;
-        void            *value = NULL;
-
-        natsStrHashIter_Init(&iter, nc->respMap);
-        natsStrHashIter_Next(&iter, NULL, &value);
-        natsStrHashIter_RemoveCurrent(&iter);
+        void *value = NULL;
+        natsStrHash_RemoveSingle(nc->respMap, NULL, &value);
         resp = (respInfo*) value;
     }
     if (resp != NULL)

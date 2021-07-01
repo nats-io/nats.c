@@ -4967,6 +4967,7 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
             }
             break;
         }
+        case 11:
         case 4:
         {
             arg->status = natsConnection_PublishString(nc,
@@ -4974,6 +4975,8 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
                                                        arg->string);
             if (arg->status == NATS_OK)
                 arg->status = natsConnection_Flush(nc);
+            if (arg->control == 11)
+                arg->sum++;
             break;
         }
         case 5:
@@ -10754,6 +10757,7 @@ test_Request(void)
     natsMsg             *req      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
+    int                 i;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
@@ -10809,7 +10813,46 @@ test_Request(void)
                          natsMsg_GetDataLength(msg)) == 0));
 
     natsMsg_Destroy(msg);
+    msg = NULL;
     natsMsg_Destroy(req);
+    req = NULL;
+
+    natsMutex_Lock(arg.m);
+    arg.control = 11;
+    natsMutex_Unlock(arg.m);
+
+    test("Race on timeout: ");
+    for (i=0; (s == NATS_OK) && (i<100); i++)
+    {
+        s = natsConnection_Request(&msg, nc, "foo", "help!", 5, 1);
+        // Make sure that we get either OK with msg != NULL
+        // or TIMEOUT but with msg == NULL
+        if (s == NATS_OK)
+        {
+            if (msg == NULL)
+                s = NATS_ERR;
+            else
+            {
+                natsMsg_Destroy(msg);
+                msg = NULL;
+            }
+        }
+        else if ((s == NATS_TIMEOUT) && (msg == NULL))
+        {
+            s = NATS_OK;
+            nats_clearLastError();
+        }
+        // else if timeout and msg != NULL, that is a bug!
+    }
+    testCond(s == NATS_OK);
+
+    // Ensure the last callback returns to avoid accessing data that has been freed.
+    natsMutex_Lock(arg.m);
+    s = NATS_OK;
+    while ((s != NATS_TIMEOUT) && (arg.sum != 100))
+        natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
 
@@ -13084,6 +13127,9 @@ test_ServersOption(void)
 
     s = natsOptions_Create(&opts);
     IFOK(s, natsOptions_SetNoRandomize(opts, true));
+#if _WIN32
+    IFOK(s, natsOptions_SetTimeout(opts, 250));
+#endif
 
     if (s != NATS_OK)
         FAIL("Unable to create options for test ServerOptions");
@@ -21716,9 +21762,6 @@ test_StanSubTimeout(void)
             pb__subscription_request__free_unpacked(r, NULL);
 
         natsMsg_Destroy(resp);
-
-        if (valgrind)
-            nats_Sleep(900);
     }
 
     natsSubscription_Destroy(ncSub);

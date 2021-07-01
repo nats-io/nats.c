@@ -2108,7 +2108,42 @@ test_natsHash(void)
 
     test("Destroy: ");
     natsHash_Destroy(hash);
+    hash = NULL;
     testCond(1);
+
+    test("Create new: ");
+    s = natsHash_Create(&hash, 4);
+    testCond(s == NATS_OK);
+
+    test("Populate: ");
+    s = natsHash_Set(hash, 1, (void*) 1, NULL);
+    IFOK(s, natsHash_Set(hash, 2, (void*) 2, NULL));
+    IFOK(s, natsHash_Set(hash, 3, (void*) 3, NULL));
+    testCond(s == NATS_OK);
+
+    test("Remove one: ");
+    s = (natsHash_Remove(hash, 2) == (void*) 2) ? NATS_OK : NATS_ERR;
+    testCond(s == NATS_OK);
+
+    test("RemoveSingle fails if more than one: ");
+    s = natsHash_RemoveSingle(hash, &key, NULL);
+    testCond(s == NATS_ERR);
+    nats_clearLastError();
+
+    test("Remove second: ");
+    s = (natsHash_Remove(hash, 1) == (void*) 1) ? NATS_OK : NATS_ERR;
+    testCond(s == NATS_OK);
+
+    test("Remove single: ");
+    key = 0;
+    oldval = NULL;
+    s = natsHash_RemoveSingle(hash, &key, &oldval);
+    testCond((s == NATS_OK)
+                && (hash->used == 0)
+                && (key == 3)
+                && (oldval == (void*) 3));
+
+    natsHash_Destroy(hash);
 }
 
 static void
@@ -2343,7 +2378,56 @@ test_natsStrHash(void)
 
     test("Destroy: ");
     natsStrHash_Destroy(hash);
+    hash = NULL;
     testCond(1);
+
+    test("Create new: ");
+    s = natsStrHash_Create(&hash, 4);
+    testCond(s == NATS_OK);
+
+    test("Populate: ");
+    s = natsStrHash_Set(hash, (char*) "1", true, (void*) 1, NULL);
+    IFOK(s, natsStrHash_Set(hash, (char*) "2", true, (void*) 2, NULL));
+    IFOK(s, natsStrHash_Set(hash, (char*) "3", true, (void*) 3, NULL));
+    testCond(s == NATS_OK);
+
+    test("Remove one: ");
+    s = (natsStrHash_Remove(hash, (char*) "2") == (void*) 2) ? NATS_OK : NATS_ERR;
+    testCond(s == NATS_OK);
+
+    test("RemoveSingle fails if more than one: ");
+    s = natsStrHash_RemoveSingle(hash, &key, NULL);
+    testCond(s == NATS_ERR);
+    nats_clearLastError();
+
+    test("Remove second: ");
+    s = (natsStrHash_Remove(hash, (char*) "1") == (void*) 1) ? NATS_OK : NATS_ERR;
+    testCond(s == NATS_OK);
+
+    test("Remove single (copy of key): ");
+    key = NULL;
+    oldval = NULL;
+    s = natsStrHash_RemoveSingle(hash, &key, &oldval);
+    testCond((s == NATS_OK)
+                && (hash->used == 0)
+                && (strcmp(key, "3") == 0)
+                && (oldval == (void*) 3));
+    free(key);
+    key = NULL;
+    oldval = NULL;
+
+    test("Add key without copy: ");
+    s = natsStrHash_Set(hash, (char*) "4", false, (void*) 4, NULL);
+    testCond(s == NATS_OK);
+
+    test("Remove single (no copy of key): ");
+    s = natsStrHash_RemoveSingle(hash, &key, &oldval);
+    testCond((s == NATS_OK)
+                && (hash->used == 0)
+                && (strcmp(key, "4") == 0)
+                && (oldval == (void*) 4));
+
+    natsStrHash_Destroy(hash);
 }
 
 static const char*

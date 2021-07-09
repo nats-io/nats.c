@@ -24,6 +24,7 @@
 #define STATUS_HDR          "Status"
 #define DESCRIPTION_HDR     "Description"
 #define NO_RESP_STATUS      "503"
+#define CTRL_STATUS         "100"
 #define HDR_STATUS_LEN      (3)
 
 struct __natsMsg;
@@ -44,7 +45,8 @@ struct __natsMsg
     int                 dataLen;
     int                 hdrLen;
 
-    // subscription (needed when delivery done by connection)
+    // subscription (needed when delivery done by connection,
+    // or for JetStream).
     struct __natsSubscription *sub;
 
     bool                hdrLift;
@@ -52,6 +54,11 @@ struct __natsMsg
     // therefore msg->reply points to a memory location outside
     // of the message object and needs to be freed separately.
     bool                freeRply;
+    // When we want the server to survive a natsMsg_Destroy done
+    // by the user.
+    bool                noDestroy;
+    // To suppress users double ack.
+    bool                acked;
 
     // Must be last field!
     struct __natsMsg    *next;
@@ -89,6 +96,9 @@ natsMsg_create(natsMsg **newMsg,
 
 void
 natsMsg_freeHeaders(natsMsg *msg);
+
+bool
+natsMsg_isCtrl(natsMsg *msg);
 
 // This needs to follow the nats_FreeObjectCb prototype (see gc.h)
 void

@@ -69,9 +69,7 @@ static const char *statusText[] = {
 
     "No responders available for request",
 
-    "JetStream not enabled",
-    "Stream name is required",
-    "Invalid stream name",
+    "Mismatch",
 };
 
 const char*

@@ -848,6 +848,11 @@ _jsonParseValue(char **str, nats_JSONField *field, int nested)
             ptr += objLen;
         }
     }
+    else if ((*ptr == 'n') && (strstr(ptr, "null") == ptr))
+    {
+        ptr += 4;
+        field->typ = TYPE_NULL;
+    }
     else
     {
         s = nats_setError(NATS_ERR,
@@ -1067,7 +1072,7 @@ nats_JSONGetField(nats_JSON *json, const char *fieldName, int fieldType, nats_JS
     nats_JSONField *field = NULL;
 
     field = (nats_JSONField*) natsStrHash_Get(json->fields, (char*) fieldName);
-    if (field == NULL)
+    if ((field == NULL) || (field->typ == TYPE_NULL))
     {
         *retField = NULL;
         return NATS_OK;
@@ -1340,7 +1345,7 @@ nats_JSONGetArrayField(nats_JSON *json, const char *fieldName, int fieldType, na
     nats_JSONField  *field   = NULL;
 
     field = (nats_JSONField*) natsStrHash_Get(json->fields, (char*) fieldName);
-    if (field == NULL)
+    if ((field == NULL) || (field->typ == TYPE_NULL))
     {
         *retField = NULL;
         return NATS_OK;

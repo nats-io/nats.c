@@ -126,6 +126,8 @@ typedef enum
 
     NATS_NO_RESPONDERS,                 ///< No responders were running when the server received the request.
 
+    NATS_MISMATCH,                      ///< For JetStream subscriptions, it means that a consumer sequence mismatch was discovered.
+
 } natsStatus;
 
 typedef enum {
@@ -225,7 +227,6 @@ typedef enum {
     JSConsumerInvalidPolicyErr = 10094,                 ///< Generic delivery policy error
     JSConsumerInvalidSamplingErr = 10095,               ///< Failed to parse consumer sampling configuration
     JSStreamInvalidErr = 10096,                         ///< Stream not valid
-    JSStreamMaximumConsumersReachedErr = 10097,         ///< Maximum consumers limit reached
     JSConsumerWQRequiresExplicitAckErr = 10098,         ///< Workqueue stream requires explicit ack
     JSConsumerWQMultipleUnfilteredErr = 10099,          ///< Multiple non-filtered consumers not allowed on workqueue stream
     JSConsumerWQConsumerNotUniqueErr = 10100,           ///< Filtered consumer not unique on workqueue stream

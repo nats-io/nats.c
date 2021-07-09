@@ -1447,7 +1447,7 @@ _doReconnect(void *arg)
         // We have to pick which type of jitter to use, for now, we use these hints:
         jitter = nc->opts->reconnectJitter;
         if (nc->opts->secure || (nc->opts->sslCtx != NULL))
-			jitter = nc->opts->reconnectJitterTLS;
+            jitter = nc->opts->reconnectJitterTLS;
     }
     else
         crdClosure = nc->opts->customReconnectDelayCBClosure;
@@ -1674,37 +1674,37 @@ natsConn_flushOrKickFlusher(natsConnection *nc)
 static natsStatus
 _readProto(natsConnection *nc, natsBuffer **proto)
 {
-	natsStatus	s 			= NATS_OK;
-	char		protoEnd	= '\n';
-	natsBuffer	*buf		= NULL;
-	char		oneChar[1]  = { '\0' };
+    natsStatus	s 			= NATS_OK;
+    char		protoEnd	= '\n';
+    natsBuffer	*buf		= NULL;
+    char		oneChar[1]  = { '\0' };
 
-	s = natsBuf_Create(&buf, 10);
-	if (s != NATS_OK)
-		return s;
+    s = natsBuf_Create(&buf, 10);
+    if (s != NATS_OK)
+        return s;
 
-	for (;;)
-	{
-		s = natsSock_Read(&(nc->sockCtx), oneChar, 1, NULL);
-		if (s == NATS_CONNECTION_CLOSED)
-		    break;
-		s = natsBuf_AppendByte(buf, oneChar[0]);
-		if (s != NATS_OK)
-		{
-			natsBuf_Destroy(buf);
-			return s;
-		}
-		if (oneChar[0] == protoEnd)
-		    break;
-	}
-	s = natsBuf_AppendByte(buf, '\0');
-	if (s != NATS_OK)
-	{
-	    natsBuf_Destroy(buf);
-	    return s;
-	}
-	*proto = buf;
-	return NATS_OK;
+    for (;;)
+    {
+        s = natsSock_Read(&(nc->sockCtx), oneChar, 1, NULL);
+        if (s == NATS_CONNECTION_CLOSED)
+            break;
+        s = natsBuf_AppendByte(buf, oneChar[0]);
+        if (s != NATS_OK)
+        {
+            natsBuf_Destroy(buf);
+            return s;
+        }
+        if (oneChar[0] == protoEnd)
+            break;
+    }
+    s = natsBuf_AppendByte(buf, '\0');
+    if (s != NATS_OK)
+    {
+        natsBuf_Destroy(buf);
+        return s;
+    }
+    *proto = buf;
+    return NATS_OK;
 }
 
 static natsStatus
@@ -2509,7 +2509,14 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     natsMsg          *msg = NULL;
     natsMsgDlvWorker *ldw = NULL;
     bool             sc   = false;
+    bool             sm   = false;
     int              dl   = 0;
+    // For JetStream cases
+    jsSub            *jsi    = NULL;
+    bool             ctrlMsg = false;
+    bool             hasHBs  = false;
+    bool             hasFC   = false;
+    bool             fcReply = false;
 
     natsMutex_Lock(nc->subsMu);
 
@@ -2550,62 +2557,92 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         return NATS_OK;
     }
 
-    sub->msgList.msgs++;
-    sub->msgList.bytes += dl;
-
-    if (((sub->msgsLimit > 0) && (sub->msgList.msgs > sub->msgsLimit))
-        || ((sub->bytesLimit > 0) && (sub->msgList.bytes > sub->bytesLimit)))
+    if ((jsi = sub->jsi) != NULL)
     {
-        natsMsg_Destroy(msg);
-
-        sub->dropped++;
-
-        sc = !sub->slowConsumer;
-        sub->slowConsumer = true;
-
-        // Undo stats from above.
-        sub->msgList.msgs--;
-        sub->msgList.bytes -= dl;
+        hasHBs = jsi->hasHBs;
+        hasFC  = jsi->hasFC;
+        ctrlMsg= natsMsg_isCtrl(msg);
     }
-    else
+
+    if (!ctrlMsg)
     {
-        natsMsgList *list = NULL;
+        sub->msgList.msgs++;
+        sub->msgList.bytes += dl;
 
-        if (sub->msgList.msgs > sub->msgsMax)
-            sub->msgsMax = sub->msgList.msgs;
-
-        if (sub->msgList.bytes > sub->bytesMax)
-            sub->bytesMax = sub->msgList.bytes;
-
-        sub->slowConsumer = false;
-
-        if (ldw != NULL)
+        if (((sub->msgsLimit > 0) && (sub->msgList.msgs > sub->msgsLimit))
+            || ((sub->bytesLimit > 0) && (sub->msgList.bytes > sub->bytesLimit)))
         {
+            natsMsg_Destroy(msg);
+
+            sub->dropped++;
+
+            sc = !sub->slowConsumer;
+            sub->slowConsumer = true;
+
+            // Undo stats from above.
+            sub->msgList.msgs--;
+            sub->msgList.bytes -= dl;
+        }
+        else
+        {
+            natsMsgList *list = NULL;
+            bool        signal= false;
+
+            if (sub->msgList.msgs > sub->msgsMax)
+                sub->msgsMax = sub->msgList.msgs;
+
+            if (sub->msgList.bytes > sub->bytesMax)
+                sub->bytesMax = sub->msgList.bytes;
+
+            sub->slowConsumer = false;
+
             msg->sub = sub;
-            list = &ldw->msgList;
+
+            if (ldw != NULL)
+                list = &ldw->msgList;
+            else
+                list = &sub->msgList;
+
+            if (list->head == NULL)
+            {
+                list->head = msg;
+                signal = true;
+            }
+
+            if (list->tail != NULL)
+                list->tail->next = msg;
+
+            list->tail = msg;
+
+            if (signal)
+            {
+                if (ldw != NULL)
+                    natsCondition_Broadcast(ldw->cond);
+                else
+                    natsCondition_Broadcast(sub->cond);
+            }
+
+            // Store the ACK metadata from the message to
+            // compare later on with the received heartbeat.
+            if ((jsi != NULL) && hasHBs)
+                s = jsSub_trackSequences(jsi, msg->reply);
         }
+    }
+    else if (hasHBs && (msg->reply == NULL))
+    {
+        // Handle control heartbeat messages.
+        s = jsSub_processSequenceMismatch(sub, msg, &sm);
+    }
+    else if (hasFC && msg->reply != NULL)
+    {
+        // This is a flow control message.
+        // If we have no pending, go ahead and send in place.
+        if (sub->msgList.msgs == 0)
+            fcReply = true;
         else
         {
-            list = &sub->msgList;
-        }
-
-        if (list->head == NULL)
-            list->head = msg;
-
-        if (list->tail != NULL)
-            list->tail->next = msg;
-
-        list->tail = msg;
-
-        if (ldw != NULL)
-        {
-            if (ldw->inWait)
-                natsCondition_Broadcast(ldw->cond);
-        }
-        else
-        {
-            if (sub->inWait > 0)
-                natsCondition_Broadcast(sub->cond);
+            // Schedule a reply after the previous message is delivered.
+            s = jsSub_scheduleFlowControlResponse(jsi, msg->reply);
         }
     }
 
@@ -2614,14 +2651,20 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     else
         natsSub_Unlock(sub);
 
-    if (sc)
+    if ((s == NATS_OK) && fcReply)
+        s = natsConnection_Publish(nc, msg->reply, NULL, 0);
+
+    if (ctrlMsg)
+        natsMsg_Destroy(msg);
+
+    if (sc || sm)
     {
         natsConn_Lock(nc);
 
-        nc->err = NATS_SLOW_CONSUMER;
+        nc->err = (sc ? NATS_SLOW_CONSUMER : NATS_MISMATCH);
 
         if (nc->opts->asyncErrCb != NULL)
-            natsAsyncCb_PostErrHandler(nc, sub, NATS_SLOW_CONSUMER);
+            natsAsyncCb_PostErrHandler(nc, sub, nc->err);
 
         natsConn_Unlock(nc);
     }
@@ -2842,7 +2885,7 @@ natsStatus
 natsConn_subscribeImpl(natsSubscription **newSub,
                        natsConnection *nc, bool lock, const char *subj, const char *queue,
                        int64_t timeout, natsMsgHandler cb, void *cbClosure,
-                       bool preventUseOfLibDlvPool)
+                       bool preventUseOfLibDlvPool, jsSub *jsi)
 {
     natsStatus          s    = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -2875,7 +2918,7 @@ natsConn_subscribeImpl(natsSubscription **newSub,
         return nats_setDefaultError(NATS_DRAINING);
     }
 
-    s = natsSub_create(&sub, nc, subj, queue, timeout, cb, cbClosure, preventUseOfLibDlvPool);
+    s = natsSub_create(&sub, nc, subj, queue, timeout, cb, cbClosure, preventUseOfLibDlvPool, jsi);
     if (s == NATS_OK)
     {
         natsMutex_Lock(nc->subsMu);
@@ -2970,6 +3013,13 @@ natsStatus
 natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max, bool drainMode, int64_t timeout)
 {
     natsStatus      s = NATS_OK;
+
+    if ((sub != NULL) && (sub->jsi != NULL))
+    {
+        s = jsSub_unsubscribe(sub->jsi, drainMode);
+        if (s != NATS_OK)
+            return NATS_UPDATE_ERR_STACK(s);
+    }
 
     natsConn_Lock(nc);
 

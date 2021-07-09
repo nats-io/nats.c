@@ -684,6 +684,9 @@ natsMsg_Destroy(natsMsg *msg)
     if (msg == NULL)
         return;
 
+    if (msg->noDestroy)
+        return;
+
     if (natsGC_collect((natsGCItem *) msg))
         return;
 
@@ -763,13 +766,15 @@ natsMsg_create(natsMsg **newMsg,
     // about updating this initialization code.
     memset(&(msg->gc), 0, sizeof(natsGCItem));
 
-    msg->hdr     = NULL;
-    msg->hdrLen  = 0;
-    msg->hdrLift = false;
-    msg->headers = NULL;
-    msg->sub     = NULL;
-    msg->freeRply= false;
-    msg->next    = NULL;
+    msg->hdr        = NULL;
+    msg->hdrLen     = 0;
+    msg->hdrLift    = false;
+    msg->headers    = NULL;
+    msg->sub        = NULL;
+    msg->freeRply   = false;
+    msg->noDestroy  = false;
+    msg->acked      = false;
+    msg->next       = NULL;
 
     ptr = (char*) (((char*) &(msg->next)) + sizeof(msg->next));
 
@@ -862,4 +867,32 @@ natsMsg_IsNoResponders(natsMsg *m)
                 && (natsMsgHeader_Get(m, STATUS_HDR, &val) == NATS_OK)
                 && (val != NULL)
                 && (strncmp(val, NO_RESP_STATUS, HDR_STATUS_LEN) == 0));
+}
+
+bool
+natsMsg_isCtrl(natsMsg *msg)
+{
+    char *p = NULL;
+
+    if ((msg->dataLen > 0) || (msg->hdrLen <= 0))
+        return false;
+
+    if (strstr(msg->hdr, HDR_LINE_PRE) != msg->hdr)
+        return false;
+
+    p = msg->hdr + HDR_LINE_PRE_LEN;
+    if (*p != ' ')
+        return false;
+
+    while ((*p != '\0') && isspace(*p))
+        p++;
+
+    if (*p == '\0')
+        return false;
+
+    if (strstr(p, CTRL_STATUS) != p)
+        return false;
+
+    p += HDR_STATUS_LEN;
+    return (isspace(*p) || (*p == '\r') || (*p == '\n'));
 }

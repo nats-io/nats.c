@@ -322,11 +322,58 @@ typedef struct __natsMsgDlvWorker
     natsMutex       *lock;
     natsCondition   *cond;
     natsThread      *thread;
-    bool            inWait;
     bool            shutdown;
     natsMsgList     msgList;
 
 } natsMsgDlvWorker;
+
+struct __jsCtx
+{
+    natsMutex		    *mu;
+    natsConnection      *nc;
+    jsOptions  	        opts;
+    int				    refs;
+    natsCondition       *cond;
+    natsStrHash         *pm;
+    natsSubscription    *rsub;
+    char                *rpre;
+    int                 pacw;
+    int                 pmcount;
+    int                 stalled;
+};
+
+typedef struct __jsSub
+{
+    jsCtx               *js;
+    char                *stream;
+    char                *consumer;
+    bool                delCons;
+    bool                hasHBs;
+    bool                hasFC;
+
+    uint64_t            sseq;
+    uint64_t            dseq;
+    uint64_t            ldseq;
+    // Skip sequence mismatch notification. This is used for
+    // async subscriptions to notify the asyn err handler only
+    // once. Should the mismatch be resolved, this will be
+    // cleared so notification can happen again.
+    bool                ssmn;
+    // Sequence mismatch. This is for synchronous subscription
+    // so that they don't have to rely on async error callback.
+    // Calling NextMsg() when this is true will cause NextMsg()
+    // to return NATS_SLOW_CONSUMER, so that user can check
+    // the sequence mismatch report. Should the mismatch be
+    // resolved, this will be cleared.
+    bool                sm;
+
+    // When in auto-ack mode, we have an internal callback
+    // that will call natsMsg_Ack after the user callback returns.
+    // We need to keep track of the user callback/closure though.
+    natsMsgHandler      usrCb;
+    void                *usrCbClosure;
+
+} jsSub;
 
 struct __natsSubscription
 {
@@ -352,10 +399,6 @@ struct __natsSubscription
 
     // Condition variable used to wait for message delivery.
     natsCondition               *cond;
-
-    // This is > 0 when the delivery thread (or NextMsg) goes into a
-    // condition wait.
-    int                         inWait;
 
     // The subscriber is closed (or closing).
     bool                        closed;
@@ -423,6 +466,9 @@ struct __natsSubscription
     // Complete callback
     natsOnCompleteCB            onCompleteCB;
     void                        *onCompleteCBClosure;
+
+    // For JetStream
+    jsSub                       *jsi;
 
 };
 
@@ -707,5 +753,22 @@ natsMutex_Unlock(natsMutex *m);
 void
 natsMutex_Destroy(natsMutex *m);
 
+//
+// JetStream
+//
+void
+jsSub_free(jsSub *sub);
+
+natsStatus
+jsSub_unsubscribe(jsSub *sub, bool drainMode);
+
+natsStatus
+jsSub_trackSequences(jsSub *jsi, const char *reply);
+
+natsStatus
+jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm);
+
+natsStatus
+jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply);
 
 #endif /* NATSP_H_ */

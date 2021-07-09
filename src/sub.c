@@ -70,6 +70,7 @@ _freeSubscription(natsSubscription *sub)
     natsTimer_Destroy(sub->timeoutTimer);
     natsCondition_Destroy(sub->cond);
     natsMutex_Destroy(sub->mu);
+    jsSub_free(sub->jsi);
 
     natsConn_release(sub->conn);
 
@@ -168,12 +169,10 @@ natsSub_deliverMsgs(void *arg)
         s = NATS_OK;
         while (((msg = sub->msgList.head) == NULL) && !(sub->closed) && !(sub->draining) && (s != NATS_TIMEOUT))
         {
-            sub->inWait++;
             if (timeout != 0)
                 s = natsCondition_TimedWait(sub->cond, sub->mu, timeout);
             else
                 natsCondition_Wait(sub->cond, sub->mu);
-            sub->inWait--;
         }
 
         if (sub->closed)
@@ -355,7 +354,7 @@ _asyncTimeoutStopCb(natsTimer *timer, void* closure)
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
                const char *queueGroup, int64_t timeout, natsMsgHandler cb, void *cbClosure,
-               bool preventUseOfLibDlvPool)
+               bool preventUseOfLibDlvPool, jsSub *jsi)
 {
     natsStatus          s = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -384,6 +383,7 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     sub->msgCbClosure   = cbClosure;
     sub->msgsLimit      = nc->opts->maxPendingMsgs;
     sub->bytesLimit     = bytesLimit;
+    sub->jsi            = jsi;
 
     sub->subject = NATS_STRDUP(subj);
     if (sub->subject == NULL)
@@ -623,13 +623,18 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
 
         return nats_setDefaultError(NATS_SLOW_CONSUMER);
     }
+    if ((sub->jsi != NULL) && (sub->jsi->sm))
+    {
+        sub->jsi->sm = false;
+        natsSub_Unlock(sub);
+
+        return nats_setError(NATS_MISMATCH, "%s", "consumer sequence mismatch");
+    }
 
     nc = sub->conn;
 
     if (timeout > 0)
     {
-        sub->inWait++;
-
         while ((sub->msgList.msgs == 0)
                && (s != NATS_TIMEOUT)
                && !(sub->closed)
@@ -642,8 +647,6 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
             if (s != NATS_OK)
                 s = nats_setDefaultError(s);
         }
-
-        sub->inWait--;
 
         if (sub->connClosed)
             s = nats_setDefaultError(NATS_CONNECTION_CLOSED);

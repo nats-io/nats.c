@@ -29,6 +29,7 @@ extern int jsonMaxNested;
 #define TYPE_DOUBLE     (6)
 #define TYPE_ARRAY      (7)
 #define TYPE_OBJECT     (8)
+#define TYPE_NULL       (9)
 
 typedef struct
 {

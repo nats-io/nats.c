@@ -40,6 +40,7 @@ natsWaitReady
 natsSign
 HeadersLift
 HeadersAPIs
+MsgIsControl
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize
@@ -212,6 +213,10 @@ JetStreamMgtStreams
 JetStreamMgtConsumers
 JetStreamPublish
 JetStreamPublishAsync
+JetStreamSubscribe
+JetStreamSubscribeSync
+JetStreamSubscribeIdleHeartbeat
+JetStreamSubscribePull
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

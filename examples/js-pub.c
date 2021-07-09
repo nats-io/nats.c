@@ -114,12 +114,12 @@ int main(int argc, char **argv)
     for (count = 0; (s == NATS_OK) && (count < total); count++)
     {
         if (async)
-            s = js_PublishAsync(js, stream, (const void*) payload, dataLen, NULL);
+            s = js_PublishAsync(js, subj, (const void*) payload, dataLen, NULL);
         else
         {
             jsPubAck *pa = NULL;
 
-            s = js_Publish(&pa, js, stream, (const void*) payload, dataLen, NULL, &jerr);
+            s = js_Publish(&pa, js, subj, (const void*) payload, dataLen, NULL, &jerr);
             if (s == NATS_OK)
             {
                 if (pa->Duplicate)

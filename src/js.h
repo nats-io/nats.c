@@ -38,8 +38,19 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsExpectedLastSubjSeqHdr    "Nats-Expected-Last-Subject-Sequence"
 #define jsExpectedLastMsgIdHdr      "Nats-Expected-Last-Msg-Id"
 
-#define jsErrStreamNameRequired     "stream name is required"
-#define jsErrConsumerNameRequired   "consumer name is required"
+#define jsErrStreamNameRequired             "stream name is required"
+#define jsErrConsumerNameRequired           "consumer name is required"
+#define jsErrNoStreamMatchesSubject         "no stream matches subject"
+#define jsErrPullSubscribeToPushConsumer    "cannot pull subscribe to push based consumer"
+#define jsErrPullSubscribeRequired          "must use pull subscribe to bind to pull based consumer"
+#define jsErrMsgNotBound                    "message not bound to a subscription"
+#define jsErrMsgNotJS                       "not a JetStream message"
+
+// Content of ACK messages sent to server
+#define jsAckAck            "+ACK"
+#define jsAckNak            "-NAK"
+#define jsAckInProgress     "+WPI"
+#define jsAckTerm           "+TERM"
 
 // jsApiAccountInfo is for obtaining general information about JetStream.
 #define jsApiAccountInfo "%.*s.INFO"
@@ -71,6 +82,8 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiDeleteConsumerT is used to delete consumers.
 #define jsApiConsumerDeleteT "%.*s.CONSUMER.DELETE.%s.%s"
 
+// jsApiStreams can lookup a stream by subject.
+#define jsApiStreams "%.*s.STREAM.NAMES"
 
 /*
     // apiRequestNextT is the prefix for the request next message(s) for a consumer in worker/pull mode.
@@ -81,9 +94,6 @@ extern const int64_t    jsDefaultRequestWait;
 
     // apiConsumerNamesT is used to return a list with all consumer names for the stream.
     apiConsumerNamesT = "CONSUMER.NAMES.%s"
-
-    // apiStreams can lookup a stream by subject.
-    apiStreams = "STREAM.NAMES"
 
     // apiStreamListT is the endpoint that will return all detailed stream information
     apiStreamList = "STREAM.LIST"
@@ -104,21 +114,6 @@ extern const int64_t    jsDefaultRequestWait;
 
 // Returns true if the API response has a Code or ErrCode that is not 0.
 #define js_apiResponseIsErr(ar)	(((ar)->Error.Code != 0) || ((ar)->Error.ErrCode != 0))
-
-struct __jsCtx
-{
-    natsMutex		    *mu;
-    natsConnection      *nc;
-    jsOptions  	    opts;
-    int				    refs;
-    natsCondition       *cond;
-    natsStrHash         *pm;
-    natsSubscription    *rsub;
-    char                *rpre;
-    int                 pacw;
-    int                 pmcount;
-    int                 stalled;
-};
 
 // jsApiError is included in all API responses if there was an error.
 typedef struct __jsApiError
@@ -170,3 +165,6 @@ js_unmarshalStreamState(nats_JSON *pjson, const char *fieldName, jsStreamState *
 
 void
 js_cleanStreamState(jsStreamState *state);
+
+const char*
+jsAckPolicyStr(jsAckPolicy p);

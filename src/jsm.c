@@ -1393,22 +1393,29 @@ _marshalDeliverPolicy(natsBuffer *buf, jsDeliverPolicy p)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+const char*
+jsAckPolicyStr(jsAckPolicy p)
+{
+    switch (p)
+    {
+        case js_AckNone:
+            return jsAckNoneStr;
+        case js_AckAll:
+            return jsAckAllStr;
+        case js_AckExplicit:
+            return jsAckExplictStr;
+        default:
+            return "unknown";
+    }
+}
+
 static natsStatus
 _marshalAckPolicy(natsBuffer *buf, jsAckPolicy p)
 {
     natsStatus  s;
-    const char  *ap = NULL;
 
     s = natsBuf_Append(buf, ",\"ack_policy\":\"", -1);
-    switch (p)
-    {
-        case js_AckNone:        ap = jsAckNoneStr;     break;
-        case js_AckAll:         ap = jsAckAllStr;      break;
-        case js_AckExplicit:    ap = jsAckExplictStr;  break;
-        default:
-            ap = "unknown";
-    }
-    IFOK(s, natsBuf_Append(buf, ap, -1));
+    IFOK(s, natsBuf_Append(buf, jsAckPolicyStr(p), -1));
     IFOK(s, natsBuf_AppendByte(buf, '"'));
 
     return NATS_UPDATE_ERR_STACK(s);

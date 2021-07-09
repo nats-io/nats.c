@@ -222,9 +222,10 @@ typedef enum
  */
 typedef enum
 {
-        js_AckNone = 0, ///< Requires no acks for delivered messages.
-        js_AckAll,      ///< When acking a sequence number, this implicitly acks all sequences below this one as well.
-        js_AckExplicit, ///< Requires ack or nack for all messages.
+        js_AckExplicit = 0,     ///< Requires ack or nack for all messages.
+        js_AckNone,             ///< Requires no acks for delivered messages.
+        js_AckAll,              ///< When acking a sequence number, this implicitly acks all sequences below this one as well.
+
 
 } jsAckPolicy;
 
@@ -533,6 +534,97 @@ typedef struct jsConsumerConfig
 } jsConsumerConfig;
 
 /**
+ * This represents a consumer sequence mismatch between the server and client
+ * views.
+ *
+ * This can help applications find out if messages have been missed. Without
+ * this and during a disconnect, it would be possible that a subscription
+ * is not aware that it missed messages from the server. When acknowledgment
+ * mode is other than #js_AckNone, messages would ultimately be redelivered,
+ * but for #js_AckNone, they would not. But even with an acknowledgment mode
+ * this may help finding sooner that something went wrong and let the application
+ * decide if it wants to recreate the subscription starting at a given
+ * sequence.
+ *
+ * The gap of missing messages could be calculated as `ConsumerServer-ConsumerClient`.
+ *
+ * @see jsSub_GetSequenceMismatch
+ */
+typedef struct jsConsumerSequenceMismatch
+{
+        uint64_t        Stream;         ///< This is the stream sequence that the application should resume from.
+        uint64_t        ConsumerClient; ///< This is the consumer sequence that was last received by the library.
+        uint64_t        ConsumerServer; ///< This is the consumer sequence last sent by the server.
+
+} jsConsumerSequenceMismatch;
+
+/**
+ * JetStream subscribe options.
+ *
+ * These are options that you can provide to JetStream subscribe APIs.
+ *
+ * The common usage will be to initialize a structure on the stack by
+ * calling #jsSubOptions_Init. Note that strings are owned by
+ * the application and need to be valid for the duration of the API
+ * call this object is passed to.
+ *
+ * \note It is the user responsibility to free the strings if they
+ * have been allocated.
+ *
+ * @see jsSubOptions_Init
+ */
+typedef struct jsSubOptions
+{
+        /**
+         * If specified, the library will only bind to this stream,
+         * otherwise, the library communicates with the server to
+         * get the stream name that has the matching subject given
+         * to the #js_Subscribe family calls.
+         */
+        const char              *Stream;        ///< If specified, the consumer will be bound to this stream name.
+        /**
+         * If specified, the #js_Subscribe family calls will only
+         * attempt to create a subscription for this matching consumer.
+         *
+         * That is, the consumer should exist prior to the call,
+         * either created by the application calling #js_AddStream
+         * or it should have been created with some other tools
+         * such as the NATS cli.
+         */
+        const char              *Consumer;      ///< If specified, the subscription will be bound to an existing consumer from the `Stream` without attempting to create.
+        /**
+         * If specified, the low level NATS subscription will be a
+         * queue subscription, which means that the load on the
+         * delivery subject will be balanced across multiple members
+         * of the same queue group.
+         *
+         * This makes sense only if the delivery subject in the
+         * `Config` field of #jsSubOptions is the same for the
+         * members of the same group.
+         */
+        const char              *Queue;         ///< Queue name for queue subscriptions.
+        /**
+         * This has meaning only for asynchronous subscriptions,
+         * and only if the consumer's acknowledgment mode is
+         * other than #js_AckNone.
+         *
+         * For asynchronous subscriptions, the default behavior
+         * is for the library to acknowledge the message once
+         * the user callback returns.
+         *
+         * This option allows you to take control of when the
+         * message should be acknowledged.
+         */
+        bool                    ManualAck;      ///< If true, the user will have to acknowledge the messages.
+        /**
+         * This allows the user to fully configure the JetStream
+         * consumer.
+         */
+        jsConsumerConfig        Config;         ///< Consumer configuration.
+
+} jsSubOptions;
+
+/**
  * Includes the consumer and stream sequence info from a JetStream consumer.
  */
 typedef struct jsSequencePair
@@ -600,6 +692,24 @@ typedef struct jsAccountInfo
         jsAccountLimits         Limits;         //`json:"limits"`
 
 } jsAccountInfo;
+
+/**
+ * This represents the JetStream metadata associated with received messages.
+ *
+ * @see natsMsg_GetMetaData
+ * @see jsMsgMetaData_Destroy
+ *
+ */
+typedef struct jsMsgMetaData
+{
+        jsSequencePair  Sequence;
+        uint64_t        NumDelivered;
+        uint64_t        NumPending;
+        int64_t         Timestamp;
+        char            *Stream;
+        char            *Consumer;
+
+} jsMsgMetaData;
 
 /**
  * Ack received after successfully publishing a message.
@@ -5056,6 +5166,193 @@ NATS_EXTERN natsStatus
 js_PublishAsyncComplete(jsCtx *js, jsPubOptions *opts);
 
 /** @} */ // end of jsPubGroup
+
+/** \defgroup jsSubGroup Subscribing
+ *
+ *  Subscribing functions
+ *  @{
+ */
+
+/** \brief Initializes a subscribe options structure.
+ *
+ * Use this before setting specific subscribe options and passing this
+ * configuration to the JetStream subscribe APIs.
+ *
+ * @param opts the pointer to the #jsSubOptions to initialize.
+ */
+NATS_EXTERN natsStatus
+jsSubOptions_Init(jsSubOptions *opts);
+
+/** \brief Create an asynchronous subscription.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param js the pointer to the #jsCtx object.
+ * @param subject the subject this subscription is created for.
+ * @param cb the #natsMsgHandler callback.
+ * @param cbClosure a pointer to an user defined object (can be `NULL`). See
+ * the #natsMsgHandler prototype.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param subOpts the subscribe options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
+             natsMsgHandler cb, void* cbClosure,
+             jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
+
+/** \brief Create a synchronous subscription.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param js the pointer to the #jsCtx object.
+ * @param subject the subject this subscription is created for.
+ * the #natsMsgHandler prototype.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param subOpts the subscribe options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
+                 jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
+
+/** \brief Create a pull subscriber.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param js the pointer to the #jsCtx object.
+ * @param subject the subject this subscription is created for.
+ * the #natsMsgHandler prototype.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param subOpts the subscribe options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject,
+                 jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
+
+/** \brief Returns the consumer sequence mismatch information.
+ *
+ * If `Heartbeat` is configured in #jsConsumerConfig object (or configured in an existing
+ * JetStream consumer), the server sends heartbeats to the client at the given interval.
+ *
+ * Those heartbeats contains information that allow the application to detect a mismatch
+ * between the server and client's view of the state of the consumer.
+ *
+ * If the library detects a sequence mismatch, the behavior is different depending on
+ * the type of subscritpion:
+ *
+ * * For asynchronous subscriptions: the error #NATS_MISMATCH is published to the error handler
+ * (see #natsOptions_SetErrorHandler).
+ * * For synchronous subscriptions: the next call to #natsSubscription_NextMsg() will
+ * return the error #NATS_MISMATCH (but will succeed afterwards).
+ *
+ * In both cases, the user should check what the mismatch is using this function and
+ * possibly recreate the consumer based on the provided information.
+ *
+ * \note For a valid JetStream subscription, this function will return #NATS_NOT_FOUND
+ * if no consumer sequence mismatch has been detected.
+ *
+ * @see jsConsumerSequenceMismatch
+ *
+ * @param csm the pointer location where to copy the consumer sequence mismatch information.
+ * @param sub the pointer to the #natsSubscription object.
+ */
+NATS_EXTERN natsStatus
+jsSub_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscription *sub);
+
+/** @} */ // end of jsSubGroup
+
+/** \defgroup jsMsg JetStream Message
+ *
+ *  Function specific to JetStream messages
+ *  @{
+ */
+
+/** \brief Returns metadata from this JetStream message.
+ *
+ * This works only for JetStream messages that have been received through
+ * a subscription callback or calling #natsSubscription_NextMsg.
+ *
+ * \note The user must destroy the returned object with #jsMsgMetaData_Destroy.
+ *
+ * \note This function will return an error for non JetStream messages.
+ *
+ * @param new_meta the location where to store the pointer to the newly created
+ * #jsMsgMetaData object.
+ * @param msg the pointer to the #natsMsg object, which should be a JetStream
+ * message received through a subscription callback or #natsSubscription_NextMsg.
+ */
+NATS_EXTERN natsStatus
+natsMsg_GetMetaData(jsMsgMetaData **new_meta, natsMsg *msg);
+
+NATS_EXTERN void
+jsMsgMetaData_Destroy(jsMsgMetaData *meta);
+
+/** \brief Acknowledges a message.
+ *
+ * This tells the server that the message was successfully processed and
+ * it can move on to the next message.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+natsMsg_Ack(natsMsg *msg, jsOptions *opts);
+
+/** \brief Acknowledges a message and wait for a confirmation.
+ *
+ * This is the synchronous version of #natsMsg_Ack. This indicates successful
+ * message processing, and waits for confirmation from the server that
+ * the acknowledgment has been processed.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+natsMsg_AckSync(natsMsg *msg, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Negatively acknowledges a message.
+ *
+ * This tells the server to redeliver the message. You can configure the
+ * number of redeliveries by passing `MaxDeliver` when you subscribe.
+ *
+ * The default is infinite redeliveries.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+natsMsg_Nak(natsMsg *msg, jsOptions *opts);
+
+/** \brief Resets redelivery timer on the server.
+ *
+ * This tells the server that this message is being worked on. It resets
+ * the redelivery timer on the server.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+natsMsg_InProgress(natsMsg *msg, jsOptions *opts);
+
+/** \brief Abandon this message.
+ *
+ * This tells the server to not redeliver this message, regardless of
+ * the value `MaxDeliver`.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+natsMsg_Term(natsMsg *msg, jsOptions *opts);
+
+/** @} */ // end of jsMsg
 
 /** @} */ // end of jsGroup
 

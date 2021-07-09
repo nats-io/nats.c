@@ -1667,11 +1667,7 @@ _deliverMsgs(void *arg)
     while (true)
     {
         while (((msg = dlv->msgList.head) == NULL) && !dlv->shutdown)
-        {
-            dlv->inWait = true;
             natsCondition_Wait(dlv->cond, dlv->lock);
-            dlv->inWait = false;
-        }
 
         // Break out only when list is empty
         if ((msg == NULL) && dlv->shutdown)
@@ -1894,6 +1890,7 @@ natsLib_msgDeliveryPostControlMsg(natsSubscription *sub)
     if (s == NATS_OK)
     {
         natsMsgList *l;
+        bool        signal = false;
 
         natsMutex_Lock(worker->lock);
 
@@ -1903,10 +1900,13 @@ natsLib_msgDeliveryPostControlMsg(natsSubscription *sub)
         if (l->tail != NULL)
             l->tail->next = controlMsg;
         if (l->head == NULL)
+        {
             l->head = controlMsg;
+            signal  = true;
+        }
         l->tail = controlMsg;
 
-        if (worker->inWait)
+        if (signal)
             natsCondition_Signal(worker->cond);
 
         natsMutex_Unlock(worker->lock);

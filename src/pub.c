@@ -99,10 +99,10 @@ natsConn_publish(natsConnection *nc, natsMsg *msg, const char *reply, bool direc
         return nats_setDefaultError(NATS_DRAINING);
     }
 
-    // We can have headers NULL but hdrLift==true which means we are in special
+    // We can have headers NULL but needsLift which means we are in special
     // situation where a message was received and is sent back without the user
     // accessing the headers. It should still be considered having headers.
-    if ((msg->headers != NULL) || msg->hdrLift)
+    if ((msg->headers != NULL) || natsMsg_needsLift(msg))
     {
         if (!nc->info.headers)
         {

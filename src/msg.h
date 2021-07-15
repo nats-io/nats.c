@@ -27,7 +27,13 @@
 #define CTRL_STATUS         "100"
 #define HDR_STATUS_LEN      (3)
 
-struct __natsMsg;
+#define natsMsg_setNeedsLift(m)     ((m)->flags  |=  (1 << 0))
+#define natsMsg_needsLift(m)        (((m)->flags &   (1 << 0)) != 0)
+#define natsMsg_clearNeedsLift(m)   ((m)->flags  &= ~(1 << 0))
+
+#define natsMsg_setAcked(m)         ((m)->flags  |=  (1 << 1))
+#define natsMsg_isAcked(m)          (((m)->flags &   (1 << 1)) != 0)
+#define natsMsg_clearAcked(m)       ((m)->flags  &= ~(1 << 1))
 
 struct __natsMsg
 {
@@ -44,17 +50,11 @@ struct __natsMsg
     const char          *data;
     int                 dataLen;
     int                 hdrLen;
+    int                 flags;
 
     // subscription (needed when delivery done by connection,
     // or for JetStream).
     struct __natsSubscription *sub;
-
-    bool                hdrLift;
-    // When we want the server to survive a natsMsg_Destroy done
-    // by the user.
-    bool                noDestroy;
-    // To suppress users double ack.
-    bool                acked;
 
     // Must be last field!
     struct __natsMsg    *next;

@@ -1050,14 +1050,14 @@ typedef int64_t (*natsCustomReconnectDelayHandler)(natsConnection *nc, int attem
 /** \brief Callback used to process asynchronous publish errors from JetStream.
  *
  * Callback used to process asynchronous publish errors from JetStream #js_PublishAsync
- * and #js_PublishMsgAsync. The provided #jsPubAckErr gives the user
+ * and #js_PublishMsgAsync calls. The provided #jsPubAckErr object gives the user
  * access to the encountered error along with the original message sent to the server
  * for possible restransmitting.
  *
  * \note If the message is resent, the library will not destroy the original
  * message and once again take ownership of it. To resend the message, do the
- * following so that the library knows no to destroy the message (since the
- * call will clear the `Msg` field from the #jsPubAckErr object.
+ * following so that the library knows not to destroy the message (since the
+ * call will clear the `Msg` field from the #jsPubAckErr object).
  *
  * \code{.unparsed}
  * void myPAECallback(jsCtx *js, jsPubAckErr *pae, void* closure)
@@ -5136,14 +5136,19 @@ js_PublishAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
  * to be notified when all publish acknowledgments for the pending publish calls
  * have been received.
  *
- * \warning The message should not be destroyed by the caller. The library takes
- * ownership and will either destroy it or pass it to the optional error callback.
+ * \note If this call is successful, the library takes ownership of the message
+ * and will destroy it after the acknowledgment has been received, or will
+ * present it to the user through the #jsPubAckErrHandler callback. To prevent the user
+ * from accessing/destroying the message while in use by the library, this function
+ * requires a pointer to the pointer of the message so that it can be cleared.
+ * That way, the user should always call #natsMsg_Destroy, regardless of success or
+ * failure, since #natsMsg_Destroy will have no effect if the message pointer is `NULL`.
  *
  * @see js_PublishAsyncComplete
  * @see jsPubAckErrHandler
  *
  * @param js the pointer to the #jsCtx object.
- * @param msg the memory location where the pointer to the #natsMsg object to send is located.
+ * @param msg the memory location where the pointer to the #natsMsg object is located.
  * If the library takes ownership of the message, this location will be cleared so a following
  * call to #natsMsg_Destroy would have no effect.
  * @param opts the publish options, possibly `NULL`.

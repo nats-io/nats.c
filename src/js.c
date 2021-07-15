@@ -511,7 +511,6 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
     char            *id         = NULL;
     jsCtx           *js         = NULL;
     natsMsg         *pmsg       = NULL;
-    bool            freeMsg     = true;
     char            errTxt[256] = {'\0'};
     jsPubAckErr     pae;
     struct jsOptionsPublishAsync *opa = NULL;
@@ -583,9 +582,12 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
 
             js_lock(js);
 
-            // If the user took ownership of the message (by resending it),
-            // then we should not destroy the message at the end of this callback.
-            freeMsg = (pae.Msg != NULL);
+            // If the user resent the message, pae->Msg will have been cleared.
+            // In this case, do not destroy the message. Do not blindly destroy
+            // an address that could have been set, so destroy only if pmsg
+            // is same value than pae->Msg.
+            if (pae.Msg != pmsg)
+                pmsg = NULL;
         }
     }
 
@@ -601,8 +603,7 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
     }
     js_unlock(js);
 
-    if (freeMsg)
-        natsMsg_Destroy(pmsg);
+    natsMsg_Destroy(pmsg);
     natsMsg_Destroy(msg);
 }
 
@@ -613,7 +614,7 @@ _subComplete(void *closure)
 }
 
 static natsStatus
-_newAsyncReply(char *reply, jsCtx *js, natsMsg *msg)
+_newAsyncReply(char *reply, jsCtx *js)
 {
     natsStatus  s           = NATS_OK;
 
@@ -696,7 +697,7 @@ _registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg)
     maxp = js->opts.PublishAsync.MaxPending;
 
     js->pmcount++;
-    s = _newAsyncReply(reply, js, msg);
+    s = _newAsyncReply(reply, js);
     if (s == NATS_OK)
         id = reply+jsReplyPrefixLen;
     if ((s == NATS_OK)
@@ -920,21 +921,33 @@ jsSub_free(jsSub *jsi)
 static void
 _autoAckCB(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    jsSub               *jsi = (jsSub*) closure;
+    jsSub   *jsi = (jsSub*) closure;
+    char    _reply[256];
+    char    *reply = NULL;
+    bool    frply  = false;
 
-    // Prevent natsMsg_Destroy() to free the message when the
-    // user calls it inside the callback.
-    msg->noDestroy = true;
+    if (strlen(msg->reply) < sizeof(_reply))
+    {
+        snprintf(_reply, sizeof(_reply), "%s", msg->reply);
+        reply = _reply;
+    }
+    else
+    {
+        reply = NATS_STRDUP(msg->reply);
+        frply = (reply != NULL ? true : false);
+    }
 
     // Invoke user callback
     (jsi->usrCb)(nc, sub, msg, jsi->usrCbClosure);
 
-    // Ack the message
-    natsMsg_Ack(msg, NULL);
+    // Ack the message (unless we got a failure copying the reply subject)
+    if (reply == NULL)
+        return;
 
-    // Destroy the message now.
-    msg->noDestroy = false;
-    natsMsg_Destroy(msg);
+    natsConnection_PublishString(nc, reply, jsAckAck);
+
+    if (frply)
+        NATS_FREE(reply);
 }
 
 natsStatus
@@ -1465,7 +1478,7 @@ _ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool sync, jsErrCode
     if (msg == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if (msg->acked)
+    if (natsMsg_isAcked(msg))
         return NATS_OK;
 
     if (msg->sub == NULL)
@@ -1502,7 +1515,7 @@ _ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool sync, jsErrCode
     }
     // Indicate that we have ack'ed the message
     if (s == NATS_OK)
-        msg->acked = true;
+        natsMsg_setAcked(msg);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

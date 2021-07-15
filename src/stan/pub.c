@@ -406,10 +406,10 @@ _stanPublish(stanConnection *sc, const char *channel, const void *data, int data
                 {
                     natsMsg msg;
 
-                    natsMsg_init(&msg, (const char*) sc->pubSubjBuf, (const char*) sc->ackSubject,
+                    natsMsg_init(&msg, (const char*) sc->pubSubjBuf,
                                  (const char*) sc->pubMsgBuf, pubSize);
                     // Use private function to cause flush of buffer in place if sync call
-                    s = natsConn_publish(sc->nc, &msg, isSync);
+                    s = natsConn_publish(sc->nc, &msg, (const char*) sc->ackSubject, isSync);
                 }
                 if ((s != NATS_OK) && (pa != NULL))
                 {

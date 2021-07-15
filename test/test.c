@@ -22028,15 +22028,6 @@ test_JetStreamPublishAsync(void)
     testCond(s == NATS_INVALID_ARG);
     nats_clearLastError();
 
-    test("Reply subject should not be set: ");
-    s = natsMsg_Create(&msg, "foo", "bar", "baz", 3);
-    IFOK(s, js_PublishMsgAsync(js, &msg, NULL));
-    testCond((s == NATS_INVALID_ARG) && (msg != NULL)
-                && (strstr(nats_GetLastError(NULL), "reply subject should not be set") != NULL));
-    nats_clearLastError();
-    natsMsg_Destroy(msg);
-    msg = NULL;
-
     test("Publish msg: ");
     s = jsPubOptions_Init(&opts);
     if (s == NATS_OK)
@@ -22275,6 +22266,17 @@ test_JetStreamPublishAsync(void)
     natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
+    test("Reply subject can be set: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    IFOK(s, natsMsg_Create(&msg, "bar", "baz", "bat", 3));
+    IFOK(s, js_PublishMsgAsync(js, &msg, NULL));
+    testCond((s == NATS_OK) && (msg == NULL));
+
+    test("Wait complete: ");
+    s = js_PublishAsyncComplete(js, NULL);
+    testCond(s == NATS_OK);
+
+    jsCtx_Destroy(js);
     natsConnection_Destroy(nc);
     _destroyDefaultThreadArgs(&args);
     _stopServer(pid);

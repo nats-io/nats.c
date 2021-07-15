@@ -368,12 +368,12 @@ jsPubOptions_Init(jsPubOptions *opts)
 
 natsStatus
 js_Publish(jsPubAck **new_puback, jsCtx *js, const char *subj, const void *data, int dataLen,
-               jsPubOptions *opts, jsErrCode *errCode)
+           jsPubOptions *opts, jsErrCode *errCode)
 {
     natsStatus s;
     natsMsg    msg;
 
-    natsMsg_init(&msg, subj, NULL, (const char*) data, dataLen);
+    natsMsg_init(&msg, subj, (const char*) data, dataLen);
     s = js_PublishMsg(new_puback, js, &msg, opts, errCode);
     natsMsg_freeHeaders(&msg);
 
@@ -424,7 +424,7 @@ _checkMaxWaitOpt(int64_t *new_ttl, jsPubOptions *opts)
 
 natsStatus
 js_PublishMsg(jsPubAck **new_puback,jsCtx *js, natsMsg *msg,
-                  jsPubOptions *opts, jsErrCode *errCode)
+              jsPubOptions *opts, jsErrCode *errCode)
 {
     natsStatus          s       = NATS_OK;
     int64_t             ttl     = 0;
@@ -512,7 +512,6 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
     jsCtx           *js         = NULL;
     natsMsg         *pmsg       = NULL;
     bool            freeMsg     = true;
-    char            *rplyToFree = NULL;
     char            errTxt[256] = {'\0'};
     jsPubAckErr     pae;
     struct jsOptionsPublishAsync *opa = NULL;
@@ -578,20 +577,6 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
             pae.Msg = pmsg;
             // And the error text.
             pae.ErrText = errTxt;
-
-            // We need to clear the "reply" subject from the original message,
-            // which was added during the publish async call, otherwise user
-            // would not be able to resend it if desired.
-            if (pmsg->reply != NULL)
-            {
-                // However, we can't free it since the "id" points to a token
-                // in the reply subject. So just keep track of it and free
-                // only at the end.
-                if (pmsg->freeRply)
-                    rplyToFree = (char*) pmsg->reply;
-                pmsg->reply = NULL;
-            }
-
             js_unlock(js);
 
             (opa->ErrHandler)(js, &pae, opa->ErrHandlerClosure);
@@ -618,7 +603,6 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
 
     if (freeMsg)
         natsMsg_Destroy(pmsg);
-    NATS_FREE(rplyToFree);
     natsMsg_Destroy(msg);
 }
 
@@ -629,7 +613,7 @@ _subComplete(void *closure)
 }
 
 static natsStatus
-_newAsyncReply(char **new_id, jsCtx *js, natsMsg *msg)
+_newAsyncReply(char *reply, jsCtx *js, natsMsg *msg)
 {
     natsStatus  s           = NATS_OK;
 
@@ -683,7 +667,6 @@ _newAsyncReply(char **new_id, jsCtx *js, natsMsg *msg)
     }
     if (s == NATS_OK)
     {
-        char    reply[jsReplyPrefixLen + jsReplyTokenSize + 1];
         int64_t l;
         int     i;
 
@@ -695,22 +678,13 @@ _newAsyncReply(char **new_id, jsCtx *js, natsMsg *msg)
             l /= jsBase;
         }
         reply[jsReplyPrefixLen+jsReplyTokenSize] = '\0';
-
-        msg->reply = (const char*) NATS_STRDUP(reply);
-        if (msg->reply == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-        else
-        {
-            msg->freeRply = true;
-            *new_id = (char*) (msg->reply+jsReplyPrefixLen);
-        }
     }
 
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 static natsStatus
-_registerPubMsg(natsConnection **nc, char **new_id, jsCtx *js, natsMsg *msg)
+_registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg)
 {
     natsStatus  s       = NATS_OK;
     char        *id     = NULL;
@@ -722,7 +696,9 @@ _registerPubMsg(natsConnection **nc, char **new_id, jsCtx *js, natsMsg *msg)
     maxp = js->opts.PublishAsync.MaxPending;
 
     js->pmcount++;
-    s = _newAsyncReply(&id, js, msg);
+    s = _newAsyncReply(reply, js, msg);
+    if (s == NATS_OK)
+        id = reply+jsReplyPrefixLen;
     if ((s == NATS_OK)
             && (maxp > 0)
             && (js->pmcount > maxp))
@@ -742,16 +718,11 @@ _registerPubMsg(natsConnection **nc, char **new_id, jsCtx *js, natsMsg *msg)
         release = true;
     }
     if (s == NATS_OK)
-        s = natsStrHash_Set(js->pm, id, false, msg, NULL);
+        s = natsStrHash_Set(js->pm, id, true, msg, NULL);
     if (s == NATS_OK)
-    {
-        *new_id = id;
-        *nc     = js->nc;
-    }
+        *nc = js->nc;
     else
-    {
         js->pmcount--;
-    }
     if (release)
         js_unlockAndRelease(js);
     else
@@ -781,13 +752,10 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
 {
     natsStatus      s   = NATS_OK;
     natsConnection  *nc = NULL;
-    char            *id = NULL;
+    char            reply[jsReplyPrefixLen + jsReplyTokenSize + 1];
 
     if ((js == NULL) || (msg == NULL) || (*msg == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
-
-    if (natsMsg_GetReply(*msg) != NULL)
-        return nats_setError(NATS_INVALID_ARG, "%s", "reply subject should not be set");
 
     if (opts != NULL)
     {
@@ -797,12 +765,14 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
     }
 
     // On success, the context will be retained.
-    s = _registerPubMsg(&nc, &id, js, *msg);
+    s = _registerPubMsg(&nc, reply, js, *msg);
     if (s == NATS_OK)
     {
-        s = natsConnection_PublishMsg(nc, *msg);
+        s = natsConn_publish(nc, *msg, (const char*) reply, false);
         if (s != NATS_OK)
         {
+            char *id = reply+jsReplyPrefixLen;
+
             // The message may or may not have been sent, we don't know for sure.
             // We are going to attempt to remove from the map. If we can, then
             // we return the failure and the user owns the message. If we can't

@@ -669,10 +669,6 @@ natsMsg_free(void *object)
         return;
 
     msg = (natsMsg*) object;
-
-    if (msg->freeRply && (msg->reply != NULL))
-        NATS_FREE((char*) msg->reply);
-
     natsMsg_freeHeaders(msg);
 
     NATS_FREE(msg);
@@ -771,7 +767,6 @@ natsMsg_create(natsMsg **newMsg,
     msg->hdrLift    = false;
     msg->headers    = NULL;
     msg->sub        = NULL;
-    msg->freeRply   = false;
     msg->noDestroy  = false;
     msg->acked      = false;
     msg->next       = NULL;
@@ -825,11 +820,10 @@ natsMsg_create(natsMsg **newMsg,
 // Used internally to initialize a message structure, generally defined on the stack,
 // that will then be passed as a reference to publish functions.
 void
-natsMsg_init(natsMsg *msg, const char *subj, const char *reply, const char *data, int dataLen)
+natsMsg_init(natsMsg *msg, const char *subj, const char *data, int dataLen)
 {
     memset(msg, 0, sizeof(natsMsg));
     msg->subject = subj;
-    msg->reply = reply;
     msg->data = data;
     msg->dataLen = dataLen;
 }

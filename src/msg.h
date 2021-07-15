@@ -50,10 +50,6 @@ struct __natsMsg
     struct __natsSubscription *sub;
 
     bool                hdrLift;
-    // True if the reply is set after the message was created and
-    // therefore msg->reply points to a memory location outside
-    // of the message object and needs to be freed separately.
-    bool                freeRply;
     // When we want the server to survive a natsMsg_Destroy done
     // by the user.
     bool                noDestroy;
@@ -85,7 +81,7 @@ natsMsgHeader_encode(natsBuffer *buf, natsMsg *msg);
 
 void
 natsMsg_init(natsMsg *msg,
-             const char *subject, const char *reply,
+             const char *subject,
              const char *data, int dataLen);
 
 natsStatus

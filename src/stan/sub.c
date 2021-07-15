@@ -139,8 +139,8 @@ _stanProcessMsg(natsConnection *nc, natsSubscription *ignored, natsMsg *msg, voi
                 {
                     natsMsg ackMsg;
 
-                    natsMsg_init(&ackMsg, (const char*) ackSubject, NULL, (const char*) ackBuf, ackSize);
-                    natsConn_publish(nc, &ackMsg, flush);
+                    natsMsg_init(&ackMsg, (const char*) ackSubject, (const char*) ackBuf, ackSize);
+                    natsConn_publish(nc, &ackMsg, NULL, flush);
                 }
             }
         }
@@ -235,8 +235,8 @@ stanSubscription_AckMsg(stanSubscription *sub, stanMsg *msg)
             {
                 natsMsg ackMsg;
 
-                natsMsg_init(&ackMsg, ackSub, NULL, (const void*) ackBuf, ackSize);
-                s = natsConn_publish(nc, &ackMsg, flush);
+                natsMsg_init(&ackMsg, ackSub, (const void*) ackBuf, ackSize);
+                s = natsConn_publish(nc, &ackMsg, NULL, flush);
             }
 
             if (needFree)

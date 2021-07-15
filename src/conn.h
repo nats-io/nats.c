@@ -123,7 +123,7 @@ void
 natsConn_destroyRespPool(natsConnection *nc);
 
 natsStatus
-natsConn_publish(natsConnection *nc, natsMsg *msg, bool directFlush);
+natsConn_publish(natsConnection *nc, natsMsg *msg, const char *reply, bool directFlush);
 
 natsStatus
 natsConn_userFromFile(char **userJWT, char **customErrTxt, void *closure);

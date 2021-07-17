@@ -22712,20 +22712,24 @@ test_JetStreamSubscribeSync(void)
     s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond((s == NATS_OK) && (msg != NULL));
 
-    test("InProgress: ");
-    s = natsMsg_InProgress(msg, NULL);
-    IFOK(s, natsSubscription_NextMsg(&ack, ackSub, 1000));
-    if (s == NATS_OK)
+    // Should be able to send InProgress more than once.
+    for (i=0; i<2; i++)
     {
-        s = (strncmp(
-                natsMsg_GetData(ack),
-                jsAckInProgress,
-                natsMsg_GetDataLength(ack)) == 0 ? NATS_OK : NATS_ERR);
+        test("InProgress: ");
+        s = natsMsg_InProgress(msg, NULL);
+        IFOK(s, natsSubscription_NextMsg(&ack, ackSub, 1000));
+        if (s == NATS_OK)
+        {
+            s = (strncmp(
+                    natsMsg_GetData(ack),
+                    jsAckInProgress,
+                    natsMsg_GetDataLength(ack)) == 0 ? NATS_OK : NATS_ERR);
 
-        natsMsg_Destroy(ack);
-        ack = NULL;
+            natsMsg_Destroy(ack);
+            ack = NULL;
+        }
+        testCond(s == NATS_OK);
     }
-    testCond(s == NATS_OK);
     natsMsg_Destroy(msg);
     msg = NULL;
 

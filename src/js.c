@@ -1467,7 +1467,7 @@ js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject,
 }
 
 static natsStatus
-_ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool sync, jsErrCode *errCode)
+_ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool inProgress, bool sync, jsErrCode *errCode)
 {
     natsSubscription    *sub = NULL;
     natsConnection      *nc  = NULL;
@@ -1514,7 +1514,7 @@ _ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool sync, jsErrCode
         s = natsConnection_PublishString(nc, msg->reply, ackType);
     }
     // Indicate that we have ack'ed the message
-    if (s == NATS_OK)
+    if ((s == NATS_OK) && !inProgress)
         natsMsg_setAcked(msg);
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -1523,31 +1523,31 @@ _ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool sync, jsErrCode
 natsStatus
 natsMsg_Ack(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckAck, false, NULL);
+    return _ackMsg(msg, opts, jsAckAck, false, false, NULL);
 }
 
 natsStatus
 natsMsg_AckSync(natsMsg *msg, jsOptions *opts, jsErrCode *errCode)
 {
-    return _ackMsg(msg, opts, jsAckAck, true, errCode);
+    return _ackMsg(msg, opts, jsAckAck, false, true, errCode);
 }
 
 natsStatus
 natsMsg_Nak(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckNak, false, NULL);
+    return _ackMsg(msg, opts, jsAckNak, false, false, NULL);
 }
 
 natsStatus
 natsMsg_InProgress(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckInProgress, false, NULL);
+    return _ackMsg(msg, opts, jsAckInProgress, true, false, NULL);
 }
 
 natsStatus
 natsMsg_Term(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckTerm, false, NULL);
+    return _ackMsg(msg, opts, jsAckTerm, false, false, NULL);
 }
 
 natsStatus

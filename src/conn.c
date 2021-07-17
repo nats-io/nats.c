@@ -2585,8 +2585,8 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         }
         else
         {
-            natsMsgList *list = NULL;
-            bool        signal= false;
+            nats_MsgList *list = NULL;
+            bool         signal= false;
 
             if (sub->msgList.msgs > sub->msgsMax)
                 sub->msgsMax = sub->msgList.msgs;

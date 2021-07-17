@@ -1889,8 +1889,8 @@ natsLib_msgDeliveryPostControlMsg(natsSubscription *sub)
     s = natsMsg_create(&controlMsg, NULL, 0, NULL, 0, NULL, 0, -1);
     if (s == NATS_OK)
     {
-        natsMsgList *l;
-        bool        signal = false;
+        nats_MsgList    *l;
+        bool            signal = false;
 
         natsMutex_Lock(worker->lock);
 

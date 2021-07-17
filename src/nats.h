@@ -136,6 +136,35 @@ typedef struct __natsOptions        natsOptions;
  */
 typedef char                        natsInbox;
 
+/** \brief A list of NATS messages.
+ *
+ * Used by some APIs which return a list of #natsMsg objects.
+ *
+ * Those APIs will not create the object, but instead initialize
+ * the object to which a pointer to that object will be passed to it.
+ * Typically, the user will define the object on the stack and
+ * pass a pointer to this object to APIs that require a pointer
+ * to a #natsMsgList object.
+ *
+ * Similarly, calling #natsMsgList_Destroy will call #natsMsg_Destroy
+ * on any message still in the list, free the array containing pointers
+ * to the messages, but not free the #natsMsgList object itself.
+ *
+ * \note If the user wants to keep some of the messages from the
+ * list, the pointers of those messages in the `Msgs` array should
+ * be set to `NULL`. The value `Count` MUST not be changed. The
+ * function #natsMsgList_Destroy will iterate through all
+ * pointers in the list and only destroy the ones that have not
+ * been set to `NULL`.
+ *
+ * @see natsMsgList_Destroy
+ */
+typedef struct natsMsgList
+{
+        natsMsg         **Msgs;
+        const int       Count;
+
+} natsMsgList;
 
 /**
  * The JetStream context. Use for JetStream assets management and communication.
@@ -253,8 +282,8 @@ typedef enum
  */
 typedef struct jsPlacement
 {
-        const char      *Cluster;       //`json:"cluster"`
-        const char      **Tags;         //`json:"tags,omitempty"`
+        const char      *Cluster;
+        const char      **Tags;
         int             TagsLen;
 
 } jsPlacement;
@@ -270,8 +299,8 @@ typedef struct jsPlacement
  */
 typedef struct jsExternalStream
 {
-        const char      *APIPrefix;     //`json:"api"`
-        const char      *DeliverPrefix; //`json:"deliver"`
+        const char      *APIPrefix;
+        const char      *DeliverPrefix;
 
 } jsExternalStream;
 
@@ -289,11 +318,11 @@ typedef struct jsExternalStream
  */
 typedef struct jsStreamSource
 {
-        const char              *Name;          //`json:"name"`
-        uint64_t                OptStartSeq;    //`json:"opt_start_seq,omitempty"`
-        int64_t                 OptStartTime;   //`json:"opt_start_time,omitempty"`
-        const char              *FilterSubject; //`json:"filter_subject,omitempty"`
-        jsExternalStream        *External;      //`json:"external,omitempty"`
+        const char              *Name;
+        uint64_t                OptStartSeq;
+        int64_t                 OptStartTime;   ///< UTC time expressed as number of nanoseconds since epoch.
+        const char              *FilterSubject;
+        jsExternalStream        *External;
 
 } jsStreamSource;
 
@@ -367,25 +396,25 @@ typedef struct jsStreamSource
  * \endcode
  */
 typedef struct jsStreamConfig {
-        const char              *Name;              //`json:"name"`
-        const char              **Subjects;         //`json:"subjects,omitempty"`
+        const char              *Name;
+        const char              **Subjects;
         int                     SubjectsLen;
-        jsRetentionPolicy       Retention;          //`json:"retention"`
-        int                     MaxConsumers;       //`json:"max_consumers"`
-        int64_t                 MaxMsgs;            //`json:"max_msgs"`
-        int64_t                 MaxBytes;           //`json:"max_bytes"`
-        int64_t                 MaxAge;             //`json:"max_age"`
-        int64_t                 MaxMsgsPerSubject;  //`json:"max_msgs_per_subject"`
-        int32_t                 MaxMsgSize;         //`json:"max_msg_size,omitempty"`
-        jsDiscardPolicy         Discard;            //`json:"discard"`
-        jsStorageType           Storage;            //`json:"storage"`
-        int                     Replicas;           //`json:"num_replicas"`
-        bool                    NoAck;              //`json:"no_ack,omitempty"`
-        const char              *Template;          //`json:"template_owner,omitempty"`
-        int64_t                 Duplicates;         //`json:"duplicate_window,omitempty"`
-        jsPlacement             *Placement;         //`json:"placement,omitempty"`
-        jsStreamSource          *Mirror;            //`json:"mirror,omitempty"`
-        jsStreamSource          **Sources;          //`json:"sources,omitempty"`
+        jsRetentionPolicy       Retention;
+        int                     MaxConsumers;
+        int64_t                 MaxMsgs;
+        int64_t                 MaxBytes;
+        int64_t                 MaxAge;
+        int64_t                 MaxMsgsPerSubject;
+        int32_t                 MaxMsgSize;
+        jsDiscardPolicy         Discard;
+        jsStorageType           Storage;
+        int                     Replicas;
+        bool                    NoAck;
+        const char              *Template;
+        int64_t                 Duplicates;
+        jsPlacement             *Placement;
+        jsStreamSource          *Mirror;
+        jsStreamSource          **Sources;
         int                     SourcesLen;
 
 } jsStreamConfig;
@@ -395,9 +424,9 @@ typedef struct jsStreamConfig {
  */
 typedef struct jsLostStreamData
 {
-        uint64_t                *Msgs;          //`json:"msgs"`
+        uint64_t                *Msgs;
         int                     MsgsLen;
-        uint64_t                Bytes;          //`json:"bytes"`
+        uint64_t                Bytes;
 
 } jsLostStreamData;
 
@@ -409,17 +438,17 @@ typedef struct jsLostStreamData
  */
 typedef struct jsStreamState
 {
-        uint64_t                Msgs;           //`json:"messages"`
-        uint64_t                Bytes;          //`json:"bytes"`
-        uint64_t                FirstSeq;       //`json:"first_seq"`
-        int64_t                 FirstTime;      //`json:"first_ts"`
-        uint64_t                LastSeq;        //`json:"last_seq"`
-        int64_t                 LastTime;       //`json:"last_ts"`
-        uint64_t                NumDeleted;     //`json:"num_deleted,omitempty"`
-        uint64_t                *Deleted;       //`json:"deleted,omitempty"`
+        uint64_t                Msgs;
+        uint64_t                Bytes;
+        uint64_t                FirstSeq;
+        int64_t                 FirstTime;      ///< UTC time expressed as number of nanoseconds since epoch.
+        uint64_t                LastSeq;
+        int64_t                 LastTime;       ///< UTC time expressed as number of nanoseconds since epoch.
+        uint64_t                NumDeleted;
+        uint64_t                *Deleted;
         int                     DeletedLen;
-        jsLostStreamData        *Lost;          //`json:"lost,omitempty"`
-        int                     Consumers;      //`json:"consumer_count"`
+        jsLostStreamData        *Lost;
+        int                     Consumers;
 
 } jsStreamState;
 
@@ -429,11 +458,11 @@ typedef struct jsStreamState
  */
 typedef struct jsPeerInfo
 {
-        char        *Name;      //`json:"name"`
-        bool        Current;    //`json:"current"`
-        bool        Offline;    //`json:"offline,omitempty"`
-        int64_t     Active;     //`json:"active"`
-        uint64_t    Lag;        //`json:"lag,omitempty"`
+        char        *Name;
+        bool        Current;
+        bool        Offline;
+        int64_t     Active;
+        uint64_t    Lag;
 
 } jsPeerInfo;
 
@@ -443,9 +472,9 @@ typedef struct jsPeerInfo
  */
 typedef struct jsClusterInfo
 {
-        char            *Name;      //`json:"name,omitempty"`
-        char            *Leader;    //`json:"leader,omitempty"`
-        jsPeerInfo      **Replicas; //`json:"replicas,omitempty"`
+        char            *Name;
+        char            *Leader;
+        jsPeerInfo      **Replicas;
         int             ReplicasLen;
 
 } jsClusterInfo;
@@ -455,10 +484,10 @@ typedef struct jsClusterInfo
  */
 typedef struct jsStreamSourceInfo
 {
-        char                    *Name;          //`json:"name"`
-        jsExternalStream        *External;      //`json:"external,omitempty"`
-        uint64_t                Lag;            //`json:"lag"`
-        int64_t                 Active;         //`json:"active"`
+        char                    *Name;
+        jsExternalStream        *External;
+        uint64_t                Lag;
+        int64_t                 Active;
 
 } jsStreamSourceInfo;
 
@@ -470,12 +499,12 @@ typedef struct jsStreamSourceInfo
  */
 typedef struct jsStreamInfo
 {
-        jsStreamConfig          *Config;    //`json:"config"`
-        int64_t                 Created;    //`json:"created"`
-        jsStreamState           State;      //`json:"state"`
-        jsClusterInfo           *Cluster;   //`json:"cluster,omitempty"`
-        jsStreamSourceInfo      *Mirror;    //`json:"mirror,omitempty"`
-        jsStreamSourceInfo      **Sources;  //`json:"sources,omitempty"`
+        jsStreamConfig          *Config;
+        int64_t                 Created;        ///< UTC time expressed as number of nanoseconds since epoch.
+        jsStreamState           State;
+        jsClusterInfo           *Cluster;
+        jsStreamSourceInfo      *Mirror;
+        jsStreamSourceInfo      **Sources;
         int                     SourcesLen;
 
 } jsStreamInfo;
@@ -514,22 +543,22 @@ typedef struct jsStreamInfo
  */
 typedef struct jsConsumerConfig
 {
-        const char              *Durable;               //`json:"durable_name,omitempty"`
-        const char              *DeliverSubject;        //`json:"deliver_subject,omitempty"`
-        jsDeliverPolicy         DeliverPolicy;          //`json:"deliver_policy"`
-        uint64_t                OptStartSeq;            //`json:"opt_start_seq,omitempty"`
-        int64_t                 OptStartTime;           //`json:"opt_start_time,omitempty"`
-        jsAckPolicy             AckPolicy;              //`json:"ack_policy"`
-        int64_t                 AckWait;                //`json:"ack_wait,omitempty"`
-        int                     MaxDeliver;             //`json:"max_deliver,omitempty"`
-        const char              *FilterSubject;         //`json:"filter_subject,omitempty"`
-        jsReplayPolicy          ReplayPolicy;           //`json:"replay_policy"`
-        uint64_t                RateLimit;              //`json:"rate_limit_bps,omitempty"` // Bits per sec
-        const char              *SampleFrequency;       //`json:"sample_freq,omitempty"`
-        int                     MaxWaiting;             //`json:"max_waiting,omitempty"`
-        int                     MaxAckPending;          //`json:"max_ack_pending,omitempty"`
-        bool                    FlowControl;            //`json:"flow_control,omitempty"`
-        int64_t                 Heartbeat;              //`json:"idle_heartbeat,omitempty"`
+        const char              *Durable;
+        const char              *DeliverSubject;
+        jsDeliverPolicy         DeliverPolicy;
+        uint64_t                OptStartSeq;
+        int64_t                 OptStartTime;           ///< UTC time expressed as number of nanoseconds since epoch.
+        jsAckPolicy             AckPolicy;
+        int64_t                 AckWait;
+        int                     MaxDeliver;
+        const char              *FilterSubject;
+        jsReplayPolicy          ReplayPolicy;
+        uint64_t                RateLimit;
+        const char              *SampleFrequency;
+        int                     MaxWaiting;
+        int                     MaxAckPending;
+        bool                    FlowControl;
+        int64_t                 Heartbeat;              ///< Heartbeat interval expressed in number of nanoseconds.
 
 } jsConsumerConfig;
 
@@ -629,8 +658,8 @@ typedef struct jsSubOptions
  */
 typedef struct jsSequencePair
 {
-        uint64_t        Consumer;                       //`json:"consumer_seq"`
-        uint64_t        Stream;                         //`json:"stream_seq"`
+        uint64_t        Consumer;
+        uint64_t        Stream;
 
 } jsSequencePair;
 
@@ -642,17 +671,17 @@ typedef struct jsSequencePair
  */
 typedef struct jsConsumerInfo
 {
-        char                    *Stream;                //`json:"stream_name"`
-        char                    *Name;                  //`json:"name"`
-        int64_t                 Created;                //`json:"created"`
-        jsConsumerConfig        *Config;                //`json:"config"`
-        jsSequencePair          Delivered;              //`json:"delivered"`
-        jsSequencePair          AckFloor;               //`json:"ack_floor"`
-        int                     NumAckPending;          //`json:"num_ack_pending"`
-        int                     NumRedelivered;         //`json:"num_redelivered"`
-        int                     NumWaiting;             //`json:"num_waiting"`
-        uint64_t                NumPending;             //`json:"num_pending"`
-        jsClusterInfo           *Cluster;               //`json:"cluster,omitempty"`
+        char                    *Stream;
+        char                    *Name;
+        int64_t                 Created;                ///< UTC time expressed as number of nanoseconds since epoch.
+        jsConsumerConfig        *Config;
+        jsSequencePair          Delivered;
+        jsSequencePair          AckFloor;
+        int                     NumAckPending;
+        int                     NumRedelivered;
+        int                     NumWaiting;
+        uint64_t                NumPending;
+        jsClusterInfo           *Cluster;
 
 } jsConsumerInfo;
 
@@ -661,8 +690,8 @@ typedef struct jsConsumerInfo
  */
 typedef struct jsAPIStats
 {
-        uint64_t Total;  //`json:"total"`
-        uint64_t Errors; //`json:"errors"`
+        uint64_t Total;
+        uint64_t Errors;
 
 } jsAPIStats;
 
@@ -671,10 +700,10 @@ typedef struct jsAPIStats
  */
 typedef struct  jsAccountLimits
 {
-        int64_t MaxMemory;      //`json:"max_memory"`
-        int64_t MaxStore;       //`json:"max_storage"`
-        int     MaxStreams;     //`json:"max_streams"`
-        int     MaxConsumers;   //`json:"max_consumers"`
+        int64_t MaxMemory;
+        int64_t MaxStore;
+        int     MaxStreams;
+        int     MaxConsumers;
 
 } jsAccountLimits;
 
@@ -683,13 +712,13 @@ typedef struct  jsAccountLimits
  */
 typedef struct jsAccountInfo
 {
-        uint64_t                Memory;         //`json:"memory"`
-        uint64_t                Store;          //`json:"storage"`
-        int                     Streams;        //`json:"streams"`
-        int                     Consumers;      //`json:"consumers"`
-        char                    *Domain;        //`json:"domain,omitempty"`
-        jsAPIStats              API;            //`json:"api"`
-        jsAccountLimits         Limits;         //`json:"limits"`
+        uint64_t                Memory;
+        uint64_t                Store;
+        int                     Streams;
+        int                     Consumers;
+        char                    *Domain;
+        jsAPIStats              API;
+        jsAccountLimits         Limits;
 
 } jsAccountInfo;
 
@@ -716,9 +745,9 @@ typedef struct jsMsgMetaData
  */
 typedef struct jsPubAck
 {
-        char            *Stream;        //`json:"stream"`
-        uint64_t        Sequence;       //`json:"seq"`
-        bool            Duplicate;      //`json:"duplicate,omitempty"`
+        char            *Stream;
+        uint64_t        Sequence;
+        bool            Duplicate;
 
 } jsPubAck;
 
@@ -2936,6 +2965,21 @@ natsInbox_Destroy(natsInbox *inbox);
  *  NATS Message.
  *  @{
  */
+
+/** \brief  Destroys this list of messages.
+ *
+ * This function iterates through the list of all messages and call #natsMsg_Destroy
+ * for each valid (not set to `NULL`) message. It then frees the array that was
+ * allocated to hold pointers to those messages.
+ *
+ * \note The #natsMsgList object itself is not freed since it is expected that
+ * users will pass a pointer to a stack object. Should the user create its own
+ * object, it will be the user responsibility to free this object.
+ *
+ * @param list the #natsMsgList list of #natsMsg objects to destroy.
+ */
+NATS_EXTERN void
+natsMsgList_Destroy(natsMsgList *list);
 
 /** \brief Creates a #natsMsg object.
  *
@@ -5170,6 +5214,57 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts);
 NATS_EXTERN natsStatus
 js_PublishAsyncComplete(jsCtx *js, jsPubOptions *opts);
 
+/** \brief Returns the list of pending messages published asynchronously.
+ *
+ * This call returns the list of all asynchronously published messages
+ * for which no acknowledgment have been received yet.
+ *
+ * The user has now back ownership of the messages and can resend send if
+ * desired or simply destroy them.
+ *
+ * \note After this call returns, it is possible that acknowledgments arrive
+ * from the server but since they have been removed from the pending list, the
+ * acknowledgments will be discarded (no #jsPubAckErrHandler callback invoked).
+ * If the server did receive a particular message and the user in the meantime
+ * has resent that message, it would be a duplicate, so in order for the server
+ * to detect this duplicate, ensure that the stream's duplicate window setting
+ * is specified and a unique message ID was set when sending the message.
+ *
+ * \warning The user must call #natsMsgList_Destroy to release memory
+ * allocated by this call and destroy all pending messages still present in the list.
+ *
+ * \code{.unparsed}
+ * natsMsgList pending;
+ *
+ * s = js_PublishAsyncGetPendingList(&pending, js);
+ * if (s == NATS_OK)
+ * {
+ *      int i;
+ *
+ *      for (i=0; i<pending.Count; i++)
+ *      {
+ *              if (your_decision_to_resend(pending.Msgs[i]))
+ *              {
+ *                      // If the call is successful, pending.Msgs[i] will
+ *                      // be set to NULL so the message will not be
+ *                      // destroyed.
+ *                      js_PublishMsgAsync(js, &(pending.Msgs[i]), NULL);
+ *              }
+ *      }
+ *
+ *      // Calling this will release memory allocated to hold the
+ *      // array of messages but also call natsMsg_Destroy on all
+ *      // messages still present in the array.
+ *      natsMsgList_Destroy(&pending);
+ * }
+ * \endcode
+ *
+ * @param pending pointer to a #natsMsgList object, typically defined on the stack.
+ * @param js the pointer to the #jsCtx object.
+ */
+NATS_EXTERN natsStatus
+js_PublishAsyncGetPendingList(natsMsgList *pending, jsCtx *js);
+
 /** @} */ // end of jsPubGroup
 
 /** \defgroup jsSubGroup Subscribing
@@ -5248,7 +5343,7 @@ js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject,
  * between the server and client's view of the state of the consumer.
  *
  * If the library detects a sequence mismatch, the behavior is different depending on
- * the type of subscritpion:
+ * the type of subscription:
  *
  * * For asynchronous subscriptions: the error #NATS_MISMATCH is published to the error handler
  * (see #natsOptions_SetErrorHandler).

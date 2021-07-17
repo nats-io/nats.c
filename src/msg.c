@@ -885,3 +885,16 @@ natsMsg_isCtrl(natsMsg *msg)
     p += HDR_STATUS_LEN;
     return (isspace(*p) || (*p == '\r') || (*p == '\n'));
 }
+
+void
+natsMsgList_Destroy(natsMsgList *list)
+{
+    int i;
+
+    if (list == NULL)
+        return;
+
+    for (i=0; i < list->Count; i++)
+        natsMsg_Destroy(list->Msgs[i]);
+    NATS_FREE(list->Msgs);
+}

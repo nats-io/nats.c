@@ -21949,12 +21949,18 @@ test_JetStreamPublishAsync(void)
     jsPubOptions        opts;
     natsMsg             *msg = NULL;
     natsMsg             *cmsg = NULL;
+    natsMsg             *msg1 = NULL;
+    natsMsg             *msg2 = NULL;
     const char          *val = NULL;
     const char          **keys = NULL;
     int                 keysCount = 0;
     char                datastore[256] = {'\0'};
     char                cmdLine[1024] = {'\0'};
     struct threadArg    args;
+    int                 i;
+    bool                ok1 = false;
+    bool                ok2 = false;
+    natsMsgList         pending;
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)
@@ -22276,10 +22282,56 @@ test_JetStreamPublishAsync(void)
     s = js_PublishAsyncComplete(js, NULL);
     testCond(s == NATS_OK);
 
+    test("Publish async: ");
+    _stopServer(pid);
+    s = natsMsg_Create(&msg1, "foo", NULL, "hello1", 6);
+    IFOK(s, natsMsg_Create(&msg2, "foo", NULL, "hello2", 6));
+    IFOK(s, js_PublishMsgAsync(js, &msg1, NULL));
+    IFOK(s, js_PublishMsgAsync(js, &msg2, NULL));
+    testCond((s == NATS_OK) && (msg1 == NULL) && (msg2 == NULL));
+
+    test("Get pending (bad args): ");
+    s = js_PublishAsyncGetPendingList(NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_PublishAsyncGetPendingList(&pending, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_PublishAsyncGetPendingList(NULL, js);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Get pending: ");
+    s = js_PublishAsyncGetPendingList(&pending, js);
+    testCond((s == NATS_OK)
+                && (pending.Msgs != NULL)
+                && (pending.Count == 2));
+
+    test("Verify pending list: ");
+    for (i=0; i<pending.Count; i++)
+    {
+        natsMsg *msg = pending.Msgs[i];
+
+        // Cannot assume order, but we should get hello1 and hello2 in all.
+        if (strncmp(natsMsg_GetData(msg), "hello1", 6) == 0)
+        {
+            ok1 = true;
+            msg1 = msg;
+            pending.Msgs[i] = NULL;
+        }
+        else if (strncmp(natsMsg_GetData(msg), "hello2", 6) == 0)
+            ok2 = true;
+    }
+    testCond(ok1 && ok2 && (msg1 != NULL));
+
+    test("Destroy list leaves msg1 valid: ");
+    natsMsgList_Destroy(&pending);
+    // Access something from msg1 to make sure that memory is still valid
+    s = (strncmp(natsMsg_GetData(msg1), "hello1", 6) == 0 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg1);
+
     jsCtx_Destroy(js);
     natsConnection_Destroy(nc);
     _destroyDefaultThreadArgs(&args);
-    _stopServer(pid);
     rmtree(datastore);
 }
 

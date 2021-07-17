@@ -308,14 +308,14 @@ struct __natsOptions
     bool disableNoResponders;
 };
 
-typedef struct __natsMsgList
+typedef struct __nats_MsgList
 {
     natsMsg     *head;
     natsMsg     *tail;
     int         msgs;
     int         bytes;
 
-} natsMsgList;
+} nats_MsgList;
 
 typedef struct __natsMsgDlvWorker
 {
@@ -323,7 +323,7 @@ typedef struct __natsMsgDlvWorker
     natsCondition   *cond;
     natsThread      *thread;
     bool            shutdown;
-    natsMsgList     msgList;
+    nats_MsgList     msgList;
 
 } natsMsgDlvWorker;
 
@@ -392,7 +392,7 @@ struct __natsSubscription
 
     // The list of messages waiting to be delivered to the callback (or
     // returned from NextMsg).
-    natsMsgList                 msgList;
+    nats_MsgList                msgList;
 
     // True if msgList.count is over pendingMax
     bool                        slowConsumer;

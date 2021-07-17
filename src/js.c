@@ -835,7 +835,54 @@ js_PublishAsyncComplete(jsCtx *js, jsPubOptions *opts)
             natsCondition_Wait(js->cond, js->mu);
     }
     js->pacw--;
+
+    // Make sure that if we return timeout, there is really
+    // still unack'ed publish messages.
+    if ((s == NATS_TIMEOUT) && (js->pmcount == 0))
+        s = NATS_OK;
+
     js_unlockAndRelease(js);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_PublishAsyncGetPendingList(natsMsgList *pending, jsCtx *js)
+{
+    natsStatus          s        = NATS_OK;
+    int                 count    = 0;
+
+    if ((pending == NULL) || (js == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    js_lock(js);
+    if ((count = natsStrHash_Count(js->pm)) == 0)
+    {
+        js_unlock(js);
+        return NATS_NOT_FOUND;
+    }
+    pending->Msgs  = (natsMsg**) NATS_CALLOC(count, sizeof(natsMsg*));
+    if (pending->Msgs == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    else
+    {
+        natsStrHashIter iter;
+        void            *val = NULL;
+        int             i    = 0;
+
+        natsStrHashIter_Init(&iter, js->pm);
+        while (natsStrHashIter_Next(&iter, NULL, &val))
+        {
+            pending->Msgs[i++] = (natsMsg*) val;
+            natsStrHashIter_RemoveCurrent(&iter);
+            if (js->pmcount > 0)
+                js->pmcount--;
+        }
+        *(int*)&(pending->Count) = count;
+    }
+    js_unlock(js);
+
+    if (s != NATS_OK)
+        natsMsgList_Destroy(pending);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

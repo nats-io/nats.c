@@ -23,6 +23,9 @@ natsSock_Init(natsSockCtx *ctx);
 natsStatus
 natsSock_WaitReady(int waitMode, natsSockCtx *ctx);
 
+void
+natsSock_ShuffleIPs(natsSockCtx *ctx, struct addrinfo **tmp, int tmpSize, struct addrinfo **ipListHead, int count);
+
 natsStatus
 natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port);
 

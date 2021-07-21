@@ -4859,11 +4859,106 @@ test_natsSock_ConnectTcp(void)
     _stopServer(serverPid);
     serverPid = NATS_INVALID_PID;
 
+    test("Check connect tcp hostname: ");
+    serverPid = _startServer("nats://localhost:4222", "-p 4222", true);
+    testCond(serverPid != NATS_INVALID_PID);
+    _stopServer(serverPid);
+    serverPid = NATS_INVALID_PID;
+
     test("Check connect tcp (force server to listen to IPv4): ");
     serverPid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222", true);
     testCond(serverPid != NATS_INVALID_PID);
     _stopServer(serverPid);
     serverPid = NATS_INVALID_PID;
+}
+
+static bool
+listOrder(struct addrinfo *head, bool ordered)
+{
+    struct addrinfo *p;
+    int i;
+
+    p = head;
+    for (i=0; i<10; i++)
+    {
+        if (ordered && (p->ai_flags != (i+1)))
+            return false;
+        p = p->ai_next;
+    }
+    return true;
+}
+
+static void
+test_natsSock_ShuffleIPs(void)
+{
+    struct addrinfo *tmp[10];
+    struct addrinfo *head = NULL;
+    struct addrinfo *tail = NULL;
+    struct addrinfo *list = NULL;
+    struct addrinfo *p;
+    natsSockCtx     ctx;
+    int i=0;
+
+    // Create a fake list that has `ai_flags` set to 1 to 10.
+    // We will use that to check that the list is shuffled or not.
+    for (i=0; i<10; i++)
+    {
+        p = calloc(1, sizeof(struct addrinfo));
+        p->ai_flags = (i+1);
+        if (head == NULL)
+            head=p;
+        if (tail != NULL)
+            tail->ai_next = p;
+        tail = p;
+    }
+
+    test("No randomize, so no shuffling: ");
+    natsSock_Init(&ctx);
+    ctx.noRandomize = true;
+    list = head;
+    natsSock_ShuffleIPs(&ctx, tmp, sizeof(tmp), &list, 10);
+    testCond((list == head) && listOrder(list, true));
+
+    test("Shuffling bad args 2: ");
+    natsSock_Init(&ctx);
+    list = head;
+    natsSock_ShuffleIPs(&ctx, tmp, sizeof(tmp), NULL, 10);
+    testCond((list == head) && listOrder(list, true));
+
+    test("Shuffling bad args 1: ");
+    natsSock_Init(&ctx);
+    list = head;
+    natsSock_ShuffleIPs(&ctx, tmp, sizeof(tmp), &list, 0);
+    testCond((list == head) && listOrder(list, true));
+
+    test("No shuffling count==1: ");
+    natsSock_Init(&ctx);
+    list = head;
+    natsSock_ShuffleIPs(&ctx, tmp, sizeof(tmp), &list, 1);
+    testCond((list == head) && listOrder(list, true));
+
+    test("Shuffling: ");
+    natsSock_Init(&ctx);
+    list = head;
+    natsSock_ShuffleIPs(&ctx, tmp, sizeof(tmp), &list, 10);
+    testCond(listOrder(list, false));
+
+    // Reorder the list, and we will try with a tmp buffer too small,
+    // so API is going to allocate memory.
+    p = list;
+    for (i=0; i<10; i++)
+        p->ai_flags = (i+1);
+    head = list;
+    test("Shuffling mem alloc: ");
+    natsSock_Init(&ctx);
+    natsSock_ShuffleIPs(&ctx, tmp, 5, &list, 10);
+    testCond(listOrder(list, false));
+
+    for (p = list; p != NULL; p = list)
+    {
+        list = list->ai_next;
+        free(p);
+    }
 }
 
 static natsOptions*
@@ -5241,6 +5336,7 @@ test_ServersRandomize(void)
     natsStatus      s;
     natsOptions     *opts   = NULL;
     natsConnection  *nc     = NULL;
+    natsPid         pid     = NATS_INVALID_PID;
     int serversCount;
 
     serversCount = sizeof(testServers) / sizeof(char *);
@@ -5330,7 +5426,43 @@ test_ServersRandomize(void)
     testCond(s == NATS_OK);
 
     natsConn_release(nc);
+    nc = NULL;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("NoRandomize==true passed to context: ");
+    s = natsOptions_SetNoRandomize(opts, true);
+    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    if (s == NATS_OK)
+    {
+        natsConn_Lock(nc);
+        if (!nc->sockCtx.noRandomize)
+            s = NATS_ERR;
+        natsConn_Unlock(nc);
+    }
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    test("NoRandomize==false passed to context: ");
+    s = natsOptions_SetNoRandomize(opts, false);
+    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    if (s == NATS_OK)
+    {
+        natsConn_Lock(nc);
+        if (nc->sockCtx.noRandomize)
+            s = NATS_ERR;
+        natsConn_Unlock(nc);
+    }
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
+    _stopServer(pid);
 }
 
 static void
@@ -21897,6 +22029,7 @@ static testInfo allTests[] =
     {"natsInbox",                       test_natsInbox},
     {"natsOptions",                     test_natsOptions},
     {"natsSock_ConnectTcp",             test_natsSock_ConnectTcp},
+    {"natsSock_ShuffleIPs",             test_natsSock_ShuffleIPs},
     {"natsSock_IPOrder",                test_natsSock_IPOrder},
     {"natsSock_ReadLine",               test_natsSock_ReadLine},
     {"natsJSON",                        test_natsJSON},

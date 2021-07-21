@@ -78,6 +78,60 @@ natsSock_SetCommonTcpOptions(natsSock fd)
     return NATS_OK;
 }
 
+void
+natsSock_ShuffleIPs(natsSockCtx *ctx, struct addrinfo **tmp, int tmpSize, struct addrinfo **ipListHead, int count)
+{
+    struct addrinfo **ips   = NULL;
+    struct addrinfo *p      = NULL;
+    bool            doFree  = false;
+    int             i, j;
+
+    if (ctx->noRandomize || (ipListHead == NULL) || (*ipListHead == NULL) || count <= 1)
+        return;
+
+    if (count > tmpSize)
+    {
+        ips = (struct addrinfo**) NATS_CALLOC(count, sizeof(struct addrinfo*));
+        // Let's not fail the caller, simply don't shuffle.
+        if (ips == NULL)
+            return;
+        doFree = true;
+    }
+    else
+    {
+        ips = tmp;
+    }
+    p = *ipListHead;
+    // Put them in a array
+    for (i=0; i<count; i++)
+    {
+        ips[i] = p;
+        p = p->ai_next;
+    }
+    // Shuffle the array
+    for (i=0; i<count; i++)
+    {
+        j = rand() % (i + 1);
+        p = ips[i];
+        ips[i] = ips[j];
+        ips[j] = p;
+    }
+    // Relink them
+    for (i=0; i<count; i++)
+    {
+        if (i < count-1)
+            ips[i]->ai_next = ips[i+1];
+        else
+            ips[i]->ai_next = NULL;
+    }
+    // Update the list head with the first in the array.
+    *ipListHead = ips[0];
+
+    // If we allocated the array, free it.
+    if (doFree)
+        NATS_FREE(ips);
+}
+
 #define MAX_HOST_NAME   (256)
 
 natsStatus
@@ -97,6 +151,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     int64_t         start         = 0;
     int64_t         totalTimeout  = 0;
     int64_t         timeoutPerIP  = 0;
+    struct addrinfo *tmpStorage[64];
 
     if (phost == NULL)
         return nats_setError(NATS_ADDRESS_MISSING, "%s", "No host specified");
@@ -124,6 +179,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     {
         struct addrinfo hints;
         struct addrinfo *servinfo = NULL;
+        int             count     = 0;
         struct addrinfo *p;
 
         memset(&hints,0,sizeof(hints));
@@ -144,9 +200,14 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
                               gai_strerror(res));
             continue;
         }
-        servInfos[numServInfo++] = servinfo;
+        servInfos[numServInfo] = servinfo;
         for (p = servinfo; (p != NULL); p = p->ai_next)
+        {
+            count++;
             numIPs++;
+        }
+        natsSock_ShuffleIPs(ctx, tmpStorage, sizeof(tmpStorage), &(servInfos[numServInfo]), count);
+        numServInfo++;
     }
     // If we got a getaddrinfo() and there is no servInfos to try to connect to
     // bail out now.

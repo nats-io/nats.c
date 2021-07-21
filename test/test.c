@@ -6860,7 +6860,7 @@ test_LibMsgDelivery(void)
     // Check some pre-conditions that need to be met for the test to work.
     test("Check initial values: ")
     natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
-    testCond((pmaxSize == 2) && (psize == 0) && (pidx == 0));
+    testCond((pmaxSize == 1) && (psize == 0) && (pidx == 0));
 
     test("Check pool size not negative: ")
     s = nats_SetMessageDeliveryPoolSize(-1);
@@ -6873,7 +6873,12 @@ test_LibMsgDelivery(void)
     // Reset stack since we know the above generated errors.
     nats_clearLastError();
 
-    test("Check pool size decreased no error: ")
+    test("Increase size to 2: ")
+    s = nats_SetMessageDeliveryPoolSize(2);
+    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
+    testCond((s == NATS_OK) && (pmaxSize == 2) && (psize == 0));
+
+    test("Check pool size decreased (no error): ")
     s = nats_SetMessageDeliveryPoolSize(1);
     natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
     testCond((s == NATS_OK) && (pmaxSize == 2) && (psize == 0));

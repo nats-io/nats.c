@@ -1040,7 +1040,7 @@ nats_Open(int64_t lockSpinCount)
             gLib.libDefaultWriteDeadline = (int64_t) atol(defaultWriteDeadlineStr);
 
         gLib.libHandlingMsgDeliveryByDefault = (getenv("NATS_DEFAULT_TO_LIB_MSG_DELIVERY") != NULL ? true : false);
-        gLib.dlvWorkers.maxSize = 2;
+        gLib.dlvWorkers.maxSize = 1;
         gLib.dlvWorkers.workers = NATS_CALLOC(gLib.dlvWorkers.maxSize, sizeof(natsMsgDlvWorker*));
         if (gLib.dlvWorkers.workers == NULL)
             s = NATS_NO_MEMORY;

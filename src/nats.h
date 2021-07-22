@@ -400,7 +400,7 @@ typedef struct jsStreamConfig {
         const char              **Subjects;
         int                     SubjectsLen;
         jsRetentionPolicy       Retention;
-        int                     MaxConsumers;
+        int64_t                 MaxConsumers;
         int64_t                 MaxMsgs;
         int64_t                 MaxBytes;
         int64_t                 MaxAge;
@@ -408,7 +408,7 @@ typedef struct jsStreamConfig {
         int32_t                 MaxMsgSize;
         jsDiscardPolicy         Discard;
         jsStorageType           Storage;
-        int                     Replicas;
+        int64_t                 Replicas;
         bool                    NoAck;
         const char              *Template;
         int64_t                 Duplicates;
@@ -448,7 +448,7 @@ typedef struct jsStreamState
         uint64_t                *Deleted;
         int                     DeletedLen;
         jsLostStreamData        *Lost;
-        int                     Consumers;
+        int64_t                 Consumers;
 
 } jsStreamState;
 
@@ -550,13 +550,13 @@ typedef struct jsConsumerConfig
         int64_t                 OptStartTime;           ///< UTC time expressed as number of nanoseconds since epoch.
         jsAckPolicy             AckPolicy;
         int64_t                 AckWait;
-        int                     MaxDeliver;
+        int64_t                 MaxDeliver;
         const char              *FilterSubject;
         jsReplayPolicy          ReplayPolicy;
         uint64_t                RateLimit;
         const char              *SampleFrequency;
-        int                     MaxWaiting;
-        int                     MaxAckPending;
+        int64_t                 MaxWaiting;
+        int64_t                 MaxAckPending;
         bool                    FlowControl;
         int64_t                 Heartbeat;              ///< Heartbeat interval expressed in number of nanoseconds.
 
@@ -677,9 +677,9 @@ typedef struct jsConsumerInfo
         jsConsumerConfig        *Config;
         jsSequencePair          Delivered;
         jsSequencePair          AckFloor;
-        int                     NumAckPending;
-        int                     NumRedelivered;
-        int                     NumWaiting;
+        int64_t                 NumAckPending;
+        int64_t                 NumRedelivered;
+        int64_t                 NumWaiting;
         uint64_t                NumPending;
         jsClusterInfo           *Cluster;
 
@@ -702,8 +702,8 @@ typedef struct  jsAccountLimits
 {
         int64_t MaxMemory;
         int64_t MaxStore;
-        int     MaxStreams;
-        int     MaxConsumers;
+        int64_t MaxStreams;
+        int64_t MaxConsumers;
 
 } jsAccountLimits;
 
@@ -714,8 +714,8 @@ typedef struct jsAccountInfo
 {
         uint64_t                Memory;
         uint64_t                Store;
-        int                     Streams;
-        int                     Consumers;
+        int64_t                 Streams;
+        int64_t                 Consumers;
         char                    *Domain;
         jsAPIStats              API;
         jsAccountLimits         Limits;
@@ -785,7 +785,7 @@ typedef struct jsOptions
          */
         struct jsOptionsPublishAsync
         {
-                int                     MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
+                int64_t                 MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
                 jsPubAckErrHandler      ErrHandler;             ///< Callback invoked when error encountered publishing a given message.
                 void                    *ErrHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckErrHandler callback.
                 int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.

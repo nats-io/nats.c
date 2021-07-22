@@ -548,7 +548,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     s = nats_JSONGetStr(jcfg, "name", (char**) &(cfg->Name));
     IFOK(s, nats_JSONGetArrayStr(jcfg, "subjects", (char***) &(cfg->Subjects), &(cfg->SubjectsLen)));
     IFOK(s, _unmarshalRetentionPolicy(jcfg, "retention", &(cfg->Retention)));
-    IFOK(s, nats_JSONGetInt(jcfg, "max_consumers", &(cfg->MaxConsumers)));
+    IFOK(s, nats_JSONGetLong(jcfg, "max_consumers", &(cfg->MaxConsumers)));
     IFOK(s, nats_JSONGetLong(jcfg, "max_msgs", &(cfg->MaxMsgs)));
     IFOK(s, nats_JSONGetLong(jcfg, "max_bytes", &(cfg->MaxBytes)));
     IFOK(s, nats_JSONGetLong(jcfg, "max_age", &(cfg->MaxAge)));
@@ -556,7 +556,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_JSONGetInt32(jcfg, "max_msg_size", &(cfg->MaxMsgSize)));
     IFOK(s, _unmarshalDiscardPolicy(jcfg, "discard", &(cfg->Discard)));
     IFOK(s, _unmarshalStorageType(jcfg, "storage", &(cfg->Storage)));
-    IFOK(s, nats_JSONGetInt(jcfg, "num_replicas", &(cfg->Replicas)));
+    IFOK(s, nats_JSONGetLong(jcfg, "num_replicas", &(cfg->Replicas)));
     IFOK(s, nats_JSONGetBool(jcfg, "no_ack", &(cfg->NoAck)));
     IFOK(s, nats_JSONGetStr(jcfg, "template_owner", (char**) &(cfg->Template)));
     IFOK(s, nats_JSONGetLong(jcfg, "duplicate_window", &(cfg->Duplicates)));
@@ -618,7 +618,7 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
     }
     IFOK(s, _marshalRetentionPolicy(cfg->Retention, buf));
 
-    IFOK(s, _marshalLong(buf, true, "max_consumers", (int64_t) cfg->MaxConsumers));
+    IFOK(s, _marshalLong(buf, true, "max_consumers", cfg->MaxConsumers));
     IFOK(s, _marshalLong(buf, true, "max_msgs", cfg->MaxMsgs));
     IFOK(s, _marshalLong(buf, true, "max_bytes", cfg->MaxBytes));
     IFOK(s, _marshalLong(buf, true, "max_age", cfg->MaxAge));
@@ -629,7 +629,7 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
 
     IFOK(s, _marshalStorageType(cfg->Storage, buf));
 
-    IFOK(s, _marshalLong(buf, true, "num_replicas", (int64_t) cfg->Replicas));
+    IFOK(s, _marshalLong(buf, true, "num_replicas", cfg->Replicas));
 
     if (cfg->NoAck)
         IFOK(s, natsBuf_Append(buf, ",\"no_ack\":true", -1));
@@ -719,7 +719,7 @@ js_unmarshalStreamState(nats_JSON *pjson, const char *fieldName, jsStreamState *
     IFOK(s, nats_JSONGetULong(json, "num_deleted", &(state->NumDeleted)));
     IFOK(s, nats_JSONGetArrayULong(json, "deleted", &(state->Deleted), &(state->DeletedLen)));
     IFOK(s, _unmarshalLostStreamData(json, "lost", &(state->Lost)));
-    IFOK(s, nats_JSONGetInt(json, "consumer_count", &(state->Consumers)));
+    IFOK(s, nats_JSONGetLong(json, "consumer_count", &(state->Consumers)));
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -1235,8 +1235,8 @@ js_unmarshalAccountInfo(nats_JSON *json, jsAccountInfo **new_ai)
 
     s = nats_JSONGetULong(json, "memory", &(ai->Memory));
     IFOK(s, nats_JSONGetULong(json, "storage", &(ai->Store)));
-    IFOK(s, nats_JSONGetInt(json, "streams", &(ai->Streams)));
-    IFOK(s, nats_JSONGetInt(json, "consumers", &(ai->Consumers)));
+    IFOK(s, nats_JSONGetLong(json, "streams", &(ai->Streams)));
+    IFOK(s, nats_JSONGetLong(json, "consumers", &(ai->Consumers)));
     IFOK(s, nats_JSONGetStr(json, "domain", &(ai->Domain)));
     IFOK(s, nats_JSONGetObject(json, "api", &obj));
     if ((s == NATS_OK) && (obj != NULL))
@@ -1250,8 +1250,8 @@ js_unmarshalAccountInfo(nats_JSON *json, jsAccountInfo **new_ai)
     {
         IFOK(s, nats_JSONGetLong(obj, "max_memory", &(ai->Limits.MaxMemory)));
         IFOK(s, nats_JSONGetLong(obj, "max_storage", &(ai->Limits.MaxStore)));
-        IFOK(s, nats_JSONGetInt(obj, "max_streams", &(ai->Limits.MaxStreams)));
-        IFOK(s, nats_JSONGetInt(obj, "max_consumers", &(ai->Limits.MaxConsumers)));
+        IFOK(s, nats_JSONGetLong(obj, "max_streams", &(ai->Limits.MaxStreams)));
+        IFOK(s, nats_JSONGetLong(obj, "max_consumers", &(ai->Limits.MaxConsumers)));
         obj = NULL;
     }
 
@@ -1474,7 +1474,7 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
     if ((s == NATS_OK) && (cfg->AckWait > 0))
         s = _marshalLong(buf, true, "ack_wait", cfg->AckWait);
     if ((s == NATS_OK) && (cfg->MaxDeliver > 0))
-        s = _marshalLong(buf, true, "max_deliver", (int64_t) cfg->MaxDeliver);
+        s = _marshalLong(buf, true, "max_deliver", cfg->MaxDeliver);
     if ((s == NATS_OK) && !nats_IsStringEmpty(cfg->FilterSubject))
     {
         s = natsBuf_Append(buf, ",\"filter_subject\":\"", -1);
@@ -1491,9 +1491,9 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         IFOK(s, natsBuf_AppendByte(buf, '"'));
     }
     if ((s == NATS_OK) && (cfg->MaxWaiting > 0))
-        s = _marshalLong(buf, true, "max_waiting", (int64_t) cfg->MaxWaiting);
+        s = _marshalLong(buf, true, "max_waiting", cfg->MaxWaiting);
     if ((s == NATS_OK) && (cfg->MaxAckPending > 0))
-        s = _marshalLong(buf, true, "max_ack_pending", (int64_t) cfg->MaxAckPending);
+        s = _marshalLong(buf, true, "max_ack_pending", cfg->MaxAckPending);
     if ((s == NATS_OK) && cfg->FlowControl)
         s = natsBuf_Append(buf, ",\"flow_control\":true", -1);
     if ((s == NATS_OK) && (cfg->Heartbeat > 0))
@@ -1616,13 +1616,13 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
         IFOK(s, nats_JSONGetTime(cjson, "opt_start_time", &(cc->OptStartTime)));
         IFOK(s, _unmarshalAckPolicy(cjson, "ack_policy", &(cc->AckPolicy)));
         IFOK(s, nats_JSONGetLong(cjson, "ack_wait", &(cc->AckWait)));
-        IFOK(s, nats_JSONGetInt(cjson, "max_deliver", &(cc->MaxDeliver)));
+        IFOK(s, nats_JSONGetLong(cjson, "max_deliver", &(cc->MaxDeliver)));
         IFOK(s, nats_JSONGetStr(cjson, "filter_subject", (char**) &(cc->FilterSubject)));
         IFOK(s, _unmarshalReplayPolicy(cjson, "replay_policy", &(cc->ReplayPolicy)));
         IFOK(s, nats_JSONGetULong(cjson, "rate_limit_bps", &(cc->RateLimit)));
         IFOK(s, nats_JSONGetStr(cjson, "sample_freq", (char**) &(cc->SampleFrequency)));
-        IFOK(s, nats_JSONGetInt(cjson, "max_waiting", &(cc->MaxWaiting)));
-        IFOK(s, nats_JSONGetInt(cjson, "max_ack_pending", &(cc->MaxAckPending)));
+        IFOK(s, nats_JSONGetLong(cjson, "max_waiting", &(cc->MaxWaiting)));
+        IFOK(s, nats_JSONGetLong(cjson, "max_ack_pending", &(cc->MaxAckPending)));
         IFOK(s, nats_JSONGetBool(cjson, "flow_control", &(cc->FlowControl)));
         IFOK(s, nats_JSONGetLong(cjson, "idle_heartbeat", &(cc->Heartbeat)));
     }
@@ -1666,9 +1666,9 @@ _unmarshalConsumerInfo(nats_JSON *json, jsConsumerInfo **new_ci)
     IFOK(s, _unmarshalConsumerConfig(json, "config", &(ci->Config)));
     IFOK(s, _unmarshalSeqPair(json, "delivered", &(ci->Delivered)));
     IFOK(s, _unmarshalSeqPair(json, "ack_floor", &(ci->AckFloor)));
-    IFOK(s, nats_JSONGetInt(json, "num_ack_pending", &(ci->NumAckPending)));
-    IFOK(s, nats_JSONGetInt(json, "num_redelivered", &(ci->NumRedelivered)));
-    IFOK(s, nats_JSONGetInt(json, "num_waiting", &(ci->NumWaiting)));
+    IFOK(s, nats_JSONGetLong(json, "num_ack_pending", &(ci->NumAckPending)));
+    IFOK(s, nats_JSONGetLong(json, "num_redelivered", &(ci->NumRedelivered)));
+    IFOK(s, nats_JSONGetLong(json, "num_waiting", &(ci->NumWaiting)));
     IFOK(s, nats_JSONGetULong(json, "num_pending", &(ci->NumPending)));
     IFOK(s, _unmarshalClusterInfo(json, "cluster", &(ci->Cluster)));
 

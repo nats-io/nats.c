@@ -338,7 +338,7 @@ struct __jsCtx
     natsSubscription    *rsub;
     char                *rpre;
     int                 pacw;
-    int                 pmcount;
+    int64_t             pmcount;
     int                 stalled;
 };
 

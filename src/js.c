@@ -690,7 +690,7 @@ _registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg)
     natsStatus  s       = NATS_OK;
     char        *id     = NULL;
     bool        release = false;
-    int         maxp    = 0;
+    int64_t     maxp    = 0;
 
     js_lock(js);
 
@@ -1234,7 +1234,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
     bool                consBound   = false;
     bool                hasFC       = false;
     bool                delCons     = false;
-    int                 maxMsgs     = jsDefaultMaxMsgs;
+    int64_t             maxMsgs     = jsDefaultMaxMsgs;
     natsConnection      *nc         = NULL;
     bool                freePfx     = false;
     bool                freeStream  = false;
@@ -1438,7 +1438,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
         }
     }
     IFOK(s, natsConn_subscribeImpl(new_sub, nc, true, (const char*) deliver, opts->Queue, 0, cb, cbClosure, false, jsi));
-    IFOK(s, natsSubscription_SetPendingLimits(*new_sub, maxMsgs, NATS_OPTS_DEFAULT_MAX_PENDING_MSGS*1024));
+    IFOK(s, natsSubscription_SetPendingLimits(*new_sub, (int) maxMsgs, NATS_OPTS_DEFAULT_MAX_PENDING_MSGS*1024));
 
 END:
     if (s != NATS_OK)

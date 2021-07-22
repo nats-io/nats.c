@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['callbacks',['Callbacks',['../group__callbacks_group.html',1,'']]],
-  ['connection',['Connection',['../group__conn_group.html',1,'']]]
+  ['_25nats_20c_20client_2e_0',['%NATS C client.',['../index.html',1,'']]]
 ];

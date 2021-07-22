@@ -1,6 +1,6 @@
 var indexSectionsWithContent =
 {
-  0: "cdefilmnopstw",
+  0: "%cdefilmnopstw",
   1: "lns",
   2: "ns",
   3: "ns",
@@ -8,7 +8,7 @@ var indexSectionsWithContent =
   5: "n",
   6: "n",
   7: "cefilmopstw",
-  8: "d"
+  8: "%d"
 };
 
 var indexSectionNames =

@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['deprecated_20list',['Deprecated List',['../deprecated.html',1,'']]]
+  ['callbacks_1',['Callbacks',['../group__callbacks_group.html',1,'']]],
+  ['connection_2',['Connection',['../group__conn_group.html',1,'']]]
 ];

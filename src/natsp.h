@@ -460,6 +460,10 @@ typedef struct __natsSockCtx
 
     int             orderIP; // possible values: 0,4,6,46,64
 
+    // By default, the list of IPs returned by the hostname resolution will
+    // be shuffled. This option, if `true`, will disable the shuffling.
+    bool            noRandomize;
+
 } natsSockCtx;
 
 typedef struct __respInfo

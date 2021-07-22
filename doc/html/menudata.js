@@ -22,37 +22,21 @@
 
  @licend  The above is the entire license notice for the JavaScript code in this file
 */
-var NAVTREE =
-[
-  [ "NATS C Client with Streaming support", "index.html", [
-    [ "NATS C client.", "index.html", [
-      [ "Introduction", "index.html#intro_sec", null ],
-      [ "Installation", "index.html#install_sec", null ],
-      [ "Frequently Asked Questions", "index.html#faq_sec", null ],
-      [ "Other Documentation", "index.html#other_doc_section", null ]
-    ] ],
-    [ "Deprecated List", "deprecated.html", null ],
-    [ "Modules", "modules.html", "modules" ],
-    [ "Files", "files.html", [
-      [ "File List", "files.html", "files_dup" ],
-      [ "File Members", "globals.html", [
-        [ "All", "globals.html", "globals_dup" ],
-        [ "Functions", "globals_func.html", null ],
-        [ "Typedefs", "globals_type.html", null ],
-        [ "Enumerations", "globals_enum.html", null ],
-        [ "Enumerator", "globals_eval.html", null ],
-        [ "Macros", "globals_defs.html", null ]
-      ] ]
-    ] ]
-  ] ]
-];
-
-var NAVTREEINDEX =
-[
-"deprecated.html",
-"group__opts_group.html#ga36943e2ba53d05407cdabc4e7e96484b",
-"nats_8h.html#af798865ac824e5959987de0fe8d07383"
-];
-
-var SYNCONMSG = 'click to disable panel synchronisation';
-var SYNCOFFMSG = 'click to enable panel synchronisation';
+var menudata={children:[
+{text:"Main Page",url:"index.html"},
+{text:"Related Pages",url:"pages.html"},
+{text:"Modules",url:"modules.html"},
+{text:"Files",url:"files.html",children:[
+{text:"File List",url:"files.html"},
+{text:"File Members",url:"globals.html",children:[
+{text:"All",url:"globals.html",children:[
+{text:"n",url:"globals.html#index_n"},
+{text:"s",url:"globals_s.html#index_s"}]},
+{text:"Functions",url:"globals_func.html",children:[
+{text:"n",url:"globals_func.html#index_n"},
+{text:"s",url:"globals_func.html#index_s"}]},
+{text:"Typedefs",url:"globals_type.html"},
+{text:"Enumerations",url:"globals_enum.html"},
+{text:"Enumerator",url:"globals_eval.html",children:[
+{text:"n",url:"globals_eval.html#index_n"}]},
+{text:"Macros",url:"globals_defs.html"}]}]}]}

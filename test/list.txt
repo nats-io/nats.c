@@ -21,6 +21,7 @@ natsStrHash
 natsInbox
 natsOptions
 natsSock_ConnectTcp
+natsSock_ShuffleIPs
 natsSock_IPOrder
 natsSock_ReadLine
 natsJSON

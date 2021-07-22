@@ -1,4 +1,4 @@
-var files =
+var files_dup =
 [
     [ "libevent.h", "libevent_8h.html", "libevent_8h" ],
     [ "libuv.h", "libuv_8h.html", "libuv_8h" ],

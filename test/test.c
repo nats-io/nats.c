@@ -22363,6 +22363,18 @@ _jsMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clo
 }
 
 static void
+_jsSubComplete(void *closure)
+{
+    struct threadArg *args = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    args->done = true;
+    natsCondition_Broadcast(args->c);
+    natsMutex_Unlock(args->m);
+    printf("@@IK: HERE!!!\n");
+}
+
+static void
 test_JetStreamSubscribe(void)
 {
     natsStatus          s;
@@ -22583,6 +22595,7 @@ test_JetStreamSubscribe(void)
     natsMutex_Lock(args.m);
     args.control = 0;
     args.sum = 0;
+    args.done = false;
     natsMutex_Unlock(args.m);
     jsSubOptions_Init(&so);
     so.Config.DeliverPolicy = js_DeliverAll;
@@ -22604,8 +22617,20 @@ test_JetStreamSubscribe(void)
     natsMutex_Unlock(sub->mu);
     IFOK(s, natsSubscription_NextMsg(&ack, ackSub, 300));
     testCond((s == NATS_TIMEOUT) && (ack == NULL));
+    nats_clearLastError();
 
+    test("Check user setting onComplete is ok: ");
+    s = natsSubscription_SetOnCompleteCB(sub, _jsSubComplete, (void*)&args);
+    testCond(s == NATS_OK);
+
+    test("Wait for complete: ");
     natsSubscription_Destroy(sub);
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.done)
+        s = natsCondition_TimedWait(args.c, args.m, 1000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
     natsSubscription_Destroy(ackSub);
     jsCtx_Destroy(js);
     natsConnection_Destroy(nc);

@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <ctype.h>
+
 #include "js.h"
 #include "mem.h"
 #include "conn.h"
@@ -960,6 +962,7 @@ jsSub_free(jsSub *jsi)
     js = jsi->js;
     NATS_FREE(jsi->stream);
     NATS_FREE(jsi->consumer);
+    NATS_FREE(jsi->fcReply);
     NATS_FREE(jsi);
 
     js_release(js);
@@ -1214,8 +1217,15 @@ jsSub_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscription *sub
 }
 
 natsStatus
-jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply)
+jsSub_scheduleFlowControlResponse(jsSub *jsi, natsSubscription *sub, const char *reply)
 {
+    NATS_FREE(jsi->fcReply);
+    jsi->fcReply = NATS_STRDUP(reply);
+    if (jsi->fcReply == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    jsi->fcDelivered = sub->delivered + (uint64_t) sub->msgList.msgs;
+
     return NATS_OK;
 }
 
@@ -1648,4 +1658,46 @@ jsMsgMetaData_Destroy(jsMsgMetaData *meta)
     NATS_FREE(meta->Stream);
     NATS_FREE(meta->Consumer);
     NATS_FREE(meta);
+}
+
+bool
+natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType)
+{
+    char *p = NULL;
+
+    *ctrlType = 0;
+
+    if ((msg->dataLen > 0) || (msg->hdrLen <= 0))
+        return false;
+
+    if (strstr(msg->hdr, HDR_LINE_PRE) != msg->hdr)
+        return false;
+
+    p = msg->hdr + HDR_LINE_PRE_LEN;
+    if (*p != ' ')
+        return false;
+
+    while ((*p != '\0') && isspace(*p))
+        p++;
+
+    if ((*p == '\r') || (*p == '\n') || (*p == '\0'))
+        return false;
+
+    if (strstr(p, CTRL_STATUS) != p)
+        return false;
+
+    p += HDR_STATUS_LEN;
+
+    if (!isspace(*p))
+        return false;
+
+    while (isspace(*p))
+        p++;
+
+    if (strstr(p, "Idle") == p)
+        *ctrlType = jsCtrlHeartbeat;
+    else if (strstr(p, "Flow") == p)
+        *ctrlType = jsCtrlFlowControl;
+
+    return true;
 }

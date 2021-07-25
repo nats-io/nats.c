@@ -373,6 +373,11 @@ typedef struct __jsSub
     natsMsgHandler      usrCb;
     void                *usrCbClosure;
 
+    // For flow control, when the subscription reaches this
+    // delivered count, then send a message to this reply subject.
+    uint64_t            fcDelivered;
+    char                *fcReply;
+
 } jsSub;
 
 struct __natsSubscription
@@ -769,6 +774,9 @@ natsStatus
 jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm);
 
 natsStatus
-jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply);
+jsSub_scheduleFlowControlResponse(jsSub *jsi, natsSubscription *sub, const char *reply);
+
+bool
+natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType);
 
 #endif /* NATSP_H_ */

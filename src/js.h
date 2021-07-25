@@ -46,6 +46,9 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsErrMsgNotBound                    "message not bound to a subscription"
 #define jsErrMsgNotJS                       "not a JetStream message"
 
+#define jsCtrlHeartbeat     (1)
+#define jsCtrlFlowControl   (2)
+
 // Content of ACK messages sent to server
 #define jsAckAck            "+ACK"
 #define jsAckNak            "-NAK"

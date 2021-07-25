@@ -33,6 +33,7 @@
 #include "comsock.h"
 #include "nkeys.h"
 #include "crypto.h"
+#include "js.h"
 
 #define DEFAULT_SCRATCH_SIZE    (512)
 #define MAX_INFO_MESSAGE_SIZE   (32768)
@@ -2511,12 +2512,16 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     bool             sc   = false;
     bool             sm   = false;
     int              dl   = 0;
+    nats_MsgList     *list = NULL;
+    natsMutex        *mu   = NULL;
+    natsCondition    *cond = NULL;
     // For JetStream cases
     jsSub            *jsi    = NULL;
     bool             ctrlMsg = false;
     bool             hasHBs  = false;
     bool             hasFC   = false;
     bool             fcReply = false;
+    int              jct     = 0;
 
     natsMutex_Lock(nc->subsMu);
 
@@ -2541,18 +2546,29 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     // computed as the bufLen - header size.
     dl = msg->dataLen;
 
+    // Pick mutex, condition variable and list based on if the sub is
+    // part of a global delivery thread pool or not.
+    // Note about `list`: this is used only to link messages, but
+    // sub->msgList needs to be used to update/check number of pending
+    // messages, since in case of delivery thread pool, `list` will have
+    // messages from many different subscriptions.
     if ((ldw = sub->libDlvWorker) != NULL)
-        natsMutex_Lock(ldw->lock);
+    {
+        mu   = ldw->lock;
+        cond = ldw->cond;
+        list = &(ldw->msgList);
+    }
     else
-        natsSub_Lock(sub);
+    {
+        mu   = sub->mu;
+        cond = sub->cond;
+        list = &(sub->msgList);
+    }
 
+    natsMutex_Lock(mu);
     if (sub->closed || sub->drainSkip)
     {
-        if (ldw != NULL)
-            natsMutex_Unlock(ldw->lock);
-        else
-            natsSub_Unlock(sub);
-
+        natsMutex_Unlock(mu);
         natsMsg_Destroy(msg);
         return NATS_OK;
     }
@@ -2561,7 +2577,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     {
         hasHBs = jsi->hasHBs;
         hasFC  = jsi->hasFC;
-        ctrlMsg= natsMsg_isCtrl(msg);
+        ctrlMsg= natsMsg_isJSCtrl(msg, &jct);
     }
 
     if (!ctrlMsg)
@@ -2585,8 +2601,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         }
         else
         {
-            nats_MsgList *list = NULL;
-            bool         signal= false;
+            bool signal= false;
 
             if (sub->msgList.msgs > sub->msgsMax)
                 sub->msgsMax = sub->msgList.msgs;
@@ -2598,29 +2613,18 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
             msg->sub = sub;
 
-            if (ldw != NULL)
-                list = &ldw->msgList;
-            else
-                list = &sub->msgList;
-
             if (list->head == NULL)
             {
                 list->head = msg;
                 signal = true;
             }
-
-            if (list->tail != NULL)
+            else
                 list->tail->next = msg;
 
             list->tail = msg;
 
             if (signal)
-            {
-                if (ldw != NULL)
-                    natsCondition_Broadcast(ldw->cond);
-                else
-                    natsCondition_Broadcast(sub->cond);
-            }
+                natsCondition_Signal(cond);
 
             // Store the ACK metadata from the message to
             // compare later on with the received heartbeat.
@@ -2628,28 +2632,24 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
                 s = jsSub_trackSequences(jsi, msg->reply);
         }
     }
-    else if (hasHBs && (msg->reply == NULL))
+    else if (hasHBs && (jct == jsCtrlHeartbeat) && (msg->reply == NULL))
     {
         // Handle control heartbeat messages.
         s = jsSub_processSequenceMismatch(sub, msg, &sm);
     }
-    else if (hasFC && msg->reply != NULL)
+    else if (hasFC && (jct == jsCtrlFlowControl) && (msg->reply != NULL))
     {
-        // This is a flow control message.
         // If we have no pending, go ahead and send in place.
         if (sub->msgList.msgs == 0)
             fcReply = true;
         else
         {
             // Schedule a reply after the previous message is delivered.
-            s = jsSub_scheduleFlowControlResponse(jsi, msg->reply);
+            s = jsSub_scheduleFlowControlResponse(jsi, sub, msg->reply);
         }
     }
 
-    if (ldw != NULL)
-        natsMutex_Unlock(ldw->lock);
-    else
-        natsSub_Unlock(sub);
+    natsMutex_Unlock(mu);
 
     if ((s == NATS_OK) && fcReply)
         s = natsConnection_Publish(nc, msg->reply, NULL, 0);

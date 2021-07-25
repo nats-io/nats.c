@@ -153,6 +153,8 @@ natsSub_deliverMsgs(void *arg)
     bool                rmSub    = false;
     natsOnCompleteCB    onCompleteCB = NULL;
     void                *onCompleteCBClosure = NULL;
+    char                *fcReply = NULL;
+    jsSub               *jsi = NULL;
 
     // This just serves as a barrier for the creation of this thread.
     natsConn_Lock(nc);
@@ -160,6 +162,7 @@ natsSub_deliverMsgs(void *arg)
 
     natsSub_Lock(sub);
     timeout = sub->timeout;
+    jsi = sub->jsi;
     natsSub_Unlock(sub);
 
     while (true)
@@ -212,6 +215,15 @@ natsSub_deliverMsgs(void *arg)
         // Capture this under lock.
         max = sub->max;
 
+        // Check for JS flow control
+        fcReply = NULL;
+        if ((jsi != NULL) && (jsi->fcDelivered == delivered))
+        {
+            fcReply          = jsi->fcReply;
+            jsi->fcReply     = NULL;
+            jsi->fcDelivered = 0;
+        }
+
         natsSub_Unlock(sub);
 
         if ((max == 0) || (delivered <= max))
@@ -222,6 +234,12 @@ natsSub_deliverMsgs(void *arg)
         {
             // We need to destroy the message since the user can't do it
             natsMsg_Destroy(msg);
+        }
+
+        if (fcReply != NULL)
+        {
+            natsConnection_Publish(nc, fcReply, NULL, 0);
+            NATS_FREE(fcReply);
         }
 
         // Don't do 'else' because we need to remove when we have hit
@@ -587,6 +605,8 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
     natsMsg         *msg = NULL;
     bool            removeSub = false;
     int64_t         target    = 0;
+    jsSub           *jsi      = NULL;
+    char            *fcReply  = NULL;
 
     if ((sub == NULL) || (nextMsg == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -632,6 +652,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
     }
 
     nc = sub->conn;
+    jsi= sub->jsi;
 
     if (timeout > 0)
     {
@@ -681,6 +702,13 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
             msg->next = NULL;
 
             sub->delivered++;
+            if ((jsi != NULL) && (jsi->fcDelivered == sub->delivered))
+            {
+                fcReply          = jsi->fcReply;
+                jsi->fcReply     = NULL;
+                jsi->fcDelivered = 0;
+            }
+
             if (sub->max > 0)
             {
                 if (sub->delivered > sub->max)
@@ -707,6 +735,12 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
         *nextMsg = msg;
 
     natsSub_Unlock(sub);
+
+    if (fcReply != NULL)
+    {
+        natsConnection_Publish(nc, fcReply, NULL, 0);
+        NATS_FREE(fcReply);
+    }
 
     if (removeSub)
     {

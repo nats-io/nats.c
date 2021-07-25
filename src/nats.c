@@ -1661,6 +1661,8 @@ _deliverMsgs(void *arg)
     uint64_t            max;
     natsMsg             *msg;
     bool                timerNeedReset = false;
+    jsSub               *jsi;
+    char                *fcReply;
 
     natsMutex_Lock(dlv->lock);
 
@@ -1774,6 +1776,15 @@ _deliverMsgs(void *arg)
 
         delivered = ++(sub->delivered);
 
+        fcReply = NULL;
+        jsi = sub->jsi;
+        if ((jsi != NULL) && (jsi->fcDelivered == delivered))
+        {
+            fcReply          = jsi->fcReply;
+            jsi->fcReply     = NULL;
+            jsi->fcDelivered = 0;
+        }
+
         // Is this a subscription that can timeout?
         if (!sub->draining && (sub->timeout != 0))
         {
@@ -1796,6 +1807,12 @@ _deliverMsgs(void *arg)
         {
             // We need to destroy the message since the user can't do it
             natsMsg_Destroy(msg);
+        }
+
+        if (fcReply != NULL)
+        {
+            natsConnection_Publish(nc, fcReply, NULL, 0);
+            NATS_FREE(fcReply);
         }
 
         // Don't do 'else' because we need to remove when we have hit

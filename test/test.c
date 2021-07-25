@@ -4963,29 +4963,34 @@ test_natsMsgHeaderAPIs(void)
 }
 
 static void
-test_natsMsgIsCtrl(void)
+test_natsMsgIsJSCtrl(void)
 {
     struct testCase {
         const char  *buf;
         int         dataLen;
         bool        isCtrl;
+        int         ct;
     };
     const struct testCase cases[] = {
-        {"data", 4, false},
-        {"NATS/1.0 100 Idle Heartbeat\r\n\r\ndata", 4, false},
-        {"NATS/1.0 200 Some status...\r\n\r\n", 0, false},
-        {"NATS/1.0100 Idle Heartbeat\r\n\r\n", 0,  false},
-        {"NATS/1.0 1000 Some status\r\n\r\n", 0, false},
-        {"NATS/1.0 100-Some status\r\n\r\n", 0, false},
-        {"NATS/1.0 100\r\n\r\n", 0, true},
-        {"NATS/1.0  100\r\n\r\n", 0, true},
-        {"NATS/1.0   100\r\n\r\n", 0, true},
-        {"NATS/1.0   100 \r\n\r\n", 0, true},
-        {"NATS/1.0   100  \r\n\r\n", 0, true},
-        {"NATS/1.0  100  \r\n\r\n", 0, true},
-        {"NATS/1.0 100  \r\n\r\n", 0, true},
-        {"NATS/1.0 100 \r\n\r\n", 0, true},
-        {"NATS/1.0 100\n\r\n", 0, true},
+        {"data", 4, false, 0},
+        {"NATS/1.0 100 Idle Heartbeat\r\n\r\ndata", 4, false, 0},
+        {"NATS/1.0 200 Some status...\r\n\r\n", 0, false, 0},
+        {"NATS/1.0100 Idle Heartbeat\r\n\r\n", 0,  false, 0},
+        {"NATS/1.0 1000 Some status\r\n\r\n", 0, false, 0},
+        {"NATS/1.0 100-Some status\r\n\r\n", 0, false, 0},
+        {"NATS/1.0 100\r\n\r\n", 0, true, 0},
+        {"NATS/1.0  100\r\n\r\n", 0, true, 0},
+        {"NATS/1.0   100\r\n\r\n", 0, true, 0},
+        {"NATS/1.0   100 \r\n\r\n", 0, true, 0},
+        {"NATS/1.0   100  \r\n\r\n", 0, true, 0},
+        {"NATS/1.0  100  \r\n\r\n", 0, true, 0},
+        {"NATS/1.0 100  \r\n\r\n", 0, true, 0},
+        {"NATS/1.0 100 \r\n\r\n", 0, true, 0},
+        {"NATS/1.0 100\n\r\n", 0, true, 0},
+        {"NATS/1.0 100  Idle Heartbeat\r\n\r\n", 0, true, jsCtrlHeartbeat},
+        {"NATS/1.0 100 Idle Heartbeat\r\n\r\n", 0, true, jsCtrlHeartbeat},
+        {"NATS/1.0 100  FlowControl Request\r\n\r\n", 0, true, jsCtrlFlowControl},
+        {"NATS/1.0 100 FlowControl Request\r\n\r\n", 0, true, jsCtrlFlowControl},
     };
     natsStatus  s;
     natsMsg     *msg = NULL;
@@ -5001,7 +5006,13 @@ test_natsMsgIsCtrl(void)
         bufLen = (int)strlen(cases[i].buf);
         s = natsMsg_create(&msg, "foo", 3, NULL, 0, cases[i].buf, bufLen, bufLen-cases[i].dataLen);
         if (s == NATS_OK)
-            s = natsMsg_isCtrl(msg) == cases[i].isCtrl ? NATS_OK : NATS_ERR;
+        {
+            int ctrlType = 0;
+            bool isCtrl  = false;
+
+            isCtrl = natsMsg_isJSCtrl(msg, &ctrlType);
+            s = ((isCtrl == cases[i].isCtrl) && (ctrlType == cases[i].ct) ? NATS_OK : NATS_ERR);
+        }
         testCond(s == NATS_OK);
         natsMsg_Destroy(msg);
         msg = NULL;
@@ -22344,7 +22355,8 @@ _jsMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clo
     args->sum++;
     if (args->control == 1)
         natsMsg_Ack(msg, NULL);
-    natsCondition_Signal(args->c);
+    if ((args->control != 2) || (args->sum == args->results[0]))
+        natsCondition_Signal(args->c);
     natsMutex_Unlock(args->m);
 
     natsMsg_Destroy(msg);
@@ -23152,6 +23164,134 @@ test_JetStreamSubscribeIdleHearbeat(void)
     natsConnection_Destroy(nc);
     _destroyDefaultThreadArgs(&args);
     natsOptions_Destroy(opts);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
+test_JetStreamSubscribeFlowControl(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsErrCode           jerr= 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    const char          *subjects[] = {"foo"};
+    jsStreamConfig      sc;
+    jsSubOptions        so;
+    natsMsg             *msg;
+    struct threadArg    args;
+    natsSubscription    *nsub = NULL;
+    int                 i;
+    int                 total = 20000;
+    char                *data = malloc(1024);
+
+    if (data == NULL)
+        FAIL("Unable to allocate data");
+    for (i=0; i<1024; i++)
+        data[i] = 'A';
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+    args.control = 2;
+    args.results[0] = total;
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = subjects;
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Populate: ");
+    for (i=0; (s == NATS_OK) && (i<total); i++)
+        s = js_PublishAsync(js, "foo", data, 1024, NULL);
+    testCond(s == NATS_OK);
+
+    test("Wait complete: ");
+    s = js_PublishAsyncComplete(js, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create sub to check for FC: ");
+    s = natsConnection_SubscribeSync(&nsub, nc, "$JS.FC.TEST.>");
+    testCond((s == NATS_OK) && (nsub != NULL));
+
+    test("Subscribe async: ");
+    jsSubOptions_Init(&so);
+    so.Config.FlowControl = true;
+    s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msg received: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != total))
+        s = natsCondition_TimedWait(args.c, args.m, 10000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check FC responses were sent: ");
+    s = natsSubscription_NextMsg(&msg, nsub, 2000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    natsSubscription_Destroy(nsub);
+    nsub = NULL;
+
+    test("Create sub to check for FC: ");
+    s = natsConnection_SubscribeSync(&nsub, nc, "$JS.FC.TEST.>");
+    testCond((s == NATS_OK) && (nsub != NULL));
+
+    test("Subscribe sync: ");
+    jsSubOptions_Init(&so);
+    so.Config.FlowControl = true;
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msg received: ");
+    for (i=0; (s == NATS_OK) && (i<total); i++)
+    {
+        s = natsSubscription_NextMsg(&msg, sub, 1000);
+        natsMsg_Destroy(msg);
+        msg = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Check FC responses were sent: ");
+    s = natsSubscription_NextMsg(&msg, nsub, 2000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    free(data);
+    natsSubscription_Destroy(sub);
+    natsSubscription_Destroy(nsub);
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&args);
     _stopServer(pid);
     rmtree(datastore);
 }
@@ -25455,7 +25595,7 @@ static testInfo allTests[] =
     {"natsSign",                        test_natsSign},
     {"HeadersLift",                     test_natsMsgHeadersLift},
     {"HeadersAPIs",                     test_natsMsgHeaderAPIs},
-    {"MsgIsControl",                    test_natsMsgIsCtrl},
+    {"MsgIsJSControl",                  test_natsMsgIsJSCtrl},
 
     // Package Level Tests
 
@@ -25643,6 +25783,7 @@ static testInfo allTests[] =
     {"JetStreamSubscribe",              test_JetStreamSubscribe},
     {"JetStreamSubscribeSync",          test_JetStreamSubscribeSync},
     {"JetStreamSubscribeIdleHeartbeat", test_JetStreamSubscribeIdleHearbeat},
+    {"JetStreamSubscribeFlowControl",   test_JetStreamSubscribeFlowControl},
     {"JetStreamSubscribePull",          test_JetStreamSubscribePull},
 
 #if defined(NATS_HAS_STREAMING)

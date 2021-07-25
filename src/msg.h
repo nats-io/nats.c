@@ -93,9 +93,6 @@ natsMsg_create(natsMsg **newMsg,
 void
 natsMsg_freeHeaders(natsMsg *msg);
 
-bool
-natsMsg_isCtrl(natsMsg *msg);
-
 // This needs to follow the nats_FreeObjectCb prototype (see gc.h)
 void
 natsMsg_free(void *object);

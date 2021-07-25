@@ -858,34 +858,6 @@ natsMsg_IsNoResponders(natsMsg *m)
                 && (strncmp(val, NO_RESP_STATUS, HDR_STATUS_LEN) == 0));
 }
 
-bool
-natsMsg_isCtrl(natsMsg *msg)
-{
-    char *p = NULL;
-
-    if ((msg->dataLen > 0) || (msg->hdrLen <= 0))
-        return false;
-
-    if (strstr(msg->hdr, HDR_LINE_PRE) != msg->hdr)
-        return false;
-
-    p = msg->hdr + HDR_LINE_PRE_LEN;
-    if (*p != ' ')
-        return false;
-
-    while ((*p != '\0') && isspace(*p))
-        p++;
-
-    if (*p == '\0')
-        return false;
-
-    if (strstr(p, CTRL_STATUS) != p)
-        return false;
-
-    p += HDR_STATUS_LEN;
-    return (isspace(*p) || (*p == '\r') || (*p == '\n'));
-}
-
 void
 natsMsgList_Destroy(natsMsgList *list)
 {

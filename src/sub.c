@@ -21,6 +21,7 @@
 #include "sub.h"
 #include "msg.h"
 #include "util.h"
+#include "js.h"
 
 #ifdef DEV_MODE
 
@@ -103,6 +104,20 @@ natsSub_release(natsSubscription *sub)
 
     if (refs == 0)
         _freeSubscription(sub);
+}
+
+void
+natsSubAndLdw_Lock(natsSubscription *sub)
+{
+    natsMutex_Lock(sub->mu);
+    SUB_DLV_WORKER_LOCK(sub);
+}
+
+void
+natsSubAndLdw_Unlock(natsSubscription *sub)
+{
+    SUB_DLV_WORKER_UNLOCK(sub);
+    natsMutex_Unlock(sub->mu);
 }
 
 static void
@@ -591,14 +606,8 @@ natsSubscription_NoDeliveryDelay(natsSubscription *sub)
     return NATS_OK;
 }
 
-
-/*
- * Return the next message available to a synchronous subscriber or block until
- * one is available. A timeout can be used to return when no message has been
- * delivered.
- */
 natsStatus
-natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout)
+natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool pullSubInternal)
 {
     natsStatus      s    = NATS_OK;
     natsConnection  *nc  = NULL;
@@ -643,12 +652,20 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
 
         return nats_setDefaultError(NATS_SLOW_CONSUMER);
     }
-    if ((sub->jsi != NULL) && (sub->jsi->sm))
+    if (sub->jsi != NULL)
     {
-        sub->jsi->sm = false;
-        natsSub_Unlock(sub);
+        if (sub->jsi->sm)
+        {
+            sub->jsi->sm = false;
+            natsSub_Unlock(sub);
 
-        return nats_setError(NATS_MISMATCH, "%s", "consumer sequence mismatch");
+            return nats_setError(NATS_MISMATCH, "%s", "consumer sequence mismatch");
+        }
+        else if (!pullSubInternal && sub->jsi->pull)
+        {
+            natsSub_Unlock(sub);
+            return nats_setError(NATS_INVALID_SUBSCRIPTION, "%s", jsErrPullSub);
+        }
     }
 
     nc = sub->conn;
@@ -677,7 +694,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
     else
     {
         s = (sub->msgList.msgs == 0 ? NATS_TIMEOUT : NATS_OK);
-        if (s != NATS_OK)
+        if ((s != NATS_OK) && !pullSubInternal)
             s = nats_setDefaultError(s);
     }
 
@@ -748,6 +765,21 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
         natsSub_release(sub);
     }
 
+    if (pullSubInternal && (s == NATS_TIMEOUT))
+        return s;
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+/*
+ * Return the next message available to a synchronous subscriber or block until
+ * one is available. A timeout can be used to return when no message has been
+ * delivered.
+ */
+natsStatus
+natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout)
+{
+    natsStatus s = natsSub_nextMsg(nextMsg, sub, timeout, false);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

@@ -1944,3 +1944,37 @@ nats_GetJWTOrSeed(char **val, const char *content, int item)
 
     return NATS_UPDATE_ERR_STACK(s);
 }
+
+static natsStatus
+_marshalLongVal(natsBuffer *buf, bool comma, const char *fieldName, bool l, int64_t lval, uint64_t uval)
+{
+    natsStatus  s = NATS_OK;
+    char        temp[32];
+    const char  *start = (comma ? ",\"" : "\"");
+
+    if (l)
+        snprintf(temp, sizeof(temp), "%" PRId64, lval);
+    else
+        snprintf(temp, sizeof(temp), "%" PRIi64, uval);
+
+    s = natsBuf_Append(buf, start, -1);
+    IFOK(s, natsBuf_Append(buf, fieldName, -1));
+    IFOK(s, natsBuf_Append(buf, "\":", -1));
+    IFOK(s, natsBuf_Append(buf, temp, -1));
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+nats_marshalLong(natsBuffer *buf, bool comma, const char *fieldName, int64_t lval)
+{
+    natsStatus s = _marshalLongVal(buf, comma, fieldName, true, lval, 0);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+nats_marshalULong(natsBuffer *buf, bool comma, const char *fieldName, uint64_t uval)
+{
+    natsStatus s = _marshalLongVal(buf, comma, fieldName, false, 0, uval);
+    return NATS_UPDATE_ERR_STACK(s);
+}

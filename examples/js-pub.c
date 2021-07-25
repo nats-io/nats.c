@@ -140,6 +140,15 @@ int main(int argc, char **argv)
         // being sent.
         jsPubOpts.MaxWait = 30000;
         s = js_PublishAsyncComplete(js, &jsPubOpts);
+        if (s == NATS_TIMEOUT)
+        {
+            // Let's get the list of pending messages. We could resend,
+            // etc, but for now, just destroy them.
+            natsMsgList list;
+
+            js_PublishAsyncGetPendingList(&list, js);
+            natsMsgList_Destroy(&list);
+        }
     }
 
     if (s == NATS_OK)

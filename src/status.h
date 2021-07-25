@@ -128,6 +128,8 @@ typedef enum
 
     NATS_MISMATCH,                      ///< For JetStream subscriptions, it means that a consumer sequence mismatch was discovered.
 
+    NATS_MISSED_HEARTBEAT,              ///< For JetStream subscriptions, it means that the library detected that server heartbeats have been missed.
+
 } natsStatus;
 
 typedef enum {

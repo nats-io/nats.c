@@ -1090,7 +1090,7 @@ natsInbox_Create(natsInbox **newInbox)
 {
     natsStatus  s;
     char        *inbox = NULL;
-    char        tmpInbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1];
+    char        tmpInbox[NATS_INBOX_ARRAY_SIZE];
 
     s = nats_Open(-1);
     if (s != NATS_OK)
@@ -1119,7 +1119,7 @@ natsInbox_init(char *inbox, int inboxLen)
     if (s != NATS_OK)
         return s;
 
-    if (inboxLen < (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1))
+    if (inboxLen < (NATS_INBOX_ARRAY_SIZE))
         return NATS_INSUFFICIENT_BUFFER;
 
     sprintf(inbox, "%s", inboxPrefix);
@@ -1914,13 +1914,13 @@ natsLib_msgDeliveryPostControlMsg(natsSubscription *sub)
         controlMsg->sub = sub;
 
         l = &(worker->msgList);
-        if (l->tail != NULL)
-            l->tail->next = controlMsg;
         if (l->head == NULL)
         {
             l->head = controlMsg;
             signal  = true;
         }
+        else
+            l->tail->next = controlMsg;
         l->tail = controlMsg;
 
         if (signal)

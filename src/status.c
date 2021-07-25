@@ -70,6 +70,7 @@ static const char *statusText[] = {
     "No responders available for request",
 
     "Mismatch",
+    "Missed Server Heartbeat",
 };
 
 const char*

@@ -338,7 +338,7 @@ _oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
 {
     natsStatus          s       = NATS_OK;
     natsSubscription    *sub    = NULL;
-    char                inbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1];
+    char                inbox[NATS_INBOX_ARRAY_SIZE];
 
     s = natsInbox_init(inbox, sizeof(inbox));
     if (s == NATS_OK)
@@ -422,7 +422,7 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     natsStatus          s           = NATS_OK;
     respInfo            *resp       = NULL;
     bool                needsRemoval= true;
-    char                respInbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1 + NATS_MAX_REQ_ID_LEN + 1]; // _INBOX.<nuid>.<reqId>
+    char                respInbox[NATS_INBOX_ARRAY_SIZE + NATS_MAX_REQ_ID_LEN + 1]; // _INBOX.<nuid>.<reqId>
 
     if ((replyMsg == NULL) || (nc == NULL) || (m == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);

@@ -69,6 +69,15 @@ natsSub_updateDrainStatus(natsSubscription *sub, natsStatus s);
 void
 natsSub_drain(natsSubscription *sub);
 
+natsStatus
+natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool pullSubInternal);
+
+void
+natsSubAndLdw_Lock(natsSubscription *sub);
+
+void
+natsSubAndLdw_Unlock(natsSubscription *sub);
+
 void
 natsSub_close(natsSubscription *sub, bool connectionClosed);
 

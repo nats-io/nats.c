@@ -1337,7 +1337,7 @@ natsStatus
 natsConn_initResp(natsConnection *nc, natsMsgHandler cb)
 {
     natsStatus s = NATS_OK;
-    char       ginbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1 + 1 + 1]; // _INBOX.<nuid>.*
+    char       ginbox[NATS_INBOX_ARRAY_SIZE + 1 + 1]; // _INBOX.<nuid>.*
 
     nc->respPool = NATS_CALLOC(RESP_INFO_POOL_MAX_SIZE, sizeof(respInfo*));
     if (nc->respPool == NULL)
@@ -2575,7 +2575,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
     if ((jsi = sub->jsi) != NULL)
     {
-        hasHBs = jsi->hasHBs;
+        hasHBs = (jsi->hbi > 0 ? true : false);
         hasFC  = jsi->hasFC;
         ctrlMsg= natsMsg_isJSCtrl(msg, &jct);
     }

@@ -213,4 +213,10 @@ nats_GetJWTOrSeed(char **val, const char *content, int item);
 void
 nats_FreeAddrInfo(struct addrinfo *res);
 
+natsStatus
+nats_marshalLong(natsBuffer *buf, bool comma, const char *fieldName, int64_t lval);
+
+natsStatus
+nats_marshalULong(natsBuffer *buf, bool comma, const char *fieldName, uint64_t uval);
+
 #endif /* UTIL_H_ */

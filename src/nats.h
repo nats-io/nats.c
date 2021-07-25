@@ -5320,19 +5320,46 @@ js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
 
 /** \brief Create a pull subscriber.
  *
- * @param sub the location where to store the pointer to the newly created
- * #natsSubscription object.
+ * A pull based consumer is a type of consumer that does not have a delivery subject,
+ * that is the library has to request for the messages to be delivered as needed from the server.
+ *
+ * \note All pull subscriptions must have a durable name.
+ *
+ * @param sub the location where to store the pointer to the newly created #natsSubscription object.
  * @param js the pointer to the #jsCtx object.
  * @param subject the subject this subscription is created for.
- * the #natsMsgHandler prototype.
+ * @param durable the durable name, which is required for pull subscriptions.
  * @param opts the pointer to the #jsOptions object, possibly `NULL`.
  * @param subOpts the subscribe options, possibly `NULL`.
  * @param errCode the location where to store the JetStream specific error code, or `NULL`
  * if not needed.
  */
 NATS_EXTERN natsStatus
-js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject,
+js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject, const char *durable,
                  jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
+
+/** \brief Fetches messages for a pull subscription.
+ *
+ * Fetches up to `batch` messages from the server, waiting up to `timeout` milliseconds.
+ * No more thant `batch` messages will be returned, however, it can be less.
+ *
+ * For `batch` greater than `1`, this call will not necessarily wait up `timeout` milliseconds
+ * if some messages were collected and the library receives a notification that
+ * no more messages are available at this time.<br>
+ * It means that calling `natsSubscription_Fetch(&list, sub, 10, 5000)` may
+ * return after less than 5 seconds with only 3 messages.
+ *
+ * @param list the location to a #natsMsgList that will be filled by the result of this call.
+ * @param sub the pointer to the #natsSubscription object.
+ * @param batch the batch size, that is, the maximum number of messages to return.
+ * @param timeout the timeout (required) expressed in number of milliseconds.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int64_t timeout,
+                       jsErrCode *errCode);
+
 
 /** \brief Returns the consumer sequence mismatch information.
  *

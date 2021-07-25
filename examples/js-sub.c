@@ -16,6 +16,7 @@
 static const char *usage = ""\
 "-gd            use global message delivery thread pool\n" \
 "-sync          receive synchronously (default is asynchronous)\n" \
+"-pull          use pull subscription\n" \
 "-count         number of expected messages\n";
 
 static void
@@ -43,8 +44,7 @@ onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 static void
 asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
-    if (print)
-        printf("Async error: %d - %s\n", err, natsStatus_GetText(err));
+    printf("Async error: %d - %s\n", err, natsStatus_GetText(err));
 
     natsSubscription_GetDropped(sub, (int64_t*) &dropped);
 }
@@ -63,8 +63,8 @@ int main(int argc, char **argv)
 
     opts = parseArgs(argc, argv, usage);
 
-    printf("Listening %ssynchronously on '%s'.\n",
-           (async ? "a" : ""), subj);
+    printf("Created %s subscription on '%s'.\n",
+        (pull ? "pull" : (async ? "asynchronous" : "synchronous")), subj);
 
     s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);
 
@@ -79,16 +79,41 @@ int main(int argc, char **argv)
 
     if (s == NATS_OK)
     {
-        if (async)
+        if (pull)
+            s = js_PullSubscribe(&sub, js, subj, durable, &jsOpts, NULL, &jerr);
+        else if (async)
             s = js_Subscribe(&sub, js, subj, onMsg, NULL, &jsOpts, NULL, &jerr);
         else
             s = js_SubscribeSync(&sub, js, subj, &jsOpts, NULL, &jerr);
     }
+    if (s == NATS_OK)
+        s = natsSubscription_SetPendingLimits(sub, -1, -1);
 
     if (s == NATS_OK)
         s = natsStatistics_Create(&stats);
 
-    if ((s == NATS_OK) && async)
+    if ((s == NATS_OK) && pull)
+    {
+        natsMsgList list;
+        int         i;
+
+        for (count = 0; (s == NATS_OK) && (count < total); )
+        {
+            s = natsSubscription_Fetch(&list, sub, 1024, 5000, &jerr);
+            if (s != NATS_OK)
+                break;
+
+            if (start == 0)
+                start = nats_Now();
+
+            count += (int64_t) list.Count;
+            for (i=0; i<list.Count; i++)
+                natsMsg_Ack(list.Msgs[i], &jsOpts);
+
+            natsMsgList_Destroy(&list);
+        }
+    }
+    else if ((s == NATS_OK) && async)
     {
         while (s == NATS_OK)
         {

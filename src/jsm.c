@@ -39,10 +39,6 @@ static const char *jsAckExplictStr         = "explicit";
 static const char *jsReplayOriginalStr     = "original";
 static const char *jsReplayInstantStr      = "instant";
 
-
-#define _marshalLong(b, c, f, l)    _marshalLongVal((b), (c), (f), true, (l), 0)
-#define _marshalULong(b, c, f, u)   _marshalLongVal((b), (c), (f), false, 0, (u))
-
 typedef enum
 {
     jsStreamActionCreate = 1,
@@ -71,26 +67,6 @@ _marshalTimeUTC(natsBuffer *buf, const char *fieldName, int64_t timeUTC)
     IFOK(s, natsBuf_Append(buf, "\":\"", -1));
     IFOK(s, natsBuf_Append(buf, dbuf, -1));
     IFOK(s, natsBuf_AppendByte(buf, '"'));
-
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
-static natsStatus
-_marshalLongVal(natsBuffer *buf, bool comma, const char *fieldName, bool l, int64_t lval, uint64_t uval)
-{
-    natsStatus  s = NATS_OK;
-    char        temp[32];
-    const char  *start = (comma ? ",\"" : "\"");
-
-    if (l)
-        snprintf(temp, sizeof(temp), "%" PRId64, lval);
-    else
-        snprintf(temp, sizeof(temp), "%" PRIi64, uval);
-
-    s = natsBuf_Append(buf, start, -1);
-    IFOK(s, natsBuf_Append(buf, fieldName, -1));
-    IFOK(s, natsBuf_Append(buf, "\":", -1));
-    IFOK(s, natsBuf_Append(buf, temp, -1));
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -326,7 +302,7 @@ _marshalStreamSource(jsStreamSource *source, const char *fieldName, natsBuffer *
     IFOK(s, natsBuf_Append(buf, source->Name, -1));
     IFOK(s, natsBuf_AppendByte(buf, '"'));
     if ((s == NATS_OK) && (source->OptStartSeq > 0))
-        s = _marshalLong(buf, true, "opt_start_seq", source->OptStartSeq);
+        s = nats_marshalLong(buf, true, "opt_start_seq", source->OptStartSeq);
     if ((s == NATS_OK) && (source->OptStartTime > 0))
         IFOK(s, _marshalTimeUTC(buf, "opt_start_time", source->OptStartTime));
     if (source->FilterSubject != NULL)
@@ -618,18 +594,18 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
     }
     IFOK(s, _marshalRetentionPolicy(cfg->Retention, buf));
 
-    IFOK(s, _marshalLong(buf, true, "max_consumers", cfg->MaxConsumers));
-    IFOK(s, _marshalLong(buf, true, "max_msgs", cfg->MaxMsgs));
-    IFOK(s, _marshalLong(buf, true, "max_bytes", cfg->MaxBytes));
-    IFOK(s, _marshalLong(buf, true, "max_age", cfg->MaxAge));
-    IFOK(s, _marshalLong(buf, true, "max_msg_size", (int64_t) cfg->MaxMsgSize));
-    IFOK(s, _marshalLong(buf, true, "max_msgs_per_subject", cfg->MaxMsgsPerSubject));
+    IFOK(s, nats_marshalLong(buf, true, "max_consumers", cfg->MaxConsumers));
+    IFOK(s, nats_marshalLong(buf, true, "max_msgs", cfg->MaxMsgs));
+    IFOK(s, nats_marshalLong(buf, true, "max_bytes", cfg->MaxBytes));
+    IFOK(s, nats_marshalLong(buf, true, "max_age", cfg->MaxAge));
+    IFOK(s, nats_marshalLong(buf, true, "max_msg_size", (int64_t) cfg->MaxMsgSize));
+    IFOK(s, nats_marshalLong(buf, true, "max_msgs_per_subject", cfg->MaxMsgsPerSubject));
 
     IFOK(s, _marshalDiscardPolicy(cfg->Discard, buf));
 
     IFOK(s, _marshalStorageType(cfg->Storage, buf));
 
-    IFOK(s, _marshalLong(buf, true, "num_replicas", cfg->Replicas));
+    IFOK(s, nats_marshalLong(buf, true, "num_replicas", cfg->Replicas));
 
     if (cfg->NoAck)
         IFOK(s, natsBuf_Append(buf, ",\"no_ack\":true", -1));
@@ -642,7 +618,7 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
     }
 
     if (cfg->Duplicates != 0)
-        s = _marshalLong(buf, true, "duplicate_window", cfg->Duplicates);
+        s = nats_marshalLong(buf, true, "duplicate_window", cfg->Duplicates);
 
     if (cfg->Placement != NULL)
         IFOK(s, _marshalPlacement(cfg->Placement, buf));
@@ -1122,10 +1098,10 @@ _marshalPurgeRequest(natsBuffer **new_buf, struct jsOptionsStreamPurge *opts)
         comma = true;
     }
     if ((s == NATS_OK) && (opts->Sequence > 0))
-        s = _marshalULong(buf, comma, "seq", opts->Sequence);
+        s = nats_marshalULong(buf, comma, "seq", opts->Sequence);
 
     if ((s == NATS_OK) && (opts->Keep > 0))
-        s = _marshalULong(buf, comma, "keep", opts->Keep);
+        s = nats_marshalULong(buf, comma, "keep", opts->Keep);
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
@@ -1467,14 +1443,14 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         IFOK(s, natsBuf_AppendByte(buf, '"'));
     }
     if ((s == NATS_OK) && (cfg->OptStartSeq > 0))
-        s = _marshalLong(buf, true, "opt_start_seq", cfg->OptStartSeq);
+        s = nats_marshalLong(buf, true, "opt_start_seq", cfg->OptStartSeq);
     if ((s == NATS_OK) && (cfg->OptStartTime > 0))
         s = _marshalTimeUTC(buf, "opt_start_time", cfg->OptStartTime);
     IFOK(s, _marshalAckPolicy(buf, cfg->AckPolicy));
     if ((s == NATS_OK) && (cfg->AckWait > 0))
-        s = _marshalLong(buf, true, "ack_wait", cfg->AckWait);
+        s = nats_marshalLong(buf, true, "ack_wait", cfg->AckWait);
     if ((s == NATS_OK) && (cfg->MaxDeliver > 0))
-        s = _marshalLong(buf, true, "max_deliver", cfg->MaxDeliver);
+        s = nats_marshalLong(buf, true, "max_deliver", cfg->MaxDeliver);
     if ((s == NATS_OK) && !nats_IsStringEmpty(cfg->FilterSubject))
     {
         s = natsBuf_Append(buf, ",\"filter_subject\":\"", -1);
@@ -1483,7 +1459,7 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
     }
     IFOK(s, _marshalReplayPolicy(buf, cfg->ReplayPolicy))
     if ((s == NATS_OK) && (cfg->RateLimit > 0))
-        s = _marshalULong(buf, true, "rate_limit_bps", cfg->RateLimit);
+        s = nats_marshalULong(buf, true, "rate_limit_bps", cfg->RateLimit);
     if ((s == NATS_OK) && !nats_IsStringEmpty(cfg->SampleFrequency))
     {
         s = natsBuf_Append(buf, ",\"sample_freq\":\"", -1);
@@ -1491,13 +1467,13 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         IFOK(s, natsBuf_AppendByte(buf, '"'));
     }
     if ((s == NATS_OK) && (cfg->MaxWaiting > 0))
-        s = _marshalLong(buf, true, "max_waiting", cfg->MaxWaiting);
+        s = nats_marshalLong(buf, true, "max_waiting", cfg->MaxWaiting);
     if ((s == NATS_OK) && (cfg->MaxAckPending > 0))
-        s = _marshalLong(buf, true, "max_ack_pending", cfg->MaxAckPending);
+        s = nats_marshalLong(buf, true, "max_ack_pending", cfg->MaxAckPending);
     if ((s == NATS_OK) && cfg->FlowControl)
         s = natsBuf_Append(buf, ",\"flow_control\":true", -1);
     if ((s == NATS_OK) && (cfg->Heartbeat > 0))
-        s = _marshalLong(buf, true, "idle_heartbeat", cfg->Heartbeat);
+        s = nats_marshalLong(buf, true, "idle_heartbeat", cfg->Heartbeat);
     IFOK(s, natsBuf_Append(buf, "}}", -1));
 
     if (s == NATS_OK)

@@ -58,6 +58,7 @@ bool        deliverAll  = false;
 bool        deliverLast = true;
 uint64_t    deliverSeq  = 0;
 bool        unsubscribe = false;
+bool        pull        = false;
 
 const char  *stream     = "foo";
 
@@ -277,6 +278,7 @@ parseArgs(int argc, char **argv, const char *usage)
         else if (strcasecmp(argv[i], "-sync") == 0)
         {
             async = false;
+            pull  = false;
         }
         else if (strcasecmp(argv[i], "-subj") == 0)
         {
@@ -389,6 +391,11 @@ parseArgs(int argc, char **argv, const char *usage)
                 printUsageAndExit(argv[0], usage);
 
             stream = argv[++i];
+        }
+        else if (strcasecmp(argv[i], "-pull") == 0)
+        {
+            async = false;
+            pull  = true;
         }
         else
         {

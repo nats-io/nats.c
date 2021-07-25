@@ -45,6 +45,10 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsErrPullSubscribeRequired          "must use pull subscribe to bind to pull based consumer"
 #define jsErrMsgNotBound                    "message not bound to a subscription"
 #define jsErrMsgNotJS                       "not a JetStream message"
+#define jsErrDurRequired                    "durable name is required"
+#define jsErrNotPullSub                     "not a JetStream pull subscriptions"
+#define jsErrPullSub                        "not applicable to JetStream pull subscriptions"
+#define jsErrNoHeartbeatForQueueSub         "a queue subscription cannot be created against consumer with heartbeat"
 
 #define jsCtrlHeartbeat     (1)
 #define jsCtrlFlowControl   (2)
@@ -88,10 +92,10 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiStreams can lookup a stream by subject.
 #define jsApiStreams "%.*s.STREAM.NAMES"
 
-/*
-    // apiRequestNextT is the prefix for the request next message(s) for a consumer in worker/pull mode.
-    apiRequestNextT = "CONSUMER.MSG.NEXT.%s.%s"
+// jsApiRequestNextT is the prefix for the request next message(s) for a consumer in worker/pull mode.
+#define jsApiRequestNextT "%s.CONSUMER.MSG.NEXT.%s.%s"
 
+/*
     // apiConsumerListT is used to return all detailed consumer information
     apiConsumerListT = "CONSUMER.LIST.%s"
 

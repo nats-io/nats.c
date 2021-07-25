@@ -94,6 +94,8 @@
 #define NATS_REQ_ID_OFFSET  (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1)
 #define NATS_MAX_REQ_ID_LEN (19) // to display 2^63-1 number
 
+#define NATS_INBOX_ARRAY_SIZE   (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1)
+
 #define WAIT_FOR_READ       (0)
 #define WAIT_FOR_WRITE      (1)
 #define WAIT_FOR_CONNECT    (2)
@@ -347,9 +349,14 @@ typedef struct __jsSub
     jsCtx               *js;
     char                *stream;
     char                *consumer;
+    char                *nxtMsgSubj;
     bool                delCons;
-    bool                hasHBs;
     bool                hasFC;
+    bool                pull;
+
+    int64_t             hbi;
+    int64_t             lasthb;
+    natsTimer           *hbTimer;
 
     uint64_t            sseq;
     uint64_t            dseq;

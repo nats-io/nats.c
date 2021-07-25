@@ -18,6 +18,7 @@
 #include "conn.h"
 #include "util.h"
 #include "opts.h"
+#include "sub.h"
 
 #ifdef DEV_MODE
 // For type safety
@@ -633,7 +634,7 @@ _newAsyncReply(char *reply, jsCtx *js)
                 s = nats_setDefaultError(NATS_NO_MEMORY);
             else
             {
-                char tmp[NATS_INBOX_PRE_LEN+NUID_BUFFER_LEN+1];
+                char tmp[NATS_INBOX_ARRAY_SIZE];
 
                 natsInbox_init(tmp, sizeof(tmp));
                 memcpy(js->rpre, tmp, NATS_INBOX_PRE_LEN);
@@ -960,8 +961,10 @@ jsSub_free(jsSub *jsi)
         return;
 
     js = jsi->js;
+    natsTimer_Destroy(jsi->hbTimer);
     NATS_FREE(jsi->stream);
     NATS_FREE(jsi->consumer);
+    NATS_FREE(jsi->nxtMsgSubj);
     NATS_FREE(jsi->fcReply);
     NATS_FREE(jsi);
 
@@ -1004,6 +1007,9 @@ natsStatus
 jsSub_unsubscribe(jsSub *jsi, bool drainMode)
 {
     natsStatus s;
+
+    if (jsi->hbTimer != NULL)
+        natsTimer_Stop(jsi->hbTimer);
 
     // We want to cleanup only JS consumer that has been
     // created by the library (case of an ephemeral and
@@ -1135,6 +1141,9 @@ jsSub_trackSequences(jsSub *jsi, const char *reply)
     if ((reply == NULL) || (strstr(reply, jsAckPrefix) != reply))
         return NATS_OK;
 
+    // Data is equivalent to HB, so capture this as the last HB received.
+    jsi->lasthb = nats_Now();
+
     s = _getMetaData(reply+jsAckPrefixLen, NULL, NULL, NULL, &jsi->sseq, &jsi->dseq, NULL, NULL, 2);
     if (s != NATS_OK)
     {
@@ -1153,6 +1162,9 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm)
     int64_t     val    = 0;
 
     *sm = false;
+
+    // This is an HB, so update last time we saw an HB.
+    jsi->lasthb = nats_Now();
 
     if (jsi->dseq == 0)
         return NATS_OK;
@@ -1230,7 +1242,267 @@ jsSub_scheduleFlowControlResponse(jsSub *jsi, natsSubscription *sub, const char 
 }
 
 static natsStatus
-_subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
+_checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, jsErrCode *jerr)
+{
+    natsStatus  s    = NATS_OK;
+    const char  *val = NULL;
+    const char  *desc= NULL;
+
+    *usrMsg = true;
+    if (jerr != NULL)
+        *jerr = 0;
+
+    if ((msg->dataLen > 0) || (msg->hdrLen <= 0))
+        return NATS_OK;
+
+    s = natsMsgHeader_Get(msg, STATUS_HDR, &val);
+    // If no status header, this is still considered a user message, so OK.
+    if (s == NATS_NOT_FOUND)
+        return NATS_OK;
+    // If serious error, return it.
+    else if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    // At this point, this is known to be a status message, not a user message.
+    *usrMsg = false;
+
+    // If we don't care about status, we are done.
+    if (!checkSts)
+        return NATS_OK;
+
+    // 404 indicating that there are no messages.
+    if (strncmp(val, NOT_FOUND_STATUS, HDR_STATUS_LEN) == 0)
+        return NATS_NOT_FOUND;
+
+    // 408 indicating a request timeout (when request is sent
+    // with an "expires" field).
+    if (strncmp(val, REQ_TIMEOUT, HDR_STATUS_LEN) == 0)
+        return NATS_TIMEOUT;
+
+    if (strncmp(val, NO_RESP_STATUS, HDR_STATUS_LEN) == 0)
+    {
+        if (jerr != NULL)
+            *jerr = JSNotEnabledErr;
+        return nats_setDefaultError(NATS_NO_RESPONDERS);
+    }
+
+    natsMsgHeader_Get(msg, DESCRIPTION_HDR, &desc);
+    return nats_setError(NATS_ERR, "%s", (desc == NULL ? "error checking pull subscribe message" : desc));
+}
+
+natsStatus
+natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int64_t timeout,
+                       jsErrCode *errCode)
+{
+    natsStatus      s       = NATS_OK;
+    natsMsg         **msgs  = NULL;
+    int             count   = 0;
+    natsConnection  *nc     = NULL;
+    const char      *subj   = NULL;
+    const char      *rply   = NULL;
+    int             pmc     = 0;
+    char            buffer[64];
+    natsBuffer      buf;
+    int64_t         start;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if (list == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    memset(list, 0, sizeof(natsMsgList));
+
+    if ((sub == NULL) || (batch <= 0))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (timeout <= 0)
+        return nats_setDefaultError(NATS_INVALID_TIMEOUT);
+
+    natsSub_Lock(sub);
+    if ((sub->jsi == NULL) || !sub->jsi->pull)
+    {
+        natsSub_Unlock(sub);
+        return nats_setError(NATS_INVALID_SUBSCRIPTION, "%s", jsErrNotPullSub);
+    }
+    msgs = (natsMsg**) NATS_CALLOC(batch, sizeof(natsMsg*));
+    if (msgs == NULL)
+    {
+        natsSub_Unlock(sub);
+        return nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
+    nc   = sub->conn;
+    rply = (const char*) sub->subject;
+    subj = sub->jsi->nxtMsgSubj;
+    pmc  = (sub->msgList.msgs > 0);
+    natsSub_Unlock(sub);
+
+    start = nats_Now();
+
+    // First, if there are already pending messages in the internal sub,
+    // then get as much messages as we can (but not more than the batch).
+    while (pmc && (s == NATS_OK) && (count < batch))
+    {
+        natsMsg *msg  = NULL;
+        bool    usrMsg= false;
+
+        // This call will pull messages from the internal sync subscription
+        // but will not wait (and return NATS_TIMEOUT without updating
+        // the error stack) if there are no messages.
+        s = natsSub_nextMsg(&msg, sub, 0, true);
+        if (s == NATS_OK)
+        {
+            // Here we care only about user messages.
+            s = _checkMsg(msg, false, &usrMsg, errCode);
+            if ((s == NATS_OK) && usrMsg)
+                msgs[count++] = msg;
+            else
+                natsMsg_Destroy(msg);
+        }
+    }
+
+    // If we have OK or TIMEOUT and not all messages, we will send a fetch
+    // request to the server.
+    if (((s == NATS_OK) || (s == NATS_TIMEOUT)) && (count != batch))
+    {
+        bool doNoWait = false;
+
+        // For batch==1, it does not make sense to send a no_wait.
+        if (batch > 1)
+        {
+            doNoWait = true;
+            s = natsBuf_Append(&buf, "{\"no_wait\":true", -1);
+        }
+        // Need comma only if we have `no_wait` set.
+        IFOK(s, nats_marshalLong(&buf, doNoWait, "batch", (int64_t)(batch-count)));
+        IFOK(s, natsBuf_AppendByte(&buf, '}'));
+
+        // Sent the request to get more messages.
+        IFOK(s, natsConnection_PublishRequest(nc, subj, rply, natsBuf_Data(&buf), natsBuf_Len(&buf)));
+
+        // Now wait for messages or a 404 saying that there are no more.
+        while ((s == NATS_OK) && (count < batch))
+        {
+            natsMsg *msg    = NULL;
+            bool    usrMsg  = false;
+
+            timeout -= (nats_Now()-start);
+            if (timeout < 0)
+                timeout = 0;
+
+            s = natsSub_nextMsg(&msg, sub, timeout, true);
+            if (s == NATS_OK)
+            {
+                s = _checkMsg(msg, true, &usrMsg, errCode);
+                if ((s == NATS_OK) && usrMsg)
+                    msgs[count++] = msg;
+                else
+                {
+                    natsMsg_Destroy(msg);
+                    // If we have a 404 for our "no_wait" request and have
+                    // not collected any message, then resend request to
+                    // wait this time.
+                    if (doNoWait && (s == NATS_NOT_FOUND) && (count == 0))
+                    {
+                        int64_t expires;
+
+                        // Make sure we do this only once...
+                        doNoWait = false;
+
+                        timeout -= (nats_Now()-start);
+                        if (timeout < 0)
+                        {
+                            // At this point, consider that we have timed-out.
+                            s = NATS_TIMEOUT;
+                            break;
+                        }
+
+                        // Make our request expiration a bit shorter than the
+                        // current timeout.
+                        expires = (timeout >= 20 ? timeout - 10 : timeout);
+
+                        // Since "expires" is a Go time.Duration and our timeout
+                        // is in milliseconds, convert it to nanos.
+                        expires *= 1000000;
+
+                        natsBuf_Reset(&buf);
+                        s = natsBuf_AppendByte(&buf, '{');
+                        IFOK(s, nats_marshalLong(&buf, false, "batch", (int64_t)(batch-count)));
+                        IFOK(s, nats_marshalLong(&buf, true, "expires", expires));
+                        IFOK(s, natsBuf_AppendByte(&buf, '}'));
+
+                        // Sent the request to get more messages.
+                        IFOK(s, natsConnection_PublishRequest(nc, subj, rply,
+                            natsBuf_Data(&buf), natsBuf_Len(&buf)));
+                    }
+                }
+            }
+        }
+    }
+
+    natsBuf_Destroy(&buf);
+
+    // If count > 0 it means that we have gathered some user messages,
+    // so we need to return them to the user with a NATS_OK status.
+    if (count > 0)
+    {
+        // If there was an error other than "expected" ones that do
+        // not update the error stack, then we need to clear it.
+        if ((s != NATS_NOT_FOUND) && (s != NATS_TIMEOUT))
+            nats_clearLastError();
+
+        // Update the list with what we have collected.
+        list->Msgs = msgs;
+        *(int*)&(list->Count) = count;
+
+        return NATS_OK;
+    }
+
+    NATS_FREE(msgs);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static void
+_hbTimerFired(natsTimer *timer, void* closure)
+{
+    natsSubscription    *sub = (natsSubscription*) closure;
+    jsSub               *jsi = sub->jsi;
+    int64_t             now  = nats_Now();
+    bool                alert= false;
+    natsConnection      *nc  = NULL;
+
+    natsSubAndLdw_Lock(sub);
+    alert = ((now - jsi->lasthb) >= jsi->hbi + 100 /*ms*/ ? true : false);
+    nc = sub->conn;
+    natsSubAndLdw_Unlock(sub);
+
+    if (!alert)
+        return;
+
+    natsConn_Lock(nc);
+    // We did create the timer only knowing that there was a async err
+    // handler, but check anyway in case we decide to have timer set
+    // regardless.
+    if (nc->opts->asyncErrCb != NULL)
+        natsAsyncCb_PostErrHandler(nc, sub, NATS_MISSED_HEARTBEAT);
+    natsConn_Unlock(nc);
+}
+
+// This is invoked when the subscription is destroyed, since in NATS C
+// client, timers will automatically fire again, so this callback is
+// invoked when the timer has been stopped (and we are ready to destroy it).
+static void
+_hbTimerStopped(natsTimer *timer, void* closure)
+{
+    natsSubscription *sub = (natsSubscription*) closure;
+
+    natsSub_release(sub);
+}
+
+static natsStatus
+_subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const char *durable,
            natsMsgHandler cb, void *cbClosure, bool isPullMode,
            jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {
@@ -1244,12 +1516,14 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
     bool                consBound   = false;
     bool                hasFC       = false;
     bool                delCons     = false;
+    bool                isQueue     = false;
     int64_t             maxMsgs     = jsDefaultMaxMsgs;
     natsConnection      *nc         = NULL;
     bool                freePfx     = false;
     bool                freeStream  = false;
     jsSub               *jsi        = NULL;
-    char                inbox[NATS_INBOX_PRE_LEN+NUID_BUFFER_LEN+1];
+    int64_t             hbi         = 0;
+    char                inbox[NATS_INBOX_ARRAY_SIZE];
     jsOptions           jo;
     jsSubOptions        o;
 
@@ -1268,10 +1542,16 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
         opts = &o;
     }
 
+    isQueue  = !nats_IsStringEmpty(opts->Queue);
     hasFC    = opts->Config.FlowControl;
     stream   = opts->Stream;
     consumer = opts->Consumer;
     consBound= (!nats_IsStringEmpty(stream) && !nats_IsStringEmpty(consumer));
+
+    // Reject a user configuration that would want to define hearbeats with
+    // a queue subscription.
+    if (isQueue && opts->Config.Heartbeat > 0)
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrNoHeartbeatForQueueSub);
 
     // With flow control enabled async subscriptions we will bump msgs
     // limits, and set a larger pending bytes limit by default.
@@ -1310,6 +1590,15 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
         // Attach using the found consumer config.
         jsConsumerConfig *ccfg = info->Config;
 
+        // If consumer exists in the server and has hearbeat configured,
+        // then let the user know that it probably does not make sense
+        // to create a queue subscription from this consumer.
+        if (isQueue && (ccfg->Heartbeat > 0))
+        {
+            s = nats_setError(NATS_INVALID_ARG, "%s", jsErrNoHeartbeatForQueueSub);
+            goto END;
+        }
+
         // Make sure this new subject matches or is a subset.
         if (!nats_IsStringEmpty(ccfg->FilterSubject) && (strcmp(subject, ccfg->FilterSubject) != 0))
         {
@@ -1339,6 +1628,9 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
             natsInbox_init(inbox, sizeof(inbox));
             deliver = (const char*) inbox;
         }
+
+        // Capture the HB interval
+        hbi = ccfg->Heartbeat;
     }
     else if (((s != NATS_OK) && (s != NATS_NOT_FOUND)) || ((s == NATS_NOT_FOUND) && consBound))
     {
@@ -1363,6 +1655,8 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
 
         if (!isPullMode)
             cfg.DeliverSubject = (const char*) deliver;
+        else
+            cfg.Durable = durable;
 
         // Do filtering always, server will clear as needed.
         cfg.FilterSubject = subject;
@@ -1390,6 +1684,15 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
             if (s != NATS_OK)
                 goto END;
 
+            // Check the case where there is attempt to create a queue subscription
+            // and the existing consumer has Heartbeat configured, which does not
+            // make sense with Queue subs.
+            if (isQueue && (info->Config->Heartbeat > 0))
+            {
+                s = nats_setError(NATS_INVALID_ARG, "%s", jsErrNoHeartbeatForQueueSub);
+                goto END;
+            }
+
             // Attach using the found consumer config.
             ccfg = info->Config;
 
@@ -1401,7 +1704,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
                 goto END;
             }
         }
-        else if (nats_IsStringEmpty(opts->Queue) && nats_IsStringEmpty(opts->Config.Durable))
+        else if (!isQueue && nats_IsStringEmpty(opts->Config.Durable))
         {
             // Library will delete the consumer on Unsubscribe() only if
             // it is the one that created the consumer and that there is
@@ -1416,6 +1719,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
         stream   = info->Stream;
         consumer = info->Name;
         deliver  = (natsInbox*) info->Config->DeliverSubject;
+        hbi      = info->Config->Heartbeat;
     }
 
     if (s == NATS_OK)
@@ -1425,14 +1729,19 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
             s = nats_setDefaultError(NATS_NO_MEMORY);
         else
         {
-            DUP_STRING(s, jsi->stream, stream);
+            if (isPullMode)
+            {
+                if (nats_asprintf(&(jsi->nxtMsgSubj), jsApiRequestNextT, jo.Prefix, stream, consumer) < 0)
+                    s = nats_setDefaultError(NATS_NO_MEMORY);
+            }
+            IF_OK_DUP_STRING(s, jsi->stream, stream);
             IF_OK_DUP_STRING(s, jsi->consumer, consumer);
             if (s == NATS_OK)
             {
                 jsi->js       = js;
                 jsi->delCons  = delCons;
-                jsi->hasHBs   = (opts->Config.Heartbeat > 0 ? true : false);
                 jsi->hasFC    = hasFC;
+                jsi->pull     = isPullMode;
                 js_retain(js);
 
                 if ((cb != NULL) && !opts->ManualAck && (opts->Config.AckPolicy != js_AckNone))
@@ -1447,8 +1756,52 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject,
             }
         }
     }
-    IFOK(s, natsConn_subscribeImpl(new_sub, nc, true, (const char*) deliver, opts->Queue, 0, cb, cbClosure, false, jsi));
-    IFOK(s, natsSubscription_SetPendingLimits(*new_sub, (int) maxMsgs, NATS_OPTS_DEFAULT_MAX_PENDING_MSGS*1024));
+    if (s == NATS_OK)
+    {
+        char pullInbox[NATS_INBOX_ARRAY_SIZE];
+
+        if (isPullMode)
+        {
+            s = natsInbox_init(pullInbox, sizeof(pullInbox));
+            deliver = (const char*) pullInbox;
+        }
+        // Create the NATS subscription on given deliver subject. Note that
+        // cb/cbClosure will be NULL for sync or pull subscriptions.
+        IFOK(s, natsConn_subscribeImpl(new_sub, nc, true, deliver,
+                                       opts->Queue, 0, cb, cbClosure, false, jsi));
+
+        // For async subscriptions with FC enabled, set some non-default
+        // pending message limits.
+        if ((s == NATS_OK) && !isPullMode && (cb != NULL) && hasFC)
+            s = natsSubscription_SetPendingLimits(*new_sub, (int) maxMsgs,
+                                    NATS_OPTS_DEFAULT_MAX_PENDING_MSGS*1024);
+    }
+    if ((s == NATS_OK) && (hbi > 0))
+    {
+        bool ct = false; // create timer or not.
+
+        // Our timers are only milliseconds, so need to convert since
+        // the Heartbeat is a go's time.Duration, which is in nanosec.
+        hbi /= 1000000;
+
+        // Save the fact that the server is going to send HBs at this interval.
+        // (actually, server sends HBs only if there is no data to send).
+        jsi->hbi = hbi;
+
+        // Check to see if it is even worth creating a timer to check
+        // on missed heartbeats, since the way to notify the user will be
+        // through async callback.
+        natsConn_Lock(nc);
+        ct = (nc->opts->asyncErrCb != NULL ? true : false);
+        natsConn_Unlock(nc);
+        if (ct)
+        {
+            natsSub_retain(*new_sub);
+            s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi, (void*) *new_sub);
+            if (s != NATS_OK)
+                natsSub_release(*new_sub);
+        }
+    }
 
 END:
     if (s != NATS_OK)
@@ -1489,7 +1842,7 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
     if (cb == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    return _subscribe(sub, js, subject, cb, cbClosure, false, jsOpts, opts, errCode);
+    return _subscribe(sub, js, subject, NULL, cb, cbClosure, false, jsOpts, opts, errCode);
 }
 
 natsStatus
@@ -1499,15 +1852,18 @@ js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
     if (errCode != NULL)
         *errCode = 0;
 
-    return _subscribe(sub, js, subject, NULL, NULL, false, jsOpts, opts, errCode);
+    return _subscribe(sub, js, subject, NULL, NULL, NULL, false, jsOpts, opts, errCode);
 }
 
 natsStatus
-js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject,
+js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject, const char *durable,
                  jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {
     if (errCode != NULL)
         *errCode = 0;
+
+    if (nats_IsStringEmpty(durable))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrDurRequired);
 
     // Check for invalid ack policy
     if (opts != NULL)
@@ -1520,7 +1876,7 @@ js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject,
                                  jsAckPolicyStr(p));
     }
 
-    return _subscribe(sub, js, subject, NULL, NULL, true, jsOpts, opts, errCode);
+    return _subscribe(sub, js, subject, durable, NULL, NULL, true, jsOpts, opts, errCode);
 }
 
 static natsStatus

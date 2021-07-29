@@ -1517,7 +1517,6 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     bool                hasFC       = false;
     bool                delCons     = false;
     bool                isQueue     = false;
-    int64_t             maxMsgs     = jsDefaultMaxMsgs;
     natsConnection      *nc         = NULL;
     bool                freePfx     = false;
     bool                freeStream  = false;
@@ -1552,11 +1551,6 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     // a queue subscription.
     if (isQueue && opts->Config.Heartbeat > 0)
         return nats_setError(NATS_INVALID_ARG, "%s", jsErrNoHeartbeatForQueueSub);
-
-    // With flow control enabled async subscriptions we will bump msgs
-    // limits, and set a larger pending bytes limit by default.
-    if (!isPullMode && (cb != NULL) && hasFC)
-        maxMsgs *= 16;
 
     // In case a consumer has not been set explicitly, then the
     // durable name will be used as the consumer name (which
@@ -1630,7 +1624,8 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
         }
 
         // Capture the HB interval
-        hbi = ccfg->Heartbeat;
+        hbi   = ccfg->Heartbeat;
+        hasFC = ccfg->FlowControl;
     }
     else if (((s != NATS_OK) && (s != NATS_NOT_FOUND)) || ((s == NATS_NOT_FOUND) && consBound))
     {
@@ -1664,7 +1659,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
         // If we have acks at all and the MaxAckPending is not set go ahead
         // and set to the internal max.
         if ((cfg.MaxAckPending == 0) && (cfg.AckPolicy != js_AckNone))
-            cfg.MaxAckPending = maxMsgs;
+            cfg.MaxAckPending = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
 
         // Multiple subscribers could compete in creating the first consumer
         // that will be shared using the same durable name. If this happens, then
@@ -1704,7 +1699,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
                 goto END;
             }
         }
-        else if (!isQueue && nats_IsStringEmpty(opts->Config.Durable))
+        else if (!isQueue && nats_IsStringEmpty(opts->Config.Durable) && (durable == NULL))
         {
             // Library will delete the consumer on Unsubscribe() only if
             // it is the one that created the consumer and that there is
@@ -1720,6 +1715,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
         consumer = info->Name;
         deliver  = (natsInbox*) info->Config->DeliverSubject;
         hbi      = info->Config->Heartbeat;
+        hasFC    = info->Config->FlowControl;
     }
 
     if (s == NATS_OK)
@@ -1769,12 +1765,6 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
         // cb/cbClosure will be NULL for sync or pull subscriptions.
         IFOK(s, natsConn_subscribeImpl(new_sub, nc, true, deliver,
                                        opts->Queue, 0, cb, cbClosure, false, jsi));
-
-        // For async subscriptions with FC enabled, set some non-default
-        // pending message limits.
-        if ((s == NATS_OK) && !isPullMode && (cb != NULL) && hasFC)
-            s = natsSubscription_SetPendingLimits(*new_sub, (int) maxMsgs,
-                                    NATS_OPTS_DEFAULT_MAX_PENDING_MSGS*1024);
     }
     if ((s == NATS_OK) && (hbi > 0))
     {

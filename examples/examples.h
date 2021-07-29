@@ -58,9 +58,10 @@ bool        deliverAll  = false;
 bool        deliverLast = true;
 uint64_t    deliverSeq  = 0;
 bool        unsubscribe = false;
-bool        pull        = false;
 
-const char  *stream     = "foo";
+const char  *stream     = NULL;
+bool        pull        = false;
+bool        flowctrl    = false;
 
 static natsStatus
 printStats(int mode, natsConnection *conn, natsSubscription *sub,
@@ -396,6 +397,10 @@ parseArgs(int argc, char **argv, const char *usage)
         {
             async = false;
             pull  = true;
+        }
+        else if (strcasecmp(argv[i], "-fc") == 0)
+        {
+            flowctrl = true;
         }
         else
         {

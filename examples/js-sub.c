@@ -17,6 +17,7 @@ static const char *usage = ""\
 "-gd            use global message delivery thread pool\n" \
 "-sync          receive synchronously (default is asynchronous)\n" \
 "-pull          use pull subscription\n" \
+"-fc            enable flow control\n" \
 "-count         number of expected messages\n";
 
 static void
@@ -57,8 +58,9 @@ int main(int argc, char **argv)
     natsSubscription    *sub   = NULL;
     natsMsg             *msg   = NULL;
     jsCtx               *js    = NULL;
-    jsOptions           jsOpts;
     jsErrCode           jerr   = 0;
+    jsOptions           jsOpts;
+    jsSubOptions        so;
     natsStatus          s;
 
     opts = parseArgs(argc, argv, usage);
@@ -75,16 +77,25 @@ int main(int argc, char **argv)
         s = jsOptions_Init(&jsOpts);
 
     if (s == NATS_OK)
+        s = jsSubOptions_Init(&so);
+    if (s == NATS_OK)
+    {
+        so.Stream = stream;
+        so.Consumer = durable;
+        so.Config.FlowControl = flowctrl;
+    }
+
+    if (s == NATS_OK)
         s = natsConnection_JetStream(&js, conn, &jsOpts);
 
     if (s == NATS_OK)
     {
         if (pull)
-            s = js_PullSubscribe(&sub, js, subj, durable, &jsOpts, NULL, &jerr);
+            s = js_PullSubscribe(&sub, js, subj, durable, &jsOpts, &so, &jerr);
         else if (async)
-            s = js_Subscribe(&sub, js, subj, onMsg, NULL, &jsOpts, NULL, &jerr);
+            s = js_Subscribe(&sub, js, subj, onMsg, NULL, &jsOpts, &so, &jerr);
         else
-            s = js_SubscribeSync(&sub, js, subj, &jsOpts, NULL, &jerr);
+            s = js_SubscribeSync(&sub, js, subj, &jsOpts, &so, &jerr);
     }
     if (s == NATS_OK)
         s = natsSubscription_SetPendingLimits(sub, -1, -1);
@@ -107,8 +118,8 @@ int main(int argc, char **argv)
                 start = nats_Now();
 
             count += (int64_t) list.Count;
-            for (i=0; i<list.Count; i++)
-                natsMsg_Ack(list.Msgs[i], &jsOpts);
+            for (i=0; (s == NATS_OK) && (i<list.Count); i++)
+                s = natsMsg_Ack(list.Msgs[i], &jsOpts);
 
             natsMsgList_Destroy(&list);
         }

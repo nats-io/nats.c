@@ -16,30 +16,6 @@
 #include "util.h"
 #include "js.h"
 
-static const char *jsRetPolicyLimitsStr      = "limits";
-static const char *jsRetPolicyInterestStr    = "interest";
-static const char *jsRetPolicyWorkQueueStr   = "workqueue";
-
-static const char *jsDiscardPolicyOldStr   = "old";
-static const char *jsDiscardPolicyNewStr   = "new";
-
-static const char *jsStorageTypeFileStr    = "file";
-static const char *jsStorageTypeMemStr     = "memory";
-
-static const char *jsDeliverAllStr              = "all";
-static const char *jsDeliverLastStr             = "last";
-static const char *jsDeliverNewStr              = "new";
-static const char *jsDeliverBySeqStr            = "by_start_sequence";
-static const char *jsDeliverByTimeStr           = "by_start_time";
-static const char *jsDeliverLastPerSubjectStr   = "last_per_subject";
-
-static const char *jsAckNoneStr            = "none";
-static const char *jsAckAllStr             = "all";
-static const char *jsAckExplictStr         = "explicit";
-
-static const char *jsReplayOriginalStr     = "original";
-static const char *jsReplayInstantStr      = "instant";
-
 typedef enum
 {
     jsStreamActionCreate = 1,
@@ -56,12 +32,7 @@ _marshalTimeUTC(natsBuffer *buf, const char *fieldName, int64_t timeUTC)
 
     s = nats_EncodeTimeUTC(dbuf, sizeof(dbuf), timeUTC);
     if (s != NATS_OK)
-    {
-        if (s == NATS_INVALID_ARG)
-            return NATS_UPDATE_ERR_STACK(s);
-
         return nats_setError(NATS_ERR, "unable to encode data for field '%s' value %" PRId64, fieldName, timeUTC);
-    }
 
     s = natsBuf_Append(buf, ",\"", -1);
     IFOK(s, natsBuf_Append(buf, fieldName, -1));
@@ -410,7 +381,7 @@ _marshalRetentionPolicy(jsRetentionPolicy policy, natsBuffer *buf)
         case js_InterestPolicy:     rp = jsRetPolicyInterestStr;   break;
         case js_WorkQueuePolicy:    rp = jsRetPolicyWorkQueueStr;  break;
         default:
-            rp = "unknown";
+            return nats_setError(NATS_INVALID_ARG, "invalid retention policy %d", (int) policy);
     }
     IFOK(s, natsBuf_Append(buf, rp, -1));
     IFOK(s, natsBuf_AppendByte(buf, '"'));
@@ -451,7 +422,7 @@ _marshalDiscardPolicy(jsDiscardPolicy policy, natsBuffer *buf)
         case js_DiscardOld: dp = jsDiscardPolicyOldStr;   break;
         case js_DiscardNew: dp = jsDiscardPolicyNewStr;   break;
         default:
-            dp = "unknown";
+            return nats_setError(NATS_INVALID_ARG, "invalid discard policy %d", (int) policy);
     }
     IFOK(s, natsBuf_Append(buf, dp, -1));
     IFOK(s, natsBuf_AppendByte(buf, '"'));
@@ -492,7 +463,7 @@ _marshalStorageType(jsStorageType storage, natsBuffer *buf)
         case js_FileStorage:    st = jsStorageTypeFileStr; break;
         case js_MemoryStorage:  st = jsStorageTypeMemStr;  break;
         default:
-            st = "unknown";
+            return nats_setError(NATS_INVALID_ARG, "invalid storage type %d", (int) storage);
     }
     IFOK(s, natsBuf_Append(buf, st, -1));
     IFOK(s, natsBuf_AppendByte(buf, '"'));
@@ -581,13 +552,13 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
     s = natsBuf_Append(buf, "{\"name\":\"", -1);
     IFOK(s, natsBuf_Append(buf, cfg->Name, -1));
     IFOK(s, natsBuf_AppendByte(buf, '"'));
-    if (!nats_IsStringEmpty(cfg->Description))
+    if ((s == NATS_OK) && !nats_IsStringEmpty(cfg->Description))
     {
         IFOK(s, natsBuf_Append(buf, ",\"description\":\"", -1));
         IFOK(s, natsBuf_Append(buf, cfg->Description, -1));
         IFOK(s, natsBuf_AppendByte(buf, '"'));
     }
-    if (cfg->SubjectsLen > 0)
+    if ((s == NATS_OK) && (cfg->SubjectsLen > 0))
     {
         int i;
 
@@ -616,26 +587,26 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
 
     IFOK(s, nats_marshalLong(buf, true, "num_replicas", cfg->Replicas));
 
-    if (cfg->NoAck)
+    if ((s == NATS_OK) && cfg->NoAck)
         IFOK(s, natsBuf_Append(buf, ",\"no_ack\":true", -1));
 
-    if (cfg->Template != NULL)
+    if ((s == NATS_OK) && (cfg->Template != NULL))
     {
         IFOK(s, natsBuf_Append(buf, ",\"template_owner\":\"", -1));
         IFOK(s, natsBuf_Append(buf, cfg->Template, -1));
         IFOK(s, natsBuf_AppendByte(buf, '"'));
     }
 
-    if (cfg->Duplicates != 0)
-        s = nats_marshalLong(buf, true, "duplicate_window", cfg->Duplicates);
+    if ((s == NATS_OK) && (cfg->Duplicates != 0))
+        IFOK(s, nats_marshalLong(buf, true, "duplicate_window", cfg->Duplicates));
 
-    if (cfg->Placement != NULL)
+    if ((s == NATS_OK) && (cfg->Placement != NULL))
         IFOK(s, _marshalPlacement(cfg->Placement, buf));
 
-    if (cfg->Mirror != NULL)
+    if ((s == NATS_OK) && (cfg->Mirror != NULL))
         IFOK(s, _marshalStreamSource(cfg->Mirror, "mirror", buf));
 
-    if (cfg->SourcesLen > 0)
+    if ((s == NATS_OK) && (cfg->SourcesLen > 0))
     {
         int i;
 
@@ -813,8 +784,8 @@ _unmarshalStreamSourceInfo(nats_JSON *pjson, const char *fieldName, jsStreamSour
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static natsStatus
-_unmarshalStreamInfo(nats_JSON *json, jsStreamInfo **new_si)
+natsStatus
+js_unmarshalStreamInfo(nats_JSON *json, jsStreamInfo **new_si)
 {
     jsStreamInfo        *si         = NULL;
     nats_JSON           **sources   = NULL;
@@ -874,8 +845,7 @@ _unmarshalStreamCreateResp(jsStreamInfo **new_si, natsMsg *resp, jsErrCode *errC
         if (errCode != NULL)
             *errCode = (int) ar.Error.ErrCode;
 
-        // If the error code is JSStreamNotFoundErr then pick NATS_NOT_FOUND
-        // as the error and caller will clear error stack.
+        // If the error code is JSStreamNotFoundErr then pick NATS_NOT_FOUND.
         if (ar.Error.ErrCode == JSStreamNotFoundErr)
             s = NATS_NOT_FOUND;
         else
@@ -884,7 +854,7 @@ _unmarshalStreamCreateResp(jsStreamInfo **new_si, natsMsg *resp, jsErrCode *errC
     else if (new_si != NULL)
     {
         // At this point we need to unmarshal the stream info itself.
-        s = _unmarshalStreamInfo(json, new_si);
+        s = js_unmarshalStreamInfo(json, new_si);
     }
 
     js_freeApiRespContent(&ar);
@@ -957,9 +927,8 @@ _addUpdateOrGet(jsStreamInfo **new_si, jsStreamAction action, jsCtx *js, jsStrea
     {
         case jsStreamActionCreate: apiT = jsApiStreamCreateT; break;
         case jsStreamActionUpdate: apiT = jsApiStreamUpdateT; break;
-        case jsStreamActionGet:    apiT = jsApiStreamInfoT; break;
-        default:
-            abort();
+        case jsStreamActionGet:    apiT = jsApiStreamInfoT;   break;
+        default: abort();
     }
     s = js_setOpts(&nc, &freePfx, js, opts, &o);
     if (s == NATS_OK)
@@ -1012,11 +981,6 @@ natsStatus
 js_UpdateStream(jsStreamInfo **new_si, jsCtx *js, jsStreamConfig *cfg, jsOptions *opts, jsErrCode *errCode)
 {
     natsStatus s = _addUpdateOrGet(new_si, jsStreamActionUpdate, js, cfg, opts, errCode);
-    if (s == NATS_NOT_FOUND)
-    {
-        nats_clearLastError();
-        return s;
-    }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -1037,11 +1001,6 @@ js_GetStreamInfo(jsStreamInfo **new_si, jsCtx *js, const char *stream, jsOptions
     cfg.Name = (char*) stream;
 
     s = _addUpdateOrGet(new_si, jsStreamActionGet, js, &cfg, opts, errCode);
-    if (s == NATS_NOT_FOUND)
-    {
-        nats_clearLastError();
-        return s;
-    }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -1183,11 +1142,6 @@ natsStatus
 js_PurgeStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode)
 {
     natsStatus s = _purgeOrDelete(true, js, stream, opts, errCode);
-    if (s == NATS_NOT_FOUND)
-    {
-        nats_clearLastError();
-        return s;
-    }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -1195,11 +1149,6 @@ natsStatus
 js_DeleteStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode)
 {
     natsStatus s = _purgeOrDelete(false, js, stream, opts, errCode);
-    if (s == NATS_NOT_FOUND)
-    {
-        nats_clearLastError();
-        return s;
-    }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -1371,7 +1320,7 @@ _marshalDeliverPolicy(natsBuffer *buf, jsDeliverPolicy p)
         case js_DeliverByStartTime:     dp = jsDeliverByTimeStr;        break;
         case js_DeliverLastPerSubject:  dp = jsDeliverLastPerSubjectStr;break;
         default:
-            dp = "unknown";
+            return nats_setError(NATS_INVALID_ARG, "invalid deliver policy %d", (int) p);
     }
     IFOK(s, natsBuf_Append(buf, dp, -1));
     IFOK(s, natsBuf_AppendByte(buf, '"'));
@@ -1379,29 +1328,22 @@ _marshalDeliverPolicy(natsBuffer *buf, jsDeliverPolicy p)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-const char*
-jsAckPolicyStr(jsAckPolicy p)
-{
-    switch (p)
-    {
-        case js_AckNone:
-            return jsAckNoneStr;
-        case js_AckAll:
-            return jsAckAllStr;
-        case js_AckExplicit:
-            return jsAckExplictStr;
-        default:
-            return "unknown";
-    }
-}
-
 static natsStatus
 _marshalAckPolicy(natsBuffer *buf, jsAckPolicy p)
 {
     natsStatus  s;
+    const char  *ap;
 
     s = natsBuf_Append(buf, ",\"ack_policy\":\"", -1);
-    IFOK(s, natsBuf_Append(buf, jsAckPolicyStr(p), -1));
+    switch (p)
+    {
+        case js_AckNone: ap = jsAckNoneStr; break;
+        case js_AckAll: ap = jsAckAllStr; break;
+        case js_AckExplicit: ap = jsAckExplictStr; break;
+        default:
+            return nats_setError(NATS_INVALID_ARG, "invalid ack policy %d", (int)p);
+    }
+    IFOK(s, natsBuf_Append(buf, ap, -1));
     IFOK(s, natsBuf_AppendByte(buf, '"'));
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -1419,7 +1361,7 @@ _marshalReplayPolicy(natsBuffer *buf, jsReplayPolicy p)
         case js_ReplayOriginal: rp = jsReplayOriginalStr;  break;
         case js_ReplayInstant:  rp = jsReplayInstantStr;   break;
         default:
-            rp = "unknown";
+            return nats_setError(NATS_INVALID_ARG, "invalid replay policy %d", (int)p);
     }
     IFOK(s, natsBuf_Append(buf, rp, -1));
     IFOK(s, natsBuf_AppendByte(buf, '"'));
@@ -1646,8 +1588,8 @@ _unmarshalSeqPair(nats_JSON *json, const char *fieldName, jsSequencePair *sp)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static natsStatus
-_unmarshalConsumerInfo(nats_JSON *json, jsConsumerInfo **new_ci)
+natsStatus
+js_unmarshalConsumerInfo(nats_JSON *json, jsConsumerInfo **new_ci)
 {
     natsStatus          s   = NATS_OK;
     jsConsumerInfo      *ci = NULL;
@@ -1700,11 +1642,12 @@ _unmarshalConsumerCreateOrGetResp(jsConsumerInfo **new_ci, natsMsg *resp, jsErrC
     else if (new_ci != NULL)
     {
         // At this point we need to unmarshal the consumer info itself.
-        s = _unmarshalConsumerInfo(json, new_ci);
+        s = js_unmarshalConsumerInfo(json, new_ci);
     }
 
     js_freeApiRespContent(&ar);
     nats_JSONDestroy(json);
+
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -1813,12 +1756,6 @@ js_GetConsumerInfo(jsConsumerInfo **new_ci, jsCtx *js,
     NATS_FREE(subj);
     natsMsg_Destroy(resp);
 
-    if (s == NATS_NOT_FOUND)
-    {
-        nats_clearLastError();
-        return s;
-    }
-
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -1869,12 +1806,6 @@ js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
 
     NATS_FREE(subj);
     natsMsg_Destroy(resp);
-
-    if (s == NATS_NOT_FOUND)
-    {
-        nats_clearLastError();
-        return s;
-    }
 
     return NATS_UPDATE_ERR_STACK(s);
 }

@@ -46,12 +46,39 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsErrMsgNotBound                    "message not bound to a subscription"
 #define jsErrMsgNotJS                       "not a JetStream message"
 #define jsErrDurRequired                    "durable name is required"
-#define jsErrNotPullSub                     "not a JetStream pull subscriptions"
-#define jsErrPullSub                        "not applicable to JetStream pull subscriptions"
+#define jsErrNotAPullSubscription           "not a JetStream pull subscription"
+#define jsErrNotAJetStreamSubscription      "not a JetStream subscription"
+#define jsErrNotApplicableToPullSub         "not applicable to JetStream pull subscriptions"
 #define jsErrNoHeartbeatForQueueSub         "a queue subscription cannot be created against consumer with heartbeat"
+#define jsErrConsumerSeqMismatch            "consumer sequence mismatch"
 
 #define jsCtrlHeartbeat     (1)
 #define jsCtrlFlowControl   (2)
+
+#define jsRetPolicyLimitsStr    "limits"
+#define jsRetPolicyInterestStr  "interest"
+#define jsRetPolicyWorkQueueStr "workqueue"
+
+#define jsDiscardPolicyOldStr   "old"
+#define jsDiscardPolicyNewStr   "new"
+
+#define jsStorageTypeFileStr    "file"
+#define jsStorageTypeMemStr     "memory"
+
+#define jsDeliverAllStr             "all"
+#define jsDeliverLastStr            "last"
+#define jsDeliverNewStr             "new"
+#define jsDeliverBySeqStr           "by_start_sequence"
+#define jsDeliverByTimeStr          "by_start_time"
+#define jsDeliverLastPerSubjectStr  "last_per_subject"
+
+#define jsAckNoneStr    "none"
+#define jsAckAllStr     "all"
+#define jsAckExplictStr "explicit"
+
+#define jsReplayOriginalStr "original"
+#define jsReplayInstantStr  "instant"
+
 
 // Content of ACK messages sent to server
 #define jsAckAck            "+ACK"
@@ -95,23 +122,6 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiRequestNextT is the prefix for the request next message(s) for a consumer in worker/pull mode.
 #define jsApiRequestNextT "%s.CONSUMER.MSG.NEXT.%s.%s"
 
-/*
-    // apiConsumerListT is used to return all detailed consumer information
-    apiConsumerListT = "CONSUMER.LIST.%s"
-
-    // apiConsumerNamesT is used to return a list with all consumer names for the stream.
-    apiConsumerNamesT = "CONSUMER.NAMES.%s"
-
-    // apiStreamListT is the endpoint that will return all detailed stream information
-    apiStreamList = "STREAM.LIST"
-
-    // apiMsgGetT is the endpoint to get a message.
-    apiMsgGetT = "STREAM.MSG.GET.%s"
-
-    // apiMsgDeleteT is the endpoint to remove a message.
-    apiMsgDeleteT = "STREAM.MSG.DELETE.%s"
-*/
-
 // Creates a subject based on the option's prefix, the subject format and its values.
 #define js_apiSubj(s, o, f, ...) (nats_asprintf((s), (f), (o)->Prefix, __VA_ARGS__) < 0 ? NATS_NO_MEMORY : NATS_OK)
 
@@ -125,17 +135,17 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiError is included in all API responses if there was an error.
 typedef struct __jsApiError
 {
-    int         Code;           //`json:"code"`
-    uint16_t    ErrCode;        //`json:"err_code,omitempty"`
-    char        *Description;   //`json:"description,omitempty"
+    int         Code;
+    uint16_t    ErrCode;
+    char        *Description;
 
 } jsApiError;
 
 // apiResponse is a standard response from the JetStream JSON API
 typedef struct __jsApiResponse
 {
-    char            *Type;  //`json:"type"`
-    jsApiError 	Error;  //`json:"error,omitempty"`
+    char        *Type;
+    jsApiError 	Error;
 
 } jsApiResponse;
 
@@ -170,8 +180,11 @@ js_destroyStreamConfig(jsStreamConfig *cfg);
 natsStatus
 js_unmarshalStreamState(nats_JSON *pjson, const char *fieldName, jsStreamState *state);
 
+natsStatus
+js_unmarshalStreamInfo(nats_JSON *json, jsStreamInfo **new_si);
+
+natsStatus
+js_unmarshalConsumerInfo(nats_JSON *json, jsConsumerInfo **new_ci);
+
 void
 js_cleanStreamState(jsStreamState *state);
-
-const char*
-jsAckPolicyStr(jsAckPolicy p);

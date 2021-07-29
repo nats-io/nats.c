@@ -506,7 +506,6 @@ js_SubscribeSync(&sub, js, "foo", &jsOpts, &so);
 
 ```c
 natsJSStreamConfig  cfg;
-const char          *subjects = {"ORDERS.*"};
 
 // Connect to NATS
 natsConnection_Connect(&conn, opts);
@@ -519,7 +518,7 @@ natsJSStreamConfig_Init(&cfg);
 // Provide a name
 cfg.Name = "ORDERS";
 // Array of subjects and its size
-cfg.Subjects = subjects;
+cfg.Subjects = (const char*[1]){"ORDERS.*"};
 cfg.SubjectsLen = 1;
 
 // Create a Stream

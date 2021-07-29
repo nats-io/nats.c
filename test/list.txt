@@ -206,7 +206,9 @@ LameDuckMode
 JetStreamUnmarshalAccInfo
 JetStreamUnmarshalStreamState
 JetStreamUnmarshalStreamCfg
+JetStreamUnmarshalStreamInfo
 JetStreamMarshalStreamCfg
+JetStreamUnmarshalConsumerInfo
 JetStreamContext
 JetStreamDomain
 JetStreamMgtStreams

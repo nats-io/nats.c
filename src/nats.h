@@ -580,7 +580,7 @@ typedef struct jsConsumerConfig
  *
  * The gap of missing messages could be calculated as `ConsumerServer-ConsumerClient`.
  *
- * @see jsSub_GetSequenceMismatch
+ * @see natsSubscription_GetSequenceMismatch
  */
 typedef struct jsConsumerSequenceMismatch
 {
@@ -5392,7 +5392,7 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
  * @param sub the pointer to the #natsSubscription object.
  */
 NATS_EXTERN natsStatus
-jsSub_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscription *sub);
+natsSubscription_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscription *sub);
 
 /** @} */ // end of jsSubGroup
 
@@ -5419,6 +5419,12 @@ jsSub_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscription *sub
 NATS_EXTERN natsStatus
 natsMsg_GetMetaData(jsMsgMetaData **new_meta, natsMsg *msg);
 
+/** \brief Destroys the message metadata object.
+ *
+ * Releases memory allocated for this #jsMsgMetaData object.
+ *
+ * @param meta the pointer to the #jsMsgMetaData object.
+ */
 NATS_EXTERN void
 jsMsgMetaData_Destroy(jsMsgMetaData *meta);
 

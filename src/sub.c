@@ -659,12 +659,12 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
             sub->jsi->sm = false;
             natsSub_Unlock(sub);
 
-            return nats_setError(NATS_MISMATCH, "%s", "consumer sequence mismatch");
+            return nats_setError(NATS_MISMATCH, "%s", jsErrConsumerSeqMismatch);
         }
         else if (!pullSubInternal && sub->jsi->pull)
         {
             natsSub_Unlock(sub);
-            return nats_setError(NATS_INVALID_SUBSCRIPTION, "%s", jsErrPullSub);
+            return nats_setError(NATS_INVALID_SUBSCRIPTION, "%s", jsErrNotApplicableToPullSub);
         }
     }
 

@@ -21417,6 +21417,7 @@ test_JetStreamMgtConsumers(void)
     char                    *desc = NULL;
     jsStreamConfig          scfg;
     const char              *subjects[] = {"bar"};
+    const char              *kvSubjs[] = {"kv.>"};
     char                    datastore[256] = {'\0'};
     char                    cmdLine[1024] = {'\0'};
     int                     i;
@@ -21662,6 +21663,45 @@ test_JetStreamMgtConsumers(void)
     cfg.DeliverSubject = "desc2";
     s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
     testCond((s == NATS_ERR) && (ci == NULL) && (jerr == JSConsumerDescriptionTooLongErr));
+    nats_clearLastError();
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&scfg);
+    scfg.Name = "KV";
+    scfg.Subjects = kvSubjs;
+    scfg.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &scfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Create check sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.CONSUMER.CREATE.>");
+    testCond(s == NATS_OK);
+
+    test("Deliver policy last_per_subject: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.DeliverSubject = "d";
+    cfg.DeliverPolicy = js_DeliverLastPerSubject;
+    cfg.FilterSubject = "kv.b1.*";
+    s = js_AddConsumer(&ci, js, "KV", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (ci != NULL) && (jerr == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+    test("Verify config: ");
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK) && (resp != NULL)
+                && (strncmp(natsMsg_GetData(resp),
+                    "{\"stream_name\":\"KV\","\
+                    "\"config\":{\"deliver_policy\":\"last_per_subject\","\
+                    "\"deliver_subject\":\"d\","\
+                    "\"ack_policy\":\"explicit\","\
+                    "\"filter_subject\":\"kv.b1.*\","\
+                    "\"replay_policy\":\"instant\"}}",
+                    natsMsg_GetDataLength(resp)) == 0));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+    natsSubscription_Destroy(sub);
+    sub = NULL;
 
     free(desc);
     jsCtx_Destroy(js);

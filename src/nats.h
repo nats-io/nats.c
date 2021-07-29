@@ -243,6 +243,7 @@ typedef enum
 	js_DeliverNew,              ///< Starts with messages sent after the consumer is created.
         js_DeliverByStartSequence,  ///< Starts from a given sequence.
 	js_DeliverByStartTime,      ///< Starts from a given UTC time (number of nanoseconds since epoch)
+        js_DeliverLastPerSubject,   ///< Starts with the last message for all subjects received.
 
 } jsDeliverPolicy;
 

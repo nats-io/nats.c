@@ -26,11 +26,12 @@ static const char *jsDiscardPolicyNewStr   = "new";
 static const char *jsStorageTypeFileStr    = "file";
 static const char *jsStorageTypeMemStr     = "memory";
 
-static const char *jsDeliverAllStr         = "all";
-static const char *jsDeliverLastStr        = "last";
-static const char *jsDeliverNewStr         = "new";
-static const char *jsDeliverBySeqStr       = "by_start_sequence";
-static const char *jsDeliverByTimeStr      = "by_start_time";
+static const char *jsDeliverAllStr              = "all";
+static const char *jsDeliverLastStr             = "last";
+static const char *jsDeliverNewStr              = "new";
+static const char *jsDeliverBySeqStr            = "by_start_sequence";
+static const char *jsDeliverByTimeStr           = "by_start_time";
+static const char *jsDeliverLastPerSubjectStr   = "last_per_subject";
 
 static const char *jsAckNoneStr            = "none";
 static const char *jsAckAllStr             = "all";
@@ -1363,11 +1364,12 @@ _marshalDeliverPolicy(natsBuffer *buf, jsDeliverPolicy p)
     s = natsBuf_Append(buf, "\"deliver_policy\":\"", -1);
     switch (p)
     {
-        case js_DeliverAll:             dp = jsDeliverAllStr;     break;
-        case js_DeliverLast:            dp = jsDeliverLastStr;    break;
-        case js_DeliverNew:             dp = jsDeliverNewStr;     break;
-        case js_DeliverByStartSequence: dp = jsDeliverBySeqStr;   break;
-        case js_DeliverByStartTime:     dp = jsDeliverByTimeStr;  break;
+        case js_DeliverAll:             dp = jsDeliverAllStr;           break;
+        case js_DeliverLast:            dp = jsDeliverLastStr;          break;
+        case js_DeliverNew:             dp = jsDeliverNewStr;           break;
+        case js_DeliverByStartSequence: dp = jsDeliverBySeqStr;         break;
+        case js_DeliverByStartTime:     dp = jsDeliverByTimeStr;        break;
+        case js_DeliverLastPerSubject:  dp = jsDeliverLastPerSubjectStr;break;
         default:
             dp = "unknown";
     }
@@ -1532,6 +1534,8 @@ _unmarshalDeliverPolicy(nats_JSON *json, const char *fieldName, jsDeliverPolicy 
         *dp = js_DeliverByStartSequence;
     else if (strcmp(str, jsDeliverByTimeStr) == 0)
         *dp = js_DeliverByStartTime;
+    else if (strcmp(str, jsDeliverLastPerSubjectStr) == 0)
+        *dp = js_DeliverLastPerSubject;
     else
         s = nats_setError(NATS_ERR, "unable to unmarshal delivery policy '%s'", str);
 

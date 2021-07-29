@@ -17579,6 +17579,9 @@ test_GetClientID(void)
     test("Create nc1: ");
     s = _createDefaultThreadArgsForCbTests(&arg);
     IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 50));
+    IFOK(s, natsOptions_SetTimeout(opts, 250));
     IFOK(s, natsOptions_SetDiscoveredServersCB(opts, _discoveredServersCb, (void*)&arg));
     IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*)&arg));
     IFOK(s, natsConnection_Connect(&nc1, opts));

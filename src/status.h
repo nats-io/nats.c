@@ -238,6 +238,7 @@ typedef enum {
     JSConsumerStoreFailedErr = 10104,                   ///< Error creating store for consumer
     JSConsumerExistingActiveErr = 10105,                ///< Consumer already exists and is still active
     JSConsumerReplacementWithDifferentNameErr = 10106,  ///< Consumer replacement durable config not the same
+    JSConsumerDescriptionTooLongErr = 10107,            ///< Consumer description is too long
 
 } jsErrCode;
 

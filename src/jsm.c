@@ -122,6 +122,7 @@ js_destroyStreamConfig(jsStreamConfig *cfg)
         return;
 
     NATS_FREE((char*) cfg->Name);
+    NATS_FREE((char*) cfg->Description);
     for (i=0; i<cfg->SubjectsLen; i++)
         NATS_FREE((char*) cfg->Subjects[i]);
     NATS_FREE((char**) cfg->Subjects);
@@ -522,6 +523,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
         return nats_setDefaultError(NATS_NO_MEMORY);
 
     s = nats_JSONGetStr(jcfg, "name", (char**) &(cfg->Name));
+    IFOK(s, nats_JSONGetStr(jcfg, "description", (char**) &(cfg->Description)));
     IFOK(s, nats_JSONGetArrayStr(jcfg, "subjects", (char***) &(cfg->Subjects), &(cfg->SubjectsLen)));
     IFOK(s, _unmarshalRetentionPolicy(jcfg, "retention", &(cfg->Retention)));
     IFOK(s, nats_JSONGetLong(jcfg, "max_consumers", &(cfg->MaxConsumers)));
@@ -578,6 +580,12 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
     s = natsBuf_Append(buf, "{\"name\":\"", -1);
     IFOK(s, natsBuf_Append(buf, cfg->Name, -1));
     IFOK(s, natsBuf_AppendByte(buf, '"'));
+    if (!nats_IsStringEmpty(cfg->Description))
+    {
+        IFOK(s, natsBuf_Append(buf, ",\"description\":\"", -1));
+        IFOK(s, natsBuf_Append(buf, cfg->Description, -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+    }
     if (cfg->SubjectsLen > 0)
     {
         int i;
@@ -1430,6 +1438,12 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
     // Marshal something that is always present first, so that the optionals
     // will always start with a "," and we know that there will be a field before that.
     IFOK(s, _marshalDeliverPolicy(buf, cfg->DeliverPolicy));
+    if ((s == NATS_OK) && (!nats_IsStringEmpty(cfg->Description)))
+    {
+        s = natsBuf_Append(buf, ",\"description\":\"", -1);
+        IFOK(s, natsBuf_Append(buf, cfg->Description, -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+    }
     if ((s == NATS_OK) && (!nats_IsStringEmpty(cfg->Durable)))
     {
         s = natsBuf_Append(buf, ",\"durable_name\":\"", -1);
@@ -1491,6 +1505,7 @@ _destroyConsumerConfig(jsConsumerConfig *cc)
         return;
 
     NATS_FREE((char*) cc->Durable);
+    NATS_FREE((char*) cc->Description);
     NATS_FREE((char*) cc->DeliverSubject);
     NATS_FREE((char*) cc->FilterSubject);
     NATS_FREE((char*) cc->SampleFrequency);
@@ -1586,6 +1601,7 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
     if ((s == NATS_OK) && (cjson != NULL))
     {
         s = nats_JSONGetStr(cjson, "durable_name", (char**) &(cc->Durable));
+        IFOK(s, nats_JSONGetStr(cjson, "description", (char**) &(cc->Description)));
         IFOK(s, nats_JSONGetStr(cjson, "deliver_subject", (char**) &(cc->DeliverSubject)));
         IFOK(s, _unmarshalDeliverPolicy(cjson, "deliver_policy", &(cc->DeliverPolicy)));
         IFOK(s, nats_JSONGetULong(cjson, "opt_start_seq", &(cc->OptStartSeq)));

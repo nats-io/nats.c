@@ -397,6 +397,7 @@ typedef struct jsStreamSource
  */
 typedef struct jsStreamConfig {
         const char              *Name;
+        const char              *Description;
         const char              **Subjects;
         int                     SubjectsLen;
         jsRetentionPolicy       Retention;
@@ -544,6 +545,7 @@ typedef struct jsStreamInfo
 typedef struct jsConsumerConfig
 {
         const char              *Durable;
+        const char              *Description;
         const char              *DeliverSubject;
         jsDeliverPolicy         DeliverPolicy;
         uint64_t                OptStartSeq;

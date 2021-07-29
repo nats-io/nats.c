@@ -20630,7 +20630,7 @@ test_JetStreamUnmarshalStreamConfig(void)
     json = NULL;
 
     test("Stream config with all: ");
-    if (snprintf(tmp, sizeof(tmp), "{\"name\":\"TEST\",\"subjects\":[\"foo\",\"bar\"],"\
+    if (snprintf(tmp, sizeof(tmp), "{\"name\":\"TEST\",\"description\":\"this is my stream\",\"subjects\":[\"foo\",\"bar\"],"\
         "\"retention\":\"workqueue\",\"max_consumers\":5,\"max_msgs\":10,\"max_bytes\":1000,"\
         "\"max_age\":20000000,\"max_msg_size\":1024,\"max_msgs_per_subject\":1,\"discard\":\"new\",\"storage\":\"memory\","\
         "\"num_replicas\":3,\"no_ack\":true,\"template_owner\":\"owner\","\
@@ -20643,6 +20643,10 @@ test_JetStreamUnmarshalStreamConfig(void)
     s = nats_JSONParse(&json, tmp, (int) strlen(tmp));
     IFOK(s, js_unmarshalStreamConfig(json, NULL, &sc));
     testCond((s == NATS_OK) && (sc != NULL)
+                && (sc->Name != NULL)
+                && (strcmp(sc->Name, "TEST") == 0)
+                && (sc->Description != NULL)
+                && (strcmp(sc->Description, "this is my stream") == 0)
                 && (sc->Subjects != NULL)
                 && (sc->SubjectsLen == 2)
                 && (strcmp(sc->Subjects[0], "foo") == 0)
@@ -20699,6 +20703,7 @@ test_JetStreamMarshalStreamConfig(void)
 
     jsStreamConfig_Init(&sc);
     sc.Name = "MyStream";
+    sc.Description = "this is my stream";
     sc.Subjects = subjects;
     sc.SubjectsLen = 2;
     sc.Retention = js_InterestPolicy;
@@ -20761,7 +20766,10 @@ test_JetStreamMarshalStreamConfig(void)
     s = nats_JSONParse(&json, natsBuf_Data(buf), natsBuf_Len(buf));
     IFOK(s, js_unmarshalStreamConfig(json, NULL, &rsc));
     testCond((s == NATS_OK) && (rsc != NULL)
+                && (rsc->Name != NULL)
                 && (strcmp(rsc->Name, "MyStream") == 0)
+                && (rsc->Description != NULL)
+                && (strcmp(rsc->Description, "this is my stream") == 0)
                 && (rsc->SubjectsLen == 2)
                 && (rsc->Subjects != NULL)
                 && (strcmp(rsc->Subjects[0], "foo") == 0)
@@ -21081,10 +21089,12 @@ test_JetStreamMgtStreams(void)
     jsErrCode           jerr = 0;
     natsMsg             *resp = NULL;
     natsSubscription    *sub  = NULL;
+    char                *desc = NULL;
     const char          *subjects[] = {"foo", "bar"};
     char                datastore[256] = {'\0'};
     char                cmdLine[1024] = {'\0'};
     jsOptions           o;
+    int                 i;
 
     _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
 
@@ -21361,6 +21371,30 @@ test_JetStreamMgtStreams(void)
     natsMsg_Destroy(resp);
     resp = NULL;
 
+    test("Create stream with description: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "TEST_DESC";
+    cfg.Description = "MyDescription";
+    s = js_AddStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (si != NULL) && (jerr == 0)
+                && (si->Config != NULL)
+                && (si->Config->Description != NULL)
+                && (strcmp(si->Config->Description, "MyDescription") == 0));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Create stream with description too long: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "TEST_DESC2";
+    desc = malloc(4*1024+2);
+    for (i=0;i<4*1024+1;i++)
+        desc[i] = 'a';
+    desc[i]='\0';
+    cfg.Description = (const char*) desc;
+    s = js_AddStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_ERR) && (si == NULL) && (jerr == JSStreamInvalidConfig));
+
+    free(desc);
     jsCtx_Destroy(js);
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
@@ -21380,10 +21414,12 @@ test_JetStreamMgtConsumers(void)
     jsErrCode               jerr = 0;
     natsMsg                 *resp = NULL;
     natsSubscription        *sub  = NULL;
+    char                    *desc = NULL;
     jsStreamConfig          scfg;
     const char              *subjects[] = {"bar"};
     char                    datastore[256] = {'\0'};
     char                    cmdLine[1024] = {'\0'};
+    int                     i;
 
     _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
 
@@ -21438,6 +21474,7 @@ test_JetStreamMgtConsumers(void)
 
     test("Add consumer (non durable): ");
     cfg.Durable = NULL;
+    cfg.Description = "MyDescription";
     cfg.DeliverSubject = "foo";
     cfg.DeliverPolicy = js_DeliverLast;
     cfg.OptStartSeq = 100;
@@ -21466,6 +21503,7 @@ test_JetStreamMgtConsumers(void)
                 && (strncmp(natsMsg_GetData(resp),
                     "{\"stream_name\":\"MY_STREAM\","\
                     "\"config\":{\"deliver_policy\":\"last\","\
+                    "\"description\":\"MyDescription\","\
                     "\"deliver_subject\":\"foo\","\
                     "\"opt_start_seq\":100,"\
                     "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","\
@@ -21495,6 +21533,7 @@ test_JetStreamMgtConsumers(void)
                 && (strncmp(natsMsg_GetData(resp),
                     "{\"stream_name\":\"MY_STREAM\","\
                     "\"config\":{\"deliver_policy\":\"last\","\
+                    "\"description\":\"MyDescription\","\
                     "\"durable_name\":\"dur\",\"deliver_subject\":\"foo\","\
                     "\"opt_start_seq\":100,"\
                     "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","\
@@ -21601,6 +21640,30 @@ test_JetStreamMgtConsumers(void)
                 && (jerr == JSConsumerNotFoundErr)
                 && (nats_GetLastError(NULL) == NULL));
 
+    test("Create consumer with description: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Description = "MyDescription";
+    cfg.DeliverSubject = "desc1";
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (ci != NULL) && (jerr == 0)
+                && (ci->Config != NULL)
+                && (ci->Config->Description != NULL)
+                && (strcmp(ci->Config->Description, "MyDescription") == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+    test("Create consumer with description too long: ");
+    jsConsumerConfig_Init(&cfg);
+    desc = malloc(4*1024+2);
+    for (i=0;i<4*1024+1;i++)
+        desc[i] = 'a';
+    desc[i]='\0';
+    cfg.Description = (const char*) desc;
+    cfg.DeliverSubject = "desc2";
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s == NATS_ERR) && (ci == NULL) && (jerr == JSConsumerDescriptionTooLongErr));
+
+    free(desc);
     jsCtx_Destroy(js);
     natsConnection_Destroy(nc);
     _stopServer(pid);

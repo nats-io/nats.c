@@ -1001,6 +1001,11 @@ js_GetStreamInfo(jsStreamInfo **new_si, jsCtx *js, const char *stream, jsOptions
     cfg.Name = (char*) stream;
 
     s = _addUpdateOrGet(new_si, jsStreamActionGet, js, &cfg, opts, errCode);
+    if (s == NATS_NOT_FOUND)
+    {
+        nats_clearLastError();
+        return s;
+    }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -1755,6 +1760,12 @@ js_GetConsumerInfo(jsConsumerInfo **new_ci, jsCtx *js,
 
     NATS_FREE(subj);
     natsMsg_Destroy(resp);
+
+    if (s == NATS_NOT_FOUND)
+    {
+        nats_clearLastError();
+        return s;
+    }
 
     return NATS_UPDATE_ERR_STACK(s);
 }

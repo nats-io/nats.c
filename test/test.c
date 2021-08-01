@@ -21633,8 +21633,8 @@ test_JetStreamMgtStreams(void)
     s = js_GetStreamInfo(&si, js, "NOT_FOUND", NULL, &jerr);
     testCond((s == NATS_NOT_FOUND)
                 && (jerr == JSStreamNotFoundErr)
-                && (si == NULL));
-    nats_clearLastError();
+                && (si == NULL)
+                && (nats_GetLastError(NULL) == NULL));
 
     test("Purge stream (bad args): ");
     s = js_PurgeStream(NULL, "TEST2", NULL, &jerr);
@@ -22124,8 +22124,8 @@ test_JetStreamMgtConsumers(void)
     s = js_GetConsumerInfo(&ci, js, "MY_STREAM", "dur2", NULL, &jerr);
     testCond((s == NATS_NOT_FOUND)
                 && (jerr == JSConsumerNotFoundErr)
-                && (ci == NULL));
-    nats_clearLastError();
+                && (ci == NULL)
+                && (nats_GetLastError(NULL) == NULL));
 
     test("Delete consumer (bad args): ");
     s = js_DeleteConsumer(NULL, "MY_STREAM", "dur", NULL, &jerr);
@@ -23003,7 +23003,7 @@ _jsMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clo
     if (args->control == 1)
         natsMsg_Ack(msg, NULL);
     if ((args->control != 2) || (args->sum == args->results[0]))
-        natsCondition_Signal(args->c);
+        natsCondition_Broadcast(args->c);
     natsMutex_Unlock(args->m);
 
     natsMsg_Destroy(msg);
@@ -23041,11 +23041,12 @@ _jsCreateSubThread(void *closure)
     if (s == NATS_OK)
     {
         natsMutex_Lock(args->m);
+        args->attached++;
         while (!args->done)
             natsCondition_Wait(args->c, args->m);
         natsMutex_Unlock(args->m);
+        natsSubscription_Destroy(sub);
     }
-    natsSubscription_Destroy(sub);
 
     natsMutex_Lock(args->m);
     if ((s != NATS_OK) && (args->status == NATS_OK))
@@ -23215,8 +23216,8 @@ test_JetStreamSubscribe(void)
     s = natsSubscription_Unsubscribe(sub);
     nats_Sleep(500);
     IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", consName, NULL, &jerr));
-    testCond((s == NATS_NOT_FOUND) && (ci == NULL) && (jerr == JSConsumerNotFoundErr));
-    nats_clearLastError();
+    testCond((s == NATS_NOT_FOUND) && (ci == NULL) && (jerr == JSConsumerNotFoundErr)
+                && (nats_GetLastError(NULL) == NULL));
 
     test("Create queue sub with bind: ");
     natsSubscription_Destroy(sub);
@@ -23426,14 +23427,28 @@ test_JetStreamSubscribe(void)
         s = natsThread_Create(&threads[i], _jsCreateSubThread, (void*) &args);
     testCond(s == NATS_OK);
 
+    test("Wait for subscriptions to be started: ");
+    {
+        int attempts = 0;
+        natsMutex_Lock(args.m);
+        while ((attempts != 20) && (args.attached != 10))
+        {
+            natsCondition_TimedWait(args.c, args.m, 100);
+            if (args.attached != 10)
+                attempts++;
+        }
+        natsMutex_Unlock(args.m);
+    }
+    testCond(s == NATS_OK);
+
     test("Publish: ");
     s = js_Publish(NULL, js, "concurrent", "hello", 5, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
 
     test("Check each sub got message: ");
     natsMutex_Lock(args.m);
-    // while ((s != NATS_TIMEOUT) && (args.sum != 10))
-    //     s = natsCondition_TimedWait(args.c, args.m, 2000);
+    while ((s != NATS_TIMEOUT) && (args.sum != 10))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
     // Signal threads to stop.
     args.done = true;
     natsCondition_Broadcast(args.c);
@@ -23886,8 +23901,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
 
     test("Check get mismatch returns not found: ");
     s = natsSubscription_GetSequenceMismatch(&csm, sub);
-    testCond(s == NATS_NOT_FOUND);
-    nats_clearLastError();
+    testCond((s == NATS_NOT_FOUND) && (nats_GetLastError(NULL) == NULL));
 
     test("Send new message: ");
     s = js_Publish(NULL, js, "foo", "msg", 3, NULL, &jerr);

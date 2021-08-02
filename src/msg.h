@@ -1,4 +1,4 @@
-// Copyright 2015-2020 The NATS Authors
+// Copyright 2015-2021 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -24,9 +24,18 @@
 #define STATUS_HDR          "Status"
 #define DESCRIPTION_HDR     "Description"
 #define NO_RESP_STATUS      "503"
+#define NOT_FOUND_STATUS    "404"
+#define REQ_TIMEOUT         "408"
+#define CTRL_STATUS         "100"
 #define HDR_STATUS_LEN      (3)
 
-struct __natsMsg;
+#define natsMsg_setNeedsLift(m)     ((m)->flags  |=  (1 << 0))
+#define natsMsg_needsLift(m)        (((m)->flags &   (1 << 0)) != 0)
+#define natsMsg_clearNeedsLift(m)   ((m)->flags  &= ~(1 << 0))
+
+#define natsMsg_setAcked(m)         ((m)->flags  |=  (1 << 1))
+#define natsMsg_isAcked(m)          (((m)->flags &   (1 << 1)) != 0)
+#define natsMsg_clearAcked(m)       ((m)->flags  &= ~(1 << 1))
 
 struct __natsMsg
 {
@@ -39,13 +48,14 @@ struct __natsMsg
     const char          *subject;
     const char          *reply;
     char                *hdr;
-    int                 hdrLen;
-    bool                hdrLift;
+    natsStrHash         *headers;
     const char          *data;
     int                 dataLen;
-    natsStrHash         *headers;
+    int                 hdrLen;
+    int                 flags;
 
-    // subscription (needed when delivery done by connection)
+    // subscription (needed when delivery done by connection,
+    // or for JetStream).
     struct __natsSubscription *sub;
 
     // Must be last field!
@@ -73,7 +83,7 @@ natsMsgHeader_encode(natsBuffer *buf, natsMsg *msg);
 
 void
 natsMsg_init(natsMsg *msg,
-             const char *subject, const char *reply,
+             const char *subject,
              const char *data, int dataLen);
 
 natsStatus
@@ -81,6 +91,9 @@ natsMsg_create(natsMsg **newMsg,
                const char *subject, int subjLen,
                const char *reply, int replyLen,
                const char *buf, int bufLen, int hdrLen);
+
+void
+natsMsg_freeHeaders(natsMsg *msg);
 
 // This needs to follow the nats_FreeObjectCb prototype (see gc.h)
 void

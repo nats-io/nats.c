@@ -59,6 +59,10 @@ bool        deliverLast = true;
 uint64_t    deliverSeq  = 0;
 bool        unsubscribe = false;
 
+const char  *stream     = NULL;
+bool        pull        = false;
+bool        flowctrl    = false;
+
 static natsStatus
 printStats(int mode, natsConnection *conn, natsSubscription *sub,
            natsStatistics *stats)
@@ -275,6 +279,7 @@ parseArgs(int argc, char **argv, const char *usage)
         else if (strcasecmp(argv[i], "-sync") == 0)
         {
             async = false;
+            pull  = false;
         }
         else if (strcasecmp(argv[i], "-subj") == 0)
         {
@@ -380,6 +385,22 @@ parseArgs(int argc, char **argv, const char *usage)
                 printUsageAndExit(argv[0], usage);
 
             s = natsOptions_SetWriteDeadline(opts, atol(argv[++i]));
+        }
+        else if (strcasecmp(argv[i], "-stream") == 0)
+        {
+            if (i + 1 == argc)
+                printUsageAndExit(argv[0], usage);
+
+            stream = argv[++i];
+        }
+        else if (strcasecmp(argv[i], "-pull") == 0)
+        {
+            async = false;
+            pull  = true;
+        }
+        else if (strcasecmp(argv[i], "-fc") == 0)
+        {
+            flowctrl = true;
         }
         else
         {

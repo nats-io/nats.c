@@ -33,6 +33,7 @@
 #include "comsock.h"
 #include "nkeys.h"
 #include "crypto.h"
+#include "js.h"
 
 #define DEFAULT_SCRATCH_SIZE    (512)
 #define MAX_INFO_MESSAGE_SIZE   (32768)
@@ -509,36 +510,22 @@ _processInfo(natsConnection *nc, char *info, int len)
     if (s != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
-    if (s == NATS_OK)
-        s = nats_JSONGetStr(json, "server_id", &(nc->info.id));
-    if (s == NATS_OK)
-        s = nats_JSONGetStr(json, "version", &(nc->info.version));
-    if (s == NATS_OK)
-        s = nats_JSONGetStr(json, "host", &(nc->info.host));
-    if (s == NATS_OK)
-        s = nats_JSONGetInt(json, "port", &(nc->info.port));
-    if (s == NATS_OK)
-        s = nats_JSONGetBool(json, "auth_required", &(nc->info.authRequired));
-    if (s == NATS_OK)
-        s = nats_JSONGetBool(json, "tls_required", &(nc->info.tlsRequired));
-    if (s == NATS_OK)
-        s = nats_JSONGetLong(json, "max_payload", &(nc->info.maxPayload));
-    if (s == NATS_OK)
-        s = nats_JSONGetArrayStr(json, "connect_urls",
+    IFOK(s, nats_JSONGetStr(json, "server_id", &(nc->info.id)));
+    IFOK(s, nats_JSONGetStr(json, "version", &(nc->info.version)));
+    IFOK(s, nats_JSONGetStr(json, "host", &(nc->info.host)));
+    IFOK(s, nats_JSONGetInt(json, "port", &(nc->info.port)));
+    IFOK(s, nats_JSONGetBool(json, "auth_required", &(nc->info.authRequired)));
+    IFOK(s, nats_JSONGetBool(json, "tls_required", &(nc->info.tlsRequired)));
+    IFOK(s, nats_JSONGetLong(json, "max_payload", &(nc->info.maxPayload)));
+    IFOK(s, nats_JSONGetArrayStr(json, "connect_urls",
                                  &(nc->info.connectURLs),
-                                 &(nc->info.connectURLsCount));
-    if (s == NATS_OK)
-        s = nats_JSONGetInt(json, "proto", &(nc->info.proto));
-    if (s == NATS_OK)
-        s = nats_JSONGetULong(json, "client_id", &(nc->info.CID));
-    if (s == NATS_OK)
-        s = nats_JSONGetStr(json, "nonce", &(nc->info.nonce));
-    if (s == NATS_OK)
-        s = nats_JSONGetStr(json, "client_ip", &(nc->info.clientIP));
-    if (s == NATS_OK)
-        s = nats_JSONGetBool(json, "ldm", &(nc->info.lameDuckMode));
-    if (s == NATS_OK)
-        s = nats_JSONGetBool(json, "headers", &(nc->info.headers));
+                                 &(nc->info.connectURLsCount)));
+    IFOK(s, nats_JSONGetInt(json, "proto", &(nc->info.proto)));
+    IFOK(s, nats_JSONGetULong(json, "client_id", &(nc->info.CID)));
+    IFOK(s, nats_JSONGetStr(json, "nonce", &(nc->info.nonce)));
+    IFOK(s, nats_JSONGetStr(json, "client_ip", &(nc->info.clientIP)));
+    IFOK(s, nats_JSONGetBool(json, "ldm", &(nc->info.lameDuckMode)));
+    IFOK(s, nats_JSONGetBool(json, "headers", &(nc->info.headers)));
 
     // The array could be empty/not present on initial connect,
     // if advertise is disabled on that server, or servers that
@@ -1350,7 +1337,7 @@ natsStatus
 natsConn_initResp(natsConnection *nc, natsMsgHandler cb)
 {
     natsStatus s = NATS_OK;
-    char       ginbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1 + 1 + 1]; // _INBOX.<nuid>.*
+    char       ginbox[NATS_INBOX_ARRAY_SIZE + 1 + 1]; // _INBOX.<nuid>.*
 
     nc->respPool = NATS_CALLOC(RESP_INFO_POOL_MAX_SIZE, sizeof(respInfo*));
     if (nc->respPool == NULL)
@@ -1461,7 +1448,7 @@ _doReconnect(void *arg)
         // We have to pick which type of jitter to use, for now, we use these hints:
         jitter = nc->opts->reconnectJitter;
         if (nc->opts->secure || (nc->opts->sslCtx != NULL))
-			jitter = nc->opts->reconnectJitterTLS;
+            jitter = nc->opts->reconnectJitterTLS;
     }
     else
         crdClosure = nc->opts->customReconnectDelayCBClosure;
@@ -1688,37 +1675,37 @@ natsConn_flushOrKickFlusher(natsConnection *nc)
 static natsStatus
 _readProto(natsConnection *nc, natsBuffer **proto)
 {
-	natsStatus	s 			= NATS_OK;
-	char		protoEnd	= '\n';
-	natsBuffer	*buf		= NULL;
-	char		oneChar[1]  = { '\0' };
+    natsStatus	s 			= NATS_OK;
+    char		protoEnd	= '\n';
+    natsBuffer	*buf		= NULL;
+    char		oneChar[1]  = { '\0' };
 
-	s = natsBuf_Create(&buf, 10);
-	if (s != NATS_OK)
-		return s;
+    s = natsBuf_Create(&buf, 10);
+    if (s != NATS_OK)
+        return s;
 
-	for (;;)
-	{
-		s = natsSock_Read(&(nc->sockCtx), oneChar, 1, NULL);
-		if (s == NATS_CONNECTION_CLOSED)
-		    break;
-		s = natsBuf_AppendByte(buf, oneChar[0]);
-		if (s != NATS_OK)
-		{
-			natsBuf_Destroy(buf);
-			return s;
-		}
-		if (oneChar[0] == protoEnd)
-		    break;
-	}
-	s = natsBuf_AppendByte(buf, '\0');
-	if (s != NATS_OK)
-	{
-	    natsBuf_Destroy(buf);
-	    return s;
-	}
-	*proto = buf;
-	return NATS_OK;
+    for (;;)
+    {
+        s = natsSock_Read(&(nc->sockCtx), oneChar, 1, NULL);
+        if (s == NATS_CONNECTION_CLOSED)
+            break;
+        s = natsBuf_AppendByte(buf, oneChar[0]);
+        if (s != NATS_OK)
+        {
+            natsBuf_Destroy(buf);
+            return s;
+        }
+        if (oneChar[0] == protoEnd)
+            break;
+    }
+    s = natsBuf_AppendByte(buf, '\0');
+    if (s != NATS_OK)
+    {
+        natsBuf_Destroy(buf);
+        return s;
+    }
+    *proto = buf;
+    return NATS_OK;
 }
 
 static natsStatus
@@ -2523,7 +2510,18 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     natsMsg          *msg = NULL;
     natsMsgDlvWorker *ldw = NULL;
     bool             sc   = false;
+    bool             sm   = false;
     int              dl   = 0;
+    nats_MsgList     *list = NULL;
+    natsMutex        *mu   = NULL;
+    natsCondition    *cond = NULL;
+    // For JetStream cases
+    jsSub            *jsi    = NULL;
+    bool             ctrlMsg = false;
+    bool             hasHBs  = false;
+    bool             hasFC   = false;
+    bool             fcReply = false;
+    int              jct     = 0;
 
     natsMutex_Lock(nc->subsMu);
 
@@ -2548,94 +2546,125 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     // computed as the bufLen - header size.
     dl = msg->dataLen;
 
+    // Pick mutex, condition variable and list based on if the sub is
+    // part of a global delivery thread pool or not.
+    // Note about `list`: this is used only to link messages, but
+    // sub->msgList needs to be used to update/check number of pending
+    // messages, since in case of delivery thread pool, `list` will have
+    // messages from many different subscriptions.
     if ((ldw = sub->libDlvWorker) != NULL)
-        natsMutex_Lock(ldw->lock);
+    {
+        mu   = ldw->lock;
+        cond = ldw->cond;
+        list = &(ldw->msgList);
+    }
     else
-        natsSub_Lock(sub);
+    {
+        mu   = sub->mu;
+        cond = sub->cond;
+        list = &(sub->msgList);
+    }
 
+    natsMutex_Lock(mu);
     if (sub->closed || sub->drainSkip)
     {
-        if (ldw != NULL)
-            natsMutex_Unlock(ldw->lock);
-        else
-            natsSub_Unlock(sub);
-
+        natsMutex_Unlock(mu);
         natsMsg_Destroy(msg);
         return NATS_OK;
     }
 
-    sub->msgList.msgs++;
-    sub->msgList.bytes += dl;
-
-    if (((sub->msgsLimit > 0) && (sub->msgList.msgs > sub->msgsLimit))
-        || ((sub->bytesLimit > 0) && (sub->msgList.bytes > sub->bytesLimit)))
+    if ((jsi = sub->jsi) != NULL)
     {
+        hasHBs = (jsi->hbi > 0 ? true : false);
+        hasFC  = jsi->hasFC;
+        ctrlMsg= natsMsg_isJSCtrl(msg, &jct);
+    }
+
+    if (!ctrlMsg)
+    {
+        sub->msgList.msgs++;
+        sub->msgList.bytes += dl;
+
+        if (((sub->msgsLimit > 0) && (sub->msgList.msgs > sub->msgsLimit))
+            || ((sub->bytesLimit > 0) && (sub->msgList.bytes > sub->bytesLimit)))
+        {
+            natsMsg_Destroy(msg);
+
+            sub->dropped++;
+
+            sc = !sub->slowConsumer;
+            sub->slowConsumer = true;
+
+            // Undo stats from above.
+            sub->msgList.msgs--;
+            sub->msgList.bytes -= dl;
+        }
+        else
+        {
+            bool signal= false;
+
+            if (sub->msgList.msgs > sub->msgsMax)
+                sub->msgsMax = sub->msgList.msgs;
+
+            if (sub->msgList.bytes > sub->bytesMax)
+                sub->bytesMax = sub->msgList.bytes;
+
+            sub->slowConsumer = false;
+
+            msg->sub = sub;
+
+            if (list->head == NULL)
+            {
+                list->head = msg;
+                signal = true;
+            }
+            else
+                list->tail->next = msg;
+
+            list->tail = msg;
+
+            if (signal)
+                natsCondition_Signal(cond);
+
+            // Store the ACK metadata from the message to
+            // compare later on with the received heartbeat.
+            if ((jsi != NULL) && hasHBs)
+                s = jsSub_trackSequences(jsi, msg->reply);
+        }
+    }
+    else if (hasHBs && (jct == jsCtrlHeartbeat) && (msg->reply == NULL))
+    {
+        // Handle control heartbeat messages.
+        s = jsSub_processSequenceMismatch(sub, msg, &sm);
+    }
+    else if (hasFC && (jct == jsCtrlFlowControl) && (msg->reply != NULL))
+    {
+        // If we have no pending, go ahead and send in place.
+        if (sub->msgList.msgs == 0)
+            fcReply = true;
+        else
+        {
+            // Schedule a reply after the previous message is delivered.
+            s = jsSub_scheduleFlowControlResponse(jsi, sub, msg->reply);
+        }
+    }
+
+    natsMutex_Unlock(mu);
+
+    if ((s == NATS_OK) && fcReply)
+        s = natsConnection_Publish(nc, msg->reply, NULL, 0);
+
+    if (ctrlMsg)
         natsMsg_Destroy(msg);
 
-        sub->dropped++;
-
-        sc = !sub->slowConsumer;
-        sub->slowConsumer = true;
-
-        // Undo stats from above.
-        sub->msgList.msgs--;
-        sub->msgList.bytes -= dl;
-    }
-    else
-    {
-        natsMsgList *list = NULL;
-
-        if (sub->msgList.msgs > sub->msgsMax)
-            sub->msgsMax = sub->msgList.msgs;
-
-        if (sub->msgList.bytes > sub->bytesMax)
-            sub->bytesMax = sub->msgList.bytes;
-
-        sub->slowConsumer = false;
-
-        if (ldw != NULL)
-        {
-            msg->sub = sub;
-            list = &ldw->msgList;
-        }
-        else
-        {
-            list = &sub->msgList;
-        }
-
-        if (list->head == NULL)
-            list->head = msg;
-
-        if (list->tail != NULL)
-            list->tail->next = msg;
-
-        list->tail = msg;
-
-        if (ldw != NULL)
-        {
-            if (ldw->inWait)
-                natsCondition_Broadcast(ldw->cond);
-        }
-        else
-        {
-            if (sub->inWait > 0)
-                natsCondition_Broadcast(sub->cond);
-        }
-    }
-
-    if (ldw != NULL)
-        natsMutex_Unlock(ldw->lock);
-    else
-        natsSub_Unlock(sub);
-
-    if (sc)
+    if (sc || sm)
     {
         natsConn_Lock(nc);
 
-        nc->err = NATS_SLOW_CONSUMER;
+        nc->err = (sc ? NATS_SLOW_CONSUMER : NATS_MISMATCH);
 
         if (nc->opts->asyncErrCb != NULL)
-            natsAsyncCb_PostErrHandler(nc, sub, NATS_SLOW_CONSUMER);
+            natsAsyncCb_PostErrHandler(nc, sub, nc->err);
 
         natsConn_Unlock(nc);
     }
@@ -2856,7 +2885,7 @@ natsStatus
 natsConn_subscribeImpl(natsSubscription **newSub,
                        natsConnection *nc, bool lock, const char *subj, const char *queue,
                        int64_t timeout, natsMsgHandler cb, void *cbClosure,
-                       bool preventUseOfLibDlvPool)
+                       bool preventUseOfLibDlvPool, jsSub *jsi)
 {
     natsStatus          s    = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -2889,7 +2918,7 @@ natsConn_subscribeImpl(natsSubscription **newSub,
         return nats_setDefaultError(NATS_DRAINING);
     }
 
-    s = natsSub_create(&sub, nc, subj, queue, timeout, cb, cbClosure, preventUseOfLibDlvPool);
+    s = natsSub_create(&sub, nc, subj, queue, timeout, cb, cbClosure, preventUseOfLibDlvPool, jsi);
     if (s == NATS_OK)
     {
         natsMutex_Lock(nc->subsMu);
@@ -2984,6 +3013,13 @@ natsStatus
 natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max, bool drainMode, int64_t timeout)
 {
     natsStatus      s = NATS_OK;
+
+    if ((sub != NULL) && (sub->jsi != NULL))
+    {
+        s = jsSub_unsubscribe(sub->jsi, drainMode);
+        if (s != NATS_OK)
+            return NATS_UPDATE_ERR_STACK(s);
+    }
 
     natsConn_Lock(nc);
 

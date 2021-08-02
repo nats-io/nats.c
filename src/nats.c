@@ -1,4 +1,4 @@
-// Copyright 2015-2020 The NATS Authors
+// Copyright 2015-2021 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -128,6 +128,7 @@ typedef struct __natsLib
 } natsLib;
 
 int64_t gLockSpinCount = 2000;
+int     jsonMaxNumSize = 0;
 
 static natsInitOnceType gInitOnce = NATS_ONCE_STATIC_INIT;
 static natsLib          gLib;
@@ -403,6 +404,16 @@ _doInitOnce(void)
         fprintf(stderr, "FATAL ERROR: Unable to initialize library!\n");
         fflush(stderr);
         abort();
+    }
+
+    if (jsonMaxNumSize == 0)
+    {
+        int szInt    = (int) sizeof(int64_t);
+        int szUInt   = (int) sizeof(uint64_t);
+        int szDbl    = (int) sizeof(long double);
+
+        jsonMaxNumSize = (szDbl > szInt ? szDbl : szInt);
+        jsonMaxNumSize = (jsonMaxNumSize > szUInt ? jsonMaxNumSize : szUInt);
     }
 
     natsSys_Init();
@@ -1079,7 +1090,7 @@ natsInbox_Create(natsInbox **newInbox)
 {
     natsStatus  s;
     char        *inbox = NULL;
-    char        tmpInbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1];
+    char        tmpInbox[NATS_INBOX_ARRAY_SIZE];
 
     s = nats_Open(-1);
     if (s != NATS_OK)
@@ -1108,7 +1119,7 @@ natsInbox_init(char *inbox, int inboxLen)
     if (s != NATS_OK)
         return s;
 
-    if (inboxLen < (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1))
+    if (inboxLen < (NATS_INBOX_ARRAY_SIZE))
         return NATS_INSUFFICIENT_BUFFER;
 
     sprintf(inbox, "%s", inboxPrefix);
@@ -1650,17 +1661,15 @@ _deliverMsgs(void *arg)
     uint64_t            max;
     natsMsg             *msg;
     bool                timerNeedReset = false;
+    jsSub               *jsi;
+    char                *fcReply;
 
     natsMutex_Lock(dlv->lock);
 
     while (true)
     {
         while (((msg = dlv->msgList.head) == NULL) && !dlv->shutdown)
-        {
-            dlv->inWait = true;
             natsCondition_Wait(dlv->cond, dlv->lock);
-            dlv->inWait = false;
-        }
 
         // Break out only when list is empty
         if ((msg == NULL) && dlv->shutdown)
@@ -1767,6 +1776,15 @@ _deliverMsgs(void *arg)
 
         delivered = ++(sub->delivered);
 
+        fcReply = NULL;
+        jsi = sub->jsi;
+        if ((jsi != NULL) && (jsi->fcDelivered == delivered))
+        {
+            fcReply          = jsi->fcReply;
+            jsi->fcReply     = NULL;
+            jsi->fcDelivered = 0;
+        }
+
         // Is this a subscription that can timeout?
         if (!sub->draining && (sub->timeout != 0))
         {
@@ -1789,6 +1807,12 @@ _deliverMsgs(void *arg)
         {
             // We need to destroy the message since the user can't do it
             natsMsg_Destroy(msg);
+        }
+
+        if (fcReply != NULL)
+        {
+            natsConnection_Publish(nc, fcReply, NULL, 0);
+            NATS_FREE(fcReply);
         }
 
         // Don't do 'else' because we need to remove when we have hit
@@ -1882,20 +1906,24 @@ natsLib_msgDeliveryPostControlMsg(natsSubscription *sub)
     s = natsMsg_create(&controlMsg, NULL, 0, NULL, 0, NULL, 0, -1);
     if (s == NATS_OK)
     {
-        natsMsgList *l;
+        nats_MsgList    *l;
+        bool            signal = false;
 
         natsMutex_Lock(worker->lock);
 
         controlMsg->sub = sub;
 
         l = &(worker->msgList);
-        if (l->tail != NULL)
-            l->tail->next = controlMsg;
         if (l->head == NULL)
+        {
             l->head = controlMsg;
+            signal  = true;
+        }
+        else
+            l->tail->next = controlMsg;
         l->tail = controlMsg;
 
-        if (worker->inWait)
+        if (signal)
             natsCondition_Signal(worker->cond);
 
         natsMutex_Unlock(worker->lock);

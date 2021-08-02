@@ -23,8 +23,10 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
     * [Testing](#testing)
 - [Documentation](#documentation)
 - [NATS Client](#nats-client)
-    * [JetStream](#jetstream)
     * [Important Changes](#important-changes)
+    * [JetStream](#jetstream)
+        * [JetStream Basic Usage](#jetstream-basic-usage)
+        * [JetStream Basic Management](#jetstream-basic-usage)
 	* [Getting Started](#getting-started)
 	* [Basic Usage](#basic-usage)
     * [Headers](#headers)
@@ -310,14 +312,6 @@ The source code is also quite documented.
 
 # NATS Client
 
-## JetStream
-
-In order to use the NATS C client to interact with JetStream, you need to add the option:
-```c
-natsOptions_UseOldRequestStyle(opts, true);
-```
-before creating the connection issuing requests to JetStream server.
-
 ## Important Changes
 
 This section lists important changes such as deprecation notices, etc...
@@ -426,6 +420,116 @@ onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
     // Don't forget to destroy the message!
     natsMsg_Destroy(msg);
 }
+```
+
+## JetStream
+
+Support for JetStream starts with the version `v3.0.0` of the library and NATS Server `v2.2.0+`, although getting JetStream
+specific error codes requires the server at version `v2.3.0+`.
+
+Look at examples named `js-xxx.c` in the `examples` directory for examples on how to use the API.
+The new objects and APIs are full documented in the online [documentation](http://nats-io.github.io/nats.c/group__js_group.html).
+
+### JetStream Basic Usage
+
+```c
+// Connect to NATS
+natsConnection_Connect(&conn, opts);
+
+// Initialize and set some JetStream options
+natsJSOptions_Init(&jsOpts);
+jsOpts.PublishAsyncMaxPending = 256;
+
+// Create JetStream Context
+natsJS_NewContext(&js, conn, &jsOpts);
+
+// Simple Stream Publisher
+natsJS_Publish(&pa, js, "ORDERS.scratch", (const void*) "hello", 5, NULL, &jerr);
+
+// Simple Async Stream Publisher
+for (i=0; i < 500; i++)
+{
+    natsJS_PublishAsync(js, "ORDERS.scratch", (const void*) "hello", 5, NULL);
+}
+
+// Wait for up to 5 seconds to receive all publish acknowledgments.
+natsJSPubOptions_Init(&jsPubOpts);
+jsPubOpts.MaxWait = 5000;
+natsJS_PublishAsyncComplete(js, &jsPubOpts);
+
+// One can get the list of all pending publish async messages,
+// to either resend them or simply destroy them.
+natsMsgList pending;
+s = js_PublishAsyncGetPending(&pending, js);
+if (s == NATS_OK)
+{
+    int i;
+
+    for (i=0; i<pending.Count; i++)
+    {
+
+        // There could be a decision to resend these messages or not.
+        if (your_decision_to_resend(pending.Msgs[i]))
+        {
+
+            // If the call is successful, pending.Msgs[i] will be set
+            // to NULL so destroying the pending list will not destroy
+            // this message since the library has taken ownership back.
+            js_PublishMsgAsync(js, &(pending.Msgs[i]), NULL);
+        }
+    }
+
+    // Destroy the pending list object and all messages still in that list.
+    natsMsgList_Destroy(&pending);
+}
+
+// To create an asynchronous ephemeral consumer
+js_Subscribe(&sub, js, "foo", myMsgHandler, myClosure, &jsOpts, NULL);
+
+// Same but use a subscription option to ask the callback to not do auto-ack.
+jsSubOptions so;
+jsSubOptions_Init(&so);
+so.ManualAck = true;
+js_Subscribe(&sub, js, "foo", myMsgHandler, myClosure, &jsOpts, &so);
+
+// Or to bind to an existing specific stream/durable:
+jsSubOptions_Init(&so);
+so.Stream = "MY_STREAM";
+so.Consumer = "my_durable";
+js_Subscribe(&sub, js, "foo", myMsgHandler, myClosure, &jsOpts, &so);
+
+// Synchronous subscription:
+js_SubscribeSync(&sub, js, "foo", &jsOpts, &so);
+```
+
+### JetStream Basic Management
+
+```c
+natsJSStreamConfig  cfg;
+
+// Connect to NATS
+natsConnection_Connect(&conn, opts);
+
+// Create JetStream Context
+natsJS_NewContext(&js, conn, NULL);
+
+// Initialize the configuration structure.
+natsJSStreamConfig_Init(&cfg);
+// Provide a name
+cfg.Name = "ORDERS";
+// Array of subjects and its size
+cfg.Subjects = (const char*[1]){"ORDERS.*"};
+cfg.SubjectsLen = 1;
+
+// Create a Stream
+natsJS_AddStream(NULL, js, &cfg, NULL, &jerr);
+
+// Update a Stream
+cfg.MaxBytes = 8;
+natsJS_UpdateStream(NULL, js, &cfg, NULL, &jerr);
+
+// Delete a Stream
+natsJS_DeleteStream(js, "ORDERS", NULL, &jerr);
 ```
 
 ## Headers
@@ -1473,12 +1577,12 @@ the server to reject messages from a client that has been replaced by another cl
 
 The basic publish API (`stanConnection_Publish()`) is synchronous; it does not return control to the caller until the
 NATS Streaming server has acknowledged receipt of the message. To accomplish this, a unique identifier (GUID) is generated for
-the message on creation, and the client library waits for a publish acknowledgement from the server with a matching GUID before
+the message on creation, and the client library waits for a publish acknowledgment from the server with a matching GUID before
 it returns control to the caller, possibly with an error indicating that the operation was not successful due to some server
 problem or authorization error.
 
-Advanced users may wish to process these publish acknowledgements manually to achieve higher publish throughput by not
-waiting on individual acknowledgements during the publish operation. An asynchronous publish API is provided for this purpose:
+Advanced users may wish to process these publish acknowledgments manually to achieve higher publish throughput by not
+waiting on individual acknowledgments during the publish operation. An asynchronous publish API is provided for this purpose:
 
 ```
 static void
@@ -1507,12 +1611,12 @@ file for an example on how to do so.
 ### Message Acknowledgments and Redelivery
 
 NATS Streaming offers At-Least-Once delivery semantics, meaning that once a message has been delivered to an eligible subscriber,
-if an acknowledgement is not received within the configured timeout interval, NATS Streaming will attempt redelivery of the message.
+if an acknowledgment is not received within the configured timeout interval, NATS Streaming will attempt redelivery of the message.
 This timeout interval is specified by the subscription option `stanSubOptions_SetAckWait()`, which defaults to 30 seconds.
 
 By default, messages are automatically acknowledged by the NATS Streaming client library after the subscriber's message handler
-is invoked. However, there may be cases in which the subscribing client wishes to accelerate or defer acknowledgement of the message.
-To do this, the client must set manual acknowledgement mode on the subscription, and invoke `stanSubscription_AckMsg()`. ex:
+is invoked. However, there may be cases in which the subscribing client wishes to accelerate or defer acknowledgment of the message.
+To do this, the client must set manual acknowledgment mode on the subscription, and invoke `stanSubscription_AckMsg()`. ex:
 
 ```
 // Subscribe with manual ack mode, and set AckWait to 60 seconds
@@ -1581,7 +1685,7 @@ unblocked for each message when the limit has been reached.
 ### Subscriber rate limiting
 
 Rate limiting may also be accomplished on the subscriber side, on a per-subscription basis, using a subscription
-option called `stanSubOptions_SetMaxInflight()`. This option specifies the maximum number of outstanding acknowledgements
+option called `stanSubOptions_SetMaxInflight()`. This option specifies the maximum number of outstanding acknowledgments
 (messages that have been delivered but not acknowledged) that NATS Streaming will allow for a given subscription.
 When this limit is reached, NATS Streaming will suspend delivery of messages to this subscription until the number
 of unacknowledged messages falls below the specified limit. ex:

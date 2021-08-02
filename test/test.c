@@ -16,6 +16,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#ifdef _WIN32
+#else
+#include <dirent.h>
+#include <sys/stat.h>
+#endif
 
 #include "buf.h"
 #include "timer.h"
@@ -31,6 +36,7 @@
 #include "crypto.h"
 #include "nkeys.h"
 #include "parser.h"
+#include "js.h"
 #if defined(NATS_HAS_STREAMING)
 #include "stan/conn.h"
 #include "stan/pub.h"
@@ -67,7 +73,6 @@ static natsHash  *slMap = NULL;
 #define LOGFILE_NAME    "server.log"
 #endif
 #define FAIL(m)         { printf("@@ %s @@\n", (m)); failed=true; return; }
-#define IFOK(s, c)      if (s == NATS_OK) { s = (c); }
 
 #define CHECK_SERVER_STARTED(p) if ((p) == NATS_INVALID_PID) FAIL("Unable to start or verify that the server was started!")
 
@@ -122,6 +127,7 @@ struct threadArg
     natsSubscription *sub;
     natsOptions      *opts;
     natsConnection   *nc;
+    jsCtx            *js;
 
 #if defined(NATS_HAS_STREAMING)
     stanConnection   *sc;
@@ -168,6 +174,19 @@ serverVersionAtLeast(int major, int minor, int update)
         return true;
 
     return false;
+}
+
+static void
+_waitSubPending(natsSubscription *sub, int expected)
+{
+    int mc = 0;
+    do
+    {
+        natsSubscription_GetPending(sub, &mc, NULL);
+        if (mc != expected)
+            nats_Sleep(15);
+        }
+    while (mc != expected);
 }
 
 static natsStatus
@@ -2997,8 +3016,20 @@ test_natsJSON(void)
     bool        boolVal = false;
     long double doubleVal = 0;
     char        **arrVal = NULL;
+    bool        *arrBoolVal = NULL;
+    long double *arrDoubleVal = NULL;
+    int         *arrIntVal = NULL;
+    int64_t     *arrLongVal = NULL;
+    uint64_t    *arrULongVal = NULL;
+    nats_JSON   **arrObjVal = NULL;
+    nats_JSONArray **arrArrVal = NULL;
     int         arrCount = 0;
     uint64_t    ulongVal = 0;
+    nats_JSON   *obj1 = NULL;
+    nats_JSON   *obj2 = NULL;
+    nats_JSON   *obj3 = NULL;
+    int32_t     int32Val = 0;
+    uint16_t    uint16Val = 0;
     const char  *wrong[] = {
             "{",
             "}",
@@ -3018,11 +3049,14 @@ test_natsJSON(void)
             "{\"test\": \"abc\\u1234",
             "{\"test\": \"abc\\uabc",
             "{\"test\" \"separator missing\"}",
+            "{\"test\":[1, \"abc\", true]}",
     };
     const char  *good[] = {
+            "{}",
             " {}",
             " { }",
             " { } ",
+            "{ \"test\":{}}",
             "{ \"test\":1.2}",
             "{ \"test\" :1.2}",
             "{ \"test\" : 1.2}",
@@ -3057,12 +3091,14 @@ test_natsJSON(void)
             "{ \"test\": [\"a\", \"b\", \"c\"]}",
             "{ \"test\": [\"a\\\"b\\\"c\"]}",
             "{ \"test\": [\"abc,def\"]}",
-            "{ \"test\": {\"inner\":\"not \\\"supported\\\", at this time\"}}",
-            "{ \"test\":[\"a\", \"b\", \"c\", 1]}",
+            "{ \"test\": [{\"a\": 1}, {\"b\": \"c\"}]}",
+            "{ \"test\": [[{\"a\": 1}], [{\"b\": \"c\"}]]}",
+            "{ \"test\": {\"inner\":\"a\",\"inner2\":2,\"inner3\":false,\"inner4\":{\"inner_inner1\" : 1.234}}}",
             "{ \"test\": \"a\\\"b\\\"c\"}",
             "{ \"test\": \"\\\"\\\\/\b\f\n\r\t\\uabcd\"}",
             "{ \"test\": \"\\ua12f\"}",
             "{ \"test\": \"\\uA01F\"}",
+            "{ \"test\": null}",
     };
     nats_JSONField *f = NULL;
 
@@ -3112,6 +3148,19 @@ test_natsJSON(void)
     free(strVal);
     strVal = NULL;
 
+    test("Single field, string with escape chars: ");
+    s = nats_JSONParse(&json, "{\"test\":\"escapes: \\\" \\\\ \\/ \\b \\n \\r \\t\"}", -1);
+    IFOK(s, nats_JSONGetStr(json, "test", &strVal));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (strcmp(strVal, "escapes: \\\" \\\\ \\/ \\b \\n \\r \\t") == 0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    free(strVal);
+    strVal = NULL;
+
     test("Single field, int: ");
     s = nats_JSONParse(&json, "{\"test\":1234}", -1);
     IFOK(s, nats_JSONGetInt(json, "test", &intVal));
@@ -3124,26 +3173,86 @@ test_natsJSON(void)
     json = NULL;
     intVal = 0;
 
-    test("Single field, long: ");
+    test("Single field, int32: ");
     s = nats_JSONParse(&json, "{\"test\":1234}", -1);
+    IFOK(s, nats_JSONGetInt32(json, "test", &int32Val));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (int32Val == 1234));
+    nats_JSONDestroy(json);
+    json = NULL;
+    int32Val = 0;
+
+    test("Single field, uint16: ");
+    s = nats_JSONParse(&json, "{\"test\":1234}", -1);
+    IFOK(s, nats_JSONGetUInt16(json, "test", &uint16Val));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (uint16Val == 1234));
+    nats_JSONDestroy(json);
+    json = NULL;
+    uint16Val = 0;
+
+    test("Single field, long: ");
+    s = nats_JSONParse(&json, "{\"test\":9223372036854775807}", -1);
     IFOK(s, nats_JSONGetLong(json, "test", &longVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
                 && (json->fields->used == 1)
-                && (longVal == 1234));
+                && (longVal == 9223372036854775807L));
     nats_JSONDestroy(json);
     json = NULL;
     longVal = 0;
 
-    test("Single field, ulong: ");
-    s = nats_JSONParse(&json, "{\"test\":1234}", -1);
+    test("Single field, neg long: ");
+    s = nats_JSONParse(&json, "{\"test\":-9223372036854775808}", -1);
+    IFOK(s, nats_JSONGetLong(json, "test", &longVal));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (longVal == (int64_t) 0x8000000000000000));
+    nats_JSONDestroy(json);
+    json = NULL;
+    longVal = 0;
+
+    test("Single field, neg long as ulong: ");
+    s = nats_JSONParse(&json, "{\"test\":-123456789}", -1);
     IFOK(s, nats_JSONGetULong(json, "test", &ulongVal));
     testCond((s == NATS_OK)
                 && (json != NULL)
                 && (json->fields != NULL)
                 && (json->fields->used == 1)
-                && (ulongVal == 1234));
+                && (ulongVal == 0xFFFFFFFFF8A432EB));
+    nats_JSONDestroy(json);
+    json = NULL;
+    ulongVal = 0;
+
+    test("Single field, ulong: ");
+    s = nats_JSONParse(&json, "{\"test\":18446744073709551615}", -1);
+    IFOK(s, nats_JSONGetULong(json, "test", &ulongVal));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (ulongVal == 0xFFFFFFFFFFFFFFFF));
+    nats_JSONDestroy(json);
+    json = NULL;
+    ulongVal = 0;
+
+    test("Single field, ulong: ");
+    s = nats_JSONParse(&json, "{\"test\":9007199254740993}", -1);
+    IFOK(s, nats_JSONGetULong(json, "test", &ulongVal));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (ulongVal == 9007199254740993));
     nats_JSONDestroy(json);
     json = NULL;
     ulongVal = 0;
@@ -3337,6 +3446,199 @@ test_natsJSON(void)
     arrVal = NULL;
     arrCount = 0;
 
+    test("Single field, null string array: ");
+    s = nats_JSONParse(&json, "{\"test\": null}", -1);
+    IFOK(s, nats_JSONGetArrayStr(json, "test", &arrVal, &arrCount));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrVal == NULL)
+                && (arrCount == 0));
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Single field, bool array: ");
+    s = nats_JSONParse(&json, "{\"test\":[true, false, true]}", -1);
+    IFOK(s, nats_JSONGetArrayBool(json, "test", &arrBoolVal, &arrCount));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrCount == 3)
+                && arrBoolVal[0]
+                && !arrBoolVal[1]
+                && arrBoolVal[2]);
+    nats_JSONDestroy(json);
+    json = NULL;
+    free(arrBoolVal);
+    arrBoolVal = NULL;
+    arrCount = 0;
+
+    test("Single field, double array: ");
+    s = nats_JSONParse(&json, "{\"test\":[1.0, 2.0, 3.0]}", -1);
+    IFOK(s, nats_JSONGetArrayDouble(json, "test", &arrDoubleVal, &arrCount));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrCount == 3)
+                && (arrDoubleVal[0] == 1.0)
+                && (arrDoubleVal[1] == 2.0)
+                && (arrDoubleVal[2] == 3.0));
+    nats_JSONDestroy(json);
+    json = NULL;
+    free(arrDoubleVal);
+    arrDoubleVal = NULL;
+    arrCount = 0;
+
+    test("Single field, int array: ");
+    s = nats_JSONParse(&json, "{\"test\":[1, 2, 3]}", -1);
+    IFOK(s, nats_JSONGetArrayInt(json, "test", &arrIntVal, &arrCount));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrCount == 3)
+                && (arrIntVal[0] == 1)
+                && (arrIntVal[1] == 2)
+                && (arrIntVal[2] == 3));
+    nats_JSONDestroy(json);
+    json = NULL;
+    free(arrIntVal);
+    arrIntVal = NULL;
+    arrCount = 0;
+
+    test("Single field, long array: ");
+    s = nats_JSONParse(&json, "{\"test\":[1, 2, 3]}", -1);
+    IFOK(s, nats_JSONGetArrayLong(json, "test", &arrLongVal, &arrCount));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrCount == 3)
+                && (arrLongVal[0] == 1)
+                && (arrLongVal[1] == 2)
+                && (arrLongVal[2] == 3));
+    nats_JSONDestroy(json);
+    json = NULL;
+    free(arrLongVal);
+    arrLongVal = NULL;
+    arrCount = 0;
+
+    test("Single field, ulong array: ");
+    s = nats_JSONParse(&json, "{\"test\":[1, 2, 3]}", -1);
+    IFOK(s, nats_JSONGetArrayULong(json, "test", &arrULongVal, &arrCount));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrCount == 3)
+                && (arrULongVal[0] == 1)
+                && (arrULongVal[1] == 2)
+                && (arrULongVal[2] == 3));
+    nats_JSONDestroy(json);
+    json = NULL;
+    free(arrULongVal);
+    arrULongVal = NULL;
+    arrCount = 0;
+
+    test("Single field, object array: ");
+    s = nats_JSONParse(&json, "{\"test\":[{\"a\": 1},{\"b\": true}]}", -1);
+    IFOK(s, nats_JSONGetArrayObject(json, "test", &arrObjVal, &arrCount));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrCount == 2)
+                && (nats_JSONGetInt(arrObjVal[0], "a", &intVal) == NATS_OK)
+                && (intVal == 1)
+                && (nats_JSONGetBool(arrObjVal[1], "b", &boolVal) == NATS_OK)
+                && boolVal);
+    nats_JSONDestroy(json);
+    json = NULL;
+    free(arrObjVal);
+    arrObjVal = NULL;
+    arrCount = 0;
+    intVal = 0;
+    boolVal = false;
+
+    test("Single field, array null: ");
+    s = nats_JSONParse(&json, "{\"test\":null}", -1);
+    IFOK(s, nats_JSONGetArrayObject(json, "test", &arrObjVal, &arrCount));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrObjVal == NULL)
+                && (arrCount == 0));
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Single field, array array: ");
+    s = nats_JSONParse(&json, "{\"test\":[[\"a\", \"b\"],[1, 2, 3],[{\"c\": true}]]}", -1);
+    IFOK(s, nats_JSONGetArrayArray(json, "test", &arrArrVal, &arrCount));
+    testCond((s == NATS_OK)
+                && (json != NULL)
+                && (json->fields != NULL)
+                && (json->fields->used == 1)
+                && (arrCount == 3)
+                && (nats_JSONArrayAsStrings(arrArrVal[0], &arrVal, &arrCount) == NATS_OK)
+                && (arrCount == 2)
+                && (strcmp(arrVal[0], "a") == 0)
+                && (strcmp(arrVal[1], "b") == 0)
+                && (nats_JSONArrayAsInts(arrArrVal[1], &arrIntVal, &arrCount) == NATS_OK)
+                && (arrCount == 3)
+                && (arrIntVal[0] == 1)
+                && (arrIntVal[1] == 2)
+                && (arrIntVal[2] == 3)
+                && (nats_JSONArrayAsObjects(arrArrVal[2], &arrObjVal, &arrCount) == NATS_OK)
+                && (arrCount == 1)
+                && (nats_JSONGetBool(arrObjVal[0], "c", &boolVal) == NATS_OK)
+                && boolVal);
+    nats_JSONDestroy(json);
+    json = NULL;
+    for (i=0; i<2; i++)
+        free(arrVal[i]);
+    free(arrVal);
+    arrVal = NULL;
+    free(arrIntVal);
+    arrIntVal = NULL;
+    free(arrArrVal);
+    arrArrVal = NULL;
+    free(arrObjVal);
+    arrObjVal = NULL;
+    boolVal = false;
+    arrCount = 0;
+
+    test("Object: ");
+    s = nats_JSONParse(&json, "{\"obj1\":{\"obj2\":{\"obj3\":{\"a\": 1},\"b\":true},\"c\":1.2},\"d\":3}", -1);
+    IFOK(s, nats_JSONGetObject(json, "obj1", &obj1));
+    IFOK(s, nats_JSONGetObject(obj1, "obj2", &obj2));
+    IFOK(s, nats_JSONGetObject(obj2, "obj3", &obj3));
+    IFOK(s, nats_JSONGetInt(obj3, "a", &intVal));
+    IFOK(s, nats_JSONGetBool(obj2, "b", &boolVal));
+    IFOK(s, nats_JSONGetDouble(obj1, "c", &doubleVal));
+    IFOK(s, nats_JSONGetLong(json, "d", &longVal));
+    testCond((s == NATS_OK)
+                && (intVal == 1)
+                && boolVal
+                && (doubleVal == (long double) 12.0/10.0)
+                && (longVal == 3));
+    nats_JSONDestroy(json);
+    json = NULL;
+    intVal = 0;
+    boolVal = false;
+    doubleVal = 0.0;
+    longVal = 0;
+
+    test("Object, null: ");
+    s = nats_JSONParse(&json, "{\"obj\":null}", -1);
+    IFOK(s, nats_JSONGetObject(json, "obj", &obj1));
+    testCond((s == NATS_OK) && (obj1 == NULL));
+    nats_JSONDestroy(json);
+    json = NULL;
+
     test("All field types: ");
     s = nats_JSONParse(&json, "{\"bool\":true,\"str\":\"abc\",\"int\":123,\"long\":456,\"double\":123.5,\"array\":[\"a\"]}", -1);
     IFOK(s, nats_JSONGetBool(json, "bool", &boolVal));
@@ -3417,7 +3719,7 @@ test_natsJSON(void)
     nats_JSONDestroy(json);
     json = NULL;
 
-    test("Check no error and no change to vars for unknown fields: ");
+    test("Check no error and set to default for vars for unknown fields: ");
     {
         const char *initStr = "test";
         const char *initStrArr[] = {"a", "b"};
@@ -3437,14 +3739,13 @@ test_natsJSON(void)
         IFOK(s, nats_JSONGetDouble(json, "bool", &doubleVal));
         IFOK(s, nats_JSONGetArrayStr(json, "array", &arrVal, &arrCount));
         testCond((s == NATS_OK)
-                    && (strcmp(strVal, initStr) == 0)
-                    && boolVal
-                    && (intVal == 123)
-                    && (longVal == 456)
-                    && (doubleVal == 789)
-                    && (arrCount == 2)
-                    && (strcmp(arrVal[0], "a") == 0)
-                    && (strcmp(arrVal[1], "b") == 0));
+                    && (strVal == NULL)
+                    && (boolVal == false)
+                    && (intVal == 0)
+                    && (longVal == 0)
+                    && (doubleVal == 0)
+                    && (arrCount == 0)
+                    && (arrVal == NULL));
         nats_JSONDestroy(json);
         json = NULL;
     }
@@ -3464,14 +3765,221 @@ test_natsJSON(void)
     test("NULL string with -1 len: ");
     s = nats_JSONParse(&json, NULL, -1);
     testCond((s == NATS_INVALID_ARG) && (json == NULL));
+    nats_clearLastError();
 
     test("Field reused: ");
+    s = nats_JSONParse(&json, "{\"field\":1,\"field\":2}", -1);
+    IFOK(s, nats_JSONGetInt(json, "field", &intVal));
+    testCond((s == NATS_OK) && (intVal == 2));
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Nested arrays ok: ");
+    jsonMaxNested = 10;
+    s = nats_JSONParse(&json, "{\"test\":[[[1, 2]]]}", -1);
+    testCond(s == NATS_OK);
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Nested arrays not ok: ");
+    jsonMaxNested = 10;
+    s = nats_JSONParse(&json, "{\"test\":[[[[[[[[[[[[[1, 2]]]]]]]]]]]]]}", -1);
+    testCond((s == NATS_ERR) && (json == NULL)
+                && (strstr(nats_GetLastError(NULL), " nested arrays of 10") != NULL));
+    nats_clearLastError();
+
+    test("Nested objects ok: ");
+    s = nats_JSONParse(&json, "{\"test\":{\"a\":{\"b\":{\"c\":1}}}}", -1);
+    testCond(s == NATS_OK);
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Nested arrays not ok: ");
+    jsonMaxNested = 10;
+    s = nats_JSONParse(&json, "{\"test\":{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":{\"f\":{\"g\":{\"h\":{\"i\":{\"j\":{\"k\":{\"l\":{\"m\":1}}}}}}}}}}}}}}", -1);
+    testCond((s == NATS_ERR) && (json == NULL)
+                && (strstr(nats_GetLastError(NULL), " nested objects of 10") != NULL));
+    nats_clearLastError();
+    jsonMaxNested = JSON_MAX_NEXTED;
+
+    // Negative tests
     {
-        s = nats_JSONParse(&json, "{\"field\":1,\"field\":2}", -1);
-        IFOK(s, nats_JSONGetInt(json, "field", &intVal));
-        testCond((s == NATS_OK) && (intVal == 2));
-        nats_JSONDestroy(json);
-        json = NULL;
+        const char *badTimes[] = {
+            "{\"time\":\"too small\"}",
+            "{\"time\":\"2021-06-23T18:22:00.123456789-08:00X\"}",
+            "{\"time\":\"2021-06-23T18:22:00X\"}",
+            "{\"time\":\"2021-06-23T18:22:00-0800\"}",
+            "{\"time\":\"2021-06-23T18:22:00-08.00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00.abcZ\"}",
+            "{\"time\":\"2021-06-23T18:22:00.abc-08:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.1234567890-08:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.1234567890Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00.123-0800\"}",
+        };
+        const char *errorsTxt[] = {
+            "too small",
+            "too long",
+            "invalid UTC offset",
+            "invalid UTC offset",
+            "invalid UTC offset",
+            "is invalid",
+            "is invalid",
+            "is invalid",
+            "too long",
+            "second fraction",
+            "invalid UTC offset",
+        };
+        for (i=0; i<(int)(sizeof(errorsTxt)/sizeof(char*)); i++)
+        {
+            longVal = 0;
+            snprintf(buf, sizeof(buf), "Bad time '%s': ", badTimes[i]);
+            test(buf);
+            s = nats_JSONParse(&json, badTimes[i], -1);
+            IFOK(s, nats_JSONGetTime(json, "time", &longVal));
+            testCond((s != NATS_OK)
+                        && (json != NULL)
+                        && (longVal == 0)
+                        && (strstr(nats_GetLastError(NULL), errorsTxt[i]) != NULL));
+            nats_clearLastError();
+            nats_JSONDestroy(json);
+            json = NULL;
+        }
+    }
+
+    // Positive tests
+    {
+        const char *goodTimes[] = {
+            "{\"time\":\"0001-01-01T00:00:00Z\"}",
+            "{\"time\":\"1970-01-01T01:00:00+01:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00.1Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00.12Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00.123Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00.1234Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00.12345Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00.123456Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00.1234567Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00.12345678Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00.123456789Z\"}",
+            "{\"time\":\"2021-06-23T18:22:00-07:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.1-07:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.12-07:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.123-07:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.1234-07:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.12345-07:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.123456-07:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.1234567-07:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.12345678-07:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.123456789-07:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00+01:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.1+01:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.12+01:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.123+01:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.1234+01:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.12345+01:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.123456+01:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.1234567+01:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.12345678+01:00\"}",
+            "{\"time\":\"2021-06-23T18:22:00.123456789+01:00\"}",
+        };
+        int64_t results[] = {
+            0,
+            0,
+            1624472520000000000,
+            1624472520100000000,
+            1624472520120000000,
+            1624472520123000000,
+            1624472520123400000,
+            1624472520123450000,
+            1624472520123456000,
+            1624472520123456700,
+            1624472520123456780,
+            1624472520123456789,
+            1624497720000000000,
+            1624497720100000000,
+            1624497720120000000,
+            1624497720123000000,
+            1624497720123400000,
+            1624497720123450000,
+            1624497720123456000,
+            1624497720123456700,
+            1624497720123456780,
+            1624497720123456789,
+            1624468920000000000,
+            1624468920100000000,
+            1624468920120000000,
+            1624468920123000000,
+            1624468920123400000,
+            1624468920123450000,
+            1624468920123456000,
+            1624468920123456700,
+            1624468920123456780,
+            1624468920123456789,
+        };
+        for (i=0; i<(int)(sizeof(results)/sizeof(int64_t)); i++)
+        {
+            longVal = 0;
+            snprintf(buf, sizeof(buf), "Time '%s' -> %" PRId64 ": ", goodTimes[i], results[i]);
+            test(buf);
+            s = nats_JSONParse(&json, goodTimes[i], -1);
+            IFOK(s, nats_JSONGetTime(json, "time", &longVal));
+            testCond((s == NATS_OK)
+                        && (json != NULL)
+                        && (longVal == results[i]));
+            nats_JSONDestroy(json);
+            json = NULL;
+        }
+    }
+}
+
+static void
+test_natsEncodeTimeUTC(void)
+{
+    natsStatus  s;
+    char        buf[36] = {'\0'};
+    int         i;
+    int64_t     times[] = {
+        0,
+        1624472520000000000,
+        1624472520100000000,
+        1624472520120000000,
+        1624472520123000000,
+        1624472520123400000,
+        1624472520123450000,
+        1624472520123456000,
+        1624472520123456700,
+        1624472520123456780,
+        1624472520123456789,
+    };
+    const char  *results[] = {
+        "0001-01-01T00:00:00Z",
+        "2021-06-23T18:22:00Z",
+        "2021-06-23T18:22:00.1Z",
+        "2021-06-23T18:22:00.12Z",
+        "2021-06-23T18:22:00.123Z",
+        "2021-06-23T18:22:00.1234Z",
+        "2021-06-23T18:22:00.12345Z",
+        "2021-06-23T18:22:00.123456Z",
+        "2021-06-23T18:22:00.1234567Z",
+        "2021-06-23T18:22:00.12345678Z",
+        "2021-06-23T18:22:00.123456789Z",
+    };
+
+    test("Buffer too small: ");
+    s = nats_EncodeTimeUTC(buf, 10, 0);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), "too small") != NULL));
+    nats_clearLastError();
+
+    for (i=0; i<(int)(sizeof(times)/sizeof(int64_t)); i++)
+    {
+        char txt[100];
+
+        snprintf(txt, sizeof(txt), "Time %" PRId64 " -> '%s': ", times[i], results[i]);
+        test(txt);
+        s = nats_EncodeTimeUTC(buf, sizeof(buf), times[i]);
+        testCond((s == NATS_OK) && (strcmp(buf, results[i]) == 0));
     }
 }
 
@@ -4467,6 +4975,66 @@ test_natsMsgHeaderAPIs(void)
 
     natsMsg_Destroy(msg);
 }
+
+static void
+test_natsMsgIsJSCtrl(void)
+{
+    struct testCase {
+        const char  *buf;
+        int         dataLen;
+        bool        isCtrl;
+        int         ct;
+    };
+    const struct testCase cases[] = {
+        {"key:value\r\n\r\n", 0, false, 0},
+        {"data", 4, false, 0},
+        {"NATS/1.0 \r\n\r\n", 0, false, 0},
+        {"NATS/1.0 100 Idle Heartbeat\r\n\r\ndata", 4, false, 0},
+        {"NATS/1.0 200 Some status...\r\n\r\n", 0, false, 0},
+        {"NATS/1.0100 Idle Heartbeat\r\n\r\n", 0,  false, 0},
+        {"NATS/1.0 1000 Some status\r\n\r\n", 0, false, 0},
+        {"NATS/1.0 100-Some status\r\n\r\n", 0, false, 0},
+        {"NATS/1.0 100\r\n\r\n", 0, true, 0},
+        {"NATS/1.0  100\r\n\r\n", 0, true, 0},
+        {"NATS/1.0   100\r\n\r\n", 0, true, 0},
+        {"NATS/1.0   100 \r\n\r\n", 0, true, 0},
+        {"NATS/1.0   100  \r\n\r\n", 0, true, 0},
+        {"NATS/1.0  100  \r\n\r\n", 0, true, 0},
+        {"NATS/1.0 100  \r\n\r\n", 0, true, 0},
+        {"NATS/1.0 100 \r\n\r\n", 0, true, 0},
+        {"NATS/1.0 100\n\r\n", 0, true, 0},
+        {"NATS/1.0 100  Idle Heartbeat\r\n\r\n", 0, true, jsCtrlHeartbeat},
+        {"NATS/1.0 100 Idle Heartbeat\r\n\r\n", 0, true, jsCtrlHeartbeat},
+        {"NATS/1.0 100  FlowControl Request\r\n\r\n", 0, true, jsCtrlFlowControl},
+        {"NATS/1.0 100 FlowControl Request\r\n\r\n", 0, true, jsCtrlFlowControl},
+    };
+    natsStatus  s;
+    natsMsg     *msg = NULL;
+    char        temp[64];
+    int         i;
+
+    for (i=0; i<(int)(sizeof(cases)/sizeof(struct testCase)); i++)
+    {
+        int bufLen;
+
+        snprintf(temp, sizeof(temp), "Case %d - isCtrl=%d: ", (i+1), cases[i].isCtrl);
+        test(temp);
+        bufLen = (int)strlen(cases[i].buf);
+        s = natsMsg_create(&msg, "foo", 3, NULL, 0, cases[i].buf, bufLen, bufLen-cases[i].dataLen);
+        if (s == NATS_OK)
+        {
+            int ctrlType = 0;
+            bool isCtrl  = false;
+
+            isCtrl = natsMsg_isJSCtrl(msg, &ctrlType);
+            s = ((isCtrl == cases[i].isCtrl) && (ctrlType == cases[i].ct) ? NATS_OK : NATS_ERR);
+        }
+        testCond(s == NATS_OK);
+        natsMsg_Destroy(msg);
+        msg = NULL;
+    }
+}
+
 
 static natsStatus
 _checkStart(const char *url, int orderIP, int maxAttempts)
@@ -17027,6 +17595,9 @@ test_GetClientID(void)
     test("Create nc1: ");
     s = _createDefaultThreadArgsForCbTests(&arg);
     IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 50));
+    IFOK(s, natsOptions_SetTimeout(opts, 250));
     IFOK(s, natsOptions_SetDiscoveredServersCB(opts, _discoveredServersCb, (void*)&arg));
     IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*)&arg));
     IFOK(s, natsConnection_Connect(&nc1, opts));
@@ -19807,6 +20378,4264 @@ test_SSLReconnectWithAuthError(void)
 #endif
 }
 
+static void
+rmtree(const char *path)
+{
+#ifdef _WIN32
+    WIN32_FIND_DATA ffd;
+    HANDLE          hFind = INVALID_HANDLE_VALUE;
+    char            *dir  = NULL;
+
+    if (nats_asprintf(&dir, "%s\\*", path) < 0)
+        abort();
+
+    hFind = FindFirstFile(dir, &ffd);
+    if (hFind == INVALID_HANDLE_VALUE)
+    {
+        free(dir);
+        return;
+    }
+
+    do
+    {
+        char *fullPath = NULL;
+
+        if (!strcmp(ffd.cFileName, ".") || !strcmp(ffd.cFileName, ".."))
+            continue;
+
+        if (nats_asprintf(&fullPath, "%s\\%s", path, ffd.cFileName) < 0)
+            abort();
+
+        if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            rmtree(fullPath);
+        else
+            DeleteFile(fullPath);
+        free(fullPath);
+    }
+    while (FindNextFile(hFind, &ffd) != 0);
+
+    FindClose(hFind);
+    RemoveDirectory(path);
+    free(dir);
+
+#else
+    DIR             *dir;
+    struct stat     statPath, statEntry;
+    struct dirent   *entry;
+
+    memset(&statPath, 0, sizeof(struct stat));
+
+    stat(path, &statPath);
+    if (S_ISDIR(statPath.st_mode) == 0)
+        return;
+
+    if ((dir = opendir(path)) == NULL)
+        return;
+
+    while ((entry = readdir(dir)) != NULL)
+    {
+        char *fullPath = NULL;
+
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
+            continue;
+
+        if (nats_asprintf(&fullPath, "%s/%s", path, entry->d_name) < 0)
+            abort();
+
+        memset(&statEntry, 0, sizeof(struct stat));
+        stat(fullPath, &statEntry);
+
+        if (S_ISDIR(statEntry.st_mode) != 0)
+            rmtree(fullPath);
+        else
+            unlink(fullPath);
+
+        free(fullPath);
+    }
+
+    closedir(dir);
+    rmdir(path);
+#endif
+}
+
+static void
+_makeUniqueDir(char *buf, int bufLen, const char *path)
+{
+    int n;
+
+    if ((int) strlen(path) + 1 + NUID_BUFFER_LEN + 1 > bufLen)
+        abort();
+
+    n = snprintf(buf, bufLen, "%s", path);
+    natsNUID_Next(buf+n, NUID_BUFFER_LEN+1);
+    buf[n+NUID_BUFFER_LEN+1] = '\0';
+}
+
+static void
+_createConfFile(char *buf, int bufLen, const char *content)
+{
+    FILE *f = NULL;
+
+    if (5 + NUID_BUFFER_LEN + 1 > bufLen)
+        abort();
+
+    memcpy(buf, "conf_", 5);
+    natsNUID_Next(buf+5, NUID_BUFFER_LEN+1);
+    buf[5+NUID_BUFFER_LEN+1] = '\0';
+
+    f = fopen(buf, "w");
+    if (f == NULL)
+        abort();
+
+    fputs(content, f);
+    fclose(f);
+}
+
+static void
+test_JetStreamUnmarshalAccountInfo(void)
+{
+    natsStatus          s;
+    nats_JSON           *json = NULL;
+    jsAccountInfo       *ai   = NULL;
+    const char          *bad[] = {
+        "{\"memory\":\"abc\"}",
+        "{\"storage\":\"abc\"}",
+        "{\"streams\":\"abc\"}",
+        "{\"consumers\":\"abc\"}",
+        "{\"domain\":123}",
+        "{\"api\":123}",
+        "{\"api\":{\"total\":\"abc\"}}",
+        "{\"api\":{\"errors\":\"abc\"}}",
+        "{\"limits\":123}",
+        "{\"limits\":{\"max_memory\":\"abc\"}}",
+        "{\"limits\":{\"max_storage\":\"abc\"}}",
+        "{\"limits\":{\"max_streams\":\"abc\"}}",
+        "{\"limits\":{\"max_consumers\":\"abc\"}}",
+    };
+    char tmp[512];
+    int i;
+
+    for (i=0; i<(int)(sizeof(bad)/sizeof(char*)); i++)
+    {
+        test("Bad fields: ");
+        s = nats_JSONParse(&json, bad[i], (int) strlen(bad[i]));
+        IFOK(s, js_unmarshalAccountInfo(json, &ai));
+        testCond((s != NATS_OK) && (ai == NULL));
+        nats_JSONDestroy(json);
+        json = NULL;
+        nats_clearLastError();
+    }
+
+    test("Account info complete: ");
+    snprintf(tmp, sizeof(tmp), "{\"memory\":1000,\"storage\":2000,\"streams\":5,\"consumers\":7,"\
+        "\"domain\":\"MyDomain\","\
+        "\"api\":{\"total\":8,\"errors\":2},"\
+        "\"limits\":{\"max_memory\":3000,\"max_storage\":4000,\"max_streams\":10,\"max_consumers\":20}}");
+    s = nats_JSONParse(&json, tmp, (int) strlen(tmp));
+    IFOK(s, js_unmarshalAccountInfo(json, &ai));
+    testCond((s == NATS_OK) && (ai != NULL)
+                && (ai->Memory == 1000)
+                && (ai->Store == 2000)
+                && (ai->Streams == 5)
+                && (ai->Consumers == 7)
+                && (ai->Domain != NULL)
+                && (strcmp(ai->Domain, "MyDomain") == 0)
+                && (ai->API.Total == 8)
+                && (ai->API.Errors == 2)
+                && (ai->Limits.MaxMemory == 3000)
+                && (ai->Limits.MaxStore == 4000)
+                && (ai->Limits.MaxStreams == 10)
+                && (ai->Limits.MaxConsumers == 20));
+    nats_JSONDestroy(json);
+    jsAccountInfo_Destroy(ai);
+}
+
+static void
+test_JetStreamUnmarshalStreamState(void)
+{
+    natsStatus          s;
+    nats_JSON           *json = NULL;
+    jsStreamState       state;
+    const char          *bad[] = {
+        "{\"state\":{\"messages\":\"abc\"}}",
+        "{\"state\":{\"bytes\":\"abc\"}}",
+        "{\"state\":{\"first_seq\":\"abc\"}}",
+        "{\"state\":{\"first_ts\":123}}",
+        "{\"state\":{\"last_seq\":\"abc\"}}",
+        "{\"state\":{\"last_ts\":123}}",
+        "{\"state\":{\"num_deleted\":\"abc\"}}",
+        "{\"state\":{\"deleted\":\"abc\"}}",
+        "{\"state\":{\"lost\":\"abc\"}}",
+        "{\"state\":{\"lost\":{\"msgs\":\"abc\"}}}",
+        "{\"state\":{\"lost\":{\"bytes\":\"abc\"}}}",
+        "{\"state\":{\"consumer_count\":\"abc\"}}",
+    };
+    int i;
+
+    for (i=0; i<(int)(sizeof(bad)/sizeof(char*)); i++)
+    {
+        test("Bad fields: ");
+        s = nats_JSONParse(&json, bad[i], (int) strlen(bad[i]));
+        IFOK(s, js_unmarshalStreamState(json, "state", &state));
+        testCond(s != NATS_OK);
+        nats_JSONDestroy(json);
+        json = NULL;
+        nats_clearLastError();
+    }
+
+    test("Unmarshal: ");
+    s = nats_JSONParse(&json, "{\"state\":{\"messages\":1,\"bytes\":2,"\
+        "\"first_seq\":3,\"first_ts\":\"2021-06-23T18:22:00.123Z\","\
+        "\"last_seq\":4,\"last_ts\":\"2021-06-23T18:22:00.123456789Z\","\
+        "\"num_deleted\":5,\"deleted\":[6,7,8,9,10],"\
+        "\"lost\":{\"msgs\":[11,12,13],\"bytes\":14},"\
+        "\"consumer_count\":15}}", -1);
+    IFOK(s, js_unmarshalStreamState(json, "state", &state));
+    testCond((s == NATS_OK) && (json != NULL)
+                && (state.Msgs == 1)
+                && (state.Bytes == 2)
+                && (state.FirstSeq == 3)
+                && (state.FirstTime == 1624472520123000000)
+                && (state.LastSeq == 4)
+                && (state.LastTime == 1624472520123456789)
+                && (state.NumDeleted == 5)
+                && (state.Deleted != NULL)
+                && (state.DeletedLen == 5)
+                && (state.Deleted[0] == 6)
+                && (state.Deleted[1] == 7)
+                && (state.Deleted[2] == 8)
+                && (state.Deleted[3] == 9)
+                && (state.Deleted[4] == 10)
+                && (state.Lost != NULL)
+                && (state.Lost->MsgsLen == 3)
+                && (state.Lost->Msgs != NULL)
+                && (state.Lost->Msgs[0] == 11)
+                && (state.Lost->Msgs[1] == 12)
+                && (state.Lost->Msgs[2] == 13)
+                && (state.Lost->Bytes == 14)
+                && (state.Consumers == 15));
+
+    test("Cleanup: ");
+    js_cleanStreamState(&state);
+    testCond(true);
+    // Check that this is fine
+    js_cleanStreamState(NULL);
+
+    nats_JSONDestroy(json);
+}
+
+static void
+test_JetStreamUnmarshalStreamConfig(void)
+{
+    natsStatus          s;
+    nats_JSON           *json = NULL;
+    jsStreamConfig      *sc   = NULL;
+    const char          *missing[] = {
+        "{\"name\":\"TEST\"}",
+        "{\"name\":\"TEST\",\"retention\":\"limits\"}",
+        "{\"name\":\"TEST\",\"retention\":\"limits\",\"max_consumers\":5}",
+        "{\"name\":\"TEST\",\"retention\":\"limits\",\"max_consumers\":5,\"max_msgs\":10}",
+        "{\"name\":\"TEST\",\"retention\":\"limits\",\"max_consumers\":5,\"max_msgs\":10,\"max_bytes\":1000}",
+        "{\"name\":\"TEST\",\"retention\":\"limits\",\"max_consumers\":5,\"max_msgs\":10,\"max_bytes\":1000,\"max_age\":20000000}",
+        "{\"name\":\"TEST\",\"retention\":\"limits\",\"max_consumers\":5,\"max_msgs\":10,\"max_bytes\":1000,\"max_age\":20000000,\"discard\":\"new\"}",
+        "{\"name\":\"TEST\",\"retention\":\"limits\",\"max_consumers\":5,\"max_msgs\":10,\"max_bytes\":1000,\"max_age\":20000000,\"discard\":\"new\",\"storage\":\"memory\"}",
+    };
+    char tmp[1024];
+    int i;
+
+    for (i=0; i<(int)(sizeof(missing)/sizeof(char*)); i++)
+    {
+        test("Missing fields: ");
+        s = nats_JSONParse(&json, missing[i], (int) strlen(missing[i]));
+        IFOK(s, js_unmarshalStreamConfig(json, NULL, &sc));
+        testCond((s == NATS_OK) && (sc != NULL));
+        js_destroyStreamConfig(sc);
+        sc = NULL;
+        nats_JSONDestroy(json);
+        json = NULL;
+    }
+
+    test("Stream config with all required: ");
+    snprintf(tmp, sizeof(tmp), "{\"name\":\"TEST\",\"retention\":\"workqueue\","\
+        "\"max_consumers\":5,\"max_msgs\":10,\"max_bytes\":1000,\"max_msgs_per_subject\":1,\"max_age\":20000000,"\
+        "\"discard\":\"new\",\"storage\":\"memory\",\"num_replicas\":3}");
+    s = nats_JSONParse(&json, tmp, (int) strlen(tmp));
+    IFOK(s, js_unmarshalStreamConfig(json, NULL, &sc));
+    testCond((s == NATS_OK) && (sc != NULL)
+                && (strcmp(sc->Name, "TEST") == 0)
+                && (sc->Retention == js_WorkQueuePolicy)
+                && (sc->MaxConsumers == 5)
+                && (sc->MaxMsgs == 10)
+                && (sc->MaxBytes == 1000)
+                && (sc->MaxAge == 20000000)
+                && (sc->MaxMsgsPerSubject == 1)
+                && (sc->Discard == js_DiscardNew)
+                && (sc->Storage == js_MemoryStorage)
+                && (sc->Replicas == 3));
+    js_destroyStreamConfig(sc);
+    sc = NULL;
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Stream config with all: ");
+    if (snprintf(tmp, sizeof(tmp), "{\"name\":\"TEST\",\"description\":\"this is my stream\",\"subjects\":[\"foo\",\"bar\"],"\
+        "\"retention\":\"workqueue\",\"max_consumers\":5,\"max_msgs\":10,\"max_bytes\":1000,"\
+        "\"max_age\":20000000,\"max_msg_size\":1024,\"max_msgs_per_subject\":1,\"discard\":\"new\",\"storage\":\"memory\","\
+        "\"num_replicas\":3,\"no_ack\":true,\"template_owner\":\"owner\","\
+        "\"duplicate_window\":100000000000,\"placement\":{\"cluster\":\"cluster\",\"tags\":[\"tag1\",\"tag2\"]},"\
+        "\"mirror\":{\"name\":\"TEST2\",\"opt_start_seq\":10,\"filter_subject\":\"foo\",\"external\":{\"api\":\"my_prefix\",\"deliver\":\"deliver_prefix\"}},"\
+        "\"sources\":[{\"name\":\"TEST3\",\"opt_start_seq\":20,\"filter_subject\":\"bar\",\"external\":{\"api\":\"my_prefix2\",\"deliver\":\"deliver_prefix2\"}}]}") >= (int) sizeof(tmp))
+    {
+        abort();
+    }
+    s = nats_JSONParse(&json, tmp, (int) strlen(tmp));
+    IFOK(s, js_unmarshalStreamConfig(json, NULL, &sc));
+    testCond((s == NATS_OK) && (sc != NULL)
+                && (sc->Name != NULL)
+                && (strcmp(sc->Name, "TEST") == 0)
+                && (sc->Description != NULL)
+                && (strcmp(sc->Description, "this is my stream") == 0)
+                && (sc->Subjects != NULL)
+                && (sc->SubjectsLen == 2)
+                && (strcmp(sc->Subjects[0], "foo") == 0)
+                && (strcmp(sc->Subjects[1], "bar") == 0)
+                && (sc->MaxMsgsPerSubject == 1)
+                && (sc->MaxMsgSize == 1024)
+                && (sc->NoAck)
+                && (strcmp(sc->Template, "owner") == 0)
+                && (sc->Duplicates == 100000000000)
+                && (sc->Placement != NULL)
+                && (strcmp(sc->Placement->Cluster, "cluster") == 0)
+                && (sc->Placement->TagsLen == 2)
+                && (strcmp(sc->Placement->Tags[0], "tag1") == 0)
+                && (strcmp(sc->Placement->Tags[1], "tag2") == 0)
+                && (sc->Mirror != NULL)
+                && (strcmp(sc->Mirror->Name, "TEST2") == 0)
+                && (sc->Mirror->OptStartSeq == 10)
+                && (strcmp(sc->Mirror->FilterSubject, "foo") == 0)
+                && (sc->Mirror->External != NULL)
+                && (strcmp(sc->Mirror->External->APIPrefix, "my_prefix") == 0)
+                && (strcmp(sc->Mirror->External->DeliverPrefix, "deliver_prefix") == 0)
+                && (sc->SourcesLen == 1)
+                && (strcmp(sc->Sources[0]->Name, "TEST3") == 0)
+                && (sc->Sources[0]->OptStartSeq == 20)
+                && (strcmp(sc->Sources[0]->FilterSubject, "bar") == 0)
+                && (sc->Sources[0]->External != NULL)
+                && (strcmp(sc->Sources[0]->External->APIPrefix, "my_prefix2") == 0)
+                && (strcmp(sc->Sources[0]->External->DeliverPrefix, "deliver_prefix2") == 0));
+    js_destroyStreamConfig(sc);
+    sc = NULL;
+    nats_JSONDestroy(json);
+    json = NULL;
+}
+
+static void
+test_JetStreamUnmarshalStreamInfo(void)
+{
+    natsStatus          s;
+    nats_JSON           *json = NULL;
+    jsStreamInfo        *si   = NULL;
+    const char          *good[] = {
+        "{\"cluster\":{\"name\":\"S1\",\"leader\":\"S2\"}}",
+        "{\"cluster\":{\"name\":\"S1\",\"leader\":\"S2\",\"replicas\":[{\"name\":\"S1\",\"current\":true,\"offline\":false,\"active\":123,\"lag\":456},{\"name\":\"S1\",\"current\":false,\"offline\":true,\"active\":123,\"lag\":456}]}}",
+        "{\"mirror\":{\"name\":\"M\",\"lag\":123,\"active\":456}}",
+        "{\"mirror\":{\"name\":\"M\",\"external\":{\"api\":\"MyApi\",\"deliver\":\"deliver.prefix\"},\"lag\":123,\"active\":456}}",
+        "{\"sources\":[{\"name\":\"S1\",\"lag\":123,\"active\":456},{\"name\":\"S2\",\"lag\":123,\"active\":456}]}",
+        "{\"sources\":[{\"name\":\"S1\",\"external\":{\"api\":\"MyApi\",\"deliver\":\"deliver.prefix\"},\"lag\":123,\"active\":456},{\"name\":\"S2\",\"lag\":123,\"active\":456}]}",
+    };
+    const char          *bad[] = {
+        "{\"config\":123}",
+        "{\"config\":{\"retention\":\"bad_policy\"}}",
+        "{\"config\":{\"discard\":\"bad_policy\"}}",
+        "{\"config\":{\"storage\":\"bad_policy\"}}",
+        "{\"config\":{\"placement\":{\"cluster\":123}}}",
+        "{\"config\":{\"placement\":{\"tags\":123}}}",
+        "{\"config\":{\"mirror\":{\"name\":123}}}",
+        "{\"config\":{\"mirror\":{\"opt_start_seq\":\"abc\"}}}",
+        "{\"config\":{\"mirror\":{\"opt_start_time\":123}}}",
+        "{\"config\":{\"mirror\":{\"filter_subject\":123}}}",
+        "{\"config\":{\"mirror\":{\"external\":123}}}",
+        "{\"config\":{\"mirror\":{\"external\":{\"api\":123}}}}",
+        "{\"config\":{\"mirror\":{\"external\":{\"deliver\":123}}}}",
+        "{\"state\":123}",
+        "{\"cluster\":123}",
+        "{\"cluster\":{\"name\":123}}",
+        "{\"cluster\":{\"name\":\"S1\",\"leader\":123}}",
+        "{\"cluster\":{\"name\":\"S1\",\"leader\":\"S2\",\"replicas\":123}}",
+        "{\"cluster\":{\"name\":\"S1\",\"leader\":\"S2\",\"replicas\":[{\"name\":123}]}}",
+        "{\"mirror\":123}",
+        "{\"mirror\":{\"name\":123}}",
+        "{\"mirror\":{\"name\":\"S1\",\"external\":123}}",
+        "{\"mirror\":{\"name\":\"S1\",\"external\":{\"api\":123}}}",
+        "{\"sources\":123}",
+        "{\"sources\":[{\"name\":123}]}",
+        "{\"sources\":[{\"name\":\"S1\",\"external\":123}]}",
+        "{\"sources\":[{\"name\":\"S1\",\"external\":{\"deliver\":123}}]}",
+    };
+    int i;
+    char tmp[64];
+
+    for (i=0; i<(int)(sizeof(good)/sizeof(char*)); i++)
+    {
+        snprintf(tmp, sizeof(tmp), "Positive case %d: ", i+1);
+        test(tmp);
+        s = nats_JSONParse(&json, good[i], (int) strlen(good[i]));
+        IFOK(s, js_unmarshalStreamInfo(json, &si));
+        testCond((s == NATS_OK) && (si != NULL));
+        jsStreamInfo_Destroy(si);
+        si = NULL;
+        nats_JSONDestroy(json);
+        json = NULL;
+    }
+
+    for (i=0; i<(int)(sizeof(bad)/sizeof(char*)); i++)
+    {
+        snprintf(tmp, sizeof(tmp), "Negative case %d: ", i+1);
+        test(tmp);
+        s = nats_JSONParse(&json, bad[i], (int) strlen(bad[i]));
+        IFOK(s, js_unmarshalStreamInfo(json, &si));
+        testCond((s != NATS_OK) && (si == NULL));
+        nats_JSONDestroy(json);
+        json = NULL;
+        nats_clearLastError();
+    }
+}
+
+static void
+test_JetStreamMarshalStreamConfig(void)
+{
+    natsStatus          s;
+    jsStreamConfig      sc;
+    jsPlacement         p;
+    jsStreamSource      m;
+    jsExternalStream    esm;
+    jsStreamSource      s1;
+    jsExternalStream    esmS1;
+    jsStreamSource      s2;
+    jsExternalStream    esmS2;
+    natsBuffer          *buf           = NULL;
+    nats_JSON           *json          = NULL;
+    jsStreamConfig      *rsc           = NULL;
+    int64_t             optStartTime   = 1624583232123456000;
+
+    test("init bad args: ");
+    s = jsStreamConfig_Init(NULL);
+    if (s == NATS_INVALID_ARG)
+        s = jsPlacement_Init(NULL);
+    if (s == NATS_INVALID_ARG)
+        s = jsStreamSource_Init(NULL);
+    if (s == NATS_INVALID_ARG)
+        s = jsExternalStream_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    jsStreamConfig_Init(&sc);
+    sc.Name = "MyStream";
+    sc.Description = "this is my stream";
+    sc.Subjects = (const char*[2]){"foo", "bar"};
+    sc.SubjectsLen = 2;
+    sc.Retention = js_InterestPolicy;
+    sc.MaxConsumers = 1;
+    sc.MaxMsgs = 2;
+    sc.MaxBytes = 3;
+    sc.MaxAge = 4;
+    sc.MaxMsgSize = 5;
+    sc.Duplicates = 6;
+    sc.MaxMsgsPerSubject = 1;
+    sc.Discard = js_DiscardNew;
+    sc.Storage = js_MemoryStorage;
+    sc.Replicas = 3;
+    sc.NoAck = true;
+    sc.Template = "template";
+
+    jsPlacement_Init(&p);
+    p.Cluster = "MyCluster";
+    p.Tags = (const char*[2]){"tag1", "tag2"};
+    p.TagsLen = 2;
+    sc.Placement = &p;
+
+    jsStreamSource_Init(&m);
+    m.Name = "AStream";
+    m.OptStartSeq = 100;
+    m.OptStartTime = optStartTime;
+    m.FilterSubject = "foo";
+    jsExternalStream_Init(&esm);
+    esm.APIPrefix = "mirror.prefix";
+    esm.DeliverPrefix = "deliver.prefix";
+    m.External = &esm;
+    sc.Mirror = &m;
+
+    jsStreamSource_Init(&s1);
+    s1.Name = "StreamOne";
+    s1.OptStartSeq = 10;
+    s1.FilterSubject = "stream.one";
+    jsExternalStream_Init(&esmS1);
+    esmS1.APIPrefix = "source1.prefix";
+    esmS1.DeliverPrefix = "source1.deliver.prefix";
+    s1.External = &esmS1;
+
+    jsStreamSource_Init(&s2);
+    s2.Name = "StreamTwo";
+    s2.OptStartSeq = 20;
+    s2.FilterSubject = "stream.two";
+    jsExternalStream_Init(&esmS2);
+    esmS2.APIPrefix = "source2.prefix";
+    esmS2.DeliverPrefix = "source2.deliver.prefix";
+    s2.External = &esmS2;
+
+    sc.Sources = (jsStreamSource *[2]){&s1, &s2};
+    sc.SourcesLen = 2;
+
+    test("Marshal stream config: ");
+    s = js_marshalStreamConfig(&buf, &sc);
+    testCond((s == NATS_OK) && (buf != NULL) && (natsBuf_Len(buf) > 0));
+
+    test("Verify with unmarshal: ");
+    s = nats_JSONParse(&json, natsBuf_Data(buf), natsBuf_Len(buf));
+    IFOK(s, js_unmarshalStreamConfig(json, NULL, &rsc));
+    testCond((s == NATS_OK) && (rsc != NULL)
+                && (rsc->Name != NULL)
+                && (strcmp(rsc->Name, "MyStream") == 0)
+                && (rsc->Description != NULL)
+                && (strcmp(rsc->Description, "this is my stream") == 0)
+                && (rsc->SubjectsLen == 2)
+                && (rsc->Subjects != NULL)
+                && (strcmp(rsc->Subjects[0], "foo") == 0)
+                && (strcmp(rsc->Subjects[1], "bar") == 0)
+                && (rsc->Retention == js_InterestPolicy)
+                && (rsc->MaxConsumers == 1)
+                && (rsc->MaxMsgs == 2)
+                && (rsc->MaxBytes == 3)
+                && (rsc->MaxAge == 4)
+                && (rsc->MaxMsgSize == 5)
+                && (rsc->MaxMsgsPerSubject == 1)
+                && (rsc->Duplicates == 6)
+                && (rsc->Discard == js_DiscardNew)
+                && (rsc->Storage == js_MemoryStorage)
+                && (rsc->Replicas == 3)
+                && rsc->NoAck
+                && (strcmp(rsc->Template, "template") == 0)
+                && (rsc->Placement != NULL)
+                && (strcmp(rsc->Placement->Cluster, "MyCluster") == 0)
+                && (rsc->Placement->TagsLen == 2)
+                && (rsc->Placement->Tags != NULL)
+                && (strcmp(rsc->Placement->Tags[0], "tag1") == 0)
+                && (strcmp(rsc->Placement->Tags[1], "tag2") == 0)
+                && (rsc->Mirror != NULL)
+                && (strcmp(rsc->Mirror->Name, "AStream") == 0)
+                && (rsc->Mirror->OptStartSeq == 100)
+                && (rsc->Mirror->OptStartTime == optStartTime)
+                && (strcmp(rsc->Mirror->FilterSubject, "foo") == 0)
+                && (rsc->Mirror->External != NULL)
+                && (strcmp(rsc->Mirror->External->APIPrefix, "mirror.prefix") == 0)
+                && (strcmp(rsc->Mirror->External->DeliverPrefix, "deliver.prefix") == 0)
+                && (rsc->SourcesLen == 2)
+                && (rsc->Sources != NULL)
+                && (strcmp(rsc->Sources[0]->Name, "StreamOne") == 0)
+                && (rsc->Sources[0]->OptStartSeq == 10)
+                && (strcmp(rsc->Sources[0]->FilterSubject, "stream.one") == 0)
+                && (rsc->Sources[0]->External != NULL)
+                && (strcmp(rsc->Sources[0]->External->APIPrefix, "source1.prefix") == 0)
+                && (strcmp(rsc->Sources[0]->External->DeliverPrefix, "source1.deliver.prefix") == 0)
+                && (strcmp(rsc->Sources[1]->Name, "StreamTwo") == 0)
+                && (rsc->Sources[1]->OptStartSeq == 20)
+                && (strcmp(rsc->Sources[1]->FilterSubject, "stream.two") == 0)
+                && (rsc->Sources[1]->External != NULL)
+                && (strcmp(rsc->Sources[1]->External->APIPrefix, "source2.prefix") == 0)
+                && (strcmp(rsc->Sources[1]->External->DeliverPrefix, "source2.deliver.prefix") == 0));
+    js_destroyStreamConfig(rsc);
+    rsc = NULL;
+    // Check that this does not crash
+    js_destroyStreamConfig(NULL);
+    natsBuf_Destroy(buf);
+    buf = NULL;
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("WorkQueue policy: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Retention = js_WorkQueuePolicy;
+    s = js_marshalStreamConfig(&buf, &sc);
+    testCond((s == NATS_OK) && (buf != NULL) && (natsBuf_Len(buf) > 0));
+
+    test("Verify with unmarshal: ");
+    s = nats_JSONParse(&json, natsBuf_Data(buf), natsBuf_Len(buf));
+    IFOK(s, js_unmarshalStreamConfig(json, NULL, &rsc));
+    testCond((s == NATS_OK) && (rsc != NULL) && (rsc->Retention == js_WorkQueuePolicy));
+    js_destroyStreamConfig(rsc);
+    rsc = NULL;
+    natsBuf_Destroy(buf);
+    buf = NULL;
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Bad retention: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Retention = (jsRetentionPolicy) 100;
+    s = js_marshalStreamConfig(&buf, &sc);
+    testCond((s == NATS_INVALID_ARG) && (buf == NULL));
+
+    test("Bad discard: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Discard = (jsDiscardPolicy) 100;
+    s = js_marshalStreamConfig(&buf, &sc);
+    testCond((s == NATS_INVALID_ARG) && (buf == NULL));
+
+    test("Bad storage: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Storage = (jsStorageType) 100;
+    s = js_marshalStreamConfig(&buf, &sc);
+    testCond((s == NATS_INVALID_ARG) && (buf == NULL));
+}
+
+static void
+test_JetStreamUnmarshalConsumerInfo(void)
+{
+    natsStatus          s;
+    jsConsumerInfo      *ci     = NULL;
+    nats_JSON           *json   = NULL;
+    const char          *good[] = {
+        "{\"stream_name\":\"TEST\"}",
+        "{\"name\":\"abc\"}",
+        "{\"created\":\"2021-06-23T18:22:00.123456789Z\"}",
+        "{\"delivered\":{\"consumer_seq\":1,\"stream_seq\":1}}",
+        "{\"ack_floor\":{\"consumer_seq\":1,\"stream_seq\":1}}",
+        "{\"num_ack_pending\":1}",
+        "{\"num_redelivered\":1}",
+        "{\"num_waiting\":1}",
+        "{\"num_pending\":1}",
+        "{\"config\":{\"deliver_policy\":\"" jsDeliverAllStr "\"}}",
+        "{\"config\":{\"deliver_policy\":\"" jsDeliverLastStr "\"}}",
+        "{\"config\":{\"deliver_policy\":\"" jsDeliverNewStr "\"}}",
+        "{\"config\":{\"deliver_policy\":\"" jsDeliverBySeqStr "\"}}",
+        "{\"config\":{\"deliver_policy\":\"" jsDeliverByTimeStr "\"}}",
+        "{\"config\":{\"deliver_policy\":\"" jsDeliverLastPerSubjectStr "\"}}",
+        "{\"config\":{\"ack_policy\":\"" jsAckNoneStr "\"}}",
+        "{\"config\":{\"ack_policy\":\"" jsAckAllStr "\"}}",
+        "{\"config\":{\"ack_policy\":\"" jsAckExplictStr "\"}}",
+        "{\"config\":{\"replay_policy\":\"" jsReplayInstantStr "\"}}",
+        "{\"config\":{\"replay_policy\":\"" jsReplayOriginalStr "\"}}",
+    };
+    const char          *bad[] = {
+        "{\"stream_name\":123}",
+        "{\"name\":123}",
+        "{\"created\":123}",
+        "{\"config\":123}",
+        "{\"config\":{\"durable_name\":123}}",
+        "{\"config\":{\"description\":123}}",
+        "{\"config\":{\"deliver_subject\":123}}",
+        "{\"config\":{\"deliver_policy\":\"bad_policy\"}}",
+        "{\"config\":{\"opt_start_seq\":\"abc\"}}",
+        "{\"config\":{\"opt_start_time\":123}}",
+        "{\"config\":{\"ack_policy\":\"bad_policy\"}}",
+        "{\"config\":{\"ack_wait\":\"abc\"}}",
+        "{\"config\":{\"max_deliver\":\"abc\"}}",
+        "{\"config\":{\"filter_subject\":123}}",
+        "{\"config\":{\"replay_policy\":\"bad_policy\"}}",
+        "{\"config\":{\"rate_limit_bps\":\"abc\"}}",
+        "{\"config\":{\"sample_freq\":123}}",
+        "{\"config\":{\"max_waiting\":\"abc\"}}",
+        "{\"config\":{\"max_ack_pending\":\"abc\"}}",
+        "{\"config\":{\"flow_control\":\"abc\"}}",
+        "{\"config\":{\"idle_heartbeat\":\"abc\"}}",
+        "{\"delivered\":123}",
+        "{\"delivered\":{\"consumer_seq\":\"abc\"}}",
+        "{\"delivered\":{\"stream_seq\":\"abc\"}}",
+        "{\"ack_floor\":123}",
+        "{\"ack_floor\":{\"consumer_seq\":\"abc\"}}",
+        "{\"ack_floor\":{\"stream_seq\":\"abc\"}}",
+        "{\"num_ack_pending\":\"abc\"}",
+        "{\"num_redelivered\":\"abc\"}",
+        "{\"num_waiting\":\"abc\"}",
+        "{\"num_pending\":\"abc\"}",
+        "{\"cluster\":123}",
+        "{\"cluster\":{\"name\":123}}",
+    };
+    int i;
+    char tmp[64];
+
+    for (i=0; i<(int)(sizeof(good)/sizeof(char*)); i++)
+    {
+        snprintf(tmp, sizeof(tmp), "Positive case %d: ", i+1);
+        test(tmp);
+        s = nats_JSONParse(&json, good[i], (int) strlen(good[i]));
+        IFOK(s, js_unmarshalConsumerInfo(json, &ci));
+        testCond((s == NATS_OK) && (ci != NULL));
+        jsConsumerInfo_Destroy(ci);
+        ci = NULL;
+        nats_JSONDestroy(json);
+        json = NULL;
+    }
+
+    for (i=0; i<(int)(sizeof(bad)/sizeof(char*)); i++)
+    {
+        snprintf(tmp, sizeof(tmp), "Negative case %d: ", i+1);
+        test(tmp);
+        s = nats_JSONParse(&json, bad[i], (int) strlen(bad[i]));
+        IFOK(s, js_unmarshalConsumerInfo(json, &ci));
+        testCond((s != NATS_OK) && (ci == NULL));
+        nats_JSONDestroy(json);
+        json = NULL;
+        nats_clearLastError();
+    }
+}
+
+static void
+testRespParsing(void)
+{
+    natsStatus          s;
+    nats_JSON           *json = NULL;
+    natsMsg             *msg  = NULL;
+    const char          *bad[] = {
+        "not a JSON",
+        "{\"error\":123}",
+        "{\"error\":{\"code\":\"abc\"}}",
+        "{\"error\":{\"err_code\":\"abc\"}}",
+        "{\"error\":{\"description\":123}}",
+    };
+    const char          *good[] = {
+        "{\"not_an_error\":123}",
+        "{\"error\":{\"code\":100}}",
+        "{\"error\":{\"code\":404,\"description\":\"not found\"}}",
+        "{\"error\":{\"code\":404,\"err_code\":10014,\"description\":\"not found\"}}",
+    };
+    struct _good {
+        bool        isErr;
+        int         code;
+        uint16_t    err_code;
+        const char  *desc;
+    };
+    const struct _good  goodRes[] = {
+        { false, 0, 0, NULL },
+        { true, 100, 0, NULL },
+        { true, 404, 0, "not found" },
+        { true, 404, JSConsumerNotFoundErr, "not found" },
+    };
+    char                tmp[64];
+    int                 i;
+    jsApiResponse       ar;
+
+    for (i=0; i<(int)(sizeof(bad)/sizeof(char*)); i++)
+    {
+        snprintf(tmp, sizeof(tmp), "Negative test %d: ", i+1);
+        test(tmp);
+        s = natsMsg_Create(&msg, "foo", NULL, bad[i], (int)strlen(bad[i]));
+        IFOK(s, js_unmarshalResponse(&ar, &json, msg));
+        testCond((s != NATS_OK) && (json == NULL));
+        natsMsg_Destroy(msg);
+        msg = NULL;
+        js_freeApiRespContent(&ar);
+    }
+    for (i=0; i<(int)(sizeof(good)/sizeof(char*)); i++)
+    {
+        snprintf(tmp, sizeof(tmp), "Positive test %d: ", i+1);
+        test(tmp);
+        s = natsMsg_Create(&msg, "foo", NULL, good[i], (int)strlen(good[i]));
+        IFOK(s, js_unmarshalResponse(&ar, &json, msg));
+        if (s == NATS_OK)
+        {
+            if (!goodRes[i].isErr)
+            {
+                if (js_apiResponseIsErr(&ar) || (ar.Error.Code != 0)
+                    || (ar.Error.ErrCode != 0)
+                    || !nats_IsStringEmpty(ar.Error.Description))
+                {
+                    s = NATS_ERR;
+                }
+            }
+            else
+            {
+                if ((goodRes[i].code != ar.Error.Code)
+                    || (goodRes[i].err_code != ar.Error.ErrCode)
+                    || ((goodRes[i].desc == NULL) && !nats_IsStringEmpty(ar.Error.Description))
+                    || ((goodRes[i].desc != NULL) && nats_IsStringEmpty(ar.Error.Description))
+                    || ((goodRes[i].desc != NULL) && strcmp(goodRes[i].desc, ar.Error.Description) != 0))
+                {
+                    s = NATS_ERR;
+                }
+            }
+        }
+        testCond((s == NATS_OK) && (json != NULL));
+        natsMsg_Destroy(msg);
+        msg = NULL;
+        nats_JSONDestroy(json);
+        json = NULL;
+        js_freeApiRespContent(&ar);
+    }
+    // Check that this is ok
+    js_freeApiRespContent(NULL);
+}
+
+#define ENSURE_JS_VERSION(major, minor, update) \
+if (!serverVersionAtLeast((major), (minor), (update))) \
+{ \
+    char txt[200]; \
+    snprintf(txt, sizeof(txt), "Skipping since requires server version of at least %d.%d.%d, got %s: ", \
+             (major), (minor), (update), serverVersion); \
+    test(txt); \
+    testCond(true); \
+    return; \
+}
+
+static void
+test_JetStreamContext(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsOptions           o;
+    jsAccountInfo       *ai = NULL;
+    jsErrCode           jerr = 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    char                confFile[256] = {'\0'};
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    test("Check response parsing:\n");
+    testRespParsing();
+    testCond(true);
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+    _createConfFile(confFile, sizeof(confFile),
+        " accounts { "\
+        "   NOJS { "\
+        "     users: [ "\
+        "       {user: ivan, pass: pwd} "\
+        "     ] "\
+        "   } "\
+        " }\n"
+    );
+
+    pid = _startServer("nats://127.0.0.1:4222", "", true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Check JS context invalid args: ")
+    s = natsConnection_JetStream(NULL, nc, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsConnection_JetStream(&js, NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Init options (bad args): ");
+    s = jsOptions_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Check JS context with negative wait: ")
+    jsOptions_Init(&o);
+    o.Wait = -10;
+    s = natsConnection_JetStream(&js, nc, &o);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), "negative") != NULL));
+    o.Wait = 0;
+    nats_clearLastError();
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Get account info (bad args): ");
+    s = js_GetAccountInfo(NULL, js, NULL, NULL);
+        s = js_GetAccountInfo(&ai, NULL, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (ai == NULL));
+    nats_clearLastError();
+
+    test("Get account fail: ");
+    s = js_GetAccountInfo(&ai, js, NULL, &jerr);
+    testCond((s == NATS_NO_RESPONDERS) && (ai == NULL) && (jerr == JSNotEnabledErr));
+    nats_clearLastError();
+    jerr = 0;
+
+    jsCtx_Destroy(js);
+    js = NULL;
+    // Check this is ok
+    jsCtx_Destroy(NULL);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    // Restart the server with JS enabled
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context set unknown prefix: ");
+    o.Prefix = "MyPrefix";
+    s = natsConnection_JetStream(&js, nc, &o);
+    testCond(s == NATS_OK);
+
+    test("Get account info with unknown prefix: ");
+    s = js_GetAccountInfo(&ai, js, NULL, &jerr);
+    testCond((s == NATS_NO_RESPONDERS) && (ai == NULL) && (jerr == JSNotEnabledErr));
+    nats_clearLastError();
+    jerr = 0;
+
+    test("Get account info override prefix: ");
+    o.Prefix = jsDefaultAPIPrefix;
+    s = js_GetAccountInfo(&ai, js, &o, &jerr);
+    testCond((s == NATS_OK)
+                && (jerr == 0)
+                && (ai != NULL)
+                && (ai->Limits.MaxMemory == -1)
+                && (ai->Limits.MaxStore == -1));
+    jsAccountInfo_Destroy(ai);
+    ai = NULL;
+
+    test("Prefix with trailing '.' works: ");
+    o.Prefix = "$JS.API.";
+    s = js_GetAccountInfo(&ai, js, &o, &jerr);
+    testCond((s == NATS_OK)
+                && (jerr == 0)
+                && (ai != NULL)
+                && (ai->Limits.MaxMemory == -1)
+                && (ai->Limits.MaxStore == -1));
+    jsAccountInfo_Destroy(ai);
+    ai = NULL;
+
+    jsCtx_Destroy(js);
+    js = NULL;
+
+    test("Create context with prefix with traling '.': ");
+    s = natsConnection_JetStream(&js, nc, &o);
+    IFOK(s, js_GetAccountInfo(&ai, js, NULL, &jerr));
+    testCond((s == NATS_OK)
+                && (jerr == 0)
+                && (js != NULL)
+                // Verify we don't touch the provided prefix
+                && (strcmp(o.Prefix, "$JS.API.") == 0)
+                && (ai != NULL)
+                && (ai->Limits.MaxMemory == -1)
+                && (ai->Limits.MaxStore == -1));
+    jsAccountInfo_Destroy(ai);
+    ai = NULL;
+    // Check this does not crash
+    jsAccountInfo_Destroy(NULL);
+    jsCtx_Destroy(js);
+    js = NULL;
+    natsConnection_Destroy(nc);
+    nc = NULL;
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, "nats://ivan:pwd@127.0.0.1:4222");
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Get account info error: ");
+    s = js_GetAccountInfo(&ai, js, NULL, &jerr);
+    testCond((s == NATS_ERR) && (ai == NULL) && (jerr == JSNotEnabledForAccountErr)
+                && (strstr(nats_GetLastError(NULL), "not enabled") != NULL));
+    nats_clearLastError();
+
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+    rmtree(datastore);
+    remove(confFile);
+}
+
+static void
+test_JetStreamContextDomain(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsOptions           o;
+    jsAccountInfo       *ai = NULL;
+    jsErrCode           jerr = 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    char                confFile[256] = {'\0'};
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+    _createConfFile(confFile, sizeof(confFile),
+        " jetstream: { domain: ABC }\n"
+    );
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Create context with domain: ");
+    jsOptions_Init(&o);
+    o.Domain = "ABC";
+    s = natsConnection_JetStream(&js, nc, &o);
+    if (s == NATS_OK)
+    {
+        js_lock(js);
+        // The option "Domain" should create the following prefix.
+        // The JS internal option should not have domain set.
+        if ((strcmp(js->opts.Prefix, "$JS.ABC.API") != 0)
+            || (js->opts.Domain != NULL))
+        {
+            s = NATS_ERR;
+        }
+        js_unlock(js);
+    }
+    testCond((s == NATS_OK) && (js != NULL));
+
+    test("Get account: ");
+    s = js_GetAccountInfo(&ai, js, NULL, &jerr);
+    testCond((s == NATS_OK)
+                && (jerr == 0)
+                && (ai != NULL)
+                && (strcmp(ai->Domain, "ABC") == 0)
+                && (ai->Limits.MaxMemory == -1)
+                && (ai->Limits.MaxStore == -1));
+    jsAccountInfo_Destroy(ai);
+    ai = NULL;
+
+    test("Get account with wrong domain override: ");
+    o.Domain = "DEF";
+    s = js_GetAccountInfo(&ai, js, &o, &jerr);
+    testCond((s == NATS_NO_RESPONDERS) && (ai == NULL) && (jerr == JSNotEnabledErr));
+    nats_clearLastError();
+    jerr = 0;
+
+    jsCtx_Destroy(js);
+    js = NULL;
+
+    test("Create context with mix prefix/domain: ");
+    jsOptions_Init(&o);
+    o.Prefix = "should.not.be.used";
+    o.Domain = "ABC";
+    s = natsConnection_JetStream(&js, nc, &o);
+    testCond((s == NATS_OK) && (js != NULL));
+
+    test("Get account: ");
+    s = js_GetAccountInfo(&ai, js, NULL, &jerr);
+    testCond((s == NATS_OK)
+                && (jerr == 0)
+                && (ai != NULL)
+                && (strcmp(ai->Domain, "ABC") == 0)
+                && (ai->Limits.MaxMemory == -1)
+                && (ai->Limits.MaxStore == -1));
+    jsAccountInfo_Destroy(ai);
+    ai = NULL;
+
+    jsCtx_Destroy(js);
+    js = NULL;
+
+    test("Create context without domain: ");
+    jsOptions_Init(&o);
+    s = natsConnection_JetStream(&js, nc, &o);
+    testCond((s == NATS_OK) && (js != NULL));
+
+    test("Get account with domain override: ");
+    o.Domain = "ABC";
+    s = js_GetAccountInfo(&ai, js, &o, &jerr);
+    testCond((s == NATS_OK)
+                && (jerr == 0)
+                && (ai != NULL)
+                && (strcmp(ai->Domain, "ABC") == 0)
+                && (ai->Limits.MaxMemory == -1)
+                && (ai->Limits.MaxStore == -1));
+    jsAccountInfo_Destroy(ai);
+    ai = NULL;
+
+    test("Get account with domain override (prefix option ignored): ");
+    o.Prefix = "should.not.be.used";
+    o.Domain = "ABC";
+    s = js_GetAccountInfo(&ai, js, &o, &jerr);
+    testCond((s == NATS_OK)
+                && (jerr == 0)
+                && (ai != NULL)
+                && (strcmp(ai->Domain, "ABC") == 0)
+                && (ai->Limits.MaxMemory == -1)
+                && (ai->Limits.MaxStore == -1));
+    jsAccountInfo_Destroy(ai);
+    ai = NULL;
+
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+    rmtree(datastore);
+    remove(confFile);
+}
+
+static void
+test_JetStreamMgtStreams(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    jsCtx               *js = NULL;
+    jsCtx               *js2= NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsStreamInfo        *si = NULL;
+    jsStreamConfig      cfg;
+    jsErrCode           jerr = 0;
+    natsMsg             *resp = NULL;
+    natsSubscription    *sub  = NULL;
+    char                *desc = NULL;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    jsOptions           o;
+    int                 i;
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Get context 2: ");
+    // Set some purge options that will be saved in the context.
+    // They can be overridden when invoking Purge API.
+    jsOptions_Init(&o);
+    o.Stream.Purge.Subject = "baz";
+    o.Stream.Purge.Sequence = 10;
+    s = natsConnection_JetStream(&js2, nc, &o);
+    testCond(s == NATS_OK);
+
+    test("Stream config init, bad args: ");
+    s = jsStreamConfig_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Stream config init: ");
+    s = jsStreamConfig_Init(&cfg);
+    testCond(s == NATS_OK);
+
+    test("Add stream, bad args: ");
+    s = js_AddStream(&si, NULL, &cfg, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (si == NULL));
+    nats_clearLastError();
+
+    test("Stream name required: ");
+    s = js_AddStream(&si, js, NULL, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_AddStream(&si, js, &cfg, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG)
+                && (si == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Invalid stream name: ");
+    cfg.Name = "invalid.stream.name";
+    s = js_AddStream(&si, js, &cfg, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG)
+                && (si == NULL)
+                && (strstr(nats_GetLastError(NULL), "invalid stream name") != NULL));
+    nats_clearLastError();
+
+    test("Create basic: ");
+    cfg.Name = "TEST";
+    s = js_AddStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK)
+                && (si != NULL)
+                && (si->Config != NULL)
+                && (strcmp(si->Config->Name, "TEST") == 0)
+                && (jerr == 0));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Destroy null stream info ok: ");
+    jsStreamInfo_Destroy(NULL);
+    testCond(true);
+
+    test("Create failed because already used: ");
+    cfg.Subjects = (const char*[2]){"foo", "bar"};
+    cfg.SubjectsLen = 2;
+    s = js_AddStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_ERR)
+                && (si == NULL)
+                && (strstr(nats_GetLastError(NULL), "already in use") != NULL)
+                && ((jerr == 0) || (jerr == JSStreamNameExistErr)));
+    nats_clearLastError();
+
+    jerr = 0;
+    // Reset config
+    jsStreamConfig_Init(&cfg);
+    test("Add stream without getting stream info back: ");
+    cfg.Name = "TEST2";
+    s = js_AddStream(NULL, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (si == NULL));
+
+    test("Update stream: ");
+    cfg.MaxMsgs = 1000;
+    s = js_UpdateStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0)
+                && (si != NULL)
+                && (si->Config != NULL)
+                && (si->Config->MaxMsgs == 1000));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Update stream (not found): ");
+    cfg.Name = "NOT_FOUND";
+    s = js_UpdateStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND)
+                && (jerr == JSStreamNotFoundErr)
+                && (si == NULL));
+    nats_clearLastError();
+
+    test("Send 1 message: ");
+    s = natsConnection_Request(&resp, nc, "TEST2", "hello", 5, 1000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Get stream info (bad args): ");
+    s = js_GetStreamInfo(NULL, NULL, "TEST2", NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_GetStreamInfo(NULL, js, "TEST2", NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Get stream info (stream name missing): ");
+    s = js_GetStreamInfo(&si, js, NULL, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG)
+                && (si == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Get stream info: ");
+    s = js_GetStreamInfo(&si, js, "TEST2", NULL, &jerr);
+    testCond((s == NATS_OK)
+                && (jerr == 0)
+                && (si != NULL)
+                && (si->Config != NULL)
+                && (strcmp(si->Config->Subjects[0], "TEST2") == 0)
+                && (si->State.Msgs == 1));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Get stream info (not found): ");
+    s = js_GetStreamInfo(&si, js, "NOT_FOUND", NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND)
+                && (jerr == JSStreamNotFoundErr)
+                && (si == NULL)
+                && (nats_GetLastError(NULL) == NULL));
+
+    test("Purge stream (bad args): ");
+    s = js_PurgeStream(NULL, "TEST2", NULL, &jerr);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Purge stream (stream name missing): ");
+    s = js_PurgeStream(js, NULL, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Purge stream: ");
+    s = js_PurgeStream(js, "TEST2", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Purge stream (not found): ");
+    s = js_PurgeStream(js, "NOT_FOUND", NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND)
+                && (jerr == JSStreamNotFoundErr));
+    nats_clearLastError();
+
+    test("Get stream info (verify purged): ");
+    s = js_GetStreamInfo(&si, js, "TEST2", NULL, &jerr);
+    testCond((s == NATS_OK)
+                && (jerr == 0)
+                && (si != NULL)
+                && (si->Config != NULL)
+                && (strcmp(si->Config->Subjects[0], "TEST2") == 0)
+                && (si->State.Msgs == 0));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "TEST3";
+    cfg.Subjects = (const char*[2]){"foo", "bar"};
+    cfg.SubjectsLen = 2;
+    s = js_AddStream(NULL, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Create sub to check purge req: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.STREAM.PURGE.TEST3");
+    testCond(s == NATS_OK);
+
+    test("Purge with options (subj+seq): ");
+    jsOptions_Init(&o);
+    // Will purge only messages from "foo"
+    o.Stream.Purge.Subject = "foo";
+    // Purge up-to but do not include this sequence.
+    o.Stream.Purge.Sequence = 4;
+    // We care only on the outbound request, not the result of the API call.
+    js_PurgeStream(js, "TEST3", &o, NULL);
+    nats_clearLastError();
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK)
+                && (resp != NULL)
+                && (strncmp("{\"filter\":\"foo\",\"seq\":4}",
+                            natsMsg_GetData(resp),
+                            natsMsg_GetDataLength(resp)) == 0));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Purge without options and check context used: ");
+    js_PurgeStream(js2, "TEST3", NULL, NULL);
+    nats_clearLastError();
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK)
+                && (resp != NULL)
+                && (strncmp("{\"filter\":\"baz\",\"seq\":10}",
+                            natsMsg_GetData(resp),
+                            natsMsg_GetDataLength(resp)) == 0));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Purge with options (seq and keep mutually exclusive): ");
+    jsOptions_Init(&o);
+    o.Stream.Purge.Subject = "bar";
+    o.Stream.Purge.Sequence = 8;
+    o.Stream.Purge.Keep = 2;
+    s = js_PurgeStream(js, "TEST3", &o, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), "exclusive") != NULL));
+    nats_clearLastError();
+
+    test("Check no request was sent: ");
+    s = natsSubscription_NextMsg(&resp, sub, 500);
+    testCond((s == NATS_TIMEOUT) && (resp == NULL));
+    nats_clearLastError();
+
+    test("Purge with options (subj+keep): ");
+    jsOptions_Init(&o);
+    o.Stream.Purge.Subject = "bar";
+    // Keep 2 messages in the stream's bar subject space.
+    o.Stream.Purge.Keep = 2;
+    // We care only on the outbound request, not the result of the API call.
+    js_PurgeStream(js, "TEST3", &o, NULL);
+    nats_clearLastError();
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK)
+                && (resp != NULL)
+                && (strncmp("{\"filter\":\"bar\",\"keep\":2}",
+                            natsMsg_GetData(resp),
+                            natsMsg_GetDataLength(resp)) == 0));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Delete stream (bad args): ");
+    s = js_DeleteStream(NULL, "TEST2", NULL, &jerr);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Delete stream (stream name missing): ");
+    s = js_DeleteStream(js, NULL, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Delete stream (not found): ");
+    s = js_DeleteStream(js, "NOT_FOUND", NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND)
+                && (jerr == JSStreamNotFoundErr));
+    nats_clearLastError();
+
+    test("Delete stream: ");
+    s = js_DeleteStream(js, "TEST2", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Get stream info (not found): ");
+    s = js_GetStreamInfo(&si, js, "TEST2", NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND)
+                && (jerr == JSStreamNotFoundErr)
+                && (si == NULL));
+    nats_clearLastError();
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    test("Create sub to check stream info req: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.STREAM.INFO.TEST3");
+    testCond(s == NATS_OK);
+
+    test("StreamInfo with detailed delete: ");
+    o.Stream.Info.DeletedDetails = true;
+    IFOK(s, js_GetStreamInfo(&si, js, "TEST3", &o, &jerr));
+    IFOK(s, natsSubscription_NextMsg(&resp, sub, 1000));
+    testCond((s == NATS_OK)
+                && (resp != NULL)
+                && (natsMsg_GetDataLength(resp) > 0)
+                && (strncmp("{\"deleted_details\":true}",
+                            natsMsg_GetData(resp),
+                            natsMsg_GetDataLength(resp)) == 0));
+    jsStreamInfo_Destroy(si);
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Create stream with description: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "TEST_DESC";
+    cfg.Description = "MyDescription";
+    s = js_AddStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (si != NULL) && (jerr == 0)
+                && (si->Config != NULL)
+                && (si->Config->Description != NULL)
+                && (strcmp(si->Config->Description, "MyDescription") == 0));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Create stream with description too long: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "TEST_DESC2";
+    desc = malloc(4*1024+2);
+    for (i=0;i<4*1024+1;i++)
+        desc[i] = 'a';
+    desc[i]='\0';
+    cfg.Description = (const char*) desc;
+    s = js_AddStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_ERR) && (si == NULL) && (jerr == JSStreamInvalidConfig));
+
+    free(desc);
+    jsCtx_Destroy(js);
+    jsCtx_Destroy(js2);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
+test_JetStreamMgtConsumers(void)
+{
+    natsStatus              s;
+    natsConnection          *nc = NULL;
+    jsCtx                   *js = NULL;
+    natsPid                 pid = NATS_INVALID_PID;
+    jsConsumerInfo          *ci = NULL;
+    jsConsumerConfig        cfg;
+    jsErrCode               jerr = 0;
+    natsMsg                 *resp = NULL;
+    natsSubscription        *sub  = NULL;
+    char                    *desc = NULL;
+    jsStreamConfig          scfg;
+    char                    datastore[256] = {'\0'};
+    char                    cmdLine[1024] = {'\0'};
+    int                     i;
+    const char              *dlvPoliciesStr[] = {
+        "\"deliver_policy\":\"" jsDeliverAllStr "\"",
+        "\"deliver_policy\":\"" jsDeliverLastStr "\"",
+        "\"deliver_policy\":\"" jsDeliverNewStr "\"",
+        "\"deliver_policy\":\"" jsDeliverBySeqStr "\"",
+        "\"deliver_policy\":\"" jsDeliverByTimeStr "\"",
+        "\"deliver_policy\":\"" jsDeliverLastPerSubjectStr "\"",
+    };
+    jsDeliverPolicy         dlvPolicies[] = {
+        js_DeliverAll, js_DeliverLast, js_DeliverNew, js_DeliverByStartSequence,
+        js_DeliverByStartTime, js_DeliverLastPerSubject};
+    const char              *ackPoliciesStr[] = {
+        "\"ack_policy\":\"" jsAckNoneStr "\"",
+        "\"ack_policy\":\"" jsAckAllStr "\"",
+        "\"ack_policy\":\"" jsAckExplictStr "\"",
+    };
+    jsAckPolicy             ackPolicies[] = {
+        js_AckNone, js_AckAll, js_AckExplicit};
+    const char              *replayPoliciesStr[] = {
+        "\"replay_policy\":\"" jsReplayInstantStr "\"",
+        "\"replay_policy\":\"" jsReplayOriginalStr "\"",
+    };
+    jsReplayPolicy          replayPolicies[] = {
+        js_ReplayInstant, js_ReplayOriginal};
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Consumer config init, bad args: ");
+    s = jsConsumerConfig_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Consumer config init: ");
+    s = jsConsumerConfig_Init(&cfg);
+    testCond(s == NATS_OK);
+
+    test("Add consumer, bad args: ");
+    s = js_AddConsumer(&ci, NULL, "MY_STREAM", &cfg, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_AddConsumer(&ci, js, "MY_STREAM", NULL, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (ci == NULL));
+    nats_clearLastError();
+
+    test("Add consumer, stream name required: ");
+    s = js_AddConsumer(&ci, js, NULL, &cfg, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_AddConsumer(&ci, js, "", &cfg, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (ci == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Add consumer, invalid durable name: ");
+    cfg.Durable = "invalid.durable.name";
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (ci == NULL)
+                && (strstr(nats_GetLastError(NULL), "invalid durable name") != NULL));
+    nats_clearLastError();
+
+    test("Create check sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.CONSUMER.CREATE.MY_STREAM");
+    testCond(s == NATS_OK);
+
+    for (i=0; i<6; i++)
+    {
+        test("Deliver policy: ");
+        jsConsumerConfig_Init(&cfg);
+        cfg.DeliverPolicy = dlvPolicies[i];
+        s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+        testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+        nats_clearLastError();
+
+        test("Verify config: ");
+        s = natsSubscription_NextMsg(&resp, sub, 1000);
+        testCond((s == NATS_OK) && (resp != NULL)
+                    && (strstr(natsMsg_GetData(resp), dlvPoliciesStr[i]) != NULL));
+        natsMsg_Destroy(resp);
+        resp = NULL;
+    }
+
+    test("Deliver policy bad: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.DeliverPolicy = (jsDeliverPolicy) 100;
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s = NATS_INVALID_ARG) && (jerr == 0) && (ci == NULL));
+    nats_clearLastError();
+
+    for (i=0; i<3; i++)
+    {
+        test("Ack policy: ");
+        jsConsumerConfig_Init(&cfg);
+        cfg.AckPolicy = ackPolicies[i];
+        s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+        testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+        nats_clearLastError();
+
+        test("Verify config: ");
+        s = natsSubscription_NextMsg(&resp, sub, 1000);
+        testCond((s == NATS_OK) && (resp != NULL)
+                    && (strstr(natsMsg_GetData(resp), ackPoliciesStr[i]) != NULL));
+        natsMsg_Destroy(resp);
+        resp = NULL;
+    }
+
+    test("Ack policy bad: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.AckPolicy = (jsAckPolicy) 100;
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s = NATS_INVALID_ARG) && (jerr == 0) && (ci == NULL));
+    nats_clearLastError();
+
+    for (i=0; i<2; i++)
+    {
+        test("Replay policy: ");
+        jsConsumerConfig_Init(&cfg);
+        cfg.ReplayPolicy = replayPolicies[i];
+        s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+        testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+        nats_clearLastError();
+
+        test("Verify config: ");
+        s = natsSubscription_NextMsg(&resp, sub, 1000);
+        testCond((s == NATS_OK) && (resp != NULL)
+                    && (strstr(natsMsg_GetData(resp), replayPoliciesStr[i]) != NULL));
+        natsMsg_Destroy(resp);
+        resp = NULL;
+    }
+
+    test("Replay policy bad: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.ReplayPolicy = (jsReplayPolicy) 100;
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s = NATS_INVALID_ARG) && (jerr == 0) && (ci == NULL));
+    nats_clearLastError();
+
+    test("Add consumer (non durable): ");
+    cfg.Durable = NULL;
+    cfg.Description = "MyDescription";
+    cfg.DeliverSubject = "foo";
+    cfg.DeliverPolicy = js_DeliverLast;
+    cfg.OptStartSeq = 100;
+    cfg.OptStartTime = 1624472520123450000;
+    cfg.AckPolicy = js_AckExplicit;
+    cfg.AckWait = 200;
+    cfg.MaxDeliver = 300;
+    cfg.FilterSubject = "bar";
+    cfg.ReplayPolicy = js_ReplayInstant;
+    cfg.RateLimit = 400;
+    cfg.SampleFrequency = "60%%";
+    cfg.MaxWaiting = 500;
+    cfg.MaxAckPending = 600;
+    cfg.FlowControl = true;
+    cfg.Heartbeat = 700;
+    // We create a consumer with non existing stream, so we
+    // expect this to fail. We are just checking that the config
+    // is properly serialized.
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+    nats_clearLastError();
+
+    test("Verify config: ");
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK) && (resp != NULL)
+                && (strncmp(natsMsg_GetData(resp),
+                    "{\"stream_name\":\"MY_STREAM\","\
+                    "\"config\":{\"deliver_policy\":\"last\","\
+                    "\"description\":\"MyDescription\","\
+                    "\"deliver_subject\":\"foo\","\
+                    "\"opt_start_seq\":100,"\
+                    "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","\
+                    "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","\
+                    "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"\
+                    "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"\
+                    "\"flow_control\":true,\"idle_heartbeat\":700}}",
+                    natsMsg_GetDataLength(resp)) == 0));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Create check sub: ");
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.CONSUMER.DURABLE.CREATE.MY_STREAM.dur");
+    testCond(s == NATS_OK);
+
+    test("Add consumer (durable): ");
+    cfg.Durable = "dur";
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+    nats_clearLastError();
+
+    test("Verify config: ");
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK) && (resp != NULL)
+                && (strncmp(natsMsg_GetData(resp),
+                    "{\"stream_name\":\"MY_STREAM\","\
+                    "\"config\":{\"deliver_policy\":\"last\","\
+                    "\"description\":\"MyDescription\","\
+                    "\"durable_name\":\"dur\",\"deliver_subject\":\"foo\","\
+                    "\"opt_start_seq\":100,"\
+                    "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","\
+                    "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","\
+                    "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"\
+                    "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"\
+                    "\"flow_control\":true,\"idle_heartbeat\":700}}",
+                    natsMsg_GetDataLength(resp)) == 0));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&scfg);
+    scfg.Name = "MY_STREAM";
+    scfg.Subjects = (const char*[1]){"bar"};
+    scfg.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &scfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Add consumer (durable): ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Durable = "dur";
+    cfg.DeliverSubject = "foo";
+    cfg.FilterSubject = "bar";
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL)
+                && (strcmp(ci->Stream, "MY_STREAM") == 0)
+                && (strcmp(ci->Name, "dur") == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+    test("Publish: ");
+    s = natsConnection_Publish(nc, "bar", "hello", 5);
+    testCond(s == NATS_OK);
+
+    test("Get consumer info (bad args): ");
+    s = js_GetConsumerInfo(NULL, js, "MY_STREAM", "dur", NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_GetConsumerInfo(&ci, NULL, "MY_STREAM", "dur", NULL, &jerr);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Get consumer info (stream required): ");
+    s = js_GetConsumerInfo(&ci, js, NULL, "dur", NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_GetConsumerInfo(&ci, js, "", "dur", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Get consumer info (consumer required): ");
+    s = js_GetConsumerInfo(&ci, js, "MY_STREAM", NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_GetConsumerInfo(&ci, js, "MY_STREAM", "", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrConsumerNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Get consumer info: ");
+    s = js_GetConsumerInfo(&ci, js, "MY_STREAM", "dur", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL)
+                && (strcmp(ci->Stream, "MY_STREAM") == 0)
+                && (strcmp(ci->Name, "dur") == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+    test("Get consumer info (not found): ");
+    s = js_GetConsumerInfo(&ci, js, "MY_STREAM", "dur2", NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND)
+                && (jerr == JSConsumerNotFoundErr)
+                && (ci == NULL)
+                && (nats_GetLastError(NULL) == NULL));
+
+    test("Delete consumer (bad args): ");
+    s = js_DeleteConsumer(NULL, "MY_STREAM", "dur", NULL, &jerr);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Delete consumer (stream required): ");
+    s = js_DeleteConsumer(js, NULL, "dur", NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_DeleteConsumer(js, "", "dur", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Delete consumer (consumer required): ");
+    s = js_DeleteConsumer(js, "MY_STREAM", NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_DeleteConsumer(js, "MY_STREAM", "", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrConsumerNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Delete consumer: ");
+    s = js_DeleteConsumer(js, "MY_STREAM", "dur", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Delete consumer (not found): ");
+    s = js_DeleteConsumer(js, "MY_STREAM", "dur2", NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND)
+                && (jerr == JSConsumerNotFoundErr));
+    nats_clearLastError();
+
+    test("Create consumer with description: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Description = "MyDescription";
+    cfg.DeliverSubject = "desc1";
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (ci != NULL) && (jerr == 0)
+                && (ci->Config != NULL)
+                && (ci->Config->Description != NULL)
+                && (strcmp(ci->Config->Description, "MyDescription") == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+    test("Create consumer with description too long: ");
+    jsConsumerConfig_Init(&cfg);
+    desc = malloc(4*1024+2);
+    for (i=0;i<4*1024+1;i++)
+        desc[i] = 'a';
+    desc[i]='\0';
+    cfg.Description = (const char*) desc;
+    cfg.DeliverSubject = "desc2";
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s == NATS_ERR) && (ci == NULL) && (jerr == JSConsumerDescriptionTooLongErr));
+    nats_clearLastError();
+
+    free(desc);
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
+test_JetStreamPublish(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsStreamConfig      cfg;
+    jsPubOptions        opts;
+    jsErrCode           jerr = 0;
+    jsPubAck            *pa = NULL;
+    natsMsg             *msg = NULL;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Stream config init: ");
+    s = jsStreamConfig_Init(&cfg);
+    testCond(s == NATS_OK);
+
+    test("Add stream: ");
+    cfg.Name = "TEST";
+    cfg.Subjects = (const char*[2]){"foo", "bar"};
+    cfg.SubjectsLen = 2;
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Publish bad args: ");
+    s = js_Publish(NULL, NULL, NULL, "hello", 5, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_Publish(NULL, js, NULL, "hello", 5, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_Publish(NULL, js, "", "hello", 5, NULL, &jerr);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Options init bad args: ");
+    s = jsPubOptions_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Publish bad ttl option: ");
+    s = jsPubOptions_Init(&opts);
+    if (s == NATS_OK)
+    {
+        opts.MaxWait = -10;
+        s = js_Publish(NULL, js, "foo", "hello", 5, &opts, &jerr);
+    }
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), "negative") != NULL));
+    nats_clearLastError();
+
+    test("Publish data: ");
+    opts.MaxWait = 3000;
+    s = js_Publish(NULL, js, "foo", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Publish data with pubAck: ");
+    jsPubOptions_Init(&opts);
+    opts.MsgId = "msg2";
+    s = js_Publish(&pa, js, "foo", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (pa != NULL)
+                && (strcmp(pa->Stream, "TEST") == 0)
+                && (pa->Sequence == 2)
+                && !pa->Duplicate);
+    jsPubAck_Destroy(pa);
+    pa = NULL;
+    // Check this is ok
+    jsPubAck_Destroy(NULL);
+
+    test("Publish message with same msgID: ");
+    s = js_Publish(&pa, js, "foo", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (pa != NULL) && pa->Duplicate);
+    jsPubAck_Destroy(pa);
+    pa = NULL;
+
+    test("Publish with wrong expected stream: ");
+    jsPubOptions_Init(&opts);
+    opts.ExpectStream = "WRONG";
+    s = js_Publish(&pa, js, "foo", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_ERR) && ((jerr == 0) || (jerr == JSStreamNotMatchErr)) && (pa == NULL));
+    jerr = 0;
+
+    test("Publish with wrong expected sequence: ");
+    jsPubOptions_Init(&opts);
+    opts.ExpectLastSeq = 4;
+    s = js_Publish(&pa, js, "foo", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_ERR) && ((jerr == 0) || (jerr == JSStreamWrongLastSequenceErr)) && (pa == NULL));
+    jerr = 0;
+
+    test("Publish with wrong expected message ID: ");
+    jsPubOptions_Init(&opts);
+    opts.ExpectLastMsgId = "WRONG";
+    s = js_Publish(&pa, js, "foo", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_ERR) && ((jerr == 0) || (jerr == JSStreamWrongLastMsgIDErr)) && (pa == NULL));
+    jerr = 0;
+
+    test("Publish 1 msg on bar: ");
+    jsPubOptions_Init(&opts);
+    s = js_Publish(&pa, js, "bar", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (pa != NULL)
+                && (strcmp(pa->Stream, "TEST") == 0)
+                && (pa->Sequence == 3)
+                && !pa->Duplicate);
+    jsPubAck_Destroy(pa);
+    pa = NULL;
+
+    test("Publish with wrong expected subj sequence: ");
+    jsPubOptions_Init(&opts);
+    // There should be 3 messages now, with "foo, 1", "foo, 2" and "bar, 3"
+    // We are going to send on "foo" and say that last expected msg seq on "foo"
+    // is 3, which is wrong, so should fail.
+    opts.ExpectLastSubjectSeq = 3;
+    s = js_Publish(&pa, js, "foo", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_ERR) && ((jerr == 0) || (jerr == JSStreamWrongLastSequenceErr)) && (pa == NULL));
+    jerr = 0;
+    nats_clearLastError();
+
+    test("Publish with correct expected subj sequence: ");
+    // Now set last expected for subject to 2, and it should be ok, and the sequence will be 4.
+    opts.ExpectLastSubjectSeq = 2;
+    s = js_Publish(&pa, js, "foo", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (pa != NULL)
+                && (strcmp(pa->Stream, "TEST") == 0)
+                && (pa->Sequence == 4)
+                && !pa->Duplicate);
+    jsPubAck_Destroy(pa);
+    pa = NULL;
+
+    // ---- Same than above but with PublishMsg variant
+    test("Recreate stream: ");
+    s = js_DeleteStream(js, "TEST", NULL, NULL);
+    IFOK(s, js_AddStream(NULL, js, &cfg, NULL, NULL));
+    testCond(s == NATS_OK);
+
+    test("Publish bad args: ");
+    s = js_PublishMsg(NULL, NULL, NULL, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_PublishMsg(NULL, js, NULL, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_PublishMsg(NULL, NULL, msg, NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Create msg: ");
+    s = natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+    testCond(s == NATS_OK);
+
+    test("Publish bad ttl option: ");
+    s = jsPubOptions_Init(&opts);
+    if (s == NATS_OK)
+    {
+        opts.MaxWait = -10;
+        s = js_PublishMsg(NULL, js, msg, &opts, &jerr);
+    }
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), "negative") != NULL));
+    nats_clearLastError();
+
+    test("Publish data: ");
+    opts.MaxWait = 3000;
+    s = js_PublishMsg(NULL, js, msg, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Publish data with pubAck: ");
+    jsPubOptions_Init(&opts);
+    opts.MsgId = "msg2";
+    s = js_PublishMsg(&pa, js, msg, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (pa != NULL)
+                && (strcmp(pa->Stream, "TEST") == 0)
+                && (pa->Sequence == 2)
+                && !pa->Duplicate);
+    jsPubAck_Destroy(pa);
+    pa = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+
+    test("Publish message with same msgID: ");
+    s = js_PublishMsg(&pa, js, msg, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (pa != NULL) && pa->Duplicate);
+    jsPubAck_Destroy(pa);
+    pa = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+
+    test("Publish with wrong expected stream: ");
+    jsPubOptions_Init(&opts);
+    opts.ExpectStream = "WRONG";
+    s = js_PublishMsg(&pa, js, msg, &opts, &jerr);
+    testCond((s == NATS_ERR) && ((jerr == 0) || (jerr == JSStreamNotMatchErr)) && (pa == NULL));
+    jerr = 0;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+
+    test("Publish with wrong expected sequence: ");
+    jsPubOptions_Init(&opts);
+    opts.ExpectLastSeq = 4;
+    s = js_PublishMsg(&pa, js, msg, &opts, &jerr);
+    testCond((s == NATS_ERR) && ((jerr == 0) || (jerr == JSStreamWrongLastSequenceErr)) && (pa == NULL));
+    jerr = 0;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+
+    test("Publish with wrong expected message ID: ");
+    jsPubOptions_Init(&opts);
+    opts.ExpectLastMsgId = "WRONG";
+    s = js_PublishMsg(&pa, js, msg, &opts, &jerr);
+    testCond((s == NATS_ERR) && ((jerr == 0) || (jerr == JSStreamWrongLastMsgIDErr)) && (pa == NULL));
+    jerr = 0;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Publish 1 msg on bar: ");
+    jsPubOptions_Init(&opts);
+    natsMsg_Create(&msg, "bar", NULL, "hello", 5);
+    s = js_PublishMsg(&pa, js, msg, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (pa != NULL)
+                && (strcmp(pa->Stream, "TEST") == 0)
+                && (pa->Sequence == 3)
+                && !pa->Duplicate);
+    jsPubAck_Destroy(pa);
+    pa = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Publish with wrong expected subj sequence: ");
+    jsPubOptions_Init(&opts);
+    natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+    // There should be 3 messages now, with "foo, 1", "foo, 2" and "bar, 3"
+    // We are going to send on "foo" and say that last expected msg seq on "foo"
+    // is 3, which is wrong, so should fail.
+    opts.ExpectLastSubjectSeq = 3;
+    s = js_PublishMsg(&pa, js, msg, &opts, &jerr);
+    testCond((s == NATS_ERR) && ((jerr == 0) || (jerr == JSStreamWrongLastSequenceErr)) && (pa == NULL));
+    jerr = 0;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Publish with correct expected subj sequence: ");
+    natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+    // Now set last expected for subject to 2, and it should be ok, and the sequence will be 4.
+    opts.ExpectLastSubjectSeq = 2;
+    s = js_PublishMsg(&pa, js, msg, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (pa != NULL)
+                && (strcmp(pa->Stream, "TEST") == 0)
+                && (pa->Sequence == 4)
+                && !pa->Duplicate);
+    jsPubAck_Destroy(pa);
+    pa = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
+_jsPubAckErrHandler(jsCtx *js, jsPubAckErr *pae, void *closure)
+{
+    struct threadArg    *args = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    args->sum++;
+    if (strcmp(natsMsg_GetData(pae->Msg), "fail1") == 0)
+    {
+        if ((pae->Err == NATS_ERR)
+            && ((pae->ErrCode == 0) || (pae->ErrCode == JSStreamWrongLastMsgIDErr))
+            && (strstr(pae->ErrText, "wrong last") != NULL))
+        {
+            args->status = NATS_ERR;
+        }
+    }
+    else if (strcmp(natsMsg_GetData(pae->Msg), "fail2") == 0)
+    {
+        // Resend only once
+        if (args->sum == 2)
+            js_PublishMsgAsync(js, &(pae->Msg), NULL);
+    }
+    else if (strcmp(natsMsg_GetData(pae->Msg), "fail3") == 0)
+    {
+        while (!args->done)
+            natsCondition_Wait(args->c, args->m);
+
+        // Destroy context
+        jsCtx_Destroy(js);
+        // Notify that we are done
+        args->closed = true;
+        natsCondition_Broadcast(args->c);
+    }
+    else if (strcmp(natsMsg_GetData(pae->Msg), "block") == 0)
+    {
+        while (!args->done)
+            natsCondition_Wait(args->c, args->m);
+        nats_Sleep(500);
+
+        args->closed = true;
+        natsCondition_Broadcast(args->c);
+    }
+    else if (strcmp(natsMsg_GetData(pae->Msg), "destroyed") == 0)
+    {
+        // Notify that we are in the callback.
+        args->msgReceived = true;
+        natsCondition_Broadcast(args->c);
+
+        // Now wait to be notified that the context was destroyed.
+        while (!args->closed)
+            natsCondition_Wait(args->c, args->m);
+
+        // Then access the message content again to make sure that message
+        // is still valid.
+        if (strcmp(natsMsg_GetData(pae->Msg), "destroyed") != 0)
+            args->status = NATS_ERR;
+
+        // Notify that we are done.
+        args->done = true;
+        natsCondition_Broadcast(args->c);
+    }
+    else if (pae->Err == NATS_NO_RESPONDERS)
+    {
+        args->msgReceived = true;
+        natsCondition_Broadcast(args->c);
+    }
+    natsMutex_Unlock(args->m);
+}
+
+static void
+test_JetStreamPublishAsync(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsOptions           o;
+    jsStreamConfig      cfg;
+    jsPubOptions        opts;
+    natsMsg             *msg = NULL;
+    natsMsg             *cmsg = NULL;
+    natsMsg             *msg1 = NULL;
+    natsMsg             *msg2 = NULL;
+    const char          *val = NULL;
+    const char          **keys = NULL;
+    int                 keysCount = 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    struct threadArg    args;
+    int                 i;
+    bool                ok1 = false;
+    bool                ok2 = false;
+    natsMsgList         pending;
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Create control sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    testCond(s == NATS_OK);
+
+    test("Prepare JS options: ");
+    s = jsOptions_Init(&o);
+    if (s == NATS_OK)
+    {
+        o.PublishAsync.ErrHandler        = _jsPubAckErrHandler;
+        o.PublishAsync.ErrHandlerClosure = &args;
+    }
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, &o);
+    testCond(s == NATS_OK);
+
+    test("Stream config init: ");
+    s = jsStreamConfig_Init(&cfg);
+    testCond(s == NATS_OK);
+
+    test("Add stream: ");
+    cfg.Name = "foo";
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Publish bad args: ");
+    s = js_PublishAsync(NULL, NULL, "hello", 5, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_PublishAsync(js, NULL, "hello", 5, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_PublishAsync(js, "", "hello", 5, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_PublishAsync(NULL, "foo", "hello", 5, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("PublishAsyncComplete bad args: ");
+    s = js_PublishAsyncComplete(NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("PublishAsyncComplete with no pending: ");
+    s = js_PublishAsyncComplete(js, NULL);
+    testCond(s == NATS_OK);
+
+    test("Publish data: ");
+    s = js_PublishAsync(js, "foo", "ok1", 3, NULL);
+    IFOK(s, js_PublishAsyncComplete(js, NULL));
+    testCond(s == NATS_OK);
+
+    test("Check pub msg no header and reply set: ");
+    s = natsSubscription_NextMsg(&cmsg, sub, 1000);
+    testCond((s == NATS_OK) && (cmsg != NULL)
+                && !nats_IsStringEmpty(natsMsg_GetReply(cmsg))
+                && (natsMsgHeader_Keys(cmsg, &keys, &keysCount) == NATS_NOT_FOUND));
+    natsMsg_Destroy(cmsg);
+
+    test("Publish msg (bad args): ");
+    s = js_PublishMsgAsync(NULL, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_PublishMsgAsync(NULL, &msg, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Publish msg: ");
+    s = jsPubOptions_Init(&opts);
+    if (s == NATS_OK)
+        opts.MsgId = "msgID";
+    IFOK(s, natsMsg_Create(&msg, "foo", NULL, "ok2", 3));
+    IFOK(s, js_PublishMsgAsync(js, &msg, &opts));
+    // Check that library took ownership of message by checking
+    // that msg is now NULL.
+    testCond((s == NATS_OK) && (msg == NULL));
+
+    test("Check pub msg reply set: ");
+    s = natsSubscription_NextMsg(&cmsg, sub, 1000);
+    testCond((s == NATS_OK) && (cmsg != NULL)
+                && !nats_IsStringEmpty(natsMsg_GetReply(cmsg)));
+
+    test("Check msg ID header set: ");
+    s = natsMsgHeader_Get(cmsg, jsMsgIdHdr, &val);
+    testCond((s == NATS_OK) && (strcmp(val, "msgID") == 0));
+    natsMsg_Destroy(cmsg);
+    val = NULL;
+
+    test("Wait for complete (bad args): ");
+    opts.MaxWait = -1000;
+    s = js_PublishAsyncComplete(js, &opts);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Wait for complete: ");
+    opts.MaxWait = 1000;
+    s = js_PublishAsyncComplete(js, &opts);
+    testCond(s == NATS_OK);
+
+    test("Send fails due to wrong last ID: ");
+    args.status = NATS_OK;
+    opts.MsgId = NULL;
+    opts.ExpectLastMsgId = "wrong";
+    s = natsMsg_Create(&msg, "foo", NULL, "fail1", 5);
+    IFOK(s, js_PublishMsgAsync(js, &msg, &opts));
+    testCond((s == NATS_OK) && (msg == NULL));
+
+    test("Check pub msg reply set: ");
+    s = natsSubscription_NextMsg(&cmsg, sub, 1000);
+    testCond((s == NATS_OK) && (cmsg != NULL)
+                && !nats_IsStringEmpty(natsMsg_GetReply(cmsg)));
+
+    test("Check msg ID header not set: ");
+    s = natsMsgHeader_Get(cmsg, jsMsgIdHdr, &val);
+    testCond((s == NATS_NOT_FOUND) && (val == NULL));
+
+    test("Check expect last msg ID header set: ");
+    s = natsMsgHeader_Get(cmsg, jsExpectedLastMsgIdHdr, &val);
+    testCond((s == NATS_OK) && (val != NULL) && (strcmp(val, "wrong") == 0));
+    natsMsg_Destroy(cmsg);
+    val = NULL;
+
+    test("Wait for complete: ");
+    s = js_PublishAsyncComplete(js, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check cb got proper failure: ")
+    natsMutex_Lock(args.m);
+    s = ((args.status == NATS_ERR) && (args.sum == 1) ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Send new failed message, will be resent in cb: ");
+    s = js_PublishAsync(js, "foo", "fail2", 5, &opts);
+    testCond(s == NATS_OK);
+
+    test("Wait complete: ")
+    s = js_PublishAsyncComplete(js, NULL);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args.m);
+        s = (args.sum == 3 ? NATS_OK : NATS_ERR);
+        natsMutex_Unlock(args.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Send new failed messages which will block cb: ");
+    s = js_PublishAsync(js, "foo", "fail3", 5, &opts);
+    // Send another message, which should not be delivered to CB
+    // since we will destroy context from CB on releasing CB
+    // after fail3 msg is processed.
+    IFOK(s, js_PublishAsync(js, "foo", "fail4", 5, &opts));
+    testCond(s == NATS_OK);
+
+    test("Check complete timeout: ");
+    opts.MaxWait = 100;
+    s = js_PublishAsyncComplete(js, &opts);
+    testCond(s == NATS_TIMEOUT);
+    nats_clearLastError();
+
+    test("Release cb which will destroy context: ");
+    s = NATS_OK;
+    natsMutex_Lock(args.m);
+    args.done = true;
+    natsCondition_Broadcast(args.c);
+    while ((s != NATS_TIMEOUT) && !args.closed)
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check that last msg was not delivered to CB: ");
+    natsMutex_Lock(args.m);
+    // cb has seen: fail1, fail2 twice, fail3, so sum == 4
+    s = (args.sum == 4 ? NATS_OK: NATS_ERR);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    js = NULL;
+    jsOptions_Init(&o);
+    test("Stall wait bad args: ");
+    o.PublishAsync.StallWait = -10;
+    s = natsConnection_JetStream(&js, nc, &o);
+    testCond((s == NATS_INVALID_ARG) && (js == NULL));
+    nats_clearLastError();
+
+    test("Recreate context: ");
+    o.PublishAsync.MaxPending        = 1;
+    o.PublishAsync.StallWait         = 100;
+    o.PublishAsync.ErrHandler        = _jsPubAckErrHandler;
+    o.PublishAsync.ErrHandlerClosure = &args;
+    s = natsConnection_JetStream(&js, nc, &o);
+    testCond(s == NATS_OK);
+
+    test("Block CB: ");
+    natsMutex_Lock(args.m);
+    args.done = false;
+    args.closed = false;
+    natsMutex_Unlock(args.m);
+    // Pass options so that we add an expected last msg ID which will
+    // cause failure.
+    jsPubOptions_Init(&opts);
+    opts.ExpectLastMsgId = "WRONG";
+    s = js_PublishAsync(js, "foo", "block", 5, &opts);
+    testCond(s == NATS_OK);
+
+    test("Send should fail due to stall: ");
+    s = js_PublishAsync(js, "foo", "stalled", 7, NULL);
+    testCond((s == NATS_TIMEOUT)
+                && (strstr(nats_GetLastError(NULL), "too many outstanding") != NULL));
+    nats_clearLastError();
+
+    // Release CB, which will sleep a bit before returning, so that we
+    // have time to start a publish here that we will check gets unstalled.
+    // Artificially increase the stallWait so that we don't flap on Travis/etc..
+    natsMutex_Lock(js->mu);
+    js->opts.PublishAsync.StallWait = 10000;
+    natsMutex_Unlock(js->mu);
+    // should unstall the publish that we are going to make here.
+    natsMutex_Lock(args.m);
+    args.done = true;
+    natsCondition_Broadcast(args.c);
+    natsMutex_Unlock(args.m);
+
+    test("Pub will stall: ");
+    s = js_PublishAsync(js, "foo", "ok", 2, NULL);
+    testCond(s == NATS_OK);
+
+    test("Wait complete: ");
+    s = js_PublishAsyncComplete(js, NULL);
+    testCond(s == NATS_OK);
+
+    test("Wait for CB to return: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.closed)
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Msg needs to be destroyed on failure: ");
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+    s = natsMsg_Create(&msg, "foo", NULL, "conclosed", 9);
+    IFOK(s, js_PublishMsgAsync(js, &msg, NULL));
+    testCond((s == NATS_CONNECTION_CLOSED) && (msg != NULL));
+    nats_clearLastError();
+
+    test("Msg destroy: ");
+    natsMsg_Destroy(msg);
+    testCond(true);
+
+    jsCtx_Destroy(js);
+    js = NULL;
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Create context: ");
+    s = jsOptions_Init(&o);
+    if (s == NATS_OK)
+    {
+        o.PublishAsync.ErrHandler        = _jsPubAckErrHandler;
+        o.PublishAsync.ErrHandlerClosure = &args;
+    }
+    IFOK(s, natsConnection_JetStream(&js, nc, &o));
+    testCond((s == NATS_OK) && (js != NULL));
+
+    test("Publish async no responders: ");
+    s = js_PublishAsync(js, "no.responder.check", "hello", 5, NULL);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args.m);
+        while ((s != NATS_TIMEOUT) && !args.msgReceived)
+            s = natsCondition_TimedWait(args.c, args.m, 2000);
+        args.msgReceived = false;
+        natsMutex_Unlock(args.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Enqueue message with bad subject: ");
+    s = natsMsg_Create(&msg, "some.subject", NULL, "hello", 5);
+    if (s == NATS_OK)
+    {
+        natsSubscription *rsub;
+
+        js_lock(js);
+        rsub = js->rsub;
+        js_unlock(js);
+
+        _waitSubPending(rsub, 0);
+
+        natsSub_Lock(rsub);
+        rsub->msgList.head = msg;
+        rsub->msgList.tail = msg;
+        rsub->msgList.msgs = 1;
+        rsub->msgList.bytes = msg->dataLen;
+        natsCondition_Signal(rsub->cond);
+        natsSub_Unlock(rsub);
+
+        // Message is owned by subscription, do not destroy it here.
+    }
+    testCond(s == NATS_OK);
+
+    test("Publish async cb received non existent pid: ");
+    {
+        char subj[64];
+        snprintf(subj, sizeof(subj), "%sabcdefgh", js->rpre);
+        s = natsConnection_Publish(nc, subj, NULL, 0);
+    }
+    testCond(s == NATS_OK);
+
+    test("Produce failed message: ");
+    jsPubOptions_Init(&opts);
+    opts.ExpectStream = "WRONG";
+    natsMutex_Lock(args.m);
+    args.done        = false;
+    args.closed      = false;
+    args.msgReceived = false;
+    args.status      = NATS_OK;
+    natsMutex_Unlock(args.m);
+    // Pass options with wrong expected stream, so pub will fail.
+    s = js_PublishAsync(js, "foo", "destroyed", 9, &opts);
+    testCond(s == NATS_OK);
+
+    test("Wait for msg in CB: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.msgReceived)
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Destroy context, notify CB: ");
+    jsCtx_Destroy(js);
+    js = NULL;
+    natsMutex_Lock(args.m);
+    args.closed = true;
+    natsCondition_Broadcast(args.c);
+    natsMutex_Unlock(args.m);
+    testCond(true);
+
+    test("Wait for CB to return: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.done)
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    if (s == NATS_OK)
+        s = args.status;
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Reply subject can be set: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    IFOK(s, natsMsg_Create(&msg, "bar", "baz", "bat", 3));
+    IFOK(s, js_PublishMsgAsync(js, &msg, NULL));
+    testCond((s == NATS_OK) && (msg == NULL));
+
+    test("Wait complete: ");
+    s = js_PublishAsyncComplete(js, NULL);
+    testCond(s == NATS_OK);
+
+    test("Publish async: ");
+    _stopServer(pid);
+    s = natsMsg_Create(&msg1, "foo", NULL, "hello1", 6);
+    IFOK(s, natsMsg_Create(&msg2, "foo", NULL, "hello2", 6));
+    IFOK(s, js_PublishMsgAsync(js, &msg1, NULL));
+    IFOK(s, js_PublishMsgAsync(js, &msg2, NULL));
+    testCond((s == NATS_OK) && (msg1 == NULL) && (msg2 == NULL));
+
+    test("Get pending (bad args): ");
+    s = js_PublishAsyncGetPendingList(NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_PublishAsyncGetPendingList(&pending, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_PublishAsyncGetPendingList(NULL, js);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Get pending: ");
+    s = js_PublishAsyncGetPendingList(&pending, js);
+    testCond((s == NATS_OK)
+                && (pending.Msgs != NULL)
+                && (pending.Count == 2));
+
+    test("Verify pending list: ");
+    for (i=0; i<pending.Count; i++)
+    {
+        natsMsg *msg = pending.Msgs[i];
+
+        // Cannot assume order, but we should get hello1 and hello2 in all.
+        if (strncmp(natsMsg_GetData(msg), "hello1", 6) == 0)
+        {
+            ok1 = true;
+            msg1 = msg;
+            pending.Msgs[i] = NULL;
+        }
+        else if (strncmp(natsMsg_GetData(msg), "hello2", 6) == 0)
+            ok2 = true;
+    }
+    testCond(ok1 && ok2 && (msg1 != NULL));
+
+    test("Destroy list leaves msg1 valid: ");
+    natsMsgList_Destroy(&pending);
+    // Access something from msg1 to make sure that memory is still valid
+    s = (strncmp(natsMsg_GetData(msg1), "hello1", 6) == 0 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg1);
+    msg1 = NULL;
+
+    test("Get pending, no msg: ");
+    s = js_PublishAsyncGetPendingList(&pending, js);
+    testCond((s == NATS_NOT_FOUND) && (pending.Msgs == NULL) && (pending.Count == 0));
+
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&args);
+    rmtree(datastore);
+}
+
+static void
+_jsMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    struct threadArg *args = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    args->sum++;
+    if (args->control == 1)
+        natsMsg_Ack(msg, NULL);
+    if ((args->control != 2) || (args->sum == args->results[0]))
+        natsCondition_Broadcast(args->c);
+    natsMutex_Unlock(args->m);
+
+    natsMsg_Destroy(msg);
+}
+
+static void
+_jsSubComplete(void *closure)
+{
+    struct threadArg *args = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    args->done = true;
+    natsCondition_Broadcast(args->c);
+    natsMutex_Unlock(args->m);
+}
+
+static void
+_jsCreateSubThread(void *closure)
+{
+    struct threadArg    *args = (struct threadArg*) closure;
+    natsStatus          s;
+    jsCtx               *js;
+    jsSubOptions        so;
+    natsSubscription    *sub = NULL;
+
+    natsMutex_Lock(args->m);
+    js = args->js;
+    natsMutex_Unlock(args->m);
+
+    nats_Sleep(100);
+
+    jsSubOptions_Init(&so);
+    so.Config.Durable = "my_durable";
+    s = js_Subscribe(&sub, js, "concurrent", _jsMsgHandler, (void*) args, NULL, &so, NULL);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args->m);
+        args->attached++;
+        while (!args->done)
+            natsCondition_Wait(args->c, args->m);
+        natsMutex_Unlock(args->m);
+        natsSubscription_Destroy(sub);
+    }
+
+    natsMutex_Lock(args->m);
+    if ((s != NATS_OK) && (args->status == NATS_OK))
+        args->status = s;
+    natsMutex_Unlock(args->m);
+}
+
+static void
+test_JetStreamSubscribe(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsErrCode           jerr= 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    natsSubscription    *ackSub = NULL;
+    natsMsg             *ack = NULL;
+    natsSubscription    *sub2= NULL;
+    jsStreamConfig      sc;
+    jsConsumerConfig    cc;
+    jsSubOptions        so;
+    struct threadArg    args;
+    int                 i;
+    const char          *consName = NULL;
+    jsConsumerInfo      *ci = NULL;
+#ifndef _WIN32
+    char                longsn[256];
+#endif
+    natsThread          *threads[10] = {NULL};
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-DV -js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Sub options init (bad args): ");
+    s = jsSubOptions_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Create async sub (invalid args): ");
+    s = js_Subscribe(NULL, js, "foo", NULL, NULL, NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_Subscribe(&sub, NULL, "foo", NULL, NULL, NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_Subscribe(&sub, js, NULL, NULL, NULL, NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_Subscribe(&sub, js, "", NULL, NULL, NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_Subscribe(&sub, js, "foo", NULL, NULL, NULL, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0));
+    nats_clearLastError();
+
+    test("Create, no stream exists: ");
+    s = js_Subscribe(&sub, js, "foo", _dummyMsgHandler, NULL, NULL, NULL, &jerr);
+    testCond((s != NATS_OK) && (sub == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrNoStreamMatchesSubject) != NULL));
+    nats_clearLastError();
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Populate: ");
+    s = js_Publish(NULL, js, "foo", "msg1", 4, NULL, &jerr);
+    IFOK(s, js_Publish(NULL, js, "foo", "msg2", 4, NULL, &jerr));
+    IFOK(s, js_Publish(NULL, js, "foo", "msg3", 4, NULL, &jerr));
+    testCond(s == NATS_OK);
+
+    test("Create sub to check lib sends ACKs: ");
+    s = natsConnection_SubscribeSync(&ackSub, nc, "$JS.ACK.TEST.>");
+    testCond(s == NATS_OK);
+
+    test("Subscribe, no options: ");
+    s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, &args, NULL, NULL, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msgs received: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != 3))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check acks sent: ");
+    // Sub should have its own autoAck CB, so usrCb should be != NULL
+    natsMutex_Lock(sub->mu);
+    s = (sub->jsi->usrCb != NULL ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(sub->mu);
+    for (i=0; (s == NATS_OK) && (i < 3); i++)
+    {
+        s = natsSubscription_NextMsg(&ack, ackSub, 1000);
+        natsMsg_Destroy(ack);
+        ack = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Create sub with manual ack: ");
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    natsMutex_Lock(args.m);
+    args.control = 1;
+    args.sum = 0;
+    natsMutex_Unlock(args.m);
+    jsSubOptions_Init(&so);
+    so.ManualAck = true;
+    s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msgs received: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != 3))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check acks sent: ");
+    // Sub should have NOT have its own autoAck CB, so usrCb should be NULL
+    natsMutex_Lock(sub->mu);
+    s = (sub->jsi->usrCb == NULL ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(sub->mu);
+    for (i=0; (s == NATS_OK) && (i < 3); i++)
+    {
+        s = natsSubscription_NextMsg(&ack, ackSub, 1000);
+        natsMsg_Destroy(ack);
+        ack = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Check no auto-ack behavior: ");
+    s = natsSubscription_NextMsg(&ack, ackSub, 150);
+    testCond((s == NATS_TIMEOUT) && (ack == NULL));
+    nats_clearLastError();
+
+    test("Create durable: ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "durable";
+    cc.DeliverSubject = "bar";
+    cc.DeliverPolicy = js_DeliverAll;
+    s = js_AddConsumer(NULL, js, "TEST", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Unsub removes ephemeral consumer: ");
+    consName = sub->jsi->ephemeral;
+    s = natsSubscription_Unsubscribe(sub);
+    nats_Sleep(500);
+    IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", consName, NULL, &jerr));
+    testCond((s == NATS_NOT_FOUND) && (ci == NULL) && (jerr == JSConsumerNotFoundErr)
+                && (nats_GetLastError(NULL) == NULL));
+
+    test("Create queue sub with bind: ");
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    natsMutex_Lock(args.m);
+    args.control = 0;
+    args.sum = 0;
+    natsMutex_Unlock(args.m);
+    jsSubOptions_Init(&so);
+    so.Stream = "TEST";
+    so.Consumer = "durable";
+    so.Queue = "queue";
+    s = js_Subscribe(&sub, js, "bar", _jsMsgHandler, (void*)&args, NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msgs received: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != 3))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check acks sent: ");
+    for (i=0; (s == NATS_OK) && (i < 3); i++)
+    {
+        s = natsSubscription_NextMsg(&ack, ackSub, 1000);
+        natsMsg_Destroy(ack);
+        ack = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Create second member: ");
+    s = js_Subscribe(&sub2, js, "bar", _jsMsgHandler, (void*)&args, NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub2 != NULL) && (jerr == 0));
+
+    // Wait a bit and make sure no new message is delivered
+    test("No new message: ");
+    natsMutex_Lock(args.m);
+    natsCondition_TimedWait(args.c, args.m, 250);
+    s = (args.sum == 3 ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Attached consumer not destroyed on unsub: ");
+    s = natsSubscription_Unsubscribe(sub2);
+    nats_Sleep(500);
+    IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", "durable", NULL, &jerr));
+    testCond((s == NATS_OK) && (ci != NULL) && (jerr == 0));
+    jsConsumerInfo_Destroy(ci);
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    natsSubscription_Destroy(sub2);
+    sub2 = NULL;
+
+    test("No auto-ack for AckNone: ");
+    natsMutex_Lock(args.m);
+    args.control = 0;
+    args.sum = 0;
+    args.done = false;
+    natsMutex_Unlock(args.m);
+    jsSubOptions_Init(&so);
+    so.Config.DeliverPolicy = js_DeliverAll;
+    so.Config.AckPolicy = js_AckNone;
+    s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msgs received: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != 3))
+        s = natsCondition_TimedWait(args.c, args.m, 1000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check no ack was sent: ");
+    natsMutex_Lock(sub->mu);
+    // We should not have set an internal autoAck CB, so usrCb should be NULL.
+    s = (sub->jsi->usrCb == NULL ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(sub->mu);
+    IFOK(s, natsSubscription_NextMsg(&ack, ackSub, 300));
+    testCond((s == NATS_TIMEOUT) && (ack == NULL));
+    nats_clearLastError();
+
+    test("Check user setting onComplete is ok: ");
+    s = natsSubscription_SetOnCompleteCB(sub, _jsSubComplete, (void*)&args);
+    testCond(s == NATS_OK);
+
+    test("Wait for complete: ");
+    natsSubscription_Destroy(sub);
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.done)
+        s = natsCondition_TimedWait(args.c, args.m, 1000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+#ifndef _WIN32
+    test("Create stream with long subject: ");
+    for (i=0; i<((int)sizeof(longsn))-1; i++)
+        longsn[i] = 'a';
+    longsn[i]='\0';
+    jsStreamConfig_Init(&sc);
+    sc.Name = longsn;
+    sc.Subjects = (const char*[1]){"baz"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create sub to check lib sends ACKs: ");
+    natsSubscription_Destroy(ackSub);
+    ackSub = NULL;
+    {
+        char tmp[512];
+
+        snprintf(tmp, sizeof(tmp), "$JS.ACK.%s.>", longsn);
+        s = natsConnection_SubscribeSync(&ackSub, nc, tmp);
+    }
+    testCond(s == NATS_OK);
+
+    test("Create sub with auto-ack: ");
+    sub = NULL;
+    natsMutex_Lock(args.m);
+    args.sum = 0;
+    args.control = 0;
+    natsMutex_Unlock(args.m);
+    s = js_Subscribe(&sub, js, "baz", _jsMsgHandler, &args, NULL, NULL, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Send 1 msg: ");
+    s = js_Publish(NULL, js, "baz", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Check msg received: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != 1))
+        s = natsCondition_TimedWait(args.c, args.m, 1000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check ack sent: ");
+    s = natsSubscription_NextMsg(&ack, ackSub, 1000);
+    natsMsg_Destroy(ack);
+    ack = NULL;
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+#endif
+    sub = NULL;
+
+    test("Create stream with several subjects: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "MULTIPLE_SUBJS";
+    sc.Subjects = (const char*[2]){"sub.1", "sub.2"};
+    sc.SubjectsLen = 2;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Create consumer with filter: ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "dur";
+    cc.FilterSubject = "sub.2";
+    s = js_AddConsumer(NULL, js, "MULTIPLE_SUBJS", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Subscribe subj != filter: ");
+    jsSubOptions_Init(&so);
+    so.Stream = "MULTIPLE_SUBJS";
+    so.Consumer = "dur";
+    s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, &args, NULL, &so, &jerr);
+    testCond((s == NATS_ERR) && (sub == NULL)
+                && (strstr(nats_GetLastError(NULL), "filter subject") != NULL));
+    nats_clearLastError();
+
+    test("Create consumer for pull: ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "dur2";
+    s = js_AddConsumer(NULL, js, "MULTIPLE_SUBJS", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Subscribe subj not a pull: ");
+    jsSubOptions_Init(&so);
+    so.Stream = "MULTIPLE_SUBJS";
+    so.Consumer = "dur2";
+    s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, &args, NULL, &so, &jerr);
+    testCond((s == NATS_ERR) && (sub == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrPullSubscribeRequired) != NULL));
+    nats_clearLastError();
+
+    test("Create stream for concurrent test: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST_CONCURRENT";
+    sc.Subjects = (const char*[1]){"concurrent"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Start concurrent creation of subs: ");
+    natsMutex_Lock(args.m);
+    args.sum = 0;
+    args.done = false;
+    args.status = NATS_OK;
+    args.control = 0;
+    args.js = js;
+    natsMutex_Unlock(args.m);
+    s = NATS_OK;
+    for (i=0; ((s == NATS_OK) && (i<10)); i++)
+        s = natsThread_Create(&threads[i], _jsCreateSubThread, (void*) &args);
+    testCond(s == NATS_OK);
+
+    test("Wait for subscriptions to be started: ");
+    {
+        int attempts = 0;
+        natsMutex_Lock(args.m);
+        while ((attempts != 20) && (args.attached != 10))
+        {
+            natsCondition_TimedWait(args.c, args.m, 100);
+            if (args.attached != 10)
+                attempts++;
+        }
+        natsMutex_Unlock(args.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Publish: ");
+    s = js_Publish(NULL, js, "concurrent", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Check each sub got message: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != 10))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    // Signal threads to stop.
+    args.done = true;
+    natsCondition_Broadcast(args.c);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Wait for threads to return: ");
+    for (i=0; i<10; i++)
+    {
+        natsThread_Join(threads[i]);
+        natsThread_Destroy(threads[i]);
+    }
+    testCond(true);
+
+    test("Check results: ");
+    natsMutex_Lock(args.m);
+    s = args.status;
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(ackSub);
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&args);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
+test_JetStreamSubscribeSync(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsErrCode           jerr= 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    natsSubscription    *ackSub = NULL;
+    natsMsg             *ack = NULL;
+    jsStreamConfig      sc;
+    int                 i;
+    natsMsg             *msgs[4];
+    natsMsg             *msg = NULL;
+    const char          *consName;
+    jsConsumerInfo      *ci = NULL;
+    jsMsgMetaData       *meta = NULL;
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create sync sub (invalid args): ");
+    s = js_SubscribeSync(NULL, js, "foo", NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_SubscribeSync(&sub, NULL, "foo", NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_SubscribeSync(&sub, js, NULL, NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_SubscribeSync(&sub, js, "", NULL, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0));
+    nats_clearLastError();
+
+    test("Create, no stream exists: ");
+    s = js_SubscribeSync(&sub, js, "foo", NULL, NULL, &jerr);
+    testCond((s != NATS_OK) && (sub == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrNoStreamMatchesSubject) != NULL));
+    nats_clearLastError();
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Populate: ");
+    s = js_Publish(NULL, js, "foo", "msg1", 4, NULL, &jerr);
+    IFOK(s, js_Publish(NULL, js, "foo", "msg2", 4, NULL, &jerr));
+    IFOK(s, js_Publish(NULL, js, "foo", "msg3", 4, NULL, &jerr));
+    IFOK(s, js_Publish(NULL, js, "foo", "msg4", 4, NULL, &jerr));
+    testCond(s == NATS_OK);
+
+    test("Create sub to check ACKs: ");
+    s = natsConnection_SubscribeSync(&ackSub, nc, "$JS.ACK.TEST.>");
+    testCond(s == NATS_OK);
+
+    test("Subscribe, no options: ");
+    s = js_SubscribeSync(&sub, js, "foo", NULL, NULL, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msgs received: ");
+    for (i=0; (s == NATS_OK) && (i<4); i++)
+        s = natsSubscription_NextMsg(&msgs[i], sub, 1000);
+    testCond(s == NATS_OK);
+
+    test("Check get meta data (bad args): ");
+    s = natsMsg_GetMetaData(NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsMsg_GetMetaData(NULL, msgs[0]);
+    if (s == NATS_INVALID_ARG)
+        s = natsMsg_GetMetaData(&meta, NULL);
+    testCond((s == NATS_INVALID_ARG) && (meta == NULL));
+    nats_clearLastError();
+
+    test("Check get meta: ");
+    s = natsMsg_GetMetaData(&meta, msgs[0]);
+    testCond((s == NATS_OK) && (meta != NULL)
+                && (strcmp(meta->Stream, "TEST") == 0)
+                && (strlen(meta->Consumer) > 0)
+                && (meta->NumPending == 3)
+                && (meta->NumDelivered == 1)
+                && (meta->Sequence.Consumer == 1)
+                && (meta->Sequence.Stream == 1)
+                && (meta->Timestamp > 0));
+    jsMsgMetaData_Destroy(meta);
+    meta = NULL;
+    // Check this is ok
+    jsMsgMetaData_Destroy(NULL);
+
+    test("Ack: ");
+    s = natsMsg_Ack(msgs[0], NULL);
+    IFOK(s, natsSubscription_NextMsg(&ack, ackSub, 1000));
+    if (s == NATS_OK)
+    {
+        s = (strncmp(
+                natsMsg_GetData(ack),
+                jsAckAck,
+                natsMsg_GetDataLength(ack)) == 0 ? NATS_OK : NATS_ERR);
+
+        natsMsg_Destroy(ack);
+        ack = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Second ack does nothing: ");
+    s = natsMsg_Ack(msgs[0], NULL);
+    IFOK(s, natsSubscription_NextMsg(&ack, ackSub, 300));
+    testCond(s == NATS_TIMEOUT);
+    natsMsg_Destroy(msgs[0]);
+
+    test("AckSync: ");
+    s = natsMsg_AckSync(msgs[1], NULL, &jerr);
+    IFOK(s, natsSubscription_NextMsg(&ack, ackSub, 1000));
+    if (s == NATS_OK)
+    {
+        s = (strncmp(
+                natsMsg_GetData(ack),
+                jsAckAck,
+                natsMsg_GetDataLength(ack)) == 0 ? NATS_OK : NATS_ERR);
+
+        natsMsg_Destroy(ack);
+        ack = NULL;
+    }
+    natsMsg_Destroy(msgs[1]);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Nack: ");
+    s = natsMsg_Nak(msgs[2], NULL);
+    IFOK(s, natsSubscription_NextMsg(&ack, ackSub, 1000));
+    if (s == NATS_OK)
+    {
+        s = (strncmp(
+                natsMsg_GetData(ack),
+                jsAckNak,
+                natsMsg_GetDataLength(ack)) == 0 ? NATS_OK : NATS_ERR);
+
+        natsMsg_Destroy(ack);
+        ack = NULL;
+    }
+    natsMsg_Destroy(msgs[2]);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Nack msg resent: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK) && (msg != NULL));
+
+    // Should be able to send InProgress more than once.
+    for (i=0; i<2; i++)
+    {
+        test("InProgress: ");
+        s = natsMsg_InProgress(msg, NULL);
+        IFOK(s, natsSubscription_NextMsg(&ack, ackSub, 1000));
+        if (s == NATS_OK)
+        {
+            s = (strncmp(
+                    natsMsg_GetData(ack),
+                    jsAckInProgress,
+                    natsMsg_GetDataLength(ack)) == 0 ? NATS_OK : NATS_ERR);
+
+            natsMsg_Destroy(ack);
+            ack = NULL;
+        }
+        testCond(s == NATS_OK);
+    }
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Term: ");
+    s = natsMsg_Term(msgs[3], NULL);
+    IFOK(s, natsSubscription_NextMsg(&ack, ackSub, 1000));
+    if (s == NATS_OK)
+    {
+        s = (strncmp(
+                natsMsg_GetData(ack),
+                jsAckTerm,
+                natsMsg_GetDataLength(ack)) == 0 ? NATS_OK : NATS_ERR);
+
+        natsMsg_Destroy(ack);
+        ack = NULL;
+    }
+    natsMsg_Destroy(msgs[3]);
+    testCond(s == NATS_OK);
+
+    test("Ack failure (bad args): ");
+    s = natsMsg_Ack(NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsMsg_AckSync(NULL, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsMsg_Nak(NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsMsg_InProgress(NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsMsg_Term(NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Ack failure (not bound): ");
+    natsMsg_Create(&msg, "foo", NULL, "test", 4);
+    s = natsMsg_Ack(msg, NULL);
+    if (s == NATS_ILLEGAL_STATE)
+        s = natsMsg_AckSync(msg, NULL, NULL);
+    if (s == NATS_ILLEGAL_STATE)
+        s = natsMsg_Nak(msg, NULL);
+    if (s == NATS_ILLEGAL_STATE)
+        s = natsMsg_InProgress(msg, NULL);
+    if (s == NATS_ILLEGAL_STATE)
+        s = natsMsg_Term(msg, NULL);
+    testCond((s == NATS_ILLEGAL_STATE)
+                && (strstr(nats_GetLastError(NULL), jsErrMsgNotBound) != NULL));
+    nats_clearLastError();
+
+    test("Get Meta failure (not bound): ")
+    s = natsMsg_GetMetaData(&meta, msg);
+    testCond((s == NATS_ILLEGAL_STATE) && (meta == NULL)
+                 && (strstr(nats_GetLastError(NULL), jsErrMsgNotBound) != NULL));
+    nats_clearLastError();
+
+    test("Ack failure (no reply): ");
+    // artificially bind to existing sub
+    msg->sub = sub;
+    s = natsMsg_Ack(msg, NULL);
+    if (s == NATS_ILLEGAL_STATE)
+        s = natsMsg_AckSync(msg, NULL, NULL);
+    if (s == NATS_ILLEGAL_STATE)
+        s = natsMsg_Nak(msg, NULL);
+    if (s == NATS_ILLEGAL_STATE)
+        s = natsMsg_InProgress(msg, NULL);
+    if (s == NATS_ILLEGAL_STATE)
+        s = natsMsg_Term(msg, NULL);
+    testCond((s == NATS_ILLEGAL_STATE)
+                && (strstr(nats_GetLastError(NULL), jsErrMsgNotJS) != NULL));
+    nats_clearLastError();
+
+    test("Get Meta failure (no reply): ");
+    s = natsMsg_GetMetaData(&meta, msg);
+    testCond((s == NATS_ILLEGAL_STATE) && (meta == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrMsgNotJS) != NULL));
+    nats_clearLastError();
+    msg->sub = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Get Meta failure (not JS Ack): ");
+    s = natsMsg_Create(&msg, "foo", "not.a.js.ack", NULL, 0);
+    if (s == NATS_OK)
+        msg->sub = sub;
+    IFOK(s, natsMsg_GetMetaData(&meta, msg));
+    testCond((s == NATS_ERR) && (meta == NULL)
+                && (strstr(nats_GetLastError(NULL), "invalid meta") != NULL));
+    nats_clearLastError();
+    msg->sub = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Get Meta failure (invalid content): ");
+    s = natsMsg_Create(&msg, "foo", "$JS.ACK.TEST.CONSUMER.and.some.bad.other.things", NULL, 0);
+    if (s == NATS_OK)
+        msg->sub = sub;
+    IFOK(s, natsMsg_GetMetaData(&meta, msg));
+    testCond((s == NATS_ERR) && (meta == NULL)
+                && (strstr(nats_GetLastError(NULL), "invalid meta") != NULL));
+    nats_clearLastError();
+    msg->sub = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Send msg: ");
+    s = js_Publish(NULL, js, "foo", "block", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Drain does not delete consumer: ");
+    consName = sub->jsi->ephemeral;
+    s = natsSubscription_Drain(sub);
+    nats_Sleep(500);
+    IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", consName, NULL, &jerr));
+    testCond((s == NATS_OK) && (ci != NULL) && (jerr == 0));
+    jsConsumerInfo_Destroy(ci);
+
+    test("Wait for drain to complete: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    natsMsg_Destroy(msg);
+    IFOK(s, natsSubscription_WaitForDrainCompletion(sub, 1000));
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    natsSubscription_Destroy(ackSub);
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
+_jsSeqMismatch(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
+{
+    struct threadArg *args = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    if (err == NATS_MISMATCH)
+        args->done = true;
+    else if (err == NATS_MISSED_HEARTBEAT)
+        args->results[args->control]++;
+    natsCondition_Broadcast(args->c);
+    natsMutex_Unlock(args->m);
+}
+
+static void
+test_JetStreamSubscribeIdleHearbeat(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsErrCode           jerr= 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    jsStreamConfig      sc;
+    jsSubOptions        so;
+    natsMsg             *msg;
+    struct threadArg    args;
+    natsOptions         *opts = NULL;
+    natsSubscription    *nsub = NULL;
+    jsConsumerSequenceMismatch csm;
+    jsConsumerConfig cc;
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    s = natsOptions_Create(&opts);
+    IFOK(s, _createDefaultThreadArgsForCbTests(&args));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsOptions_SetErrorHandler(opts, _jsSeqMismatch, (void*) &args);
+    IFOK(s, natsOptions_SetReconnectWait(opts, 50));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Populate: ");
+    s = js_Publish(NULL, js, "foo", "msg", 3, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Subscribe async: ");
+    jsSubOptions_Init(&so);
+    so.Config.Heartbeat = 150*1000000;
+    s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msg received: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != 1))
+        s = natsCondition_TimedWait(args.c, args.m, 1000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check HB received: ");
+    nats_Sleep(300);
+    natsMutex_Lock(sub->mu);
+    s = (sub->jsi->dseq == 1 ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(sub->mu);
+    testCond(s == NATS_OK);
+
+    test("Check HB is not given to app: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum == 1))
+        s = natsCondition_TimedWait(args.c, args.m, 300);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_TIMEOUT);
+
+    test("Check get mismatch (bad args): ");
+    // Create regular sub to check invalid args.
+    s = natsConnection_SubscribeSync(&nsub, nc, "normal_sub");
+    IFOK(s, natsSubscription_GetSequenceMismatch(NULL, NULL));
+    if (s == NATS_INVALID_ARG)
+        s = natsSubscription_GetSequenceMismatch(NULL, sub);
+    if (s == NATS_INVALID_ARG)
+        s = natsSubscription_GetSequenceMismatch(&csm, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Not a JS sub: ")
+    s = natsSubscription_GetSequenceMismatch(&csm, nsub);
+    testCond((s == NATS_INVALID_SUBSCRIPTION)
+                && (strstr(nats_GetLastError(NULL), jsErrNotAJetStreamSubscription) != NULL));
+    nats_clearLastError();
+
+    test("Check get mismatch returns not found: ");
+    s = natsSubscription_GetSequenceMismatch(&csm, sub);
+    testCond((s == NATS_NOT_FOUND) && (nats_GetLastError(NULL) == NULL));
+
+    test("Send new message: ");
+    s = js_Publish(NULL, js, "foo", "msg", 3, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Check seq mismatch: ");
+    {
+        bool done = false;
+
+        while (!done)
+        {
+            nats_Sleep(50);
+            natsMutex_Lock(sub->mu);
+            if (sub->jsi->dseq == 2)
+            {
+                sub->jsi->dseq = 1;
+                done = true;
+            }
+            natsMutex_Unlock(sub->mu);
+        }
+    }
+    // Wait for past the next HB and we should get an async error
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.done)
+        s = natsCondition_TimedWait(args.c, args.m, 300);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check that notification is sent only once: ");
+    natsMutex_Lock(args.m);
+    args.done = false;
+    natsMutex_Unlock(args.m);
+    // Wait for more than 1 HB, the callback should not
+    // be invoked because we have notified once and
+    // the mismatch still exist.
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.done)
+        s = natsCondition_TimedWait(args.c, args.m, 300);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_TIMEOUT);
+
+    test("Check get mismatch: ");
+    s = natsSubscription_GetSequenceMismatch(&csm, sub);
+    testCond((s == NATS_OK)
+                && (csm.Stream == 2)
+                && (csm.ConsumerClient == 1)
+                && (csm.ConsumerServer == 2));
+
+    test("Check mismatch suppression cleared: ");
+    // Now restore the dseq to check that notification
+    // suppression is cleared.
+    natsMutex_Lock(sub->mu);
+    sub->jsi->dseq = 2;
+    natsMutex_Unlock(sub->mu);
+    nats_Sleep(300);
+    natsMutex_Lock(sub->mu);
+    s = (sub->jsi->ssmn == false ? NATS_OK : NATS_ERR);
+    // At the same time change again dseq so that
+    // we once again get the callback fire up.
+    sub->jsi->dseq = 1;
+    natsMutex_Unlock(sub->mu);
+    testCond(s == NATS_OK);
+
+    test("Check async cb invoked: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.done)
+        s = natsCondition_TimedWait(args.c, args.m, 1000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check HB timer reports missed HB: ");
+    _stopServer(pid);
+    nats_Sleep(300);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.results[0] == 0))
+        s = natsCondition_TimedWait(args.c, args.m, 1000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    natsMutex_Lock(args.m);
+    args.sum = 0;
+    args.done = false;
+    args.control = 1;
+    natsMutex_Unlock(args.m);
+
+    test("Subscribe sync: ");
+    jsSubOptions_Init(&so);
+    so.Config.Heartbeat = 150*1000000;
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msgs received: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    IFOK(s, natsMsg_Ack(msg, NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    IFOK(s, natsMsg_Ack(msg, NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    testCond(s == NATS_OK);
+
+    test("Check HB received: ");
+    nats_Sleep(300);
+    natsMutex_Lock(sub->mu);
+    s = (sub->jsi->dseq == 2 ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(sub->mu);
+    testCond(s == NATS_OK);
+
+    test("Check HB is not given to app: ");
+    s = natsSubscription_NextMsg(&msg, sub, 250);
+    testCond((s == NATS_TIMEOUT) && (msg == NULL));
+    nats_clearLastError();
+
+    test("Send new message: ");
+    s = js_Publish(NULL, js, "foo", "msg", 3, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Check seq mismatch, no async cb: ");
+    {
+        bool done = false;
+        while (!done)
+        {
+            nats_Sleep(50);
+            natsMutex_Lock(sub->mu);
+            if (sub->jsi->dseq == 3)
+            {
+                sub->jsi->dseq = 1;
+                done = true;
+            }
+            natsMutex_Unlock(sub->mu);
+        }
+    }
+    // For sync subs, we should not get async error
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.done)
+        s = natsCondition_TimedWait(args.c, args.m, 300);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_TIMEOUT);
+    nats_clearLastError();
+
+    test("NextMsg reports error: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_MISMATCH) && (msg == NULL));
+    nats_clearLastError();
+
+    test("NextMsg again is ok: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK) && (msg != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check get mismatch: ");
+    s = natsSubscription_GetSequenceMismatch(&csm, sub);
+    testCond((s == NATS_OK)
+                && (csm.Stream == 3)
+                && (csm.ConsumerClient == 1)
+                && (csm.ConsumerServer == 3));
+
+    test("Check mismatch suppression cleared: ");
+    // Now restore the dseq to check that notification
+    // suppression is cleared.
+    natsMutex_Lock(sub->mu);
+    sub->jsi->dseq = 3;
+    natsMutex_Unlock(sub->mu);
+    nats_Sleep(300);
+    natsMutex_Lock(sub->mu);
+    s = (sub->jsi->ssmn == false && sub->jsi->sm == false ? NATS_OK : NATS_ERR);
+    // At the same time change again dseq so that
+    // we once again get the NextMsg failure.
+    sub->jsi->dseq = 1;
+    natsMutex_Unlock(sub->mu);
+    testCond(s == NATS_OK);
+
+    test("NextMsg reports error: ");
+    nats_Sleep(300);
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_MISMATCH) && (msg == NULL));
+    nats_clearLastError();
+
+    test("Check HB timer reports missed HB: ");
+    s = NATS_OK;
+    _stopServer(pid);
+    nats_Sleep(300);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.results[1] == 0))
+        s = natsCondition_TimedWait(args.c, args.m, 1000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("HB can't work with Queue: ");
+    jsSubOptions_Init(&so);
+    so.Queue = "queue";
+    so.Config.DeliverSubject = "bar";
+    so.Config.Heartbeat = 150*1000000;
+    s = js_Subscribe(&sub, js, "bar", _jsMsgHandler, (void*)&args, NULL, &so, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrNoHeartbeatForQueueSub) != NULL));
+    nats_clearLastError();
+
+    test("Create consumer with HB: ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "dur";
+    cc.DeliverSubject = "bar";
+    cc.Heartbeat = 150*1000000;
+    s = js_AddConsumer(NULL, js, "TEST", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Queue sub against this consumer: ");
+    jsSubOptions_Init(&so);
+    so.Queue = "queue";
+    so.Stream = "TEST";
+    so.Consumer = "dur";
+    so.Config.DeliverSubject = "bar";
+    s = js_Subscribe(&sub, js, "bar", _jsMsgHandler, (void*)&args, NULL, &so, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_SubscribeSync(&sub, js, "bar", NULL, &so, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrNoHeartbeatForQueueSub) != NULL));
+    nats_clearLastError();
+
+    natsSubscription_Destroy(nsub);
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&args);
+    natsOptions_Destroy(opts);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
+test_JetStreamSubscribeFlowControl(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsErrCode           jerr= 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    jsStreamConfig      sc;
+    jsSubOptions        so;
+    natsMsg             *msg;
+    struct threadArg    args;
+    natsSubscription    *nsub = NULL;
+    int                 i;
+    int                 total = 20000;
+    char                *data = NULL;
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    data = malloc(1024);
+    if (data == NULL)
+        FAIL("Unable to allocate data");
+
+    if (valgrind)
+        total = 200;
+
+    if (data == NULL)
+        FAIL("Unable to allocate data");
+    for (i=0; i<1024; i++)
+        data[i] = 'A';
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+    args.control = 2;
+    args.results[0] = total;
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Populate: ");
+    for (i=0; (s == NATS_OK) && (i<total); i++)
+        s = js_PublishAsync(js, "foo", data, 1024, NULL);
+    testCond(s == NATS_OK);
+
+    test("Wait complete: ");
+    s = js_PublishAsyncComplete(js, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create sub to check for FC: ");
+    s = natsConnection_SubscribeSync(&nsub, nc, "$JS.FC.TEST.>");
+    testCond((s == NATS_OK) && (nsub != NULL));
+
+    test("Subscribe async: ");
+    jsSubOptions_Init(&so);
+    so.Config.FlowControl = true;
+    s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msg received: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum != total))
+        s = natsCondition_TimedWait(args.c, args.m, 10000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check FC responses were sent: ");
+    s = natsSubscription_NextMsg(&msg, nsub, 2000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    natsSubscription_Destroy(nsub);
+    nsub = NULL;
+
+    test("Create sub to check for FC: ");
+    s = natsConnection_SubscribeSync(&nsub, nc, "$JS.FC.TEST.>");
+    testCond((s == NATS_OK) && (nsub != NULL));
+
+    test("Subscribe sync: ");
+    jsSubOptions_Init(&so);
+    so.Config.FlowControl = true;
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msg received: ");
+    for (i=0; (s == NATS_OK) && (i<total); i++)
+    {
+        s = natsSubscription_NextMsg(&msg, sub, 1000);
+        natsMsg_Destroy(msg);
+        msg = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Check FC responses were sent: ");
+    s = natsSubscription_NextMsg(&msg, nsub, 2000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    free(data);
+    natsSubscription_Destroy(sub);
+    natsSubscription_Destroy(nsub);
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&args);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
+_jsPubThread(void *closure)
+{
+    jsCtx   *js = (jsCtx*) closure;
+    int     i;
+
+    nats_Sleep(300);
+    for (i=0; i<5; i++)
+        js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
+}
+
+static void
+_sendToPullSub(void *closure)
+{
+    struct threadArg    *args = (struct threadArg*) closure;
+    natsMsg             *msg  = NULL;
+    natsStatus          s;
+
+    natsMutex_Lock(args->m);
+    s = natsMsg_create(&msg, args->sub->subject, (int) strlen(args->sub->subject),
+                        NULL, 0, args->string, (int) strlen(args->string), (int) strlen(args->string));
+    IFOK(s, natsConnection_PublishMsg(args->nc, msg));
+    natsMutex_Unlock(args->m);
+    natsMsg_Destroy(msg);
+}
+
+static void
+test_JetStreamSubscribePull(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    natsMsg             *msg = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsErrCode           jerr= 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    natsMsgList         list;
+    jsStreamConfig      sc;
+    jsSubOptions        so;
+    struct threadArg    args;
+    int64_t             start, dur;
+    int                 i;
+    natsThread          *t = NULL;
+    const char          *badAckStr[] = {jsAckNoneStr, jsAckAllStr};
+    jsAckPolicy         badAck[] = {js_AckNone, js_AckAll};
+    jsConsumerConfig    cc;
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create pull sub (invalid args): ");
+    s = js_PullSubscribe(NULL, js, "foo", "dur", NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_PullSubscribe(&sub, NULL, "foo", "dur", NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_PullSubscribe(&sub, js, NULL, "dur", NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_PullSubscribe(&sub, js, "", "dur", NULL, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0));
+    nats_clearLastError();
+
+    test("Durable name required: ");
+    s = js_PullSubscribe(&sub, js, "foo", NULL, NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_PullSubscribe(&sub, js, "foo", "", NULL, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrDurRequired) != NULL));
+    nats_clearLastError();
+
+    for (i=0; i<2; i++)
+    {
+        test("Create pull sub (invalid ack mode): ");
+        jsSubOptions_Init(&so);
+        so.Config.AckPolicy = badAck[i];
+        s = js_PullSubscribe(&sub, js, "foo", "dur", NULL, &so, &jerr);
+        testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                    && (strstr(nats_GetLastError(NULL), badAckStr[i]) != NULL));
+        nats_clearLastError();
+    }
+
+    test("Create reg sync sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    testCond((s == NATS_OK) && (sub != NULL));
+
+    test("Fetch bad args: ");
+    s = natsSubscription_Fetch(NULL, sub, 1, 1000, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsSubscription_Fetch(&list, NULL, 1, 1000, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsSubscription_Fetch(&list, sub, 0, 1000, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsSubscription_Fetch(&list, sub, -1, 1000, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Fetch bad timeout: ");
+    s = natsSubscription_Fetch(&list, sub, 1, 0, NULL);
+    if (s == NATS_INVALID_TIMEOUT)
+        s = natsSubscription_Fetch(&list, sub, 1, -1, NULL);
+    testCond(s == NATS_INVALID_TIMEOUT);
+    nats_clearLastError();
+
+    test("Fetch bad sub: ");
+    s = natsSubscription_Fetch(&list, sub, 1, 1000, NULL);
+    testCond((s == NATS_INVALID_SUBSCRIPTION)
+                && (strstr(nats_GetLastError(NULL), jsErrNotAPullSubscription) != NULL));
+    nats_clearLastError();
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Create reg async sub: ");
+    s = natsConnection_Subscribe(&sub, nc, "foo", _dummyMsgHandler, NULL);
+    testCond((s == NATS_OK) && (sub != NULL));
+
+    test("Fetch bad sub: ");
+    s = natsSubscription_Fetch(&list, sub, 1, 1000, NULL);
+    testCond((s == NATS_INVALID_SUBSCRIPTION)
+                && (strstr(nats_GetLastError(NULL), jsErrNotAPullSubscription) != NULL));
+    nats_clearLastError();
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Create push consumer: ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "push_dur";
+    cc.DeliverSubject = "push.deliver";
+    s = js_AddConsumer(NULL, js, "TEST", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Try create pull sub from push consumer: ");
+    s = js_PullSubscribe(&sub, js, "foo", "push_dur", NULL, NULL, &jerr);
+    testCond((s == NATS_ERR) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrPullSubscribeToPushConsumer) != NULL));
+    nats_clearLastError();
+
+    test("Create pull bound failure: ");
+    jsSubOptions_Init(&so);
+    so.Stream = "TEST";
+    so.Consumer = "bar";
+    s = js_PullSubscribe(&sub, js, "foo", "bar", NULL, &so, &jerr);
+    testCond((s == NATS_NOT_FOUND) && (sub == NULL) && (jerr == JSConsumerNotFoundErr));
+    nats_clearLastError();
+
+    test("Create pull sub: ");
+    jsSubOptions_Init(&so);
+    so.Config.MaxAckPending = 10;
+    so.Config.AckWait = 300*1000000;
+    s = js_PullSubscribe(&sub, js, "foo", "dur", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Can't call NextMsg: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_INVALID_SUBSCRIPTION) && (msg == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrNotApplicableToPullSub) != NULL));
+    nats_clearLastError();
+
+    test("Fetch, no msg avail, timeout: ");
+    start = nats_Now();
+    s = natsSubscription_Fetch(&list, sub, 1, 500, &jerr);
+    dur = nats_Now() - start;
+    testCond((s == NATS_TIMEOUT) && (list.Msgs == NULL) && (list.Count == 0) && (jerr == 0)
+                && (dur >= 450) && (dur <= 600));
+
+    test("Send a message: ");
+    s = js_Publish(NULL, js, "foo", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Fetch batch 1: ");
+    start = nats_Now();
+    s = natsSubscription_Fetch(&list, sub, 1, 1000, &jerr);
+    dur = nats_Now() - start;
+    testCond((s == NATS_OK) && (list.Msgs != NULL) && (list.Count == 1) && (jerr == 0)
+                && (dur <= 500));
+
+    test("Ack: ");
+    for (i=0; (s == NATS_OK) && (i<list.Count); i++)
+        s = natsMsg_Ack(list.Msgs[i], NULL);
+    natsMsgList_Destroy(&list);
+    testCond(s == NATS_OK);
+
+    test("Send a message: ");
+    s = js_Publish(NULL, js, "foo", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Fetch batch more than avail: ");
+    start = nats_Now();
+    s = natsSubscription_Fetch(&list, sub, 5, 1000, &jerr);
+    dur = nats_Now() - start;
+    testCond((s == NATS_OK) && (list.Msgs != NULL) && (list.Count == 1) && (jerr == 0)
+                && (dur <= 500));
+
+    test("Ack: ");
+    for (i=0; (s == NATS_OK) && (i<list.Count); i++)
+        s = natsMsg_Ack(list.Msgs[i], NULL);
+    natsMsgList_Destroy(&list);
+    testCond(s == NATS_OK);
+
+    test("Start thread to send: ");
+    s = natsThread_Create(&t, _jsPubThread, (void*) js);
+    testCond(s == NATS_OK);
+
+    test("Fetch wait for msgs: ");
+    s = natsSubscription_Fetch(&list, sub, 5, 2000, &jerr);
+    testCond((s == NATS_OK) && (list.Msgs != NULL) && (list.Count == 5) && (jerr == 0));
+
+    // Destroy msgs without ack'ing them.
+    natsMsgList_Destroy(&list);
+
+    // Wait for AckWait and messages should be redelivered.
+    nats_Sleep(500);
+
+    test("Fetch get redelivered msgs: ");
+    s = natsSubscription_Fetch(&list, sub, 5, 2000, &jerr);
+    testCond((s == NATS_OK) && (list.Msgs != NULL) && (list.Count == 5) && (jerr == 0));
+
+    test("Ack: ");
+    for (i=0; (s == NATS_OK) && (i<list.Count); i++)
+        s = natsMsg_Ack(list.Msgs[i], NULL);
+    natsMsgList_Destroy(&list);
+    testCond(s == NATS_OK);
+
+    test("Fetch with batch > MaxAckPending: ");
+    s = natsSubscription_Fetch(&list, sub, ((int)so.Config.MaxAckPending)+10, 1000, &jerr);
+    testCond((s == NATS_ERR) && (list.Msgs == NULL) && (list.Count == 0) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), "MaxAckPending") != NULL));
+    nats_clearLastError();
+
+    test("Receive msg with header no data: ");
+    s = natsMsg_create(&msg, sub->subject, (int) strlen(sub->subject), NULL, 0,
+                        "NATS/1.0\r\nk:v\r\n\r\n", 17, 17);
+    IFOK(s, natsConnection_PublishMsg(nc, msg));
+    IFOK(s, natsSubscription_Fetch(&list, sub, 1, 1000, &jerr));
+    testCond((s == NATS_OK) && (list.Msgs != NULL) && (list.Count == 1) && (jerr == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsMsgList_Destroy(&list);
+
+    // Make sure there is no more pending.
+    _waitSubPending(sub, 0);
+
+    test("Msg with 404 status present before fetch: ");
+    s = natsMsg_create(&msg, sub->subject, (int) strlen(sub->subject), NULL, 0,
+                        "NATS/1.0 404 No Messages\r\n\r\n", 28, 28);
+    IFOK(s, natsConnection_PublishMsg(nc, msg));
+    if (s == NATS_OK)
+        _waitSubPending(sub, 1);
+    IFOK(s, natsSubscription_Fetch(&list, sub, 1, 100, &jerr));
+    testCond((s == NATS_TIMEOUT) && (list.Msgs == NULL) && (list.Count == 0) && (jerr == 0));
+    nats_clearLastError();
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsMsgList_Destroy(&list);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    t = NULL;
+
+    test("Fetch gets 408: ");
+    natsMutex_Lock(args.m);
+    args.nc = nc;
+    args.sub = sub;
+    args.string = "NATS/1.0 408 Request Timeout\r\n\r\n";
+    natsMutex_Unlock(args.m);
+    s = natsThread_Create(&t, _sendToPullSub, (void*) &args);
+    IFOK(s, natsSubscription_Fetch(&list, sub, 1, 10000, &jerr));
+    testCond((s == NATS_TIMEOUT) && (list.Msgs == NULL) && (list.Count == 0) && (jerr == 0));
+    nats_clearLastError();
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsMsgList_Destroy(&list);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    t = NULL;
+
+    test("Fetch gets 503: ");
+    natsMutex_Lock(args.m);
+    args.string = "NATS/1.0 503\r\n\r\n";
+    natsMutex_Unlock(args.m);
+    s = natsThread_Create(&t, _sendToPullSub, (void*) &args);
+    IFOK(s, natsSubscription_Fetch(&list, sub, 1, 10000, &jerr));
+    testCond((s == NATS_NO_RESPONDERS) && (list.Msgs == NULL) && (list.Count == 0) && (jerr == 0));
+    nats_clearLastError();
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsMsgList_Destroy(&list);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    natsSubscription_Destroy(sub);
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&args);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -22031,6 +26860,7 @@ static testInfo allTests[] =
     {"natsSock_IPOrder",                test_natsSock_IPOrder},
     {"natsSock_ReadLine",               test_natsSock_ReadLine},
     {"natsJSON",                        test_natsJSON},
+    {"natsEncodeTimeUTC",               test_natsEncodeTimeUTC},
     {"natsErrWithLongText",             test_natsErrWithLongText},
     {"natsErrStackMoreThanMaxFrames",   test_natsErrStackMoreThanMaxFrames},
     {"natsMsg",                         test_natsMsg},
@@ -22045,6 +26875,7 @@ static testInfo allTests[] =
     {"natsSign",                        test_natsSign},
     {"HeadersLift",                     test_natsMsgHeadersLift},
     {"HeadersAPIs",                     test_natsMsgHeaderAPIs},
+    {"MsgIsJSControl",                  test_natsMsgIsJSCtrl},
 
     // Package Level Tests
 
@@ -22218,6 +27049,24 @@ static testInfo allTests[] =
     {"ReconnectJitter",                 test_ReconnectJitter},
     {"CustomReconnectDelay",            test_CustomReconnectDelay},
     {"LameDuckMode",                    test_LameDuckMode},
+
+    {"JetStreamUnmarshalAccInfo",       test_JetStreamUnmarshalAccountInfo},
+    {"JetStreamUnmarshalStreamState",   test_JetStreamUnmarshalStreamState},
+    {"JetStreamUnmarshalStreamCfg",     test_JetStreamUnmarshalStreamConfig},
+    {"JetStreamUnmarshalStreamInfo",    test_JetStreamUnmarshalStreamInfo},
+    {"JetStreamMarshalStreamCfg",       test_JetStreamMarshalStreamConfig},
+    {"JetStreamUnmarshalConsumerInfo",  test_JetStreamUnmarshalConsumerInfo},
+    {"JetStreamContext",                test_JetStreamContext},
+    {"JetStreamDomain",                 test_JetStreamContextDomain},
+    {"JetStreamMgtStreams",             test_JetStreamMgtStreams},
+    {"JetStreamMgtConsumers",           test_JetStreamMgtConsumers},
+    {"JetStreamPublish",                test_JetStreamPublish},
+    {"JetStreamPublishAsync",           test_JetStreamPublishAsync},
+    {"JetStreamSubscribe",              test_JetStreamSubscribe},
+    {"JetStreamSubscribeSync",          test_JetStreamSubscribeSync},
+    {"JetStreamSubscribeIdleHeartbeat", test_JetStreamSubscribeIdleHearbeat},
+    {"JetStreamSubscribeFlowControl",   test_JetStreamSubscribeFlowControl},
+    {"JetStreamSubscribePull",          test_JetStreamSubscribePull},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

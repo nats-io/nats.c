@@ -29,10 +29,10 @@ natsMsgHeader_encodedLen(natsMsg *msg)
     void            *p   = NULL;
     int             hl   = 0;
 
-    // Special case: if msg->hdrLift is true, it means that this is a message
+    // Special case: if needsLift is true, it means that this is a message
     // that was received but never lifted (so for sure no header was added,
     // modified or removed. So return the current len of the encoded headers.
-    if (msg->hdrLift)
+    if (natsMsg_needsLift(msg))
         return msg->hdrLen;
 
     // Here it could be that a message was created, some headers added but
@@ -71,7 +71,7 @@ natsMsgHeader_encode(natsBuffer *buf, natsMsg *msg)
     void            *p   = NULL;
 
     // See explanation in natsMsgHeader_encodedLen()
-    if (msg->hdrLift)
+    if (natsMsg_needsLift(msg))
     {
         natsBuf_Append(buf, (const char*) msg->hdr, msg->hdrLen);
         return NATS_UPDATE_ERR_STACK(s);
@@ -321,9 +321,9 @@ _liftHeaders(natsMsg *msg, bool setOrAdd)
     char       *lk     = NULL;
     int        i;
 
-    // If there is no header map and hdrLift is false, and this is not
+    // If there is no header map and needsLift is false, and this is not
     // an action to set or add a header, then simply return.
-    if (!setOrAdd && (msg->headers == NULL) && !msg->hdrLift)
+    if (!setOrAdd && (msg->headers == NULL) && !natsMsg_needsLift(msg))
         return NATS_OK;
 
     // For set or add operations, possibly create the headers map.
@@ -335,7 +335,7 @@ _liftHeaders(natsMsg *msg, bool setOrAdd)
     }
 
     // In all cases, if there is no need to lift, we are done.
-    if (!msg->hdrLift)
+    if (!natsMsg_needsLift(msg))
         return NATS_OK;
 
     // If hdrLen is less than what we need for NATS/1.0\r\n, then
@@ -373,13 +373,13 @@ _liftHeaders(natsMsg *msg, bool setOrAdd)
     {
         // At this point we have had no protocol error lifting the header
         // so we clear this flag so that we don't attempt to lift again.
-        msg->hdrLift = false;
+        natsMsg_clearNeedsLift(msg);
 
         // Furthermore, we need the flag to be cleared should we need to
         // add the no responders header (otherwise we would recursively
         // try to lift headers).
         // If adding the field fails, it is likely due to memory issue,
-        // so it is fine to keep "hdrLift" as false.
+        // so it is fine to keep "needsLift" as false.
 
         // Check if we have an inlined status.
         if ((sts != NULL) && (*sts != '\0'))
@@ -643,6 +643,24 @@ natsMsgHeader_Delete(natsMsg *msg, const char *key)
 }
 
 void
+natsMsg_freeHeaders(natsMsg *msg)
+{
+    natsStrHashIter iter;
+    void            *p = NULL;
+
+    if (msg->headers == NULL)
+        return;
+
+    natsStrHashIter_Init(&iter, msg->headers);
+    for (;natsStrHashIter_Next(&iter, NULL, &p);)
+    {
+        natsHeaderValue *v = (natsHeaderValue *)p;
+        natsHeaderValue_free(v, true);
+    }
+    natsStrHash_Destroy(msg->headers);
+}
+
+void
 natsMsg_free(void *object)
 {
     natsMsg *msg;
@@ -651,20 +669,7 @@ natsMsg_free(void *object)
         return;
 
     msg = (natsMsg*) object;
-
-    if (msg->headers != NULL)
-    {
-        natsStrHashIter iter;
-        void            *p = NULL;
-
-        natsStrHashIter_Init(&iter, msg->headers);
-        for (;natsStrHashIter_Next(&iter, NULL, &p);)
-        {
-            natsHeaderValue *v = (natsHeaderValue *)p;
-            natsHeaderValue_free(v, true);
-        }
-        natsStrHash_Destroy(msg->headers);
-    }
+    natsMsg_freeHeaders(msg);
 
     NATS_FREE(msg);
 }
@@ -754,12 +759,12 @@ natsMsg_create(natsMsg **newMsg,
     // about updating this initialization code.
     memset(&(msg->gc), 0, sizeof(natsGCItem));
 
-    msg->hdr     = NULL;
-    msg->hdrLen  = 0;
-    msg->hdrLift = false;
-    msg->headers = NULL;
-    msg->sub     = NULL;
-    msg->next    = NULL;
+    msg->hdr        = NULL;
+    msg->hdrLen     = 0;
+    msg->flags      = 0;
+    msg->headers    = NULL;
+    msg->sub        = NULL;
+    msg->next       = NULL;
 
     ptr = (char*) (((char*) &(msg->next)) + sizeof(msg->next));
 
@@ -788,7 +793,7 @@ natsMsg_create(natsMsg **newMsg,
         *(ptr++) = '\0';
 
         msg->hdrLen  = hdrLen;
-        msg->hdrLift = true;
+        natsMsg_setNeedsLift(msg);
         dataLen -= hdrLen;
         buf += hdrLen;
     }
@@ -810,11 +815,10 @@ natsMsg_create(natsMsg **newMsg,
 // Used internally to initialize a message structure, generally defined on the stack,
 // that will then be passed as a reference to publish functions.
 void
-natsMsg_init(natsMsg *msg, const char *subj, const char *reply, const char *data, int dataLen)
+natsMsg_init(natsMsg *msg, const char *subj, const char *data, int dataLen)
 {
     memset(msg, 0, sizeof(natsMsg));
     msg->subject = subj;
-    msg->reply = reply;
     msg->data = data;
     msg->dataLen = dataLen;
 }
@@ -852,4 +856,19 @@ natsMsg_IsNoResponders(natsMsg *m)
                 && (natsMsgHeader_Get(m, STATUS_HDR, &val) == NATS_OK)
                 && (val != NULL)
                 && (strncmp(val, NO_RESP_STATUS, HDR_STATUS_LEN) == 0));
+}
+
+void
+natsMsgList_Destroy(natsMsgList *list)
+{
+    int i;
+
+    if (list == NULL)
+        return;
+
+    for (i=0; i < list->Count; i++)
+        natsMsg_Destroy(list->Msgs[i]);
+    NATS_FREE(list->Msgs);
+    list->Msgs = NULL;
+    *(int*)&(list->Count) = 0;
 }

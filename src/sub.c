@@ -21,6 +21,7 @@
 #include "sub.h"
 #include "msg.h"
 #include "util.h"
+#include "js.h"
 
 #ifdef DEV_MODE
 
@@ -70,6 +71,7 @@ _freeSubscription(natsSubscription *sub)
     natsTimer_Destroy(sub->timeoutTimer);
     natsCondition_Destroy(sub->cond);
     natsMutex_Destroy(sub->mu);
+    jsSub_free(sub->jsi);
 
     natsConn_release(sub->conn);
 
@@ -102,6 +104,20 @@ natsSub_release(natsSubscription *sub)
 
     if (refs == 0)
         _freeSubscription(sub);
+}
+
+void
+natsSubAndLdw_Lock(natsSubscription *sub)
+{
+    natsMutex_Lock(sub->mu);
+    SUB_DLV_WORKER_LOCK(sub);
+}
+
+void
+natsSubAndLdw_Unlock(natsSubscription *sub)
+{
+    SUB_DLV_WORKER_UNLOCK(sub);
+    natsMutex_Unlock(sub->mu);
 }
 
 static void
@@ -152,6 +168,8 @@ natsSub_deliverMsgs(void *arg)
     bool                rmSub    = false;
     natsOnCompleteCB    onCompleteCB = NULL;
     void                *onCompleteCBClosure = NULL;
+    char                *fcReply = NULL;
+    jsSub               *jsi = NULL;
 
     // This just serves as a barrier for the creation of this thread.
     natsConn_Lock(nc);
@@ -159,6 +177,7 @@ natsSub_deliverMsgs(void *arg)
 
     natsSub_Lock(sub);
     timeout = sub->timeout;
+    jsi = sub->jsi;
     natsSub_Unlock(sub);
 
     while (true)
@@ -168,12 +187,10 @@ natsSub_deliverMsgs(void *arg)
         s = NATS_OK;
         while (((msg = sub->msgList.head) == NULL) && !(sub->closed) && !(sub->draining) && (s != NATS_TIMEOUT))
         {
-            sub->inWait++;
             if (timeout != 0)
                 s = natsCondition_TimedWait(sub->cond, sub->mu, timeout);
             else
                 natsCondition_Wait(sub->cond, sub->mu);
-            sub->inWait--;
         }
 
         if (sub->closed)
@@ -213,6 +230,15 @@ natsSub_deliverMsgs(void *arg)
         // Capture this under lock.
         max = sub->max;
 
+        // Check for JS flow control
+        fcReply = NULL;
+        if ((jsi != NULL) && (jsi->fcDelivered == delivered))
+        {
+            fcReply          = jsi->fcReply;
+            jsi->fcReply     = NULL;
+            jsi->fcDelivered = 0;
+        }
+
         natsSub_Unlock(sub);
 
         if ((max == 0) || (delivered <= max))
@@ -223,6 +249,12 @@ natsSub_deliverMsgs(void *arg)
         {
             // We need to destroy the message since the user can't do it
             natsMsg_Destroy(msg);
+        }
+
+        if (fcReply != NULL)
+        {
+            natsConnection_Publish(nc, fcReply, NULL, 0);
+            NATS_FREE(fcReply);
         }
 
         // Don't do 'else' because we need to remove when we have hit
@@ -355,7 +387,7 @@ _asyncTimeoutStopCb(natsTimer *timer, void* closure)
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
                const char *queueGroup, int64_t timeout, natsMsgHandler cb, void *cbClosure,
-               bool preventUseOfLibDlvPool)
+               bool preventUseOfLibDlvPool, jsSub *jsi)
 {
     natsStatus          s = NATS_OK;
     natsSubscription    *sub = NULL;
@@ -384,6 +416,7 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     sub->msgCbClosure   = cbClosure;
     sub->msgsLimit      = nc->opts->maxPendingMsgs;
     sub->bytesLimit     = bytesLimit;
+    sub->jsi            = jsi;
 
     sub->subject = NATS_STRDUP(subj);
     if (sub->subject == NULL)
@@ -573,20 +606,16 @@ natsSubscription_NoDeliveryDelay(natsSubscription *sub)
     return NATS_OK;
 }
 
-
-/*
- * Return the next message available to a synchronous subscriber or block until
- * one is available. A timeout can be used to return when no message has been
- * delivered.
- */
 natsStatus
-natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout)
+natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool pullSubInternal)
 {
     natsStatus      s    = NATS_OK;
     natsConnection  *nc  = NULL;
     natsMsg         *msg = NULL;
     bool            removeSub = false;
     int64_t         target    = 0;
+    jsSub           *jsi      = NULL;
+    char            *fcReply  = NULL;
 
     if ((sub == NULL) || (nextMsg == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -623,13 +652,27 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
 
         return nats_setDefaultError(NATS_SLOW_CONSUMER);
     }
+    if (sub->jsi != NULL)
+    {
+        if (sub->jsi->sm)
+        {
+            sub->jsi->sm = false;
+            natsSub_Unlock(sub);
+
+            return nats_setError(NATS_MISMATCH, "%s", jsErrConsumerSeqMismatch);
+        }
+        else if (!pullSubInternal && sub->jsi->pull)
+        {
+            natsSub_Unlock(sub);
+            return nats_setError(NATS_INVALID_SUBSCRIPTION, "%s", jsErrNotApplicableToPullSub);
+        }
+    }
 
     nc = sub->conn;
+    jsi= sub->jsi;
 
     if (timeout > 0)
     {
-        sub->inWait++;
-
         while ((sub->msgList.msgs == 0)
                && (s != NATS_TIMEOUT)
                && !(sub->closed)
@@ -643,8 +686,6 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
                 s = nats_setDefaultError(s);
         }
 
-        sub->inWait--;
-
         if (sub->connClosed)
             s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
         else if (sub->closed)
@@ -653,7 +694,7 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
     else
     {
         s = (sub->msgList.msgs == 0 ? NATS_TIMEOUT : NATS_OK);
-        if (s != NATS_OK)
+        if ((s != NATS_OK) && !pullSubInternal)
             s = nats_setDefaultError(s);
     }
 
@@ -678,6 +719,13 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
             msg->next = NULL;
 
             sub->delivered++;
+            if ((jsi != NULL) && (jsi->fcDelivered == sub->delivered))
+            {
+                fcReply          = jsi->fcReply;
+                jsi->fcReply     = NULL;
+                jsi->fcDelivered = 0;
+            }
+
             if (sub->max > 0)
             {
                 if (sub->delivered > sub->max)
@@ -705,12 +753,33 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
 
     natsSub_Unlock(sub);
 
+    if (fcReply != NULL)
+    {
+        natsConnection_Publish(nc, fcReply, NULL, 0);
+        NATS_FREE(fcReply);
+    }
+
     if (removeSub)
     {
         natsConn_removeSubscription(nc, sub);
         natsSub_release(sub);
     }
 
+    if (pullSubInternal && (s == NATS_TIMEOUT))
+        return s;
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+/*
+ * Return the next message available to a synchronous subscriber or block until
+ * one is available. A timeout can be used to return when no message has been
+ * delivered.
+ */
+natsStatus
+natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout)
+{
+    natsStatus s = natsSub_nextMsg(nextMsg, sub, timeout, false);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

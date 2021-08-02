@@ -23,7 +23,7 @@
 
 static const char *digits = "0123456789";
 
-#define _publishMsg(n, m) natsConn_publish((n), (m), false)
+#define _publishMsg(n, m, r) natsConn_publish((n), (m), (r), false)
 
 #define GETBYTES_SIZE(len, b, i) {\
     if ((len) > 0)\
@@ -50,7 +50,7 @@ static const char *digits = "0123456789";
 // Sends a protocol data message by queueing into the bufio writer
 // and kicking the flusher thread. These writes should be protected.
 natsStatus
-natsConn_publish(natsConnection *nc, natsMsg *msg, bool directFlush)
+natsConn_publish(natsConnection *nc, natsMsg *msg, const char *reply, bool directFlush)
 {
     natsStatus  s               = NATS_OK;
     int         msgHdSize       = 0;
@@ -76,7 +76,12 @@ natsConn_publish(natsConnection *nc, natsMsg *msg, bool directFlush)
         return nats_setDefaultError(NATS_INVALID_SUBJECT);
     }
 
-    replyLen = ((msg->reply != NULL) ? (int) strlen(msg->reply) : 0);
+    // If a reply is provided through params, use that one,
+    // otherwise fallback to msg->reply.
+    if (reply == NULL)
+        reply = msg->reply;
+
+    replyLen = ((reply != NULL) ? (int) strlen(reply) : 0);
 
     natsConn_Lock(nc);
 
@@ -94,10 +99,10 @@ natsConn_publish(natsConnection *nc, natsMsg *msg, bool directFlush)
         return nats_setDefaultError(NATS_DRAINING);
     }
 
-    // We can have headers NULL but hdrLift==true which means we are in special
+    // We can have headers NULL but needsLift which means we are in special
     // situation where a message was received and is sent back without the user
     // accessing the headers. It should still be considered having headers.
-    if ((msg->headers != NULL) || msg->hdrLift)
+    if ((msg->headers != NULL) || natsMsg_needsLift(msg))
     {
         if (!nc->info.headers)
         {
@@ -162,9 +167,9 @@ natsConn_publish(natsConnection *nc, natsMsg *msg, bool directFlush)
         s = natsBuf_Append(nc->scratch, msg->subject, subjLen);
     if (s == NATS_OK)
         s = natsBuf_Append(nc->scratch, _SPC_, _SPC_LEN_);
-    if ((s == NATS_OK) && (msg->reply != NULL))
+    if ((s == NATS_OK) && (reply != NULL))
     {
-        s = natsBuf_Append(nc->scratch, msg->reply, replyLen);
+        s = natsBuf_Append(nc->scratch, reply, replyLen);
         if (s == NATS_OK)
             s = natsBuf_Append(nc->scratch, _SPC_, _SPC_LEN_);
     }
@@ -232,8 +237,8 @@ natsConnection_Publish(natsConnection *nc, const char *subj,
     natsStatus s;
     natsMsg    msg;
 
-    natsMsg_init(&msg, subj, NULL, (const char*) data, dataLen);
-    s = _publishMsg(nc, &msg);
+    natsMsg_init(&msg, subj, (const char*) data, dataLen);
+    s = _publishMsg(nc, &msg, NULL);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -256,8 +261,8 @@ natsConnection_PublishString(natsConnection *nc, const char *subj,
     if (str != NULL)
         dataLen = (int) strlen(str);
 
-    natsMsg_init(&msg, subj, NULL, str, dataLen);
-    s = _publishMsg(nc, &msg);
+    natsMsg_init(&msg, subj, str, dataLen);
+    s = _publishMsg(nc, &msg, NULL);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -269,8 +274,10 @@ natsConnection_PublishString(natsConnection *nc, const char *subj,
 natsStatus
 natsConnection_PublishMsg(natsConnection *nc, natsMsg *msg)
 {
-    natsStatus s = _publishMsg(nc, msg);
+    const char *reply = (msg != NULL ? msg->reply : NULL);
+    natsStatus s;
 
+    s = _publishMsg(nc, msg, reply);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -289,8 +296,8 @@ natsConnection_PublishRequest(natsConnection *nc, const char *subj,
     if ((reply == NULL) || (strlen(reply) == 0))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    natsMsg_init(&msg, subj, reply, (const char*) data, dataLen);
-    s = _publishMsg(nc, &msg);
+    natsMsg_init(&msg, subj, (const char*) data, dataLen);
+    s = _publishMsg(nc, &msg, reply);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -318,8 +325,8 @@ natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
     if (str != NULL)
         dataLen = (int) strlen(str);
 
-    natsMsg_init(&msg, subj, reply, str, dataLen);
-    s = _publishMsg(nc, &msg);
+    natsMsg_init(&msg, subj, str, dataLen);
+    s = _publishMsg(nc, &msg, reply);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -331,7 +338,7 @@ _oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
 {
     natsStatus          s       = NATS_OK;
     natsSubscription    *sub    = NULL;
-    char                inbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1];
+    char                inbox[NATS_INBOX_ARRAY_SIZE];
 
     s = natsInbox_init(inbox, sizeof(inbox));
     if (s == NATS_OK)
@@ -339,10 +346,7 @@ _oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
     if (s == NATS_OK)
         s = natsSubscription_AutoUnsubscribe(sub, 1);
     if (s == NATS_OK)
-    {
-        requestMsg->reply = (const char*) inbox;
-        s = natsConn_publish(nc, requestMsg, true);
-    }
+        s = natsConn_publish(nc, requestMsg, (const char*) inbox, true);
     if (s == NATS_OK)
         s = natsSubscription_NextMsg(replyMsg, sub, timeout);
 
@@ -418,7 +422,7 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     natsStatus          s           = NATS_OK;
     respInfo            *resp       = NULL;
     bool                needsRemoval= true;
-    char                respInbox[NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1 + NATS_MAX_REQ_ID_LEN + 1]; // _INBOX.<nuid>.<reqId>
+    char                respInbox[NATS_INBOX_ARRAY_SIZE + NATS_MAX_REQ_ID_LEN + 1]; // _INBOX.<nuid>.<reqId>
 
     if ((replyMsg == NULL) || (nc == NULL) || (m == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -452,8 +456,7 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
 
     if (s == NATS_OK)
     {
-        m->reply = (const char*) respInbox;
-        s = natsConn_publish(nc, m, true);
+        s = natsConn_publish(nc, m, (const char*) respInbox, true);
         if (s == NATS_OK)
         {
             natsMutex_Lock(resp->mu);
@@ -525,7 +528,7 @@ natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
     natsStatus s;
     natsMsg    msg;
 
-    natsMsg_init(&msg, subj, NULL, str, (str == NULL ? 0 : (int) strlen(str)));
+    natsMsg_init(&msg, subj, str, (str == NULL ? 0 : (int) strlen(str)));
     s = natsConnection_RequestMsg(replyMsg, nc, &msg, timeout);
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -538,7 +541,7 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
     natsStatus s;
     natsMsg    msg;
 
-    natsMsg_init(&msg, subj, NULL, (const char*) data, dataLen);
+    natsMsg_init(&msg, subj, (const char*) data, dataLen);
     s = natsConnection_RequestMsg(replyMsg, nc, &msg, timeout);
 
     return NATS_UPDATE_ERR_STACK(s);

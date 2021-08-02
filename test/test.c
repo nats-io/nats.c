@@ -21170,6 +21170,17 @@ testRespParsing(void)
     js_freeApiRespContent(NULL);
 }
 
+#define ENSURE_JS_VERSION(major, minor, update) \
+if (!serverVersionAtLeast((major), (minor), (update))) \
+{ \
+    char txt[200]; \
+    snprintf(txt, sizeof(txt), "Skipping since requires server version of at least %d.%d.%d, got %s: ", \
+             (major), (minor), (update), serverVersion); \
+    test(txt); \
+    testCond(true); \
+    return; \
+}
+
 static void
 test_JetStreamContext(void)
 {
@@ -21183,6 +21194,8 @@ test_JetStreamContext(void)
     char                datastore[256] = {'\0'};
     char                cmdLine[1024] = {'\0'};
     char                confFile[256] = {'\0'};
+
+    ENSURE_JS_VERSION(2, 3, 3);
 
     test("Check response parsing:\n");
     testRespParsing();
@@ -21362,6 +21375,8 @@ test_JetStreamContextDomain(void)
     char                cmdLine[1024] = {'\0'};
     char                confFile[256] = {'\0'};
 
+    ENSURE_JS_VERSION(2, 3, 3);
+
     _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
     _createConfFile(confFile, sizeof(confFile),
         " jetstream: { domain: ABC }\n"
@@ -21492,6 +21507,8 @@ test_JetStreamMgtStreams(void)
     char                cmdLine[1024] = {'\0'};
     jsOptions           o;
     int                 i;
+
+    ENSURE_JS_VERSION(2, 3, 3);
 
     _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
 
@@ -21867,6 +21884,8 @@ test_JetStreamMgtConsumers(void)
     jsReplayPolicy          replayPolicies[] = {
         js_ReplayInstant, js_ReplayOriginal};
 
+    ENSURE_JS_VERSION(2, 3, 3);
+
     _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
 
     test("Start JS server: ");
@@ -22203,6 +22222,8 @@ test_JetStreamPublish(void)
     natsMsg             *msg = NULL;
     char                datastore[256] = {'\0'};
     char                cmdLine[1024] = {'\0'};
+
+    ENSURE_JS_VERSION(2, 3, 3);
 
     _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
 
@@ -22560,6 +22581,8 @@ test_JetStreamPublishAsync(void)
     bool                ok1 = false;
     bool                ok2 = false;
     natsMsgList         pending;
+
+    ENSURE_JS_VERSION(2, 3, 3);
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)
@@ -23080,6 +23103,8 @@ test_JetStreamSubscribe(void)
 #endif
     natsThread          *threads[10] = {NULL};
 
+    ENSURE_JS_VERSION(2, 3, 3);
+
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)
         FAIL("Unable to setup test");
@@ -23212,7 +23237,7 @@ test_JetStreamSubscribe(void)
     testCond((s == NATS_OK) && (jerr == 0));
 
     test("Unsub removes ephemeral consumer: ");
-    consName = sub->jsi->consumer;
+    consName = sub->jsi->ephemeral;
     s = natsSubscription_Unsubscribe(sub);
     nats_Sleep(500);
     IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", consName, NULL, &jerr));
@@ -23262,10 +23287,9 @@ test_JetStreamSubscribe(void)
     testCond(s == NATS_OK);
 
     test("Attached consumer not destroyed on unsub: ");
-    consName = sub->jsi->consumer;
     s = natsSubscription_Unsubscribe(sub2);
     nats_Sleep(500);
-    IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", consName, NULL, &jerr));
+    IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", "durable", NULL, &jerr));
     testCond((s == NATS_OK) && (ci != NULL) && (jerr == 0));
     jsConsumerInfo_Destroy(ci);
 
@@ -23497,6 +23521,8 @@ test_JetStreamSubscribeSync(void)
     const char          *consName;
     jsConsumerInfo      *ci = NULL;
     jsMsgMetaData       *meta = NULL;
+
+    ENSURE_JS_VERSION(2, 3, 3);
 
     _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
 
@@ -23765,7 +23791,7 @@ test_JetStreamSubscribeSync(void)
     testCond((s == NATS_OK) && (jerr == 0));
 
     test("Drain does not delete consumer: ");
-    consName = sub->jsi->consumer;
+    consName = sub->jsi->ephemeral;
     s = natsSubscription_Drain(sub);
     nats_Sleep(500);
     IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", consName, NULL, &jerr));
@@ -23819,6 +23845,8 @@ test_JetStreamSubscribeIdleHearbeat(void)
     natsSubscription    *nsub = NULL;
     jsConsumerSequenceMismatch csm;
     jsConsumerConfig cc;
+
+    ENSURE_JS_VERSION(2, 3, 3);
 
     s = natsOptions_Create(&opts);
     IFOK(s, _createDefaultThreadArgsForCbTests(&args));
@@ -24162,7 +24190,13 @@ test_JetStreamSubscribeFlowControl(void)
     natsSubscription    *nsub = NULL;
     int                 i;
     int                 total = 20000;
-    char                *data = malloc(1024);
+    char                *data = NULL;
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    data = malloc(1024);
+    if (data == NULL)
+        FAIL("Unable to allocate data");
 
     if (valgrind)
         total = 200;
@@ -24322,6 +24356,8 @@ test_JetStreamSubscribePull(void)
     const char          *badAckStr[] = {jsAckNoneStr, jsAckAllStr};
     jsAckPolicy         badAck[] = {js_AckNone, js_AckAll};
     jsConsumerConfig    cc;
+
+    ENSURE_JS_VERSION(2, 3, 3);
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)

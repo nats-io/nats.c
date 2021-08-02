@@ -959,7 +959,7 @@ jsSub_free(jsSub *jsi)
     js = jsi->js;
     natsTimer_Destroy(jsi->hbTimer);
     NATS_FREE(jsi->stream);
-    NATS_FREE(jsi->consumer);
+    NATS_FREE(jsi->ephemeral);
     NATS_FREE(jsi->nxtMsgSubj);
     NATS_FREE(jsi->fcReply);
     NATS_FREE(jsi);
@@ -1011,10 +1011,10 @@ jsSub_unsubscribe(jsSub *jsi, bool drainMode)
     // created by the library (case of an ephemeral and
     // without queue sub), but we also don't delete if
     // we are in drain mode.
-    if (drainMode || !jsi->delCons)
+    if (drainMode || (jsi->ephemeral == NULL))
         return NATS_OK;
 
-    s = js_DeleteConsumer(jsi->js, jsi->stream, jsi->consumer, NULL, NULL);
+    s = js_DeleteConsumer(jsi->js, jsi->stream, jsi->ephemeral, NULL, NULL);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -1673,8 +1673,6 @@ PROCESS_INFO:
                     s = nats_setDefaultError(NATS_NO_MEMORY);
             }
             IF_OK_DUP_STRING(s, jsi->stream, stream);
-            if (!nats_IsStringEmpty(consumer))
-                IF_OK_DUP_STRING(s, jsi->consumer, consumer);
             if (s == NATS_OK)
             {
                 // Capture the HB interval.
@@ -1767,21 +1765,14 @@ PROCESS_INFO:
 
             goto PROCESS_INFO;
         }
-        natsSub_Lock(sub);
-        // If this is an ephemeral, we need to capture the name from
-        // the info object.
-        if (nats_IsStringEmpty(consumer))
-            DUP_STRING(s, jsi->consumer, info->Name);
-
-        // Library will delete the consumer on Unsubscribe() only if
-        // it is the one that created the consumer and that there is
-        // no Queue or Durable name specified.
-        if ((s == NATS_OK) && !isQueue && nats_IsStringEmpty(opts->Config.Durable)
-            && (durable == NULL))
+        // Capture the ephemeral consumer name so that the library
+        // can delete on Unsubscribe, unless this is a queue subscription.
+        if ((s == NATS_OK) && !isQueue && (nats_IsStringEmpty(consumer)))
         {
-            sub->jsi->delCons = true;
+            natsSub_Lock(sub);
+            DUP_STRING(s, jsi->ephemeral, info->Name);
+            natsSub_Unlock(sub);
         }
-        natsSub_Unlock(sub);
     }
 
 END:

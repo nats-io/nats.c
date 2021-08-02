@@ -348,9 +348,8 @@ typedef struct __jsSub
 {
     jsCtx               *js;
     char                *stream;
-    char                *consumer;
+    char                *ephemeral;
     char                *nxtMsgSubj;
-    bool                delCons;
     bool                hasFC;
     bool                pull;
 

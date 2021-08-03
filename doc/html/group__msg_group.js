@@ -1,5 +1,6 @@
 var group__msg_group =
 [
+    [ "natsMsgList_Destroy", "group__msg_group.html#ga1a091d24f939d881bf04fba78b8995c2", null ],
     [ "natsMsg_Create", "group__msg_group.html#ga098e4fec1c5a71c00a0d092fbd6d1a21", null ],
     [ "natsMsg_GetSubject", "group__msg_group.html#gae4338b582ab420cf6d8373bef8cffd75", null ],
     [ "natsMsg_GetReply", "group__msg_group.html#gaf3e9ab8edfa09b1e40ddb969d9ba5f01", null ],

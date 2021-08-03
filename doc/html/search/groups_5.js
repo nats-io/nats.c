@@ -1,5 +1,6 @@
 var searchData=
 [
-  ['management_585',['Management',['../group__conn_mgt_group.html',1,'(Global Namespace)'],['../group__stan_conn_mgt_group.html',1,'(Global Namespace)']]],
-  ['message_586',['Message',['../group__msg_group.html',1,'']]]
+  ['libevent_20adapter_1247',['Libevent Adapter',['../group__libevent_functions.html',1,'']]],
+  ['library_1248',['Library',['../group__library_group.html',1,'']]],
+  ['libuv_20adapter_1249',['Libuv Adapter',['../group__libuv_functions.html',1,'']]]
 ];

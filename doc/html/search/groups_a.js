@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['wildcards_599',['Wildcards',['../group__wildcards_group.html',1,'']]]
+  ['types_1264',['Types',['../group__types_group.html',1,'']]]
 ];

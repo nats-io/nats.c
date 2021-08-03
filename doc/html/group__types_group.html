@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Type" content="text/xhtml;charset=UTF-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.9.1"/>
-<title>NATS C Client with Streaming support: Types</title>
+<title>NATS C Client with JetStream and Streaming support: Types</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -25,8 +25,8 @@
  <tbody>
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
-   <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.6.0</span>
+   <div id="projectname">NATS C Client with JetStream and Streaming support
+   &#160;<span id="projectnumber">3.0.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -84,12 +84,66 @@ $(document).ready(function(){initNavTree('group__types_group.html',''); initResi
 
 <div class="header">
   <div class="summary">
-<a href="#typedef-members">Typedefs</a>  </div>
+<a href="#nested-classes">Classes</a> &#124;
+<a href="#typedef-members">Typedefs</a> &#124;
+<a href="#enum-members">Enumerations</a>  </div>
   <div class="headertitle">
 <div class="title">Types</div>  </div>
 </div><!--header-->
 <div class="contents">
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="nested-classes"></a>
+Classes</h2></td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structnats_msg_list.html">natsMsgList</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A list of NATS messages.  <a href="structnats_msg_list.html#details">More...</a><br /></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_pub_options.html">jsPubOptions</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_placement.html">jsPlacement</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_external_stream.html">jsExternalStream</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_source.html">jsStreamSource</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html">jsStreamConfig</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_lost_stream_data.html">jsLostStreamData</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_state.html">jsStreamState</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_peer_info.html">jsPeerInfo</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_cluster_info.html">jsClusterInfo</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_source_info.html">jsStreamSourceInfo</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_info.html">jsStreamInfo</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_config.html">jsConsumerConfig</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_sequence_mismatch.html">jsConsumerSequenceMismatch</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_sub_options.html">jsSubOptions</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_sequence_pair.html">jsSequencePair</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html">jsConsumerInfo</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_a_p_i_stats.html">jsAPIStats</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_account_limits.html">jsAccountLimits</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_account_info.html">jsAccountInfo</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_msg_meta_data.html">jsMsgMetaData</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_pub_ack.html">jsPubAck</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_options.html">jsOptions</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="typedef-members"></a>
 Typedefs</h2></td></tr>
 <tr class="memitem:gaf88dca0a18efb5c5e994d265a9f04aec"><td class="memItemLeft" align="right" valign="top">typedef struct __natsConnection&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a></td></tr>
@@ -110,6 +164,57 @@ Typedefs</h2></td></tr>
 <tr class="memitem:ga206c3d4d6f4f6f96fd2cae53a3df31c1"><td class="memItemLeft" align="right" valign="top">typedef char&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1">natsInbox</a></td></tr>
 <tr class="memdesc:ga206c3d4d6f4f6f96fd2cae53a3df31c1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Unique subject often used for point-to-point communication.  <a href="group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1">More...</a><br /></td></tr>
 <tr class="separator:ga206c3d4d6f4f6f96fd2cae53a3df31c1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gafd5523161ec3783e79719cb9a9a66b5b"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structnats_msg_list.html">natsMsgList</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gafd5523161ec3783e79719cb9a9a66b5b">natsMsgList</a></td></tr>
+<tr class="memdesc:gafd5523161ec3783e79719cb9a9a66b5b"><td class="mdescLeft">&#160;</td><td class="mdescRight">A list of NATS messages.  <a href="group__types_group.html#gafd5523161ec3783e79719cb9a9a66b5b">More...</a><br /></td></tr>
+<tr class="separator:gafd5523161ec3783e79719cb9a9a66b5b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaaf12cdd24c6cc23a57c20466c92ff8c1"><td class="memItemLeft" align="right" valign="top">typedef struct __jsCtx&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a></td></tr>
+<tr class="separator:gaaf12cdd24c6cc23a57c20466c92ff8c1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga7bbea3575d35dcdbfc9b766b04269eb7"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_pub_options.html">jsPubOptions</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga7bbea3575d35dcdbfc9b766b04269eb7">jsPubOptions</a></td></tr>
+<tr class="separator:ga7bbea3575d35dcdbfc9b766b04269eb7"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga49d1138fac9da8b85d00a367081e91c9"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_placement.html">jsPlacement</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga49d1138fac9da8b85d00a367081e91c9">jsPlacement</a></td></tr>
+<tr class="separator:ga49d1138fac9da8b85d00a367081e91c9"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaef6601477f6456bebc229f7f38982a6c"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_external_stream.html">jsExternalStream</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gaef6601477f6456bebc229f7f38982a6c">jsExternalStream</a></td></tr>
+<tr class="separator:gaef6601477f6456bebc229f7f38982a6c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gab4c43c87d81917aab748a50eee028449"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_stream_source.html">jsStreamSource</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gab4c43c87d81917aab748a50eee028449">jsStreamSource</a></td></tr>
+<tr class="separator:gab4c43c87d81917aab748a50eee028449"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga26fd6a73df327ca3c271e46ddefc8acf"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_stream_config.html">jsStreamConfig</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga26fd6a73df327ca3c271e46ddefc8acf">jsStreamConfig</a></td></tr>
+<tr class="separator:ga26fd6a73df327ca3c271e46ddefc8acf"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaf80828510450faf84bbf456e94f5b784"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_lost_stream_data.html">jsLostStreamData</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gaf80828510450faf84bbf456e94f5b784">jsLostStreamData</a></td></tr>
+<tr class="separator:gaf80828510450faf84bbf456e94f5b784"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga2bfd6de6ffc84d767482b3dd57cb9271"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_stream_state.html">jsStreamState</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga2bfd6de6ffc84d767482b3dd57cb9271">jsStreamState</a></td></tr>
+<tr class="separator:ga2bfd6de6ffc84d767482b3dd57cb9271"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga1e938dab794089f9329d7b7ece8f3e9b"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_peer_info.html">jsPeerInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga1e938dab794089f9329d7b7ece8f3e9b">jsPeerInfo</a></td></tr>
+<tr class="separator:ga1e938dab794089f9329d7b7ece8f3e9b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaaf92318ce94a1ae3547c9a7af5a3f4f6"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_cluster_info.html">jsClusterInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gaaf92318ce94a1ae3547c9a7af5a3f4f6">jsClusterInfo</a></td></tr>
+<tr class="separator:gaaf92318ce94a1ae3547c9a7af5a3f4f6"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gab2f33f57188a550f2f747d4f27bc24bd"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_stream_source_info.html">jsStreamSourceInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gab2f33f57188a550f2f747d4f27bc24bd">jsStreamSourceInfo</a></td></tr>
+<tr class="separator:gab2f33f57188a550f2f747d4f27bc24bd"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga2629c9454996edf7914be36a9e44921b"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_stream_info.html">jsStreamInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga2629c9454996edf7914be36a9e44921b">jsStreamInfo</a></td></tr>
+<tr class="separator:ga2629c9454996edf7914be36a9e44921b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga0483b2197c0ddd9082b48c2dd3fe7cee"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_consumer_config.html">jsConsumerConfig</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga0483b2197c0ddd9082b48c2dd3fe7cee">jsConsumerConfig</a></td></tr>
+<tr class="separator:ga0483b2197c0ddd9082b48c2dd3fe7cee"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gace471cd2cef1df797b2a1c6b485049bd"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_consumer_sequence_mismatch.html">jsConsumerSequenceMismatch</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gace471cd2cef1df797b2a1c6b485049bd">jsConsumerSequenceMismatch</a></td></tr>
+<tr class="separator:gace471cd2cef1df797b2a1c6b485049bd"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaccfaac2079656ffd40d003e4de5d2280"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_sub_options.html">jsSubOptions</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gaccfaac2079656ffd40d003e4de5d2280">jsSubOptions</a></td></tr>
+<tr class="separator:gaccfaac2079656ffd40d003e4de5d2280"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga39011d30b295759b7f6ca0a7539dff8f"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_sequence_pair.html">jsSequencePair</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga39011d30b295759b7f6ca0a7539dff8f">jsSequencePair</a></td></tr>
+<tr class="separator:ga39011d30b295759b7f6ca0a7539dff8f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga2f21bb79884e56a5613d7fe76b11b1e5"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_consumer_info.html">jsConsumerInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga2f21bb79884e56a5613d7fe76b11b1e5">jsConsumerInfo</a></td></tr>
+<tr class="separator:ga2f21bb79884e56a5613d7fe76b11b1e5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gad057a0107367ce5727975f3daf63ff75"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_a_p_i_stats.html">jsAPIStats</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gad057a0107367ce5727975f3daf63ff75">jsAPIStats</a></td></tr>
+<tr class="separator:gad057a0107367ce5727975f3daf63ff75"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaa889f706cce285adb9cea8aba0b76866"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_account_limits.html">jsAccountLimits</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gaa889f706cce285adb9cea8aba0b76866">jsAccountLimits</a></td></tr>
+<tr class="separator:gaa889f706cce285adb9cea8aba0b76866"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga57cdc53b29a4fedb5a4140b6e64a4fab"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_account_info.html">jsAccountInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga57cdc53b29a4fedb5a4140b6e64a4fab">jsAccountInfo</a></td></tr>
+<tr class="separator:ga57cdc53b29a4fedb5a4140b6e64a4fab"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gace9595b1a5ce3f7a13670367fd293b4a"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_msg_meta_data.html">jsMsgMetaData</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gace9595b1a5ce3f7a13670367fd293b4a">jsMsgMetaData</a></td></tr>
+<tr class="separator:gace9595b1a5ce3f7a13670367fd293b4a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaf1d5e436c5d41c5b9b96d84e3d2bc86f"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_pub_ack.html">jsPubAck</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gaf1d5e436c5d41c5b9b96d84e3d2bc86f">jsPubAck</a></td></tr>
+<tr class="separator:gaf1d5e436c5d41c5b9b96d84e3d2bc86f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gadb7c287bc86b92765fbe45a066b96f40"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gadb7c287bc86b92765fbe45a066b96f40">jsPubAckErr</a></td></tr>
+<tr class="separator:gadb7c287bc86b92765fbe45a066b96f40"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga0e3a3b7cf89e7dfa955f0f8f3f1eb6e5"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_options.html">jsOptions</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga0e3a3b7cf89e7dfa955f0f8f3f1eb6e5">jsOptions</a></td></tr>
+<tr class="separator:ga0e3a3b7cf89e7dfa955f0f8f3f1eb6e5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga9e826493769d23086cfccefe95cdf64c"><td class="memItemLeft" align="right" valign="top">typedef struct __stanConnection&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c">stanConnection</a></td></tr>
 <tr class="memdesc:ga9e826493769d23086cfccefe95cdf64c"><td class="mdescLeft">&#160;</td><td class="mdescRight">A connection to a <code>NATS Streaming Server</code>.  <a href="group__types_group.html#ga9e826493769d23086cfccefe95cdf64c">More...</a><br /></td></tr>
 <tr class="separator:ga9e826493769d23086cfccefe95cdf64c"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -125,6 +230,42 @@ Typedefs</h2></td></tr>
 <tr class="memitem:ga023712711f5c289663fc2223e83686d3"><td class="memItemLeft" align="right" valign="top">typedef struct __stanSubOptions&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga023712711f5c289663fc2223e83686d3">stanSubOptions</a></td></tr>
 <tr class="memdesc:ga023712711f5c289663fc2223e83686d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Way to configure a <a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5" title="Interest on a given channel.">stanSubscription</a>.  <a href="group__types_group.html#ga023712711f5c289663fc2223e83686d3">More...</a><br /></td></tr>
 <tr class="separator:ga023712711f5c289663fc2223e83686d3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="enum-members"></a>
+Enumerations</h2></td></tr>
+<tr class="memitem:ga410f8fb053efa02b2ca1de0c02fa4b6d"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga410f8fb053efa02b2ca1de0c02fa4b6d">jsRetentionPolicy</a> { <a class="el" href="group__types_group.html#gga410f8fb053efa02b2ca1de0c02fa4b6da6a2aa02f32acec6526d81f6e974e690f">js_LimitsPolicy</a> = 0
+, <a class="el" href="group__types_group.html#gga410f8fb053efa02b2ca1de0c02fa4b6dae874de4a787cfbec4c6d0eb1a3f05ebd">js_InterestPolicy</a>
+, <a class="el" href="group__types_group.html#gga410f8fb053efa02b2ca1de0c02fa4b6daf7e6581e69572691b01d1294a3c3a478">js_WorkQueuePolicy</a>
+ }</td></tr>
+<tr class="separator:ga410f8fb053efa02b2ca1de0c02fa4b6d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga7f88b7d482488398074f9d1419a9b8c2"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga7f88b7d482488398074f9d1419a9b8c2">jsDiscardPolicy</a> { <a class="el" href="group__types_group.html#gga7f88b7d482488398074f9d1419a9b8c2abb31b828421634f1e6a1ef9359bc91f6">js_DiscardOld</a> = 0
+, <a class="el" href="group__types_group.html#gga7f88b7d482488398074f9d1419a9b8c2a99d7f2d740af26c340c0a4e2b72fb6ab">js_DiscardNew</a>
+ }</td></tr>
+<tr class="separator:ga7f88b7d482488398074f9d1419a9b8c2"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga1802a53c79e667f093bba033b16adc98"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga1802a53c79e667f093bba033b16adc98">jsStorageType</a> { <a class="el" href="group__types_group.html#gga1802a53c79e667f093bba033b16adc98a1d9dad1854cf374b22e3688b98284dec">js_FileStorage</a> = 0
+, <a class="el" href="group__types_group.html#gga1802a53c79e667f093bba033b16adc98a428ed10448726ad01c1db77a7f748314">js_MemoryStorage</a>
+ }</td></tr>
+<tr class="separator:ga1802a53c79e667f093bba033b16adc98"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga117ed2c35f89ef3144540ed9cbadc818"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga117ed2c35f89ef3144540ed9cbadc818">jsDeliverPolicy</a> { <br />
+&#160;&#160;<a class="el" href="group__types_group.html#gga117ed2c35f89ef3144540ed9cbadc818ac692ba1363103768ac4bb58695549758">js_DeliverAll</a> = 0
+, <a class="el" href="group__types_group.html#gga117ed2c35f89ef3144540ed9cbadc818abbd81d6c4e0f17f30e2186f1335e991d">js_DeliverLast</a>
+, <a class="el" href="group__types_group.html#gga117ed2c35f89ef3144540ed9cbadc818a82b8d36e17391212398984f92db9c381">js_DeliverNew</a>
+, <a class="el" href="group__types_group.html#gga117ed2c35f89ef3144540ed9cbadc818a06299d9c8262a16306ba6cc16d293c5e">js_DeliverByStartSequence</a>
+, <br />
+&#160;&#160;<a class="el" href="group__types_group.html#gga117ed2c35f89ef3144540ed9cbadc818a33317133d42f21bf5919827a691543f6">js_DeliverByStartTime</a>
+, <a class="el" href="group__types_group.html#gga117ed2c35f89ef3144540ed9cbadc818abb50ebcd2fbafe27038c966121b9407b">js_DeliverLastPerSubject</a>
+<br />
+ }</td></tr>
+<tr class="separator:ga117ed2c35f89ef3144540ed9cbadc818"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga8fcb50e6e7312834791f9e237d28e873"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga8fcb50e6e7312834791f9e237d28e873">jsAckPolicy</a> { <a class="el" href="group__types_group.html#gga8fcb50e6e7312834791f9e237d28e873a02d46a6395933c55c95ee5194bb6b80e">js_AckExplicit</a> = 0
+, <a class="el" href="group__types_group.html#gga8fcb50e6e7312834791f9e237d28e873afd91fe31cf57c68863ca3090b07c296c">js_AckNone</a>
+, <a class="el" href="group__types_group.html#gga8fcb50e6e7312834791f9e237d28e873a1232af28bf4e4b82e962174f1432ed4a">js_AckAll</a>
+ }</td></tr>
+<tr class="separator:ga8fcb50e6e7312834791f9e237d28e873"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga8650faf52b0b6b23df376eebeb9d0354"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga8650faf52b0b6b23df376eebeb9d0354">jsReplayPolicy</a> { <a class="el" href="group__types_group.html#gga8650faf52b0b6b23df376eebeb9d0354a2c4a1e2b75f31dd69a89b541d75afa44">js_ReplayInstant</a> = 0
+, <a class="el" href="group__types_group.html#gga8650faf52b0b6b23df376eebeb9d0354a6ee3851dac5c90a61492193dd55931f5">js_ReplayOriginal</a>
+ }</td></tr>
+<tr class="separator:ga8650faf52b0b6b23df376eebeb9d0354"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>NATS Types. </p>
@@ -219,6 +360,487 @@ Typedefs</h2></td></tr>
 
 </div>
 </div>
+<a id="gafd5523161ec3783e79719cb9a9a66b5b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gafd5523161ec3783e79719cb9a9a66b5b">&#9670;&nbsp;</a></span>natsMsgList</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structnats_msg_list.html">natsMsgList</a> <a class="el" href="structnats_msg_list.html">natsMsgList</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Used by some APIs which return a list of <a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a" title="A structure holding a subject, optional reply and payload.">natsMsg</a> objects.</p>
+<p>Those APIs will not create the object, but instead initialize the object to which a pointer to that object will be passed to it. Typically, the user will define the object on the stack and pass a pointer to this object to APIs that require a pointer to a <a class="el" href="structnats_msg_list.html" title="A list of NATS messages.">natsMsgList</a> object.</p>
+<p>Similarly, calling <a class="el" href="group__msg_group.html#ga1a091d24f939d881bf04fba78b8995c2" title="Destroys this list of messages.">natsMsgList_Destroy</a> will call <a class="el" href="group__msg_group.html#ga9e9590018284939f43f60964283f33ae" title="Destroys the message object.">natsMsg_Destroy</a> on any message still in the list, free the array containing pointers to the messages, but not free the <a class="el" href="structnats_msg_list.html" title="A list of NATS messages.">natsMsgList</a> object itself.</p>
+<dl class="section note"><dt>Note</dt><dd>If the user wants to keep some of the messages from the list, the pointers of those messages in the <code>Msgs</code> array should be set to <code>NULL</code>. The value <code>Count</code> MUST not be changed. The function <a class="el" href="group__msg_group.html#ga1a091d24f939d881bf04fba78b8995c2" title="Destroys this list of messages.">natsMsgList_Destroy</a> will iterate through all pointers in the list and only destroy the ones that have not been set to <code>NULL</code>.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__msg_group.html#ga1a091d24f939d881bf04fba78b8995c2" title="Destroys this list of messages.">natsMsgList_Destroy</a> </dd></dl>
+
+</div>
+</div>
+<a id="gaaf12cdd24c6cc23a57c20466c92ff8c1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaaf12cdd24c6cc23a57c20466c92ff8c1">&#9670;&nbsp;</a></span>jsCtx</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct __jsCtx <a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>The JetStream context. Use for JetStream assets management and communication.</p>
+<dl class="section warning"><dt>Warning</dt><dd>A context MUST not be destroyed concurrently with <a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> API calls (for instance <a class="el" href="group__js_pub_group.html#gac6ba005531c82d9f0efa88dd6b458477" title="Publishes data on a subject to JetStream.">js_Publish</a> or <a class="el" href="group__js_pub_group.html#ga069dfd6f0f3d96f1ff8bf2372e59900c" title="Publishes data to JetStream but does not wait for a jsPubAck.">js_PublishAsync</a>, etc...). However, it is safe to destroy the context while a <a class="el" href="group__callbacks_group.html#ga954768cc1d3388bb6ab723e777647992" title="Callback used to process asynchronous publish errors from JetStream.">jsPubAckErrHandler</a> callback is running or while inside <a class="el" href="group__js_pub_group.html#ga24813ee9a58f00c0f21d10ab9c93b81d" title="Wait for all outstanding messages to be acknowledged.">js_PublishAsyncComplete</a>. </dd></dl>
+
+</div>
+</div>
+<a id="ga7bbea3575d35dcdbfc9b766b04269eb7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga7bbea3575d35dcdbfc9b766b04269eb7">&#9670;&nbsp;</a></span>jsPubOptions</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_pub_options.html">jsPubOptions</a> <a class="el" href="structjs_pub_options.html">jsPubOptions</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>JetStream publish options.</p>
+<p>These are options that you can provide to JetStream publish APIs.</p>
+<p>The common usage will be to initialize a structure on the stack by calling <a class="el" href="group__js_pub_group.html#gaf09f333a8675a8060c5ede07a6bdeef9" title="Initializes a publish options structure.">jsPubOptions_Init</a>. Note that strings are owned by the application and need to be valid for the duration of the API call this object is passed to.</p>
+<dl class="section note"><dt>Note</dt><dd>It is the user responsibility to free the strings if they have been allocated.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__js_pub_group.html#gaf09f333a8675a8060c5ede07a6bdeef9" title="Initializes a publish options structure.">jsPubOptions_Init</a> </dd></dl>
+
+</div>
+</div>
+<a id="ga49d1138fac9da8b85d00a367081e91c9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga49d1138fac9da8b85d00a367081e91c9">&#9670;&nbsp;</a></span>jsPlacement</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_placement.html">jsPlacement</a> <a class="el" href="structjs_placement.html">jsPlacement</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Used to guide placement of streams in clustered JetStream.</p>
+<p>Initialize the object with <a class="el" href="group__js_assets_group.html#ga223691e6831072a0b8f8103a778293b0" title="Initializes a placement configuration structure.">jsPlacement_Init</a>.</p>
+<dl class="section note"><dt>Note</dt><dd>The strings are applications owned and will not be freed by the library.</dd></dl>
+<p>See <a class="el" href="structjs_stream_config.html">jsStreamConfig</a> for information on how to configure a stream.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__js_assets_group.html#ga223691e6831072a0b8f8103a778293b0" title="Initializes a placement configuration structure.">jsPlacement_Init</a> </dd></dl>
+
+</div>
+</div>
+<a id="gaef6601477f6456bebc229f7f38982a6c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaef6601477f6456bebc229f7f38982a6c">&#9670;&nbsp;</a></span>jsExternalStream</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_external_stream.html">jsExternalStream</a> <a class="el" href="structjs_external_stream.html">jsExternalStream</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Allows you to qualify access to a stream source in another account.</p>
+<p>Initialize the object with <a class="el" href="group__js_assets_group.html#ga81aebebcd79922104720da51e95020d4" title="Initializes an external stream configuration structure.">jsExternalStream_Init</a>.</p>
+<dl class="section note"><dt>Note</dt><dd>The strings are applications owned and will not be freed by the library.</dd></dl>
+<p>See <a class="el" href="structjs_stream_config.html">jsStreamConfig</a> for information on how to configure a stream. </p>
+
+</div>
+</div>
+<a id="gab4c43c87d81917aab748a50eee028449"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gab4c43c87d81917aab748a50eee028449">&#9670;&nbsp;</a></span>jsStreamSource</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_stream_source.html">jsStreamSource</a> <a class="el" href="structjs_stream_source.html">jsStreamSource</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Dictates how streams can source from other streams.</p>
+<p>Initialize the object with <a class="el" href="group__js_assets_group.html#ga7fe8e0bf98a38eb59372e7cd78aaaf56" title="Initializes a stream source configuration structure.">jsStreamSource_Init</a>.</p>
+<dl class="section note"><dt>Note</dt><dd>The strings are applications owned and will not be freed by the library.</dd>
+<dd>
+The <code>OptStartTime</code> needs to be expressed as the number of nanoseconds passed since 00:00:00 UTC Thursday, 1 January 1970.</dd></dl>
+<p>See <a class="el" href="structjs_stream_config.html">jsStreamConfig</a> for information on how to configure a stream. </p>
+
+</div>
+</div>
+<a id="ga26fd6a73df327ca3c271e46ddefc8acf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga26fd6a73df327ca3c271e46ddefc8acf">&#9670;&nbsp;</a></span>jsStreamConfig</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_stream_config.html">jsStreamConfig</a> <a class="el" href="structjs_stream_config.html">jsStreamConfig</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Configuration of a JetStream stream.</p>
+<p>There are sensible defaults for most. If no subjects are given the name will be used as the only subject.</p>
+<p>In order to add/update a stream, a configuration needs to be set. The typical usage would be to initialize all required objects on the stack and configure them, then pass the pointer to the configuration to <a class="el" href="group__js_assets_group.html#ga5efc5136d33ba52161e6732f88f1ee75" title="Creates a stream.">js_AddStream</a> or <a class="el" href="group__js_assets_group.html#ga75a5c44304e24481c67e17fbccc15c31" title="Updates a stream.">js_UpdateStream</a>.</p>
+<dl class="section note"><dt>Note</dt><dd>The strings are applications owned and will not be freed by the library.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__js_assets_group.html#gac230f71dbdc4d10bc7471d01763881d6" title="Initializes a streaming configuration structure.">jsStreamConfig_Init</a></dd></dl>
+<div class="fragment"><div class="line">jsStreamConfig   sc;</div>
+<div class="line">jsPlacement      p;</div>
+<div class="line">jsStreamSource   m;</div>
+<div class="line">jsExternalStream esm;</div>
+<div class="line">jsStreamSource   s1;</div>
+<div class="line">jsStreamSource   s2;</div>
+<div class="line">jsExternalStream esmS2;</div>
+<div class="line">const char       *subjects[]     = {&quot;foo&quot;, &quot;bar&quot;};</div>
+<div class="line">const char       *tags[]         = {&quot;tag1&quot;, &quot;tag2&quot;};</div>
+<div class="line">jsStreamSource   *sources[]      = {&amp;s1, &amp;s2};</div>
+<div class="line"> </div>
+<div class="line">jsStreamConfig_Init(&amp;sc);</div>
+<div class="line"> </div>
+<div class="line">jsPlacement_Init(&amp;p);</div>
+<div class="line">p.Cluster = &quot;MyCluster&quot;;</div>
+<div class="line">p.Tags = tags;</div>
+<div class="line">p.TagsLen = 2;</div>
+<div class="line"> </div>
+<div class="line">jsStreamSource_Init(&amp;m);</div>
+<div class="line">m.Name = &quot;AStream&quot;;</div>
+<div class="line">m.OptStartSeq = 100;</div>
+<div class="line">m.FilterSubject = &quot;foo&quot;;</div>
+<div class="line">jsExternalStream_Init(&amp;esm);</div>
+<div class="line">esm.APIPrefix = &quot;mirror.prefix.&quot;;</div>
+<div class="line">esm.DeliverPrefix = &quot;deliver.prefix.&quot;;</div>
+<div class="line">m.External = &amp;esm;</div>
+<div class="line"> </div>
+<div class="line">jsStreamSource_Init(&amp;s1);</div>
+<div class="line">s1.Name = &quot;StreamOne&quot;;</div>
+<div class="line">s1.OptStartSeq = 10;</div>
+<div class="line">s1.FilterSubject = &quot;stream.one&quot;;</div>
+<div class="line"> </div>
+<div class="line">jsStreamSource_Init(&amp;s2);</div>
+<div class="line">s2.Name = &quot;StreamTwo&quot;;</div>
+<div class="line">s2.FilterSubject = &quot;stream.two&quot;;</div>
+<div class="line">jsExternalStream_Init(&amp;esmS2);</div>
+<div class="line">esmS2.APIPrefix = &quot;mirror.prefix.&quot;;</div>
+<div class="line">esmS2.DeliverPrefix = &quot;deliver.prefix.&quot;;</div>
+<div class="line">s2.External = &amp;esmS2;</div>
+<div class="line"> </div>
+<div class="line">sc.Name = &quot;MyStream&quot;;</div>
+<div class="line">sc.Subjects = subjects;</div>
+<div class="line">sc.SubjectsLen = 2;</div>
+<div class="line">sc.Retention = js_InterestPolicy;</div>
+<div class="line">sc.Replicas = 3;</div>
+<div class="line">sc.Placement = &amp;p;</div>
+<div class="line">sc.Mirror = &amp;m;</div>
+<div class="line">sc.Sources = sources;</div>
+<div class="line">sc.SourcesLen = 2;</div>
+<div class="line"> </div>
+<div class="line">s = js_AddStream(&amp;si, js, &amp;sc, NULL, &amp;jerr);</div>
+</div><!-- fragment --> 
+</div>
+</div>
+<a id="gaf80828510450faf84bbf456e94f5b784"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaf80828510450faf84bbf456e94f5b784">&#9670;&nbsp;</a></span>jsLostStreamData</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_lost_stream_data.html">jsLostStreamData</a> <a class="el" href="structjs_lost_stream_data.html">jsLostStreamData</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Information about messages that have been lost </p>
+
+</div>
+</div>
+<a id="ga2bfd6de6ffc84d767482b3dd57cb9271"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga2bfd6de6ffc84d767482b3dd57cb9271">&#9670;&nbsp;</a></span>jsStreamState</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_stream_state.html">jsStreamState</a> <a class="el" href="structjs_stream_state.html">jsStreamState</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Information about the given stream</p>
+<dl class="section note"><dt>Note</dt><dd><code>FirstTime</code> and <code>LastTime</code> are message timestamps expressed as the number of nanoseconds passed since 00:00:00 UTC Thursday, 1 January 1970. </dd></dl>
+
+</div>
+</div>
+<a id="ga1e938dab794089f9329d7b7ece8f3e9b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga1e938dab794089f9329d7b7ece8f3e9b">&#9670;&nbsp;</a></span>jsPeerInfo</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_peer_info.html">jsPeerInfo</a> <a class="el" href="structjs_peer_info.html">jsPeerInfo</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Information about all the peers in the cluster that are supporting the stream or consumer. </p>
+
+</div>
+</div>
+<a id="gaaf92318ce94a1ae3547c9a7af5a3f4f6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaaf92318ce94a1ae3547c9a7af5a3f4f6">&#9670;&nbsp;</a></span>jsClusterInfo</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_cluster_info.html">jsClusterInfo</a> <a class="el" href="structjs_cluster_info.html">jsClusterInfo</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Information about the underlying set of servers that make up the stream or consumer. </p>
+
+</div>
+</div>
+<a id="gab2f33f57188a550f2f747d4f27bc24bd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gab2f33f57188a550f2f747d4f27bc24bd">&#9670;&nbsp;</a></span>jsStreamSourceInfo</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_stream_source_info.html">jsStreamSourceInfo</a> <a class="el" href="structjs_stream_source_info.html">jsStreamSourceInfo</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Information about an upstream stream source. </p>
+
+</div>
+</div>
+<a id="ga2629c9454996edf7914be36a9e44921b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga2629c9454996edf7914be36a9e44921b">&#9670;&nbsp;</a></span>jsStreamInfo</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_stream_info.html">jsStreamInfo</a> <a class="el" href="structjs_stream_info.html">jsStreamInfo</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Configuration and current state for this stream.</p>
+<dl class="section note"><dt>Note</dt><dd><code>Created</code> is the timestamp when the stream was created, expressed as the number of nanoseconds passed since 00:00:00 UTC Thursday, 1 January 1970. </dd></dl>
+
+</div>
+</div>
+<a id="ga0483b2197c0ddd9082b48c2dd3fe7cee"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga0483b2197c0ddd9082b48c2dd3fe7cee">&#9670;&nbsp;</a></span>jsConsumerConfig</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_consumer_config.html">jsConsumerConfig</a> <a class="el" href="structjs_consumer_config.html">jsConsumerConfig</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Configuration of a JetStream consumer.</p>
+<p>In order to add a consumer, a configuration needs to be set. The typical usage would be to initialize all required objects on the stack and configure them, then pass the pointer to the configuration to <a class="el" href="group__js_assets_group.html#gaf2efb63db150e782d9007090b49d4115" title="Adds a JetStream consumer.">js_AddConsumer</a>.</p>
+<dl class="section note"><dt>Note</dt><dd><code>OptStartTime</code> needs to be expressed as the number of nanoseconds passed since 00:00:00 UTC Thursday, 1 January 1970.</dd>
+<dd>
+The strings are applications owned and will not be freed by the library.</dd>
+<dd>
+<code>SampleFrequency</code> is a sampling value, represented as a string such as "50" for 50%, that causes the server to produce advisories for consumer ack metrics. If the percent sign is in the string, and since <code>%</code> is an escape character, it needs to be doubled, such as <code>cfg.SampleFrequency = "50%%";</code>.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__js_assets_group.html#ga3381bb05c05bf4a8979adde68d37dd66" title="Initializes a consumer configuration structure.">jsConsumerConfig_Init</a></dd></dl>
+<div class="fragment"><div class="line">jsConsumerInfo   *ci = NULL;</div>
+<div class="line">jsConsumerConfig cc;</div>
+<div class="line"> </div>
+<div class="line">jsConsumerConfig_Init(&amp;cc);</div>
+<div class="line">cc.Durable = &quot;MY_DURABLE&quot;;</div>
+<div class="line">cc.DeliverSubject = &quot;foo&quot;;</div>
+<div class="line">cc.DeliverPolicy = js_DeliverNew;</div>
+<div class="line"> </div>
+<div class="line">s = js_AddConsumer(&amp;ci, js, &amp;cc, NULL, &amp;jerr);</div>
+</div><!-- fragment --> 
+</div>
+</div>
+<a id="gace471cd2cef1df797b2a1c6b485049bd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gace471cd2cef1df797b2a1c6b485049bd">&#9670;&nbsp;</a></span>jsConsumerSequenceMismatch</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_consumer_sequence_mismatch.html">jsConsumerSequenceMismatch</a> <a class="el" href="structjs_consumer_sequence_mismatch.html">jsConsumerSequenceMismatch</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This represents a consumer sequence mismatch between the server and client views.</p>
+<p>This can help applications find out if messages have been missed. Without this and during a disconnect, it would be possible that a subscription is not aware that it missed messages from the server. When acknowledgment mode is other than <a class="el" href="group__types_group.html#gga8fcb50e6e7312834791f9e237d28e873afd91fe31cf57c68863ca3090b07c296c" title="Requires no acks for delivered messages.">js_AckNone</a>, messages would ultimately be redelivered, but for <a class="el" href="group__types_group.html#gga8fcb50e6e7312834791f9e237d28e873afd91fe31cf57c68863ca3090b07c296c" title="Requires no acks for delivered messages.">js_AckNone</a>, they would not. But even with an acknowledgment mode this may help finding sooner that something went wrong and let the application decide if it wants to recreate the subscription starting at a given sequence.</p>
+<p>The gap of missing messages could be calculated as <code>ConsumerServer-ConsumerClient</code>.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__js_sub_group.html#ga0daed9f0d2d00cb14314ecc180a6fa84" title="Returns the consumer sequence mismatch information.">natsSubscription_GetSequenceMismatch</a> </dd></dl>
+
+</div>
+</div>
+<a id="gaccfaac2079656ffd40d003e4de5d2280"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaccfaac2079656ffd40d003e4de5d2280">&#9670;&nbsp;</a></span>jsSubOptions</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_sub_options.html">jsSubOptions</a> <a class="el" href="structjs_sub_options.html">jsSubOptions</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>JetStream subscribe options.</p>
+<p>These are options that you can provide to JetStream subscribe APIs.</p>
+<p>The common usage will be to initialize a structure on the stack by calling <a class="el" href="group__js_sub_group.html#ga472adb949d1af9d8f07bda99f5d7f3f8" title="Initializes a subscribe options structure.">jsSubOptions_Init</a>. Note that strings are owned by the application and need to be valid for the duration of the API call this object is passed to.</p>
+<dl class="section note"><dt>Note</dt><dd>It is the user responsibility to free the strings if they have been allocated.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__js_sub_group.html#ga472adb949d1af9d8f07bda99f5d7f3f8" title="Initializes a subscribe options structure.">jsSubOptions_Init</a> </dd></dl>
+
+</div>
+</div>
+<a id="ga39011d30b295759b7f6ca0a7539dff8f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga39011d30b295759b7f6ca0a7539dff8f">&#9670;&nbsp;</a></span>jsSequencePair</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_sequence_pair.html">jsSequencePair</a> <a class="el" href="structjs_sequence_pair.html">jsSequencePair</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Includes the consumer and stream sequence info from a JetStream consumer. </p>
+
+</div>
+</div>
+<a id="ga2f21bb79884e56a5613d7fe76b11b1e5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga2f21bb79884e56a5613d7fe76b11b1e5">&#9670;&nbsp;</a></span>jsConsumerInfo</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_consumer_info.html">jsConsumerInfo</a> <a class="el" href="structjs_consumer_info.html">jsConsumerInfo</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Configuration and current state for this consumer.</p>
+<dl class="section note"><dt>Note</dt><dd><code>Created</code> is the timestamp when the consumer was created, expressed as the number of nanoseconds passed since 00:00:00 UTC Thursday, 1 January 1970. </dd></dl>
+
+</div>
+</div>
+<a id="gad057a0107367ce5727975f3daf63ff75"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gad057a0107367ce5727975f3daf63ff75">&#9670;&nbsp;</a></span>jsAPIStats</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_a_p_i_stats.html">jsAPIStats</a> <a class="el" href="structjs_a_p_i_stats.html">jsAPIStats</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Reports on API calls to JetStream for this account. </p>
+
+</div>
+</div>
+<a id="gaa889f706cce285adb9cea8aba0b76866"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaa889f706cce285adb9cea8aba0b76866">&#9670;&nbsp;</a></span>jsAccountLimits</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_account_limits.html">jsAccountLimits</a> <a class="el" href="structjs_account_limits.html">jsAccountLimits</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Includes the JetStream limits of the current account. </p>
+
+</div>
+</div>
+<a id="ga57cdc53b29a4fedb5a4140b6e64a4fab"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga57cdc53b29a4fedb5a4140b6e64a4fab">&#9670;&nbsp;</a></span>jsAccountInfo</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_account_info.html">jsAccountInfo</a> <a class="el" href="structjs_account_info.html">jsAccountInfo</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Information about the JetStream usage from the current account. </p>
+
+</div>
+</div>
+<a id="gace9595b1a5ce3f7a13670367fd293b4a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gace9595b1a5ce3f7a13670367fd293b4a">&#9670;&nbsp;</a></span>jsMsgMetaData</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_msg_meta_data.html">jsMsgMetaData</a> <a class="el" href="structjs_msg_meta_data.html">jsMsgMetaData</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This represents the JetStream metadata associated with received messages.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__js_msg.html#gacf48e59038fab35849e9dc6f8fcf6328" title="Returns metadata from this JetStream message.">natsMsg_GetMetaData</a> </dd>
+<dd>
+<a class="el" href="group__js_msg.html#gaf9bf92294342bcb27053de7038606d12" title="Destroys the message metadata object.">jsMsgMetaData_Destroy</a> </dd></dl>
+
+</div>
+</div>
+<a id="gaf1d5e436c5d41c5b9b96d84e3d2bc86f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaf1d5e436c5d41c5b9b96d84e3d2bc86f">&#9670;&nbsp;</a></span>jsPubAck</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_pub_ack.html">jsPubAck</a> <a class="el" href="structjs_pub_ack.html">jsPubAck</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Ack received after successfully publishing a message. </p>
+
+</div>
+</div>
+<a id="gadb7c287bc86b92765fbe45a066b96f40"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gadb7c287bc86b92765fbe45a066b96f40">&#9670;&nbsp;</a></span>jsPubAckErr</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a> <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Publish acknowledgment failure that will be passed to the optional <a class="el" href="group__callbacks_group.html#ga954768cc1d3388bb6ab723e777647992" title="Callback used to process asynchronous publish errors from JetStream.">jsPubAckErrHandler</a> callback. </p>
+
+</div>
+</div>
+<a id="ga0e3a3b7cf89e7dfa955f0f8f3f1eb6e5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga0e3a3b7cf89e7dfa955f0f8f3f1eb6e5">&#9670;&nbsp;</a></span>jsOptions</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_options.html">jsOptions</a> <a class="el" href="structjs_options.html">jsOptions</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>JetStream context options.</p>
+<p>Initialize the object with <a class="el" href="group__js_group.html#ga855ff9a04888d696785cc5ede96112e4" title="Initializes a streaming context options structure.">jsOptions_Init</a>. </p>
+
+</div>
+</div>
 <a id="ga9e826493769d23086cfccefe95cdf64c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga9e826493769d23086cfccefe95cdf64c">&#9670;&nbsp;</a></span>stanConnection</h2>
 
@@ -291,6 +913,145 @@ Typedefs</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Options can be used to create a customized <a class="el" href="group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5" title="Interest on a given channel.">stanSubscription</a>. </p>
+
+</div>
+</div>
+<h2 class="groupheader">Enumeration Type Documentation</h2>
+<a id="ga410f8fb053efa02b2ca1de0c02fa4b6d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga410f8fb053efa02b2ca1de0c02fa4b6d">&#9670;&nbsp;</a></span>jsRetentionPolicy</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum <a class="el" href="group__types_group.html#ga410f8fb053efa02b2ca1de0c02fa4b6d">jsRetentionPolicy</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Determines how messages in a set are retained. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="gga410f8fb053efa02b2ca1de0c02fa4b6da6a2aa02f32acec6526d81f6e974e690f"></a>js_LimitsPolicy&#160;</td><td class="fielddoc"><p>Specifies that messages are retained until any given limit is reached, which could be one of MaxMsgs, MaxBytes, or MaxAge. This is the default. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga410f8fb053efa02b2ca1de0c02fa4b6dae874de4a787cfbec4c6d0eb1a3f05ebd"></a>js_InterestPolicy&#160;</td><td class="fielddoc"><p>Specifies that when all known observables have acknowledged a message it can be removed. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga410f8fb053efa02b2ca1de0c02fa4b6daf7e6581e69572691b01d1294a3c3a478"></a>js_WorkQueuePolicy&#160;</td><td class="fielddoc"><p>Specifies that when the first worker or subscriber acknowledges the message it can be removed. </p>
+</td></tr>
+</table>
+
+</div>
+</div>
+<a id="ga7f88b7d482488398074f9d1419a9b8c2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga7f88b7d482488398074f9d1419a9b8c2">&#9670;&nbsp;</a></span>jsDiscardPolicy</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum <a class="el" href="group__types_group.html#ga7f88b7d482488398074f9d1419a9b8c2">jsDiscardPolicy</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Determines how to proceed when limits of messages or bytes are reached. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="gga7f88b7d482488398074f9d1419a9b8c2abb31b828421634f1e6a1ef9359bc91f6"></a>js_DiscardOld&#160;</td><td class="fielddoc"><p>Will remove older messages to return to the limits. This is the default. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga7f88b7d482488398074f9d1419a9b8c2a99d7f2d740af26c340c0a4e2b72fb6ab"></a>js_DiscardNew&#160;</td><td class="fielddoc"><p>Will fail to store new messages. </p>
+</td></tr>
+</table>
+
+</div>
+</div>
+<a id="ga1802a53c79e667f093bba033b16adc98"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga1802a53c79e667f093bba033b16adc98">&#9670;&nbsp;</a></span>jsStorageType</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum <a class="el" href="group__types_group.html#ga1802a53c79e667f093bba033b16adc98">jsStorageType</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Determines how messages are stored for retention. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="gga1802a53c79e667f093bba033b16adc98a1d9dad1854cf374b22e3688b98284dec"></a>js_FileStorage&#160;</td><td class="fielddoc"><p>Specifies on disk storage. It's the default. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga1802a53c79e667f093bba033b16adc98a428ed10448726ad01c1db77a7f748314"></a>js_MemoryStorage&#160;</td><td class="fielddoc"><p>Specifies in memory only. </p>
+</td></tr>
+</table>
+
+</div>
+</div>
+<a id="ga117ed2c35f89ef3144540ed9cbadc818"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga117ed2c35f89ef3144540ed9cbadc818">&#9670;&nbsp;</a></span>jsDeliverPolicy</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum <a class="el" href="group__types_group.html#ga117ed2c35f89ef3144540ed9cbadc818">jsDeliverPolicy</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Determines how the consumer should select the first message to deliver. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="gga117ed2c35f89ef3144540ed9cbadc818ac692ba1363103768ac4bb58695549758"></a>js_DeliverAll&#160;</td><td class="fielddoc"><p>Starts from the very beginning of a stream. This is the default. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga117ed2c35f89ef3144540ed9cbadc818abbd81d6c4e0f17f30e2186f1335e991d"></a>js_DeliverLast&#160;</td><td class="fielddoc"><p>Starts with the last sequence received. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga117ed2c35f89ef3144540ed9cbadc818a82b8d36e17391212398984f92db9c381"></a>js_DeliverNew&#160;</td><td class="fielddoc"><p>Starts with messages sent after the consumer is created. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga117ed2c35f89ef3144540ed9cbadc818a06299d9c8262a16306ba6cc16d293c5e"></a>js_DeliverByStartSequence&#160;</td><td class="fielddoc"><p>Starts from a given sequence. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga117ed2c35f89ef3144540ed9cbadc818a33317133d42f21bf5919827a691543f6"></a>js_DeliverByStartTime&#160;</td><td class="fielddoc"><p>Starts from a given UTC time (number of nanoseconds since epoch) </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga117ed2c35f89ef3144540ed9cbadc818abb50ebcd2fbafe27038c966121b9407b"></a>js_DeliverLastPerSubject&#160;</td><td class="fielddoc"><p>Starts with the last message for all subjects received. </p>
+</td></tr>
+</table>
+
+</div>
+</div>
+<a id="ga8fcb50e6e7312834791f9e237d28e873"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga8fcb50e6e7312834791f9e237d28e873">&#9670;&nbsp;</a></span>jsAckPolicy</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum <a class="el" href="group__types_group.html#ga8fcb50e6e7312834791f9e237d28e873">jsAckPolicy</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Determines how the consumer should acknowledge delivered messages. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="gga8fcb50e6e7312834791f9e237d28e873a02d46a6395933c55c95ee5194bb6b80e"></a>js_AckExplicit&#160;</td><td class="fielddoc"><p>Requires ack or nack for all messages. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga8fcb50e6e7312834791f9e237d28e873afd91fe31cf57c68863ca3090b07c296c"></a>js_AckNone&#160;</td><td class="fielddoc"><p>Requires no acks for delivered messages. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga8fcb50e6e7312834791f9e237d28e873a1232af28bf4e4b82e962174f1432ed4a"></a>js_AckAll&#160;</td><td class="fielddoc"><p>When acking a sequence number, this implicitly acks all sequences below this one as well. </p>
+</td></tr>
+</table>
+
+</div>
+</div>
+<a id="ga8650faf52b0b6b23df376eebeb9d0354"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga8650faf52b0b6b23df376eebeb9d0354">&#9670;&nbsp;</a></span>jsReplayPolicy</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum <a class="el" href="group__types_group.html#ga8650faf52b0b6b23df376eebeb9d0354">jsReplayPolicy</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Determines how the consumer should replay messages it already has queued in the stream. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="gga8650faf52b0b6b23df376eebeb9d0354a2c4a1e2b75f31dd69a89b541d75afa44"></a>js_ReplayInstant&#160;</td><td class="fielddoc"><p>Replays messages as fast as possible. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga8650faf52b0b6b23df376eebeb9d0354a6ee3851dac5c90a61492193dd55931f5"></a>js_ReplayOriginal&#160;</td><td class="fielddoc"><p>Maintains the same timing as the messages were received. </p>
+</td></tr>
+</table>
 
 </div>
 </div>

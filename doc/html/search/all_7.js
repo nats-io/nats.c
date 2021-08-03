@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['management_12',['Management',['../group__conn_mgt_group.html',1,'(Global Namespace)'],['../group__stan_conn_mgt_group.html',1,'(Global Namespace)']]],
-  ['message_13',['Message',['../group__msg_group.html',1,'']]]
+  ['heartbeat_50',['Heartbeat',['../structjs_consumer_config.html#ac439828c3bedb8826a1e92de13280d53',1,'jsConsumerConfig']]]
 ];

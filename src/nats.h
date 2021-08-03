@@ -5396,7 +5396,7 @@ natsSubscription_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscr
 
 /** @} */ // end of jsSubGroup
 
-/** \defgroup jsMsg JetStream Message
+/** \defgroup jsMsg Messages
  *
  *  Function specific to JetStream messages
  *  @{

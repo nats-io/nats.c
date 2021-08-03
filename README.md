@@ -9,7 +9,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 [![License Apache 2](https://img.shields.io/badge/License-Apache2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Build Status](https://travis-ci.com/nats-io/nats.c.svg?branch=main)](https://travis-ci.com/github/nats-io/nats.c)
 [![Coverage Status](https://coveralls.io/repos/github/nats-io/nats.c/badge.svg?branch=main)](https://coveralls.io/github/nats-io/nats.c?branch=main)
-[![Release](https://img.shields.io/badge/release-v2.6.0-blue.svg?style=flat)](https://github.com/nats-io/nats.c/releases/tag/v2.6.0)
+[![Release](https://img.shields.io/badge/release-v3.0.0-blue.svg?style=flat)](https://github.com/nats-io/nats.c/releases/tag/v3.0.0)
 [![Documentation](https://img.shields.io/badge/doc-Doxygen-brightgreen.svg?style=flat)](http://nats-io.github.io/nats.c)
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/nats-io/nats.c.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/nats-io/nats.c/alerts/)
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/nats-io/nats.c.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/nats-io/nats.c/context:cpp)
@@ -425,7 +425,8 @@ onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 ## JetStream
 
 Support for JetStream starts with the version `v3.0.0` of the library and NATS Server `v2.2.0+`, although getting JetStream
-specific error codes requires the server at version `v2.3.0+`.
+specific error codes requires the server at version `v2.3.0+`. Some of the configuration options are only available starting `v2.3.3`,
+so we recommend that you use the latest NATS Server release to have a better experience.
 
 Look at examples named `js-xxx.c` in the `examples` directory for examples on how to use the API.
 The new objects and APIs are full documented in the online [documentation](http://nats-io.github.io/nats.c/group__js_group.html).

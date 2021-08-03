@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Type" content="text/xhtml;charset=UTF-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.9.1"/>
-<title>NATS C Client with Streaming support: Callbacks</title>
+<title>NATS C Client with JetStream and Streaming support: Callbacks</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -25,8 +25,8 @@
  <tbody>
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
-   <div id="projectname">NATS C Client with Streaming support
-   &#160;<span id="projectnumber">2.6.0</span>
+   <div id="projectname">NATS C Client with JetStream and Streaming support
+   &#160;<span id="projectnumber">3.0.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -128,6 +128,9 @@ Typedefs</h2></td></tr>
 <tr class="memitem:ga3353d4b92851c52121f65aaf0684cba4"><td class="memItemLeft" align="right" valign="top">typedef int64_t(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga3353d4b92851c52121f65aaf0684cba4">natsCustomReconnectDelayHandler</a>) (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, int attempts, void *closure)</td></tr>
 <tr class="memdesc:ga3353d4b92851c52121f65aaf0684cba4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to specify how long to wait between reconnects.  <a href="group__callbacks_group.html#ga3353d4b92851c52121f65aaf0684cba4">More...</a><br /></td></tr>
 <tr class="separator:ga3353d4b92851c52121f65aaf0684cba4"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga954768cc1d3388bb6ab723e777647992"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga954768cc1d3388bb6ab723e777647992">jsPubAckErrHandler</a>) (<a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> *js, <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a> *pae, void *closure)</td></tr>
+<tr class="memdesc:ga954768cc1d3388bb6ab723e777647992"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to process asynchronous publish errors from JetStream.  <a href="group__callbacks_group.html#ga954768cc1d3388bb6ab723e777647992">More...</a><br /></td></tr>
+<tr class="separator:ga954768cc1d3388bb6ab723e777647992"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gad5d6a685731b3bf635995b7375af4d18"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gad5d6a685731b3bf635995b7375af4d18">stanPubAckHandler</a>) (const char *guid, const char *error, void *closure)</td></tr>
 <tr class="memdesc:gad5d6a685731b3bf635995b7375af4d18"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify of an asynchronous publish result.  <a href="group__callbacks_group.html#gad5d6a685731b3bf635995b7375af4d18">More...</a><br /></td></tr>
 <tr class="separator:gad5d6a685731b3bf635995b7375af4d18"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -387,6 +390,39 @@ Typedefs</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>the number of milliseconds to wait before trying to reconnect. </dd></dl>
+
+</div>
+</div>
+<a id="ga954768cc1d3388bb6ab723e777647992"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga954768cc1d3388bb6ab723e777647992">&#9670;&nbsp;</a></span>jsPubAckErrHandler</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef void(* jsPubAckErrHandler) (<a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> *js, <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a> *pae, void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Callback used to process asynchronous publish errors from JetStream <a class="el" href="group__js_pub_group.html#ga069dfd6f0f3d96f1ff8bf2372e59900c" title="Publishes data to JetStream but does not wait for a jsPubAck.">js_PublishAsync</a> and <a class="el" href="group__js_pub_group.html#gab7e4139a48c5ee4d2155cbb43142e873" title="Publishes a message to JetStream but does not wait for a jsPubAck.">js_PublishMsgAsync</a> calls. The provided <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a> object gives the user access to the encountered error along with the original message sent to the server for possible restransmitting.</p>
+<dl class="section note"><dt>Note</dt><dd>If the message is resent, the library will not destroy the original message and once again take ownership of it. To resend the message, do the following so that the library knows not to destroy the message (since the call will clear the <code>Msg</code> field from the <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a> object).</dd></dl>
+<div class="fragment"><div class="line">void myPAECallback(jsCtx *js, jsPubAckErr *pae, void* closure)</div>
+<div class="line">{</div>
+<div class="line">     ...</div>
+<div class="line">     // Resend the message</div>
+<div class="line">     js_PublishMsgAsync(js, &amp;(pae-&gt;Msg), NULL);</div>
+<div class="line">}</div>
+</div><!-- fragment --><dl class="section warning"><dt>Warning</dt><dd>The <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a> object and its content will be invalid as soon as the callback returns.</dd>
+<dd>
+Unlike a NATS message callback, the user does not have to destroy the original NATS message (present in the <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a> object), the library will do it.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">js</td><td>the pointer to the <a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> object. </td></tr>
+    <tr><td class="paramname">pae</td><td>the pointer to the <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a> object. </td></tr>
+    <tr><td class="paramname">closure</td><td>an optional pointer to a user defined object that was specified when registering the callback. </td></tr>
+  </table>
+  </dd>
+</dl>
 
 </div>
 </div>

@@ -23,6 +23,10 @@
 
 int jsonMaxNested = JSON_MAX_NEXTED;
 
+// A long double memory size is larger (or equal to) u/int64_t, so use that
+// as the maximum size of a num element in an array.
+#define JSON_MAX_NUM_SIZE   ((int) sizeof(long double))
+
 // Forward declarations due to recursive calls
 static natsStatus _jsonParse(nats_JSON **newJSON, int *parsedLen, const char *jsonStr, int jsonLen, int nested);
 static natsStatus _jsonParseValue(char **str, nats_JSONField *field, int nested);
@@ -63,18 +67,18 @@ for (i=0; i<arr->size; i++)                         \
 return NATS_OK;
 
 #define JSON_ARRAY_AS_NUM(t) \
-int i;                                                      \
-t* values = (t*) NATS_CALLOC(arr->size, sizeof(t));         \
-if (values == NULL)                                         \
-    return nats_setDefaultError(NATS_NO_MEMORY);            \
-for (i=0; i<arr->size; i++)                                 \
-{                                                           \
-    void *ptr = NULL;                                       \
-    ptr = (void*) ((char*)(arr->values)+(i*jsonMaxNumSize));\
-    values[i] = *(t*) ptr;                                  \
-}                                                           \
-*array     = values;                                        \
-*arraySize = arr->size;                                     \
+int i;                                                          \
+t* values = (t*) NATS_CALLOC(arr->size, sizeof(t));             \
+if (values == NULL)                                             \
+    return nats_setDefaultError(NATS_NO_MEMORY);                \
+for (i=0; i<arr->size; i++)                                     \
+{                                                               \
+    void *ptr = NULL;                                           \
+    ptr = (void*) ((char*)(arr->values)+(i*JSON_MAX_NUM_SIZE)); \
+    values[i] = *(t*) ptr;                                      \
+}                                                               \
+*array     = values;                                            \
+*arraySize = arr->size;                                         \
 return NATS_OK;
 
 #define JSON_GET_ARRAY(t, f) \
@@ -679,7 +683,7 @@ _jsonGetArray(char **ptr, nats_JSONArray **newArray, int nested)
                 {
                     case TYPE_STR:      array.eltSize = sizeof(char*);              break;
                     case TYPE_BOOL:     array.eltSize = sizeof(bool);               break;
-                    case TYPE_NUM:      array.eltSize = jsonMaxNumSize;             break;
+                    case TYPE_NUM:      array.eltSize = JSON_MAX_NUM_SIZE;          break;
                     case TYPE_OBJECT:   array.eltSize = sizeof(nats_JSON*);         break;
                     case TYPE_ARRAY:    array.eltSize = sizeof(nats_JSONArray*);    break;
                     default:
@@ -725,24 +729,24 @@ _jsonGetArray(char **ptr, nats_JSONArray **newArray, int nested)
                  break;
             case TYPE_NUM:
             {
-                void    *ptr = NULL;
+                void    *numPtr = NULL;
                 size_t  sz   = 0;
 
                 switch (field.numTyp)
                 {
                     case TYPE_INT:
-                        ptr = &(field.value.vint);
-                        sz  = sizeof(int64_t);
+                        numPtr = &(field.value.vint);
+                        sz     = sizeof(int64_t);
                         break;
                     case TYPE_UINT:
-                        ptr = &(field.value.vuint);
-                        sz  = sizeof(uint64_t);
+                        numPtr = &(field.value.vuint);
+                        sz     = sizeof(uint64_t);
                         break;
                     default:
-                        ptr = &(field.value.vdec);
-                        sz  = sizeof(long double);
+                        numPtr = &(field.value.vdec);
+                        sz     = sizeof(long double);
                 }
-                memcpy((void*)(((char *)array.values)+(array.size*array.eltSize)), ptr, sz);
+                memcpy((void*)(((char *)array.values)+(array.size*array.eltSize)), numPtr, sz);
                 array.size++;
                 break;
             }

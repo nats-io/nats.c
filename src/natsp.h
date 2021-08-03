@@ -135,8 +135,6 @@
 
 #define IFOK(s, c)      if (s == NATS_OK) { s = (c); }
 
-extern int jsonMaxNumSize;
-
 extern int64_t gLockSpinCount;
 
 typedef void (*natsInitOnceCb)(void);

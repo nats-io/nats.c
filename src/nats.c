@@ -128,7 +128,6 @@ typedef struct __natsLib
 } natsLib;
 
 int64_t gLockSpinCount = 2000;
-int     jsonMaxNumSize = 0;
 
 static natsInitOnceType gInitOnce = NATS_ONCE_STATIC_INIT;
 static natsLib          gLib;
@@ -404,16 +403,6 @@ _doInitOnce(void)
         fprintf(stderr, "FATAL ERROR: Unable to initialize library!\n");
         fflush(stderr);
         abort();
-    }
-
-    if (jsonMaxNumSize == 0)
-    {
-        int szInt    = (int) sizeof(int64_t);
-        int szUInt   = (int) sizeof(uint64_t);
-        int szDbl    = (int) sizeof(long double);
-
-        jsonMaxNumSize = (szDbl > szInt ? szDbl : szInt);
-        jsonMaxNumSize = (jsonMaxNumSize > szUInt ? jsonMaxNumSize : szUInt);
     }
 
     natsSys_Init();

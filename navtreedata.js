@@ -24,7 +24,7 @@
 */
 var NAVTREE =
 [
-  [ "NATS C Client with Streaming support", "index.html", [
+  [ "NATS C Client with JetStream and Streaming support", "index.html", [
     [ "NATS C client.", "index.html", [
       [ "Introduction", "index.html#intro_sec", null ],
       [ "Installation", "index.html#install_sec", null ],
@@ -33,11 +33,19 @@ var NAVTREE =
     ] ],
     [ "Deprecated List", "deprecated.html", null ],
     [ "Modules", "modules.html", "modules" ],
+    [ "Classes", "annotated.html", [
+      [ "Class List", "annotated.html", "annotated_dup" ],
+      [ "Class Index", "classes.html", null ],
+      [ "Class Members", "functions.html", [
+        [ "All", "functions.html", null ],
+        [ "Variables", "functions_vars.html", null ]
+      ] ]
+    ] ],
     [ "Files", "files.html", [
       [ "File List", "files.html", "files_dup" ],
       [ "File Members", "globals.html", [
         [ "All", "globals.html", "globals_dup" ],
-        [ "Functions", "globals_func.html", null ],
+        [ "Functions", "globals_func.html", "globals_func" ],
         [ "Typedefs", "globals_type.html", null ],
         [ "Enumerations", "globals_enum.html", null ],
         [ "Enumerator", "globals_eval.html", null ],
@@ -49,9 +57,11 @@ var NAVTREE =
 
 var NAVTREEINDEX =
 [
-"deprecated.html",
-"group__opts_group.html#ga36943e2ba53d05407cdabc4e7e96484b",
-"nats_8h.html#af798865ac824e5959987de0fe8d07383"
+"annotated.html",
+"group__library_group.html#ga5fab3b18c4fe3630254483575f6066f4",
+"group__stan_sub_opts_group.html#gaa018bceba99ef3726157e87c6918ab14",
+"status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a739799359c3988ea18fe861eaff6f1f5",
+"structjs_stream_info.html#adcc402d28e0ee443419e9b549da233c6"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

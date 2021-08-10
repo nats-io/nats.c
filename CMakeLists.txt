@@ -10,6 +10,18 @@ include(FindPackageHandleStandardArgs)
 # Uncomment to have the executable moved to 'build' instead of their respective 'build/xxx' directories
 #set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 
+# Set a default build type if none was specified
+set(default_build_type "Release")
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Setting build type to '${default_build_type}' as none was specified.")
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+      STRING "Choose the type of build." FORCE)
+  # Set the possible values of build type for cmake-gui
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+    "Release" "Debug" "MinSizeRel" "RelWithDebInfo")
+endif()
+
 option(NATS_UPDATE_VERSION "Update the version file" OFF)
 option(NATS_UPDATE_DOC "Update the doc template file" OFF)
 option(NATS_COVERAGE "Code coverage" OFF)
@@ -145,9 +157,6 @@ if(UNIX)
 
   set(NATS_LIBDIR ${CMAKE_INSTALL_LIBDIR})
   set(NATS_INCLUDE_DIR ${CMAKE_INSTALL_INCLUDEDIR})
-
-  set(NATS_BUILD_TYPE Release CACHE STRING "Build type: Release, Debug, RelWithDebInfo, MinRelSize")
-  set(CMAKE_BUILD_TYPE ${NATS_BUILD_TYPE} CACHE INTERNAL "")
 
   set(NATS_BUILD_ARCH "64" CACHE STRING "32 for 32bits builds")
 

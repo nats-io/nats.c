@@ -740,6 +740,7 @@ typedef struct jsMsgMetaData
         int64_t         Timestamp;
         char            *Stream;
         char            *Consumer;
+        char            *Domain;
 
 } jsMsgMetaData;
 

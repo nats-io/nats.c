@@ -1032,6 +1032,7 @@ _copyString(char **new_str, const char *str, int l)
 
 static natsStatus
 _getMetaData(const char *reply,
+    char **domain,
     char **stream,
     char **consumer,
     uint64_t *numDelivered,
@@ -1043,23 +1044,73 @@ _getMetaData(const char *reply,
 {
     natsStatus  s    = NATS_OK;
     const char  *p   = reply;
+    const char  *np  = NULL;
     const char  *str = NULL;
     int         done = 0;
     int64_t     val  = 0;
+    int         nt   = 0;
     int         i, l;
+    struct token {
+        const char* start;
+        int         len;
+    };
+    struct token tokens[9];
 
-    for (i=0; i<7; i++)
+    memset(tokens, 0, sizeof(tokens));
+
+    // v1 version of subject is total of 9 tokens:
+    //
+    // $JS.ACK.<stream name>.<consumer name>.<num delivered>.<stream sequence>.<consumer sequence>.<timestamp>.<num pending>
+    //
+    // Since we are here with the 2 first token stripped, the number of tokens is 7.
+    //
+    // v2 version of subject total tokens is 12:
+    //
+    // $JS.ACK.<domain>.<account hash>.<stream name>.<consumer name>.<num delivered>.<stream sequence>.<consumer sequence>.<timestamp>.<num pending>.<a token with a random value>
+    //
+    // Again, since "$JS.ACK." has already been stripped, this is 10 tokens.
+    // However, the library does not care about anything after the num pending,
+    // so it would be 9 tokens.
+
+    // Find tokens but stop when we have at most 9 tokens.
+    while ((nt < 9) && ((np = strchr(p, '.')) != NULL))
     {
-        str = p;
-        p = strchr(p, '.');
-        if (p == NULL)
-        {
-            if (i < 6)
-                return NATS_ERR;
-            p = strrchr(str, '\0');
-        }
-        l = (int) (p-str);
-        if (i > 1)
+        tokens[nt].start = p;
+        tokens[nt].len   = (int) (np - p);
+        nt++;
+        p = (const char*) (np+1);
+    }
+    if (np == NULL)
+    {
+        tokens[nt].start = p;
+        tokens[nt].len   = (int) (strlen(p));
+        nt++;
+    }
+
+    // It is invalid if less than 7 or if it has more than 7, it has to have
+    // at least 9 to be valid.
+    if ((nt < 7) || ((nt > 7) && (nt < 9)))
+        return NATS_ERR;
+
+    // If it is 7 tokens (the v1), then insert 2 empty tokens at the beginning.
+    if (nt == 7)
+    {
+        memmove(&(tokens[2]), &(tokens[0]), nt*sizeof(struct token));
+        tokens[0].start = NULL;
+        tokens[0].len = 0;
+        tokens[1].start = NULL;
+        tokens[1].len = 0;
+        // We work with knowledge that we have now 9 tokens.
+        nt = 9;
+    }
+
+    for (i=0; i<nt; i++)
+    {
+        str = tokens[i].start;
+        l   = tokens[i].len;
+        // For numeric tokens, anything after the consumer name token,
+        // which is index 3 (starting at 0).
+        if (i > 3)
         {
             val = nats_ParseInt64(str, l);
             // Since we don't expect any negative value,
@@ -1071,6 +1122,22 @@ _getMetaData(const char *reply,
         switch (i)
         {
             case 0:
+                if (domain != NULL)
+                {
+                    // A domain "_" will be sent by new server to indicate
+                    // that there is no domain, but to make the number of tokens
+                    // constant.
+                    if ((str == NULL) || ((l == 1) && (str[0] == '_')))
+                        *domain = NULL;
+                    else if ((s = _copyString(domain, str, l)) != NATS_OK)
+                        return NATS_UPDATE_ERR_STACK(s);
+                    done++;
+                }
+                break;
+            case 1:
+                // acc hash, ignore.
+                break;
+            case 2:
                 if (stream != NULL)
                 {
                     if ((s = _copyString(stream, str, l)) != NATS_OK)
@@ -1078,7 +1145,7 @@ _getMetaData(const char *reply,
                     done++;
                 }
                 break;
-            case 1:
+            case 3:
                 if (consumer != NULL)
                 {
                     if ((s = _copyString(consumer, str, l)) != NATS_OK)
@@ -1086,35 +1153,35 @@ _getMetaData(const char *reply,
                     done++;
                 }
                 break;
-            case 2:
+            case 4:
                 if (numDelivered != NULL)
                 {
                     *numDelivered = (uint64_t) val;
                     done++;
                 }
                 break;
-            case 3:
+            case 5:
                 if (sseq != NULL)
                 {
                     *sseq = (uint64_t) val;
                     done++;
                 }
                 break;
-            case 4:
+            case 6:
                 if (dseq != NULL)
                 {
                     *dseq = (uint64_t) val;
                     done++;
                 }
                 break;
-            case 5:
+            case 7:
                 if (tm != NULL)
                 {
                     *tm = val;
                     done++;
                 }
                 break;
-            case 6:
+            case 8:
                 if (numPending != NULL)
                 {
                     *numPending = (uint64_t) val;
@@ -1124,7 +1191,6 @@ _getMetaData(const char *reply,
         }
         if (done == asked)
             return NATS_OK;
-        p++;
     }
     return NATS_OK;
 }
@@ -1140,7 +1206,7 @@ jsSub_trackSequences(jsSub *jsi, const char *reply)
     // Data is equivalent to HB, so capture this as the last HB received.
     jsi->lasthb = nats_Now();
 
-    s = _getMetaData(reply+jsAckPrefixLen, NULL, NULL, NULL, &jsi->sseq, &jsi->dseq, NULL, NULL, 2);
+    s = _getMetaData(reply+jsAckPrefixLen, NULL, NULL, NULL, NULL, &jsi->sseq, &jsi->dseq, NULL, NULL, 2);
     if (s != NATS_OK)
     {
         if (s == NATS_ERR)
@@ -1967,6 +2033,7 @@ natsMsg_GetMetaData(jsMsgMetaData **new_meta, natsMsg *msg)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
     s = _getMetaData(msg->reply+jsAckPrefixLen,
+                        &(meta->Domain),
                         &(meta->Stream),
                         &(meta->Consumer),
                         &(meta->NumDelivered),
@@ -1974,7 +2041,7 @@ natsMsg_GetMetaData(jsMsgMetaData **new_meta, natsMsg *msg)
                         &(meta->Sequence.Consumer),
                         &(meta->Timestamp),
                         &(meta->NumPending),
-                        7);
+                        8);
     if (s == NATS_ERR)
         s = nats_setError(NATS_ERR, "invalid meta data '%s'", msg->reply);
 
@@ -1994,6 +2061,7 @@ jsMsgMetaData_Destroy(jsMsgMetaData *meta)
 
     NATS_FREE(meta->Stream);
     NATS_FREE(meta->Consumer);
+    NATS_FREE(meta->Domain);
     NATS_FREE(meta);
 }
 

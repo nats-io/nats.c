@@ -23774,6 +23774,42 @@ test_JetStreamSubscribeSync(void)
     natsMsg_Destroy(msg);
     msg = NULL;
 
+    test("Get Meta failure (terminal dot): ");
+    s = natsMsg_Create(&msg, "foo", "$JS.ACK.TEST.CONSUMER.1.1.1.1629415486698860000.3.", NULL, 0);
+    if (s == NATS_OK)
+        msg->sub = sub;
+    IFOK(s, natsMsg_GetMetaData(&meta, msg));
+    testCond((s == NATS_ERR) && (meta == NULL)
+                && (strstr(nats_GetLastError(NULL), "invalid meta") != NULL));
+    nats_clearLastError();
+    msg->sub = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Get Meta failure (too small): ");
+    s = natsMsg_Create(&msg, "foo", "$JS.ACK.TEST.CONSUMER.1.1.1.1629415486698860000", NULL, 0);
+    if (s == NATS_OK)
+        msg->sub = sub;
+    IFOK(s, natsMsg_GetMetaData(&meta, msg));
+    testCond((s == NATS_ERR) && (meta == NULL)
+                && (strstr(nats_GetLastError(NULL), "invalid meta") != NULL));
+    nats_clearLastError();
+    msg->sub = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Get Meta failure (too small v2): ");
+    s = natsMsg_Create(&msg, "foo", "$JS.ACK.HUB.accHash.TEST.CONSUMER.1.1.1.1629415486698860000", NULL, 0);
+    if (s == NATS_OK)
+        msg->sub = sub;
+    IFOK(s, natsMsg_GetMetaData(&meta, msg));
+    testCond((s == NATS_ERR) && (meta == NULL)
+                && (strstr(nats_GetLastError(NULL), "invalid meta") != NULL));
+    nats_clearLastError();
+    msg->sub = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
     test("Get Meta failure (invalid content): ");
     s = natsMsg_Create(&msg, "foo", "$JS.ACK.TEST.CONSUMER.and.some.bad.other.things", NULL, 0);
     if (s == NATS_OK)
@@ -23782,6 +23818,98 @@ test_JetStreamSubscribeSync(void)
     testCond((s == NATS_ERR) && (meta == NULL)
                 && (strstr(nats_GetLastError(NULL), "invalid meta") != NULL));
     nats_clearLastError();
+    msg->sub = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Get Meta failure (invalid content v2): ");
+    s = natsMsg_Create(&msg, "foo", "$JS.ACK.HUB.accHash.TEST.CONSUMER.and.some.bad.other.things", NULL, 0);
+    if (s == NATS_OK)
+        msg->sub = sub;
+    IFOK(s, natsMsg_GetMetaData(&meta, msg));
+    testCond((s == NATS_ERR) && (meta == NULL)
+                && (strstr(nats_GetLastError(NULL), "invalid meta") != NULL));
+    nats_clearLastError();
+    msg->sub = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Get Meta v2: ");
+    s = natsMsg_Create(&msg, "foo", "$JS.ACK.HUB.accHash.TEST.CONSUMER.1.2.3.1629415486698860000.4.random", NULL, 0);
+    if (s == NATS_OK)
+        msg->sub = sub;
+    IFOK(s, natsMsg_GetMetaData(&meta, msg));
+    testCond((s == NATS_OK) && (meta != NULL)
+                && (strcmp(meta->Domain, "HUB") == 0)
+                && (strcmp(meta->Stream, "TEST") == 0)
+                && (strcmp(meta->Consumer, "CONSUMER") == 0)
+                && (meta->NumDelivered == 1)
+                && (meta->Sequence.Stream == 2)
+                && (meta->Sequence.Consumer == 3)
+                && (meta->Timestamp == 1629415486698860000)
+                && (meta->NumPending == 4));
+    jsMsgMetaData_Destroy(meta);
+    meta = NULL;
+    msg->sub = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Get Meta v2 (empty domain): ");
+    s = natsMsg_Create(&msg, "foo", "$JS.ACK._.accHash.TEST.CONSUMER.1.2.3.1629415486698860000.4.random", NULL, 0);
+    if (s == NATS_OK)
+        msg->sub = sub;
+    IFOK(s, natsMsg_GetMetaData(&meta, msg));
+    testCond((s == NATS_OK) && (meta != NULL)
+                && (meta->Domain == NULL)
+                && (strcmp(meta->Stream, "TEST") == 0)
+                && (strcmp(meta->Consumer, "CONSUMER") == 0)
+                && (meta->NumDelivered == 1)
+                && (meta->Sequence.Stream == 2)
+                && (meta->Sequence.Consumer == 3)
+                && (meta->Timestamp == 1629415486698860000)
+                && (meta->NumPending == 4));
+    jsMsgMetaData_Destroy(meta);
+    meta = NULL;
+    msg->sub = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Get Meta v2 (no failure with appended tokens): ");
+    s = natsMsg_Create(&msg, "foo", "$JS.ACK._.accHash.TEST.CONSUMER.1.2.3.1629415486698860000.4.random.new_one", NULL, 0);
+    if (s == NATS_OK)
+        msg->sub = sub;
+    IFOK(s, natsMsg_GetMetaData(&meta, msg));
+    testCond((s == NATS_OK) && (meta != NULL)
+                && (meta->Domain == NULL)
+                && (strcmp(meta->Stream, "TEST") == 0)
+                && (strcmp(meta->Consumer, "CONSUMER") == 0)
+                && (meta->NumDelivered == 1)
+                && (meta->Sequence.Stream == 2)
+                && (meta->Sequence.Consumer == 3)
+                && (meta->Timestamp == 1629415486698860000)
+                && (meta->NumPending == 4));
+    jsMsgMetaData_Destroy(meta);
+    meta = NULL;
+    msg->sub = NULL;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Get Meta v2 (no failure with appended tokens, malformed ok): ");
+    s = natsMsg_Create(&msg, "foo", "$JS.ACK._.accHash.TEST.CONSUMER.1.2.3.1629415486698860000.4.", NULL, 0);
+    if (s == NATS_OK)
+        msg->sub = sub;
+    IFOK(s, natsMsg_GetMetaData(&meta, msg));
+    testCond((s == NATS_OK) && (meta != NULL)
+                && (meta->Domain == NULL)
+                && (strcmp(meta->Stream, "TEST") == 0)
+                && (strcmp(meta->Consumer, "CONSUMER") == 0)
+                && (meta->NumDelivered == 1)
+                && (meta->Sequence.Stream == 2)
+                && (meta->Sequence.Consumer == 3)
+                && (meta->Timestamp == 1629415486698860000)
+                && (meta->NumPending == 4));
+    jsMsgMetaData_Destroy(meta);
+    meta = NULL;
     msg->sub = NULL;
     natsMsg_Destroy(msg);
     msg = NULL;

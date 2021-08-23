@@ -37,6 +37,7 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsExpectedLastSeqHdr        "Nats-Expected-Last-Sequence"
 #define jsExpectedLastSubjSeqHdr    "Nats-Expected-Last-Subject-Sequence"
 #define jsExpectedLastMsgIdHdr      "Nats-Expected-Last-Msg-Id"
+#define jsConsumerStalledHdr        "Nats-Consumer-Stalled"
 
 #define jsErrStreamNameRequired             "stream name is required"
 #define jsErrConsumerNameRequired           "consumer name is required"
@@ -49,7 +50,8 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsErrNotAPullSubscription           "not a JetStream pull subscription"
 #define jsErrNotAJetStreamSubscription      "not a JetStream subscription"
 #define jsErrNotApplicableToPullSub         "not applicable to JetStream pull subscriptions"
-#define jsErrNoHeartbeatForQueueSub         "a queue subscription cannot be created against consumer with heartbeat"
+#define jsErrNoHeartbeatForQueueSub         "a queue subscription cannot be created for a consumer with heartbeat"
+#define jsErrNoFlowControlForQueueSub       "a queue subscription cannot be created for a consumer with flow control"
 #define jsErrConsumerSeqMismatch            "consumer sequence mismatch"
 
 #define jsCtrlHeartbeat     (1)

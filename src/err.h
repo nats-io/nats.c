@@ -44,4 +44,7 @@ nats_doNotUpdateErrStack(bool skipStackUpdate);
 void
 nats_updateErrTxt(const char *fileName, const char *funcName, int line, const char *errTxtFmt, ...);
 
+void
+nats_setErrStatusAndTxt(natsStatus err, const char *errTxt);
+
 #endif /* ERR_H_ */

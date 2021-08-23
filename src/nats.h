@@ -548,6 +548,7 @@ typedef struct jsConsumerConfig
         const char              *Durable;
         const char              *Description;
         const char              *DeliverSubject;
+        const char              *DeliverGroup;
         jsDeliverPolicy         DeliverPolicy;
         uint64_t                OptStartSeq;
         int64_t                 OptStartTime;           ///< UTC time expressed as number of nanoseconds since epoch.
@@ -667,6 +668,17 @@ typedef struct jsSequencePair
 } jsSequencePair;
 
 /**
+ * Has both the consumer and the stream sequence and last activity.
+ */
+typedef struct jsSequenceInfo
+{
+        uint64_t        Consumer;
+        uint64_t        Stream;
+        int64_t         Last;           ///< UTC time expressed as number of nanoseconds since epoch.
+
+} jsSequenceInfo;
+
+/**
  * Configuration and current state for this consumer.
  *
  * \note `Created` is the timestamp when the consumer was created, expressed as the number
@@ -678,13 +690,14 @@ typedef struct jsConsumerInfo
         char                    *Name;
         int64_t                 Created;                ///< UTC time expressed as number of nanoseconds since epoch.
         jsConsumerConfig        *Config;
-        jsSequencePair          Delivered;
-        jsSequencePair          AckFloor;
+        jsSequenceInfo          Delivered;
+        jsSequenceInfo          AckFloor;
         int64_t                 NumAckPending;
         int64_t                 NumRedelivered;
         int64_t                 NumWaiting;
         uint64_t                NumPending;
         jsClusterInfo           *Cluster;
+        bool                    PushBound;
 
 } jsConsumerInfo;
 
@@ -751,6 +764,7 @@ typedef struct jsPubAck
 {
         char            *Stream;
         uint64_t        Sequence;
+        char            *Domain;
         bool            Duplicate;
 
 } jsPubAck;

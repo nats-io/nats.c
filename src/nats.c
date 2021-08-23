@@ -783,8 +783,12 @@ _asyncCbsThread(void *arg)
                 (*(nc->opts->lameDuckCb))(nc, nc->opts->lameDuckClosure);
                 break;
             case ASYNC_ERROR:
+            {
+                if (cb->errTxt != NULL)
+                    nats_setErrStatusAndTxt(cb->err, cb->errTxt);
                 (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
                 break;
+            }
 #if defined(NATS_HAS_STREAMING)
             case ASYNC_STAN_CONN_LOST:
                 (*(sc->opts->connectionLostCB))(sc, sc->connLostErrTxt, sc->opts->connectionLostCBClosure);
@@ -795,6 +799,7 @@ _asyncCbsThread(void *arg)
         }
 
         natsAsyncCb_Destroy(cb);
+        nats_clearLastError();
 
         natsMutex_Lock(asyncCbs->lock);
     }
@@ -1431,6 +1436,19 @@ nats_updateErrTxt(const char *fileName, const char *funcName, int line, const ch
                 errTL->text[pos--] = '.';
         }
     }
+}
+
+void
+nats_setErrStatusAndTxt(natsStatus err, const char *errTxt)
+{
+    natsTLError *errTL  = _getTLError();
+
+    if ((errTL == NULL) || errTL->skipUpdate)
+        return;
+
+    errTL->sts         = err;
+    snprintf(errTL->text, sizeof(errTL->text), "%s", errTxt);
+    errTL->framesCount = -1;
 }
 
 natsStatus

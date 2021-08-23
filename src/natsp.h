@@ -346,15 +346,16 @@ typedef struct __jsSub
 {
     jsCtx               *js;
     char                *stream;
-    char                *ephemeral;
+    char                *consumer;
     char                *nxtMsgSubj;
-    bool                hasFC;
     bool                pull;
+    bool                dc; // delete JS consumer in Unsub()/Drain()
 
     int64_t             hbi;
-    int64_t             lasthb;
+    int64_t             active;
     natsTimer           *hbTimer;
 
+    char                *cmeta;
     uint64_t            sseq;
     uint64_t            dseq;
     uint64_t            ldseq;
@@ -769,7 +770,7 @@ void
 jsSub_free(jsSub *sub);
 
 natsStatus
-jsSub_unsubscribe(jsSub *sub, bool drainMode);
+jsSub_deleteConsumer(natsSubscription *sub);
 
 natsStatus
 jsSub_trackSequences(jsSub *jsi, const char *reply);

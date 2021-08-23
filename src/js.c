@@ -483,6 +483,7 @@ js_PublishMsg(jsPubAck **new_puback,jsCtx *js, natsMsg *msg,
                 s = nats_JSONGetStr(json, "stream", &(pa->Stream));
                 IFOK(s, nats_JSONGetULong(json, "seq", &(pa->Sequence)));
                 IFOK(s, nats_JSONGetBool(json, "duplicate", &(pa->Duplicate)));
+                IFOK(s, nats_JSONGetStr(json, "domain", &(pa->Domain)));
 
                 if (s == NATS_OK)
                     *new_puback = pa;
@@ -504,6 +505,7 @@ jsPubAck_Destroy(jsPubAck *pa)
         return;
 
     NATS_FREE(pa->Stream);
+    NATS_FREE(pa->Domain);
     NATS_FREE(pa);
 }
 
@@ -959,8 +961,9 @@ jsSub_free(jsSub *jsi)
     js = jsi->js;
     natsTimer_Destroy(jsi->hbTimer);
     NATS_FREE(jsi->stream);
-    NATS_FREE(jsi->ephemeral);
+    NATS_FREE(jsi->consumer);
     NATS_FREE(jsi->nxtMsgSubj);
+    NATS_FREE(jsi->cmeta);
     NATS_FREE(jsi->fcReply);
     NATS_FREE(jsi);
 
@@ -975,15 +978,18 @@ _autoAckCB(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closur
     char    *reply = NULL;
     bool    frply  = false;
 
-    if (strlen(msg->reply) < sizeof(_reply))
+    if (msg->reply != NULL)
     {
-        snprintf(_reply, sizeof(_reply), "%s", msg->reply);
-        reply = _reply;
-    }
-    else
-    {
-        reply = NATS_STRDUP(msg->reply);
-        frply = (reply != NULL ? true : false);
+        if (strlen(msg->reply) < sizeof(_reply))
+        {
+            snprintf(_reply, sizeof(_reply), "%s", msg->reply);
+            reply = _reply;
+        }
+        else
+        {
+            reply = NATS_STRDUP(msg->reply);
+            frply = (reply != NULL ? true : false);
+        }
     }
 
     // Invoke user callback
@@ -1000,21 +1006,31 @@ _autoAckCB(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closur
 }
 
 natsStatus
-jsSub_unsubscribe(jsSub *jsi, bool drainMode)
+jsSub_deleteConsumer(natsSubscription *sub)
 {
-    natsStatus s;
+    jsCtx       *js       = NULL;
+    const char  *stream   = NULL;
+    const char  *consumer = NULL;
+    natsStatus  s;
 
-    if (jsi->hbTimer != NULL)
-        natsTimer_Stop(jsi->hbTimer);
+    natsSub_Lock(sub);
+    if ((sub->jsi != NULL) && (sub->jsi->dc))
+    {
+        js       = sub->jsi->js;
+        stream   = sub->jsi->stream;
+        consumer = sub->jsi->consumer;
+        // For drain, we could be trying to delete from
+        // the thread that checks for drain, or from the
+        // user checking from drain completion. So we
+        // switch off if we are going to delete now.
+        sub->jsi->dc = false;
+    }
+    natsSub_Unlock(sub);
 
-    // We want to cleanup only JS consumer that has been
-    // created by the library (case of an ephemeral and
-    // without queue sub), but we also don't delete if
-    // we are in drain mode.
-    if (drainMode || (jsi->ephemeral == NULL))
+    if ((js == NULL) || (stream == NULL) || (consumer == NULL))
         return NATS_OK;
 
-    s = js_DeleteConsumer(jsi->js, jsi->stream, jsi->ephemeral, NULL, NULL);
+    s = js_DeleteConsumer(js, stream, consumer, NULL, NULL);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -1198,22 +1214,17 @@ _getMetaData(const char *reply,
 natsStatus
 jsSub_trackSequences(jsSub *jsi, const char *reply)
 {
-    natsStatus  s;
+    natsStatus  s = NATS_OK;
 
     if ((reply == NULL) || (strstr(reply, jsAckPrefix) != reply))
         return NATS_OK;
 
-    // Data is equivalent to HB, so capture this as the last HB received.
-    jsi->lasthb = nats_Now();
+    // Data is equivalent to HB, so consider active.
+    jsi->active = true;
 
-    s = _getMetaData(reply+jsAckPrefixLen, NULL, NULL, NULL, NULL, &jsi->sseq, &jsi->dseq, NULL, NULL, 2);
-    if (s != NATS_OK)
-    {
-        if (s == NATS_ERR)
-            return nats_setError(NATS_ERR, "invalid JS ACK: '%s'", reply);
-        return NATS_UPDATE_ERR_STACK(s);
-    }
-    return NATS_OK;
+    NATS_FREE(jsi->cmeta);
+    DUP_STRING(s, jsi->cmeta, reply+jsAckPrefixLen);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -1222,30 +1233,38 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm)
     jsSub       *jsi   = sub->jsi;
     const char  *str   = NULL;
     int64_t     val    = 0;
+    natsStatus  s;
 
     *sm = false;
 
-    // This is an HB, so update last time we saw an HB.
-    jsi->lasthb = nats_Now();
+    // This is an HB, so update that we are active.
+    jsi->active = true;
 
-    if (jsi->dseq == 0)
+    if (jsi->cmeta == NULL)
         return NATS_OK;
 
-    // This function is invoked as long as the message does not
-    // have any data and has a header status of 100, but does not check
-    // if this is an hearbeat (in status description).
-    // If it is an HB it should have the following header field. If not
-    // present, do not treat this as an error.
-    if (natsMsgHeader_Get(msg, jsLastConsumerSeqHdr, &str) != NATS_OK)
-        return NATS_OK;
+    s = _getMetaData(jsi->cmeta, NULL, NULL, NULL, NULL, &jsi->sseq, &jsi->dseq, NULL, NULL, 2);
+    if (s != NATS_OK)
+    {
+        if (s == NATS_ERR)
+            return nats_setError(NATS_ERR, "invalid JS ACK: '%s'", jsi->cmeta);
+        return NATS_UPDATE_ERR_STACK(s);
+    }
 
-    // Now that we have the field, we parse it. This function returns
-    // -1 if there is a parsing error.
-    val = nats_ParseInt64(str, (int) strlen(str));
-    if (val == -1)
-        return nats_setError(NATS_ERR, "invalid last consumer sequence: '%s'", str);
+    s = natsMsgHeader_Get(msg, jsLastConsumerSeqHdr, &str);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
 
-    jsi->ldseq = (uint64_t) val;
+    if (str != NULL)
+    {
+        // Now that we have the field, we parse it. This function returns
+        // -1 if there is a parsing error.
+        val = nats_ParseInt64(str, (int) strlen(str));
+        if (val == -1)
+            return nats_setError(NATS_ERR, "invalid last consumer sequence: '%s'", str);
+
+        jsi->ldseq = (uint64_t) val;
+    }
     if (jsi->ldseq == jsi->dseq)
     {
         // Sync subs use this flag to get the NextMsg() to error out and
@@ -1536,12 +1555,12 @@ _hbTimerFired(natsTimer *timer, void* closure)
 {
     natsSubscription    *sub = (natsSubscription*) closure;
     jsSub               *jsi = sub->jsi;
-    int64_t             now  = nats_Now();
     bool                alert= false;
     natsConnection      *nc  = NULL;
 
     natsSubAndLdw_Lock(sub);
-    alert = ((now - jsi->lasthb) >= jsi->hbi + 100 /*ms*/ ? true : false);
+    alert = !jsi->active;
+    jsi->active = false;
     nc = sub->conn;
     natsSubAndLdw_Unlock(sub);
 
@@ -1553,7 +1572,7 @@ _hbTimerFired(natsTimer *timer, void* closure)
     // handler, but check anyway in case we decide to have timer set
     // regardless.
     if (nc->opts->asyncErrCb != NULL)
-        natsAsyncCb_PostErrHandler(nc, sub, NATS_MISSED_HEARTBEAT);
+        natsAsyncCb_PostErrHandler(nc, sub, NATS_MISSED_HEARTBEAT, NULL);
     natsConn_Unlock(nc);
 }
 
@@ -1569,13 +1588,103 @@ _hbTimerStopped(natsTimer *timer, void* closure)
 }
 
 static natsStatus
-_subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const char *durable,
+_processConsInfo(const char **dlvSubject, jsConsumerInfo *info,
+                 bool isPullMode, const char *subj, const char *queue)
+{
+    bool                dlvSubjEmpty = false;
+    jsConsumerConfig    *ccfg        = info->Config;
+    const char          *dg          = NULL;
+
+    *dlvSubject = NULL;
+
+	// Make sure this new subject matches or is a subset.
+	if (!nats_IsStringEmpty(ccfg->FilterSubject) && (strcmp(subj, ccfg->FilterSubject) != 0))
+        return nats_setError(NATS_ERR, "subject '%s' does not match consumer filter subject '%s'",
+                             subj, ccfg->FilterSubject);
+
+    // Check that if user wants to create a queue sub,
+    // the consumer has no HB nor FC.
+    queue = (nats_IsStringEmpty(queue) ? NULL : queue);
+
+    if (queue != NULL)
+    {
+        if (ccfg->Heartbeat > 0)
+            return nats_setError(NATS_ERR, "%s", jsErrNoHeartbeatForQueueSub);
+
+        if (ccfg->FlowControl)
+            return nats_setError(NATS_ERR, "%s", jsErrNoFlowControlForQueueSub);
+    }
+
+    dlvSubjEmpty = nats_IsStringEmpty(ccfg->DeliverSubject);
+
+	// Prevent binding a subscription against incompatible consumer types.
+	if (isPullMode && !dlvSubjEmpty)
+    {
+        return nats_setError(NATS_ERR, "%s", jsErrPullSubscribeToPushConsumer);
+    }
+    else if (!isPullMode && dlvSubjEmpty)
+    {
+        return nats_setError(NATS_ERR, "%s", jsErrPullSubscribeRequired);
+    }
+
+	// If pull mode, nothing else to check here.
+	if (isPullMode)
+        return NATS_OK;
+
+	// At this point, we know the user wants push mode, and the JS consumer is
+	// really push mode.
+    dg = ccfg->DeliverGroup;
+
+	if (nats_IsStringEmpty(dg))
+    {
+		// Prevent an user from attempting to create a queue subscription on
+		// a JS consumer that was not created with a deliver group.
+		if (queue != NULL)
+        {
+			return nats_setError(NATS_ERR, "%s",
+                                 "cannot create a queue subscription for a consumer without a deliver group");
+		}
+        else if (info->PushBound)
+        {
+			// Need to reject a non queue subscription to a non queue consumer
+			// if the consumer is already bound.
+			return nats_setError(NATS_ERR, "%s", "consumer is already bound to a subscription");
+		}
+	}
+    else
+    {
+		// If the JS consumer has a deliver group, we need to fail a non queue
+		// subscription attempt:
+		if (queue == NULL)
+        {
+			return nats_setError(NATS_ERR,
+                                "cannot create a subscription for a consumer with a deliver group %s",
+                                dg);
+		}
+        else if (strcmp(queue, dg) != 0)
+        {
+			// Here the user's queue group name does not match the one associated
+			// with the JS consumer.
+			return nats_setError(NATS_ERR,
+                                 "cannot create a queue subscription '%s' for a consumer with a deliver group '%s'",
+				                 queue, dg);
+		}
+	}
+
+    *dlvSubject = ccfg->DeliverSubject;
+    return NATS_OK;
+}
+
+
+static natsStatus
+_subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const char *pullDurable,
            natsMsgHandler usrCB, void *usrCBClosure, bool isPullMode,
            jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {
     natsStatus          s           = NATS_OK;
     const char          *stream     = NULL;
     const char          *consumer   = NULL;
+    const char          *durable    = NULL;
     const char          *deliver    = NULL;
     jsErrCode           jerr        = 0;
     jsConsumerInfo      *info       = NULL;
@@ -1614,19 +1723,33 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
 
     isQueue  = !nats_IsStringEmpty(opts->Queue);
     stream   = opts->Stream;
-    consumer = (durable != NULL ? durable : opts->Consumer);
+    durable  = (pullDurable != NULL ? pullDurable : opts->Config.Durable);
+    consumer = opts->Consumer;
     consBound= (!nats_IsStringEmpty(stream) && !nats_IsStringEmpty(consumer));
 
-    // Reject a user configuration that would want to define hearbeats with
-    // a queue subscription.
-    if (isQueue && opts->Config.Heartbeat > 0)
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrNoHeartbeatForQueueSub);
+    if (isQueue)
+    {
+        // Reject a user configuration that would want to define hearbeats with
+        // a queue subscription.
+        if (opts->Config.Heartbeat > 0)
+            return nats_setError(NATS_INVALID_ARG, "%s", jsErrNoHeartbeatForQueueSub);
+        // Same for flow control
+        if (opts->Config.FlowControl)
+            return nats_setError(NATS_INVALID_ARG, "%s", jsErrNoFlowControlForQueueSub);
+    }
 
     // In case a consumer has not been set explicitly, then the durable name
     // will be used as the consumer name (after that, `consumer` will still be
     // possibly NULL).
     if (nats_IsStringEmpty(consumer))
-        consumer = opts->Config.Durable;
+    {
+        // If this is a queue sub and no durable name was provided, use
+        // the queue name as the durable.
+        if (isQueue && nats_IsStringEmpty(durable))
+            durable = opts->Queue;
+
+        consumer = durable;
+    }
 
     // Find the stream mapped to the subject if not bound to a stream already,
     // that is, if user did not provide a `Stream` name through options).
@@ -1650,44 +1773,17 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
 PROCESS_INFO:
     if (info != NULL)
     {
-        bool dlvSubjEmpty = false;
-
-        // Attach using the found consumer config.
-        cfg = info->Config;
-
-        // If consumer exists in the server and has hearbeat configured,
-        // then let the user know that it probably does not make sense
-        // to create a queue subscription from this consumer.
-        if (isQueue && (cfg->Heartbeat > 0))
+        if (info->Config == NULL)
         {
-            s = nats_setError(NATS_INVALID_ARG, "%s", jsErrNoHeartbeatForQueueSub);
+            s = nats_setError(NATS_ERR, "%s", "no configuration in consumer info");
             goto END;
         }
-
-        // Make sure this new subject matches or is a subset.
-        if (!nats_IsStringEmpty(cfg->FilterSubject) && (strcmp(subject, cfg->FilterSubject) != 0))
-        {
-            s = nats_setError(NATS_ERR, "subject '%s' does not match consumer filter subject '%s'",
-                              subject, cfg->FilterSubject);
+        s = _processConsInfo(&deliver, info, isPullMode, subject, opts->Queue);
+        if (s != NATS_OK)
             goto END;
-        }
 
-        dlvSubjEmpty = nats_IsStringEmpty(cfg->DeliverSubject);
-
-        // Prevent binding a subscription against incompatible consumer types.
-        if (isPullMode && !dlvSubjEmpty)
-        {
-            s = nats_setError(NATS_ERR, "%s", jsErrPullSubscribeToPushConsumer);
-            goto END;
-        }
-        else if (!isPullMode && dlvSubjEmpty)
-        {
-            s = nats_setError(NATS_ERR, "%s", jsErrPullSubscribeRequired);
-            goto END;
-        }
-
-        if (!isPullMode)
-            deliver = cfg->DeliverSubject;
+        // Capture the HB interval (convert in millsecond since Go duration is in nanos)
+        hbi = info->Config->Heartbeat / 1000000;
     }
     else if (((s != NATS_OK) && (s != NATS_NOT_FOUND)) || ((s == NATS_NOT_FOUND) && consBound))
     {
@@ -1713,8 +1809,13 @@ PROCESS_INFO:
             deliver = (const char*) inbox;
             cfg->DeliverSubject = deliver;
         }
-        else
-            cfg->Durable = durable;
+
+        // Set config durable with "durable" variable, which will
+        // possibly be NULL.
+        cfg->Durable = durable;
+
+        // Set DeliverGroup to queue name, possibly NULL
+        cfg->DeliverGroup = opts->Queue;
 
         // Do filtering always, server will clear as needed.
         cfg->FilterSubject = subject;
@@ -1723,6 +1824,9 @@ PROCESS_INFO:
         // and set to the internal max.
         if ((cfg->MaxAckPending == 0) && (cfg->AckPolicy != js_AckNone))
             cfg->MaxAckPending = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
+
+        // Capture the HB interval (convert in millsecond since Go duration is in nanos)
+        hbi = cfg->Heartbeat / 1000000;
 
         create = true;
     }
@@ -1741,14 +1845,8 @@ PROCESS_INFO:
             IF_OK_DUP_STRING(s, jsi->stream, stream);
             if (s == NATS_OK)
             {
-                // Capture the HB interval.
-                // Our timers are only milliseconds, so need to convert since
-                // the Heartbeat is a go's time.Duration, which is in nanosec.
-                hbi = cfg->Heartbeat / 1000000;
-
                 jsi->js     = js;
                 jsi->hbi    = hbi;
-                jsi->hasFC  = cfg->FlowControl;
                 jsi->pull   = isPullMode;
                 js_retain(js);
 
@@ -1795,7 +1893,7 @@ PROCESS_INFO:
             {
                 natsSub_Lock(sub);
                 sub->refs++;
-                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi, (void*) sub);
+                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi*2, (void*) sub);
                 if (s != NATS_OK)
                     sub->refs--;
                 natsSub_Unlock(sub);
@@ -1820,23 +1918,20 @@ PROCESS_INFO:
             if (s != NATS_OK)
                 goto END;
 
-            // This is the deliver subject the NATS subscription should be recreated with.
-            deliver = info->Config->DeliverSubject;
-
             // We will re-create the sub/jsi, so destroy here and go back to point where
             // we process the consumer info response.
             natsSubscription_Destroy(sub);
             sub = NULL;
+            jsi = NULL;
             create = false;
 
             goto PROCESS_INFO;
         }
-        // Capture the ephemeral consumer name so that the library
-        // can delete on Unsubscribe, unless this is a queue subscription.
-        if ((s == NATS_OK) && !isQueue && (nats_IsStringEmpty(consumer)))
+        else
         {
             natsSub_Lock(sub);
-            DUP_STRING(s, jsi->ephemeral, info->Name);
+            jsi->dc = true;
+            DUP_STRING(s, jsi->consumer, info->Name);
             natsSub_Unlock(sub);
         }
     }

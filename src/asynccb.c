@@ -21,11 +21,13 @@
 static void
 _freeAsyncCbInfo(natsAsyncCbInfo *info)
 {
+    NATS_FREE(info->errTxt);
     NATS_FREE(info);
 }
 
 static void
-_createAndPostCb(natsAsyncCbType type, natsConnection *nc, natsSubscription *sub, natsStatus err, void* scPtr)
+_createAndPostCb(natsAsyncCbType type, natsConnection *nc, natsSubscription *sub, natsStatus err,
+                 char *errTxt, void* scPtr)
 {
     natsStatus          s  = NATS_OK;
     natsAsyncCbInfo     *cb;
@@ -44,7 +46,8 @@ _createAndPostCb(natsAsyncCbType type, natsConnection *nc, natsSubscription *sub
     cb->type = type;
     cb->nc   = nc;
     cb->sub  = sub;
-    cb->err  = err;
+    cb->err     = err;
+    cb->errTxt  = errTxt;
 #if defined(NATS_HAS_STREAMING)
     cb->sc   = sc;
     stanConn_retain(sc);
@@ -62,20 +65,20 @@ _createAndPostCb(natsAsyncCbType type, natsConnection *nc, natsSubscription *sub
 void
 natsAsyncCb_PostConnHandler(natsConnection *nc, natsAsyncCbType type)
 {
-    _createAndPostCb(type, nc, NULL, NATS_OK, NULL);
+    _createAndPostCb(type, nc, NULL, NATS_OK, NULL, NULL);
 }
 
 void
-natsAsyncCb_PostErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err)
+natsAsyncCb_PostErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, char *errTxt)
 {
-    _createAndPostCb(ASYNC_ERROR, nc, sub, err, NULL);
+    _createAndPostCb(ASYNC_ERROR, nc, sub, err, errTxt, NULL);
 }
 
 #if defined(NATS_HAS_STREAMING)
 void
 natsAsyncCb_PostStanConnLostHandler(stanConnection *sc)
 {
-    _createAndPostCb(ASYNC_STAN_CONN_LOST, NULL, NULL, NATS_CONNECTION_CLOSED, (void*) sc);
+    _createAndPostCb(ASYNC_STAN_CONN_LOST, NULL, NULL, NATS_CONNECTION_CLOSED, NULL, (void*) sc);
 }
 #endif
 

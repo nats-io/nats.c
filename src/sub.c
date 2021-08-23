@@ -325,6 +325,9 @@ natsSub_close(natsSubscription *sub, bool connectionClosed)
         sub->closed = true;
         sub->connClosed = connectionClosed;
 
+        if ((sub->jsi != NULL) && (sub->jsi->hbTimer != NULL))
+            natsTimer_Stop(sub->jsi->hbTimer);
+
         if (sub->libDlvWorker != NULL)
         {
             // If this is a subscription with timeout, stop the timer.
@@ -788,6 +791,8 @@ _unsubscribe(natsSubscription *sub, int max, bool drainMode, int64_t timeout)
 {
     natsStatus      s   = NATS_OK;
     natsConnection  *nc = NULL;
+    bool            dc  = false;
+    jsSub           *jsi;
 
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -796,9 +801,23 @@ _unsubscribe(natsSubscription *sub, int max, bool drainMode, int64_t timeout)
     nc = sub->conn;
     _retain(sub);
 
+    if ((jsi = sub->jsi) != NULL)
+    {
+        if (jsi->hbTimer != NULL)
+            natsTimer_Stop(jsi->hbTimer);
+
+        dc = jsi->dc;
+    }
+
     natsSub_Unlock(sub);
 
     s = natsConn_unsubscribe(nc, sub, max, drainMode, timeout);
+
+    // If user calls natsSubscription_Unsubscribe() and this
+    // is a JS subscription that is supposed to delete the JS
+    // consumer, do so now.
+    if ((s == NATS_OK) && (max == 0) && !drainMode && dc)
+        s = jsSub_deleteConsumer(sub);
 
     natsSub_release(sub);
 
@@ -894,12 +913,19 @@ _flushAndDrain(void *closure)
     natsThread       *t       = NULL;
     int64_t          timeout  = 0;
     int64_t          deadline = 0;
+    bool             dc       = false;
+    const char       *consumer= NULL;
     natsStatus       s;
 
     natsSub_Lock(sub);
     nc      = sub->conn;
     t       = sub->drainThread;
     timeout = sub->drainTimeout;
+    if ((sub->jsi != NULL) && sub->jsi->dc && (sub->jsi->consumer != NULL))
+    {
+        dc = true;
+        consumer = sub->jsi->consumer;
+    }
     natsSub_Unlock(sub);
 
     // Make sure that negative value is considered no timeout.
@@ -934,6 +960,23 @@ _flushAndDrain(void *closure)
         while ((s != NATS_TIMEOUT) && !natsSub_drainComplete(sub))
             s = natsCondition_AbsoluteTimedWait(sub->cond, sub->mu, deadline);
         natsSub_Unlock(sub);
+
+        if ((s == NATS_OK) && dc)
+        {
+            natsStatus ls = jsSub_deleteConsumer(sub);
+            if (ls != NATS_OK)
+            {
+                natsConn_Lock(nc);
+                if (nc->opts->asyncErrCb != NULL)
+                {
+                    char tmp[256];
+                    snprintf(tmp, sizeof(tmp), "failed to delete consumer '%s': %d (%s)",
+                             consumer, ls, natsStatus_GetText(ls));
+                    natsAsyncCb_PostErrHandler(nc, sub, ls, NATS_STRDUP(tmp));
+                }
+                natsConn_Unlock(nc);
+            }
+        }
 
         if (s != NATS_OK)
         {
@@ -1011,6 +1054,7 @@ natsSubscription_WaitForDrainCompletion(natsSubscription *sub, int64_t timeout)
 {
     natsStatus  s        = NATS_OK;
     int64_t     deadline = 0;
+    bool        dc       = false;
 
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1023,6 +1067,8 @@ natsSubscription_WaitForDrainCompletion(natsSubscription *sub, int64_t timeout)
     }
     _retain(sub);
 
+    dc = (sub->jsi != NULL ? sub->jsi->dc : false);
+
     if (timeout > 0)
         deadline = nats_setTargetTime(timeout);
 
@@ -1034,6 +1080,9 @@ natsSubscription_WaitForDrainCompletion(natsSubscription *sub, int64_t timeout)
             natsCondition_Wait(sub->cond, sub->mu);
     }
     natsSub_Unlock(sub);
+
+    if ((s == NATS_OK) && dc)
+        s = jsSub_deleteConsumer(sub);
 
     natsSub_release(sub);
 

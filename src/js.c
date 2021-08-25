@@ -895,6 +895,9 @@ jsSubOptions_Init(jsSubOptions *opts)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     memset(opts, 0, sizeof(jsSubOptions));
+    opts->Config.AckPolicy      = -1;
+    opts->Config.DeliverPolicy  = -1;
+    opts->Config.ReplayPolicy   = -1;
     return NATS_OK;
 }
 
@@ -1587,13 +1590,85 @@ _hbTimerStopped(natsTimer *timer, void* closure)
     natsSub_release(sub);
 }
 
+static bool
+_stringPropertyDiffer(const char *user, const char *server)
+{
+    if (nats_IsStringEmpty(user))
+        return false;
+
+    if (nats_IsStringEmpty(server))
+        return true;
+
+    return (strcmp(user, server) != 0 ? true : false);
+}
+
+#define CFG_CHECK_ERR_START "configuration requests %s to be "
+#define CFG_CHECK_ERR_END   ", but consumer's value is "
+
 static natsStatus
-_processConsInfo(const char **dlvSubject, jsConsumerInfo *info,
+_checkConfig(jsConsumerConfig *s, jsConsumerConfig *u)
+{
+    if (_stringPropertyDiffer(u->Durable, s->Durable))
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "'%s'" CFG_CHECK_ERR_END "'%s'", "durable", u->Durable, s->Durable);
+
+    if (_stringPropertyDiffer(u->Description, s->Description))
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "'%s'" CFG_CHECK_ERR_END "'%s'", "description", u->Description, s->Description);
+
+    if ((int) u->DeliverPolicy >= 0 && u->DeliverPolicy != s->DeliverPolicy)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%d" CFG_CHECK_ERR_END "%d", "deliver policy", u->DeliverPolicy, s->DeliverPolicy);
+
+    if (u->OptStartSeq > 0 && u->OptStartSeq != s->OptStartSeq)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRIu64 CFG_CHECK_ERR_END "%" PRIu64, "optional start sequence", u->OptStartSeq, s->OptStartSeq);
+
+    if (u->OptStartTime > 0 && u->OptStartTime != s->OptStartTime)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "optional start time", u->OptStartTime, s->OptStartTime);
+
+    if ((int) u->AckPolicy >= 0 && u->AckPolicy != s->AckPolicy)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%d" CFG_CHECK_ERR_END "%d", "ack policy", u->AckPolicy, s->AckPolicy);
+
+    if (u->AckWait > 0 && u->AckWait != s->AckWait)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "ack wait", u->AckWait, s->AckWait);
+
+    if (u->MaxDeliver > 0 && u->MaxDeliver != s->MaxDeliver)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max deliver", u->MaxDeliver, s->MaxDeliver);
+
+    if ((int) u->ReplayPolicy >= 0 && u->ReplayPolicy != s->ReplayPolicy)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%d" CFG_CHECK_ERR_END "%d", "replay policy", u->ReplayPolicy, s->ReplayPolicy);
+
+    if (u->RateLimit > 0 && u->RateLimit != s->RateLimit)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRIu64 CFG_CHECK_ERR_END "%" PRIu64, "rate limit", u->RateLimit, s->RateLimit);
+
+    if (_stringPropertyDiffer(u->SampleFrequency, s->SampleFrequency))
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "'%s'" CFG_CHECK_ERR_END "'%s'", "sample frequency", u->SampleFrequency, s->SampleFrequency);
+
+    if (u->MaxWaiting > 0 && u->MaxWaiting != s->MaxWaiting)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max waiting", u->MaxWaiting, s->MaxWaiting);
+
+    if (u->MaxAckPending > 0 && u->MaxAckPending != s->MaxAckPending)
+    {
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max ack pending", u->MaxAckPending, s->MaxAckPending);
+    }
+
+	// For flow control, we want to fail if the user explicit wanted it, but
+	// it is not set in the existing consumer. If it is not asked by the user,
+	// the library still handles it and so no reason to fail.
+	if (u->FlowControl && !s->FlowControl)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "'%s'" CFG_CHECK_ERR_END "'%s'", "flow control", "true", "false");
+
+    if (u->Heartbeat > 0 && u->Heartbeat != s->Heartbeat)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "heartbeat", u->Heartbeat, s->Heartbeat);
+
+    return NATS_OK;
+}
+
+static natsStatus
+_processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig *userCfg,
                  bool isPullMode, const char *subj, const char *queue)
 {
     bool                dlvSubjEmpty = false;
     jsConsumerConfig    *ccfg        = info->Config;
     const char          *dg          = NULL;
+    natsStatus          s            = NATS_OK;
 
     *dlvSubject = NULL;
 
@@ -1629,7 +1704,10 @@ _processConsInfo(const char **dlvSubject, jsConsumerInfo *info,
 
 	// If pull mode, nothing else to check here.
 	if (isPullMode)
-        return NATS_OK;
+    {
+        s = _checkConfig(ccfg, userCfg);
+        return NATS_UPDATE_ERR_STACK(s);
+    }
 
 	// At this point, we know the user wants push mode, and the JS consumer is
 	// really push mode.
@@ -1670,9 +1748,11 @@ _processConsInfo(const char **dlvSubject, jsConsumerInfo *info,
 				                 queue, dg);
 		}
 	}
+    s = _checkConfig(ccfg, userCfg);
+    if (s == NATS_OK)
+        *dlvSubject = ccfg->DeliverSubject;
 
-    *dlvSubject = ccfg->DeliverSubject;
-    return NATS_OK;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 
@@ -1720,6 +1800,12 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
         jsSubOptions_Init(&o);
         opts = &o;
     }
+    // If user configures optional start sequence or time, the deliver policy
+    // need to be updated accordingly. Server will return error if user tries to have both set.
+    if (opts->Config.OptStartSeq > 0)
+        opts->Config.DeliverPolicy = js_DeliverByStartSequence;
+    if (opts->Config.OptStartTime > 0)
+        opts->Config.DeliverPolicy = js_DeliverByStartTime;
 
     isQueue  = !nats_IsStringEmpty(opts->Queue);
     stream   = opts->Stream;
@@ -1778,7 +1864,7 @@ PROCESS_INFO:
             s = nats_setError(NATS_ERR, "%s", "no configuration in consumer info");
             goto END;
         }
-        s = _processConsInfo(&deliver, info, isPullMode, subject, opts->Queue);
+        s = _processConsInfo(&deliver, info, &(opts->Config), isPullMode, subject, opts->Queue);
         if (s != NATS_OK)
             goto END;
 

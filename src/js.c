@@ -1034,7 +1034,47 @@ jsSub_deleteConsumer(natsSubscription *sub)
         return NATS_OK;
 
     s = js_DeleteConsumer(js, stream, consumer, NULL, NULL);
+    if (s == NATS_NOT_FOUND)
+        s = nats_setError(s, "failed to delete consumer '%s': not found", consumer);
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+// Runs under the subscription lock, but lock will be released,
+// the connection lock will be possibly acquired/released, then
+// the subscription lock reacquired.
+void
+jsSub_deleteConsumerAfterDrain(natsSubscription *sub)
+{
+    natsConnection  *nc       = NULL;
+    const char      *consumer = NULL;
+    natsStatus      s;
+
+    if ((sub->jsi == NULL) || !sub->jsi->dc)
+        return;
+
+    nc       = sub->conn;
+    consumer = sub->jsi->consumer;
+
+    // Need to release sub lock since deletion of consumer
+    // will require the connection lock, etc..
+    natsSub_Unlock(sub);
+
+    s = jsSub_deleteConsumer(sub);
+    if (s != NATS_OK)
+    {
+        natsConn_Lock(nc);
+        if (nc->opts->asyncErrCb != NULL)
+        {
+            char tmp[256];
+            snprintf(tmp, sizeof(tmp), "failed to delete consumer '%s': %d (%s)",
+                    consumer, s, natsStatus_GetText(s));
+            natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
+        }
+        natsConn_Unlock(nc);
+    }
+
+    // Reacquire the lock before returning.
+    natsSub_Lock(sub);
 }
 
 static natsStatus
@@ -1301,23 +1341,23 @@ natsSubscription_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscr
     if ((csm == NULL) || (sub == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    natsSub_Lock(sub);
+    natsSubAndLdw_Lock(sub);
     if (sub->jsi == NULL)
     {
-        natsSub_Unlock(sub);
+        natsSubAndLdw_Unlock(sub);
         return nats_setError(NATS_INVALID_SUBSCRIPTION, "%s", jsErrNotAJetStreamSubscription);
     }
     jsi = sub->jsi;
     if (jsi->dseq == jsi->ldseq)
     {
-        natsSub_Unlock(sub);
+        natsSubAndLdw_Unlock(sub);
         return NATS_NOT_FOUND;
     }
     memset(csm, 0, sizeof(jsConsumerSequenceMismatch));
     csm->Stream = jsi->sseq;
     csm->ConsumerClient = jsi->dseq;
     csm->ConsumerServer = jsi->ldseq;
-    natsSub_Unlock(sub);
+    natsSubAndLdw_Unlock(sub);
     return NATS_OK;
 }
 

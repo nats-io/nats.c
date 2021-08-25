@@ -217,6 +217,7 @@ JetStreamPublish
 JetStreamPublishAsync
 JetStreamSubscribe
 JetStreamSubscribeSync
+JetStreamSubscribeConfigCheck
 JetStreamSubscribeIdleHeartbeat
 JetStreamSubscribeFlowControl
 JetStreamSubscribePull

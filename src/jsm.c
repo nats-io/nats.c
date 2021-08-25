@@ -1380,6 +1380,14 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
     natsStatus      s    = NATS_OK;
     natsBuffer      *buf = NULL;
 
+    // If not set, set some defaults
+    if ((int) cfg->DeliverPolicy < 0)
+        cfg->DeliverPolicy = js_DeliverAll;
+    if ((int) cfg->AckPolicy < 0)
+        cfg->AckPolicy = js_AckExplicit;
+    if ((int) cfg->ReplayPolicy < 0)
+        cfg->ReplayPolicy = js_ReplayInstant;
+
     s = natsBuf_Create(&buf, 256);
     IFOK(s, natsBuf_Append(buf, "{\"stream_name\":\"", -1));
     IFOK(s, natsBuf_Append(buf, stream, -1));
@@ -1841,6 +1849,9 @@ jsConsumerConfig_Init(jsConsumerConfig *cc)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     memset(cc, 0, sizeof(jsConsumerConfig));
+    cc->AckPolicy       = -1;
+    cc->DeliverPolicy   = -1;
+    cc->ReplayPolicy    = -1;
     return NATS_OK;
 }
 

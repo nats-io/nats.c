@@ -526,8 +526,6 @@ typedef struct jsStreamInfo
  *
  * \note `SampleFrequency` is a sampling value, represented as a string such as "50"
  * for 50%, that causes the server to produce advisories for consumer ack metrics.
- * If the percent sign is in the string, and since `%` is an escape character, it
- * needs to be doubled, such as `cfg.SampleFrequency = "50%%";`.
  *
  * @see jsConsumerConfig_Init
  *

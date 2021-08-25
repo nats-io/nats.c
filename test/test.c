@@ -22499,6 +22499,7 @@ test_JetStreamPublish(void)
     natsConnection_Destroy(nc);
     _stopServer(pid);
     rmtree(datastore);
+    remove(confFile);
 }
 
 static void
@@ -24043,6 +24044,335 @@ test_JetStreamSubscribeSync(void)
 
     natsSubscription_Destroy(sub);
     natsSubscription_Destroy(ackSub);
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
+test_JetStreamSubscribeConfigCheck(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    const char          *name = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsErrCode           jerr= 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    char                durName[64];
+    char                testName[64];
+    jsStreamConfig      sc;
+    jsConsumerConfig    cc;
+    int                 i;
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    for (i=0; i<10; i++)
+    {
+        jsSubOptions    so1;
+        jsSubOptions    so2;
+
+        natsNUID_Next(durName, sizeof(durName));
+
+        jsSubOptions_Init(&so1);
+        jsSubOptions_Init(&so2);
+        switch (i)
+        {
+            case 0:
+            {
+                name = "description";
+                so1.Config.Description = "a";
+                so2.Config.Description = "b";
+                break;
+            }
+            case 1:
+            {
+                name = "deliver policy";
+                so1.Config.DeliverPolicy = js_DeliverAll;
+                so2.Config.DeliverPolicy = js_DeliverLast;
+                break;
+            }
+            case 2:
+            {
+                name = "optional start sequence";
+                so1.Config.OptStartSeq = 1;
+                so2.Config.OptStartSeq = 10;
+                break;
+            }
+            case 3:
+            {
+                name = "optional start time";
+                so1.Config.OptStartTime = 1000000000;
+                so2.Config.OptStartTime = 2000000000;
+                break;
+            }
+            case 4:
+            {
+                name = "ack wait";
+                so1.Config.AckWait = 10*(int64_t)1E9;
+                so2.Config.AckWait = 15*(int64_t)1E9;
+                break;
+            }
+            case 5:
+            {
+                name = "max deliver";
+                so1.Config.MaxDeliver = 3;
+                so2.Config.MaxDeliver = 5;
+                break;
+            }
+            case 6:
+            {
+                name = "replay policy";
+                so1.Config.ReplayPolicy = js_ReplayOriginal;
+                so2.Config.ReplayPolicy = js_ReplayInstant;
+                break;
+            }
+            case 7:
+            {
+                name = "max waiting";
+                so1.Config.MaxWaiting = 10;
+                so2.Config.MaxWaiting = 20;
+                break;
+            }
+            case 8:
+            {
+                name = "max ack pending";
+                so1.Config.MaxAckPending = 10;
+                so2.Config.MaxAckPending = 20;
+                break;
+            }
+            case 9:
+            {
+                name = "sample frequency";
+                so1.Config.SampleFrequency = "100%";
+                so2.Config.SampleFrequency = "50%";
+                break;
+            }
+        }
+        snprintf(testName, sizeof(testName), "Check %s: ", name);
+        test(testName);
+        s = js_PullSubscribe(&sub, js, "foo", durName, NULL, &so1, &jerr);
+        if ((s == NATS_OK) && (jerr == 0))
+        {
+            natsSubscription *nsub = NULL;
+
+            s = js_PullSubscribe(&nsub, js, "foo", durName, NULL, &so2, &jerr);
+            if ((s != NATS_OK) && (nsub == NULL) && (strstr(nats_GetLastError(NULL), name) != NULL))
+            {
+                s = NATS_OK;
+                nats_clearLastError();
+            }
+            else
+                s = NATS_ERR;
+        }
+        testCond(s == NATS_OK);
+        natsSubscription_Unsubscribe(sub);
+        natsSubscription_Destroy(sub);
+        sub = NULL;
+    }
+
+    for (i=0; i<4; i++)
+    {
+        jsConsumerConfig    cc;
+        char                inbox[64];
+
+        natsInbox_init(inbox, sizeof(inbox));
+        natsNUID_Next(durName, sizeof(durName));
+        jsConsumerConfig_Init(&cc);
+        switch (i)
+        {
+            case 0: cc.AckPolicy = js_AckAll; break;
+            case 1: cc.RateLimit = 10; break;
+            case 2: cc.FlowControl = false; break;
+            case 3: cc.Heartbeat = 10*(int64_t)1E9; break;
+        }
+        cc.Durable = durName;
+        cc.DeliverSubject = inbox;
+        s = js_AddConsumer(NULL, js, "TEST", &cc, NULL, &jerr);
+        if ((s == NATS_OK) && (jerr == 0))
+        {
+            jsSubOptions so;
+
+            jsSubOptions_Init(&so);
+            so.Config.Durable = durName;
+            switch (i)
+            {
+                case 0: name="ack policy"; so.Config.AckPolicy = js_AckNone; break;
+                case 1: name="rate limit"; so.Config.RateLimit = 100; break;
+                case 2: name="flow control"; so.Config.FlowControl = true; break;
+                case 3: name="heartbeat"; so.Config.Heartbeat = 20*(int64_t)1E9; break;
+            }
+            snprintf(testName, sizeof(testName), "Check %s: ", name);
+            test(testName);
+            s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+            if ((s != NATS_OK) && (sub == NULL) && (strstr(nats_GetLastError(NULL), name) != NULL))
+            {
+                s = NATS_OK;
+                nats_clearLastError();
+            }
+            else
+                s = NATS_ERR;
+            testCond(s == NATS_OK);
+        }
+    }
+
+    // Verify that we don't fail if user did not set it.
+    for (i=0; i<9; i++)
+    {
+        natsSubscription *nsub = NULL;
+        jsSubOptions so;
+
+        jsSubOptions_Init(&so);
+        switch (i)
+        {
+            case 0: name = "description"; so.Config.Description = "a"; break;
+            case 1: name = "deliver policy"; so.Config.DeliverPolicy = js_DeliverLast; break;
+            case 2: name = "optional start sequence"; so.Config.OptStartSeq = 10; break;
+            case 3: name = "optional start time"; so.Config.OptStartTime = 1000000000; break;
+            case 4: name = "ack wait"; so.Config.AckWait = 10*(int64_t)1E9; break;
+            case 5: name = "max deliver"; so.Config.MaxDeliver = 3; break;
+            case 6: name = "replay policy"; so.Config.ReplayPolicy = js_ReplayInstant; break;
+            case 7: name = "max waiting"; so.Config.MaxWaiting = 10; break;
+            case 8: name = "max ack pending"; so.Config.MaxAckPending = 10; break;
+        }
+
+        natsNUID_Next(durName, sizeof(durName));
+
+        snprintf(testName, sizeof(testName), "Check %s: ", name);
+        test(testName);
+        s = js_PullSubscribe(&sub, js, "foo", durName, NULL, &so, &jerr);
+        if (s == NATS_OK)
+        {
+            // If not explicitly asked by the user, we are ok
+			s = js_PullSubscribe(&nsub, js, "foo", durName, NULL, NULL, &jerr);
+
+            natsSubscription_Unsubscribe(nsub);
+			natsSubscription_Destroy(nsub);
+            nsub = NULL;
+        }
+        testCond(s == NATS_OK);
+        natsSubscription_Unsubscribe(sub);
+        natsSubscription_Destroy(sub);
+        sub = NULL;
+	}
+
+    // If the option is the same as the server default, it is not an error either.
+    for (i=0; i<5; i++)
+    {
+        natsSubscription *nsub = NULL;
+        jsSubOptions so;
+
+        jsSubOptions_Init(&so);
+        switch (i)
+        {
+            case 1: name = "default deliver policy"; so.Config.DeliverPolicy = js_DeliverAll; break;
+            case 4: name = "default ack wait"; so.Config.AckWait = 30*(int64_t)1E9; break;
+            case 6: name = "default replay policy"; so.Config.ReplayPolicy = js_ReplayInstant; break;
+            case 7: name = "default max waiting"; so.Config.MaxWaiting = 512; break;
+            case 8: name = "default max ack pending"; so.Config.MaxAckPending = 65536; break;
+        }
+
+        natsNUID_Next(durName, sizeof(durName));
+
+        snprintf(testName, sizeof(testName), "Check %s: ", name);
+        test(testName);
+        s = js_PullSubscribe(&sub, js, "foo", durName, NULL, NULL, &jerr);
+        if (s == NATS_OK)
+        {
+			s = js_PullSubscribe(&nsub, js, "foo", durName, NULL, &so, &jerr);
+            natsSubscription_Unsubscribe(nsub);
+			natsSubscription_Destroy(nsub);
+            nsub = NULL;
+        }
+        testCond(s == NATS_OK);
+        natsSubscription_Unsubscribe(sub);
+        natsSubscription_Destroy(sub);
+        sub = NULL;
+	}
+
+    for (i=0; i<5; i++)
+    {
+        jsSubOptions so;
+
+        jsSubOptions_Init(&so);
+        switch (i)
+        {
+            case 0: name = "deliver policy"; so.Config.DeliverPolicy = js_DeliverNew; break;
+            case 1: name = "ack wait"; so.Config.AckWait = 31*(int64_t)1E9; break;
+            case 2: name = "replay policy"; so.Config.ReplayPolicy = js_ReplayOriginal; break;
+            case 3: name = "max waiting"; so.Config.MaxWaiting = 513; break;
+            case 4: name = "max ack pending"; so.Config.MaxAckPending = 2; break;
+        }
+
+        natsNUID_Next(durName, sizeof(durName));
+
+        snprintf(testName, sizeof(testName), "Check %s: ", name);
+        test(testName);
+        s = js_PullSubscribe(&sub, js, "foo", durName, NULL, NULL, &jerr);
+        if (s == NATS_OK)
+        {
+            natsSubscription *nsub = NULL;
+
+			// First time it was created with defaults and the
+			// second time a change is attempted, so it is an error.
+			s = js_PullSubscribe(&nsub, js, "foo", durName, NULL, &so, &jerr);
+            if ((s != NATS_OK) && (nsub == NULL) && (strstr(nats_GetLastError(NULL), name) != NULL))
+            {
+                s = NATS_OK;
+                nats_clearLastError();
+            }
+            else
+                s = NATS_ERR;
+        }
+        testCond(s == NATS_OK);
+        natsSubscription_Unsubscribe(sub);
+        natsSubscription_Destroy(sub);
+        sub = NULL;
+    }
+
+    // Check that binding to a durable (without specifying durable option) works
+    test("Create durable: ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "BindDurable";
+    cc.DeliverSubject = "bar";
+    s = js_AddConsumer(NULL, js, "TEST", &cc, NULL, &jerr);
+    if (s == NATS_OK)
+    {
+        jsSubOptions so;
+
+        jsSubOptions_Init(&so);
+        so.Stream = "TEST";
+        so.Consumer = "BindDurable";
+        s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+        natsSubscription_Destroy(sub);
+    }
+    testCond(s == NATS_OK);
+
     jsCtx_Destroy(js);
     natsConnection_Destroy(nc);
     _stopServer(pid);
@@ -27308,6 +27638,7 @@ static testInfo allTests[] =
     {"JetStreamPublishAsync",           test_JetStreamPublishAsync},
     {"JetStreamSubscribe",              test_JetStreamSubscribe},
     {"JetStreamSubscribeSync",          test_JetStreamSubscribeSync},
+    {"JetStreamSubscribeConfigCheck",   test_JetStreamSubscribeConfigCheck},
     {"JetStreamSubscribeIdleHeartbeat", test_JetStreamSubscribeIdleHearbeat},
     {"JetStreamSubscribeFlowControl",   test_JetStreamSubscribeFlowControl},
     {"JetStreamSubscribePull",          test_JetStreamSubscribePull},

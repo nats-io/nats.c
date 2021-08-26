@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.0.0</span>
+   &#160;<span id="projectnumber">3.1.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -104,10 +104,10 @@ Public Attributes</h2></td></tr>
 <tr class="separator:a670d38f2e9ba5c354ca3560a8064d00c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a2f63940ca1f024ad3840418c2f6a1ae1"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_consumer_config.html">jsConsumerConfig</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#a2f63940ca1f024ad3840418c2f6a1ae1">Config</a></td></tr>
 <tr class="separator:a2f63940ca1f024ad3840418c2f6a1ae1"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a3be1ac5aa4cc71609197b9b777b761d0"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_sequence_pair.html">jsSequencePair</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#a3be1ac5aa4cc71609197b9b777b761d0">Delivered</a></td></tr>
-<tr class="separator:a3be1ac5aa4cc71609197b9b777b761d0"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a1e5a2a0f4686950da292eaec55e01c40"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_sequence_pair.html">jsSequencePair</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#a1e5a2a0f4686950da292eaec55e01c40">AckFloor</a></td></tr>
-<tr class="separator:a1e5a2a0f4686950da292eaec55e01c40"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a15f2d68fbf126acc1907ba9462ad9ee9"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_sequence_info.html">jsSequenceInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#a15f2d68fbf126acc1907ba9462ad9ee9">Delivered</a></td></tr>
+<tr class="separator:a15f2d68fbf126acc1907ba9462ad9ee9"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab69c36ae092df9b0663b675a5abbab55"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_sequence_info.html">jsSequenceInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#ab69c36ae092df9b0663b675a5abbab55">AckFloor</a></td></tr>
+<tr class="separator:ab69c36ae092df9b0663b675a5abbab55"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a882bebeb7af80fcce088afdf2c98de50"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#a882bebeb7af80fcce088afdf2c98de50">NumAckPending</a></td></tr>
 <tr class="separator:a882bebeb7af80fcce088afdf2c98de50"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a932bf14ebb9ce167af8975e3b1f8d001"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#a932bf14ebb9ce167af8975e3b1f8d001">NumRedelivered</a></td></tr>
@@ -118,6 +118,8 @@ Public Attributes</h2></td></tr>
 <tr class="separator:aeaefd5a500996013b1ce13d8872e869b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a6f4401563a9fd102226d82cdc6136e32"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_cluster_info.html">jsClusterInfo</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#a6f4401563a9fd102226d82cdc6136e32">Cluster</a></td></tr>
 <tr class="separator:a6f4401563a9fd102226d82cdc6136e32"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a31282cdc72000a91af03f89899740bfa"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#a31282cdc72000a91af03f89899740bfa">PushBound</a></td></tr>
+<tr class="separator:a31282cdc72000a91af03f89899740bfa"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Configuration and current state for this consumer.</p>
@@ -179,28 +181,28 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
-<a id="a3be1ac5aa4cc71609197b9b777b761d0"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a3be1ac5aa4cc71609197b9b777b761d0">&#9670;&nbsp;</a></span>Delivered</h2>
+<a id="a15f2d68fbf126acc1907ba9462ad9ee9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a15f2d68fbf126acc1907ba9462ad9ee9">&#9670;&nbsp;</a></span>Delivered</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="structjs_sequence_pair.html">jsSequencePair</a> jsConsumerInfo::Delivered</td>
+          <td class="memname"><a class="el" href="structjs_sequence_info.html">jsSequenceInfo</a> jsConsumerInfo::Delivered</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
 </div>
 </div>
-<a id="a1e5a2a0f4686950da292eaec55e01c40"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1e5a2a0f4686950da292eaec55e01c40">&#9670;&nbsp;</a></span>AckFloor</h2>
+<a id="ab69c36ae092df9b0663b675a5abbab55"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab69c36ae092df9b0663b675a5abbab55">&#9670;&nbsp;</a></span>AckFloor</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="structjs_sequence_pair.html">jsSequencePair</a> jsConsumerInfo::AckFloor</td>
+          <td class="memname"><a class="el" href="structjs_sequence_info.html">jsSequenceInfo</a> jsConsumerInfo::AckFloor</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -271,6 +273,20 @@ Public Attributes</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname"><a class="el" href="structjs_cluster_info.html">jsClusterInfo</a>* jsConsumerInfo::Cluster</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a31282cdc72000a91af03f89899740bfa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a31282cdc72000a91af03f89899740bfa">&#9670;&nbsp;</a></span>PushBound</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool jsConsumerInfo::PushBound</td>
         </tr>
       </table>
 </div><div class="memdoc">

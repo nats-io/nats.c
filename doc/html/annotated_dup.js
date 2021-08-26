@@ -16,6 +16,7 @@ var annotated_dup =
     [ "jsPubAck", "structjs_pub_ack.html", "structjs_pub_ack" ],
     [ "jsPubAckErr", "structjs_pub_ack_err.html", "structjs_pub_ack_err" ],
     [ "jsPubOptions", "structjs_pub_options.html", "structjs_pub_options" ],
+    [ "jsSequenceInfo", "structjs_sequence_info.html", "structjs_sequence_info" ],
     [ "jsSequencePair", "structjs_sequence_pair.html", "structjs_sequence_pair" ],
     [ "jsStreamConfig", "structjs_stream_config.html", "structjs_stream_config" ],
     [ "jsStreamInfo", "structjs_stream_info.html", "structjs_stream_info" ],

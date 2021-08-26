@@ -60,8 +60,8 @@ var NAVTREEINDEX =
 "annotated.html",
 "group__library_group.html#ga5fab3b18c4fe3630254483575f6066f4",
 "group__stan_sub_opts_group.html#gaa018bceba99ef3726157e87c6918ab14",
-"status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a739799359c3988ea18fe861eaff6f1f5",
-"structjs_stream_info.html#adcc402d28e0ee443419e9b549da233c6"
+"status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a6b6aaaa23b1af2caf959529287b2a847",
+"structjs_stream_config.html#acdba5b22e4e60fd81a54769a7d09bc51"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

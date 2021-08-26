@@ -3,6 +3,7 @@ var structjs_consumer_config =
     [ "Durable", "structjs_consumer_config.html#a36cf121162cf0b40edf051991d851ee0", null ],
     [ "Description", "structjs_consumer_config.html#a36a14d666d99bdade87a5e21a25491d6", null ],
     [ "DeliverSubject", "structjs_consumer_config.html#a95aa4184ed77f69b7674756572da1ded", null ],
+    [ "DeliverGroup", "structjs_consumer_config.html#ae0765f3b5effe365187d3cf809c6ed3c", null ],
     [ "DeliverPolicy", "structjs_consumer_config.html#a364127e68bf0d3bf13efdc0b416667f4", null ],
     [ "OptStartSeq", "structjs_consumer_config.html#a2f0243899885dc97f304f48ca52b5356", null ],
     [ "OptStartTime", "structjs_consumer_config.html#a802ea3bf0669395bee28611f4ecede80", null ],

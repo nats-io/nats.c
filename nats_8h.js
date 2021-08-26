@@ -30,6 +30,7 @@ var nats_8h =
     [ "jsConsumerSequenceMismatch", "group__types_group.html#gace471cd2cef1df797b2a1c6b485049bd", null ],
     [ "jsSubOptions", "group__types_group.html#gaccfaac2079656ffd40d003e4de5d2280", null ],
     [ "jsSequencePair", "group__types_group.html#ga39011d30b295759b7f6ca0a7539dff8f", null ],
+    [ "jsSequenceInfo", "group__types_group.html#ga27e1a5d5b513f9eb7d61a17db71f8003", null ],
     [ "jsConsumerInfo", "group__types_group.html#ga2f21bb79884e56a5613d7fe76b11b1e5", null ],
     [ "jsAPIStats", "group__types_group.html#gad057a0107367ce5727975f3daf63ff75", null ],
     [ "jsAccountLimits", "group__types_group.html#gaa889f706cce285adb9cea8aba0b76866", null ],

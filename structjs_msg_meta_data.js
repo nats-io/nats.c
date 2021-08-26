@@ -5,5 +5,6 @@ var structjs_msg_meta_data =
     [ "NumPending", "structjs_msg_meta_data.html#a02f1bbd37e9650ed6bfda0210f038e30", null ],
     [ "Timestamp", "structjs_msg_meta_data.html#abab9ed5600a3629ea6d6c78170d7d5e9", null ],
     [ "Stream", "structjs_msg_meta_data.html#a32e2a9438d2dc769f7f64d2f8897abc4", null ],
-    [ "Consumer", "structjs_msg_meta_data.html#a6dcc2a442984b0ca070b3d8077192127", null ]
+    [ "Consumer", "structjs_msg_meta_data.html#a6dcc2a442984b0ca070b3d8077192127", null ],
+    [ "Domain", "structjs_msg_meta_data.html#a388e38ccea591181436d199dc7c2f8ea", null ]
 ];

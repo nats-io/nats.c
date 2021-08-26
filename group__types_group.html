@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.0.0</span>
+   &#160;<span id="projectnumber">3.1.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -127,6 +127,8 @@ Classes</h2></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_sequence_pair.html">jsSequencePair</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_sequence_info.html">jsSequenceInfo</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html">jsConsumerInfo</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_a_p_i_stats.html">jsAPIStats</a></td></tr>
@@ -199,6 +201,8 @@ Typedefs</h2></td></tr>
 <tr class="separator:gaccfaac2079656ffd40d003e4de5d2280"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga39011d30b295759b7f6ca0a7539dff8f"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_sequence_pair.html">jsSequencePair</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga39011d30b295759b7f6ca0a7539dff8f">jsSequencePair</a></td></tr>
 <tr class="separator:ga39011d30b295759b7f6ca0a7539dff8f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga27e1a5d5b513f9eb7d61a17db71f8003"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_sequence_info.html">jsSequenceInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga27e1a5d5b513f9eb7d61a17db71f8003">jsSequenceInfo</a></td></tr>
+<tr class="separator:ga27e1a5d5b513f9eb7d61a17db71f8003"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga2f21bb79884e56a5613d7fe76b11b1e5"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_consumer_info.html">jsConsumerInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga2f21bb79884e56a5613d7fe76b11b1e5">jsConsumerInfo</a></td></tr>
 <tr class="separator:ga2f21bb79884e56a5613d7fe76b11b1e5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gad057a0107367ce5727975f3daf63ff75"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_a_p_i_stats.html">jsAPIStats</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gad057a0107367ce5727975f3daf63ff75">jsAPIStats</a></td></tr>
@@ -650,7 +654,7 @@ The <code>OptStartTime</code> needs to be expressed as the number of nanoseconds
 <dd>
 The strings are applications owned and will not be freed by the library.</dd>
 <dd>
-<code>SampleFrequency</code> is a sampling value, represented as a string such as "50" for 50%, that causes the server to produce advisories for consumer ack metrics. If the percent sign is in the string, and since <code>%</code> is an escape character, it needs to be doubled, such as <code>cfg.SampleFrequency = "50%%";</code>.</dd></dl>
+<code>SampleFrequency</code> is a sampling value, represented as a string such as "50" for 50%, that causes the server to produce advisories for consumer ack metrics.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__js_assets_group.html#ga3381bb05c05bf4a8979adde68d37dd66" title="Initializes a consumer configuration structure.">jsConsumerConfig_Init</a></dd></dl>
 <div class="fragment"><div class="line">jsConsumerInfo   *ci = NULL;</div>
 <div class="line">jsConsumerConfig cc;</div>
@@ -713,6 +717,21 @@ The strings are applications owned and will not be freed by the library.</dd>
       </table>
 </div><div class="memdoc">
 <p>Includes the consumer and stream sequence info from a JetStream consumer. </p>
+
+</div>
+</div>
+<a id="ga27e1a5d5b513f9eb7d61a17db71f8003"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga27e1a5d5b513f9eb7d61a17db71f8003">&#9670;&nbsp;</a></span>jsSequenceInfo</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_sequence_info.html">jsSequenceInfo</a> <a class="el" href="structjs_sequence_info.html">jsSequenceInfo</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Has both the consumer and the stream sequence and last activity. </p>
 
 </div>
 </div>

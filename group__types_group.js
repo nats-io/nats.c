@@ -101,6 +101,7 @@ var group__types_group =
       [ "Durable", "structjs_consumer_config.html#a36cf121162cf0b40edf051991d851ee0", null ],
       [ "Description", "structjs_consumer_config.html#a36a14d666d99bdade87a5e21a25491d6", null ],
       [ "DeliverSubject", "structjs_consumer_config.html#a95aa4184ed77f69b7674756572da1ded", null ],
+      [ "DeliverGroup", "structjs_consumer_config.html#ae0765f3b5effe365187d3cf809c6ed3c", null ],
       [ "DeliverPolicy", "structjs_consumer_config.html#a364127e68bf0d3bf13efdc0b416667f4", null ],
       [ "OptStartSeq", "structjs_consumer_config.html#a2f0243899885dc97f304f48ca52b5356", null ],
       [ "OptStartTime", "structjs_consumer_config.html#a802ea3bf0669395bee28611f4ecede80", null ],
@@ -132,18 +133,24 @@ var group__types_group =
       [ "Consumer", "structjs_sequence_pair.html#a6d205effd29f8994f0028bfaf2e8d816", null ],
       [ "Stream", "structjs_sequence_pair.html#ab051e0815302c48ba6122bd18d9d76f7", null ]
     ] ],
+    [ "jsSequenceInfo", "structjs_sequence_info.html", [
+      [ "Consumer", "structjs_sequence_info.html#ae4416a5d766e07db207e563668edd06f", null ],
+      [ "Stream", "structjs_sequence_info.html#ab52c55c1d0edd20e064870b490b4b990", null ],
+      [ "Last", "structjs_sequence_info.html#a4e94c91650b7db253645515fee4c3b05", null ]
+    ] ],
     [ "jsConsumerInfo", "structjs_consumer_info.html", [
       [ "Stream", "structjs_consumer_info.html#a8f21939613163a7c0ebfb521aa471260", null ],
       [ "Name", "structjs_consumer_info.html#a9359aea7cd05a27b2a15f8a35cdb1008", null ],
       [ "Created", "structjs_consumer_info.html#a670d38f2e9ba5c354ca3560a8064d00c", null ],
       [ "Config", "structjs_consumer_info.html#a2f63940ca1f024ad3840418c2f6a1ae1", null ],
-      [ "Delivered", "structjs_consumer_info.html#a3be1ac5aa4cc71609197b9b777b761d0", null ],
-      [ "AckFloor", "structjs_consumer_info.html#a1e5a2a0f4686950da292eaec55e01c40", null ],
+      [ "Delivered", "structjs_consumer_info.html#a15f2d68fbf126acc1907ba9462ad9ee9", null ],
+      [ "AckFloor", "structjs_consumer_info.html#ab69c36ae092df9b0663b675a5abbab55", null ],
       [ "NumAckPending", "structjs_consumer_info.html#a882bebeb7af80fcce088afdf2c98de50", null ],
       [ "NumRedelivered", "structjs_consumer_info.html#a932bf14ebb9ce167af8975e3b1f8d001", null ],
       [ "NumWaiting", "structjs_consumer_info.html#a57e4a4139310c50a1f3d51af67197af0", null ],
       [ "NumPending", "structjs_consumer_info.html#aeaefd5a500996013b1ce13d8872e869b", null ],
-      [ "Cluster", "structjs_consumer_info.html#a6f4401563a9fd102226d82cdc6136e32", null ]
+      [ "Cluster", "structjs_consumer_info.html#a6f4401563a9fd102226d82cdc6136e32", null ],
+      [ "PushBound", "structjs_consumer_info.html#a31282cdc72000a91af03f89899740bfa", null ]
     ] ],
     [ "jsAPIStats", "structjs_a_p_i_stats.html", [
       [ "Total", "structjs_a_p_i_stats.html#a1545170bebb347d0ea1254f51c3027cf", null ],
@@ -170,11 +177,13 @@ var group__types_group =
       [ "NumPending", "structjs_msg_meta_data.html#a02f1bbd37e9650ed6bfda0210f038e30", null ],
       [ "Timestamp", "structjs_msg_meta_data.html#abab9ed5600a3629ea6d6c78170d7d5e9", null ],
       [ "Stream", "structjs_msg_meta_data.html#a32e2a9438d2dc769f7f64d2f8897abc4", null ],
-      [ "Consumer", "structjs_msg_meta_data.html#a6dcc2a442984b0ca070b3d8077192127", null ]
+      [ "Consumer", "structjs_msg_meta_data.html#a6dcc2a442984b0ca070b3d8077192127", null ],
+      [ "Domain", "structjs_msg_meta_data.html#a388e38ccea591181436d199dc7c2f8ea", null ]
     ] ],
     [ "jsPubAck", "structjs_pub_ack.html", [
       [ "Stream", "structjs_pub_ack.html#a4fd5e6cdb7217d72c553afcc75358893", null ],
       [ "Sequence", "structjs_pub_ack.html#a01d302d5e1a2e71487a8c74c3fed1691", null ],
+      [ "Domain", "structjs_pub_ack.html#a0b73200c0b035db3c9c96421706d51b0", null ],
       [ "Duplicate", "structjs_pub_ack.html#a0381a49ff62e8fac7a52cad6a5eb7243", null ]
     ] ],
     [ "jsPubAckErr", "structjs_pub_ack_err.html", [
@@ -231,6 +240,7 @@ var group__types_group =
     [ "jsConsumerSequenceMismatch", "group__types_group.html#gace471cd2cef1df797b2a1c6b485049bd", null ],
     [ "jsSubOptions", "group__types_group.html#gaccfaac2079656ffd40d003e4de5d2280", null ],
     [ "jsSequencePair", "group__types_group.html#ga39011d30b295759b7f6ca0a7539dff8f", null ],
+    [ "jsSequenceInfo", "group__types_group.html#ga27e1a5d5b513f9eb7d61a17db71f8003", null ],
     [ "jsConsumerInfo", "group__types_group.html#ga2f21bb79884e56a5613d7fe76b11b1e5", null ],
     [ "jsAPIStats", "group__types_group.html#gad057a0107367ce5727975f3daf63ff75", null ],
     [ "jsAccountLimits", "group__types_group.html#gaa889f706cce285adb9cea8aba0b76866", null ],

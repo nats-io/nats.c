@@ -1830,11 +1830,8 @@ js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
 
     // If we got a response, check for error and success result.
     IFOK(s, _unmarshalSuccessResp(&success, resp, errCode));
-    if ((s == NATS_NOT_FOUND) || ((s == NATS_OK) && !success))
-    {
-        const char *nferr = (s == NATS_NOT_FOUND ? ": not found" : "");
-        s = nats_setError(s, "failed to delete consumer '%s'%s", consumer,nferr);
-    }
+    if ((s == NATS_OK) && !success)
+        s = nats_setError(s, "failed to delete consumer '%s'", consumer);
 
     NATS_FREE(subj);
     natsMsg_Destroy(resp);

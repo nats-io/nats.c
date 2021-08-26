@@ -23525,6 +23525,29 @@ test_JetStreamSubscribe(void)
 
     test("Create consumer: ");
     jsSubOptions_Init(&so);
+    so.Config.Durable = "delcons2sync";
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Drain deletes consumer: ");
+    s = natsSubscription_Drain(sub);
+    for (i=0; i<3; i++)
+    {
+        natsMsg *msg = NULL;
+        IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+        IFOK(s, natsMsg_Ack(msg, NULL));
+        natsMsg_Destroy(msg);
+        msg = NULL;
+    }
+    IFOK(s, natsSubscription_WaitForDrainCompletion(sub, 1000));
+    IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", "delcons2sync", NULL, &jerr));
+    testCond((s == NATS_NOT_FOUND) && (ci == NULL) && (jerr == JSConsumerNotFoundErr)
+                && (nats_GetLastError(NULL) == NULL));
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Create consumer: ");
+    jsSubOptions_Init(&so);
     so.Config.Durable = "delcons3";
     s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
@@ -24468,9 +24491,9 @@ test_JetStreamSubscribeIdleHearbeat(void)
 
     test("Check HB received: ");
     nats_Sleep(300);
-    natsMutex_Lock(sub->mu);
+    natsSubAndLdw_Lock(sub);
     s = (sub->jsi->dseq == 1 ? NATS_OK : NATS_ERR);
-    natsMutex_Unlock(sub->mu);
+    natsSubAndLdw_Unlock(sub);
     testCond(s == NATS_OK);
 
     test("Check HB is not given to app: ");
@@ -24543,9 +24566,9 @@ test_JetStreamSubscribeIdleHearbeat(void)
     // Send real message so that all clears up
     s = js_Publish(NULL, js, "foo", "msg3", 4, NULL, &jerr);
     nats_Sleep(300);
-    natsMutex_Lock(sub->mu);
+    natsSubAndLdw_Lock(sub);
     s = (sub->jsi->ssmn == false ? NATS_OK : NATS_ERR);
-    natsMutex_Unlock(sub->mu);
+    natsSubAndLdw_Unlock(sub);
     testCond(s == NATS_OK);
 
     test("Skip again: ");
@@ -24647,9 +24670,9 @@ test_JetStreamSubscribeIdleHearbeat(void)
     // Send real message so that all clears up
     s = js_Publish(NULL, js, "foo", "msg4", 4, NULL, &jerr);
     nats_Sleep(300);
-    natsMutex_Lock(sub->mu);
+    natsSubAndLdw_Lock(sub);
     s = (sub->jsi->ssmn == false && sub->jsi->sm == false ? NATS_OK : NATS_ERR);
-    natsMutex_Unlock(sub->mu);
+    natsSubAndLdw_Unlock(sub);
     testCond(s == NATS_OK);
 
     test("Skip again: ");

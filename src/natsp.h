@@ -772,6 +772,9 @@ jsSub_free(jsSub *sub);
 natsStatus
 jsSub_deleteConsumer(natsSubscription *sub);
 
+void
+jsSub_deleteConsumerAfterDrain(natsSubscription *sub);
+
 natsStatus
 jsSub_trackSequences(jsSub *jsi, const char *reply);
 

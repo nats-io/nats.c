@@ -1407,16 +1407,55 @@ _checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, jsErrCode *jerr)
     if (strncmp(val, NOT_FOUND_STATUS, HDR_STATUS_LEN) == 0)
         return NATS_NOT_FOUND;
 
-    // 408 indicating a request timeout (when request is sent
-    // with an "expires" field).
+    // Older servers may send a 408 when a request in the server was expired
+    // and interest is still found, which will be the case for our
+    // implementation. Regardless, ignore 408 errors, the caller will
+    // go back to wait for the next message.
     if (strncmp(val, REQ_TIMEOUT, HDR_STATUS_LEN) == 0)
-        return NATS_TIMEOUT;
+        return NATS_OK;
 
     // The possible 503 is handled directly in natsSub_nextMsg(), so we
     // would never get it here in this function.
 
     natsMsgHeader_Get(msg, DESCRIPTION_HDR, &desc);
     return nats_setError(NATS_ERR, "%s", (desc == NULL ? "error checking pull subscribe message" : desc));
+}
+
+static natsStatus
+_sendPullRequest(natsConnection *nc, const char *subj, const char *rply,
+                 natsBuffer *buf, int batchSize, int64_t *timeout, int64_t start, bool noWait)
+{
+    natsStatus  s;
+    int64_t     expires;
+
+    *timeout -= (nats_Now()-start);
+    if (*timeout <= 0)
+    {
+        // At this point, consider that we have timed-out.
+        return nats_setDefaultError(NATS_TIMEOUT);
+    }
+
+    // Make our request expiration a bit shorter than the
+    // current timeout.
+    expires = (*timeout >= 20 ? *timeout - 10 : *timeout);
+
+    // Since "expires" is a Go time.Duration and our timeout
+    // is in milliseconds, convert it to nanos.
+    expires *= 1000000;
+
+    natsBuf_Reset(buf);
+    s = natsBuf_AppendByte(buf, '{');
+    IFOK(s, nats_marshalLong(buf, false, "batch", (int64_t) batchSize));
+    IFOK(s, nats_marshalLong(buf, true, "expires", expires));
+    if ((s == NATS_OK) && noWait)
+        s = natsBuf_Append(buf, ",\"no_wait\":true", -1);
+    IFOK(s, natsBuf_AppendByte(buf, '}'));
+
+    // Sent the request to get more messages.
+    IFOK(s, natsConnection_PublishRequest(nc, subj, rply,
+        natsBuf_Data(buf), natsBuf_Len(buf)));
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -1495,30 +1534,15 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
     // request to the server.
     if (((s == NATS_OK) || (s == NATS_TIMEOUT)) && (count != batch))
     {
-        bool doNoWait = false;
+        bool doNoWait = (batch-count > 1 ? true : false);
 
-        // For batch==1, it does not make sense to send a no_wait.
-        if (batch > 1)
-        {
-            doNoWait = true;
-            s = natsBuf_Append(&buf, "{\"no_wait\":true", -1);
-        }
-        // Need comma only if we have `no_wait` set.
-        IFOK(s, nats_marshalLong(&buf, doNoWait, "batch", (int64_t)(batch-count)));
-        IFOK(s, natsBuf_AppendByte(&buf, '}'));
-
-        // Sent the request to get more messages.
-        IFOK(s, natsConnection_PublishRequest(nc, subj, rply, natsBuf_Data(&buf), natsBuf_Len(&buf)));
-
+        s = _sendPullRequest(nc, subj, rply, &buf, batch-count,
+                             &timeout, start, doNoWait);
         // Now wait for messages or a 404 saying that there are no more.
         while ((s == NATS_OK) && (count < batch))
         {
             natsMsg *msg    = NULL;
             bool    usrMsg  = false;
-
-            timeout -= (nats_Now()-start);
-            if (timeout < 0)
-                timeout = 0;
 
             s = natsSub_nextMsg(&msg, sub, timeout, true);
             if (s == NATS_OK)
@@ -1534,36 +1558,10 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
                     // wait this time.
                     if (doNoWait && (s == NATS_NOT_FOUND) && (count == 0))
                     {
-                        int64_t expires;
-
-                        // Make sure we do this only once...
                         doNoWait = false;
 
-                        timeout -= (nats_Now()-start);
-                        if (timeout < 0)
-                        {
-                            // At this point, consider that we have timed-out.
-                            s = NATS_TIMEOUT;
-                            break;
-                        }
-
-                        // Make our request expiration a bit shorter than the
-                        // current timeout.
-                        expires = (timeout >= 20 ? timeout - 10 : timeout);
-
-                        // Since "expires" is a Go time.Duration and our timeout
-                        // is in milliseconds, convert it to nanos.
-                        expires *= 1000000;
-
-                        natsBuf_Reset(&buf);
-                        s = natsBuf_AppendByte(&buf, '{');
-                        IFOK(s, nats_marshalLong(&buf, false, "batch", (int64_t)(batch-count)));
-                        IFOK(s, nats_marshalLong(&buf, true, "expires", expires));
-                        IFOK(s, natsBuf_AppendByte(&buf, '}'));
-
-                        // Sent the request to get more messages.
-                        IFOK(s, natsConnection_PublishRequest(nc, subj, rply,
-                            natsBuf_Data(&buf), natsBuf_Len(&buf)));
+                        s = _sendPullRequest(nc, subj, rply, &buf, batch-count,
+                                             &timeout, start, false);
                     }
                 }
             }

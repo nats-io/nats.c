@@ -25193,15 +25193,18 @@ test_JetStreamSubscribePull(void)
     natsThread_Destroy(t);
     t = NULL;
 
-    test("Fetch gets 408: ");
+    test("Fetch ignores 408: ");
     natsMutex_Lock(args.m);
     args.nc = nc;
     args.sub = sub;
     args.string = "NATS/1.0 408 Request Timeout\r\n\r\n";
     natsMutex_Unlock(args.m);
     s = natsThread_Create(&t, _sendToPullSub, (void*) &args);
-    IFOK(s, natsSubscription_Fetch(&list, sub, 1, 10000, &jerr));
-    testCond((s == NATS_TIMEOUT) && (list.Msgs == NULL) && (list.Count == 0) && (jerr == 0));
+    start = nats_Now();
+    IFOK(s, natsSubscription_Fetch(&list, sub, 1, 500, &jerr));
+    dur = nats_Now() - start;
+    testCond((s == NATS_TIMEOUT) && (list.Msgs == NULL) && (list.Count == 0) && (jerr == 0)
+                && (dur > 400));
     nats_clearLastError();
     natsMsg_Destroy(msg);
     msg = NULL;
@@ -25225,6 +25228,47 @@ test_JetStreamSubscribePull(void)
 
     natsThread_Join(t);
     natsThread_Destroy(t);
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST2";
+    sc.Subjects = (const char*[1]){"bar"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Pull with max waiting: ");
+    jsSubOptions_Init(&so);
+    so.Config.MaxWaiting = 2;
+    s = js_PullSubscribe(&sub, js, "bar", "pullmaxwaiting", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Max requests: ");
+    for (i=0; (s == NATS_OK) && (i<2); i++)
+    {
+        s = natsSubscription_Fetch(&list, sub, 1, 50, &jerr);
+        if (s == NATS_TIMEOUT)
+            s = NATS_OK;
+    }
+    testCond(s == NATS_OK);
+    nats_clearLastError();
+
+    // Wait for more than expiration of above pull requests
+    nats_Sleep(100);
+
+    test("Next does not return early: ");
+    for (i=0; i<2; i++)
+    {
+        int batchSize = (i == 0 ? 1 : 10);
+        start = nats_Now();
+        s = natsSubscription_Fetch(&list, sub, batchSize, 250, &jerr);
+        dur = nats_Now() - start;
+        s = (((s == NATS_TIMEOUT) && (list.Count == 0) && (dur >= 200)) ? NATS_OK : NATS_ERR);
+    }
+    testCond(s == NATS_OK);
+
     natsSubscription_Destroy(sub);
     jsCtx_Destroy(js);
     natsConnection_Destroy(nc);

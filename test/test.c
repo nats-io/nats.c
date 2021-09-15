@@ -24813,6 +24813,7 @@ test_JetStreamSubscribeFlowControl(void)
     test("Subscribe async: ");
     jsSubOptions_Init(&so);
     so.Config.FlowControl = true;
+    so.Config.Heartbeat = (int64_t) 1E9;
     s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
@@ -24841,6 +24842,7 @@ test_JetStreamSubscribeFlowControl(void)
     test("Subscribe sync: ");
     jsSubOptions_Init(&so);
     so.Config.FlowControl = true;
+    so.Config.Heartbeat = (int64_t) 1E9;
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
@@ -24872,6 +24874,7 @@ test_JetStreamSubscribeFlowControl(void)
     test("Subscribe: ");
     jsSubOptions_Init(&so);
     so.Config.FlowControl = true;
+    so.Config.Heartbeat = (int64_t) 1E9;
     s = js_Subscribe(&sub, js, "bar", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 

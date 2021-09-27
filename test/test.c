@@ -12357,6 +12357,16 @@ test_SubBadSubjectAndQueueName(void)
     _stopServer(pid);
 }
 
+static void
+_subComplete(void *closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    arg->done = true;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+}
 
 static void
 test_ClientAsyncAutoUnsub(void)
@@ -12367,6 +12377,7 @@ test_ClientAsyncAutoUnsub(void)
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
     int                 checks;
+    int64_t             nd = 0;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
@@ -12399,6 +12410,31 @@ test_ClientAsyncAutoUnsub(void)
 
     test("Received no more than max: ");
     testCond(arg.sum == 10);
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Subscribe and publish 100 msgs: ");
+    s = natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg);
+    IFOK(s, natsSubscription_SetOnCompleteCB(sub, _subComplete, (void*) &arg));
+    for (int i=0; (s == NATS_OK) && (i<100); i++)
+        s = natsConnection_PublishString(nc, "foo", "hello");
+    IFOK(s, natsConnection_Flush(nc));
+    checks = 0;
+    while ((natsSubscription_GetDelivered(sub, &nd) == NATS_OK)
+           && (checks++ < 10))
+    {
+        nats_Sleep(100);
+    }
+    testCond((s == NATS_OK) && (nd == 100));
+
+    test("Auto-unsub with 10, should close the sub right away: ");
+    s = natsSubscription_AutoUnsubscribe(sub, 10);
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
@@ -12447,6 +12483,26 @@ test_ClientSyncAutoUnsub(void)
 
     test("IsValid should be false: ");
     testCond((sub != NULL) && !natsSubscription_IsValid(sub));
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Subscribe and publish 100 msgs: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    for (int i=0; (s == NATS_OK) && (i<100); i++)
+        s = natsConnection_PublishString(nc, "foo", "hello");
+    IFOK(s, natsConnection_Flush(nc));
+    for (int i=0; (s == NATS_OK) && (i<100); i++)
+    {
+        s = natsSubscription_NextMsg(&msg, sub, 1000);
+        received++;
+        natsMsg_Destroy(msg);
+    }
+    testCond(s == NATS_OK);
+
+    test("Auto-unsub with 10, should close the sub right away: ");
+    s = natsSubscription_AutoUnsubscribe(sub, 10);
+    testCond(!natsSubscription_IsValid(sub));
 
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);

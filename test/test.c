@@ -3045,7 +3045,7 @@ test_natsJSON(void)
             "{\"test\": \"abc\\u123\"}",
             "{\"test\": \"abc\\u123g\"}",
             "{\"test\": \"abc\\u 23f\"}",
-            "{\"test\": \"abc\\""",
+            ("{\"test\": \"abc\\"""),
             "{\"test\": \"abc\\u1234",
             "{\"test\": \"abc\\uabc",
             "{\"test\" \"separator missing\"}",

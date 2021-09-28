@@ -5035,7 +5035,6 @@ test_natsMsgIsJSCtrl(void)
     }
 }
 
-
 static natsStatus
 _checkStart(const char *url, int orderIP, int maxAttempts)
 {
@@ -17775,16 +17774,18 @@ test_GetClientIP(void)
     CHECK_SERVER_STARTED(serverPid);
 
     test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4222");
     testCond(s == NATS_OK);
 
     test("Get client IP - no conn: ");
     s = natsConnection_GetClientIP(NULL, &ip);
     testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
 
     test("Get client IP - no ip loc: ");
     s = natsConnection_GetClientIP(nc, NULL);
     testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
 
     test("Get client IP: ");
     s = natsConnection_GetClientIP(nc, &ip);
@@ -17796,6 +17797,7 @@ test_GetClientIP(void)
     test("Get client IP after conn closed: ");
     s = natsConnection_GetClientIP(nc, &ip);
     testCond((s == NATS_CONNECTION_CLOSED) && (ip == NULL));
+    nats_clearLastError();
 
     natsConnection_Destroy(nc);
     nc = NULL;
@@ -17837,6 +17839,7 @@ test_GetClientIP(void)
     test("Get client IP with old server: ");
     s = natsConnection_GetClientIP(nc, &ip);
     testCond ((s == NATS_NO_SERVER_SUPPORT) && (ip == NULL));
+    nats_clearLastError();
 
     // Notify mock server we are done
     natsMutex_Lock(arg.m);
@@ -19227,6 +19230,89 @@ test_HeadersBasic(void)
 
     natsMsg_Destroy(msg);
     natsMsg_Destroy(rmsg);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+}
+
+static void
+_msgFilterNoOp(natsConnection *nc, natsMsg **msg) { }
+
+static void
+_msgFilterAlterMsg(natsConnection *nc, natsMsg **msg)
+{
+    natsStatus  s;
+    natsMsg     *nm = NULL;
+
+    s = natsMsg_Create(&nm, natsMsg_GetSubject(*msg), NULL, "replaced", 8);
+    if (s != NATS_OK)
+        nats_PrintLastErrorStack(stderr);
+
+    natsMsg_Destroy(*msg);
+    *msg = nm;
+}
+
+static void
+_msgFilterDropMsg(natsConnection *nc, natsMsg **msg)
+{
+    natsMsg_Destroy(*msg);
+    *msg = NULL;
+    natsConn_setFilter(nc, NULL);
+}
+
+static void
+test_natsMsgsFilter(void)
+{
+    natsStatus          s;
+    natsConnection      *nc     = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+    natsMsg             *msg    = NULL;
+    natsSubscription    *sub    = NULL;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect ok: ");
+    s = natsConnection_ConnectTo(&nc, "nats://127.0.0.1:4222");
+    testCond(s == NATS_OK);
+
+    test("Create sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    testCond(s == NATS_OK);
+
+    test("Add no-op filter: ");
+    natsConn_setFilter(nc, _msgFilterNoOp);
+    s = natsConnection_PublishString(nc, "foo", "original");
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL)
+                && (strcmp(natsMsg_GetData(msg), "original") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Add alter-msg filter: ");
+    natsConn_setFilter(nc, _msgFilterAlterMsg);
+    s = natsConnection_PublishString(nc, "foo", "original");
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL)
+                && (strcmp(natsMsg_GetData(msg), "replaced") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Add drop-msg filter: ");
+    natsConn_setFilter(nc, _msgFilterDropMsg);
+    s = natsConnection_PublishString(nc, "foo", "will be dropped");
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 100));
+    testCond((s == NATS_TIMEOUT) && (msg == NULL));
+    nats_clearLastError();
+
+    test("Filter is removed from previous filter: ");
+    s = natsConnection_PublishString(nc, "foo", "got it");
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL)
+                && (strcmp(natsMsg_GetData(msg), "got it") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
     _stopServer(pid);
@@ -27713,6 +27799,7 @@ static testInfo allTests[] =
     {"WriteDeadline",                   test_WriteDeadline},
     {"HeadersNotSupported",             test_HeadersNotSupported},
     {"HeadersBasic",                    test_HeadersBasic},
+    {"MsgsFilter",                      test_natsMsgsFilter},
     {"EventLoop",                       test_EventLoop},
     {"EventLoopRetryOnFailedConnect",   test_EventLoopRetryOnFailedConnect},
     {"EventLoopTLS",                    test_EventLoopTLS},

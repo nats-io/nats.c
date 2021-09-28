@@ -619,16 +619,16 @@ natsStrHash_SetEx(natsStrHash *hash, char *key, bool copyKey, bool freeKey,
 }
 
 void*
-natsStrHash_Get(natsStrHash *hash, char *key)
+natsStrHash_GetEx(natsStrHash *hash, char *key, int keyLen)
 {
     natsStrHashEntry    *e;
-    uint32_t            hk = natsStrHash_Hash(key, (int) strlen(key));
+    uint32_t            hk = natsStrHash_Hash(key, keyLen);
 
     e = hash->bkts[hk & hash->mask];
     while (e != NULL)
     {
         if ((e->hk == hk)
-            && (strcmp(e->key, key) == 0))
+            && (strncmp(e->key, key, keyLen) == 0))
         {
             return e->data;
         }

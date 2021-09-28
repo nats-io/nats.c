@@ -170,6 +170,7 @@ ConnSign
 WriteDeadline
 HeadersNotSupported
 HeadersBasic
+MsgsFilter
 EventLoop
 EventLoopRetryOnFailedConnect
 EventLoopTLS

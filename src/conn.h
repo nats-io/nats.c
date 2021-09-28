@@ -132,6 +132,9 @@ natsStatus
 natsConn_signatureHandler(char **customErrTxt, unsigned char **sig, int *sigLen, const char *nonce, void *closure);
 
 void
+natsConn_setFilter(natsConnection *nc, natsMsgFilter f);
+
+void
 natsConn_close(natsConnection *nc);
 
 void

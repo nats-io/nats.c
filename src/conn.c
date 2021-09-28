@@ -2520,6 +2520,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     bool             ctrlMsg = false;
     const char       *fcReply= NULL;
     int              jct     = 0;
+    natsMsgFilter    mf      = NULL;
 
     natsMutex_Lock(nc->subsMu);
 
@@ -2527,7 +2528,8 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     nc->stats.inBytes += (uint64_t) bufLen;
 
     sub = natsHash_Get(nc->subs, nc->ps->ma.sid);
-
+    if (sub != NULL)
+        mf = nc->filter;
     natsMutex_Unlock(nc->subsMu);
 
     if (sub == NULL)
@@ -2543,6 +2545,13 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     // to capture the real message payload data length, which has been
     // computed as the bufLen - header size.
     dl = msg->dataLen;
+
+    if (mf != NULL)
+    {
+        (*mf)(nc, &msg);
+        if (msg == NULL)
+            return NATS_OK;
+    }
 
     // Pick mutex, condition variable and list based on if the sub is
     // part of a global delivery thread pool or not.
@@ -4270,4 +4279,12 @@ natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port)
     natsConn_Unlock(nc);
 
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+natsConn_setFilter(natsConnection *nc, natsMsgFilter f)
+{
+    natsMutex_Lock(nc->subsMu);
+    nc->filter = f;
+    natsMutex_Unlock(nc->subsMu);
 }

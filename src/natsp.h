@@ -538,6 +538,9 @@ typedef struct __respInfo
 
 } respInfo;
 
+// Used internally for testing and allow to alter/suppress an incoming message
+typedef void (*natsMsgFilter)(natsConnection *nc, natsMsg **msg);
+
 struct __natsConnection
 {
     natsMutex           *mu;
@@ -615,6 +618,10 @@ struct __natsConnection
         void            *buffer;
         void            *data;
     } el;
+
+    // Msg filters for testing.
+	// Protected by subsMu
+	natsMsgFilter       filter;
 };
 
 //

@@ -298,14 +298,18 @@ natsSub_deliverMsgs(void *arg)
     natsSub_release(sub);
 }
 
-void
+bool
 natsSub_setMax(natsSubscription *sub, uint64_t max)
 {
+    bool accepted = false;
+
     natsSub_Lock(sub);
     SUB_DLV_WORKER_LOCK(sub);
-    sub->max = max;
+    sub->max = (max <= sub->delivered ? 0 : max);
+    accepted = sub->max != 0;
     SUB_DLV_WORKER_UNLOCK(sub);
     natsSub_Unlock(sub);
+    return accepted;
 }
 
 natsStatus

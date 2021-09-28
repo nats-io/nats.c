@@ -3036,8 +3036,14 @@ natsConn_unsubscribe(natsConnection *nc, natsSubscription *sub, int max, bool dr
     }
 
     if (max > 0)
-        natsSub_setMax(sub, max);
-    else if (!drainMode)
+    {
+        // If we try to set a max but number of delivered messages
+        // is already higher than that, then we will do an actual
+        // remove.
+        if (!natsSub_setMax(sub, max))
+            max = 0;
+    }
+    if ((max == 0) && !drainMode)
         natsConn_removeSubscription(nc, sub);
 
     if (!drainMode && !natsConn_isReconnecting(nc))

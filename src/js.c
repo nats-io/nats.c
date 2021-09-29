@@ -42,6 +42,7 @@ const int64_t    jsDefaultRequestWait    = 5000;
 const int64_t    jsDefaultStallWait      = 200;
 const char       *jsDigits               = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const int        jsBase                  = 62;
+const int64_t    jsOrderedHBInterval     = 5*(int64_t)1E9;
 
 #define jsReplyTokenSize    (8)
 #define jsReplyPrefixLen    (NATS_INBOX_PRE_LEN + (jsReplyTokenSize) + 1)
@@ -50,6 +51,18 @@ const int        jsBase                  = 62;
 #define jsAckPrefix             "$JS.ACK."
 #define jsAckPrefixLen          (8)
 #define jsLastConsumerSeqHdr    "Nats-Last-Consumer"
+
+typedef struct __jsOrderedConsInfo
+{
+    int64_t             osid;
+    int64_t             nsid;
+    uint64_t            sseq;
+    natsConnection      *nc;
+    natsSubscription    *sub;
+    char                *ndlv;
+    natsThread          *thread;
+
+} jsOrderedConsInfo;
 
 static void
 _destroyOptions(jsOptions *o)
@@ -1271,7 +1284,7 @@ jsSub_trackSequences(jsSub *jsi, const char *reply)
 }
 
 natsStatus
-jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm)
+jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *sm)
 {
     jsSub       *jsi   = sub->jsi;
     const char  *str   = NULL;
@@ -1319,18 +1332,25 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm)
         // Clear the suppression flag.
         jsi->ssmn = false;
     }
-    else if (!jsi->ssmn)
+    else
     {
-        // Record the sequence mismatch.
-        jsi->sm = true;
-        // Prevent following mismatch report until mismatch is resolved.
-        jsi->ssmn = true;
-        // Only for async subscriptions, indicate that the connection should
-        // push a NATS_MISMATCH to the async callback.
-        if (sub->msgCb != NULL)
-            *sm = true;
+		if (jsi->ordered)
+        {
+            s = jsSub_resetOrderedConsumer(sub, mu, jsi->sseq+1);
+        }
+        else if (!jsi->ssmn)
+        {
+            // Record the sequence mismatch.
+            jsi->sm = true;
+            // Prevent following mismatch report until mismatch is resolved.
+            jsi->ssmn = true;
+            // Only for async subscriptions, indicate that the connection should
+            // push a NATS_MISMATCH to the async callback.
+            if (sub->msgCb != NULL)
+                *sm = true;
+        }
     }
-    return NATS_OK;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -1862,6 +1882,29 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
             return nats_setError(NATS_INVALID_ARG, "%s", jsErrNoFlowControlForQueueSub);
     }
 
+    // Do some quick checks here for ordered consumers.
+    if (opts->Ordered)
+    {
+		// Check for pull mode.
+		if (isPullMode)
+            return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoPullMode);
+        // Make sure we are not durable.
+		if (!nats_IsStringEmpty(durable))
+            return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoDurable);
+        // Check ack policy.
+		if ((int) opts->Config.AckPolicy != -1)
+            return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoAckPolicy);
+        // Check max deliver. If set, it has to be 1.
+		if ((opts->Config.MaxDeliver > 0) && (opts->Config.MaxDeliver != 1))
+            return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoMaxDeliver);
+        // Queue groups not allowed.
+		if (isQueue)
+            return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoQueue);
+		// Check for bound consumers.
+		if (!nats_IsStringEmpty(consumer))
+            return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoBind);
+    }
+
     // In case a consumer has not been set explicitly, then the durable name
     // will be used as the consumer name (after that, `consumer` will still be
     // possibly NULL).
@@ -1934,20 +1977,32 @@ PROCESS_INFO:
             cfg->DeliverSubject = deliver;
         }
 
-        // Set config durable with "durable" variable, which will
-        // possibly be NULL.
-        cfg->Durable = durable;
-
-        // Set DeliverGroup to queue name, possibly NULL
-        cfg->DeliverGroup = opts->Queue;
-
         // Do filtering always, server will clear as needed.
         cfg->FilterSubject = subject;
 
-        // If we have acks at all and the MaxAckPending is not set go ahead
-        // and set to the internal max.
-        if ((cfg->MaxAckPending == 0) && (cfg->AckPolicy != js_AckNone))
-            cfg->MaxAckPending = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
+        if (opts->Ordered)
+        {
+            cfg->FlowControl = true;
+            cfg->AckPolicy   = js_AckNone;
+		    cfg->MaxDeliver  = 1;
+            cfg->AckWait     = (24*60*60)*(int64_t)1E9; // Just set to something known, not utilized.
+            if (opts->Config.Heartbeat <= 0)
+                cfg->Heartbeat = jsOrderedHBInterval;
+        }
+        else
+        {
+            // Set config durable with "durable" variable, which will
+            // possibly be NULL.
+            cfg->Durable = durable;
+
+            // Set DeliverGroup to queue name, possibly NULL
+            cfg->DeliverGroup = opts->Queue;
+
+            // If we have acks at all and the MaxAckPending is not set go ahead
+            // and set to the internal max.
+            if ((cfg->MaxAckPending == 0) && (cfg->AckPolicy != js_AckNone))
+                cfg->MaxAckPending = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
+        }
 
         // Capture the HB interval (convert in millsecond since Go duration is in nanos)
         hbi = cfg->Heartbeat / 1000000;
@@ -1972,6 +2027,7 @@ PROCESS_INFO:
                 jsi->js     = js;
                 jsi->hbi    = hbi;
                 jsi->pull   = isPullMode;
+                jsi->ordered= opts->Ordered;
                 js_retain(js);
 
                 if ((usrCB != NULL) && !opts->ManualAck && (opts->Config.AckPolicy != js_AckNone))
@@ -2055,7 +2111,11 @@ PROCESS_INFO:
         {
             natsSub_Lock(sub);
             jsi->dc = true;
-            DUP_STRING(s, jsi->consumer, info->Name);
+            // There may be a race in the case of an ordered consumer where by this
+            // time, the consumer has been recreated (jsResetOrderedConsumer). So
+            // set only if jsi->consumer is NULL!
+            if (jsi->consumer == NULL)
+                DUP_STRING(s, jsi->consumer, info->Name);
             natsSub_Unlock(sub);
         }
     }
@@ -2324,4 +2384,200 @@ natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType)
         *ctrlType = jsCtrlFlowControl;
 
     return true;
+}
+
+// Update and replace sid.
+// Lock should be held on entry but will be unlocked to prevent lock inversion.
+int64_t
+applyNewSID(natsSubscription *sub, natsMutex *mu)
+{
+    int64_t         osid = 0;
+    int64_t         nsid = 0;
+    natsConnection  *nc  = sub->conn;
+
+    natsMutex_Unlock(mu);
+
+    natsMutex_Lock(nc->subsMu);
+    osid = sub->sid;
+    natsHash_Remove(nc->subs, osid);
+	// Place new one.
+    nc->ssid++;
+    nsid = nc->ssid;
+    natsHash_Set(nc->subs, nsid, sub, NULL);
+	natsMutex_Unlock(nc->subsMu);
+
+    natsMutex_Lock(mu);
+    sub->sid = nsid;
+	return osid;
+}
+
+static void
+_recreateOrderedCons(void *closure)
+{
+    jsOrderedConsInfo   *oci = (jsOrderedConsInfo*) closure;
+    natsConnection      *nc  = oci->nc;
+    natsSubscription    *sub = oci->sub;
+    natsThread          *t   = NULL;
+    jsSub               *jsi = NULL;
+    jsConsumerInfo      *ci  = NULL;
+    jsConsumerConfig    cc;
+    natsStatus          s;
+
+    // Unsubscribe and subscribe with new inbox and sid.
+    // Remap a new low level sub into this sub since its client accessible.
+    // This is done here in this thread to prevent lock inversion.
+
+    natsConn_Lock(nc);
+    SET_WRITE_DEADLINE(nc);
+    s = natsConn_sendUnsubProto(nc, oci->osid, 0);
+    IFOK(s, natsConn_sendSubProto(nc, oci->ndlv, NULL, oci->nsid));
+    IFOK(s, natsConn_flushOrKickFlusher(nc));
+    natsConn_Unlock(nc);
+
+    if (s == NATS_OK)
+    {
+        natsSubAndLdw_Lock(sub);
+        t = oci->thread;
+        jsi = sub->jsi;
+        // Reset some items in jsi.
+        jsi->dseq = 1;
+        NATS_FREE(jsi->cmeta);
+        jsi->cmeta = NULL;
+        NATS_FREE(jsi->fcReply);
+        jsi->fcReply = NULL;
+        jsi->fcDelivered = 0;
+        // Create consumer request for starting policy.
+        jsConsumerConfig_Init(&cc);
+        cc.FlowControl      = true;
+        cc.AckPolicy        = js_AckNone;
+        cc.MaxDeliver       = 1;
+        cc.AckWait          = (24*60*60)*(int64_t)1E9; // Just set to something known, not utilized.
+        cc.Heartbeat        = jsi->hbi * 1000000;
+        cc.DeliverSubject   = sub->subject;
+        cc.DeliverPolicy    = js_DeliverByStartSequence;
+        cc.OptStartSeq      = oci->sseq;
+        natsSubAndLdw_Unlock(sub);
+
+        s = js_AddConsumer(&ci, jsi->js, jsi->stream, &cc, NULL, NULL);
+        if (s == NATS_OK)
+        {
+            natsSub_Lock(sub);
+            NATS_FREE(jsi->consumer);
+            jsi->consumer = NULL;
+            DUP_STRING(s, jsi->consumer, ci->Name);
+            natsSub_Unlock(sub);
+
+            jsConsumerInfo_Destroy(ci);
+        }
+    }
+    if (s != NATS_OK)
+    {
+        natsConn_Lock(nc);
+        if (nc->opts->asyncErrCb != NULL)
+        {
+            char tmp[256];
+            snprintf(tmp, sizeof(tmp), "failed recreating ordered consumer: %d (%s)",
+                     s, natsStatus_GetText(s));
+            natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
+        }
+        natsConn_Unlock(nc);
+
+        natsConn_unsubscribe(nc, sub, 0, true, 0);
+    }
+
+    NATS_FREE(oci);
+    natsThread_Detach(t);
+    natsThread_Destroy(t);
+    natsSub_release(sub);
+}
+
+// We are here if we have detected a gap with an ordered consumer.
+// We will create a new consumer and rewire the low level subscription.
+// Lock should be held.
+natsStatus
+jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
+{
+    natsStatus          s           = NATS_OK;
+    natsConnection      *nc         = sub->conn;
+    int64_t             osid        = 0;
+    natsInbox           *newDeliver = NULL;
+    jsOrderedConsInfo   *oci        = NULL;
+
+	if ((sub->jsi == NULL) || (nc == NULL) || sub->closed)
+		return NATS_OK;
+
+	// Grab new inbox.
+    s = natsInbox_Create(&newDeliver);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+	// Quick unsubscribe. Since we know this is a simple push subscriber we do in place.
+    osid = applyNewSID(sub, mu);
+
+    NATS_FREE(sub->subject);
+    sub->subject = (char*) newDeliver;
+
+	// We are still in the low level readloop for the connection so we need
+	// to spin a thread to try to create the new consumer.
+    // Create object that will hold some state to pass to the thread.
+    oci = NATS_CALLOC(1, sizeof(jsOrderedConsInfo));
+    if (oci == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+
+    if (s == NATS_OK)
+    {
+        oci->osid = osid;
+        oci->nsid = sub->sid;
+        oci->sseq = sseq;
+        oci->nc   = nc;
+        oci->sub  = sub;
+        oci->ndlv = (char*) newDeliver;
+        natsSub_retain(sub);
+
+        s = natsThread_Create(&oci->thread, _recreateOrderedCons, (void*) oci);
+        if (s != NATS_OK)
+        {
+            NATS_FREE(oci);
+            natsSub_release(sub);
+        }
+    }
+    return s;
+}
+
+// Check to make sure messages are arriving in order.
+// Returns true if the sub had to be replaced. Will cause upper layers to return.
+// The caller has verified that sub.jsi != nil and that this is not a control message.
+// Lock should be held.
+natsStatus
+jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *reset)
+{
+    natsStatus  s    = NATS_OK;
+    jsSub       *jsi = NULL;
+    uint64_t    sseq = 0;
+    uint64_t    dseq = 0;
+
+    *reset = false;
+
+	// Ignore msgs with no reply like HBs and flowcontrol, they are handled elsewhere.
+    if (natsMsg_GetReply(msg) == NULL)
+		return NATS_OK;
+
+	// Normal message here.
+    s = _getMetaData(natsMsg_GetReply(msg), NULL, NULL, NULL, NULL, &sseq, &dseq, NULL, NULL, 2);
+    if (s == NATS_OK)
+    {
+        jsi = sub->jsi;
+        if (dseq != jsi->dseq)
+        {
+            *reset = true;
+            s = jsSub_resetOrderedConsumer(sub, mu, jsi->sseq+1);
+        }
+        else
+        {
+            // Update our tracking here.
+            jsi->dseq = dseq+1;
+            jsi->sseq = sseq;
+        }
+    }
+	return NATS_UPDATE_ERR_STACK(s);
 }

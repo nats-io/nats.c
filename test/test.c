@@ -128,6 +128,7 @@ struct threadArg
     natsOptions      *opts;
     natsConnection   *nc;
     jsCtx            *js;
+    natsBuffer       *buf;
 
 #if defined(NATS_HAS_STREAMING)
     stanConnection   *sc;
@@ -19236,10 +19237,10 @@ test_HeadersBasic(void)
 }
 
 static void
-_msgFilterNoOp(natsConnection *nc, natsMsg **msg) { }
+_msgFilterNoOp(natsConnection *nc, natsMsg **msg, void *closure) { }
 
 static void
-_msgFilterAlterMsg(natsConnection *nc, natsMsg **msg)
+_msgFilterAlterMsg(natsConnection *nc, natsMsg **msg, void *closure)
 {
     natsStatus  s;
     natsMsg     *nm = NULL;
@@ -19253,7 +19254,7 @@ _msgFilterAlterMsg(natsConnection *nc, natsMsg **msg)
 }
 
 static void
-_msgFilterDropMsg(natsConnection *nc, natsMsg **msg)
+_msgFilterDropMsg(natsConnection *nc, natsMsg **msg, void *closure)
 {
     natsMsg_Destroy(*msg);
     *msg = NULL;
@@ -25422,6 +25423,510 @@ test_JetStreamSubscribePull(void)
     rmtree(datastore);
 }
 
+static void
+_orderedConsCB(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    struct threadArg *args = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    if (natsMsg_GetDataLength(msg) == 0)
+    {
+        args->done = true;
+        natsCondition_Signal(args->c);
+    }
+    else
+    {
+        natsBuf_Append(args->buf, natsMsg_GetData(msg), natsMsg_GetDataLength(msg));
+        args->sum++;
+    }
+    natsMutex_Unlock(args->m);
+    natsMsg_Destroy(msg);
+}
+
+static natsStatus
+_testOrderedCons(jsCtx *js, jsStreamInfo *si, char *asset, int assetLen, struct threadArg *args, bool async)
+{
+    natsStatus          s    = NATS_OK;
+    natsSubscription    *sub = NULL;
+    int                 received = 0;
+    jsSubOptions        so;
+
+    jsSubOptions_Init(&so);
+    so.Ordered = true;
+    so.Config.Heartbeat = 250*1000000;
+
+    s = natsBuf_Create(&args->buf, assetLen);
+    if ((s == NATS_OK) && async)
+    {
+        s = js_Subscribe(&sub, js, "a", _orderedConsCB, (void*) args, NULL, &so, NULL);
+        if (s == NATS_OK)
+        {
+            natsMutex_Lock(args->m);
+            while ((s != NATS_TIMEOUT) && !args->done)
+                s = natsCondition_TimedWait(args->c, args->m, 5000);
+            received = args->sum;
+            natsMutex_Unlock(args->m);
+        }
+    }
+    else if (s == NATS_OK)
+    {
+        s = js_SubscribeSync(&sub, js, "a", NULL, &so, NULL);
+        if (s == NATS_OK)
+        {
+            bool    done  = false;
+            int64_t start = 0;
+            natsMsg *msg  = NULL;
+
+            start = nats_Now();
+            while ((s == NATS_OK) && !done)
+            {
+                s = natsSubscription_NextMsg(&msg, sub, 1000);
+                if (s == NATS_OK)
+                {
+                    done = (natsMsg_GetDataLength(msg) == 0 ? true : false);
+                    if (!done)
+                    {
+                        s = natsBuf_Append(args->buf, natsMsg_GetData(msg), natsMsg_GetDataLength(msg));
+                        received++;
+                    }
+                    natsMsg_Destroy(msg);
+                    msg = NULL;
+                }
+                if ((s == NATS_OK) && (nats_Now() - start > 5000))
+                    s = NATS_TIMEOUT;
+            }
+        }
+    }
+    if ((s == NATS_OK) && (natsBuf_Len(args->buf) != assetLen))
+    {
+        fprintf(stderr, "\nAsset length (%d) does not match received data length (%d)\n",
+                assetLen, natsBuf_Len(args->buf));
+        s = NATS_MISMATCH;
+    }
+    else if (s == NATS_OK)
+    {
+        int     i;
+        char    *data = natsBuf_Data(args->buf);
+
+        for (i=0; i<assetLen; i++)
+        {
+            if (data[i] != asset[i])
+            {
+                fprintf(stderr, "\nAsset does not match received data:\nAsset=\n%s\nData=\n%s\n",
+                        asset, data);
+                s = NATS_MISMATCH;
+                break;
+            }
+        }
+    }
+    else if (s == NATS_TIMEOUT)
+        fprintf(stderr, "\nReceived %d chunks out of %d\n", received, (int) (si->State.Msgs-1));
+
+    fflush(stderr);
+    natsSubscription_Destroy(sub);
+    natsMutex_Lock(args->m);
+    natsBuf_Destroy(args->buf);
+    args->buf = NULL;
+    args->sum = 0;
+    args->done = false;
+    natsMutex_Unlock(args->m);
+
+    return s;
+}
+
+static void
+_singleLoss(natsConnection *nc, natsMsg **msg, void* closure)
+{
+    const char  *val = NULL;
+    int         res  = rand() % 100;
+
+    if ((res <= 10) && (natsMsgHeader_Get(*msg, "data", &val) == NATS_OK))
+    {
+        natsMsg_Destroy(*msg);
+        *msg = NULL;
+        natsConn_setFilter(nc, NULL);
+    }
+}
+
+static void
+_multiLoss(natsConnection *nc, natsMsg **msg, void* closure)
+{
+    const char  *val = NULL;
+    int         res  = rand() % 100;
+
+    if ((res <= 10) && (natsMsgHeader_Get(*msg, "data", &val) == NATS_OK))
+    {
+        natsMsg_Destroy(*msg);
+        *msg = NULL;
+    }
+}
+
+static void
+_firstOnlyLoss(natsConnection *nc, natsMsg **msg, void* closure)
+{
+    jsMsgMetaData *meta = NULL;
+
+    if (natsMsg_GetMetaData(&meta, *msg) == NATS_OK)
+    {
+        if (meta->Sequence.Consumer == 1)
+        {
+            natsMsg_Destroy(*msg);
+            *msg = NULL;
+            natsConn_setFilter(nc, NULL);
+        }
+        jsMsgMetaData_Destroy(meta);
+    }
+}
+
+static void
+_lastOnlyLoss(natsConnection *nc, natsMsg **msg, void* closure)
+{
+    jsMsgMetaData   *meta = NULL;
+    jsStreamInfo    *si   = (jsStreamInfo*) closure;
+
+    if (natsMsg_GetMetaData(&meta, *msg) == NATS_OK)
+    {
+        if (meta->Sequence.Stream == si->State.LastSeq-1)
+        {
+            natsMsg_Destroy(*msg);
+            *msg = NULL;
+            natsConn_setFilter(nc, NULL);
+        }
+        jsMsgMetaData_Destroy(meta);
+    }
+}
+
+static void
+test_JetStreamOrderedConsumer(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsErrCode           jerr= 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    jsStreamConfig      sc;
+    jsSubOptions        so;
+    struct threadArg    args;
+    int                 i;
+    char                *asset = NULL;
+    int                 assetLen = 1024*1024;
+    const int           chunkSize = 1024;
+    jsStreamInfo        *si = NULL;
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "OBJECT";
+    sc.Subjects = (const char*[1]){"a"};
+    sc.SubjectsLen = 1;
+    sc.Storage = js_MemoryStorage;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+	// Create a sample asset.
+    asset = malloc(assetLen);
+    for (i=0; i<assetLen; i++)
+        asset[i] = (rand() % 26) + 'A';
+
+	test("Send chunks: ");
+	for (i=0; ((s == NATS_OK) && (i<assetLen)); i+=chunkSize)
+    {
+        char    *chunk = asset+i;
+        int     csize  = (assetLen-i <= chunkSize ? assetLen-i : chunkSize);
+        natsMsg *msg   = NULL;
+
+        s = natsMsg_Create(&msg, "a", NULL, (const void*) chunk, csize);
+        IFOK(s, natsMsgHeader_Set(msg, "data", "true"));
+        IFOK(s, js_PublishMsgAsync(js, &msg, NULL));
+        natsMsg_Destroy(msg);
+        msg = NULL;
+	}
+    IFOK(s, js_PublishAsync(js, "a", NULL, 0, NULL));
+    testCond(s == NATS_OK);
+
+    test("Wait for complete: ");
+    s = js_PublishAsyncComplete(js, NULL);
+    testCond(s == NATS_OK);
+
+	// Do some tests on simple misconfigurations first.
+	// For ordered delivery a couple of things need to be set properly.
+	// Can't be durable or have ack policy that is not ack none or max deliver set.
+    test("Ordered consumer, no durable: ");
+    jsSubOptions_Init(&so);
+    so.Ordered = true;
+    so.Config.Durable = "dlc";
+    s = js_SubscribeSync(&sub, js, "a", NULL, &so, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrOrderedConsNoDurable) != NULL));
+    nats_clearLastError();
+
+    test("Ordered consumer, ack explicit: ");
+    jsSubOptions_Init(&so);
+    so.Ordered = true;
+    so.Config.AckPolicy = js_AckExplicit;
+    s = js_SubscribeSync(&sub, js, "a", NULL, &so, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrOrderedConsNoAckPolicy) != NULL));
+    nats_clearLastError();
+
+    test("Ordered consumer, max deliver: ");
+    jsSubOptions_Init(&so);
+    so.Ordered = true;
+    so.Config.MaxDeliver = 10;
+    s = js_SubscribeSync(&sub, js, "a", NULL, &so, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrOrderedConsNoMaxDeliver) != NULL));
+    nats_clearLastError();
+
+    test("Ordered consumer, no queue: ");
+    jsSubOptions_Init(&so);
+    so.Ordered = true;
+    so.Queue = "queue";
+    s = js_SubscribeSync(&sub, js, "a", NULL, &so, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrOrderedConsNoQueue) != NULL));
+    nats_clearLastError();
+
+    test("Ordered consumer, no consumer: ");
+    jsSubOptions_Init(&so);
+    so.Ordered = true;
+    so.Consumer = "consumer";
+    s = js_SubscribeSync(&sub, js, "a", NULL, &so, &jerr);
+    if (s == NATS_INVALID_ARG)
+    {
+        so.Stream = "OBJECT";
+        s = js_SubscribeSync(&sub, js, "a", NULL, &so, &jerr);
+    }
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrOrderedConsNoBind) != NULL));
+    nats_clearLastError();
+
+    test("Ordered consumer, no pull mode: ");
+    jsSubOptions_Init(&so);
+    so.Ordered = true;
+    s = js_PullSubscribe(&sub, js, "a", "dur", NULL, &so, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrOrderedConsNoPullMode) != NULL));
+    nats_clearLastError();
+
+    test("Get stream info: ");
+    s = js_GetStreamInfo(&si, js, "OBJECT", NULL, &jerr);
+    testCond((s == NATS_OK) && (si != NULL) && (jerr == 0));
+
+    test("Test async consumer: ");
+    s = _testOrderedCons(js, si, asset, assetLen, &args, true);
+    testCond(s == NATS_OK);
+
+    test("Test sync consumer: ");
+    s = _testOrderedCons(js, si, asset, assetLen, &args, false);
+    testCond(s == NATS_OK);
+
+    test("Test with single loss (async): ");
+    natsConn_setFilter(nc, _singleLoss);
+    s = _testOrderedCons(js, si, asset, assetLen, &args, true);
+    testCond(s == NATS_OK);
+
+    test("Test with single loss (sync): ");
+    natsConn_setFilter(nc, _singleLoss);
+    s = _testOrderedCons(js, si, asset, assetLen, &args, false);
+    testCond(s == NATS_OK);
+
+    test("Test with single loss (async): ");
+    natsConn_setFilter(nc, _multiLoss);
+    s = _testOrderedCons(js, si, asset, assetLen, &args, true);
+    testCond(s == NATS_OK);
+
+    test("Test with single loss (sync): ");
+    natsConn_setFilter(nc, _multiLoss);
+    s = _testOrderedCons(js, si, asset, assetLen, &args, false);
+    testCond(s == NATS_OK);
+
+    test("Test with first msg loss (async): ");
+    natsConn_setFilter(nc, _firstOnlyLoss);
+    s = _testOrderedCons(js, si, asset, assetLen, &args, true);
+    testCond(s == NATS_OK);
+
+    test("Test with first msg loss (sync): ");
+    natsConn_setFilter(nc, _firstOnlyLoss);
+    s = _testOrderedCons(js, si, asset, assetLen, &args, false);
+    testCond(s == NATS_OK);
+
+    test("Test with last msg loss (async): ");
+    natsConn_setFilterWithClosure(nc, _lastOnlyLoss, (void*) si);
+    s = _testOrderedCons(js, si, asset, assetLen, &args, true);
+    testCond(s == NATS_OK);
+
+    test("Test with last msg loss (sync): ");
+    natsConn_setFilterWithClosure(nc, _lastOnlyLoss, (void*) si);
+    s = _testOrderedCons(js, si, asset, assetLen, &args, false);
+    testCond(s == NATS_OK);
+
+    free(asset);
+    jsStreamInfo_Destroy(si);
+    natsSubscription_Destroy(sub);
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&args);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
+_jsOrderedErrHandler(natsConnection *nc, natsSubscription *subscription, natsStatus err, void *closure)
+{
+    struct threadArg    *args = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    args->status = err;
+    natsCondition_Signal(args->c);
+    natsMutex_Unlock(args->m);
+}
+
+static void
+test_JetStreamOrderedConsumerWithErrors(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsOptions         *opts = NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsErrCode           jerr= 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    jsStreamConfig      sc;
+    jsSubOptions        so;
+    int                 i, iter;
+    char                *asset = NULL;
+    int                 assetLen = 128*1024;
+    const int           chunkSize = 256;
+    struct threadArg    args;
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetErrorHandler(opts, _jsOrderedErrHandler, (void*) &args));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    // Create a sample asset.
+    asset = malloc(assetLen);
+    for (i=0; i<assetLen; i++)
+        asset[i] = (rand() % 26) + 'A';
+
+    for (iter=0; iter<2; iter++)
+    {
+        test("Create stream: ");
+        jsStreamConfig_Init(&sc);
+        sc.Name = "OBJECT";
+        sc.Subjects = (const char*[1]){"a"};
+        sc.SubjectsLen = 1;
+        sc.Storage = js_MemoryStorage;
+        s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+        testCond((s == NATS_OK) && (jerr == 0));
+
+        test("Send chunks: ");
+        for (i=0; ((s == NATS_OK) && (i<assetLen)); i+=chunkSize)
+        {
+            char    *chunk = asset+i;
+            int     csize  = (assetLen-i <= chunkSize ? assetLen-i : chunkSize);
+
+            s = js_PublishAsync(js, "a", chunk, csize, NULL);
+        }
+        testCond(s == NATS_OK);
+
+        test("Wait for complete: ");
+        s = js_PublishAsyncComplete(js, NULL);
+        testCond(s == NATS_OK);
+
+        test("Create ordered sub: ");
+        jsSubOptions_Init(&so);
+        so.Ordered = true;
+        so.Config.Heartbeat = 200*1000000;
+        s = js_SubscribeSync(&sub, js, "a", NULL, &so, &jerr);
+        testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+		// Since we are sync we will be paused here due to flow control.
+        nats_Sleep(100);
+
+        test("Delete asset: ");
+        if (iter == 0)
+        {
+            s = js_DeleteStream(js, "OBJECT", NULL, &jerr);
+        }
+        else
+        {
+            char *cons = NULL;
+
+            natsSub_Lock(sub);
+            cons = sub->jsi->consumer;
+            natsSub_Unlock(sub);
+            s = js_DeleteConsumer(js, "OBJECT", cons, NULL, &jerr);
+        }
+        testCond((s == NATS_OK) && (jerr == 0));
+
+        test("Check we get error: ");
+        natsMutex_Lock(args.m);
+        while ((s != NATS_TIMEOUT) && (args.status != NATS_MISSED_HEARTBEAT))
+            s = natsCondition_TimedWait(args.c, args.m, 1000);
+        args.status = NATS_OK;
+        natsMutex_Unlock(args.m);
+        testCond(s == NATS_OK);
+
+        natsSubscription_Destroy(sub);
+        sub = NULL;
+	}
+
+    free(asset);
+    jsCtx_Destroy(js);
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&args);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -27855,6 +28360,8 @@ static testInfo allTests[] =
     {"JetStreamSubscribeIdleHeartbeat", test_JetStreamSubscribeIdleHearbeat},
     {"JetStreamSubscribeFlowControl",   test_JetStreamSubscribeFlowControl},
     {"JetStreamSubscribePull",          test_JetStreamSubscribePull},
+    {"JetStreamOrderedCons",            test_JetStreamOrderedConsumer},
+    {"JetStreamOrderedConsWithErrors",  test_JetStreamOrderedConsumerWithErrors},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

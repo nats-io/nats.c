@@ -53,6 +53,12 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsErrNoHeartbeatForQueueSub         "a queue subscription cannot be created for a consumer with heartbeat"
 #define jsErrNoFlowControlForQueueSub       "a queue subscription cannot be created for a consumer with flow control"
 #define jsErrConsumerSeqMismatch            "consumer sequence mismatch"
+#define jsErrOrderedConsNoDurable           "durable can not be set for an ordered consumer"
+#define jsErrOrderedConsNoAckPolicy         "ack policy can not be set for an ordered consume"
+#define jsErrOrderedConsNoMaxDeliver        "max deliver can not be set for an ordered consumer"
+#define jsErrOrderedConsNoQueue             "queue can not be set for an ordered consumer"
+#define jsErrOrderedConsNoBind              "can not bind existing consumer for an ordered consumer"
+#define jsErrOrderedConsNoPullMode          "can not use pull mode for an ordered consumer"
 
 #define jsCtrlHeartbeat     (1)
 #define jsCtrlFlowControl   (2)

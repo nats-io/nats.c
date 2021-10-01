@@ -1885,23 +1885,26 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     // Do some quick checks here for ordered consumers.
     if (opts->Ordered)
     {
-		// Check for pull mode.
-		if (isPullMode)
+        // Check for pull mode.
+        if (isPullMode)
             return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoPullMode);
         // Make sure we are not durable.
-		if (!nats_IsStringEmpty(durable))
+        if (!nats_IsStringEmpty(durable))
             return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoDurable);
         // Check ack policy.
-		if ((int) opts->Config.AckPolicy != -1)
+        if ((int) opts->Config.AckPolicy != -1)
             return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoAckPolicy);
         // Check max deliver. If set, it has to be 1.
-		if ((opts->Config.MaxDeliver > 0) && (opts->Config.MaxDeliver != 1))
+        if ((opts->Config.MaxDeliver > 0) && (opts->Config.MaxDeliver != 1))
             return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoMaxDeliver);
+        // No deliver subject, we pick our own.
+        if (!nats_IsStringEmpty(opts->Config.DeliverSubject))
+            return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoDeliverSubject);
         // Queue groups not allowed.
-		if (isQueue)
+        if (isQueue)
             return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoQueue);
-		// Check for bound consumers.
-		if (!nats_IsStringEmpty(consumer))
+        // Check for bound consumers.
+        if (!nats_IsStringEmpty(consumer))
             return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoBind);
     }
 

@@ -15573,7 +15573,7 @@ test_ReconnectJitter(void)
     // the number of reconnect attempts.
     start = nats_Now();
     nats_Sleep(400);
-	pid = _startServer("nats://127.0.0.1:4222", "-p 4222", true);
+    pid = _startServer("nats://127.0.0.1:4222", "-p 4222", true);
     CHECK_SERVER_STARTED(pid);
 
     test("Check jitter: ");
@@ -15684,14 +15684,14 @@ test_CustomReconnectDelay(void)
     s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK);
 
-	// Cause disconnect
+    // Cause disconnect
     _stopServer(pid);
     pid = NATS_INVALID_PID;
 
-	// We should be trying to reconnect 4 times
-	start = nats_Now();
+    // We should be trying to reconnect 4 times
+    start = nats_Now();
 
-	// Wait on error or completion of test.
+    // Wait on error or completion of test.
     test("Check custom delay cb: ");
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.closed && (arg.status == NATS_OK))
@@ -24435,17 +24435,17 @@ test_JetStreamSubscribeConfigCheck(void)
         if (s == NATS_OK)
         {
             // If not explicitly asked by the user, we are ok
-			s = js_PullSubscribe(&nsub, js, "foo", durName, NULL, NULL, &jerr);
+            s = js_PullSubscribe(&nsub, js, "foo", durName, NULL, NULL, &jerr);
 
             natsSubscription_Unsubscribe(nsub);
-			natsSubscription_Destroy(nsub);
+            natsSubscription_Destroy(nsub);
             nsub = NULL;
         }
         testCond(s == NATS_OK);
         natsSubscription_Unsubscribe(sub);
         natsSubscription_Destroy(sub);
         sub = NULL;
-	}
+    }
 
     // If the option is the same as the server default, it is not an error either.
     for (i=0; i<5; i++)
@@ -24470,16 +24470,16 @@ test_JetStreamSubscribeConfigCheck(void)
         s = js_PullSubscribe(&sub, js, "foo", durName, NULL, NULL, &jerr);
         if (s == NATS_OK)
         {
-			s = js_PullSubscribe(&nsub, js, "foo", durName, NULL, &so, &jerr);
+            s = js_PullSubscribe(&nsub, js, "foo", durName, NULL, &so, &jerr);
             natsSubscription_Unsubscribe(nsub);
-			natsSubscription_Destroy(nsub);
+            natsSubscription_Destroy(nsub);
             nsub = NULL;
         }
         testCond(s == NATS_OK);
         natsSubscription_Unsubscribe(sub);
         natsSubscription_Destroy(sub);
         sub = NULL;
-	}
+    }
 
     for (i=0; i<5; i++)
     {
@@ -24504,9 +24504,9 @@ test_JetStreamSubscribeConfigCheck(void)
         {
             natsSubscription *nsub = NULL;
 
-			// First time it was created with defaults and the
-			// second time a change is attempted, so it is an error.
-			s = js_PullSubscribe(&nsub, js, "foo", durName, NULL, &so, &jerr);
+            // First time it was created with defaults and the
+            // second time a change is attempted, so it is an error.
+            s = js_PullSubscribe(&nsub, js, "foo", durName, NULL, &so, &jerr);
             if ((s != NATS_OK) && (nsub == NULL) && (strstr(nats_GetLastError(NULL), name) != NULL))
             {
                 s = NATS_OK;
@@ -25647,13 +25647,13 @@ test_JetStreamOrderedConsumer(void)
     s = js_AddStream(NULL, js, &sc, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
 
-	// Create a sample asset.
+    // Create a sample asset.
     asset = malloc(assetLen);
     for (i=0; i<assetLen; i++)
         asset[i] = (rand() % 26) + 'A';
 
-	test("Send chunks: ");
-	for (i=0; ((s == NATS_OK) && (i<assetLen)); i+=chunkSize)
+    test("Send chunks: ");
+    for (i=0; ((s == NATS_OK) && (i<assetLen)); i+=chunkSize)
     {
         char    *chunk = asset+i;
         int     csize  = (assetLen-i <= chunkSize ? assetLen-i : chunkSize);
@@ -25664,7 +25664,7 @@ test_JetStreamOrderedConsumer(void)
         IFOK(s, js_PublishMsgAsync(js, &msg, NULL));
         natsMsg_Destroy(msg);
         msg = NULL;
-	}
+    }
     IFOK(s, js_PublishAsync(js, "a", NULL, 0, NULL));
     testCond(s == NATS_OK);
 
@@ -25672,9 +25672,9 @@ test_JetStreamOrderedConsumer(void)
     s = js_PublishAsyncComplete(js, NULL);
     testCond(s == NATS_OK);
 
-	// Do some tests on simple misconfigurations first.
-	// For ordered delivery a couple of things need to be set properly.
-	// Can't be durable or have ack policy that is not ack none or max deliver set.
+    // Do some tests on simple misconfigurations first.
+    // For ordered delivery a couple of things need to be set properly.
+    // Can't be durable or have ack policy that is not ack none or max deliver set.
     test("Ordered consumer, no durable: ");
     jsSubOptions_Init(&so);
     so.Ordered = true;
@@ -25700,6 +25700,15 @@ test_JetStreamOrderedConsumer(void)
     s = js_SubscribeSync(&sub, js, "a", NULL, &so, &jerr);
     testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
                 && (strstr(nats_GetLastError(NULL), jsErrOrderedConsNoMaxDeliver) != NULL));
+    nats_clearLastError();
+
+    test("Ordered consumer, no deliver subject: ");
+    jsSubOptions_Init(&so);
+    so.Ordered = true;
+    so.Config.DeliverSubject = "not.allowed";
+    s = js_SubscribeSync(&sub, js, "a", NULL, &so, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrOrderedConsNoDeliverSubject) != NULL));
     nats_clearLastError();
 
     test("Ordered consumer, no queue: ");
@@ -25887,7 +25896,7 @@ test_JetStreamOrderedConsumerWithErrors(void)
         s = js_SubscribeSync(&sub, js, "a", NULL, &so, &jerr);
         testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
-		// Since we are sync we will be paused here due to flow control.
+        // Since we are sync we will be paused here due to flow control.
         nats_Sleep(100);
 
         test("Delete asset: ");
@@ -25916,7 +25925,7 @@ test_JetStreamOrderedConsumerWithErrors(void)
 
         natsSubscription_Destroy(sub);
         sub = NULL;
-	}
+    }
 
     free(asset);
     jsCtx_Destroy(js);

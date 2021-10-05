@@ -1278,6 +1278,9 @@ jsSub_trackSequences(jsSub *jsi, const char *reply)
     // Data is equivalent to HB, so consider active.
     jsi->active = true;
 
+    // Keep track of inbound message "sequence" for flow control purposes.
+    jsi->fciseq++;
+
     NATS_FREE(jsi->cmeta);
     DUP_STRING(s, jsi->cmeta, reply+jsAckPrefixLen);
     return NATS_UPDATE_ERR_STACK(s);
@@ -1381,15 +1384,32 @@ natsSubscription_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscr
     return NATS_OK;
 }
 
+char*
+jsSub_checkForFlowControlResponse(natsSubscription *sub)
+{
+    jsSub *jsi     = sub->jsi;
+    char  *fcReply = NULL;
+
+    jsi->active = true;
+    if (sub->delivered >= jsi->fcDelivered)
+    {
+        fcReply = jsi->fcReply;
+        jsi->fcReply = NULL;
+        jsi->fcDelivered = 0;
+    }
+
+    return fcReply;
+}
+
 natsStatus
-jsSub_scheduleFlowControlResponse(jsSub *jsi, natsSubscription *sub, const char *reply)
+jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply)
 {
     NATS_FREE(jsi->fcReply);
     jsi->fcReply = NATS_STRDUP(reply);
     if (jsi->fcReply == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    jsi->fcDelivered = sub->delivered + (uint64_t) sub->msgList.msgs;
+    jsi->fcDelivered = jsi->fciseq;
 
     return NATS_OK;
 }

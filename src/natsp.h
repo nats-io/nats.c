@@ -382,6 +382,7 @@ typedef struct __jsSub
     // For flow control, when the subscription reaches this
     // delivered count, then send a message to this reply subject.
     uint64_t            fcDelivered;
+    uint64_t            fciseq;
     char                *fcReply;
 
 } jsSub;
@@ -790,8 +791,11 @@ jsSub_trackSequences(jsSub *jsi, const char *reply);
 natsStatus
 jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *sm);
 
+char*
+jsSub_checkForFlowControlResponse(natsSubscription *sub);
+
 natsStatus
-jsSub_scheduleFlowControlResponse(jsSub *jsi, natsSubscription *sub, const char *reply);
+jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply);
 
 natsStatus
 jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *reset);

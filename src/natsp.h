@@ -70,7 +70,7 @@
 
 #define _PING_PROTO_         "PING\r\n"
 #define _PONG_PROTO_         "PONG\r\n"
-#define _SUB_PROTO_          "SUB %s %s %d\r\n"
+#define _SUB_PROTO_          "SUB %s %s %" PRId64 "\r\n"
 #define _UNSUB_PROTO_        "UNSUB %" PRId64 " %d\r\n"
 #define _UNSUB_NO_MAX_PROTO_ "UNSUB %" PRId64 " \r\n"
 
@@ -349,6 +349,7 @@ typedef struct __jsSub
     char                *consumer;
     char                *nxtMsgSubj;
     bool                pull;
+    bool                ordered;
     bool                dc; // delete JS consumer in Unsub()/Drain()
 
     int64_t             hbi;
@@ -538,6 +539,9 @@ typedef struct __respInfo
 
 } respInfo;
 
+// Used internally for testing and allow to alter/suppress an incoming message
+typedef void (*natsMsgFilter)(natsConnection *nc, natsMsg **msg, void* closure);
+
 struct __natsConnection
 {
     natsMutex           *mu;
@@ -615,6 +619,11 @@ struct __natsConnection
         void            *buffer;
         void            *data;
     } el;
+
+    // Msg filters for testing.
+	// Protected by subsMu
+	natsMsgFilter       filter;
+    void                *filterClosure;
 };
 
 //
@@ -779,10 +788,16 @@ natsStatus
 jsSub_trackSequences(jsSub *jsi, const char *reply);
 
 natsStatus
-jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm);
+jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *sm);
 
 natsStatus
 jsSub_scheduleFlowControlResponse(jsSub *jsi, natsSubscription *sub, const char *reply);
+
+natsStatus
+jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *reset);
+
+natsStatus
+jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq);
 
 bool
 natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType);

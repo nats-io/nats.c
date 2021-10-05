@@ -129,8 +129,10 @@ natsStatus
 natsStrHash_SetEx(natsStrHash *hash, char *key, bool copyKey, bool freeKey,
                   void *data, void **oldData);
 
+#define natsStrHash_Get(h, k) natsStrHash_GetEx((h), (k), (int) strlen(k))
+
 void*
-natsStrHash_Get(natsStrHash *hash, char *key);
+natsStrHash_GetEx(natsStrHash *hash, char *key, int keyLen);
 
 void*
 natsStrHash_Remove(natsStrHash *hash, char *key);

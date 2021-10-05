@@ -170,6 +170,7 @@ ConnSign
 WriteDeadline
 HeadersNotSupported
 HeadersBasic
+MsgsFilter
 EventLoop
 EventLoopRetryOnFailedConnect
 EventLoopTLS
@@ -221,6 +222,8 @@ JetStreamSubscribeConfigCheck
 JetStreamSubscribeIdleHeartbeat
 JetStreamSubscribeFlowControl
 JetStreamSubscribePull
+JetStreamOrderedCons
+JetStreamOrderedConsWithErrors
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

@@ -652,6 +652,13 @@ typedef struct jsSubOptions
          * consumer.
          */
         jsConsumerConfig        Config;         ///< Consumer configuration.
+        /**
+         * This will create a fifo ephemeral consumer for in order delivery of
+         * messages. There are no redeliveries and no acks.
+         * Flow control and heartbeats are required and set by default, but
+         * the heartbeats value can be overridden in the consumer configuration.
+         */
+        bool                    Ordered;        ///< If true, this will be an ordered consumer.
 
 } jsSubOptions;
 

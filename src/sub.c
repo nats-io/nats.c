@@ -247,13 +247,7 @@ natsSub_deliverMsgs(void *arg)
         max = sub->max;
 
         // Check for JS flow control
-        fcReply = NULL;
-        if ((jsi != NULL) && (jsi->fcDelivered == delivered))
-        {
-            fcReply          = jsi->fcReply;
-            jsi->fcReply     = NULL;
-            jsi->fcDelivered = 0;
-        }
+        fcReply = (jsi == NULL ? NULL : jsSub_checkForFlowControlResponse(sub));
 
         natsSub_Unlock(sub);
 
@@ -742,12 +736,7 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
             msg->next = NULL;
 
             sub->delivered++;
-            if ((jsi != NULL) && (jsi->fcDelivered == sub->delivered))
-            {
-                fcReply          = jsi->fcReply;
-                jsi->fcReply     = NULL;
-                jsi->fcDelivered = 0;
-            }
+            fcReply = (jsi == NULL ? NULL : jsSub_checkForFlowControlResponse(sub));
 
             if (sub->max > 0)
             {

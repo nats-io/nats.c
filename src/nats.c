@@ -1783,14 +1783,8 @@ _deliverMsgs(void *arg)
 
         delivered = ++(sub->delivered);
 
-        fcReply = NULL;
         jsi = sub->jsi;
-        if ((jsi != NULL) && (jsi->fcDelivered == delivered))
-        {
-            fcReply          = jsi->fcReply;
-            jsi->fcReply     = NULL;
-            jsi->fcDelivered = 0;
-        }
+        fcReply = (jsi == NULL ? NULL : jsSub_checkForFlowControlResponse(sub));
 
         // Is this a subscription that can timeout?
         if (!sub->draining && (sub->timeout != 0))

@@ -2669,13 +2669,16 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     }
     else if ((jct == jsCtrlFlowControl) && (msg->reply != NULL))
     {
-        // If we have no pending, go ahead and send in place.
-        if (sub->msgList.msgs == 0)
+        // We will schedule the send of the FC reply once we have delivered the
+		// DATA message that was received before this flow control message, which
+		// has sequence `jsi.fciseq`. However, it is possible that this message
+		// has already been delivered, in that case, we need to send the FC reply now.
+        if (sub->delivered >= jsi->fciseq)
             fcReply = msg->reply;
         else
         {
             // Schedule a reply after the previous message is delivered.
-            s = jsSub_scheduleFlowControlResponse(jsi, sub, msg->reply);
+            s = jsSub_scheduleFlowControlResponse(jsi, msg->reply);
         }
     }
 

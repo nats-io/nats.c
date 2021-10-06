@@ -438,30 +438,31 @@ The new objects and APIs are full documented in the online [documentation](http:
 natsConnection_Connect(&conn, opts);
 
 // Initialize and set some JetStream options
-natsJSOptions_Init(&jsOpts);
-jsOpts.PublishAsyncMaxPending = 256;
+jsOptions jsOpts;
+jsOptions_Init(&jsOpts);
+jsOpts.PublishAsync.MaxPending = 256;
 
 // Create JetStream Context
-natsJS_NewContext(&js, conn, &jsOpts);
+natsConnection_JetStream(&js, conn, &jsOpts);
 
 // Simple Stream Publisher
-natsJS_Publish(&pa, js, "ORDERS.scratch", (const void*) "hello", 5, NULL, &jerr);
+js_Publish(&pa, js, "ORDERS.scratch", (const void*) "hello", 5, NULL, &jerr);
 
 // Simple Async Stream Publisher
 for (i=0; i < 500; i++)
 {
-    natsJS_PublishAsync(js, "ORDERS.scratch", (const void*) "hello", 5, NULL);
+    js_PublishAsync(js, "ORDERS.scratch", (const void*) "hello", 5, NULL);
 }
 
 // Wait for up to 5 seconds to receive all publish acknowledgments.
-natsJSPubOptions_Init(&jsPubOpts);
+jsPubOptions_Init(&jsPubOpts);
 jsPubOpts.MaxWait = 5000;
-natsJS_PublishAsyncComplete(js, &jsPubOpts);
+js_PublishAsyncComplete(js, &jsPubOpts);
 
 // One can get the list of all pending publish async messages,
 // to either resend them or simply destroy them.
 natsMsgList pending;
-s = js_PublishAsyncGetPending(&pending, js);
+s = js_PublishAsyncGetPendingList(&pending, js);
 if (s == NATS_OK)
 {
     int i;
@@ -485,52 +486,53 @@ if (s == NATS_OK)
 }
 
 // To create an asynchronous ephemeral consumer
-js_Subscribe(&sub, js, "foo", myMsgHandler, myClosure, &jsOpts, NULL);
+js_Subscribe(&sub, js, "foo", myMsgHandler, myClosure, &jsOpts, NULL, &jerr);
 
 // Same but use a subscription option to ask the callback to not do auto-ack.
 jsSubOptions so;
 jsSubOptions_Init(&so);
 so.ManualAck = true;
-js_Subscribe(&sub, js, "foo", myMsgHandler, myClosure, &jsOpts, &so);
+js_Subscribe(&sub, js, "foo", myMsgHandler, myClosure, &jsOpts, &so, &jerr);
 
 // Or to bind to an existing specific stream/durable:
 jsSubOptions_Init(&so);
 so.Stream = "MY_STREAM";
 so.Consumer = "my_durable";
-js_Subscribe(&sub, js, "foo", myMsgHandler, myClosure, &jsOpts, &so);
+js_Subscribe(&sub, js, "foo", myMsgHandler, myClosure, &jsOpts, &so, &jerr);
 
 // Synchronous subscription:
-js_SubscribeSync(&sub, js, "foo", &jsOpts, &so);
+js_SubscribeSync(&sub, js, "foo", &jsOpts, &so, &jerr);
 ```
 
 ### JetStream Basic Management
 
 ```c
-natsJSStreamConfig  cfg;
+jsStreamConfig  cfg;
 
 // Connect to NATS
 natsConnection_Connect(&conn, opts);
 
 // Create JetStream Context
-natsJS_NewContext(&js, conn, NULL);
+natsConnection_JetStream(&js, conn, NULL);
 
 // Initialize the configuration structure.
-natsJSStreamConfig_Init(&cfg);
+jsStreamConfig_Init(&cfg);
 // Provide a name
 cfg.Name = "ORDERS";
 // Array of subjects and its size
 cfg.Subjects = (const char*[1]){"ORDERS.*"};
 cfg.SubjectsLen = 1;
 
-// Create a Stream
-natsJS_AddStream(NULL, js, &cfg, NULL, &jerr);
+// Create a Stream. If you are not interested in the returned jsStreamInfo object,
+// you can pass NULL.
+js_AddStream(NULL, js, &cfg, NULL, &jerr);
 
 // Update a Stream
 cfg.MaxBytes = 8;
-natsJS_UpdateStream(NULL, js, &cfg, NULL, &jerr);
+js_UpdateStream(NULL, js, &cfg, NULL, &jerr);
 
 // Delete a Stream
-natsJS_DeleteStream(js, "ORDERS", NULL, &jerr);
+js_DeleteStream(js, "ORDERS", NULL, &jerr);
 ```
 
 ## Headers

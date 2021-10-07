@@ -1751,9 +1751,13 @@ _processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig
     *dlvSubject = NULL;
 
 	// Make sure this new subject matches or is a subset.
-	if (!nats_IsStringEmpty(ccfg->FilterSubject) && (strcmp(subj, ccfg->FilterSubject) != 0))
+    if (!nats_IsStringEmpty(subj)
+        && !nats_IsStringEmpty(ccfg->FilterSubject)
+        && (strcmp(subj, ccfg->FilterSubject) != 0))
+    {
         return nats_setError(NATS_ERR, "subject '%s' does not match consumer filter subject '%s'",
                              subj, ccfg->FilterSubject);
+    }
 
     // Check that if user wants to create a queue sub,
     // the consumer has no HB nor FC.
@@ -1871,7 +1875,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     jsConsumerConfig    cfgStack;
     jsConsumerConfig    *cfg = NULL;
 
-    if ((new_sub == NULL) || (js == NULL) || nats_IsStringEmpty(subject))
+    if ((new_sub == NULL) || (js == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     s = js_setOpts(&nc, &freePfx, js, jsOpts, &jo);
@@ -1898,6 +1902,8 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     consumer = opts->Consumer;
     consBound= (!nats_IsStringEmpty(stream) && !nats_IsStringEmpty(consumer));
 
+    if (nats_IsStringEmpty(subject) && !consBound)
+        return nats_setDefaultError(NATS_INVALID_ARG);
 
     // Do some quick checks here for ordered consumers.
     if (opts->Ordered)

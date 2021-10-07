@@ -23754,6 +23754,15 @@ test_JetStreamSubscribe(void)
                 && (strstr(nats_GetLastError(NULL), jsErrNoFlowControlForQueueSub) != NULL));
     nats_clearLastError();
 
+    test("Queue name can't contain dots: ");
+    jsSubOptions_Init(&so);
+    so.Stream = "TEST";
+    so.Queue = "queue.name";
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), "cannot contain '.'") != NULL));
+    nats_clearLastError();
+
     test("Queue group serves as durable: ");
     jsSubOptions_Init(&so);
     so.Stream = "TEST";
@@ -23768,6 +23777,21 @@ test_JetStreamSubscribe(void)
     ci = NULL;
     natsSubscription_Destroy(sub);
     sub = NULL;
+
+    test("Durable name invalid (push): ");
+    jsSubOptions_Init(&so);
+    so.Config.DeliverSubject = "bar";
+    so.Config.Durable = "dur.invalid";
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), "cannot contain '.'") != NULL));
+    nats_clearLastError();
+
+    test("Durable name invalid (pull): ");
+    s = js_PullSubscribe(&sub, js, "foo", "dur.invalid", NULL, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), "cannot contain '.'") != NULL));
+    nats_clearLastError();
 
     jsCtx_Destroy(js);
     natsConnection_Destroy(nc);

@@ -1337,7 +1337,7 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg
     }
     else
     {
-		if (jsi->ordered)
+        if (jsi->ordered)
         {
             s = jsSub_resetOrderedConsumer(sub, mu, jsi->sseq+1);
         }
@@ -1727,10 +1727,10 @@ _checkConfig(jsConsumerConfig *s, jsConsumerConfig *u)
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max ack pending", u->MaxAckPending, s->MaxAckPending);
     }
 
-	// For flow control, we want to fail if the user explicit wanted it, but
-	// it is not set in the existing consumer. If it is not asked by the user,
-	// the library still handles it and so no reason to fail.
-	if (u->FlowControl && !s->FlowControl)
+    // For flow control, we want to fail if the user explicit wanted it, but
+    // it is not set in the existing consumer. If it is not asked by the user,
+    // the library still handles it and so no reason to fail.
+    if (u->FlowControl && !s->FlowControl)
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "'%s'" CFG_CHECK_ERR_END "'%s'", "flow control", "true", "false");
 
     if (u->Heartbeat > 0 && u->Heartbeat != s->Heartbeat)
@@ -1750,7 +1750,7 @@ _processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig
 
     *dlvSubject = NULL;
 
-	// Make sure this new subject matches or is a subset.
+    // Make sure this new subject matches or is a subset.
     if (!nats_IsStringEmpty(subj)
         && !nats_IsStringEmpty(ccfg->FilterSubject)
         && (strcmp(subj, ccfg->FilterSubject) != 0))
@@ -1774,8 +1774,8 @@ _processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig
 
     dlvSubjEmpty = nats_IsStringEmpty(ccfg->DeliverSubject);
 
-	// Prevent binding a subscription against incompatible consumer types.
-	if (isPullMode && !dlvSubjEmpty)
+    // Prevent binding a subscription against incompatible consumer types.
+    if (isPullMode && !dlvSubjEmpty)
     {
         return nats_setError(NATS_ERR, "%s", jsErrPullSubscribeToPushConsumer);
     }
@@ -1784,52 +1784,52 @@ _processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig
         return nats_setError(NATS_ERR, "%s", jsErrPullSubscribeRequired);
     }
 
-	// If pull mode, nothing else to check here.
-	if (isPullMode)
+    // If pull mode, nothing else to check here.
+    if (isPullMode)
     {
         s = _checkConfig(ccfg, userCfg);
         return NATS_UPDATE_ERR_STACK(s);
     }
 
-	// At this point, we know the user wants push mode, and the JS consumer is
-	// really push mode.
+    // At this point, we know the user wants push mode, and the JS consumer is
+    // really push mode.
     dg = ccfg->DeliverGroup;
 
-	if (nats_IsStringEmpty(dg))
+    if (nats_IsStringEmpty(dg))
     {
-		// Prevent an user from attempting to create a queue subscription on
-		// a JS consumer that was not created with a deliver group.
-		if (queue != NULL)
+        // Prevent an user from attempting to create a queue subscription on
+        // a JS consumer that was not created with a deliver group.
+        if (queue != NULL)
         {
-			return nats_setError(NATS_ERR, "%s",
+            return nats_setError(NATS_ERR, "%s",
                                  "cannot create a queue subscription for a consumer without a deliver group");
-		}
+        }
         else if (info->PushBound)
         {
-			// Need to reject a non queue subscription to a non queue consumer
-			// if the consumer is already bound.
-			return nats_setError(NATS_ERR, "%s", "consumer is already bound to a subscription");
-		}
-	}
+            // Need to reject a non queue subscription to a non queue consumer
+            // if the consumer is already bound.
+            return nats_setError(NATS_ERR, "%s", "consumer is already bound to a subscription");
+        }
+    }
     else
     {
-		// If the JS consumer has a deliver group, we need to fail a non queue
-		// subscription attempt:
-		if (queue == NULL)
+        // If the JS consumer has a deliver group, we need to fail a non queue
+        // subscription attempt:
+        if (queue == NULL)
         {
-			return nats_setError(NATS_ERR,
+            return nats_setError(NATS_ERR,
                                 "cannot create a subscription for a consumer with a deliver group %s",
                                 dg);
-		}
+        }
         else if (strcmp(queue, dg) != 0)
         {
-			// Here the user's queue group name does not match the one associated
-			// with the JS consumer.
-			return nats_setError(NATS_ERR,
+            // Here the user's queue group name does not match the one associated
+            // with the JS consumer.
+            return nats_setError(NATS_ERR,
                                  "cannot create a queue subscription '%s' for a consumer with a deliver group '%s'",
-				                 queue, dg);
-		}
-	}
+                                 queue, dg);
+        }
+    }
     s = _checkConfig(ccfg, userCfg);
     if (s == NATS_OK)
         *dlvSubject = ccfg->DeliverSubject;
@@ -2023,7 +2023,7 @@ PROCESS_INFO:
         {
             cfg->FlowControl = true;
             cfg->AckPolicy   = js_AckNone;
-		    cfg->MaxDeliver  = 1;
+            cfg->MaxDeliver  = 1;
             cfg->AckWait     = (24*60*60)*(int64_t)1E9; // Just set to something known, not utilized.
             if (opts->Config.Heartbeat <= 0)
                 cfg->Heartbeat = jsOrderedHBInterval;
@@ -2439,15 +2439,15 @@ applyNewSID(natsSubscription *sub, natsMutex *mu)
     natsMutex_Lock(nc->subsMu);
     osid = sub->sid;
     natsHash_Remove(nc->subs, osid);
-	// Place new one.
+    // Place new one.
     nc->ssid++;
     nsid = nc->ssid;
     natsHash_Set(nc->subs, nsid, sub, NULL);
-	natsMutex_Unlock(nc->subsMu);
+    natsMutex_Unlock(nc->subsMu);
 
     natsMutex_Lock(mu);
     sub->sid = nsid;
-	return osid;
+    return osid;
 }
 
 static void
@@ -2542,22 +2542,22 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
     natsInbox           *newDeliver = NULL;
     jsOrderedConsInfo   *oci        = NULL;
 
-	if ((sub->jsi == NULL) || (nc == NULL) || sub->closed)
-		return NATS_OK;
+    if ((sub->jsi == NULL) || (nc == NULL) || sub->closed)
+        return NATS_OK;
 
-	// Grab new inbox.
+    // Grab new inbox.
     s = natsInbox_Create(&newDeliver);
     if (s != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
-	// Quick unsubscribe. Since we know this is a simple push subscriber we do in place.
+    // Quick unsubscribe. Since we know this is a simple push subscriber we do in place.
     osid = applyNewSID(sub, mu);
 
     NATS_FREE(sub->subject);
     sub->subject = (char*) newDeliver;
 
-	// We are still in the low level readloop for the connection so we need
-	// to spin a thread to try to create the new consumer.
+    // We are still in the low level readloop for the connection so we need
+    // to spin a thread to try to create the new consumer.
     // Create object that will hold some state to pass to the thread.
     oci = NATS_CALLOC(1, sizeof(jsOrderedConsInfo));
     if (oci == NULL)
@@ -2597,11 +2597,11 @@ jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *
 
     *reset = false;
 
-	// Ignore msgs with no reply like HBs and flowcontrol, they are handled elsewhere.
+    // Ignore msgs with no reply like HBs and flowcontrol, they are handled elsewhere.
     if (natsMsg_GetReply(msg) == NULL)
-		return NATS_OK;
+        return NATS_OK;
 
-	// Normal message here.
+    // Normal message here.
     s = _getMetaData(natsMsg_GetReply(msg), NULL, NULL, NULL, NULL, &sseq, &dseq, NULL, NULL, 2);
     if (s == NATS_OK)
     {
@@ -2618,5 +2618,5 @@ jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *
             jsi->sseq = sseq;
         }
     }
-	return NATS_UPDATE_ERR_STACK(s);
+    return NATS_UPDATE_ERR_STACK(s);
 }

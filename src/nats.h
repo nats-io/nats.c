@@ -527,6 +527,8 @@ typedef struct jsStreamInfo
  * \note `SampleFrequency` is a sampling value, represented as a string such as "50"
  * for 50%, that causes the server to produce advisories for consumer ack metrics.
  *
+ * \note `Durable` cannot contain the character ".".
+ *
  * @see jsConsumerConfig_Init
  *
  * \code{.unparsed}
@@ -632,6 +634,10 @@ typedef struct jsSubOptions
          * This makes sense only if the delivery subject in the
          * `Config` field of #jsSubOptions is the same for the
          * members of the same group.
+         *
+         * When no `Durable` name is specified in the `Config` block, then the
+         * queue name will be used as the consumer's durable name. In this case,
+         * the queue name cannot contain the character ".".
          */
         const char              *Queue;         ///< Queue name for queue subscriptions.
         /**
@@ -5347,6 +5353,8 @@ js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
  * that is the library has to request for the messages to be delivered as needed from the server.
  *
  * \note All pull subscriptions must have a durable name.
+ *
+ * \note A durable name cannot contain the character ".".
  *
  * @param sub the location where to store the pointer to the newly created #natsSubscription object.
  * @param js the pointer to the #jsCtx object.

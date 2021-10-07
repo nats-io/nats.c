@@ -197,3 +197,6 @@ js_unmarshalConsumerInfo(nats_JSON *json, jsConsumerInfo **new_ci);
 
 void
 js_cleanStreamState(jsStreamState *state);
+
+natsStatus
+js_checkDurName(const char *dur);

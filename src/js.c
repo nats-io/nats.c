@@ -1833,6 +1833,13 @@ _processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+natsStatus
+js_checkDurName(const char *dur)
+{
+    if (strchr(dur, '.') != NULL)
+        return nats_setError(NATS_INVALID_ARG, "invalid durable name '%s' (cannot contain '.')", dur);
+    return NATS_OK;
+}
 
 static natsStatus
 _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const char *pullDurable,
@@ -1891,16 +1898,6 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     consumer = opts->Consumer;
     consBound= (!nats_IsStringEmpty(stream) && !nats_IsStringEmpty(consumer));
 
-    if (isQueue)
-    {
-        // Reject a user configuration that would want to define hearbeats with
-        // a queue subscription.
-        if (opts->Config.Heartbeat > 0)
-            return nats_setError(NATS_INVALID_ARG, "%s", jsErrNoHeartbeatForQueueSub);
-        // Same for flow control
-        if (opts->Config.FlowControl)
-            return nats_setError(NATS_INVALID_ARG, "%s", jsErrNoFlowControlForQueueSub);
-    }
 
     // Do some quick checks here for ordered consumers.
     if (opts->Ordered)
@@ -1927,19 +1924,32 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
         if (!nats_IsStringEmpty(consumer))
             return nats_setError(NATS_INVALID_ARG, "%s", jsErrOrderedConsNoBind);
     }
+    else if (isQueue)
+    {
+        // Reject a user configuration that would want to define hearbeats with
+        // a queue subscription.
+        if (opts->Config.Heartbeat > 0)
+            return nats_setError(NATS_INVALID_ARG, "%s", jsErrNoHeartbeatForQueueSub);
+        // Same for flow control
+        if (opts->Config.FlowControl)
+            return nats_setError(NATS_INVALID_ARG, "%s", jsErrNoFlowControlForQueueSub);
+        // If no durable name was provided, use the queue name as the durable.
+        if (nats_IsStringEmpty(durable))
+            durable = opts->Queue;
+    }
+
+    // If a durable name is specified, check that it is valid
+    if (!nats_IsStringEmpty(durable))
+    {
+        if ((s = js_checkDurName(durable)) != NATS_OK)
+            return NATS_UPDATE_ERR_STACK(s);
+    }
 
     // In case a consumer has not been set explicitly, then the durable name
     // will be used as the consumer name (after that, `consumer` will still be
     // possibly NULL).
     if (nats_IsStringEmpty(consumer))
-    {
-        // If this is a queue sub and no durable name was provided, use
-        // the queue name as the durable.
-        if (isQueue && nats_IsStringEmpty(durable))
-            durable = opts->Queue;
-
         consumer = durable;
-    }
 
     // Find the stream mapped to the subject if not bound to a stream already,
     // that is, if user did not provide a `Stream` name through options).

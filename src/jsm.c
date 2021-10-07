@@ -1696,8 +1696,11 @@ js_AddConsumer(jsConsumerInfo **new_ci, jsCtx *js,
     if (nats_IsStringEmpty(stream))
         return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
 
-    if (!nats_IsStringEmpty(cfg->Durable) && (strchr(cfg->Durable, '.') != NULL))
-        return nats_setError(NATS_INVALID_ARG, "invalid durable name '%s' (cannot contain '.')", cfg->Durable);
+    if (!nats_IsStringEmpty(cfg->Durable))
+    {
+        if ((s = js_checkDurName(cfg->Durable)) != NATS_OK)
+            return NATS_UPDATE_ERR_STACK(s);
+    }
 
     s = js_setOpts(&nc, &freePfx, js, opts, &o);
     if (s == NATS_OK)

@@ -1451,6 +1451,8 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         s = natsBuf_Append(buf, ",\"flow_control\":true", -1);
     if ((s == NATS_OK) && (cfg->Heartbeat > 0))
         s = nats_marshalLong(buf, true, "idle_heartbeat", cfg->Heartbeat);
+    if ((s == NATS_OK) && cfg->HeadersOnly)
+        s = natsBuf_Append(buf, ",\"headers_only\":true", -1);
     IFOK(s, natsBuf_Append(buf, "}}", -1));
 
     if (s == NATS_OK)
@@ -1584,6 +1586,7 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
         IFOK(s, nats_JSONGetLong(cjson, "max_ack_pending", &(cc->MaxAckPending)));
         IFOK(s, nats_JSONGetBool(cjson, "flow_control", &(cc->FlowControl)));
         IFOK(s, nats_JSONGetLong(cjson, "idle_heartbeat", &(cc->Heartbeat)));
+        IFOK(s, nats_JSONGetBool(cjson, "headers_only", &(cc->HeadersOnly)));
     }
 
     if (s == NATS_OK)

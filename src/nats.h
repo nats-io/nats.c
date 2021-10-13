@@ -85,6 +85,17 @@ extern "C" {
  */
 #define NATS_DEFAULT_URL "nats://localhost:4222"
 
+/** \brief Message header for JetStream messages representing the message payload size
+ *
+ * When creating a JetStream consumer, if the `HeadersOnly` boolean is specified,
+ * the subscription will receive messages with headers only (no message payload),
+ * and a header of this name containing the size of the message payload that was
+ * omitted.
+ *
+ * @see jsConsumerConfig
+ */
+ #define JS_MSG_SIZE    "Nats-Msg-Size"
+
 //
 // Types.
 //
@@ -529,6 +540,10 @@ typedef struct jsStreamInfo
  *
  * \note `Durable` cannot contain the character ".".
  *
+ * \note `HeadersOnly` means that the subscription will not receive any message payload,
+ * instead, it will receive only messages headers (if present) with the addition of
+ * the header #JS_MSG_SIZE ("Nats-Msg-Size"), whose value is the payload size.
+ *
  * @see jsConsumerConfig_Init
  *
  * \code{.unparsed}
@@ -563,6 +578,7 @@ typedef struct jsConsumerConfig
         int64_t                 MaxAckPending;
         bool                    FlowControl;
         int64_t                 Heartbeat;              ///< Heartbeat interval expressed in number of nanoseconds.
+        bool                    HeadersOnly;
 
 } jsConsumerConfig;
 

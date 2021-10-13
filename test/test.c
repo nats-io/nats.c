@@ -21164,6 +21164,7 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"replay_policy\":\"" jsReplayInstantStr "\"}}",
         "{\"config\":{\"replay_policy\":\"" jsReplayOriginalStr "\"}}",
         "{\"config\":{\"deliver_group\":\"queue_name\"}}",
+        "{\"config\":{\"headers_only\":true}}",
     };
     const char          *bad[] = {
         "{\"stream_name\":123}",
@@ -21188,6 +21189,7 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"flow_control\":\"abc\"}}",
         "{\"config\":{\"idle_heartbeat\":\"abc\"}}",
         "{\"config\":{\"deliver_group\":123}}",
+        "{\"config\":{\"headers_only\":123}}",
         "{\"delivered\":123}",
         "{\"delivered\":{\"consumer_seq\":\"abc\"}}",
         "{\"delivered\":{\"stream_seq\":\"abc\"}}",
@@ -25455,6 +25457,85 @@ test_JetStreamSubscribePull(void)
 }
 
 static void
+test_JetStreamSubscribeHeadersOnly(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    natsMsg             *msg = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsErrCode           jerr= 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    jsStreamConfig      sc;
+    jsSubOptions        so;
+    int                 i;
+
+    ENSURE_JS_VERSION(2, 6, 2);
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "S";
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Populate: ");
+    for (i=0; (s == NATS_OK) && (i<10); i++)
+    {
+        s = natsMsg_Create(&msg, "S", NULL, "hello", 5);
+        IFOK(s, natsMsgHeader_Set(msg, "User-Header", "MyValue"));
+        IFOK(s, js_PublishMsg(NULL, js, msg, NULL, NULL));
+        natsMsg_Destroy(msg);
+        msg = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Create consumer with headers only: ");
+    jsSubOptions_Init(&so);
+    so.Config.HeadersOnly = true;
+    s = js_SubscribeSync(&sub, js, "S", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Verify only headers: ");
+    for (i=0; (s == NATS_OK) && (i<10); i++)
+    {
+        const char *val = NULL;
+        s = natsSubscription_NextMsg(&msg, sub, 1000);
+        IFOK(s, (natsMsg_GetDataLength(msg) == 0 ? NATS_OK : NATS_ERR));
+        IFOK(s, natsMsgHeader_Get(msg, "User-Header", &val));
+        IFOK(s, (strcmp(val, "MyValue") == 0 ? NATS_OK : NATS_ERR));
+        IFOK(s, natsMsgHeader_Get(msg, JS_MSG_SIZE, &val));
+        IFOK(s, (strcmp(val, "5") == 0 ? NATS_OK : NATS_ERR));
+        natsMsg_Destroy(msg);
+        msg = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
 _orderedConsCB(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     struct threadArg *args = (struct threadArg*) closure;
@@ -28400,6 +28481,7 @@ static testInfo allTests[] =
     {"JetStreamSubscribeIdleHeartbeat", test_JetStreamSubscribeIdleHearbeat},
     {"JetStreamSubscribeFlowControl",   test_JetStreamSubscribeFlowControl},
     {"JetStreamSubscribePull",          test_JetStreamSubscribePull},
+    {"JetStreamSubscribeHeadersOnly",   test_JetStreamSubscribeHeadersOnly},
     {"JetStreamOrderedCons",            test_JetStreamOrderedConsumer},
     {"JetStreamOrderedConsWithErrors",  test_JetStreamOrderedConsumerWithErrors},
 

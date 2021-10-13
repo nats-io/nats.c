@@ -23569,6 +23569,7 @@ test_JetStreamSubscribe(void)
     test("Create consumer with filter: ");
     jsConsumerConfig_Init(&cc);
     cc.Durable = "dur";
+    cc.DeliverSubject = "push.dur.sub.2";
     cc.FilterSubject = "sub.2";
     s = js_AddConsumer(NULL, js, "MULTIPLE_SUBJS", &cc, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
@@ -23581,6 +23582,12 @@ test_JetStreamSubscribe(void)
     testCond((s == NATS_ERR) && (sub == NULL)
                 && (strstr(nats_GetLastError(NULL), "filter subject") != NULL));
     nats_clearLastError();
+
+    test("Subject not required when binding to stream/consumer: ");
+    s = js_Subscribe(&sub, js, NULL, _jsMsgHandler, &args, NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+    natsSubscription_Destroy(sub);
+    sub = NULL;
 
     test("Create consumer for pull: ");
     jsConsumerConfig_Init(&cc);

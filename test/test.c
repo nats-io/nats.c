@@ -21652,6 +21652,7 @@ test_JetStreamMgtStreams(void)
     jsStreamConfig      cfg;
     jsErrCode           jerr = 0;
     natsMsg             *resp = NULL;
+    natsMsg             *msg  = NULL;
     natsSubscription    *sub  = NULL;
     char                *desc = NULL;
     char                datastore[256] = {'\0'};
@@ -21837,6 +21838,98 @@ test_JetStreamMgtStreams(void)
     jsStreamInfo_Destroy(si);
     si = NULL;
 
+    test("Create sub to check requests: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.STREAM.MSG.DELETE.TEST_MSG_DELETE");
+    testCond((s == NATS_OK) && (sub != NULL));
+
+    test("Create stream for delete msg: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "TEST_MSG_DELETE";
+    cfg.Subjects = (const char*[1]){"delete.msg"};
+    cfg.SubjectsLen = 1;
+    cfg.Storage = js_MemoryStorage;
+    s = js_AddStream(NULL, js, &cfg, NULL, &jerr);
+    testCond(s == NATS_OK);
+
+    test("Send 1 message: ");
+    s = natsConnection_Request(&resp, nc, "delete.msg", "hello", 5, 1000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Delete msg (stream missing): ");
+    s = js_DeleteMsg(js, NULL, 2, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_DeleteMsg(js, "", 2, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (jerr == 0));
+    nats_clearLastError();
+
+    test("Delete msg: ");
+    s = js_DeleteMsg(js, "TEST_MSG_DELETE", 1, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Check no_erase present: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    IFOK(s, (strstr(natsMsg_GetData(msg), "no_erase") != NULL ? NATS_OK : NATS_ERR));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Delete msg (not found): ");
+    s = js_DeleteMsg(js, "TEST_MSG_DELETE", 2, NULL, &jerr);
+    testCond((s == NATS_ERR) && (jerr == JSSequenceNotFoundErr));
+    nats_clearLastError();
+
+    test("Check no_erase present: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    IFOK(s, (strstr(natsMsg_GetData(msg), "no_erase") != NULL ? NATS_OK : NATS_ERR));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Send 1 message: ");
+    s = natsConnection_Request(&resp, nc, "delete.msg", "hello", 5, 1000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Erase msg: ");
+    s = js_EraseMsg(js, "TEST_MSG_DELETE", 2, &o, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Check no_erase absent: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    IFOK(s, (strstr(natsMsg_GetData(msg), "no_erase") != NULL ? NATS_ERR : NATS_OK));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Erase msg (not found): ");
+    s = js_EraseMsg(js, "TEST_MSG_DELETE", 3, &o, &jerr);
+    testCond((s == NATS_ERR) && (jerr == JSSequenceNotFoundErr));
+    nats_clearLastError();
+
+    test("Check no_erase absent: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    IFOK(s, (strstr(natsMsg_GetData(msg), "no_erase") != NULL ? NATS_ERR : NATS_OK));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Get stream info (verify deleted): ");
+    s = js_GetStreamInfo(&si, js, "TEST_MSG_DELETE", NULL, &jerr);
+    testCond((s == NATS_OK)
+                && (jerr == 0)
+                && (si != NULL)
+                && (si->Config != NULL)
+                && (strcmp(si->Config->Subjects[0], "delete.msg") == 0)
+                && (si->State.Msgs == 0));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
     test("Create stream: ");
     jsStreamConfig_Init(&cfg);
     cfg.Name = "TEST3";
@@ -21983,6 +22076,7 @@ test_JetStreamMgtStreams(void)
     cfg.Description = (const char*) desc;
     s = js_AddStream(&si, js, &cfg, NULL, &jerr);
     testCond((s == NATS_ERR) && (si == NULL) && (jerr == JSStreamInvalidConfig));
+    nats_clearLastError();
 
     free(desc);
     jsCtx_Destroy(js);
@@ -24985,6 +25079,13 @@ test_JetStreamSubscribeFlowControl(void)
     test("Create sub to check for FC: ");
     s = natsConnection_SubscribeSync(&nsub, nc, "$JS.FC.TEST.>");
     testCond((s == NATS_OK) && (nsub != NULL));
+
+    test("FC requires HB: ");
+    jsSubOptions_Init(&so);
+    so.Config.FlowControl = true;
+    s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
+    testCond((s == NATS_ERR) && (sub == NULL) && (jerr == JSConsumerWithFlowControlNeedsHeartbeatsErr));
+    nats_clearLastError();
 
     test("Subscribe async: ");
     jsSubOptions_Init(&so);

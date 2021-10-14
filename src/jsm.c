@@ -1157,6 +1157,76 @@ js_DeleteStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCo
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_deleteMsg(jsCtx *js, bool noErase, const char *stream, uint64_t seq, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus          s       = NATS_OK;
+    char                *subj   = NULL;
+    natsMsg             *resp   = NULL;
+    natsConnection      *nc     = NULL;
+    bool                freePfx = false;
+    bool                success = false;
+    jsOptions           o;
+    char                buffer[64];
+    natsBuffer          buf;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if (js == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (nats_IsStringEmpty(stream))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
+
+    s = js_setOpts(&nc, &freePfx, js, opts, &o);
+    if (s == NATS_OK)
+    {
+        if (nats_asprintf(&subj, jsApiMsgDeleteT, js_lenWithoutTrailingDot(o.Prefix), o.Prefix, stream) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        if (freePfx)
+            NATS_FREE((char*) o.Prefix);
+    }
+    IFOK(s, natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer)));
+    IFOK(s, natsBuf_AppendByte(&buf, '{'));
+    IFOK(s, nats_marshalULong(&buf, false, "seq", seq));
+    if ((s == NATS_OK) && noErase)
+        s = natsBuf_Append(&buf, ",\"no_erase\":true", -1);
+    IFOK(s, natsBuf_AppendByte(&buf, '}'));
+
+    // Send the request
+    IFOK_JSR(s, natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), o.Wait));
+
+    IFOK(s, _unmarshalSuccessResp(&success, resp, errCode));
+    if ((s == NATS_OK) && !success)
+        s = nats_setError(NATS_ERR, "failed to delete message %" PRIu64, seq);
+
+    natsBuf_Cleanup(&buf);
+    natsMsg_Destroy(resp);
+    NATS_FREE(subj);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_DeleteMsg(jsCtx *js, const char *stream, uint64_t seq, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s;
+
+    s = _deleteMsg(js, true, stream, seq, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_EraseMsg(jsCtx *js, const char *stream, uint64_t seq, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s;
+
+    s = _deleteMsg(js, false, stream, seq, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 //
 // Account related functions
 //

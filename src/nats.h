@@ -251,9 +251,9 @@ typedef enum
 {
         js_DeliverAll = 0,          ///< Starts from the very beginning of a stream. This is the default.
         js_DeliverLast,             ///< Starts with the last sequence received.
-	js_DeliverNew,              ///< Starts with messages sent after the consumer is created.
+        js_DeliverNew,              ///< Starts with messages sent after the consumer is created.
         js_DeliverByStartSequence,  ///< Starts from a given sequence.
-	js_DeliverByStartTime,      ///< Starts from a given UTC time (number of nanoseconds since epoch)
+        js_DeliverByStartTime,      ///< Starts from a given UTC time (number of nanoseconds since epoch)
         js_DeliverLastPerSubject,   ///< Starts with the last message for all subjects received.
 
 } jsDeliverPolicy;
@@ -4994,6 +4994,42 @@ js_PurgeStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCod
  */
 NATS_EXTERN natsStatus
 js_DeleteStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Deletes a message from the stream.
+ *
+ * Deletes the message at sequence <c>seq</c> in the stream named <c>stream</c>.
+ *
+ * \note To completely erase the content of the deleted message when stored on disk,
+ * use #js_EraseMsg instead.
+ *
+ * @see js_EraseMsg
+ *
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param seq the sequence in the stream of the message to delete.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_DeleteMsg(jsCtx *js, const char *stream, uint64_t seq, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Erases a message from the stream.
+ *
+ * Similar to #js_DeleteMsg except that the content of the deleted message is
+ * erased from stable storage.
+ *
+ * @see js_DeleteMsg
+ *
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param seq the sequence in the stream of the message to erase.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_EraseMsg(jsCtx *js, const char *stream, uint64_t seq, jsOptions *opts, jsErrCode *errCode);
 
 /** \brief Retreives information from a stream.
  *

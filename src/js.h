@@ -131,6 +131,9 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiRequestNextT is the prefix for the request next message(s) for a consumer in worker/pull mode.
 #define jsApiRequestNextT "%s.CONSUMER.MSG.NEXT.%s.%s"
 
+// jsApiMsgDeleteT is the endpoint to remove a message.
+#define jsApiMsgDeleteT "%.*s.STREAM.MSG.DELETE.%s"
+
 // Creates a subject based on the option's prefix, the subject format and its values.
 #define js_apiSubj(s, o, f, ...) (nats_asprintf((s), (f), (o)->Prefix, __VA_ARGS__) < 0 ? NATS_NO_MEMORY : NATS_OK)
 

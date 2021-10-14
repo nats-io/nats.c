@@ -1610,7 +1610,7 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
         }
     }
 
-    natsBuf_Destroy(&buf);
+    natsBuf_Cleanup(&buf);
 
     // If count > 0 it means that we have gathered some user messages,
     // so we need to return them to the user with a NATS_OK status.

@@ -222,6 +222,7 @@ JetStreamSubscribeConfigCheck
 JetStreamSubscribeIdleHeartbeat
 JetStreamSubscribeFlowControl
 JetStreamSubscribePull
+JetStreamSubscribeHeadersOnly
 JetStreamOrderedCons
 JetStreamOrderedConsWithErrors
 StanPBufAllocator

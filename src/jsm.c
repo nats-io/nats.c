@@ -531,6 +531,11 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
         // Free the array of JSON objects that was allocated by nats_JSONGetArrayObject.
         NATS_FREE(sources);
     }
+    IFOK(s, nats_JSONGetBool(jcfg, "sealed", &(cfg->Sealed)));
+    IFOK(s, nats_JSONGetBool(jcfg, "deny_delete", &(cfg->DenyDelete)));
+    IFOK(s, nats_JSONGetBool(jcfg, "deny_purge", &(cfg->DenyPurge)));
+    IFOK(s, nats_JSONGetBool(jcfg, "allow_rollup_hdrs", &(cfg->AllowRollup)));
+
     if (s == NATS_OK)
         *new_cfg = cfg;
     else
@@ -619,6 +624,15 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         }
         IFOK(s, natsBuf_AppendByte(buf, ']'));
     }
+
+    if ((s == NATS_OK) && cfg->Sealed)
+        IFOK(s, natsBuf_Append(buf, ",\"sealed\":true", -1));
+    if ((s == NATS_OK) && cfg->DenyDelete)
+        IFOK(s, natsBuf_Append(buf, ",\"deny_delete\":true", -1));
+    if ((s == NATS_OK) && cfg->DenyPurge)
+        IFOK(s, natsBuf_Append(buf, ",\"deny_purge\":true", -1));
+    if ((s == NATS_OK) && cfg->AllowRollup)
+        IFOK(s, natsBuf_Append(buf, ",\"allow_rollup_hdrs\":true", -1));
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 

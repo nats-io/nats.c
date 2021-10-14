@@ -94,7 +94,39 @@ extern "C" {
  *
  * @see jsConsumerConfig
  */
- #define JS_MSG_SIZE    "Nats-Msg-Size"
+ #define JSMsgSize    "Nats-Msg-Size"
+
+/** \brief Message header for JetStream message for rollup
+ *
+ * If message is sent to a stream's subject with this header set, and the stream
+ * is configured with `AllowRollup` option, then the server will insert this
+ * message and delete all previous messages in the stream.
+ *
+ * If the header is set to #js_MsgRollupSubject, then only messages on the
+ * specific subject this message is sent to are deleted.
+ *
+ * If the header is set to #js_MsgRollupAll, then all messages on all subjects
+ * are deleted.
+ */
+ #define JSMsgRollup            "Nats-Rollup"
+
+/** \brief Message header value causing rollup per subject
+ *
+ * This is a possible value for the #JSMsgRollup header indicating that only
+ * messages for the subject the rollup message is sent will be removed.
+ *
+ * @see JSMsgRollup
+ */
+ #define JSMsgRollupSubject     "sub"
+
+ /** \brief Message header value causing rollup for all subjects
+ *
+ * This is a possible value for the #JSMsgRollup header indicating that all
+ * messages for all subjects will be removed.
+ *
+ * @see JSMsgRollup
+ */
+ #define JSMsgRollupAll         "all"
 
 //
 // Types.
@@ -429,6 +461,14 @@ typedef struct jsStreamConfig {
         jsStreamSource          *Mirror;
         jsStreamSource          **Sources;
         int                     SourcesLen;
+        bool                    Sealed;         ///< Seal a stream so no messages can get our or in.
+        bool                    DenyDelete;     ///< Restrict the ability to delete messages.
+        bool                    DenyPurge;      ///< Restrict the ability to purge messages.
+        /**
+         * Allows messages to be placed into the system and purge
+         * all older messages using a special message header.
+         */
+        bool                    AllowRollup;
 
 } jsStreamConfig;
 

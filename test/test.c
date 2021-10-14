@@ -21029,6 +21029,12 @@ test_JetStreamMarshalStreamConfig(void)
     sc.Sources = (jsStreamSource *[2]){&s1, &s2};
     sc.SourcesLen = 2;
 
+    // Seal, deny purge, etc..
+    sc.Sealed = true;
+    sc.DenyDelete = true;
+    sc.DenyPurge = true;
+    sc.AllowRollup = true;
+
     test("Marshal stream config: ");
     s = js_marshalStreamConfig(&buf, &sc);
     testCond((s == NATS_OK) && (buf != NULL) && (natsBuf_Len(buf) > 0));
@@ -21085,7 +21091,11 @@ test_JetStreamMarshalStreamConfig(void)
                 && (strcmp(rsc->Sources[1]->FilterSubject, "stream.two") == 0)
                 && (rsc->Sources[1]->External != NULL)
                 && (strcmp(rsc->Sources[1]->External->APIPrefix, "source2.prefix") == 0)
-                && (strcmp(rsc->Sources[1]->External->DeliverPrefix, "source2.deliver.prefix") == 0));
+                && (strcmp(rsc->Sources[1]->External->DeliverPrefix, "source2.deliver.prefix") == 0)
+                && rsc->Sealed
+                && rsc->DenyDelete
+                && rsc->DenyPurge
+                && rsc->AllowRollup);
     js_destroyStreamConfig(rsc);
     rsc = NULL;
     // Check that this does not crash
@@ -25622,7 +25632,7 @@ test_JetStreamSubscribeHeadersOnly(void)
         IFOK(s, (natsMsg_GetDataLength(msg) == 0 ? NATS_OK : NATS_ERR));
         IFOK(s, natsMsgHeader_Get(msg, "User-Header", &val));
         IFOK(s, (strcmp(val, "MyValue") == 0 ? NATS_OK : NATS_ERR));
-        IFOK(s, natsMsgHeader_Get(msg, JS_MSG_SIZE, &val));
+        IFOK(s, natsMsgHeader_Get(msg, JSMsgSize, &val));
         IFOK(s, (strcmp(val, "5") == 0 ? NATS_OK : NATS_ERR));
         natsMsg_Destroy(msg);
         msg = NULL;
@@ -26305,6 +26315,199 @@ test_JetStreamOrderedConsumerWithAutoUnsub(void)
     natsConnection_Destroy(nc);
     natsConnection_Destroy(nc2);
     _destroyDefaultThreadArgs(&args);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
+static void
+test_JetStreamStreamsSealAndRollup(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsStreamInfo        *si = NULL;
+    jsStreamConfig      cfg;
+    jsErrCode           jerr = 0;
+    natsMsg             *msg  = NULL;
+    natsSubscription    *sub  = NULL;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    int                 i;
+
+    ENSURE_JS_VERSION(2, 6, 2);
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create sealed stream fails: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "SEAL_FAIL";
+    cfg.Sealed = true;
+    s = js_AddStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_ERR) && (si == NULL) && (jerr == JSStreamInvalidConfig));
+    nats_clearLastError();
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "SEAL";
+    s = js_AddStream(NULL, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Seal stream: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "SEAL";
+    cfg.Sealed = true;
+    s = js_UpdateStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (si != NULL)
+                && (si->Config != NULL) && si->Config->Sealed);
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Can't send: ");
+    s = js_Publish(NULL, js, "SEAL", "a", 1, NULL, &jerr);
+    testCond((s == NATS_ERR) && (jerr == JSStreamSealedErr));
+    nats_clearLastError();
+
+    test("Create stream with deny purge/delete: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "AUDIT";
+    cfg.Storage = js_MemoryStorage;
+    cfg.DenyPurge = true;
+    cfg.DenyDelete = true;
+    s = js_AddStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (si != NULL)
+                && (si->Config != NULL) && si->Config->DenyDelete
+                && si->Config->DenyPurge);
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Publish: ");
+    for (i=0; (s == NATS_OK) && (i < 10); i++)
+        s = js_Publish(NULL, js, "AUDIT", "ok", 2, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Can't delete: ");
+    s = js_DeleteMsg(js, "AUDIT", 1, NULL, &jerr);
+    testCond((s == NATS_ERR) && (jerr == JSStreamMsgDeleteFailed)
+                && (strstr(nats_GetLastError(NULL), "message delete not permitted") != NULL));
+    nats_clearLastError();
+
+    test("Can't purge: ");
+    s = js_PurgeStream(js, "AUDIT", NULL, &jerr);
+    testCond((s == NATS_ERR) && (jerr == JSStreamPurgeFailedErr)
+                && (strstr(nats_GetLastError(NULL), "stream purge not permitted") != NULL));
+    nats_clearLastError();
+
+    test("Try to remove deny clauses: ");
+    cfg.DenyPurge = false;
+    cfg.DenyDelete = false;
+    s = js_UpdateStream(NULL, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_ERR) && (jerr == JSStreamInvalidConfig));
+    nats_clearLastError();
+
+    test("Create stream for rollup: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "ROLLUP";
+    cfg.Subjects = (const char*[1]){"rollup.*"};
+    cfg.SubjectsLen = 1;
+    cfg.AllowRollup = true;
+    s = js_AddStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (si != NULL)
+                && (si->Config != NULL) && si->Config->AllowRollup);
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Populate: ");
+    for (i=0; (s == NATS_OK) && (i<10); i++)
+        s = js_Publish(NULL, js, "rollup.a", "a", 1, NULL, &jerr);
+    for (i=0; (s == NATS_OK) && (i<10); i++)
+        s = js_Publish(NULL, js, "rollup.b", "b", 1, NULL, &jerr);
+    for (i=0; (s == NATS_OK) && (i<10); i++)
+        s = js_Publish(NULL, js, "rollup.c", "c", 1, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Check stream: ");
+    s = js_GetStreamInfo(&si, js, "ROLLUP", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (si != NULL)
+                && (si->State.Msgs == 30));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Rollup per subject: ");
+    s = natsMsg_Create(&msg, "rollup.b", NULL, "Rollup", 6);
+    IFOK(s, natsMsgHeader_Set(msg, JSMsgRollup, JSMsgRollupSubject));
+    IFOK(s, js_PublishMsg(NULL, js, msg, NULL, &jerr));
+    testCond((s == NATS_OK) && (jerr == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Create consumer: ");
+    s = js_SubscribeSync(&sub, js, "rollup.b", NULL, NULL, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check content: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    IFOK(s, (strcmp(natsMsg_GetData(msg), "Rollup") == 0 ? NATS_OK : NATS_ERR));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Make sure single msg: ");
+    s = natsSubscription_NextMsg(&msg, sub, 250);
+    testCond((s == NATS_TIMEOUT) && (msg == NULL));
+    nats_clearLastError();
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Rollup for all: ");
+    s = natsMsg_Create(&msg, "rollup.c", NULL, "RollupAll", 9);
+    IFOK(s, natsMsgHeader_Set(msg, JSMsgRollup, JSMsgRollupAll));
+    IFOK(s, js_PublishMsg(NULL, js, msg, NULL, &jerr));
+    testCond((s == NATS_OK) && (jerr == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Create consumer: ");
+    s = js_SubscribeSync(&sub, js, "rollup.c", NULL, NULL, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check content: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    IFOK(s, (strcmp(natsMsg_GetData(msg), "RollupAll") == 0 ? NATS_OK : NATS_ERR));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Make sure single msg: ");
+    s = natsSubscription_NextMsg(&msg, sub, 250);
+    testCond((s == NATS_TIMEOUT) && (msg == NULL));
+    nats_clearLastError();
+
+    test("Check stream: ");
+    s = js_GetStreamInfo(&si, js, "ROLLUP", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (si != NULL)
+                && (si->State.Msgs == 1));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    jsCtx_Destroy(js);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
     _stopServer(pid);
     rmtree(datastore);
 }
@@ -28746,6 +28949,7 @@ static testInfo allTests[] =
     {"JetStreamOrderedCons",            test_JetStreamOrderedConsumer},
     {"JetStreamOrderedConsWithErrors",  test_JetStreamOrderedConsumerWithErrors},
     {"JetStreamOrderedConsAutoUnsub",   test_JetStreamOrderedConsumerWithAutoUnsub},
+    {"JetStreamStreamsSealAndRollup",   test_JetStreamStreamsSealAndRollup},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

@@ -240,6 +240,9 @@ typedef enum {
     JSConsumerReplacementWithDifferentNameErr = 10106,  ///< Consumer replacement durable config not the same
     JSConsumerDescriptionTooLongErr = 10107,            ///< Consumer description is too long
     JSConsumerWithFlowControlNeedsHeartbeatsErr = 10108,///< Consumer with flow control also needs heartbeats
+    JSStreamSealedErr = 10109,                          ///< Invalid operation on sealed stream
+    JSStreamPurgeFailedErr = 10110,                     ///< Generic stream purge failure
+    JSStreamRollupFailedErr = 10111,                    ///< Generic stream rollup failure
 
 } jsErrCode;
 

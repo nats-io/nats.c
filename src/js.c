@@ -61,6 +61,8 @@ typedef struct __jsOrderedConsInfo
     natsSubscription    *sub;
     char                *ndlv;
     natsThread          *thread;
+    int                 max;
+    bool                done;
 
 } jsOrderedConsInfo;
 
@@ -2469,11 +2471,16 @@ _recreateOrderedCons(void *closure)
     natsConn_Lock(nc);
     SET_WRITE_DEADLINE(nc);
     s = natsConn_sendUnsubProto(nc, oci->osid, 0);
-    IFOK(s, natsConn_sendSubProto(nc, oci->ndlv, NULL, oci->nsid));
+    if (!oci->done)
+    {
+        IFOK(s, natsConn_sendSubProto(nc, oci->ndlv, NULL, oci->nsid));
+        if ((s == NATS_OK) && (oci->max > 0))
+            s = natsConn_sendUnsubProto(nc, oci->nsid, oci->max);
+    }
     IFOK(s, natsConn_flushOrKickFlusher(nc));
     natsConn_Unlock(nc);
 
-    if (s == NATS_OK)
+    if (!oci->done && (s == NATS_OK))
     {
         natsSubAndLdw_Lock(sub);
         t = oci->thread;
@@ -2541,9 +2548,23 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
     int64_t             osid        = 0;
     natsInbox           *newDeliver = NULL;
     jsOrderedConsInfo   *oci        = NULL;
+    int                 max         = 0;
+    bool                done        = false;
 
     if ((sub->jsi == NULL) || (nc == NULL) || sub->closed)
         return NATS_OK;
+
+    // If there was an AUTO_UNSUB, we need to adjust the new value and send
+    // an UNSUB for the new sid with new value.
+    if (sub->max > 0)
+    {
+        // If we are at or anove sub->max, then we are done with this sub
+        // and will send an UNSUB in the _recreateOrderedCons thread function.
+        if (sub->jsi->fciseq < sub->max)
+            max = (int)(sub->max - sub->jsi->fciseq);
+        else
+            done = true;
+    }
 
     // Grab new inbox.
     s = natsInbox_Create(&newDeliver);
@@ -2571,6 +2592,8 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
         oci->nc   = nc;
         oci->sub  = sub;
         oci->ndlv = (char*) newDeliver;
+        oci->max  = max;
+        oci->done = done;
         natsSub_retain(sub);
 
         s = natsThread_Create(&oci->thread, _recreateOrderedCons, (void*) oci);

@@ -26048,6 +26048,166 @@ test_JetStreamOrderedConsumerWithErrors(void)
     rmtree(datastore);
 }
 
+static void
+_dropMsgFive(natsConnection *nc, natsMsg **msg, void* closure)
+{
+    const char          *val  = NULL;
+    struct threadArg    *args = (struct threadArg*) closure;
+
+    if (natsMsgHeader_Get(*msg, "data", &val) == NATS_OK)
+    {
+        if (++(args->results[0]) == 5)
+        {
+            natsMsg_Destroy(*msg);
+            *msg = NULL;
+            natsConn_setFilter(nc, NULL);
+        }
+    }
+}
+
+static void
+test_JetStreamOrderedConsumerWithAutoUnsub(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsConnection      *nc2= NULL;
+    natsSubscription    *sub= NULL;
+    jsCtx               *js = NULL;
+    jsCtx               *js2= NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsErrCode           jerr= 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    jsStreamConfig      sc;
+    jsSubOptions        so;
+    struct threadArg    args;
+    int                 i;
+    natsStatistics      stats;
+    uint64_t            in1 = 0;
+    uint64_t            in2 = 0;
+
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "OBJECT";
+    sc.Subjects = (const char*[1]){"a"};
+    sc.SubjectsLen = 1;
+    sc.Storage = js_MemoryStorage;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Subscribe: ");
+    jsSubOptions_Init(&so);
+    so.Ordered = true;
+    so.Config.Heartbeat = 250*1000000;
+    s = js_Subscribe(&sub, js, "a", _jsMsgHandler, (void*)&args, NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Auto-unsub: ");
+    s = natsSubscription_AutoUnsubscribe(sub, 10);
+    testCond(s == NATS_OK);
+
+    // Set a message filter that will drop 1 message
+    natsConn_setFilterWithClosure(nc, _dropMsgFive, (void*)&args);
+
+    // Now produce 20 messages
+    test("Produce: ");
+    for (i=0; (s == NATS_OK) && (i < 20); i++)
+    {
+        natsMsg *msg = NULL;
+
+        s = natsMsg_Create(&msg, "a", NULL, "hello", 5);
+        IFOK(s, natsMsgHeader_Set(msg, "data", "true"));
+        IFOK(s, js_PublishMsgAsync(js, &msg, NULL));
+        natsMsg_Destroy(msg);
+        msg = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("Wait for all pubs done: ");
+    s = js_PublishAsyncComplete(js, NULL);
+    testCond(s == NATS_OK);
+
+    test("Wait for subscription to be invalid: ");
+    s = NATS_ERR;
+    for (i=0; i<10; i++)
+    {
+        if (!natsSubscription_IsValid(sub))
+        {
+            s = NATS_OK;
+            break;
+        }
+        nats_Sleep(100);
+    }
+    testCond(s == NATS_OK);
+
+    // Wait a bit to make sure we are not receiving more than expected,
+    // and give a chance for the server to process the auto-unsub
+    // protocol.
+    nats_Sleep(500);
+
+    test("Check count: ");
+    natsMutex_Lock(args.m);
+    s = (args.sum == 10 ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    // Now capture the in msgs count for the connection
+    test("Get stats: ");
+    s = natsConnection_GetStats(nc, &stats);
+    IFOK(s, natsStatistics_GetCounts(&stats, &in1, NULL, NULL, NULL, NULL));
+    testCond(s == NATS_OK);
+
+    // Send one more message and this count should not increase if the
+    // server had properly processed the auto-unsub after the
+    // reset of the ordered consumer. Use a different connection
+    // to send.
+    test("Send one msg: ");
+    s = natsConnection_ConnectTo(&nc2, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_JetStream(&js2, nc2, NULL));
+    IFOK(s, js_Publish(NULL, js2, "a", "bad", 3, NULL, NULL));
+    testCond(s == NATS_OK);
+
+    test("Get stats 2: ");
+    s = natsConnection_GetStats(nc, &stats);
+    IFOK(s, natsStatistics_GetCounts(&stats, &in2, NULL, NULL, NULL, NULL));
+    testCond(s == NATS_OK);
+
+    test("Msg not received: ");
+    s = (in1 == in2 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    jsCtx_Destroy(js);
+    jsCtx_Destroy(js2);
+    natsConnection_Destroy(nc);
+    natsConnection_Destroy(nc2);
+    _destroyDefaultThreadArgs(&args);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -28484,6 +28644,7 @@ static testInfo allTests[] =
     {"JetStreamSubscribeHeadersOnly",   test_JetStreamSubscribeHeadersOnly},
     {"JetStreamOrderedCons",            test_JetStreamOrderedConsumer},
     {"JetStreamOrderedConsWithErrors",  test_JetStreamOrderedConsumerWithErrors},
+    {"JetStreamOrderedConsAutoUnsub",   test_JetStreamOrderedConsumerWithAutoUnsub},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

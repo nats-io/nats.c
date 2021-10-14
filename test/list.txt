@@ -225,6 +225,7 @@ JetStreamSubscribePull
 JetStreamSubscribeHeadersOnly
 JetStreamOrderedCons
 JetStreamOrderedConsWithErrors
+JetStreamOrderedConsAutoUnsub
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

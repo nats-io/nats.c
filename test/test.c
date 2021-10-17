@@ -3101,7 +3101,9 @@ test_natsJSON(void)
             "{ \"test\": \"\\uA01F\"}",
             "{ \"test\": null}",
     };
-    nats_JSONField *f = NULL;
+    nats_JSONField  *f      = NULL;
+    unsigned char   *bytes  = NULL;
+    int             bl      = 0;
 
     for (i=0; i<(int)(sizeof(wrong)/sizeof(char*)); i++)
     {
@@ -3932,6 +3934,39 @@ test_natsJSON(void)
             json = NULL;
         }
     }
+
+    test("GetStr bad type: ");
+    s = nats_JSONParse(&json, "{\"test\":true}", -1);
+    IFOK(s, nats_JSONGetStrPtr(json, "test", (const char**) &strVal));
+    testCond((s != NATS_OK) && (strVal == NULL));
+    nats_clearLastError();
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("GetStr: ");
+    s = nats_JSONParse(&json, "{\"test\":\"direct\"}", -1);
+    IFOK(s, nats_JSONGetStrPtr(json, "test", (const char**) &strVal));
+    testCond((s == NATS_OK) && (strVal != NULL) && (strcmp(strVal, "direct") == 0));
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("GetBytes bad type: ");
+    s = nats_JSONParse(&json, "{\"test\":true}", -1);
+    IFOK(s, nats_JSONGetBytes(json, "test", &bytes, &bl));
+    testCond((s != NATS_OK) && (bytes == NULL) && (bl == 0));
+    nats_clearLastError();
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("GetBytes: ");
+    s = nats_JSONParse(&json, "{\"test\":\"dGhpcyBpcyB0ZXN0aW5nIGJhc2U2NCBlbmNvZGluZw==\"}", -1);
+    IFOK(s, nats_JSONGetBytes(json, "test", &bytes, &bl));
+    testCond((s == NATS_OK) && (bytes != NULL) && (bl == 31)
+                && (strncmp((const char*) bytes, "this is testing base64 encoding", bl) == 0));
+    nats_clearLastError();
+    nats_JSONDestroy(json);
+    json = NULL;
+    free(bytes);
 }
 
 static void
@@ -4150,23 +4185,34 @@ test_natsBase64Encode(void)
     const char  *testStrings[] = {
             "this is testing base64 encoding",
             "dfslfdlkjsfdllkjfds dfsjlklkfsda dfsalkjklfdsalkj adfskjllkjfdaslkjfdslk",
-            "This is another with numbers like 12345678.90 and special characters !@#$%^&*()-=+",
+            "This is another with numbers like 12345678.90 and special characters !@#$%^&*()-=+/",
     };
     const char  *expectedResults[] = {
             "dGhpcyBpcyB0ZXN0aW5nIGJhc2U2NCBlbmNvZGluZw",
             "ZGZzbGZkbGtqc2ZkbGxramZkcyBkZnNqbGtsa2ZzZGEgZGZzYWxramtsZmRzYWxraiBhZGZza2psbGtqZmRhc2xramZkc2xr",
-            "VGhpcyBpcyBhbm90aGVyIHdpdGggbnVtYmVycyBsaWtlIDEyMzQ1Njc4LjkwIGFuZCBzcGVjaWFsIGNoYXJhY3RlcnMgIUAjJCVeJiooKS09Kw",
+            "VGhpcyBpcyBhbm90aGVyIHdpdGggbnVtYmVycyBsaWtlIDEyMzQ1Njc4LjkwIGFuZCBzcGVjaWFsIGNoYXJhY3RlcnMgIUAjJCVeJiooKS09Ky8",
     };
+    const char  *expectedResultsStd[] = {
+            "dGhpcyBpcyB0ZXN0aW5nIGJhc2U2NCBlbmNvZGluZw==",
+            "ZGZzbGZkbGtqc2ZkbGxramZkcyBkZnNqbGtsa2ZzZGEgZGZzYWxramtsZmRzYWxraiBhZGZza2psbGtqZmRhc2xramZkc2xr",
+            "VGhpcyBpcyBhbm90aGVyIHdpdGggbnVtYmVycyBsaWtlIDEyMzQ1Njc4LjkwIGFuZCBzcGVjaWFsIGNoYXJhY3RlcnMgIUAjJCVeJiooKS09Ky8=",
+    };
+    const uint8_t   someBytes[] = {1, 2, 0, 3, 4, 5, 0, 6, 7, 8, 0, 9, 0};
+    const char      *sbe = "AQIAAwQFAAYHCAAJAA==";
+    int             sbl  = 13;
+    int             sl   = 0;
+    int             dl   = 0;
+    unsigned char   *dec = NULL;
 
-    test("Encode nil: ");
+    test("EncodeURL nil: ");
     s = nats_Base64RawURL_EncodeString(NULL, 0, &enc);
     testCond((s == NATS_OK) && (enc == NULL));
 
-    test("Encode empty: ");
+    test("EncodeURL empty: ");
     s = nats_Base64RawURL_EncodeString((const unsigned char*) "", 0, &enc);
     testCond((s == NATS_OK) && (enc == NULL));
 
-    test("Encode strings: ");
+    test("EncodeURL strings: ");
     for (i=0; i<(int)(sizeof(testStrings)/sizeof(char*)); i++)
     {
         s = nats_Base64RawURL_EncodeString((const unsigned char*) testStrings[i], (int)strlen(testStrings[i]), &enc);
@@ -4180,20 +4226,101 @@ test_natsBase64Encode(void)
     }
     testCond(s == NATS_OK);
 
-    test("Encode bytes: ");
+    test("EncodeURL bytes: ");
     {
-        const uint8_t   src[] = {1, 2, 0, 3, 4, 5, 0, 6, 7, 8, 0, 9, 0};
-        int             len = 13;
-
-        enc = NULL;
-
-        s = nats_Base64RawURL_EncodeString((const unsigned char*) &src, len, &enc);
+        s = nats_Base64RawURL_EncodeString((const unsigned char*) &someBytes, sbl, &enc);
         if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, "AQIAAwQFAAYHCAAJAA") != 0)))
             s = NATS_ERR;
 
         free(enc);
+        enc = NULL;
     }
     testCond(s == NATS_OK);
+
+    test("Encode nil: ");
+    s = nats_Base64_Encode(NULL, 0, &enc);
+    testCond((s == NATS_OK) && (enc == NULL));
+
+    test("Encode empty: ");
+    s = nats_Base64_Encode((const unsigned char*) "", 0, &enc);
+    testCond((s == NATS_OK) && (enc == NULL));
+
+    test("Encode strings: ");
+    for (i=0; i<(int)(sizeof(testStrings)/sizeof(char*)); i++)
+    {
+        s = nats_Base64_Encode((const unsigned char*) testStrings[i], (int)strlen(testStrings[i]), &enc);
+        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, expectedResultsStd[i]) != 0)))
+            s = NATS_ERR;
+
+        free(enc);
+        enc = NULL;
+        if (s != NATS_OK)
+            break;
+    }
+    testCond(s == NATS_OK);
+
+    test("Encode bytes: ");
+    {
+        s = nats_Base64_Encode((const unsigned char*) &someBytes, sbl, &enc);
+        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, sbe) != 0)))
+            s = NATS_ERR;
+
+        free(enc);
+        enc = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("DecodeLen src needed: ");
+    s = nats_Base64_DecodeLen(NULL, &sl, &dl);
+    if (s == NATS_INVALID_ARG)
+        s = nats_Base64_DecodeLen("", &sl, &dl);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("DecodeLen bad src len: ");
+    s = nats_Base64_DecodeLen("foo", &sl, &dl);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), "invalid base64 length") != NULL));
+    nats_clearLastError();
+
+    test("DecodeLen bad content: ");
+    s = nats_Base64_DecodeLen("f=oo", &sl, &dl);
+    if (s == NATS_INVALID_ARG)
+        s = nats_Base64_DecodeLen("@!^*.#_$(foo", &sl, &dl);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), "invalid base64 character") != NULL));
+    nats_clearLastError();
+
+    test("DecodeLen: ");
+    s = nats_Base64_DecodeLen(sbe, &sl, &dl);
+    testCond((s == NATS_OK) && (sl == (int) strlen(sbe)) && (dl == sbl));
+
+    test("Decode strings: ");
+    for (i=0; i<(int)(sizeof(expectedResultsStd)/sizeof(char*)); i++)
+    {
+        s = nats_Base64_Decode(expectedResultsStd[i], &dec, &dl);
+        if ((s == NATS_OK)
+                && ((dec == NULL) || (dl != (int) strlen(testStrings[i]))
+                    || (strncmp((const char*) dec, testStrings[i], dl) != 0)))
+        {
+            s = NATS_ERR;
+        }
+        free(dec);
+        dec = NULL;
+        dl = 0;
+    }
+    testCond(s == NATS_OK);
+
+    test("Decode bytes: ");
+    s = nats_Base64_Decode(sbe, &dec, &dl);
+    if ((s == NATS_OK)
+        && ((dec == NULL) || (dl != sbl)
+            || (memcmp((const void*) someBytes, (const void*) dec, sbl) != 0)))
+    {
+        s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+    free(dec);
 }
 
 static void

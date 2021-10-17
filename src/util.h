@@ -103,6 +103,12 @@ natsStatus
 nats_JSONGetStr(nats_JSON *json, const char *fieldName, char **value);
 
 natsStatus
+nats_JSONGetStrPtr(nats_JSON *json, const char *fieldName, const char **str);
+
+natsStatus
+nats_JSONGetBytes(nats_JSON *json, const char *fieldName, unsigned char **value, int *len);
+
+natsStatus
 nats_JSONGetInt(nats_JSON *json, const char *fieldName, int *value);
 
 natsStatus
@@ -194,6 +200,18 @@ nats_Base32_DecodeString(const char *src, char *dst, int dstMax, int *dstLen);
 
 natsStatus
 nats_Base64RawURL_EncodeString(const unsigned char *src, int srcLen, char **pDest);
+
+natsStatus
+nats_Base64_Encode(const unsigned char *src, int srcLen, char **pDest);
+
+natsStatus
+nats_Base64_DecodeLen(const char *src, int *srcLen, int *dstLen);
+
+void
+nats_Base64_DecodeInPlace(const char *src, int l, unsigned char *dst);
+
+natsStatus
+nats_Base64_Decode(const char *src, unsigned char **dst, int *dstLen);
 
 uint16_t
 nats_CRC16_Compute(unsigned char *data, int len);

@@ -53,6 +53,8 @@ struct __natsMsg
     int                 dataLen;
     int                 hdrLen;
     int                 flags;
+    uint64_t            seq;
+    int64_t             time;
 
     // subscription (needed when delivery done by connection,
     // or for JetStream).

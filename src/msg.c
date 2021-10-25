@@ -722,6 +722,24 @@ natsMsg_GetDataLength(const natsMsg *msg)
     return msg->dataLen;
 }
 
+uint64_t
+natsMsg_GetSequence(natsMsg *msg)
+{
+    if (msg == NULL)
+        return 0;
+
+    return msg->seq;
+}
+
+int64_t
+natsMsg_GetTime(natsMsg *msg)
+{
+    if (msg == NULL)
+        return 0;
+
+    return msg->time;
+}
+
 natsStatus
 natsMsg_create(natsMsg **newMsg,
                const char *subject, int subjLen,
@@ -765,6 +783,8 @@ natsMsg_create(natsMsg **newMsg,
     msg->headers    = NULL;
     msg->sub        = NULL;
     msg->next       = NULL;
+    msg->seq        = 0;
+    msg->time       = 0;
 
     ptr = (char*) (((char*) &(msg->next)) + sizeof(msg->next));
 
@@ -788,18 +808,22 @@ natsMsg_create(natsMsg **newMsg,
     if (hasHdrs)
     {
         msg->hdr = ptr;
-        memcpy(ptr, buf, hdrLen);
+        if (buf != NULL)
+        {
+            memcpy(ptr, buf, hdrLen);
+            buf += hdrLen;
+        }
         ptr += hdrLen;
         *(ptr++) = '\0';
 
         msg->hdrLen  = hdrLen;
         natsMsg_setNeedsLift(msg);
         dataLen -= hdrLen;
-        buf += hdrLen;
     }
     msg->data    = (const char*) ptr;
     msg->dataLen = dataLen;
-    memcpy(ptr, buf, dataLen);
+    if (buf != NULL)
+        memcpy(ptr, buf, dataLen);
     ptr += dataLen;
     *(ptr) = '\0';
 

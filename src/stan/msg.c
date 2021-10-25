@@ -108,9 +108,8 @@ stanMsg_create(stanMsg **newMsg, stanSubscription *sub, Pb__MsgProto *pb)
     msg->timestamp   = pb->timestamp;
     msg->redelivered = pb->redelivered;
     msg->sub         = sub;
-    msg->next        = NULL;
 
-    ptr = (char*) (((char*) &(msg->next)) + sizeof(msg->next));
+    ptr = (char*) (((char*) &(msg->sub)) + sizeof(msg->sub));
     msg->data    = (const char*) ptr;
     msg->dataLen = payloadSize;
     memcpy(ptr, (char*) pb->data.data, payloadSize);

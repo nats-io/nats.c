@@ -103,6 +103,19 @@ return NATS_UPDATE_ERR_STACK(s);
 static char base32DecodeMap[256];
 
 static const char *base64EncodeURL= "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+static const char *base64EncodeStd= "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static char        base64Padding  = '=';
+
+static int base64Ints[] = {
+    62, -1, -1, -1, 63, 52, 53, 54, 55, 56,
+    57, 58, 59, 60, 61, -1, -1, -1, -1, -1,
+    -1, -1,  0,  1,  2,  3,  4,  5,  6,  7,
+     8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
+    18, 19, 20, 21, 22, 23, 24, 25, -1, -1,
+    -1, -1, -1, -1, 26, 27, 28, 29, 30, 31,
+    32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
+    42, 43, 44, 45, 46, 47, 48, 49, 50, 51};
+
 
 // An implementation of crc16 according to CCITT standards for XMODEM.
 static uint16_t crc16tab[256] = {
@@ -1137,6 +1150,38 @@ nats_JSONGetStr(nats_JSON *json, const char *fieldName, char **value)
 }
 
 natsStatus
+nats_JSONGetStrPtr(nats_JSON *json, const char *fieldName, const char **str)
+{
+    natsStatus      s;
+    nats_JSONField  *field = NULL;
+
+    s = nats_JSONGetField(json, fieldName, TYPE_STR, &field);
+    if (s == NATS_OK)
+    {
+        if (field == NULL)
+            *str = NULL;
+        else
+            *str = field->value.vstr;
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+nats_JSONGetBytes(nats_JSON *json, const char *fieldName, unsigned char **value, int *len)
+{
+    natsStatus      s;
+    const char      *str = NULL;
+
+    *value = NULL;
+    *len   = 0;
+
+    s = nats_JSONGetStrPtr(json, fieldName, &str);
+    if ((s == NATS_OK) && (str != NULL))
+        s = nats_Base64_Decode(str, value, len);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 nats_JSONGetInt(nats_JSON *json, const char *fieldName, int *value)
 {
     JSON_GET_AS(TYPE_INT, int);
@@ -1654,8 +1699,8 @@ nats_Base32_DecodeString(const char *src, char *dst, int dstMax, int *dstLen)
     return NATS_OK;
 }
 
-natsStatus
-nats_Base64RawURL_EncodeString(const unsigned char *src, int srcLen, char **pDest)
+static natsStatus
+_base64Encode(const char *map, bool padding, const unsigned char *src, int srcLen, char **pDest)
 {
     char        *dst   = NULL;
     int         dstLen = 0;
@@ -1671,7 +1716,10 @@ nats_Base64RawURL_EncodeString(const unsigned char *src, int srcLen, char **pDes
         return NATS_OK;
 
     n = srcLen;
-    dstLen = (n * 8 + 5) / 6;
+    if (padding)
+        dstLen = (n + 2) / 3 * 4;
+    else
+        dstLen = (n * 8 + 5) / 6;
     dst = NATS_CALLOC(1, dstLen + 1);
     if (dst == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
@@ -1682,10 +1730,10 @@ nats_Base64RawURL_EncodeString(const unsigned char *src, int srcLen, char **pDes
         // Convert 3x 8bit source bytes into 4 bytes
         val = (uint32_t)(src[si+0])<<16 | (uint32_t)(src[si+1])<<8 | (uint32_t)(src[si+2]);
 
-        dst[di+0] = base64EncodeURL[val >> 18 & 0x3F];
-        dst[di+1] = base64EncodeURL[val >> 12 & 0x3F];
-        dst[di+2] = base64EncodeURL[val >>  6 & 0x3F];
-        dst[di+3] = base64EncodeURL[val       & 0x3F];
+        dst[di+0] = map[val >> 18 & 0x3F];
+        dst[di+1] = map[val >> 12 & 0x3F];
+        dst[di+2] = map[val >>  6 & 0x3F];
+        dst[di+3] = map[val       & 0x3F];
 
         si += 3;
         di += 4;
@@ -1703,15 +1751,123 @@ nats_Base64RawURL_EncodeString(const unsigned char *src, int srcLen, char **pDes
     if (remain == 2)
         val |= (uint32_t)src[si+1] << 8;
 
-    dst[di+0] = base64EncodeURL[val >> 18 & 0x3F];
-    dst[di+1] = base64EncodeURL[val >> 12 & 0x3F];
+    dst[di+0] = map[val >> 18 & 0x3F];
+    dst[di+1] = map[val >> 12 & 0x3F];
 
     if (remain == 2)
-        dst[di+2] = base64EncodeURL[val >> 6 & 0x3F];
+    {
+        dst[di+2] = map[val >> 6 & 0x3F];
+        if (padding)
+            dst[di+3] = base64Padding;
+    }
+    else if (padding && (remain == 1))
+    {
+        dst[di+2] = base64Padding;
+        dst[di+3] = base64Padding;
+    }
 
     *pDest = dst;
 
     return NATS_OK;
+}
+
+natsStatus
+nats_Base64RawURL_EncodeString(const unsigned char *src, int srcLen, char **pDest)
+{
+    natsStatus s = _base64Encode(base64EncodeURL, false, src, srcLen, pDest);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+nats_Base64_Encode(const unsigned char *src, int srcLen, char **pDest)
+{
+    natsStatus s = _base64Encode(base64EncodeStd, true, src, srcLen, pDest);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static bool
+_base64IsValidChar(char c, bool paddingOk)
+{
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+        || (c >= '0' && c <= '9') || c == '+' || c == '/')
+    {
+        return true;
+    }
+    if (c == base64Padding && paddingOk)
+        return true;
+    return false;
+}
+
+natsStatus
+nats_Base64_DecodeLen(const char *src, int *srcLen, int *dstLen)
+{
+    int l;
+    int dl;
+    int i;
+
+    if (nats_IsStringEmpty(src))
+        return nats_setError(NATS_INVALID_ARG, "%s", "base64 content cannot be empty");
+
+    l = (int) strlen(src);
+    if (l % 4 != 0)
+        return nats_setError(NATS_INVALID_ARG, "invalid base64 length: %d", l);
+
+    dl = l / 4 * 3;
+    for (i=0; i<l; i++)
+    {
+        if (!_base64IsValidChar(src[i], i>=l-2))
+            return nats_setError(NATS_INVALID_ARG, "invalid base64 character: '%c'", src[i]);
+
+        if (src[i] == base64Padding)
+            dl--;
+    }
+
+    *srcLen = l;
+    *dstLen = dl;
+    return NATS_OK;
+}
+
+void
+nats_Base64_DecodeInPlace(const char *src, int l, unsigned char *dst)
+{
+    int i, j, v;
+
+    for (i=0, j=0; i<l; i+=4, j+=3)
+    {
+        v = base64Ints[src[i]-43];
+        v = (v << 6) | base64Ints[src[i+1]-43];
+        v = (src[i+2] == base64Padding ? v << 6 : (v << 6) | base64Ints[src[i+2]-43]);
+        v = (src[i+3] == base64Padding ? v << 6 : (v << 6) | base64Ints[src[i+3]-43]);
+
+        dst[j] = (v >> 16) & 0xFF;
+        if (src[i+2] != base64Padding)
+            dst[j+1] = (v >> 8) & 0xFF;
+        if (src[i+3] != base64Padding)
+            dst[j+2] = v & 0xFF;
+    }
+}
+
+natsStatus
+nats_Base64_Decode(const char *src, unsigned char **dst, int *dstLen)
+{
+    natsStatus  s;
+    int         sl;
+
+    *dst = NULL;
+    *dstLen = 0;
+
+    s = nats_Base64_DecodeLen(src, &sl, dstLen);
+    if (s == NATS_OK)
+    {
+        *dst = (unsigned char*) NATS_MALLOC(*dstLen);
+        if (*dst == NULL)
+        {
+            *dstLen = 0;
+            return nats_setDefaultError(NATS_NO_MEMORY);
+        }
+        nats_Base64_DecodeInPlace(src, sl, *dst);
+    }
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 // Returns the 2-byte crc for the data provided.
@@ -1792,7 +1948,7 @@ nats_ReadFile(natsBuffer **buffer, int initBufSize, const char *fn)
 void
 nats_FreeAddrInfo(struct addrinfo *res)
 {
-    // Calling freeaddrinfo(NULL) is undefined behaviour.
+    // Calling freeaddrinfo(NULL) is undefined behavior.
     if (res == NULL)
         return;
 

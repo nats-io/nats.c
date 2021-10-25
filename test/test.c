@@ -26639,6 +26639,145 @@ test_JetStreamStreamsSealAndRollup(void)
     rmtree(datastore);
 }
 
+static void
+test_JetStreamGetMsgAndLastMsg(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsMsg             *msg = NULL;
+    jsCtx               *js = NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    jsStreamConfig      cfg;
+    jsErrCode           jerr = 0;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    const char          *val = NULL;
+
+    ENSURE_JS_VERSION(2, 3, 1);
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "GET_MSG";
+    cfg.Subjects = (const char*[1]){"foo.*"};
+    cfg.SubjectsLen = 1;
+    cfg.Storage = js_MemoryStorage;
+    s = js_AddStream(NULL, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Populate: ");
+    s = js_Publish(NULL, js, "foo.bar", "msg1", 4, NULL, NULL);
+    IFOK(s, js_Publish(NULL, js, "foo.bar", "msg2", 4, NULL, NULL));
+    IFOK(s, js_Publish(NULL, js, "foo.baz", "msg3", 4, NULL, NULL));
+    IFOK(s, natsMsg_Create(&msg, "foo.baz", NULL, "msg4", 4));
+    IFOK(s, natsMsgHeader_Set(msg, "Some-Header", "Some-Value"));
+    IFOK(s, js_PublishMsg(NULL, js, msg, NULL, NULL));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("GetMsg bad args: ");
+    s = js_GetMsg(NULL, js, "GET_MSG", 1, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_GetMsg(&msg, NULL, "GET_MSG", 1, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_GetMsg(&msg, js, "GET_MSG", 0, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (msg == NULL) && (jerr == 0));
+    nats_clearLastError();
+
+    test("GetMsg stream name required: ");
+    s = js_GetMsg(&msg, js, NULL, 1, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_GetMsg(&msg, js, "", 1, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (msg == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("GetMsg stream not found: ");
+    s = js_GetMsg(&msg, js, "NOT_FOUND", 1, NULL, &jerr);
+    testCond((s == NATS_ERR) && (msg == NULL) && (jerr == JSStreamNotFoundErr)
+                && (strstr(nats_GetLastError(NULL), "stream not found") != NULL));
+    nats_clearLastError();
+
+    test("GetMsg message not found: ");
+    s = js_GetMsg(&msg, js, "GET_MSG", 100, NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND) && (msg == NULL) && (jerr == JSNoMessageFoundErr));
+    nats_clearLastError();
+
+    test("GetMsg message ok: ");
+    s = js_GetMsg(&msg, js, "GET_MSG", 1, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (msg != NULL)
+                && (strcmp(natsMsg_GetSubject(msg), "foo.bar") == 0)
+                && (strcmp(natsMsg_GetData(msg), "msg1") == 0)
+                && (natsMsg_GetSequence(msg) == 1)
+                && (natsMsg_GetTime(msg) != 0));
+
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    // GetLasMsg tests now....
+
+    test("GetLastMsg bad args: ");
+    s = js_GetLastMsg(NULL, js, "GET_MSG", "foo.bar", NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_GetLastMsg(&msg, NULL, "GET_MSG", "foo.bar", NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_GetLastMsg(&msg, js, "GET_MSG", NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_GetLastMsg(&msg, js, "GET_MSG", "", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (msg == NULL) && (jerr == 0));
+    nats_clearLastError();
+
+    test("GetLastMsg stream name required: ");
+    s = js_GetLastMsg(&msg, js, NULL, "foo.bar", NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_GetLastMsg(&msg, js, "", "foo.bar", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (msg == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("GetLastMsg stream not found: ");
+    s = js_GetLastMsg(&msg, js, "NOT_FOUND", "foo.bar", NULL, &jerr);
+    testCond((s == NATS_ERR) && (msg == NULL) && (jerr == JSStreamNotFoundErr)
+                && (strstr(nats_GetLastError(NULL), "stream not found") != NULL));
+    nats_clearLastError();
+
+    test("GetLastMsg message not found: ");
+    s = js_GetLastMsg(&msg, js, "GET_MSG", "not.found", NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND) && (msg == NULL) && (jerr == JSNoMessageFoundErr));
+    nats_clearLastError();
+
+    test("GetLastMsg message ok: ");
+    s = js_GetLastMsg(&msg, js, "GET_MSG", "foo.baz", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (msg != NULL) && (msg != NULL)
+                && (strcmp(natsMsg_GetSubject(msg), "foo.baz") == 0)
+                && (strcmp(natsMsg_GetData(msg), "msg4") == 0)
+                && (natsMsgHeader_Get(msg, "Some-Header", &val) == NATS_OK)
+                && (strcmp(val, "Some-Value") == 0)
+                && (natsMsg_GetSequence(msg) == 4)
+                && (natsMsg_GetTime(msg) != 0));
+    natsMsg_Destroy(msg);
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+    rmtree(datastore);
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -29077,6 +29216,7 @@ static testInfo allTests[] =
     {"JetStreamOrderedConsWithErrors",  test_JetStreamOrderedConsumerWithErrors},
     {"JetStreamOrderedConsAutoUnsub",   test_JetStreamOrderedConsumerWithAutoUnsub},
     {"JetStreamStreamsSealAndRollup",   test_JetStreamStreamsSealAndRollup},
+    {"JetStreamGetMsgAndLastMsg",       test_JetStreamGetMsgAndLastMsg},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

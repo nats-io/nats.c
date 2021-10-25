@@ -5035,6 +5035,46 @@ js_PurgeStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCod
 NATS_EXTERN natsStatus
 js_DeleteStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode);
 
+/** \brief Retrieves a JetStream message from the stream by sequence.
+ *
+ * Retrieves a raw stream message stored in JetStream by sequence number.
+ *
+ * \note The message needs to be destroyed by calling #natsMsg_Destroy.
+ *
+ * @see js_GetLastMsg
+ * @see natsMsg_Destroy
+ *
+ * @param msg the memory location where the library will store the pointer to the #natsMsg.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param seq the sequence in the stream of the message being retrieved.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_GetMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Retrieves the last JetStream message from the stream for a given subject.
+ *
+ * Retrieves the last JetStream message from the stream for a given subject.
+ *
+ * \note The message needs to be destroyed by calling #natsMsg_Destroy.
+ *
+ * @see js_GetMsg
+ * @see natsMsg_Destroy
+ *
+ * @param msg the memory location where the library will store the pointer to the #natsMsg.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param subject the subject for which the last message is being retrieved.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_GetLastMsg(natsMsg **msg, jsCtx *js, const char *stream, const char *subject, jsOptions *opts, jsErrCode *errCode);
+
 /** \brief Deletes a message from the stream.
  *
  * Deletes the message at sequence <c>seq</c> in the stream named <c>stream</c>.
@@ -5607,6 +5647,30 @@ natsMsg_InProgress(natsMsg *msg, jsOptions *opts);
  */
 NATS_EXTERN natsStatus
 natsMsg_Term(natsMsg *msg, jsOptions *opts);
+
+/** \brief Returns the sequence number of this JetStream message.
+ *
+ * Returns the sequence number of this JetStream message, or `0` if `msg` is `NULL`
+ * or not a JetStream message.
+ *
+ * \note This applies to JetStream messages retrieved with #js_GetMsg or #js_GetLastMsg.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ */
+NATS_EXTERN uint64_t
+natsMsg_GetSequence(natsMsg *msg);
+
+/** \brief Returns the timestamp (in UTC) of this JetStream message.
+ *
+ * Returns the timestamp (in UTC) of this JetStream message, or `0` if `msg` is `NULL`
+ * or not a JetStream message.
+ *
+ * \note This applies to JetStream messages retrieved with #js_GetMsg or #js_GetLastMsg.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ */
+NATS_EXTERN int64_t
+natsMsg_GetTime(natsMsg *msg);
 
 /** @} */ // end of jsMsg
 

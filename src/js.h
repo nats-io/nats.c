@@ -134,6 +134,9 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiMsgDeleteT is the endpoint to remove a message.
 #define jsApiMsgDeleteT "%.*s.STREAM.MSG.DELETE.%s"
 
+// jsApiMsgGetT is the endpoint to get a message, either by sequence or last per subject.
+#define jsApiMsgGetT "%.*s.STREAM.MSG.GET.%s"
+
 // Creates a subject based on the option's prefix, the subject format and its values.
 #define js_apiSubj(s, o, f, ...) (nats_asprintf((s), (f), (o)->Prefix, __VA_ARGS__) < 0 ? NATS_NO_MEMORY : NATS_OK)
 

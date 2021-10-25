@@ -1172,6 +1172,175 @@ js_DeleteStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCo
 }
 
 static natsStatus
+_decodeBytesLen(nats_JSON *json, const char *field, const char **str, int *strLen, int *decodedLen)
+{
+    natsStatus  s    = NATS_OK;
+
+    s = nats_JSONGetStrPtr(json, field, str);
+    if ((s == NATS_OK) && (*str != NULL))
+        s = nats_Base64_DecodeLen(*str, strLen, decodedLen);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_unmarshalStoredMsg(nats_JSON *json, natsMsg **new_msg)
+{
+    natsStatus  s;
+    natsMsg     *msg    = NULL;
+    const char  *subject= NULL;
+    const char  *hdrs   = NULL;
+    const char  *data   = NULL;
+    int         hdrsl   = 0;
+    int         dhdrsl  = 0;
+    int         datal   = 0;
+    int         ddatal  = 0;
+
+    s = nats_JSONGetStrPtr(json, "subject", &subject);
+    IFOK(s, _decodeBytesLen(json, "hdrs", &hdrs, &hdrsl, &dhdrsl));
+    IFOK(s, _decodeBytesLen(json, "data", &data, &datal, &ddatal));
+    if ((s == NATS_OK) && (subject != NULL))
+    {
+        s = natsMsg_create(&msg, subject, (int) strlen(subject),
+                           NULL, 0, NULL, dhdrsl+ddatal, dhdrsl);
+        if (s == NATS_OK)
+        {
+            if ((hdrs != NULL) && (dhdrsl > 0))
+                nats_Base64_DecodeInPlace(hdrs, hdrsl, (unsigned char*) msg->hdr);
+            if ((data != NULL) && (ddatal > 0))
+                nats_Base64_DecodeInPlace(data, datal, (unsigned char*) msg->data);
+        }
+        IFOK(s, nats_JSONGetULong(json, "seq", &(msg->seq)));
+        IFOK(s, nats_JSONGetTime(json, "time", &(msg->time)));
+    }
+    if (s == NATS_OK)
+        *new_msg = msg;
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_unmarshalGetMsgResp(natsMsg **msg, natsMsg *resp, jsErrCode *errCode)
+{
+    nats_JSON           *json = NULL;
+    jsApiResponse       ar;
+    natsStatus          s;
+
+    s = js_unmarshalResponse(&ar, &json, resp);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    if (js_apiResponseIsErr(&ar))
+    {
+        if (errCode != NULL)
+            *errCode = (int) ar.Error.ErrCode;
+
+        // If the error code is JSNoMessageFoundErr then pick NATS_NOT_FOUND.
+        if (ar.Error.ErrCode == JSNoMessageFoundErr)
+            s = NATS_NOT_FOUND;
+        else
+            s = nats_setError(NATS_ERR, "%s", ar.Error.Description);
+    }
+    else
+    {
+        nats_JSON *mjson = NULL;
+
+        s = nats_JSONGetObject(json, "message", &mjson);
+        if ((s == NATS_OK) && (mjson == NULL))
+            s = nats_setError(NATS_NOT_FOUND, "%s", "message content not found");
+        else
+            s = _unmarshalStoredMsg(mjson, msg);
+    }
+
+    js_freeApiRespContent(&ar);
+    nats_JSONDestroy(json);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_getMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, const char *subject, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus          s = NATS_OK;
+    char                *subj   = NULL;
+    natsMsg             *resp   = NULL;
+    natsConnection      *nc     = NULL;
+    bool                freePfx = false;
+    jsOptions           o;
+    char                buffer[64];
+    natsBuffer          buf;
+
+    if ((msg == NULL) || (js == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (nats_IsStringEmpty(stream))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
+
+    s = js_setOpts(&nc, &freePfx, js, opts, &o);
+    if (s == NATS_OK)
+    {
+        if (nats_asprintf(&subj, jsApiMsgGetT, js_lenWithoutTrailingDot(o.Prefix), o.Prefix, stream) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        if (freePfx)
+            NATS_FREE((char*) o.Prefix);
+    }
+    IFOK(s, natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer)));
+    IFOK(s, natsBuf_AppendByte(&buf, '{'));
+    if ((s == NATS_OK) && (seq > 0))
+    {
+        nats_marshalULong(&buf, false, "seq", seq);
+    }
+    else
+    {
+        IFOK(s, natsBuf_Append(&buf, "\"last_by_subj\":\"", -1));
+        IFOK(s, natsBuf_Append(&buf, subject, -1));
+        IFOK(s, natsBuf_AppendByte(&buf, '"'));
+    }
+    IFOK(s, natsBuf_AppendByte(&buf, '}'));
+
+    // Send the request
+    IFOK_JSR(s, natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), o.Wait));
+    // Unmarshal response
+    IFOK(s, _unmarshalGetMsgResp(msg, resp, errCode));
+
+    natsBuf_Cleanup(&buf);
+    natsMsg_Destroy(resp);
+    NATS_FREE(subj);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_GetMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if (seq < 1)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _getMsg(msg, js, stream, seq, NULL, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_GetLastMsg(natsMsg **msg, jsCtx *js, const char *stream, const char *subject, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if (nats_IsStringEmpty(subject))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _getMsg(msg, js, stream, 0, subject, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
 _deleteMsg(jsCtx *js, bool noErase, const char *stream, uint64_t seq, jsOptions *opts, jsErrCode *errCode)
 {
     natsStatus          s       = NATS_OK;

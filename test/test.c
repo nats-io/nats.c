@@ -37,6 +37,7 @@
 #include "nkeys.h"
 #include "parser.h"
 #include "js.h"
+#include "kv.h"
 #if defined(NATS_HAS_STREAMING)
 #include "stan/conn.h"
 #include "stan/pub.h"
@@ -21469,6 +21470,36 @@ if (!serverVersionAtLeast((major), (minor), (update))) \
     return; \
 }
 
+#define JS_SETUP(major, minor, update) \
+natsConnection  *nc = NULL; \
+jsCtx           *js = NULL; \
+natsPid         pid = NATS_INVALID_PID;  \
+char            datastore[256] = {'\0'}; \
+char            cmdLine[1024] = {'\0'};  \
+\
+ENSURE_JS_VERSION((major), (minor), (update)); \
+\
+_makeUniqueDir(datastore, sizeof(datastore), "datastore_"); \
+test("Start JS Server: ");                                  \
+snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);\
+pid = _startServer("nats://127.0.0.1:4222", cmdLine, true); \
+CHECK_SERVER_STARTED(pid);                                  \
+testCond(true);                                             \
+\
+test("Connect: ");                                      \
+s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);    \
+testCond(s == NATS_OK);                                 \
+\
+test("Get context: ");                          \
+s = natsConnection_JetStream(&js, nc, NULL);    \
+testCond(s == NATS_OK);
+
+#define JS_TEARDOWN \
+jsCtx_Destroy(js);          \
+natsConnection_Destroy(nc); \
+_stopServer(pid);           \
+rmtree(datastore);
+
 static void
 test_JetStreamContext(void)
 {
@@ -21490,15 +21521,6 @@ test_JetStreamContext(void)
     testCond(true);
 
     _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-    _createConfFile(confFile, sizeof(confFile),
-        " accounts { "\
-        "   NOJS { "\
-        "     users: [ "\
-        "       {user: ivan, pass: pwd} "\
-        "     ] "\
-        "   } "\
-        " }\n"
-    );
 
     pid = _startServer("nats://127.0.0.1:4222", "", true);
     CHECK_SERVER_STARTED(pid);
@@ -21622,6 +21644,15 @@ test_JetStreamContext(void)
     _stopServer(pid);
     pid = NATS_INVALID_PID;
 
+    _createConfFile(confFile, sizeof(confFile),
+        " accounts { "\
+        "   NOJS { "\
+        "     users: [ "\
+        "       {user: ivan, pass: pwd} "\
+        "     ] "\
+        "   } "\
+        " }\n"
+    );
     test("Start JS server: ");
     snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
     pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
@@ -21642,10 +21673,7 @@ test_JetStreamContext(void)
                 && (strstr(nats_GetLastError(NULL), "not enabled") != NULL));
     nats_clearLastError();
 
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
     remove(confFile);
 }
 
@@ -21770,10 +21798,7 @@ test_JetStreamContextDomain(void)
     jsAccountInfo_Destroy(ai);
     ai = NULL;
 
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
     remove(confFile);
 }
 
@@ -21781,10 +21806,7 @@ static void
 test_JetStreamMgtStreams(void)
 {
     natsStatus          s;
-    natsConnection      *nc = NULL;
-    jsCtx               *js = NULL;
     jsCtx               *js2= NULL;
-    natsPid             pid = NATS_INVALID_PID;
     jsStreamInfo        *si = NULL;
     jsStreamConfig      cfg;
     jsErrCode           jerr = 0;
@@ -21792,28 +21814,10 @@ test_JetStreamMgtStreams(void)
     natsMsg             *msg  = NULL;
     natsSubscription    *sub  = NULL;
     char                *desc = NULL;
-    char                datastore[256] = {'\0'};
-    char                cmdLine[1024] = {'\0'};
     jsOptions           o;
     int                 i;
 
-    ENSURE_JS_VERSION(2, 3, 3);
-
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
+    JS_SETUP(2, 3, 3);
 
     test("Get context 2: ");
     // Set some purge options that will be saved in the context.
@@ -22216,21 +22220,15 @@ test_JetStreamMgtStreams(void)
     nats_clearLastError();
 
     free(desc);
-    jsCtx_Destroy(js);
     jsCtx_Destroy(js2);
     natsSubscription_Destroy(sub);
-    natsConnection_Destroy(nc);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
 }
 
 static void
 test_JetStreamMgtConsumers(void)
 {
     natsStatus              s;
-    natsConnection          *nc = NULL;
-    jsCtx                   *js = NULL;
-    natsPid                 pid = NATS_INVALID_PID;
     jsConsumerInfo          *ci = NULL;
     jsConsumerConfig        cfg;
     jsErrCode               jerr = 0;
@@ -22238,8 +22236,6 @@ test_JetStreamMgtConsumers(void)
     natsSubscription        *sub  = NULL;
     char                    *desc = NULL;
     jsStreamConfig          scfg;
-    char                    datastore[256] = {'\0'};
-    char                    cmdLine[1024] = {'\0'};
     int                     i;
     const char              *dlvPoliciesStr[] = {
         "\"deliver_policy\":\"" jsDeliverAllStr "\"",
@@ -22266,23 +22262,7 @@ test_JetStreamMgtConsumers(void)
     jsReplayPolicy          replayPolicies[] = {
         js_ReplayInstant, js_ReplayOriginal};
 
-    ENSURE_JS_VERSION(2, 3, 3);
-
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
+    JS_SETUP(2, 3, 3);
 
     test("Consumer config init, bad args: ");
     s = jsConsumerConfig_Init(NULL);
@@ -22584,10 +22564,7 @@ test_JetStreamMgtConsumers(void)
     nats_clearLastError();
 
     free(desc);
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
 }
 
 static void
@@ -22871,10 +22848,7 @@ test_JetStreamPublish(void)
     natsMsg_Destroy(msg);
     msg = NULL;
 
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
     remove(confFile);
 }
 
@@ -22951,10 +22925,7 @@ static void
 test_JetStreamPublishAsync(void)
 {
     natsStatus          s;
-    natsConnection      *nc = NULL;
     natsSubscription    *sub= NULL;
-    jsCtx               *js = NULL;
-    natsPid             pid = NATS_INVALID_PID;
     jsOptions           o;
     jsStreamConfig      cfg;
     jsPubOptions        opts;
@@ -22965,31 +22936,19 @@ test_JetStreamPublishAsync(void)
     const char          *val = NULL;
     const char          **keys = NULL;
     int                 keysCount = 0;
-    char                datastore[256] = {'\0'};
-    char                cmdLine[1024] = {'\0'};
     struct threadArg    args;
     int                 i;
     bool                ok1 = false;
     bool                ok2 = false;
     natsMsgList         pending;
 
-    ENSURE_JS_VERSION(2, 3, 3);
+    JS_SETUP(2, 3, 3);
+    jsCtx_Destroy(js);
+    js = NULL;
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)
         FAIL("Unable to setup test");
-
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
 
     test("Create control sub: ");
     s = natsConnection_SubscribeSync(&sub, nc, "foo");
@@ -23351,6 +23310,7 @@ test_JetStreamPublishAsync(void)
 
     test("Publish async: ");
     _stopServer(pid);
+    pid = NATS_INVALID_PID;
     s = natsMsg_Create(&msg1, "foo", NULL, "hello1", 6);
     IFOK(s, natsMsg_Create(&msg2, "foo", NULL, "hello2", 6));
     IFOK(s, js_PublishMsgAsync(js, &msg1, NULL));
@@ -23401,10 +23361,36 @@ test_JetStreamPublishAsync(void)
     s = js_PublishAsyncGetPendingList(&pending, js);
     testCond((s == NATS_NOT_FOUND) && (pending.Msgs == NULL) && (pending.Count == 0));
 
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
+    test("Publish async: ");
+    s = natsMsg_Create(&msg1, "foo", NULL, "hello1", 6);
+    IFOK(s, natsMsg_Create(&msg2, "foo", NULL, "hello2", 6));
+    IFOK(s, js_PublishMsgAsync(js, &msg1, NULL));
+    IFOK(s, js_PublishMsgAsync(js, &msg2, NULL));
+    testCond((s == NATS_OK) && (msg1 == NULL) && (msg2 == NULL));
+
+    test("Get pending: ");
+    s = js_PublishAsyncGetPendingList(&pending, js);
+    testCond((s == NATS_OK)
+                && (pending.Msgs != NULL)
+                && (pending.Count == 2));
+
+    msg1 = pending.Msgs[0];
+    msg2 = pending.Msgs[1];
+
+    test("Check that if Msgs set to NULL, no crash: ");
+    {
+        natsMsg **l  = pending.Msgs;
+        pending.Msgs = NULL;
+        natsMsgList_Destroy(&pending);
+        free(l);
+    }
+    testCond(true);
+
+    natsMsg_Destroy(msg1);
+    natsMsg_Destroy(msg2);
+
+    JS_TEARDOWN;
     _destroyDefaultThreadArgs(&args);
-    rmtree(datastore);
 }
 
 static void
@@ -23518,7 +23504,7 @@ test_JetStreamSubscribe(void)
     _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
 
     test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-DV -js -sd %s", datastore);
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
     pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
     CHECK_SERVER_STARTED(pid);
     testCond(true);
@@ -24033,25 +24019,17 @@ test_JetStreamSubscribe(void)
                 && (strstr(nats_GetLastError(NULL), "cannot contain '.'") != NULL));
     nats_clearLastError();
 
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
+    JS_TEARDOWN;
     natsOptions_Destroy(ncOpts);
     _destroyDefaultThreadArgs(&args);
-    _stopServer(pid);
-    rmtree(datastore);
 }
 
 static void
 test_JetStreamSubscribeSync(void)
 {
     natsStatus          s;
-    natsConnection      *nc = NULL;
     natsSubscription    *sub= NULL;
-    jsCtx               *js = NULL;
-    natsPid             pid = NATS_INVALID_PID;
     jsErrCode           jerr= 0;
-    char                datastore[256] = {'\0'};
-    char                cmdLine[1024] = {'\0'};
     natsSubscription    *ackSub = NULL;
     natsMsg             *ack = NULL;
     jsStreamConfig      sc;
@@ -24062,23 +24040,7 @@ test_JetStreamSubscribeSync(void)
     jsConsumerInfo      *ci = NULL;
     jsMsgMetaData       *meta = NULL;
 
-    ENSURE_JS_VERSION(2, 3, 5);
-
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
+    JS_SETUP(2, 3, 5);
 
     test("Create sync sub (invalid args): ");
     s = js_SubscribeSync(NULL, js, "foo", NULL, NULL, &jerr);
@@ -24474,45 +24436,23 @@ test_JetStreamSubscribeSync(void)
 
     natsSubscription_Destroy(sub);
     natsSubscription_Destroy(ackSub);
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
 }
 
 static void
 test_JetStreamSubscribeConfigCheck(void)
 {
     natsStatus          s;
-    natsConnection      *nc = NULL;
     natsSubscription    *sub= NULL;
-    jsCtx               *js = NULL;
     const char          *name = NULL;
-    natsPid             pid = NATS_INVALID_PID;
     jsErrCode           jerr= 0;
-    char                datastore[256] = {'\0'};
-    char                cmdLine[1024] = {'\0'};
     char                durName[64];
     char                testName[64];
     jsStreamConfig      sc;
     jsConsumerConfig    cc;
     int                 i;
 
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
+    JS_SETUP(2, 2, 0);
 
     test("Create stream: ");
     jsStreamConfig_Init(&sc);
@@ -24803,10 +24743,7 @@ test_JetStreamSubscribeConfigCheck(void)
     }
     testCond(s == NATS_OK);
 
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
 }
 
 static void
@@ -25130,25 +25067,17 @@ test_JetStreamSubscribeIdleHearbeat(void)
     nats_clearLastError();
 
     natsSubscription_Destroy(nsub);
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
+    JS_TEARDOWN;
     _destroyDefaultThreadArgs(&args);
     natsOptions_Destroy(opts);
-    _stopServer(pid);
-    rmtree(datastore);
 }
 
 static void
 test_JetStreamSubscribeFlowControl(void)
 {
     natsStatus          s;
-    natsConnection      *nc = NULL;
     natsSubscription    *sub= NULL;
-    jsCtx               *js = NULL;
-    natsPid             pid = NATS_INVALID_PID;
     jsErrCode           jerr= 0;
-    char                datastore[256] = {'\0'};
-    char                cmdLine[1024] = {'\0'};
     jsStreamConfig      sc;
     jsSubOptions        so;
     natsMsg             *msg  = NULL;
@@ -25160,7 +25089,7 @@ test_JetStreamSubscribeFlowControl(void)
     char                *subj = NULL;
     natsBuffer          *buf  = NULL;
 
-    ENSURE_JS_VERSION(2, 3, 3);
+    JS_SETUP(2, 3, 3);
 
     data = malloc(1024);
     if (data == NULL)
@@ -25179,22 +25108,6 @@ test_JetStreamSubscribeFlowControl(void)
         FAIL("Unable to setup test");
     args.control = 2;
     args.results[0] = total;
-
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
 
     test("Create stream: ");
     jsStreamConfig_Init(&sc);
@@ -25315,11 +25228,8 @@ test_JetStreamSubscribeFlowControl(void)
     natsMsg_Destroy(msg);
     natsSubscription_Destroy(sub);
     natsSubscription_Destroy(nsub);
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
     _destroyDefaultThreadArgs(&args);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
 }
 
 static void
@@ -25352,14 +25262,9 @@ static void
 test_JetStreamSubscribePull(void)
 {
     natsStatus          s;
-    natsConnection      *nc = NULL;
     natsSubscription    *sub= NULL;
-    jsCtx               *js = NULL;
     natsMsg             *msg = NULL;
-    natsPid             pid = NATS_INVALID_PID;
     jsErrCode           jerr= 0;
-    char                datastore[256] = {'\0'};
-    char                cmdLine[1024] = {'\0'};
     natsMsgList         list;
     jsStreamConfig      sc;
     jsSubOptions        so;
@@ -25371,27 +25276,11 @@ test_JetStreamSubscribePull(void)
     jsAckPolicy         badAck[] = {js_AckNone, js_AckAll};
     jsConsumerConfig    cc;
 
-    ENSURE_JS_VERSION(2, 3, 3);
+    JS_SETUP(2, 3, 3);
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)
         FAIL("Unable to setup test");
-
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
 
     test("Create pull sub (invalid args): ");
     s = js_PullSubscribe(NULL, js, "foo", "dur", NULL, NULL, &jerr);
@@ -25687,46 +25576,22 @@ test_JetStreamSubscribePull(void)
     testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
+    JS_TEARDOWN;
     _destroyDefaultThreadArgs(&args);
-    _stopServer(pid);
-    rmtree(datastore);
 }
 
 static void
 test_JetStreamSubscribeHeadersOnly(void)
 {
     natsStatus          s;
-    natsConnection      *nc = NULL;
     natsSubscription    *sub= NULL;
-    jsCtx               *js = NULL;
     natsMsg             *msg = NULL;
-    natsPid             pid = NATS_INVALID_PID;
     jsErrCode           jerr= 0;
-    char                datastore[256] = {'\0'};
-    char                cmdLine[1024] = {'\0'};
     jsStreamConfig      sc;
     jsSubOptions        so;
     int                 i;
 
-    ENSURE_JS_VERSION(2, 6, 2);
-
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
+    JS_SETUP(2, 6, 2);
 
     test("Create stream: ");
     jsStreamConfig_Init(&sc);
@@ -25950,13 +25815,8 @@ static void
 test_JetStreamOrderedConsumer(void)
 {
     natsStatus          s;
-    natsConnection      *nc = NULL;
     natsSubscription    *sub= NULL;
-    jsCtx               *js = NULL;
-    natsPid             pid = NATS_INVALID_PID;
     jsErrCode           jerr= 0;
-    char                datastore[256] = {'\0'};
-    char                cmdLine[1024] = {'\0'};
     jsStreamConfig      sc;
     jsSubOptions        so;
     struct threadArg    args;
@@ -25966,27 +25826,11 @@ test_JetStreamOrderedConsumer(void)
     const int           chunkSize = 1024;
     jsStreamInfo        *si = NULL;
 
-    ENSURE_JS_VERSION(2, 3, 3);
+    JS_SETUP(2, 3, 3);
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)
         FAIL("Unable to setup test");
-
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
 
     test("Create stream: ");
     jsStreamConfig_Init(&sc);
@@ -26147,11 +25991,8 @@ test_JetStreamOrderedConsumer(void)
     free(asset);
     jsStreamInfo_Destroy(si);
     natsSubscription_Destroy(sub);
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
     _destroyDefaultThreadArgs(&args);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
 }
 
 static void
@@ -26278,12 +26119,9 @@ test_JetStreamOrderedConsumerWithErrors(void)
     }
 
     free(asset);
-    jsCtx_Destroy(js);
+    JS_TEARDOWN;
     natsOptions_Destroy(opts);
-    natsConnection_Destroy(nc);
     _destroyDefaultThreadArgs(&args);
-    _stopServer(pid);
-    rmtree(datastore);
 }
 
 static void
@@ -26307,15 +26145,10 @@ static void
 test_JetStreamOrderedConsumerWithAutoUnsub(void)
 {
     natsStatus          s;
-    natsConnection      *nc = NULL;
     natsConnection      *nc2= NULL;
     natsSubscription    *sub= NULL;
-    jsCtx               *js = NULL;
     jsCtx               *js2= NULL;
-    natsPid             pid = NATS_INVALID_PID;
     jsErrCode           jerr= 0;
-    char                datastore[256] = {'\0'};
-    char                cmdLine[1024] = {'\0'};
     jsStreamConfig      sc;
     jsSubOptions        so;
     struct threadArg    args;
@@ -26324,27 +26157,11 @@ test_JetStreamOrderedConsumerWithAutoUnsub(void)
     uint64_t            in1 = 0;
     uint64_t            in2 = 0;
 
-    ENSURE_JS_VERSION(2, 3, 3);
+    JS_SETUP(2, 3, 3);
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)
         FAIL("Unable to setup test");
-
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
 
     test("Create stream: ");
     jsStreamConfig_Init(&sc);
@@ -26437,48 +26254,24 @@ test_JetStreamOrderedConsumerWithAutoUnsub(void)
     testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
-    jsCtx_Destroy(js);
     jsCtx_Destroy(js2);
-    natsConnection_Destroy(nc);
     natsConnection_Destroy(nc2);
     _destroyDefaultThreadArgs(&args);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
 }
 
 static void
 test_JetStreamStreamsSealAndRollup(void)
 {
     natsStatus          s;
-    natsConnection      *nc = NULL;
-    jsCtx               *js = NULL;
-    natsPid             pid = NATS_INVALID_PID;
     jsStreamInfo        *si = NULL;
     jsStreamConfig      cfg;
     jsErrCode           jerr = 0;
     natsMsg             *msg  = NULL;
     natsSubscription    *sub  = NULL;
-    char                datastore[256] = {'\0'};
-    char                cmdLine[1024] = {'\0'};
     int                 i;
 
-    ENSURE_JS_VERSION(2, 6, 2);
-
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
+    JS_SETUP(2, 6, 2);
 
     test("Create sealed stream fails: ");
     jsStreamConfig_Init(&cfg);
@@ -26632,44 +26425,20 @@ test_JetStreamStreamsSealAndRollup(void)
     jsStreamInfo_Destroy(si);
     si = NULL;
 
-    jsCtx_Destroy(js);
     natsSubscription_Destroy(sub);
-    natsConnection_Destroy(nc);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
 }
 
 static void
 test_JetStreamGetMsgAndLastMsg(void)
 {
     natsStatus          s;
-    natsConnection      *nc = NULL;
     natsMsg             *msg = NULL;
-    jsCtx               *js = NULL;
-    natsPid             pid = NATS_INVALID_PID;
     jsStreamConfig      cfg;
     jsErrCode           jerr = 0;
-    char                datastore[256] = {'\0'};
-    char                cmdLine[1024] = {'\0'};
     const char          *val = NULL;
 
-    ENSURE_JS_VERSION(2, 3, 1);
-
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-
-    test("Start JS server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
+    JS_SETUP(2, 3, 1);
 
     test("Create stream: ");
     jsStreamConfig_Init(&cfg);
@@ -26772,10 +26541,883 @@ test_JetStreamGetMsgAndLastMsg(void)
                 && (natsMsg_GetSequence(msg) == 4)
                 && (natsMsg_GetTime(msg) != 0));
     natsMsg_Destroy(msg);
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
-    _stopServer(pid);
-    rmtree(datastore);
+    JS_TEARDOWN;
+}
+
+static void
+test_KeyValueManager(void)
+{
+    natsStatus          s;
+    kvStore             *kv = NULL;
+    kvConfig            kvc;
+    jsStreamConfig      sc;
+    jsErrCode           jerr = 0;
+
+    JS_SETUP(2, 6, 2);
+
+    test("kvConfig Init (bad args): ");
+    s = kvConfig_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Create KV - bad args: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "TEST";
+    s = js_CreateKeyValue(NULL, js, &kvc);
+    if (s == NATS_INVALID_ARG)
+        s = js_CreateKeyValue(&kv, NULL, &kvc);
+    if (s == NATS_INVALID_ARG)
+        s = js_CreateKeyValue(&kv, js, NULL);
+    testCond((s == NATS_INVALID_ARG) && (kv == NULL));
+    nats_clearLastError();
+
+    test("Create KV - bad bucket name: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "This.is.not.a.valid.name!";
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond((s == NATS_INVALID_ARG) && (kv == NULL)
+                && (strstr(nats_GetLastError(NULL), kvErrInvalidBucketName) != NULL));
+    nats_clearLastError();
+
+    test("Create KV - history too big: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "TEST";
+    kvc.History = kvMaxHistory + 10;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond((s == NATS_INVALID_ARG) && (kv == NULL)
+                && (strstr(nats_GetLastError(NULL), kvErrHistoryTooLarge) != NULL));
+    nats_clearLastError();
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "TEST";
+    kvc.History = 3;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond((s == NATS_OK) && (kv != NULL));
+
+    test("Destroy kv store: ")
+    kvStore_Destroy(kv);
+    kv = NULL;
+    // Check that this is ok
+    kvStore_Destroy(NULL);
+    testCond(true);
+
+    test("Bind (bad args): ");
+    s = js_KeyValue(NULL, js, "TEST");
+    if (s == NATS_INVALID_ARG)
+        s = js_KeyValue(&kv, NULL, "TEST");
+    if (s == NATS_INVALID_ARG)
+        s = js_KeyValue(&kv, js, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_KeyValue(&kv, NULL, "");
+    if (s == NATS_INVALID_ARG)
+        s = js_KeyValue(&kv, NULL, "bad.bucket.name");
+    testCond((s == NATS_INVALID_ARG) && (kv == NULL));
+    nats_clearLastError();
+
+    test("Bind (not found): ");
+    s = js_KeyValue(&kv, js, "NOT_FOUND");
+    testCond((s == NATS_NOT_FOUND) && (kv == NULL)
+                && (nats_GetLastError(NULL) == NULL));
+
+    test("Bind to existing: ");
+    s = js_KeyValue(&kv, js, "TEST");
+    testCond((s == NATS_OK) && (kv != NULL));
+
+    test("Destroy kv store: ")
+    kvStore_Destroy(kv);
+    kv = NULL;
+    testCond(true);
+
+    test("Create non-kv stream: ");
+    jsStreamConfig_Init(&sc);
+    // Stream name has to start with "KV_" since this is how we
+    // form the stream name: KV_ + bucket name.
+    sc.Name = "KV_NON_KV_STREAM";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Bind to non-kv stream: ");
+    s = js_KeyValue(&kv, js, "NON_KV_STREAM");
+    testCond((s == NATS_INVALID_ARG) && (kv == NULL)
+                && (strstr(nats_GetLastError(NULL), kvErrBadBucket) != NULL));
+    nats_clearLastError();
+
+    test("Delete kv store (bad args): ");
+    s = js_DeleteKeyValue(NULL, "TEST");
+    if (s == NATS_INVALID_ARG)
+        s = js_DeleteKeyValue(js, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_DeleteKeyValue(js, "");
+    if (s == NATS_INVALID_ARG)
+        s = js_DeleteKeyValue(js, "bad.bucket.name");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Delete kv store: ");
+    s = js_DeleteKeyValue(js, "TEST");
+    testCond(s == NATS_OK);
+
+    test("Check it is gone (bind should fail): ");
+    s = js_KeyValue(&kv, js, "TEST");
+    testCond((s == NATS_NOT_FOUND) && (kv == NULL));
+
+    JS_TEARDOWN;
+}
+
+static void
+test_KeyValueBasics(void)
+{
+    natsStatus          s;
+    kvStore             *kv = NULL;
+    kvEntry             *e  = NULL;
+    kvStatus            *sts= NULL;
+    uint64_t            rev = 0;
+    kvConfig            kvc;
+
+    JS_SETUP(2, 6, 2);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "TEST";
+    kvc.History = 5;
+    kvc.TTL = 3600*(int64_t)1E9;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond((s == NATS_OK) && (kv != NULL));
+
+    test("Check bucket: ");
+    s = (strcmp(kvStore_Bucket(kv), "TEST") == 0 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+
+    test("Check bucket (returns NULL): ");
+    s = (kvStore_Bucket(NULL) == NULL ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+
+    test("Simple put (bad args): ");
+    rev = 1234;
+    s = kvStore_Put(&rev, NULL, "key", (const void*) "value", 5);
+    testCond((s == NATS_INVALID_ARG) && (rev == 0));
+    nats_clearLastError();
+
+    test("Simple put (bad key): ");
+    rev = 1234;
+    s = kvStore_Put(&rev, kv, NULL, (const void*) "value", 5);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Put(&rev, kv, "", (const void*) "value", 5);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Put(&rev, kv, ".bad.key", (const void*) "value", 5);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Put(&rev, kv, "bad.key.", (const void*) "value", 5);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Put(&rev, kv, "this is a bad key", (const void*) "value", 5);
+    testCond((s == NATS_INVALID_ARG) && (rev == 0)
+                && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
+    nats_clearLastError();
+
+    test("Simple put: ");
+    s = kvStore_Put(&rev, kv, "key", (const void*) "value", 5);
+    testCond((s == NATS_OK) && (rev == 1));
+
+    test("Get (bad args): ");
+    s = kvStore_Get(NULL, kv, "key");
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Get(&e, NULL, "key");
+    testCond((s == NATS_INVALID_ARG) && (e == NULL));
+    nats_clearLastError();
+
+    test("Get (bad key): ");
+    s = kvStore_Get(&e, kv, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Get(&e, kv, "");
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Get(&e, kv, ".bad.key");
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Get(&e, kv, "bad.key.");
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Get(&e, kv, "this is a bad key");
+    testCond((s == NATS_INVALID_ARG) && (e == NULL)
+                && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
+    nats_clearLastError();
+
+    test("Simple get: ");
+    s = kvStore_Get(&e, kv, "key");
+    testCond((s == NATS_OK) && (e != NULL)
+                && (kvEntry_ValueLen(e) == 5)
+                && (memcmp(kvEntry_Value(e), "value", 5) == 0)
+                && (kvEntry_Revision(e) == 1));
+
+    test("Destroy entry: ");
+    kvEntry_Destroy(e);
+    e = NULL;
+    // Check that this is ok
+    kvEntry_Destroy(NULL);
+    testCond(true);
+
+    test("Get not found: ");
+    s = kvStore_Get(&e, kv, "not.found");
+    testCond((s == NATS_NOT_FOUND) && (e == NULL)
+                && (nats_GetLastError(NULL) == NULL));
+
+    test("Simple put string: ");
+    s = kvStore_PutString(&rev, kv, "key", "value2");
+    testCond((s == NATS_OK) && (rev == 2));
+
+    test("Simple get string: ");
+    s = kvStore_Get(&e, kv, "key");
+    testCond((s == NATS_OK) && (e != NULL)
+                && (strcmp(kvEntry_ValueString(e), "value2") == 0)
+                && (kvEntry_Revision(e) == 2));
+
+    test("Destroy entry: ");
+    kvEntry_Destroy(e);
+    e = NULL;
+    testCond(true);
+
+    test("Delete key (bad args): ");
+    s = kvStore_Delete(NULL, "key");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Delete key (bad key): ");
+    s = kvStore_Delete(kv, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Delete(kv, "");
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Delete(kv, ".bad.key");
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Delete(kv, "bad.key.");
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Delete(kv, "this is a bad key");
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
+    nats_clearLastError();
+
+    test("Delete key: ");
+    s = kvStore_Delete(kv, "key");
+    testCond(s == NATS_OK);
+
+    test("Check key gone: ");
+    s = kvStore_Get(&e, kv, "key");
+    testCond((s == NATS_NOT_FOUND) && (e == NULL)
+                && (nats_GetLastError(NULL) == NULL));
+
+    test("Create (bad args): ");
+    s = kvStore_Create(&rev, NULL, "key", (const void*) "value3", 6);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Create (bad key): ");
+    s = kvStore_Create(&rev, kv, NULL, (const void*) "value3", 6);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Create(&rev, kv, "", (const void*) "value3", 6);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Create(&rev, kv, ".bad.key", (const void*) "value3", 6);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Create(&rev, kv, "bad.key.", (const void*) "value3", 6);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Create(&rev, kv, "this..is a bad key", (const void*) "value3", 6);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
+    nats_clearLastError();
+
+    test("Create: ");
+    s = kvStore_Create(&rev, kv, "key", (const void*) "value3", 6);
+    testCond((s == NATS_OK) && (rev == 4));
+
+    test("Create fail, since already exists: ");
+    s = kvStore_Create(&rev, kv, "key", (const void*) "value4", 6);
+    testCond((s == NATS_ERR) && (rev == 0));
+    nats_clearLastError();
+
+    test("Update (bad args): ");
+    s = kvStore_Update(&rev, NULL, "key", (const void*) "value4", 6, 4);
+    testCond((s == NATS_INVALID_ARG) && (rev == 0));
+    nats_clearLastError();
+
+    test("Update (bad key): ");
+    s = kvStore_Update(&rev, kv, NULL, (const void*) "value4", 6, 4);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Update(&rev, kv, "", (const void*) "value4", 6, 4);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Update(&rev, kv, ".bad.key", (const void*) "value4", 6, 4);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Update(&rev, kv, "bad.key.", (const void*) "value4", 6, 4);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Update(&rev, kv, "bad&key", (const void*) "value4", 6, 4);
+    testCond((s == NATS_INVALID_ARG) && (rev == 0)
+                && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
+    nats_clearLastError();
+
+    test("Update: ");
+    s = kvStore_Update(&rev, kv, "key", (const void*) "value4", 6, 4);
+    testCond((s == NATS_OK) && (rev == 5));
+
+    test("Update fail because wrong rev: ");
+    s = kvStore_Update(NULL, kv, "key", (const void*) "value5", 6, 4);
+    testCond(s == NATS_ERR);
+    nats_clearLastError();
+
+    test("Update ok: ");
+    s = kvStore_Update(&rev, kv, "key", (const void*) "value5", 6, rev);
+    testCond((s == NATS_OK) && (rev == 6));
+    nats_clearLastError();
+
+    test("Create (string): ");
+    s = kvStore_CreateString(&rev, kv, "key2", "value1");
+    testCond((s == NATS_OK) && (rev == 7));
+
+    test("Update ok (string): ");
+    s = kvStore_UpdateString(&rev, kv, "key2", "value2", rev);
+    testCond((s == NATS_OK) && (rev == 8));
+
+    test("Status (bad args): ");
+    s = kvStore_Status(NULL, kv);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Status(&sts, NULL);
+    testCond((s == NATS_INVALID_ARG) && (sts == NULL));
+    nats_clearLastError();
+
+    test("Status: ");
+    s = kvStore_Status(&sts, kv);
+    testCond((s == NATS_OK) && (sts != NULL));
+
+    test("Check history: ");
+    s = (kvStatus_History(sts) == 5 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+
+    test("Check bucket: ");
+    s = (strcmp(kvStatus_Bucket(sts), "TEST") == 0 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+
+    test("Check TTL: ");
+    s = (kvStatus_TTL(sts) == 3600*(int64_t)1E9 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+
+    test("Check values: ");
+    s = (kvStatus_Values(sts) == 7 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+
+    test("Check status with NULL: ");
+    if ((kvStatus_History(NULL) != 0) || (kvStatus_Bucket(NULL) != NULL)
+        || (kvStatus_TTL(NULL) != 0) || (kvStatus_Values(NULL) != 0))
+    {
+        s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+
+    test("Destroy status: ");
+    kvStatus_Destroy(sts);
+    sts = NULL;
+    // Check that this is ok
+    kvStatus_Destroy(NULL);
+    testCond(true);
+
+    test("Destroy kv store: ");
+    kvStore_Destroy(kv);
+    testCond(true);
+
+    JS_TEARDOWN;
+}
+
+static bool
+_expectInitDone(kvWatcher *w)
+{
+    natsStatus  s;
+    kvEntry     *e = NULL;
+
+    test("Check init done: ");
+    s = kvWatcher_Next(&e, w, 1000);
+    return ((s == NATS_OK) && (e == NULL));
+}
+
+static bool
+_expectUpdate(kvWatcher *w, const char *key, const char *val, uint64_t rev)
+{
+    natsStatus  s;
+    kvEntry     *e = NULL;
+
+    test("Check update: ");
+    s = kvWatcher_Next(&e, w, 1000);
+    if ((s != NATS_OK) || (e == NULL))
+        return false;
+
+    if ((strcmp(kvEntry_Key(e), key) != 0)
+        || (strcmp(kvEntry_ValueString(e), val) != 0)
+        || (kvEntry_Revision(e) != rev))
+    {
+        return false;
+    }
+    kvEntry_Destroy(e);
+    return true;
+}
+
+static bool
+_expectDelete(kvWatcher *w, const char *key, uint64_t rev)
+{
+    natsStatus  s;
+    kvEntry     *e = NULL;
+
+    test("Check update: ");
+    s = kvWatcher_Next(&e, w, 1000);
+    if ((s != NATS_OK) || (e == NULL))
+        return false;
+
+    if ((kvEntry_Operation(e) != kvOp_Delete)
+        || (kvEntry_Revision(e) != rev))
+    {
+        return false;
+    }
+    kvEntry_Destroy(e);
+    return true;
+}
+
+static void
+test_KeyValueWatch(void)
+{
+    natsStatus          s;
+    kvStore             *kv = NULL;
+    kvWatcher           *w  = NULL;
+    kvEntry             *e  = NULL;
+    kvConfig            kvc;
+
+    JS_SETUP(2, 6, 2);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "WATCH";
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Create watcher (bad args): ");
+    s = kvStore_Watch(NULL, kv, "foo", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Watch(&w, NULL, "foo", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Watch(&w, kv, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Watch(&w, kv, "", NULL);
+    testCond((s == NATS_INVALID_ARG) && (w == NULL));
+    nats_clearLastError();
+
+    test("Create watcher: ");
+    s = kvStore_WatchAll(&w, kv, NULL);
+    testCond((s == NATS_OK) && (w != NULL));
+
+    testCond(_expectInitDone(w));
+
+    test("Create: ");
+    s = kvStore_CreateString(NULL, kv, "name", "derek");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdate(w, "name", "derek", 1));
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv, "name", "rip");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdate(w, "name", "rip", 2));
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv, "name", "ik");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdate(w, "name", "ik", 3));
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv, "age", "22");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdate(w, "age", "22", 4));
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv, "age", "33");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdate(w, "age", "33", 5));
+
+    test("Delete: ");
+    s = kvStore_Delete(kv, "age");
+    testCond(s == NATS_OK);
+    testCond(_expectDelete(w, "age", 6));
+
+    test("Next (bad args): ");
+    s = kvWatcher_Next(NULL, w, 1000);
+    if (s == NATS_INVALID_ARG)
+        s = kvWatcher_Next(&e, NULL, 1000);
+    if (s == NATS_INVALID_ARG)
+        s = kvWatcher_Next(&e, w, 0);
+    if (s == NATS_INVALID_ARG)
+        s = kvWatcher_Next(&e, w, -1000);
+    testCond((s == NATS_INVALID_ARG) && (e == NULL));
+    nats_clearLastError();
+
+    test("Next (timeout): ");
+    s = kvWatcher_Next(&e, w, 1);
+    testCond((s == NATS_TIMEOUT) && (e == NULL));
+    nats_clearLastError();
+
+    test("Stop (bad args): ");
+    s = kvWatcher_Stop(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Stop: ");
+    s = kvWatcher_Stop(w);
+    testCond(s == NATS_OK);
+
+    test("Stop again: ");
+    s = kvWatcher_Stop(w);
+    testCond(s == NATS_OK);
+
+    test("Next fails: ");
+    s = kvWatcher_Next(&e, w, 1000);
+    testCond((s == NATS_ILLEGAL_STATE) && (e == NULL))
+    nats_clearLastError();
+
+    test("Destroy watcher: ");
+    kvWatcher_Destroy(w);
+    w = NULL;
+    // Check that this is ok
+    kvWatcher_Destroy(NULL);
+    testCond(true);
+
+    // Now try wildcard matching and make sure we only get last value when starting.
+    test("Put values in different keys: ");
+    s = kvStore_PutString(NULL, kv, "t.name", "derek");
+    IFOK(s, kvStore_PutString(NULL, kv, "t.name", "ik"));
+    IFOK(s, kvStore_PutString(NULL, kv, "t.age", "22"));
+    IFOK(s, kvStore_PutString(NULL, kv, "t.age", "49"));
+    testCond(s == NATS_OK);
+
+    test("Create watcher: ");
+    s = kvStore_Watch(&w, kv, "t.*", NULL);
+    testCond(s == NATS_OK);
+
+    testCond(_expectUpdate(w, "t.name", "ik", 8));
+    testCond(_expectUpdate(w, "t.age", "49", 10));
+    testCond(_expectInitDone(w));
+
+    kvWatcher_Destroy(w);
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
+static void
+test_KeyValueHistory(void)
+{
+    natsStatus          s;
+    kvStore             *kv = NULL;
+    kvEntry             *e  = NULL;
+    kvEntryList         l;
+    kvWatchOptions      o;
+    kvConfig            kvc;
+    int                 i;
+
+    JS_SETUP(2, 6, 2);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "WATCH";
+    kvc.History = 10;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Populate: ");
+    for (i=0; (s == NATS_OK) && (i<50); i++)
+    {
+        char tmp[16];
+
+        snprintf(tmp, sizeof(tmp), "%d", i+22);
+        s = kvStore_PutString(NULL, kv, "age", tmp);
+    }
+    testCond(s == NATS_OK);
+
+    test("Get history (bad args): ");
+    s = kvStore_History(NULL, kv, "age", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_History(&l, NULL, "age", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_History(&l, kv, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_History(&l, kv, "", NULL);
+    testCond((s == NATS_INVALID_ARG) && (l.Entries == NULL) && (l.Count == 0));
+    nats_clearLastError();
+
+    test("Get history (timeout): ");
+    kvWatchOptions_Init(&o);
+    o.Timeout = 1;
+    s = kvStore_History(&l, kv, "age", &o);
+    testCond(((s == NATS_OK) && (l.Entries != NULL) && (l.Count == 10))
+            || ((s == NATS_TIMEOUT) && (l.Entries == NULL) && (l.Count == 0)));
+    nats_clearLastError();
+    kvEntryList_Destroy(&l);
+
+    test("Get History: ");
+    s = kvStore_History(&l, kv, "age", NULL);
+    testCond((s == NATS_OK) && (l.Entries != NULL) && (l.Count == 10));
+
+    test("Check values: ");
+    for (i=0; (s == NATS_OK) && (i < 10); i++)
+    {
+        e = l.Entries[i];
+        if (e == NULL)
+            s = NATS_ERR;
+        if (strcmp(kvEntry_Key(e), "age") != 0)
+            s = NATS_ERR;
+        else if (kvEntry_Revision(e) != (uint64_t)(i+41))
+            s = NATS_ERR;
+        else
+        {
+            int val = (int) nats_ParseInt64(kvEntry_Value(e), kvEntry_ValueLen(e));
+            if (val != i+62)
+                s = NATS_ERR;
+        }
+    }
+    testCond(s == NATS_OK);
+
+    test("Destroy list: ")
+    kvEntryList_Destroy(&l);
+    testCond((l.Entries == NULL) && (l.Count == 0));
+
+    // Check that this is ok
+    kvEntryList_Destroy(NULL);
+
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
+static void
+test_KeyValueKeys(void)
+{
+    natsStatus          s;
+    kvStore             *kv = NULL;
+    kvKeysList          l;
+    bool                nameOK = false;
+    bool                ageOK = false;
+    bool                countryOK = false;
+    char                *k = NULL;
+    kvConfig            kvc;
+    int                 i;
+
+    JS_SETUP(2, 6, 2);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "KVS";
+    kvc.History = 2;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Populate: ");
+    s = kvStore_PutString(NULL, kv, "name", "derek");
+    IFOK(s, kvStore_PutString(NULL, kv, "age", "22"));
+    IFOK(s, kvStore_PutString(NULL, kv, "country", "US"));
+    IFOK(s, kvStore_PutString(NULL, kv, "name", "ivan"));
+    IFOK(s, kvStore_PutString(NULL, kv, "age", "33"));
+    IFOK(s, kvStore_PutString(NULL, kv, "country", "US"));
+    IFOK(s, kvStore_PutString(NULL, kv, "name", "rip"));
+    IFOK(s, kvStore_PutString(NULL, kv, "age", "44"));
+    IFOK(s, kvStore_PutString(NULL, kv, "country", "MT"));
+    testCond(s == NATS_OK);
+
+    test("Get keys (bad args): ");
+    s = kvStore_Keys(NULL, kv, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = kvStore_Keys(&l, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
+
+    test("Get keys (timeout): ");
+    s = kvStore_Keys(&l, kv, NULL);
+    testCond((((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 3)))
+                || ((s == NATS_TIMEOUT) && (l.Keys == NULL) && (l.Count == 0)));
+    nats_clearLastError();
+    kvKeysList_Destroy(&l);
+
+    test("Get keys: ");
+    s = kvStore_Keys(&l, kv, NULL);
+    testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 3));
+
+    test("Check keys: ");
+    for (i=0; (s == NATS_OK) && (i<3); i++)
+    {
+        char *k = l.Keys[i];
+        if (k == NULL)
+            s = NATS_ERR;
+        else
+        {
+            if (strcmp(k, "name") == 0)
+                nameOK = true;
+            else if (strcmp(k, "age") == 0)
+                ageOK = true;
+            else if (strcmp(k, "country") == 0)
+                countryOK = true;
+        }
+    }
+    testCond((s == NATS_OK) && nameOK && ageOK && countryOK);
+
+    test("Destroy list: ");
+    kvKeysList_Destroy(&l);
+    testCond((l.Keys == NULL) && (l.Count == 0));
+    // Check this is ok
+    kvKeysList_Destroy(NULL);
+
+    // Make sure delete and purge do the right thing and not return the keys.
+    test("Delete name: ");
+    s = kvStore_Delete(kv, "name");
+    testCond(s == NATS_OK);
+
+    test("Purge country: ");
+    s = kvStore_Purge(kv, "country");
+    testCond(s == NATS_OK);
+
+    test("Get keys: ");
+    s = kvStore_Keys(&l, kv, NULL);
+    testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 1));
+
+    test("Check key: ");
+    k = l.Keys[0];
+    s = ((k != NULL) && (strcmp(k, "age") == 0) ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+    kvKeysList_Destroy(&l);
+
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
+static void
+test_KeyValueDeleteVsPurge(void)
+{
+    natsStatus          s;
+    kvStore             *kv = NULL;
+    kvEntry             *e  = NULL;
+    kvEntryList         l;
+    kvConfig            kvc;
+    int                 i;
+
+    JS_SETUP(2, 6, 2);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "KVS";
+    kvc.History = 10;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Populate: ");
+    s = kvStore_PutString(NULL, kv, "name", "derek");
+    IFOK(s, kvStore_PutString(NULL, kv, "age", "22"));
+    IFOK(s, kvStore_PutString(NULL, kv, "name", "ivan"));
+    IFOK(s, kvStore_PutString(NULL, kv, "age", "33"));
+    IFOK(s, kvStore_PutString(NULL, kv, "name", "rip"));
+    IFOK(s, kvStore_PutString(NULL, kv, "age", "44"));
+    testCond(s == NATS_OK);
+
+    test("Delete age: ");
+    s = kvStore_Delete(kv, "age");
+    testCond(s == NATS_OK);
+
+    test("Get age history: ");
+    s = kvStore_History(&l, kv, "age", NULL);
+    testCond((s == NATS_OK) && (l.Entries != NULL) && (l.Count == 4));
+
+    test("Check: ");
+    for (i=0;(s == NATS_OK) && (i<4); i++)
+    {
+        if (l.Entries[i] == NULL)
+            s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+    kvEntryList_Destroy(&l);
+
+    test("Purge name: ");
+    s = kvStore_Purge(kv, "name");
+    testCond(s == NATS_OK);
+
+    test("Check marker: ");
+    s = kvStore_Get(&e, kv, "age");
+    testCond((s == NATS_NOT_FOUND) && (e == NULL));
+
+    test("Get history: ");
+    s = kvStore_History(&l, kv, "name", NULL);
+    testCond((s == NATS_OK) && (l.Entries != NULL) && (l.Count == 1));
+
+    test("Check: ");
+    e = l.Entries[0];
+    s = ((e != NULL) && (kvEntry_Operation(e) == kvOp_Purge) ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+    kvEntryList_Destroy(&l);
+
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
+static void
+test_KeyValueDeleteTombstones(void)
+{
+    natsStatus          s;
+    kvStore             *kv = NULL;
+    char                *v  = NULL;
+    jsStreamInfo        *si = NULL;
+    kvConfig            kvc;
+    int                 i;
+
+    JS_SETUP(2, 6, 2);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "KVS";
+    kvc.History = 10;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Create asset: ");
+    v = (char*) malloc(100);
+    if (v != NULL)
+    {
+        for (i=0; i<100; i++)
+            v[i] = 'A' + (char)(i % 26);
+        v[99] = '\0';
+    }
+    testCond(v != NULL);
+
+    test("Populate: ");
+    for (i=0; (s == NATS_OK) && (i<100); i++)
+    {
+        char tmp[64];
+        snprintf(tmp, sizeof(tmp), "key-%d", i);
+        s = kvStore_PutString(NULL, kv, tmp, v);
+    }
+    testCond(s == NATS_OK);
+    free(v);
+
+    test("Delete: ");
+    for (i=0; (s == NATS_OK) && (i<100); i++)
+    {
+        char tmp[64];
+        snprintf(tmp, sizeof(tmp), "key-%d", i);
+        s = kvStore_Delete(kv, tmp);
+    }
+    testCond(s == NATS_OK);
+
+    test("Purge deletes (bad args): ");
+    s = kvStore_PurgeDeletes(NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Purge deletes: ");
+    s = kvStore_PurgeDeletes(kv, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check stream: ");
+    s = js_GetStreamInfo(&si, js, "KV_KVS", NULL, NULL);
+    testCond((s == NATS_OK) && (si != NULL) && (si->State.Msgs == 0));
+    jsStreamInfo_Destroy(si);
+
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
 }
 
 #if defined(NATS_HAS_STREAMING)
@@ -29217,6 +29859,14 @@ static testInfo allTests[] =
     {"JetStreamOrderedConsAutoUnsub",   test_JetStreamOrderedConsumerWithAutoUnsub},
     {"JetStreamStreamsSealAndRollup",   test_JetStreamStreamsSealAndRollup},
     {"JetStreamGetMsgAndLastMsg",       test_JetStreamGetMsgAndLastMsg},
+
+    {"KeyValueManager",                 test_KeyValueManager},
+    {"KeyValueBasics",                  test_KeyValueBasics},
+    {"KeyValueWatch",                   test_KeyValueWatch},
+    {"KeyValueHistory",                 test_KeyValueHistory},
+    {"KeyValueKeys",                    test_KeyValueKeys},
+    {"KeyValueDeleteVsPurge",           test_KeyValueDeleteVsPurge},
+    {"KeyValueDeleteTombstones",        test_KeyValueDeleteTombstones},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

@@ -887,7 +887,7 @@ natsMsgList_Destroy(natsMsgList *list)
 {
     int i;
 
-    if (list == NULL)
+    if ((list == NULL) || (list->Msgs == NULL))
         return;
 
     for (i=0; i < list->Count; i++)

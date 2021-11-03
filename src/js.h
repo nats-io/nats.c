@@ -88,6 +88,8 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsReplayOriginalStr "original"
 #define jsReplayInstantStr  "instant"
 
+#define jsAckPrefix         "$JS.ACK."
+#define jsAckPrefixLen      (8)
 
 // Content of ACK messages sent to server
 #define jsAckAck            "+ACK"
@@ -206,3 +208,21 @@ js_cleanStreamState(jsStreamState *state);
 
 natsStatus
 js_checkDurName(const char *dur);
+
+natsStatus
+js_getMetaData(const char *reply,
+    char **domain,
+    char **stream,
+    char **consumer,
+    uint64_t *numDelivered,
+    uint64_t *sseq,
+    uint64_t *dseq,
+    int64_t *tm,
+    uint64_t *numPending,
+    int asked);
+
+void
+js_retain(jsCtx *js);
+
+void
+js_release(jsCtx *js);

@@ -102,10 +102,10 @@ extern "C" {
  * is configured with `AllowRollup` option, then the server will insert this
  * message and delete all previous messages in the stream.
  *
- * If the header is set to #js_MsgRollupSubject, then only messages on the
+ * If the header is set to #JSMsgRollupSubject, then only messages on the
  * specific subject this message is sent to are deleted.
  *
- * If the header is set to #js_MsgRollupAll, then all messages on all subjects
+ * If the header is set to #JSMsgRollupAll, then all messages on all subjects
  * are deleted.
  */
  #define JSMsgRollup            "Nats-Rollup"
@@ -217,7 +217,7 @@ typedef struct natsMsgList
  * is safe to destroy the context while a #jsPubAckErrHandler callback is
  * running or while inside #js_PublishAsyncComplete.
  */
-typedef struct __jsCtx              jsCtx;
+typedef struct __jsCtx                  jsCtx;
 
 /**
  * JetStream publish options.
@@ -242,6 +242,7 @@ typedef struct jsPubOptions
         const char      *ExpectLastMsgId;       ///< Expected last message ID in the stream.
         uint64_t        ExpectLastSeq;          ///< Expected last message sequence in the stream.
         uint64_t        ExpectLastSubjectSeq;   ///< Expected last message sequence for the subject in the stream.
+        bool            ExpectNoMessage;        ///< Expected no message (that is, sequence == 0) for the subject in the stream.
 
 } jsPubOptions;
 
@@ -582,7 +583,7 @@ typedef struct jsStreamInfo
  *
  * \note `HeadersOnly` means that the subscription will not receive any message payload,
  * instead, it will receive only messages headers (if present) with the addition of
- * the header #JS_MSG_SIZE ("Nats-Msg-Size"), whose value is the payload size.
+ * the header #JSMsgSize ("Nats-Msg-Size"), whose value is the payload size.
  *
  * @see jsConsumerConfig_Init
  *
@@ -914,6 +915,118 @@ typedef struct jsOptions
         } Stream;                                       ///< Optional stream options.
 
 } jsOptions;
+
+/**
+ * The KeyValue store object.
+ */
+typedef struct __kvStore                kvStore;
+
+/**
+ * The KeyValue entry object.
+ */
+typedef struct __kvEntry                kvEntry;
+
+/**
+ * The KeyValue status object.
+ */
+typedef struct __kvStatus               kvStatus;
+
+/**
+ * The KeyValue watcher object.
+ */
+typedef struct __kvWatcher              kvWatcher;
+
+/**
+ * Determines the type of operation of a #kvEntry
+ */
+typedef enum
+{
+        kvOp_Unknown = 0,
+        kvOp_Put,
+        kvOp_Delete,
+        kvOp_Purge,
+
+} kvOperation;
+
+/**
+ * KeyValue configuration object.
+ *
+ * Initialize the object with #kvConfig_Init.
+ */
+typedef struct kvConfig
+{
+        const char      *Bucket;
+        const char      *Description;
+        int32_t         MaxValueSize;
+        uint8_t         History;
+        int64_t         TTL;
+        int64_t         MaxBytes;
+        jsStorageType   StorageType;
+        int             Replicas;
+
+} kvConfig;
+
+/**
+ * KeyValue watcher options object.
+ *
+ * Initialize the object with #kvWatchOptions_Init;
+ */
+typedef struct kvWatchOptions
+{
+        bool            IgnoreDeletes;
+        bool            IncludeHistory;
+        bool            MetaOnly;
+        int64_t         Timeout;        ///< How long to wait (in milliseconds) for some operations to complete.
+
+} kvWatchOptions;
+
+/** \brief A list of KeyValue store entries.
+ *
+ * Used by some APIs which return a list of #kvEntry objects.
+ *
+ * Those APIs will not create the object, but instead initialize
+ * the object.
+ *
+ * Typically, the user will define the object on the stack and
+ * pass a pointer to this object to APIs that require a pointer
+ * to a #kvEntryList object.
+ *
+ * Similarly, calling #kvEntryList_Destroy will call #kvEntry_Destroy
+ * on entries in the list, free the array containing pointers
+ * to the entries, but not free the #kvEntryList object itself.
+ *
+ * @see kvEntryList_Destroy
+ */
+typedef struct kvEntryList
+{
+        kvEntry         **Entries;
+        const int       Count;
+
+} kvEntryList;
+
+/** \brief A list of KeyValue store keys.
+ *
+ * Used by some APIs which return a list of key names.
+ *
+ * Those APIs will not create the object, but instead initialize
+ * the object.
+ *
+ * Typically, the user will define the object on the stack and
+ * pass a pointer to this object to APIs that require a pointer
+ * to a #kvKeysList object.
+ *
+ * Similarly, calling #kvKeysList_Destroy will free key strings
+ * in the list, free the array containing pointers to the keys,
+ * but not free the #kvKeysList object itself.
+ *
+ * @see kvKeysList_Cleanup
+ */
+typedef struct kvKeysList
+{
+        char            **Keys;
+        const int       Count;
+
+} kvKeysList;
 
 #if defined(NATS_HAS_STREAMING)
 /** \brief A connection to a `NATS Streaming Server`.
@@ -5233,10 +5346,10 @@ jsConsumerInfo_Destroy(jsConsumerInfo *ci);
  * \note The returned object should be destroyed using #jsAccountInfo_Destroy in order
  * to free allocated memory.
  *
- * @param js the pointer to the #jsCtx context.
- * @param opts the pointer to the #jsOptions object, possibly `NULL`.
  * @param ai the location where to store the pointer to the new #jsAccountInfo object in
  * response to the account information request.
+ * @param js the pointer to the #jsCtx context.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
  * @param errCode the location where to store the JetStream specific error code, or `NULL`
  * if not needed.
  */
@@ -5675,6 +5788,601 @@ natsMsg_GetTime(natsMsg *msg);
 /** @} */ // end of jsMsg
 
 /** @} */ // end of jsGroup
+
+/** \defgroup kvGroup KeyValue store
+ *
+ * A KeyValue store is a materialized view of JetStream.
+ *
+ * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
+ * necessarily bumping the major version of the library.
+ *
+ *  @{
+ */
+
+/** \defgroup kvGroupMgt KeyValue store management
+ *
+ * These functions allow to create, get or delete a KeyValue store.
+ *
+ * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
+ * necessarily bumping the major version of the library.
+ *
+ *  @{
+ */
+
+/** \brief Initializes a KeyValue configuration structure.
+ *
+ * Use this before setting specific #kvConfig options and passing it to #js_CreateKeyValue.
+ *
+ * @see js_CreateKeyValue
+ *
+ * @param cfg the pointer to the stack variable #kvConfig to initialize.
+ */
+NATS_EXTERN natsStatus
+kvConfig_Init(kvConfig *cfg);
+
+/** \brief Creates a KeyValue store with a given configuration.
+ *
+ * Creates a KeyValue store with a given configuration.
+ *
+ * Bucket names are restricted to this set of characters: `A-Z`, `a-z`, `0-9`, `_` and `-`.
+ *
+ * \note The return #kvStore object needs to be destroyed using #kvStore_Destroy when
+ * no longer needed to free allocated memory. This is different from deleting a KeyValue store
+ * from the server using the #js_DeleteKeyValue API.
+ *
+ * @param new_kv the location where to store the newly created #kvStore object.
+ * @param js the pointer to the #jsCtx object.
+ * @param cfg the pointer to the #kvConfig configuration information used to create the #kvStore object.
+ */
+NATS_EXTERN natsStatus
+js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg);
+
+/** \brief Looks-up and binds to an existing KeyValue store.
+ *
+ * This call is when the user wants to use an existing KeyValue store.
+ * If the store does not already exists, an error is returned.
+ *
+ * Bucket names are restricted to this set of characters: `A-Z`, `a-z`, `0-9`, `_` and `-`.
+ *
+ * \note The return #kvStore object needs to be destroyed using #kvStore_Destroy when
+ * no longer needed to free allocated memory. This is different from deleting a KeyValue store
+ * from the server using the #js_DeleteKeyValue API.
+ *
+ * @param new_kv the location where to store the newly created #kvStore object.
+ * @param js the pointer to the #jsCtx object.
+ * @param bucket the name of the bucket of the existing KeyValue store.
+ */
+NATS_EXTERN natsStatus
+js_KeyValue(kvStore **new_kv, jsCtx *js, const char *bucket);
+
+/** \brief Deletes a KeyValue store.
+ *
+ * This will delete the KeyValue store with the `bucket` name.
+ *
+ * Bucket names are restricted to this set of characters: `A-Z`, `a-z`, `0-9`, `_` and `-`.
+ *
+ * @param js the pointer to the #jsCtx object.
+ * @param bucket the name of the bucket of the existing KeyValue store.
+ */
+NATS_EXTERN natsStatus
+js_DeleteKeyValue(jsCtx *js, const char *bucket);
+
+/** \brief Destroys a KeyValue store object.
+ *
+ * This will simply free memory resources in the library for this #kvStore,
+ * but does not delete the KeyValue store in the server.
+ *
+ * @param kv the pointer to the #kvStore object.
+ */
+NATS_EXTERN void
+kvStore_Destroy(kvStore *kv);
+
+/** @} */ // end of  kvGroupMgt
+
+/** \defgroup kvEntry KeyValue store entries
+ *
+ * These functions allow to inspect a the value, or entry, of a given key.
+ *
+ * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
+ * necessarily bumping the major version of the library.
+ *
+ *  @{
+ */
+
+/** \brief Returns the name of the bucket the data was loaded from.
+ *
+ * Returns the name of the bucket the data was loaded from, or `NULL` if `e` itself is `NULL`.
+ *
+ * @param e the pointer to the #kvEntry object.
+ */
+NATS_EXTERN const char*
+kvEntry_Bucket(kvEntry *e);
+
+/** \brief Returns the name of the key that was retrieved.
+ *
+ * Returns the name of the key that was retrieved, or `NULL` if `e` itself is `NULL`.
+ *
+ * @param e the pointer to the #kvEntry object.
+ */
+NATS_EXTERN const char*
+kvEntry_Key(kvEntry *e);
+
+/** \brief Returns the value for this key.
+ *
+ * Returns the value for this key, or `NULL` if `e` itself is `NULL`.
+ *
+ * @param e the pointer to the #kvEntry object.
+ */
+NATS_EXTERN const void*
+kvEntry_Value(kvEntry *e);
+
+/** \brief Returns the value length for this key.
+ *
+ * Returns the value length for this key, or `-1` if `e` itself is `NULL`.
+ *
+ * @param e the pointer to the #kvEntry object.
+ */
+NATS_EXTERN int
+kvEntry_ValueLen(kvEntry *e);
+
+/** \brief Returns the value, as a string, for this key.
+ *
+ * If the value is an actual string, this call will return a NULL terminating string (`const char*`),
+ * or `NULL` if `e` itself is `NULL`.
+ *
+ * @param e the pointer to the #kvEntry object.
+ */
+NATS_EXTERN const char*
+kvEntry_ValueString(kvEntry *e);
+
+/** \brief Returns the unique sequence for this value.
+ *
+ * Returns the unique sequence for this value, or `0` if `e` itself is `NULL`.
+ *
+ * @param e the pointer to the #kvEntry object.
+ */
+NATS_EXTERN uint64_t
+kvEntry_Revision(kvEntry *e);
+
+/** \brief Returns the time (in UTC) the data was put in the bucket.
+ *
+ * Returns the time (in UTC) the data was put in the bucket, or `0` if `e` itself is `NULL`.
+ *
+ * @param e the pointer to the #kvEntry object.
+ */
+NATS_EXTERN int64_t
+kvEntry_Created(kvEntry *e);
+
+/** \brief Returns the distance from the latest value.
+ *
+ * Returns the distance from the latest value, or `0` if `e` itself is `NULL`.
+ *
+ * If history is enabled this is effectively the index of the historical value,
+ * 0 for latest, 1 for most recent etc...
+ *
+ * @param e the pointer to the #kvEntry object.
+ */
+NATS_EXTERN uint64_t
+kvEntry_Delta(kvEntry *e);
+
+/** \brief Returns the type of operation of this value.
+ *
+ * Returns the type of operation of this value.
+ *
+ * @see kvOperation
+ *
+ * @param e the pointer to the #kvEntry object.
+ */
+NATS_EXTERN kvOperation
+kvEntry_Operation(kvEntry *e);
+
+/** \brief Destroys the KeyValue entry object.
+ *
+ * Releases memory allocated for this #kvEntry object.
+ *
+ * @param e the pointer to the #kvEntry object.
+ */
+NATS_EXTERN void
+kvEntry_Destroy(kvEntry *e);
+
+/** @} */ // end of kvEntry
+
+/** \brief Returns the latest entry for the key.
+ *
+ * Returns the latest entry for the key.
+ *
+ * \note The entry should be destroyed to release memory using #kvEntry_Destroy.
+ *
+ * @param new_entry the location where to store the pointer to the entry associated with the `key`.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ */
+NATS_EXTERN natsStatus
+kvStore_Get(kvEntry **new_entry, kvStore *kv, const char *key);
+
+/** \brief Places the new value for the key into the store.
+ *
+ * Places the new value for the key into the store.
+ *
+ * @param rev the location where to store the revision of this value, or `NULL` if the stream information is not needed.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ * @param data the pointer to the data in memory.
+ * @param len the number of bytes to copy from the data's memory location.
+ */
+NATS_EXTERN natsStatus
+kvStore_Put(uint64_t *rev, kvStore *kv, const char *key, const void *data, int len);
+
+/** \brief Places the new value (as a string) for the key into the store.
+ *
+ * Places the new value, as a string, for the key into the store.
+ *
+ * \note This is equivalent of calling #kvStore_Put with `(int) strlen(data)`.
+ *
+ * \warning The NULL terminating character is not included in the number of bytes stored in the KeyValue store.
+ *
+ * @param rev the location where to store the revision of this value, or `NULL` if the stream information is not needed.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ * @param data the pointer to the string to store.
+ */
+NATS_EXTERN natsStatus
+kvStore_PutString(uint64_t *rev, kvStore *kv, const char *key, const char *data);
+
+/** \brief Places the value for the key into the store if and only if the key does not exist.
+ *
+ * Places the value for the key into the store if and only if the key does not exist.
+ *
+ * @param rev the location where to store the revision of this value, or `NULL` if the stream information is not needed.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ * @param data the pointer to the data in memory.
+ * @param len the number of bytes to copy from the data's memory location.
+ */
+NATS_EXTERN natsStatus
+kvStore_Create(uint64_t *rev, kvStore *kv, const char *key, const void *data, int len);
+
+/** \brief Places the value (as a string) for the key into the store if and only if the key does not exist.
+ *
+ * Places the value (as a string) for the key into the store if and only if the key does not exist.
+ *
+ * \note This is equivalent of calling #kvStore_Create with `(int) strlen(data)`.
+ *
+ * \warning The NULL terminating character is not included in the number of bytes stored in the KeyValue store.
+ *
+ * @param rev the location where to store the revision of this value, or `NULL` if the stream information is not needed.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ * @param data the pointer to the string.
+ */
+NATS_EXTERN natsStatus
+kvStore_CreateString(uint64_t *rev, kvStore *kv, const char *key, const char *data);
+
+/** \brief Updates the value for the key into the store if and only if the latest revision matches.
+ *
+ * Updates the value for the key into the store if and only if the latest revision matches.
+ *
+ * @param rev the location where to store the revision of this value, or `NULL` if the stream information is not needed.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ * @param data the pointer to the data in memory.
+ * @param len the number of bytes to copy from the data's memory location.
+ * @param last the expected latest revision prior to the update.
+ */
+NATS_EXTERN natsStatus
+kvStore_Update(uint64_t *rev, kvStore *kv, const char *key, const void *data, int len, uint64_t last);
+
+/** \brief Updates the value (as a string) for the key into the store if and only if the latest revision matches.
+ *
+ * Updates the value (as a string) for the key into the store if and only if the latest revision matches.
+ *
+ * \note This is equivalent of calling #kvStore_Update with `(int) strlen(data)`.
+ *
+ * \warning The NULL terminating character is not included in the number of bytes stored in the KeyValue store.
+ *
+ * @param rev the location where to store the revision of this value, or `NULL` if the stream information is not needed.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ * @param data the pointer to the string.
+ * @param last the expected latest revision prior to the update.
+ */
+NATS_EXTERN natsStatus
+kvStore_UpdateString(uint64_t *rev, kvStore *kv, const char *key, const char *data, uint64_t last);
+
+/** \brief Deletes a key by placing a delete marker and leaving all revisions.
+ *
+ * Deletes a key by placing a delete marker and leaving all revisions.
+ *
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ */
+NATS_EXTERN natsStatus
+kvStore_Delete(kvStore *kv, const char *key);
+
+/** \brief Deletes a key by placing a purge marker and removing all revisions.
+ *
+ * Deletes a key by placing a purge marker and removing all revisions.
+ *
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ */
+NATS_EXTERN natsStatus
+kvStore_Purge(kvStore *kv, const char *key);
+
+/** \brief Initializes a KeyValue watcher options structure.
+ *
+ * Use this before setting specific watcher options and passing it
+ * to #kvStore_Watch.
+ *
+ * @param opts the pointer to the #kvWatchOptions to initialize.
+ */
+NATS_EXTERN natsStatus
+kvWatchOptions_Init(kvWatchOptions *opts);
+
+/** \brief Removes all current delete markers.
+ *
+ * Removes all current delete markers.
+ *
+ * This is a maintenance option if there is a larger buildup of delete markers.
+ *
+ * \note Use #kvWatchOptions.Timeout to specify how long to wait (in milliseconds)
+ * in gathering all keys that have purge markers. This function will still
+ * purge some of the keys and return #NATS_TIMEOUT to indicate that it may not
+ * have deleted them all.
+ *
+ * @see kvWatchOptions_Init
+ *
+ * @param kv the pointer to the #kvStore object.
+ * @param opts the pointer to the #kvWatchOptions, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+kvStore_PurgeDeletes(kvStore *kv, kvWatchOptions *opts);
+
+/** \brief Returns a watcher for any updates to keys that match the `keys` argument.
+ *
+ * Returns a watcher for any updates to keys that match the `keys` argument, which
+ * could include wildcard.
+ *
+ * A `NULL` entry will be posted when the watcher has received all initial values.
+ *
+ * Call #kvWatcher_Next to get the next #kvEntry.
+ *
+ * \note The watcher should be destroyed to release memory using #kvWatcher_Destroy.
+ *
+ * @param new_watcher the location where to store the pointer to the new #kvWatcher object.
+ * @param kv the pointer to the #kvStore object.
+ * @param keys the keys (wildcard possible) to create the watcher for.
+ * @param opts the watcher options, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *keys, kvWatchOptions *opts);
+
+/** \brief Returns a watcher for any updates to any keys of the KeyValue store bucket.
+ *
+ * Returns a watcher for any updates to any keys of the KeyValue store bucket.
+ *
+ * A `NULL` entry will be posted when the watcher has received all initial values.
+ *
+ * Call #kvWatcher_Next to get the next #kvEntry.
+ *
+ * \note The watcher should be destroyed to release memory using #kvWatcher_Destroy.
+ *
+ * @param new_watcher the location where to store the pointer to the new #kvWatcher object.
+ * @param kv the pointer to the #kvStore object.
+ * @param opts the watcher options, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+kvStore_WatchAll(kvWatcher **new_watcher, kvStore *kv, kvWatchOptions *opts);
+
+/** \brief Returns all keys in the bucket.
+ *
+ * Returns all keys in the bucket.
+ *
+ * \note Use #kvWatchOptions.Timeout to specify how long to wait (in milliseconds)
+ * to gather all keys for this bucket. If the deadline is reached, this function
+ * will return #NATS_TIMEOUT and no keys.
+ *
+ * \warning The user should call #kvKeysList_Destroy to release memory allocated
+ * for the entries list.
+ *
+ * @see kvWatchOptions_Init
+ * @see kvKeysList_Destroy
+ *
+ * @param list list the pointer to a #kvKeysList that will be initialized and filled with resulting key strings.
+ * @param kv the pointer to the #kvStore object.
+ * @param opts the history options, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts);
+
+/** \brief Destroys this list of KeyValue store key strings.
+ *
+ * This function iterates through the list of all key strings and free them.
+ * It then frees the array that was allocated to hold pointers to those keys.
+ *
+ * \note The #kvKeysList object itself is not freed since it is expected that
+ * users will pass a pointer to a stack object. Should the user create its own
+ * object, it will be the user responsibility to free this object.
+ *
+ * @param list the #kvKeysList list of key strings to destroy.
+ */
+NATS_EXTERN void
+kvKeysList_Destroy(kvKeysList *list);
+
+/** \brief Returns all historical entries for the key.
+ *
+ * Returns all historical entries for the key
+ *
+ * Use the options to alter the behavior. For instance, if delete markers
+ * are not desired, option #kvWatchOptions.IgnoreDeletes should be specified.
+ *
+ * \note Use #kvWatchOptions.Timeout to specify how long to wait (in milliseconds)
+ * to gather all entries for this key. If the deadline is reached, this function
+ * will return #NATS_TIMEOUT and no entries.
+ *
+ * \warning The user should call #kvEntryList_Destroy to release memory allocated
+ * for the entries list.
+ *
+ * @see kvWatchOptions_Init
+ * @see kvEntryList_Destroy
+ *
+ * @param list the pointer to a #kvEntryList that will be initialized and filled with resulting entries.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the key for which the history is requested.
+ * @param opts the history options, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+kvStore_History(kvEntryList *list, kvStore *kv, const char *key, kvWatchOptions *opts);
+
+/** \brief Destroys this list of KeyValue store entries.
+ *
+ * This function iterates through the list of all entries and call #kvEntry_Destroy.
+ * It then frees the array that was allocated to hold pointers to those entries.
+ *
+ * \note The #kvEntryList object itself is not freed since it is expected that
+ * users will pass a pointer to a stack object. Should the user create its own
+ * object, it will be the user responsibility to free this object.
+ *
+ * @param list the #kvEntryList list of #kvEntry objects to destroy.
+ */
+NATS_EXTERN void
+kvEntryList_Destroy(kvEntryList *list);
+
+/** \brief Returns the bucket name of this KeyValue store object.
+ *
+ * Returns the bucket name of this KeyValue store object, or `NULL` if
+ * `kv` itself is NULL.
+ *
+ * \warning Do not free the string returned by this function.
+ *
+ * @param kv the pointer to the #kvStore object.
+ */
+NATS_EXTERN const char*
+kvStore_Bucket(kvStore *kv);
+
+// PurgeDeletes
+
+/** \brief Returns the status and configuration of a bucket.
+ *
+ * Returns the status and configuration of a bucket.
+ *
+ * \note The status should be destroyed to release memory using #kvStatus_Destroy.
+ *
+ * @param new_status the location where to store the status of this KeyValue store.
+ * @param kv the pointer to the #kvStore object.
+ */
+NATS_EXTERN natsStatus
+kvStore_Status(kvStatus **new_status, kvStore *kv);
+
+/** \defgroup kvWatcher KeyValue store watcher
+ *
+ * These functions allow to receive updates for key(s) on a given bucket.
+ *
+ * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
+ * necessarily bumping the major version of the library.
+ *
+ *  @{
+ */
+
+/** \brief Returns the next entry for this watcher.
+ *
+ * Returns the next entry for this watcher. The entry may be `NULL`
+ * (with #NATS_OK status) to indicate that the initial state has
+ * been retrieved.
+ *
+ * If a thread is waiting on this call, it can be canceled with a call to
+ * #kvWatcher_Stop.
+ *
+ * \note The entry should be destroyed to release memory using #kvEntry_Destroy.
+ *
+ * @param new_entry the location where to store the pointer to the #kvEntry object.
+ * @param w the pointer to the #kvWatcher object.
+ * @param timeout how long to wait (in milliseconds) for the next entry.
+ */
+NATS_EXTERN natsStatus
+kvWatcher_Next(kvEntry **new_entry, kvWatcher *w, int64_t timeout);
+
+/** \brief Stops the watcher.
+ *
+ * Stops the watcher. Stopping a stopped watcher returns #NATS_OK.
+ *
+ * After this call, new and existing calls to #kvWatcher_Next (that are waiting
+ * for an update) will return with #NATS_ILLEGAL_STATE.
+ *
+ * @param w the pointer to the #kvWatcher object.
+ */
+NATS_EXTERN natsStatus
+kvWatcher_Stop(kvWatcher *w);
+
+/** \brief Destroys the KeyValue watcher object.
+ *
+ * Releases memory allocated for this #kvWatcher object.
+ *
+ * @param w the pointer to the #kvWatcher object.
+ */
+NATS_EXTERN void
+kvWatcher_Destroy(kvWatcher *w);
+
+/** @} */ // end of kvWatcher
+
+/** \defgroup kvStatus KeyValue store status
+ *
+ * These functions allow to inspect the status of a bucket.
+ *
+ * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
+ * necessarily bumping the major version of the library.
+ *
+ *  @{
+ */
+
+/** \brief Returns the bucket name.
+ *
+ * Returns the bucket name, or `NULL` if `sts` itself is `NULL`.
+ *
+ * @param sts the pointer to the #kvStatus object.
+ */
+NATS_EXTERN const char*
+kvStatus_Bucket(kvStatus *sts);
+
+/** \brief Returns how many messages are in the bucket, including historical values.
+ *
+ * Returns how many messages are in the bucket, including historical values, or `0` if `sts` itself is `NULL`.
+ *
+ * @param sts the pointer to the #kvStatus object.
+ */
+NATS_EXTERN uint64_t
+kvStatus_Values(kvStatus *sts);
+
+/** \brief Returns the configured history kept per key.
+ *
+ * Returns the configured history kept per key, or `0` if `sts` itself is `NULL`.
+ *
+ * @param sts the pointer to the #kvStatus object.
+ */
+NATS_EXTERN int64_t
+kvStatus_History(kvStatus *sts);
+
+/** \brief Returns how long the bucket keeps values for.
+ *
+ * Returns how long the bucket keeps values for, or `0` if `sts` itself is `NULL`.
+ *
+ * @param sts the pointer to the #kvStatus object.
+ */
+NATS_EXTERN int64_t
+kvStatus_TTL(kvStatus *sts);
+
+/** \brief Destroys the KeyValue status object.
+ *
+ * Releases memory allocated for this #kvStatus object.
+ *
+ * @param sts the pointer to the #kvStatus object.
+ */
+NATS_EXTERN void
+kvStatus_Destroy(kvStatus *sts);
+
+/** @} */ // end of kvStatus
+
+/** @} */ // end of kvGroup
 
 /** @} */ // end of funcGroup
 

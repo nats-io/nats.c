@@ -27,6 +27,9 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
     * [JetStream](#jetstream)
         * [JetStream Basic Usage](#jetstream-basic-usage)
         * [JetStream Basic Management](#jetstream-basic-usage)
+    * [KeyValue](#keyvalue)
+        * [KeyValue Management](#keyvalue-management)
+        * [KeyValue APIs](#keyvalue-apis)
 	* [Getting Started](#getting-started)
 	* [Basic Usage](#basic-usage)
     * [Headers](#headers)
@@ -533,6 +536,210 @@ js_UpdateStream(NULL, js, &cfg, NULL, &jerr);
 
 // Delete a Stream
 js_DeleteStream(js, "ORDERS", NULL, &jerr);
+```
+
+## KeyValue
+
+**EXPERIMENTAL FEATURE! We reserve the right to change the API without necessarily bumping the major version of the library.**
+
+A KeyValue store is a materialized view based on JetStream. A bucket is a stream and keys are subjects within that stream.
+
+Some features require NATS Server `v2.6.2`, so we recommend that you use the latest NATS Server release to have a better experience.
+
+The new objects and APIs are full documented in the online [documentation](http://nats-io.github.io/nats.c/group__kv_group.html).
+
+### KeyValue Management
+
+Example of how to create a KeyValue store:
+```c
+jsCtx       *js = NULL;
+kvStore     *kv = NULL;
+kvConfig    kvc;
+
+// Assume we got a JetStream context in `js`...
+
+kvConfig_Init(&kvc);
+kvc.Bucket = "KVS";
+kvc.History = 10;
+s = js_CreateKeyValue(&kv, js, &kvc);
+
+// Do some stuff...
+
+// This is to free the memory used by `kv` object,
+// not delete the KeyValue store in the server
+kvStore_Destroy(kv);
+```
+
+This shows how to "bind" to an existing one:
+```c
+jsCtx       *js = NULL;
+kvStore     *kv = NULL;
+
+// Assume we got a JetStream context in `js`...
+
+s = js_KeyValue(&kv, ks, "KVS");
+
+// Do some stuff...
+
+// This is to free the memory used by `kv` object,
+// not delete the KeyValue store in the server
+kvStore_Destroy(kv);
+```
+
+This is how to delete a KeyValue store in the server:
+```c
+jsCtx       *js = NULL;
+
+// Assume we got a JetStream context in `js`...
+
+s = js_DeleteKeyValue(js, "KVS");
+```
+
+### KeyValue APIs
+
+This is how to put a value for a given key:
+```c
+kvStore     *kv = NULL;
+uint64_t    rev = 0;
+
+// Assume we got a kvStore...
+
+s = kvStore_PutString(&rev, kv, "MY_KEY", "my value");
+
+// If the one does not care about getting the revision, pass NULL:
+s = kvStore_PutString(NULL, kv, "MY_KEY", "my value");
+```
+
+The above places a value for a given key, but if instead one wants to make sure that the value is placed for the key only if it never existed before, one would call:
+```c
+// Same note than before: if "rev" is not needed, pass NULL:
+s = kvStore_CreateString(&rev, kv, "MY_KEY", "my value");
+```
+
+One can update a key if and only if the last revision in the server matches the one passed to this API:
+```c
+// This would update the key "MY_KEY" with the value "my updated value" only if the current revision (sequence number) for this key is 10.
+s = kvStore_UpdateString(&rev, kv, "MY_KEY", "my updated value", 10);
+```
+
+This is how to get a key:
+```c
+kvStore *kv = NULL;
+kvEntry *e  = NULL;
+
+// Assume we got a kvStore...
+
+s = kvStore_Get(&e, kv, "MY_KEY");
+
+// Then we can get some fields from the entry:
+printf("Key value: %s\n", kvEntry_ValueString(e));
+
+// Once done with the entry, we need to destroy it to release memory.
+// This is NOT deleting the key from the server.
+kvEntry_Destroy(e);
+```
+
+This is how to purge a key:
+```c
+kvStore *kv = NULL;
+
+// Assume we got a kvStore...
+
+s = kvStore_Purge(kv, "MY_KEY");
+```
+
+This will delete the key in the server:
+```c
+kvStore *kv = NULL;
+
+// Assume we got a kvStore...
+
+s = kvStore_Delete(kv, "MY_KEY");
+```
+
+To create a "watcher" for a given key:
+```c
+kvWatcher       *w = NULL;
+kvWatchOptions  o;
+
+// Assume we got a kvStore...
+
+// Say that we are not interested in getting the
+// delete markers...
+
+// Initialize a kvWatchOptions object:
+kvWatchOptions_Init(&o);
+o.IgnoreDeletes = true;
+// Create the watcher
+s = kvStore_Watch(&w, kv, "foo.*", &o);
+// Check for error..
+
+// Now get updates:
+while (some_condition)
+{
+    kvEntry *e = NULL;
+
+    // Wait for the next update for up to 5 seconds
+    s = kvWatcher_Next(&e, w, 5000);
+
+    // Do something with the entry...
+
+    // Destroy to release memory
+    kvEntry_Destroy(e);
+}
+
+// When done with the watcher, it needs to be destroyed to release memory:
+kvWatcher_Destroy(w);
+```
+
+To get the history of a key:
+```c
+kvEntryList l;
+int         i;
+
+// The list is defined on the stack and will be initilized/updated by this call:
+s = kvStore_History(&l, kv, "MY_KEY", NULL);
+
+for (i=0; i<l.Count; i++)
+{
+    kvEntry *e = l.Entries[i];
+
+    // Do something with the entry...
+}
+// When done with the list, call this to free entries and the content of the list.
+kvEntryList_Destroy(&l);
+
+// In order to set a timeout to get the history, we need to do so through options:
+kvWatchOptions o;
+
+kvWatchOptions_Init(&o);
+o.Timeout = 5000; // 5 seconds.
+s = kvStore_History(&l, kv, "MY_KEY", &o);
+```
+
+This is how you would get the keys of a bucket:
+```c
+kvKeysList  l;
+int         i;
+
+// If no option is required, pass NULL as the last argument.
+s = kvStore_Keys(&l, kv, NULL);
+// Check error..
+
+// Go over all keys:
+for (i=0; i<l.Count; i++)
+    printf("Key: %s\n", l.Keys[i]);
+
+// When done, list need to be destroyed.
+kvKeysList_Destroy(&l);
+
+// If option need to be specified:
+
+kvWatchOptions o;
+
+kvWatchOptions_Init(&o);
+o.Timeout = 5000; // 5 seconds.
+s = kvStore_Keys(&l, kv, &o);
 ```
 
 ## Headers

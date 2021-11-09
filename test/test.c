@@ -26981,13 +26981,24 @@ _expectDelete(kvWatcher *w, const char *key, uint64_t rev)
 }
 
 static void
+_stopWatcher(void *closure)
+{
+    kvWatcher *w = (kvWatcher*) closure;
+
+    nats_Sleep(100);
+    kvWatcher_Stop(w);
+}
+
+static void
 test_KeyValueWatch(void)
 {
     natsStatus          s;
     kvStore             *kv = NULL;
     kvWatcher           *w  = NULL;
     kvEntry             *e  = NULL;
+    natsThread          *t  = NULL;
     kvConfig            kvc;
+    int64_t             start;
 
     JS_SETUP(2, 6, 2);
 
@@ -27101,6 +27112,16 @@ test_KeyValueWatch(void)
     testCond(_expectUpdate(w, "t.age", "49", 10));
     testCond(_expectInitDone(w));
 
+    test("Block: ");
+    start = nats_Now();
+    s = natsThread_Create(&t, _stopWatcher, (void*) w);
+    IFOK(s, kvWatcher_Next(&e, w, 10000));
+    testCond((s == NATS_ILLEGAL_STATE) && (e == NULL)
+                && ((nats_Now() - start) <= 1000));
+    nats_clearLastError();
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
     kvWatcher_Destroy(w);
     kvStore_Destroy(kv);
 

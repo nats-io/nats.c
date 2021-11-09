@@ -17,5 +17,6 @@ var structjs_consumer_config =
     [ "MaxWaiting", "structjs_consumer_config.html#a8472d49fae908ab0291b4d62c8411b76", null ],
     [ "MaxAckPending", "structjs_consumer_config.html#aeb2336d480e3885385d1b08410e89892", null ],
     [ "FlowControl", "structjs_consumer_config.html#a484c64b6c54f6f758f54315470ed20d0", null ],
-    [ "Heartbeat", "structjs_consumer_config.html#ac439828c3bedb8826a1e92de13280d53", null ]
+    [ "Heartbeat", "structjs_consumer_config.html#ac439828c3bedb8826a1e92de13280d53", null ],
+    [ "HeadersOnly", "structjs_consumer_config.html#a30d4142bac47ab6dc583c5ee193704e6", null ]
 ];

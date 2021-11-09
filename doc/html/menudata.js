@@ -75,18 +75,22 @@ var menudata={children:[
 {text:"File Members",url:"globals.html",children:[
 {text:"All",url:"globals.html",children:[
 {text:"j",url:"globals.html#index_j"},
+{text:"k",url:"globals_k.html#index_k"},
 {text:"n",url:"globals_n.html#index_n"},
 {text:"s",url:"globals_s.html#index_s"}]},
 {text:"Functions",url:"globals_func.html",children:[
 {text:"j",url:"globals_func.html#index_j"},
+{text:"k",url:"globals_func_k.html#index_k"},
 {text:"n",url:"globals_func_n.html#index_n"},
 {text:"s",url:"globals_func_s.html#index_s"}]},
 {text:"Typedefs",url:"globals_type.html",children:[
 {text:"j",url:"globals_type.html#index_j"},
+{text:"k",url:"globals_type.html#index_k"},
 {text:"n",url:"globals_type.html#index_n"},
 {text:"s",url:"globals_type.html#index_s"}]},
 {text:"Enumerations",url:"globals_enum.html"},
 {text:"Enumerator",url:"globals_eval.html",children:[
 {text:"j",url:"globals_eval.html#index_j"},
+{text:"k",url:"globals_eval.html#index_k"},
 {text:"n",url:"globals_eval.html#index_n"}]},
 {text:"Macros",url:"globals_defs.html"}]}]}]}

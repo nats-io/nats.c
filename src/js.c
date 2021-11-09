@@ -48,8 +48,6 @@ const int64_t    jsOrderedHBInterval     = 5*(int64_t)1E9;
 #define jsReplyPrefixLen    (NATS_INBOX_PRE_LEN + (jsReplyTokenSize) + 1)
 #define jsDefaultMaxMsgs    (512 * 1024)
 
-#define jsAckPrefix             "$JS.ACK."
-#define jsAckPrefixLen          (8)
 #define jsLastConsumerSeqHdr    "Nats-Last-Consumer"
 
 typedef struct __jsOrderedConsInfo
@@ -102,6 +100,9 @@ void
 js_release(jsCtx *js)
 {
     bool doFree;
+
+    if (js == NULL)
+        return;
 
     js_lock(js);
     doFree = (--(js->refs) == 0);
@@ -418,11 +419,17 @@ _setHeadersFromOptions(natsMsg *msg, jsPubOptions *opts)
         snprintf(temp, sizeof(temp), "%" PRIu64, opts->ExpectLastSeq);
         s = natsMsgHeader_Set(msg, jsExpectedLastSeqHdr, temp);
     }
-
-    if ((s == NATS_OK) && (opts->ExpectLastSubjectSeq > 0))
+    if (s == NATS_OK)
     {
-        snprintf(temp, sizeof(temp), "%" PRIu64, opts->ExpectLastSubjectSeq);
-        s = natsMsgHeader_Set(msg, jsExpectedLastSubjSeqHdr, temp);
+        if (opts->ExpectNoMessage)
+        {
+            s = natsMsgHeader_Set(msg, jsExpectedLastSubjSeqHdr, "0");
+        }
+        else if (opts->ExpectLastSubjectSeq > 0)
+        {
+            snprintf(temp, sizeof(temp), "%" PRIu64, opts->ExpectLastSubjectSeq);
+            s = natsMsgHeader_Set(msg, jsExpectedLastSubjSeqHdr, temp);
+        }
     }
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -983,6 +990,7 @@ jsSub_free(jsSub *jsi)
     NATS_FREE(jsi->nxtMsgSubj);
     NATS_FREE(jsi->cmeta);
     NATS_FREE(jsi->fcReply);
+    NATS_FREE(jsi->fsubj);
     NATS_FREE(jsi);
 
     js_release(js);
@@ -1104,8 +1112,8 @@ _copyString(char **new_str, const char *str, int l)
     return NATS_OK;
 }
 
-static natsStatus
-_getMetaData(const char *reply,
+natsStatus
+js_getMetaData(const char *reply,
     char **domain,
     char **stream,
     char **consumer,
@@ -1304,7 +1312,7 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg
     if (jsi->cmeta == NULL)
         return NATS_OK;
 
-    s = _getMetaData(jsi->cmeta, NULL, NULL, NULL, NULL, &jsi->sseq, &jsi->dseq, NULL, NULL, 2);
+    s = js_getMetaData(jsi->cmeta, NULL, NULL, NULL, NULL, &jsi->sseq, &jsi->dseq, NULL, NULL, 2);
     if (s != NATS_OK)
     {
         if (s == NATS_ERR)
@@ -2063,12 +2071,15 @@ PROCESS_INFO:
                     s = nats_setDefaultError(NATS_NO_MEMORY);
             }
             IF_OK_DUP_STRING(s, jsi->stream, stream);
+            if ((s == NATS_OK) && (opts->Ordered))
+                DUP_STRING(s, jsi->fsubj, cfg->FilterSubject);
             if (s == NATS_OK)
             {
                 jsi->js     = js;
                 jsi->hbi    = hbi;
                 jsi->pull   = isPullMode;
                 jsi->ordered= opts->Ordered;
+                jsi->dseq   = 1;
                 js_retain(js);
 
                 if ((usrCB != NULL) && !opts->ManualAck && (opts->Config.AckPolicy != js_AckNone))
@@ -2352,7 +2363,7 @@ natsMsg_GetMetaData(jsMsgMetaData **new_meta, natsMsg *msg)
     if (meta == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    s = _getMetaData(msg->reply+jsAckPrefixLen,
+    s = js_getMetaData(msg->reply+jsAckPrefixLen,
                         &(meta->Domain),
                         &(meta->Stream),
                         &(meta->Consumer),
@@ -2494,6 +2505,7 @@ _recreateOrderedCons(void *closure)
         jsi->fcDelivered = 0;
         // Create consumer request for starting policy.
         jsConsumerConfig_Init(&cc);
+        cc.FilterSubject    = jsi->fsubj;
         cc.FlowControl      = true;
         cc.AckPolicy        = js_AckNone;
         cc.MaxDeliver       = 1;
@@ -2625,7 +2637,7 @@ jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *
         return NATS_OK;
 
     // Normal message here.
-    s = _getMetaData(natsMsg_GetReply(msg), NULL, NULL, NULL, NULL, &sseq, &dseq, NULL, NULL, 2);
+    s = js_getMetaData(natsMsg_GetReply(msg), NULL, NULL, NULL, NULL, &sseq, &dseq, NULL, NULL, 2);
     if (s == NATS_OK)
     {
         jsi = sub->jsi;

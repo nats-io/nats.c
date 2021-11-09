@@ -385,7 +385,52 @@ typedef struct __jsSub
     uint64_t            fciseq;
     char                *fcReply;
 
+    // When reseting an OrderedConsumer, need the original filter subject.
+    char                *fsubj;
+
 } jsSub;
+
+struct __kvStore
+{
+    natsMutex           *mu;
+    int                 refs;
+    jsCtx               *js;
+    char                *bucket;
+    char                *stream;
+    char                *pre;
+
+};
+
+struct __kvEntry
+{
+    kvStore             *kv;
+    const char          *key;
+    natsMsg             *msg;
+    uint64_t            delta;
+    kvOperation         op;
+    struct __kvEntry    *next;
+
+};
+
+struct __kvStatus
+{
+    kvStore             *kv;
+    jsStreamInfo        *si;
+
+};
+
+struct __kvWatcher
+{
+    natsMutex           *mu;
+    int                 refs;
+    kvStore             *kv;
+    natsSubscription    *sub;
+    bool                ignoreDel;
+    bool                initDone;
+    bool                retMarker;
+    bool                stopped;
+
+};
 
 struct __natsSubscription
 {
@@ -622,8 +667,8 @@ struct __natsConnection
     } el;
 
     // Msg filters for testing.
-	// Protected by subsMu
-	natsMsgFilter       filter;
+    // Protected by subsMu
+    natsMsgFilter       filter;
     void                *filterClosure;
 };
 

@@ -228,6 +228,13 @@ JetStreamOrderedConsWithErrors
 JetStreamOrderedConsAutoUnsub
 JetStreamStreamsSealAndRollup
 JetStreamGetMsgAndLastMsg
+KeyValueManager
+KeyValueBasics
+KeyValueWatch
+KeyValueHistory
+KeyValueKeys
+KeyValueDeleteVsPurge
+KeyValueDeleteTombstones
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

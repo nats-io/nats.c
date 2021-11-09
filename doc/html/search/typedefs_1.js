@@ -1,23 +1,11 @@
 var searchData=
 [
-  ['natsconnection_1043',['natsConnection',['../group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec',1,'nats.h']]],
-  ['natsconnectionhandler_1044',['natsConnectionHandler',['../group__callbacks_group.html#gacdef6aff3e47953f19e35857ab8e274c',1,'nats.h']]],
-  ['natscustomreconnectdelayhandler_1045',['natsCustomReconnectDelayHandler',['../group__callbacks_group.html#ga3353d4b92851c52121f65aaf0684cba4',1,'nats.h']]],
-  ['natserrhandler_1046',['natsErrHandler',['../group__callbacks_group.html#ga9e511dffa471dfb971b7dd2b12329626',1,'nats.h']]],
-  ['natsevloop_5fattach_1047',['natsEvLoop_Attach',['../group__callbacks_group.html#ga245eab0a01a485e40fba267f84ec037f',1,'nats.h']]],
-  ['natsevloop_5fdetach_1048',['natsEvLoop_Detach',['../group__callbacks_group.html#gab63dee7f7012ba11ae20b76dbc36f2d0',1,'nats.h']]],
-  ['natsevloop_5freadaddremove_1049',['natsEvLoop_ReadAddRemove',['../group__callbacks_group.html#gaea4c125ecfb43eaf43da20e8444c2aaa',1,'nats.h']]],
-  ['natsevloop_5fwriteaddremove_1050',['natsEvLoop_WriteAddRemove',['../group__callbacks_group.html#ga2bb5dd2d821ca5bbc0488f7e6aceed17',1,'nats.h']]],
-  ['natsinbox_1051',['natsInbox',['../group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1',1,'nats.h']]],
-  ['natsmsg_1052',['natsMsg',['../group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a',1,'nats.h']]],
-  ['natsmsghandler_1053',['natsMsgHandler',['../group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe',1,'nats.h']]],
-  ['natsmsglist_1054',['natsMsgList',['../group__types_group.html#gafd5523161ec3783e79719cb9a9a66b5b',1,'nats.h']]],
-  ['natsoncompletecb_1055',['natsOnCompleteCB',['../group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a',1,'nats.h']]],
-  ['natsoptions_1056',['natsOptions',['../group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e',1,'nats.h']]],
-  ['natssignaturehandler_1057',['natsSignatureHandler',['../group__callbacks_group.html#gab786ffd670c86de0563559351305080b',1,'nats.h']]],
-  ['natssock_1058',['natsSock',['../nats_8h.html#af798865ac824e5959987de0fe8d07383',1,'nats.h']]],
-  ['natsstatistics_1059',['natsStatistics',['../group__types_group.html#ga57a4b8c7109e2773878655722ce028aa',1,'nats.h']]],
-  ['natssubscription_1060',['natsSubscription',['../group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8',1,'nats.h']]],
-  ['natstokenhandler_1061',['natsTokenHandler',['../group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094',1,'nats.h']]],
-  ['natsuserjwthandler_1062',['natsUserJWTHandler',['../group__callbacks_group.html#ga258b30458134be90f17315c037f34b7b',1,'nats.h']]]
+  ['kvconfig_0',['kvConfig',['../group__types_group.html#ga6d594b091b4bb46192336413066a8edf',1,'nats.h']]],
+  ['kventry_1',['kvEntry',['../group__types_group.html#gad489fb4074f27427560ca71797db6191',1,'nats.h']]],
+  ['kventrylist_2',['kvEntryList',['../group__types_group.html#ga0125d394a3cbae2a1713eed8fab7f78e',1,'nats.h']]],
+  ['kvkeyslist_3',['kvKeysList',['../group__types_group.html#gab36492d9d4370337cfed80edce4144e0',1,'nats.h']]],
+  ['kvstatus_4',['kvStatus',['../group__types_group.html#gad3a0dd2dac950d5709ee5772b104fc80',1,'nats.h']]],
+  ['kvstore_5',['kvStore',['../group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a',1,'nats.h']]],
+  ['kvwatcher_6',['kvWatcher',['../group__types_group.html#ga526fa6d37e818784b94cdc1713f3a043',1,'nats.h']]],
+  ['kvwatchoptions_7',['kvWatchOptions',['../group__types_group.html#gac32f992fe797a1f7befc7dc3452640b6',1,'nats.h']]]
 ];

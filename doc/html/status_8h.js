@@ -153,6 +153,10 @@ var status_8h =
       [ "JSConsumerStoreFailedErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a2984e6b8850b6cfed9506a25bcbe0608", null ],
       [ "JSConsumerExistingActiveErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a86407070c2bbe04d97a25f2ceda4ea58", null ],
       [ "JSConsumerReplacementWithDifferentNameErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a051bfd5e3bb9ba2b2398e6501426bc63", null ],
-      [ "JSConsumerDescriptionTooLongErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ab1b6c048b0326e3f705b470e5a7f11f5", null ]
+      [ "JSConsumerDescriptionTooLongErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ab1b6c048b0326e3f705b470e5a7f11f5", null ],
+      [ "JSConsumerWithFlowControlNeedsHeartbeatsErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70abc25cc794fce2ab7b9757ff506de51c3", null ],
+      [ "JSStreamSealedErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a9bd3f4f7a2eca1f1ed49cc0499cb9c78", null ],
+      [ "JSStreamPurgeFailedErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a33f2e301313339eded6163982a680186", null ],
+      [ "JSStreamRollupFailedErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70affa3c8139019a077fac6d403d7ed0522", null ]
     ] ]
 ];

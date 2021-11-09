@@ -10,7 +10,8 @@ var group__types_group =
       [ "ExpectStream", "structjs_pub_options.html#ac7ac74d2557d772c3092288dacf3711f", null ],
       [ "ExpectLastMsgId", "structjs_pub_options.html#a095391b33a261586fc02eaf013b65e61", null ],
       [ "ExpectLastSeq", "structjs_pub_options.html#a3b02b60b05caa6d242079a4c26b181bf", null ],
-      [ "ExpectLastSubjectSeq", "structjs_pub_options.html#aeefec1d2c7644562d23b87e55bf2e253", null ]
+      [ "ExpectLastSubjectSeq", "structjs_pub_options.html#aeefec1d2c7644562d23b87e55bf2e253", null ],
+      [ "ExpectNoMessage", "structjs_pub_options.html#a740a7edee8c832a75b75fded6046ba90", null ]
     ] ],
     [ "jsPlacement", "structjs_placement.html", [
       [ "Cluster", "structjs_placement.html#ad8c83588d57f0e30959cfb6f3d5d61bf", null ],
@@ -49,7 +50,11 @@ var group__types_group =
       [ "Placement", "structjs_stream_config.html#acee6c66afc78d79c2f518eed89177efb", null ],
       [ "Mirror", "structjs_stream_config.html#acdba5b22e4e60fd81a54769a7d09bc51", null ],
       [ "Sources", "structjs_stream_config.html#a8f0ee08922e5b2108082b5b9e4a6284b", null ],
-      [ "SourcesLen", "structjs_stream_config.html#a34960d6acc710c2f32b563f4bb7c9c0a", null ]
+      [ "SourcesLen", "structjs_stream_config.html#a34960d6acc710c2f32b563f4bb7c9c0a", null ],
+      [ "Sealed", "structjs_stream_config.html#aede3fd2ab13d230eda14c96f9997e1b7", null ],
+      [ "DenyDelete", "structjs_stream_config.html#af2d42dd29b9a35257937aeeb53c9f287", null ],
+      [ "DenyPurge", "structjs_stream_config.html#a575ffbaa85b0300032963296b090583a", null ],
+      [ "AllowRollup", "structjs_stream_config.html#aba71cdb342181f52bb9f7ff5f770a1fa", null ]
     ] ],
     [ "jsLostStreamData", "structjs_lost_stream_data.html", [
       [ "Msgs", "structjs_lost_stream_data.html#a5d2e87697526033c842a7f955776dfda", null ],
@@ -115,7 +120,8 @@ var group__types_group =
       [ "MaxWaiting", "structjs_consumer_config.html#a8472d49fae908ab0291b4d62c8411b76", null ],
       [ "MaxAckPending", "structjs_consumer_config.html#aeb2336d480e3885385d1b08410e89892", null ],
       [ "FlowControl", "structjs_consumer_config.html#a484c64b6c54f6f758f54315470ed20d0", null ],
-      [ "Heartbeat", "structjs_consumer_config.html#ac439828c3bedb8826a1e92de13280d53", null ]
+      [ "Heartbeat", "structjs_consumer_config.html#ac439828c3bedb8826a1e92de13280d53", null ],
+      [ "HeadersOnly", "structjs_consumer_config.html#a30d4142bac47ab6dc583c5ee193704e6", null ]
     ] ],
     [ "jsConsumerSequenceMismatch", "structjs_consumer_sequence_mismatch.html", [
       [ "Stream", "structjs_consumer_sequence_mismatch.html#aad6a17af1719c023c38a6fd254b73f8e", null ],
@@ -127,7 +133,8 @@ var group__types_group =
       [ "Consumer", "structjs_sub_options.html#a7aa5b8439ed288b858943f28c291cb36", null ],
       [ "Queue", "structjs_sub_options.html#aaf4b620d112a31f51a20389c5405805d", null ],
       [ "ManualAck", "structjs_sub_options.html#a21a905c49dfab61729d8674702d196b2", null ],
-      [ "Config", "structjs_sub_options.html#acab25d71a2efe26bb3b084071435c2b5", null ]
+      [ "Config", "structjs_sub_options.html#acab25d71a2efe26bb3b084071435c2b5", null ],
+      [ "Ordered", "structjs_sub_options.html#a95c5d2db8ca97d644042d436de119be4", null ]
     ] ],
     [ "jsSequencePair", "structjs_sequence_pair.html", [
       [ "Consumer", "structjs_sequence_pair.html#a6d205effd29f8994f0028bfaf2e8d816", null ],
@@ -217,6 +224,30 @@ var group__types_group =
       [ "PublishAsync", "structjs_options.html#a5ce5c11cc9b9df2b6bc47cd77d7b1dc4", null ],
       [ "Stream", "structjs_options.html#ae50544ee0ef8dd7d02ef9802805807ae", null ]
     ] ],
+    [ "kvConfig", "structkv_config.html", [
+      [ "Bucket", "structkv_config.html#a11b636da727c17566d5ab1274f69fee5", null ],
+      [ "Description", "structkv_config.html#a941e9cad2bab67f093bf4d9567b4749a", null ],
+      [ "MaxValueSize", "structkv_config.html#a281156a9df0130abad7f3b2728ac35a5", null ],
+      [ "History", "structkv_config.html#a0ec6b3afbfdaa33436e2ae748e986e98", null ],
+      [ "TTL", "structkv_config.html#ad2f5503e2f2522cb52e0ba1b86983dba", null ],
+      [ "MaxBytes", "structkv_config.html#a1bc37777aa91b8b57a70e7647670cd12", null ],
+      [ "StorageType", "structkv_config.html#ad5db9a58224d93ab86b4cfc4c46f1897", null ],
+      [ "Replicas", "structkv_config.html#a48f0f70383eff868321f9c94ae1a87cd", null ]
+    ] ],
+    [ "kvWatchOptions", "structkv_watch_options.html", [
+      [ "IgnoreDeletes", "structkv_watch_options.html#a0535edd21b26affc0057575bafc21a07", null ],
+      [ "IncludeHistory", "structkv_watch_options.html#a08274f08ae96e14d9ded326e4e665649", null ],
+      [ "MetaOnly", "structkv_watch_options.html#ac9094bce4f3c6513431ba32fb49e5605", null ],
+      [ "Timeout", "structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66", null ]
+    ] ],
+    [ "kvEntryList", "structkv_entry_list.html", [
+      [ "Entries", "structkv_entry_list.html#a179d4d3e5844d005be1ed9134b969a50", null ],
+      [ "Count", "structkv_entry_list.html#a156badf833c14826a022a60c61c6766c", null ]
+    ] ],
+    [ "kvKeysList", "structkv_keys_list.html", [
+      [ "Keys", "structkv_keys_list.html#aa5cb40820a1a927375215e0a94ecfc18", null ],
+      [ "Count", "structkv_keys_list.html#a78022e66c593ab41414be9d11403f082", null ]
+    ] ],
     [ "natsConnection", "group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec", null ],
     [ "natsStatistics", "group__types_group.html#ga57a4b8c7109e2773878655722ce028aa", null ],
     [ "natsSubscription", "group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8", null ],
@@ -249,6 +280,14 @@ var group__types_group =
     [ "jsPubAck", "group__types_group.html#gaf1d5e436c5d41c5b9b96d84e3d2bc86f", null ],
     [ "jsPubAckErr", "group__types_group.html#gadb7c287bc86b92765fbe45a066b96f40", null ],
     [ "jsOptions", "group__types_group.html#ga0e3a3b7cf89e7dfa955f0f8f3f1eb6e5", null ],
+    [ "kvStore", "group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a", null ],
+    [ "kvEntry", "group__types_group.html#gad489fb4074f27427560ca71797db6191", null ],
+    [ "kvStatus", "group__types_group.html#gad3a0dd2dac950d5709ee5772b104fc80", null ],
+    [ "kvWatcher", "group__types_group.html#ga526fa6d37e818784b94cdc1713f3a043", null ],
+    [ "kvConfig", "group__types_group.html#ga6d594b091b4bb46192336413066a8edf", null ],
+    [ "kvWatchOptions", "group__types_group.html#gac32f992fe797a1f7befc7dc3452640b6", null ],
+    [ "kvEntryList", "group__types_group.html#ga0125d394a3cbae2a1713eed8fab7f78e", null ],
+    [ "kvKeysList", "group__types_group.html#gab36492d9d4370337cfed80edce4144e0", null ],
     [ "stanConnection", "group__types_group.html#ga9e826493769d23086cfccefe95cdf64c", null ],
     [ "stanSubscription", "group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5", null ],
     [ "stanMsg", "group__types_group.html#ga2cf5db7703b42d97abe56a3e83b2a87d", null ],
@@ -283,5 +322,11 @@ var group__types_group =
     [ "jsReplayPolicy", "group__types_group.html#ga8650faf52b0b6b23df376eebeb9d0354", [
       [ "js_ReplayInstant", "group__types_group.html#gga8650faf52b0b6b23df376eebeb9d0354a2c4a1e2b75f31dd69a89b541d75afa44", null ],
       [ "js_ReplayOriginal", "group__types_group.html#gga8650faf52b0b6b23df376eebeb9d0354a6ee3851dac5c90a61492193dd55931f5", null ]
+    ] ],
+    [ "kvOperation", "group__types_group.html#ga89db3bd6bf11af3ac5eb3ab560d16332", [
+      [ "kvOp_Unknown", "group__types_group.html#gga89db3bd6bf11af3ac5eb3ab560d16332a0b7a6bef67e4220f5f0c4075f2ed16b6", null ],
+      [ "kvOp_Put", "group__types_group.html#gga89db3bd6bf11af3ac5eb3ab560d16332acc0e1da3c292cb7eb19d909c9dfd788a", null ],
+      [ "kvOp_Delete", "group__types_group.html#gga89db3bd6bf11af3ac5eb3ab560d16332a4efb91331f3307128c75af5b23362f83", null ],
+      [ "kvOp_Purge", "group__types_group.html#gga89db3bd6bf11af3ac5eb3ab560d16332aee19ab8144bf518e251ea2004309b657", null ]
     ] ]
 ];

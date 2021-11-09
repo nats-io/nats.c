@@ -366,11 +366,11 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key)
     kvEntry     *e      = NULL;
     DEFINE_BUF_FOR_SUBJECT;
 
-    if (!validKey(key))
-        return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
-
     *new_entry = NULL;
     *deleted   = false;
+
+    if (!validKey(key))
+        return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
     BUILD_SUBJECT;
     IFOK(s, js_GetLastMsg(&msg, kv->js, kv->stream, natsBuf_Data(&buf), NULL, NULL));
@@ -402,22 +402,20 @@ natsStatus
 kvStore_Get(kvEntry **new_entry, kvStore *kv, const char *key)
 {
     natsStatus  s;
-    kvEntry     *e = NULL;
     bool        deleted = false;
 
     if ((new_entry == NULL) || (kv == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = _getEntry(&e, &deleted, kv, key);
+    s = _getEntry(new_entry, &deleted, kv, key);
     if (s == NATS_OK)
     {
         if (deleted)
         {
-            kvEntry_Destroy(e);
+            kvEntry_Destroy(*new_entry);
+            *new_entry = NULL;
             return NATS_NOT_FOUND;
         }
-        // Valid entry, will return it.
-        *new_entry = e;
     }
     else if (s == NATS_NOT_FOUND)
         return s;
@@ -1086,6 +1084,12 @@ int64_t
 kvStatus_TTL(kvStatus *sts)
 {
     return (sts == NULL || sts->si->Config == NULL ? 0 : sts->si->Config->MaxAge);
+}
+
+int64_t
+kvStatus_Replicas(kvStatus *sts)
+{
+    return (sts == NULL || sts->si->Config == NULL ? 0 : sts->si->Config->Replicas);
 }
 
 void

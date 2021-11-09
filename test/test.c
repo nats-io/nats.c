@@ -26684,6 +26684,7 @@ test_KeyValueBasics(void)
     kvc.Bucket = "TEST";
     kvc.History = 5;
     kvc.TTL = 3600*(int64_t)1E9;
+    kvc.Replicas = 1;
     s = js_CreateKeyValue(&kv, js, &kvc);
     testCond((s == NATS_OK) && (kv != NULL));
 
@@ -26899,6 +26900,10 @@ test_KeyValueBasics(void)
     s = (kvStatus_Values(sts) == 7 ? NATS_OK : NATS_ERR);
     testCond(s == NATS_OK);
 
+    test("Check replicas: ");
+    s = (kvStatus_Replicas(sts) == 1 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+
     test("Check status with NULL: ");
     if ((kvStatus_History(NULL) != 0) || (kvStatus_Bucket(NULL) != NULL)
         || (kvStatus_TTL(NULL) != 0) || (kvStatus_Values(NULL) != 0))
@@ -26943,9 +26948,11 @@ _expectUpdate(kvWatcher *w, const char *key, const char *val, uint64_t rev)
     if ((s != NATS_OK) || (e == NULL))
         return false;
 
-    if ((strcmp(kvEntry_Key(e), key) != 0)
+    if ((strcmp(kvEntry_Bucket(e), "WATCH") != 0)
+        || (strcmp(kvEntry_Key(e), key) != 0)
         || (strcmp(kvEntry_ValueString(e), val) != 0)
-        || (kvEntry_Revision(e) != rev))
+        || (kvEntry_Revision(e) != rev)
+        || (kvEntry_Created(e) == 0))
     {
         return false;
     }
@@ -26974,13 +26981,24 @@ _expectDelete(kvWatcher *w, const char *key, uint64_t rev)
 }
 
 static void
+_stopWatcher(void *closure)
+{
+    kvWatcher *w = (kvWatcher*) closure;
+
+    nats_Sleep(100);
+    kvWatcher_Stop(w);
+}
+
+static void
 test_KeyValueWatch(void)
 {
     natsStatus          s;
     kvStore             *kv = NULL;
     kvWatcher           *w  = NULL;
     kvEntry             *e  = NULL;
+    natsThread          *t  = NULL;
     kvConfig            kvc;
+    int64_t             start;
 
     JS_SETUP(2, 6, 2);
 
@@ -27094,6 +27112,16 @@ test_KeyValueWatch(void)
     testCond(_expectUpdate(w, "t.age", "49", 10));
     testCond(_expectInitDone(w));
 
+    test("Block: ");
+    start = nats_Now();
+    s = natsThread_Create(&t, _stopWatcher, (void*) w);
+    IFOK(s, kvWatcher_Next(&e, w, 10000));
+    testCond((s == NATS_ILLEGAL_STATE) && (e == NULL)
+                && ((nats_Now() - start) <= 1000));
+    nats_clearLastError();
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
     kvWatcher_Destroy(w);
     kvStore_Destroy(kv);
 
@@ -27196,6 +27224,7 @@ test_KeyValueKeys(void)
     bool                countryOK = false;
     char                *k = NULL;
     kvConfig            kvc;
+    kvWatchOptions      o;
     int                 i;
 
     JS_SETUP(2, 6, 2);
@@ -27227,7 +27256,9 @@ test_KeyValueKeys(void)
     nats_clearLastError();
 
     test("Get keys (timeout): ");
-    s = kvStore_Keys(&l, kv, NULL);
+    kvWatchOptions_Init(&o);
+    o.Timeout = 1;
+    s = kvStore_Keys(&l, kv, &o);
     testCond((((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 3)))
                 || ((s == NATS_TIMEOUT) && (l.Keys == NULL) && (l.Count == 0)));
     nats_clearLastError();
@@ -27324,7 +27355,10 @@ test_KeyValueDeleteVsPurge(void)
     test("Check: ");
     for (i=0;(s == NATS_OK) && (i<4); i++)
     {
-        if (l.Entries[i] == NULL)
+        e = l.Entries[i];
+        if (e == NULL)
+            s = NATS_ERR;
+        else if ((int) kvEntry_Delta(e) != (3-i))
             s = NATS_ERR;
     }
     testCond(s == NATS_OK);

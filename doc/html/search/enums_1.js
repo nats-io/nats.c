@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['natsconnstatus_1078',['natsConnStatus',['../status_8h.html#a6d667c1f8dd289a7e0f39bf10e800b51',1,'status.h']]],
-  ['natsstatus_1079',['natsStatus',['../status_8h.html#a36c934157b663b7b5fb5d6609c897c80',1,'status.h']]]
+  ['kvoperation_0',['kvOperation',['../group__types_group.html#ga89db3bd6bf11af3ac5eb3ab560d16332',1,'nats.h']]]
 ];

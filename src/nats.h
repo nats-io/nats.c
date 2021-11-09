@@ -6371,6 +6371,15 @@ kvStatus_History(kvStatus *sts);
 NATS_EXTERN int64_t
 kvStatus_TTL(kvStatus *sts);
 
+/** \brief Returns the number of replicas to keep for a bucket.
+ *
+ * Returns the number of replicas to keep for a bucket, or `0` if `sts` itself is `NULL`.
+ *
+ * @param sts the pointer to the #kvStatus object.
+ */
+NATS_EXTERN int64_t
+kvStatus_Replicas(kvStatus *sts);
+
 /** \brief Destroys the KeyValue status object.
  *
  * Releases memory allocated for this #kvStatus object.

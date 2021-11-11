@@ -24,5 +24,9 @@ var annotated_dup =
     [ "jsStreamSourceInfo", "structjs_stream_source_info.html", "structjs_stream_source_info" ],
     [ "jsStreamState", "structjs_stream_state.html", "structjs_stream_state" ],
     [ "jsSubOptions", "structjs_sub_options.html", "structjs_sub_options" ],
+    [ "kvConfig", "structkv_config.html", "structkv_config" ],
+    [ "kvEntryList", "structkv_entry_list.html", "structkv_entry_list" ],
+    [ "kvKeysList", "structkv_keys_list.html", "structkv_keys_list" ],
+    [ "kvWatchOptions", "structkv_watch_options.html", "structkv_watch_options" ],
     [ "natsMsgList", "structnats_msg_list.html", "structnats_msg_list" ]
 ];

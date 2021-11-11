@@ -20,5 +20,9 @@ var structjs_stream_config =
     [ "Placement", "structjs_stream_config.html#acee6c66afc78d79c2f518eed89177efb", null ],
     [ "Mirror", "structjs_stream_config.html#acdba5b22e4e60fd81a54769a7d09bc51", null ],
     [ "Sources", "structjs_stream_config.html#a8f0ee08922e5b2108082b5b9e4a6284b", null ],
-    [ "SourcesLen", "structjs_stream_config.html#a34960d6acc710c2f32b563f4bb7c9c0a", null ]
+    [ "SourcesLen", "structjs_stream_config.html#a34960d6acc710c2f32b563f4bb7c9c0a", null ],
+    [ "Sealed", "structjs_stream_config.html#aede3fd2ab13d230eda14c96f9997e1b7", null ],
+    [ "DenyDelete", "structjs_stream_config.html#af2d42dd29b9a35257937aeeb53c9f287", null ],
+    [ "DenyPurge", "structjs_stream_config.html#a575ffbaa85b0300032963296b090583a", null ],
+    [ "AllowRollup", "structjs_stream_config.html#aba71cdb342181f52bb9f7ff5f770a1fa", null ]
 ];

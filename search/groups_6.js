@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['management_1259',['Management',['../group__conn_mgt_group.html',1,'(Global Namespace)'],['../group__stan_conn_mgt_group.html',1,'(Global Namespace)']]],
-  ['message_1260',['Message',['../group__msg_group.html',1,'']]],
-  ['messages_1261',['Messages',['../group__js_msg.html',1,'']]]
+  ['libevent_20adapter_0',['Libevent Adapter',['../group__libevent_functions.html',1,'']]],
+  ['library_1',['Library',['../group__library_group.html',1,'']]],
+  ['libuv_20adapter_2',['Libuv Adapter',['../group__libuv_functions.html',1,'']]]
 ];

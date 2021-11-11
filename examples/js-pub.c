@@ -85,8 +85,10 @@ int main(int argc, char **argv)
 
             // Initialize the configuration structure.
             jsStreamConfig_Init(&cfg);
-            // Since we don't provide subjects, the subjects it will default to the stream name.
             cfg.Name = stream;
+            // Set the subject
+            cfg.Subjects = (const char*[1]){subj};
+            cfg.SubjectsLen = 1;
             // Make it a memory stream.
             cfg.Storage = js_MemoryStorage;
             // Add the stream,

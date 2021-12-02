@@ -18,6 +18,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 
 - [Building](#building)
 	* [TLS Support](#tls-support)
+        * [Link statically](#link-statically)
     * [Building with Streaming](#building-with-streaming)
     * [Building with Libsodium](#building-with-libsodium)
     * [Testing](#testing)
@@ -157,6 +158,15 @@ cmake .. -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON
 Since the NATS C client dynamically links to the OpenSSL library, you need to make sure that you are then running your application against an OpenSSL 1.1+ library.
 
 Note that the option `NATS_BUILD_WITH_TLS_CLIENT_METHOD` is deprecated. Its purpose was to make the NATS C client use a method that was introduced in OpenSSL `1.1+`. The new option `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` is more generic and replaces `NATS_BUILD_WITH_TLS_CLIENT_METHOD`. If you are using scripts to automate your build process that makes use of `NATS_BUILD_WITH_TLS_CLIENT_METHOD`, they will still work and using this deprecated option will have the same effect than setting `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` to `ON`.
+
+### Link statically
+
+If you want to link to the static OpenSSL library, you need to delete the `CMakeCache.txt` and regenerate it with the additional option:
+```
+rm CMakeCache.txt
+cmake .. <build options that you may already use> -DNATS_BUILD_OPENSSL_STATIC_LIBS=ON
+```
+Then call `make` (or equivalent depending on your platform) and this should ensure that the library (and examples and/or test suite executable) are linked against the OpenSSL library, if it was found by CMake.
 
 ## Building with Streaming
 

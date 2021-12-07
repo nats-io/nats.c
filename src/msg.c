@@ -680,6 +680,9 @@ natsMsg_Destroy(natsMsg *msg)
     if (msg == NULL)
         return;
 
+    if (natsMsg_isNoDestroy(msg))
+        return;
+
     if (natsGC_collect((natsGCItem *) msg))
         return;
 

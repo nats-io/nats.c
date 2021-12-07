@@ -38,7 +38,7 @@ onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
     if (++count == total)
         elapsed = nats_Now() - start;
 
-    natsMsg_Ack(msg, NULL);
+    // Since this is auto-ack callback, we don't need to ack here.
     natsMsg_Destroy(msg);
 }
 

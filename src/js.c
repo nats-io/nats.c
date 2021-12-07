@@ -1000,35 +1000,15 @@ static void
 _autoAckCB(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     jsSub   *jsi = (jsSub*) closure;
-    char    _reply[256];
-    char    *reply = NULL;
-    bool    frply  = false;
 
-    if (msg->reply != NULL)
-    {
-        if (strlen(msg->reply) < sizeof(_reply))
-        {
-            snprintf(_reply, sizeof(_reply), "%s", msg->reply);
-            reply = _reply;
-        }
-        else
-        {
-            reply = NATS_STRDUP(msg->reply);
-            frply = (reply != NULL ? true : false);
-        }
-    }
+    natsMsg_setNoDestroy(msg);
 
     // Invoke user callback
     (jsi->usrCb)(nc, sub, msg, jsi->usrCbClosure);
 
-    // Ack the message (unless we got a failure copying the reply subject)
-    if (reply == NULL)
-        return;
-
-    natsConnection_PublishString(nc, reply, jsAckAck);
-
-    if (frply)
-        NATS_FREE(reply);
+    natsMsg_Ack(msg, &(jsi->js->opts));
+    natsMsg_clearNoDestroy(msg);
+    natsMsg_Destroy(msg);
 }
 
 natsStatus

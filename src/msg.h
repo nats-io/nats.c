@@ -37,6 +37,10 @@
 #define natsMsg_isAcked(m)          (((m)->flags &   (1 << 1)) != 0)
 #define natsMsg_clearAcked(m)       ((m)->flags  &= ~(1 << 1))
 
+#define natsMsg_setNoDestroy(m)     ((m)->flags  |=  (1 << 2))
+#define natsMsg_isNoDestroy(m)      (((m)->flags &   (1 << 2)) != 0)
+#define natsMsg_clearNoDestroy(m)   ((m)->flags  &= ~(1 << 2))
+
 struct __natsMsg
 {
     natsGCItem          gc;

@@ -23402,6 +23402,17 @@ _jsMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clo
     args->sum++;
     if (args->control == 1)
         natsMsg_Ack(msg, NULL);
+    else if (args->control == 3)
+    {
+        if (args->sum == 1)
+            natsMsg_Nak(msg, NULL);
+        else
+        {
+            while (!args->done)
+                natsCondition_Wait(args->c, args->m);
+            args->msgReceived = true;
+        }
+    }
     if ((args->control != 2) || (args->sum == args->results[0]))
         natsCondition_Broadcast(args->c);
     natsMutex_Unlock(args->m);
@@ -23624,6 +23635,54 @@ test_JetStreamSubscribe(void)
     s = natsSubscription_NextMsg(&ack, ackSub, 150);
     testCond((s == NATS_TIMEOUT) && (ack == NULL));
     nats_clearLastError();
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Create sub with auto-ack: ");
+    natsMutex_Lock(args.m);
+    args.control = 3;
+    args.sum = 0;
+    natsMutex_Unlock(args.m);
+    jsSubOptions_Init(&so);
+    so.Stream = "TEST";
+    so.Config.DeliverPolicy = js_DeliverLast;
+    s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, (void*)&args, NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msgs received: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum < 1))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check NAck sent: ");
+    s = natsSubscription_NextMsg(&ack, ackSub, 1000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(ack);
+    ack = NULL;
+
+    test("Check no auto-ack: ");
+    s = natsSubscription_NextMsg(&ack, ackSub, 100);
+    testCond((s == NATS_TIMEOUT) && (ack == NULL));
+    nats_clearLastError();
+    s = NATS_OK;
+
+    natsMutex_Lock(args.m);
+    args.done = true;
+    natsCondition_Broadcast(args.c);
+    while ((s != NATS_TIMEOUT) && !args.msgReceived)
+        s = natsCondition_TimedWait(args.c, args.m, 1000);
+    args.done = false;
+    args.msgReceived = false;
+    natsMutex_Unlock(args.m);
+
+    test("Check auto-ack sent: ");
+    s = natsSubscription_NextMsg(&ack, ackSub, 1000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(ack);
+    ack = NULL;
 
     natsSubscription_Destroy(sub);
     sub = NULL;

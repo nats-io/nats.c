@@ -351,6 +351,7 @@ typedef struct __jsSub
     bool                pull;
     bool                ordered;
     bool                dc; // delete JS consumer in Unsub()/Drain()
+    bool                ackNone;
 
     int64_t             hbi;
     int64_t             active;

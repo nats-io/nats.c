@@ -24098,6 +24098,7 @@ test_JetStreamSubscribeSync(void)
     const char          *consName;
     jsConsumerInfo      *ci = NULL;
     jsMsgMetaData       *meta = NULL;
+    jsSubOptions        so;
 
     JS_SETUP(2, 3, 5);
 
@@ -24492,6 +24493,34 @@ test_JetStreamSubscribeSync(void)
     natsMsg_Destroy(msg);
     IFOK(s, natsSubscription_WaitForDrainCompletion(sub, 1000));
     testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Create sub with ack-none: ");
+    jsSubOptions_Init(&so);
+    so.Config.AckPolicy = js_AckNone;
+    so.Config.DeliverPolicy = js_DeliverLast;
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Check msg received: ");
+    msg = NULL;
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond(s == NATS_OK);
+
+    test("Check ack: ");
+    s = natsMsg_InProgress(msg, NULL);
+    IFOK(s, natsMsg_Nak(msg, NULL));
+    IFOK(s, natsMsg_Ack(msg, NULL));
+    IFOK(s, natsMsg_Term(msg, NULL));
+    testCond(s == NATS_OK);
+
+    test("Check no ack sent: ");
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    s = natsSubscription_NextMsg(&msg, ackSub, 100);
+    testCond((s == NATS_TIMEOUT) && (msg == NULL));
 
     natsSubscription_Destroy(sub);
     natsSubscription_Destroy(ackSub);

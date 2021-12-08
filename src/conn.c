@@ -2633,6 +2633,9 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         {
             bool signal= false;
 
+            if ((jsi != NULL) && jsi->ackNone)
+                natsMsg_setAcked(msg);
+
             if (sub->msgList.msgs > sub->msgsMax)
                 sub->msgsMax = sub->msgList.msgs;
 

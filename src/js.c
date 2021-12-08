@@ -2060,9 +2060,10 @@ PROCESS_INFO:
                 jsi->pull   = isPullMode;
                 jsi->ordered= opts->Ordered;
                 jsi->dseq   = 1;
+                jsi->ackNone= opts->Config.AckPolicy == js_AckNone;
                 js_retain(js);
 
-                if ((usrCB != NULL) && !opts->ManualAck && (opts->Config.AckPolicy != js_AckNone))
+                if ((usrCB != NULL) && !opts->ManualAck && !jsi->ackNone)
                 {
                     // Keep track of user provided CB and closure
                     jsi->usrCb          = usrCB;

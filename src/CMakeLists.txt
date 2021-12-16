@@ -58,6 +58,7 @@ endif(NATS_BUILD_LIB_STATIC)
 if(NATS_BUILD_LIB_SHARED)
   set_property(TARGET nats PROPERTY DEBUG_POSTFIX d)
   target_include_directories(nats PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<INSTALL_INTERFACE:include>)
   install(TARGETS nats EXPORT cnats-targets DESTINATION ${NATS_LIBDIR})
   install(EXPORT cnats-targets
@@ -69,6 +70,7 @@ endif(NATS_BUILD_LIB_SHARED)
 if(NATS_BUILD_LIB_STATIC)
   set_property(TARGET nats_static PROPERTY DEBUG_POSTFIX d)
   target_include_directories(nats_static PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<INSTALL_INTERFACE:include>)
   install(TARGETS nats_static EXPORT cnats-targets ARCHIVE DESTINATION ${NATS_LIBDIR})
   install(EXPORT cnats-targets

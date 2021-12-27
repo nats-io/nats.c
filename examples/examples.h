@@ -417,7 +417,7 @@ parseArgs(int argc, char **argv, const char *usage)
 
     if (s != NATS_OK)
     {
-        printf("Error parsing arguments: %d - %s\n",
+        printf("Error parsing arguments: %u - %s\n",
                s, natsStatus_GetText(s));
 
         nats_PrintLastErrorStack(stderr);

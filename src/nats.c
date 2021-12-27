@@ -1253,7 +1253,7 @@ nats_GetVersionNumber(void)
 static void
 _versionGetString(char *buffer, size_t bufLen, uint32_t verNumber)
 {
-    snprintf(buffer, bufLen, "%d.%d.%d",
+    snprintf(buffer, bufLen, "%u.%u.%u",
              ((verNumber >> 16) & 0xF),
              ((verNumber >> 8) & 0xF),
              (verNumber & 0xF));
@@ -1593,7 +1593,7 @@ nats_PrintLastErrorStack(FILE *file)
     if ((errTL == NULL) || (errTL->sts == NATS_OK) || (errTL->framesCount == -1))
         return;
 
-    fprintf(file, "Error: %d - %s",
+    fprintf(file, "Error: %u - %s",
             errTL->sts, natsStatus_GetText(errTL->sts));
     if (errTL->text[0] != '\0')
         fprintf(file, " - %s", errTL->text);

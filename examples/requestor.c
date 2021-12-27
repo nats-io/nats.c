@@ -71,7 +71,7 @@ int main(int argc, char **argv)
     }
     else
     {
-        printf("Error: %d - %s\n", s, natsStatus_GetText(s));
+        printf("Error: %u - %s\n", s, natsStatus_GetText(s));
         nats_PrintLastErrorStack(stderr);
     }
 

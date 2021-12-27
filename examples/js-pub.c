@@ -24,7 +24,7 @@ _jsPubErr(jsCtx *js, jsPubAckErr *pae, void *closure)
 {
     int *errors = (int*) closure;
 
-    printf("Error: %d - Code: %d - Text: %s\n", pae->Err, pae->ErrCode, pae->ErrText);
+    printf("Error: %u - Code: %u - Text: %s\n", pae->Err, pae->ErrCode, pae->ErrText);
     printf("Original message: %.*s\n", natsMsg_GetDataLength(pae->Msg), natsMsg_GetData(pae->Msg));
 
     *errors = (*errors + 1);
@@ -184,7 +184,7 @@ int main(int argc, char **argv)
     }
     if (s != NATS_OK)
     {
-        printf("Error: %d - %s - jerr=%d\n", s, natsStatus_GetText(s), jerr);
+        printf("Error: %u - %s - jerr=%u\n", s, natsStatus_GetText(s), jerr);
         nats_PrintLastErrorStack(stderr);
     }
 

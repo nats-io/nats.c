@@ -1069,7 +1069,7 @@ jsSub_deleteConsumerAfterDrain(natsSubscription *sub)
         if (nc->opts->asyncErrCb != NULL)
         {
             char tmp[256];
-            snprintf(tmp, sizeof(tmp), "failed to delete consumer '%s': %d (%s)",
+            snprintf(tmp, sizeof(tmp), "failed to delete consumer '%s': %u (%s)",
                     consumer, s, natsStatus_GetText(s));
             natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
         }
@@ -2515,7 +2515,7 @@ _recreateOrderedCons(void *closure)
         if (nc->opts->asyncErrCb != NULL)
         {
             char tmp[256];
-            snprintf(tmp, sizeof(tmp), "failed recreating ordered consumer: %d (%s)",
+            snprintf(tmp, sizeof(tmp), "failed recreating ordered consumer: %u (%s)",
                      s, natsStatus_GetText(s));
             natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
         }

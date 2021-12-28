@@ -46,7 +46,7 @@ static void
 asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
     if (print)
-        printf("Async error: %d - %s\n", err, natsStatus_GetText(err));
+        printf("Async error: %u - %s\n", err, natsStatus_GetText(err));
 
     natsSubscription_GetDropped(sub, (int64_t*) &dropped);
 }
@@ -143,7 +143,7 @@ int main(int argc, char **argv)
     }
     else
     {
-        printf("Error: %d - %s\n", s, natsStatus_GetText(s));
+        printf("Error: %u - %s\n", s, natsStatus_GetText(s));
         nats_PrintLastErrorStack(stderr);
     }
 

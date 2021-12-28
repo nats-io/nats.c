@@ -3470,7 +3470,7 @@ _pushDrainErr(natsConnection *nc, natsStatus s, const char *errTxt)
     if (nc->opts->asyncErrCb != NULL)
     {
         char tmp[256];
-        snprintf(tmp, sizeof(tmp), "Drain error: %s: %d (%s)", errTxt, s, natsStatus_GetText(s));
+        snprintf(tmp, sizeof(tmp), "Drain error: %s: %u (%s)", errTxt, s, natsStatus_GetText(s));
         natsAsyncCb_PostErrHandler(nc, NULL, s, NATS_STRDUP(tmp));
     }
     natsConn_Unlock(nc);

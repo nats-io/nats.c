@@ -902,7 +902,7 @@ parseErr:
     natsMutex_Lock(nc->mu);
 
     snprintf(nc->errStr, sizeof(nc->errStr),
-             "Parse Error [%d]: '%.*s'",
+             "Parse Error [%u]: '%.*s'",
              nc->ps->state,
              bufLen - i,
              buf + i);

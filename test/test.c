@@ -11263,7 +11263,7 @@ test_Flush(void)
         if ((s == NATS_OK) && (args[i].s != NATS_OK))
         {
             s = args[i].s;
-            printf("t=%d s=%d\n", i, s);
+            printf("t=%d s=%u\n", i, s);
         }
     }
     if (s == NATS_OK)

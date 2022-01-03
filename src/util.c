@@ -485,9 +485,7 @@ _jsonGetStr(char **ptr, char **value)
                     for (i=0; i<4; i++)
                     {
                         // digit range
-                        if (((*p >= '0') && (*p <= '9'))
-                                || ((*p >= 'A') && (*p <= 'F'))
-                                || ((*p >= 'a') && (*p <= 'f')))
+                        if (isxdigit(*p))
                         {
                             p++;
                         }

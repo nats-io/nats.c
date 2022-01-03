@@ -1849,7 +1849,7 @@ natsStatus
 nats_Base64_Decode(const char *src, unsigned char **dst, int *dstLen)
 {
     natsStatus  s;
-    int         sl;
+    int         sl = 0;
 
     *dst = NULL;
     *dstLen = 0;

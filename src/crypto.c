@@ -462,6 +462,28 @@ cryptoSign(unsigned char *sm,
   modL(sm + 32,x);
 }
 
+// secure_memzero() tries to effectively set to zero a given number
+// of bytes, even if optimizations are applied to the code.
+// Code derived from sodium_memzero()
+static void
+secure_memzero(void * const pnt, const size_t len)
+{
+#ifdef _WIN32
+    SecureZeroMemory(pnt, len);
+#elif defined(HAVE_EXPLICIT_BZERO)
+    explicit_bzero(pnt, len);
+#elif defined(HAVE_EXPLICIT_MEMSET)
+    explicit_memset(pnt, 0, len);
+#else
+    volatile unsigned char *volatile p =
+        (volatile unsigned char *volatile) pnt;
+    size_t i;
+    for (i = 0; i < len; i++) {
+        p[i] = 0;
+    }
+#endif
+}
+
 natsStatus
 natsCrypto_Init()
 {
@@ -483,8 +505,8 @@ natsCrypto_Sign(const unsigned char *seed,
     newKeyFromSeed(seed, sk);
     cryptoSign((unsigned char*) sm, input, inputLen, sk);
     memcpy(signature, sm, NATS_CRYPTO_SIGN_BYTES);
-    memset((void*) sm, 0, NATS_CRYPTO_SIGN_BYTES);
-    memset((void*) sk, 0, sizeof(sk));
+    secure_memzero((void*) sm, NATS_CRYPTO_SIGN_BYTES);
+    secure_memzero((void*) sk, sizeof(sk));
     NATS_FREE(sm);
     return NATS_OK;
 }
@@ -492,7 +514,7 @@ natsCrypto_Sign(const unsigned char *seed,
 void
 natsCrypto_Clear(void *mem, int memLen)
 {
-    memset(mem, 0, (size_t) memLen);
+    secure_memzero(mem, (size_t) memLen);
 }
 
 #endif

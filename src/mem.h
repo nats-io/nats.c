@@ -27,5 +27,30 @@
 #endif
 #define NATS_FREE(p)        free((p))
 
+// GNU C Library version 2.25 or later.
+#if defined(__GLIBC__) && \
+    (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25))
+#define HAVE_EXPLICIT_BZERO 1
+#endif
+
+// Newlib
+#if defined(__NEWLIB__)
+#define HAVE_EXPLICIT_BZERO 1
+#endif
+
+// FreeBSD version 11.0 or later.
+#if defined(__FreeBSD__) && __FreeBSD_version >= 1100037
+#define HAVE_EXPLICIT_BZERO 1
+#endif
+
+// OpenBSD version 5.5 or later.
+#if defined(__OpenBSD__) && OpenBSD >= 201405
+#define HAVE_EXPLICIT_BZERO 1
+#endif
+
+// NetBSD version 7.2 or later.
+#if defined(__NetBSD__) && __NetBSD_Version__ >= 702000000
+#define HAVE_EXPLICIT_MEMSET 1
+#endif
 
 #endif /* MEM_H_ */

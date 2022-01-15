@@ -456,62 +456,100 @@ _jsonTrimSpace(char *ptr)
 }
 
 static natsStatus
+_decodeUni(char **iPtr, char *val)
+{
+    int     res = 0;
+    char    *i  = *iPtr;
+    int     j;
+
+    if (strlen(i) < 5)
+        return NATS_ERR;
+
+    i++;
+    for (j=0; j<4; j++)
+    {
+        char c = i[j];
+        if ((c >= '0') && (c <= '9'))
+            c = c - '0';
+        else if ((c >= 'a') && (c <= 'f'))
+            c = c - 'a' + 10;
+        else if ((c >= 'A') && (c <= 'F'))
+            c = c - 'A' + 10;
+        else
+            return NATS_ERR;
+
+		res = (res << 4) + c;
+	}
+    *val   = (char) res;
+    *iPtr += 5;
+
+    return NATS_OK;
+}
+
+static natsStatus
 _jsonGetStr(char **ptr, char **value)
 {
     char *p = *ptr;
+    char *o = *ptr;
 
     while ((*p != '\0') && (*p != '"'))
     {
-        if ((*p == '\\') && (*(p + 1) != '\0'))
+        if (*p != '\\')
         {
+            if (o != p)
+                *o = *p;
+            o++;
             p++;
-            // based on what http://www.json.org/ says a string should be
-            switch (*p)
+            continue;
+        }
+        p++;
+        // Escaped character here...
+        if (*p == '\0')
+        {
+            *o = '\0';
+            return nats_setError(NATS_ERR,
+                                 "error parsing string '%s': invalid control character at the end",
+                                 o);
+        }
+        // based on what http://www.json.org/ says a string should be
+        switch (*p)
+        {
+            case 'b': *o++ = '\b'; break;
+            case 'f': *o++ = '\f'; break;
+            case 'n': *o++ = '\n'; break;
+            case 'r': *o++ = '\r'; break;
+            case 't': *o++ = '\t'; break;
+            case '"':
+            case '\\':
+            case '/':
+                *o++ = *p;
+                break;
+            case 'u':
             {
-                case '"':
-                case '\\':
-                case '/':
-                case 'b':
-                case 'n':
-                case 'r':
-                case 't':
-                    break;
-                case 'u':
+                char        val = 0;
+                natsStatus  s   = _decodeUni(&p, &val);
+                if (s != NATS_OK)
                 {
-                    int i;
-
-                    // Needs to be 4 hex. A hex is a digit or AF, af
-                    p++;
-                    for (i=0; i<4; i++)
-                    {
-                        // digit range
-                        if (isxdigit(*p))
-                        {
-                            p++;
-                        }
-                        else
-                        {
-                            return nats_setError(NATS_ERR,
-                                                 "error parsing string '%s': invalid unicode character",
-                                                 p);
-                        }
-                    }
-                    p--;
-                    break;
-                }
-                default:
                     return nats_setError(NATS_ERR,
-                                         "error parsing string '%s': invalid control character",
+                                         "error parsing string '%s': invalid unicode character",
                                          p);
+                }
+                *o++ = val;
+                p--;
+                break;
             }
+            default:
+                return nats_setError(NATS_ERR,
+                                     "error parsing string '%s': invalid control character",
+                                     p);
         }
         p++;
     }
 
     if (*p != '\0')
     {
+        *o = '\0';
         *value = *ptr;
-        *p = '\0';
         *ptr = (char*) (p + 1);
         return NATS_OK;
     }

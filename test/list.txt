@@ -226,6 +226,7 @@ JetStreamSubscribeHeadersOnly
 JetStreamOrderedCons
 JetStreamOrderedConsWithErrors
 JetStreamOrderedConsAutoUnsub
+JetStreamSubscribeWithFWC
 JetStreamStreamsSealAndRollup
 JetStreamGetMsgAndLastMsg
 KeyValueManager

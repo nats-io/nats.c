@@ -208,7 +208,7 @@ natsNUID_init(void)
     natsStatus      s;
     unsigned int    seed = (unsigned int) nats_NowInNanoSeconds();
 
-    memset(&globalNUID, 0, sizeof(natsNUID));
+    memset(&globalNUID, 0, sizeof(natsLockedNUID));
 
     srand(seed);
     _initCMWC(seed);

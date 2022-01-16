@@ -390,8 +390,8 @@ static void test_natsBuffer(void)
             && (strcmp(backend, "abcd") == 0));
 
     test("Changing backend is reflected in buffer: ");
+    backend[1] = 'x';
     testCond((s == NATS_OK)
-             && (backend[1] = 'x')
              && (natsBuf_Data(buf)[1] == 'x'));
 
     test("Append less than capacity does not expand buffer: ");

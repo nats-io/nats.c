@@ -1945,8 +1945,7 @@ _connect(natsConnection *nc)
             {
                 if (natsConn_isClosed(nc))
                 {
-                    if (s == NATS_OK)
-                        s = NATS_CONNECTION_CLOSED;
+                    s = NATS_CONNECTION_CLOSED;
                     break;
                 }
 

@@ -22,7 +22,6 @@
 static const char *kvBucketNameTmpl  = "KV_%s";
 static const char *kvSubjectsTmpl    = "$KV.%s.>";
 static const char *kvSubjectsPreTmpl = "$KV.%s.";
-// static const char *kvNoPending       = "0";
 
 #define KV_WATCH_FOR_EVER (int64_t)(0x7FFFFFFFFFFFFFFF)
 
@@ -30,10 +29,18 @@ static const char *kvSubjectsPreTmpl = "$KV.%s.";
 char        buffer[128];    \
 natsBuffer  buf;
 
-#define BUILD_SUBJECT \
-natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));   \
-s = natsBuf_Append(&buf, kv->pre, -1);                      \
-IFOK(s, natsBuf_Append(&buf, key, -1));                     \
+#define USE_JS_PREFIX   true
+#define KEY_NAME_ONLY   false
+
+#define BUILD_SUBJECT(p) \
+s = natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer)); \
+if ((p) && kv->useJSPrefix) \
+{ \
+    IFOK(s, natsBuf_Append(&buf, kv->js->opts.Prefix, -1)); \
+    IFOK(s, natsBuf_AppendByte(&buf, '.')); \
+} \
+IFOK(s, natsBuf_Append(&buf, kv->pre, -1)); \
+IFOK(s, natsBuf_Append(&buf, key, -1)); \
 IFOK(s, natsBuf_AppendByte(&buf, 0));
 
 #define KV_DEFINE_LIST \
@@ -168,6 +175,7 @@ _createKV(kvStore **new_kv, jsCtx *js, const char *bucket)
 
     if (s == NATS_OK)
     {
+        kv->useJSPrefix = (strcmp(js->opts.Prefix, jsDefaultAPIPrefix) != 0 ? true : false);
         kv->js = js;
         js_retain(js);
         *new_kv = kv;
@@ -372,7 +380,7 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key)
     if (!validKey(key))
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
-    BUILD_SUBJECT;
+    BUILD_SUBJECT(KEY_NAME_ONLY);
     IFOK(s, js_GetLastMsg(&msg, kv->js, kv->stream, natsBuf_Data(&buf), NULL, NULL));
     IFOK(s, _createEntry(&e, kv, &msg));
 
@@ -443,7 +451,7 @@ _putEntry(uint64_t *rev, kvStore *kv, jsPubOptions *po, const char *key, const v
     if (!validKey(key))
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
-    BUILD_SUBJECT;
+    BUILD_SUBJECT(USE_JS_PREFIX);
     IFOK(s, js_Publish(ppa, kv->js, natsBuf_Data(&buf), data, len, po, NULL));
 
     if ((s == NATS_OK) && (rev != NULL))
@@ -544,7 +552,7 @@ _delete(kvStore *kv, const char *key, bool purge)
     if (!validKey(key))
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
-    BUILD_SUBJECT;
+    BUILD_SUBJECT(USE_JS_PREFIX);
     IFOK(s, natsMsg_Create(&msg, natsBuf_Data(&buf), NULL, NULL, 0));
     if (s == NATS_OK)
     {
@@ -619,6 +627,8 @@ kvStore_PurgeDeletes(kvStore *kv, kvWatchOptions *opts)
 
         natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
 
+        // Go over the list, even when s != NATS_OK so we destroy
+        // each entry and don't have a memory leak.
         for (; h != NULL; )
         {
             natsBuf_Reset(&buf);
@@ -792,7 +802,7 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
     w->kv = kv;
     w->refs = 1;
 
-    BUILD_SUBJECT;
+    BUILD_SUBJECT(KEY_NAME_ONLY);
     IFOK(s, natsMutex_Create(&(w->mu)));
     if (s == NATS_OK)
     {

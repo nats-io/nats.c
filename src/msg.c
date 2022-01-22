@@ -73,7 +73,7 @@ natsMsgHeader_encode(natsBuffer *buf, natsMsg *msg)
     // See explanation in natsMsgHeader_encodedLen()
     if (natsMsg_needsLift(msg))
     {
-        natsBuf_Append(buf, (const char*) msg->hdr, msg->hdrLen);
+        s = natsBuf_Append(buf, (const char*) msg->hdr, msg->hdrLen);
         return NATS_UPDATE_ERR_STACK(s);
     }
 

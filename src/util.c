@@ -1967,9 +1967,10 @@ nats_ReadFile(natsBuffer **buffer, int initBufSize, const char *fn)
     else if (fclose(f) != 0)
         s = nats_setError(NATS_ERR, "error closing file '%s': '%s", fn, strerror(errno));
 
+    IFOK(s, natsBuf_AppendByte(buf, '\0'));
+
     if (s == NATS_OK)
     {
-        natsBuf_AppendByte(buf, '\0');
         *buffer = buf;
     }
     else if (buf != NULL)

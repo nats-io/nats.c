@@ -1437,12 +1437,9 @@ _checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, jsErrCode *jerr)
     if (strncmp(val, NOT_FOUND_STATUS, HDR_STATUS_LEN) == 0)
         return NATS_NOT_FOUND;
 
-    // Older servers may send a 408 when a request in the server was expired
-    // and interest is still found, which will be the case for our
-    // implementation. Regardless, ignore 408 errors, the caller will
-    // go back to wait for the next message.
+    // 408 indicating request timeout
     if (strncmp(val, REQ_TIMEOUT, HDR_STATUS_LEN) == 0)
-        return NATS_OK;
+        return NATS_TIMEOUT;
 
     // The possible 503 is handled directly in natsSub_nextMsg(), so we
     // would never get it here in this function.
@@ -1453,21 +1450,14 @@ _checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, jsErrCode *jerr)
 
 static natsStatus
 _sendPullRequest(natsConnection *nc, const char *subj, const char *rply,
-                 natsBuffer *buf, int batchSize, int64_t *timeout, int64_t start, bool noWait)
+                 natsBuffer *buf, int batchSize, int64_t timeout, bool noWait)
 {
     natsStatus  s;
     int64_t     expires;
 
-    *timeout -= (nats_Now()-start);
-    if (*timeout <= 0)
-    {
-        // At this point, consider that we have timed-out.
-        return nats_setDefaultError(NATS_TIMEOUT);
-    }
-
     // Make our request expiration a bit shorter than the
     // current timeout.
-    expires = (*timeout >= 20 ? *timeout - 10 : *timeout);
+    expires = (timeout >= 20 ? timeout - 10 : timeout);
 
     // Since "expires" is a Go time.Duration and our timeout
     // is in milliseconds, convert it to nanos.
@@ -1564,17 +1554,28 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
     // request to the server.
     if (((s == NATS_OK) || (s == NATS_TIMEOUT)) && (count != batch))
     {
+        bool sendReq  = true;
         bool doNoWait = (batch-count > 1 ? true : false);
 
-        s = _sendPullRequest(nc, subj, rply, &buf, batch-count,
-                             &timeout, start, doNoWait);
+        // Reset status in case we entered with timeout
+        s = NATS_OK;
+
         // Now wait for messages or a 404 saying that there are no more.
         while ((s == NATS_OK) && (count < batch))
         {
             natsMsg *msg    = NULL;
             bool    usrMsg  = false;
 
-            s = natsSub_nextMsg(&msg, sub, timeout, true);
+            timeout -= (nats_Now()-start);
+            if (timeout <= 0)
+                s = NATS_TIMEOUT;
+
+            if ((s == NATS_OK) && sendReq)
+            {
+                sendReq = false;
+                s = _sendPullRequest(nc, subj, rply, &buf, batch-count, timeout, doNoWait);
+            }
+            IFOK(s, natsSub_nextMsg(&msg, sub, timeout, true));
             if (s == NATS_OK)
             {
                 s = _checkMsg(msg, true, &usrMsg, errCode);
@@ -1588,10 +1589,15 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
                     // wait this time.
                     if (doNoWait && (s == NATS_NOT_FOUND) && (count == 0))
                     {
+                        s        = NATS_OK;
                         doNoWait = false;
-
-                        s = _sendPullRequest(nc, subj, rply, &buf, batch-count,
-                                             &timeout, start, false);
+                        sendReq  = true;
+                    }
+                    else if ((s == NATS_TIMEOUT) && (count == 0))
+                    {
+                        // If we get a 408, we will bail if we already collected some
+                        // messages, otherwise ignore and go back calling nextMsg.
+                        s = NATS_OK;
                     }
                 }
             }

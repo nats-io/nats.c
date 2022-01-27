@@ -25559,12 +25559,20 @@ test_JetStreamSubscribePull(void)
     s = natsThread_Create(&t, _jsPubThread, (void*) js);
     testCond(s == NATS_OK);
 
-    test("Fetch wait for msgs: ");
-    s = natsSubscription_Fetch(&list, sub, 5, 2000, &jerr);
-    testCond((s == NATS_OK) && (list.Msgs != NULL) && (list.Count == 5) && (jerr == 0));
+    test("Fetch: ");
+    {
+        int got = 0;
 
-    // Destroy msgs without ack'ing them.
-    natsMsgList_Destroy(&list);
+        while ((s == NATS_OK) && (got != 5))
+        {
+            s = natsSubscription_Fetch(&list, sub, 5-got, 2000, &jerr);
+            if (s == NATS_OK)
+                got += list.Count;
+            // Destroy msgs without ack'ing them.
+            natsMsgList_Destroy(&list);
+        }
+        testCond(s == NATS_OK);
+    }
 
     // Wait for AckWait and messages should be redelivered.
     nats_Sleep(500);

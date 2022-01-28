@@ -142,6 +142,12 @@ natsConn_sendUnsubProto(natsConnection *nc, int64_t subId, int max);
 void
 natsConn_setFilterWithClosure(natsConnection *nc, natsMsgFilter f, void* closure);
 
+natsStatus
+natsConn_initInbox(natsConnection *nc, char *buf, int bufSize, char **newInbox, bool *allocated);
+
+natsStatus
+natsConn_newInbox(natsConnection *nc, natsInbox **newInbox);
+
 void
 natsConn_close(natsConnection *nc);
 

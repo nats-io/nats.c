@@ -120,6 +120,7 @@ RequestMuxWithMappedSubject
 OldRequest
 SimultaneousRequests
 RequestClose
+CustomInbox
 FlushInCb
 ReleaseFlush
 FlushErrOnDisconnect

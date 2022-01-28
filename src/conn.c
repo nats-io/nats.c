@@ -1276,9 +1276,9 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox, in
         nc->respId[nc->respIdPos + 1] = '\0';
 
         // Build the response inbox
-        memcpy(respInbox, nc->respSub, NATS_REQ_ID_OFFSET);
-        respInbox[NATS_REQ_ID_OFFSET-1] = '.';
-        memcpy(respInbox+NATS_REQ_ID_OFFSET, nc->respId, nc->respIdPos + 2); // copy the '\0' of respId
+        memcpy(respInbox, nc->respSub, nc->reqIdOffset);
+        respInbox[nc->reqIdOffset-1] = '.';
+        memcpy(respInbox+nc->reqIdOffset, nc->respId, nc->respIdPos + 2); // copy the '\0' of respId
 
         nc->respIdVal++;
         if (nc->respIdVal == 10)
@@ -1321,7 +1321,7 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox, in
                 nc->respIdPos = 0;
         }
 
-        s = natsStrHash_Set(nc->respMap, respInbox+NATS_REQ_ID_OFFSET, true,
+        s = natsStrHash_Set(nc->respMap, respInbox+nc->reqIdOffset, true,
                             (void*) resp, NULL);
     }
 
@@ -1333,13 +1333,58 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox, in
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+natsStatus
+natsConn_initInbox(natsConnection *nc, char *buf, int bufSize, char **newInbox, bool *allocated)
+{
+    int         needed  = nc->inboxPfxLen+NUID_BUFFER_LEN+1;
+    char        *inbox  = buf;
+    bool        created = false;
+    natsStatus  s;
+
+    if (needed > bufSize)
+    {
+        inbox = NATS_MALLOC(needed);
+        if (inbox == NULL)
+            return nats_setDefaultError(NATS_NO_MEMORY);
+        created = true;
+    }
+    memcpy(inbox, nc->inboxPfx, nc->inboxPfxLen);
+    // This will add the terminal '\0';
+    s = natsNUID_Next(inbox+nc->inboxPfxLen, NUID_BUFFER_LEN+1);
+    if (s == NATS_OK)
+    {
+        *newInbox = inbox;
+        if (allocated != NULL)
+            *allocated = created;
+    }
+    else if (created)
+        NATS_FREE(inbox);
+
+    return s;
+}
+
+natsStatus
+natsConn_newInbox(natsConnection *nc, natsInbox **newInbox)
+{
+    natsStatus  s;
+    int         inboxLen = nc->inboxPfxLen+NUID_BUFFER_LEN+1;
+    char        *inbox   = NATS_MALLOC(inboxLen);
+
+    if (inbox == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    s = natsConn_initInbox(nc, inbox, inboxLen, (char**) newInbox, NULL);
+    if (s != NATS_OK)
+        NATS_FREE(inbox);
+    return s;
+}
+
 // Initialize some of the connection's fields used for request/reply mapping.
 // Connection's lock is held on entry.
 natsStatus
 natsConn_initResp(natsConnection *nc, natsMsgHandler cb)
 {
     natsStatus s = NATS_OK;
-    char       ginbox[NATS_INBOX_ARRAY_SIZE + 1 + 1]; // _INBOX.<nuid>.*
 
     nc->respPool = NATS_CALLOC(RESP_INFO_POOL_MAX_SIZE, sizeof(respInfo*));
     if (nc->respPool == NULL)
@@ -1347,11 +1392,17 @@ natsConn_initResp(natsConnection *nc, natsMsgHandler cb)
     if (s == NATS_OK)
         s = natsStrHash_Create(&nc->respMap, 4);
     if (s == NATS_OK)
-        s = natsInbox_Create(&nc->respSub);
+        s = natsConn_newInbox(nc, (natsInbox**) &nc->respSub);
     if (s == NATS_OK)
     {
-        snprintf(ginbox, sizeof(ginbox), "%s.*", nc->respSub);
-        s = natsConn_subscribeNoPoolNoLock(&(nc->respMux), nc, ginbox, cb, (void*) nc);
+        char *inbox = NULL;
+
+        if (nats_asprintf(&inbox, "%s.*", nc->respSub) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+            s = natsConn_subscribeNoPoolNoLock(&(nc->respMux), nc, inbox, cb, (void*) nc);
+
+        NATS_FREE(inbox);
     }
     if (s != NATS_OK)
     {
@@ -3156,6 +3207,17 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
         s = natsCondition_Create(&(nc->pongs.cond));
     if (s == NATS_OK)
         s = natsCondition_Create(&(nc->reconnectCond));
+
+    if (s == NATS_OK)
+    {
+        if (nc->opts->inboxPfx != NULL)
+            nc->inboxPfx = (const char*) nc->opts->inboxPfx;
+        else
+            nc->inboxPfx = NATS_DEFAULT_INBOX_PRE;
+
+        nc->inboxPfxLen = (int) strlen(nc->inboxPfx);
+        nc->reqIdOffset = nc->inboxPfxLen+NUID_BUFFER_LEN+1;
+    }
 
     if (s == NATS_OK)
         *newConn = nc;

@@ -382,7 +382,7 @@ stanConn_subscribe(stanSubscription **newSub, stanConnection *sc,
     if (s == NATS_OK)
         s = natsPBufAllocator_Create(&sub->allocator, sizeof(Pb__MsgProto), 3);
     if (s == NATS_OK)
-        s = natsInbox_Create((natsInbox**) &sub->inbox);
+        s = natsConn_newInbox(nc, (natsInbox**) &sub->inbox);
 
     if (s == NATS_OK)
     {

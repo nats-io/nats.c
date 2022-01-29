@@ -237,6 +237,7 @@ KeyValueHistory
 KeyValueKeys
 KeyValueDeleteVsPurge
 KeyValueDeleteTombstones
+KeyValueCrossAccount
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

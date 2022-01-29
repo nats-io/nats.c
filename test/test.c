@@ -27762,6 +27762,217 @@ test_KeyValueDeleteTombstones(void)
     JS_TEARDOWN;
 }
 
+static void
+test_KeyValueCrossAccount(void)
+{
+    natsStatus          s;
+    natsOptions         *opts= NULL;
+    natsConnection      *nc1 = NULL;
+    natsConnection      *nc2 = NULL;
+    jsCtx               *js1 = NULL;
+    jsCtx               *js2 = NULL;
+    natsPid             pid  = NATS_INVALID_PID;
+    kvStore             *kv1 = NULL;
+    kvWatcher           *w1  = NULL;
+    kvStore             *kv2 = NULL;
+    kvWatcher           *w2  = NULL;
+    kvEntry             *e   = NULL;
+    jsStreamInfo        *si  = NULL;
+    kvConfig            kvc;
+    jsOptions           o;
+    char                datastore[256] = {'\0'};
+    char                cmdLine[1024] = {'\0'};
+    char                confFile[256] = {'\0'};
+
+    ENSURE_JS_VERSION(2, 6, 2);
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+    _createConfFile(confFile, sizeof(confFile),
+        "jetstream: enabled\n"\
+        "accounts: {\n"\
+        "   A: {\n"\
+        "       users: [ {user: a, password: a} ]\n"\
+        "       jetstream: enabled\n"\
+        "       exports: [\n"\
+        "           {service: '$JS.API.>' }\n"\
+        "           {service: '$KV.>'}\n"\
+        "           {stream: 'accI.>'}\n"\
+        "       ]\n"\
+        "   },\n"\
+        "   I: {\n"\
+        "       users: [ {user: i, password: i} ]\n"\
+        "       imports: [\n"\
+        "           {service: {account: A, subject: '$JS.API.>'}, to: 'fromA.>' }\n"\
+        "           {service: {account: A, subject: '$KV.>'}, to: 'fromA.$KV.>' }\n"\
+        "           {stream: {subject: 'accI.>', account: A}}\n"\
+        "       ]\n"\
+        "   }\n"\
+        "}");
+
+    test("Start JS server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Create conn1: ");
+    s = natsConnection_ConnectTo(&nc1, "nats://a:a@127.0.0.1:4222");
+    testCond(s == NATS_OK);
+
+    test("Get context1: ");
+    s = natsConnection_JetStream(&js1, nc1, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create KV1: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "Map";
+    s = js_CreateKeyValue(&kv1, js1, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Create Watcher1: ");
+    s = kvStore_Watch(&w1, kv1, "map", NULL);
+    IFOK(s, kvWatcher_Next(&e, w1, 1000));
+    testCond((s == NATS_OK) && (e == NULL));
+
+    test("Create conn2: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "nats://i:i@127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetCustomInboxPrefix(opts, "accI"));
+    IFOK(s, natsConnection_Connect(&nc2, opts));
+    testCond(s == NATS_OK);
+
+    test("Get context2: ");
+    jsOptions_Init(&o);
+    o.Prefix = "fromA";
+    s = natsConnection_JetStream(&js2, nc2, &o);
+    testCond(s == NATS_OK);
+
+    test("Create KV2: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "Map";
+    s = js_CreateKeyValue(&kv2, js2, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Create Watcher2: ");
+    s = kvStore_Watch(&w2, kv2, "map", NULL);
+    IFOK(s, kvWatcher_Next(&e, w2, 1000));
+    testCond((s == NATS_OK) && (e == NULL));
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv2, "map", "value");
+    testCond(s == NATS_OK);
+
+    test("Get from kv1: ");
+    s = kvStore_Get(&e, kv1, "map");
+    testCond((s == NATS_OK) && (e != NULL)
+            && (strcmp(kvEntry_Key(e), "map") == 0)
+            && (strcmp(kvEntry_ValueString(e), "value") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Get from kv2: ");
+    s = kvStore_Get(&e, kv2, "map");
+    testCond((s == NATS_OK) && (e != NULL)
+            && (strcmp(kvEntry_Key(e), "map") == 0)
+            && (strcmp(kvEntry_ValueString(e), "value") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Watcher1 Next: ");
+    s = kvWatcher_Next(&e, w1, 1000);
+    testCond((s == NATS_OK) && (e != NULL)
+            && (strcmp(kvEntry_Key(e), "map") == 0)
+            && (strcmp(kvEntry_ValueString(e), "value") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Watcher2 Next: ");
+    s = kvWatcher_Next(&e, w2, 1000);
+    testCond((s == NATS_OK) && (e != NULL)
+            && (strcmp(kvEntry_Key(e), "map") == 0)
+            && (strcmp(kvEntry_ValueString(e), "value") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Purge key from kv2: ");
+    s = kvStore_Purge(kv2, "map");
+    testCond(s == NATS_OK);
+
+    test("Check purge ok from w1: ");
+    s = kvWatcher_Next(&e, w1, 1000);
+    testCond((s == NATS_OK) && (e != NULL) && (kvEntry_Operation(e) == kvOp_Purge));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Check purge ok from w2: ");
+    s = kvWatcher_Next(&e, w2, 1000);
+    testCond((s == NATS_OK) && (e != NULL) && (kvEntry_Operation(e) == kvOp_Purge));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Delete purge records: ");
+    s = kvStore_PurgeDeletes(kv2, NULL);
+    testCond(s == NATS_OK);
+
+    test("All gone: ");
+    s = js_GetStreamInfo(&si, js1, "KV_Map", NULL, NULL);
+    testCond((s == NATS_OK) && (si != NULL) && (si->State.Msgs == 0));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Delete key from kv2: ");
+    s = kvStore_Delete(kv2, "map");
+    testCond(s == NATS_OK);
+
+    test("Check key gone: ");
+    s = kvStore_Get(&e, kv1, "map");
+    testCond((s == NATS_NOT_FOUND) && (e == NULL));
+
+    kvWatcher_Destroy(w2);
+    w2 = NULL;
+    kvStore_Destroy(kv2);
+    kv2 = NULL;
+    jsCtx_Destroy(js2);
+    js2 = NULL;
+
+    test("Get context2 (with trailing dot for prefix): ");
+    jsOptions_Init(&o);
+    o.Prefix = "fromA";
+    s = natsConnection_JetStream(&js2, nc2, &o);
+    testCond(s == NATS_OK);
+
+    test("Create KV2: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "Map";
+    s = js_CreateKeyValue(&kv2, js2, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv2, "map", "value2");
+    testCond(s == NATS_OK);
+
+    test("Get from kv1: ");
+    s = kvStore_Get(&e, kv1, "map");
+    testCond((s == NATS_OK) && (e != NULL)
+            && (strcmp(kvEntry_Key(e), "map") == 0)
+            && (strcmp(kvEntry_ValueString(e), "value2") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    kvWatcher_Destroy(w1);
+    kvStore_Destroy(kv1);
+    jsCtx_Destroy(js1);
+    kvWatcher_Destroy(w2);
+    kvStore_Destroy(kv2);
+    jsCtx_Destroy(js2);
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc1);
+    natsConnection_Destroy(nc2);
+    _stopServer(pid);
+    rmtree(datastore);
+    remove(confFile);
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -30211,6 +30422,7 @@ static testInfo allTests[] =
     {"KeyValueKeys",                    test_KeyValueKeys},
     {"KeyValueDeleteVsPurge",           test_KeyValueDeleteVsPurge},
     {"KeyValueDeleteTombstones",        test_KeyValueDeleteTombstones},
+    {"KeyValueCrossAccount",            test_KeyValueCrossAccount},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

@@ -401,6 +401,7 @@ struct __kvStore
     char                *bucket;
     char                *stream;
     char                *pre;
+    bool                useJSPrefix;
 
 };
 

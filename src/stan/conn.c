@@ -372,7 +372,7 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
 
     // Create HB inbox and a subscription on that
     if (s == NATS_OK)
-        s = natsInbox_Create(&sc->hbInbox);
+        s = natsConn_newInbox(sc->nc, &sc->hbInbox);
     if (s == NATS_OK)
     {
         s = natsConn_subscribeNoPool(&sc->hbSubscription, sc->nc, sc->hbInbox, _processHeartBeat, NULL);
@@ -388,7 +388,7 @@ stanConnection_Connect(stanConnection **newConn, const char* clusterID, const ch
     // Prepare a subscription on ping responses
     if (s == NATS_OK)
     {
-        s = natsInbox_Create((char**) &pingInbox);
+        s = natsConn_newInbox(sc->nc, (natsInbox**) &pingInbox);
         if (s == NATS_OK)
             s = natsConn_subscribeNoPool(&pingSub, sc->nc, pingInbox, _processPingResponse, (void*) sc);
         if (s == NATS_OK)

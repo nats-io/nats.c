@@ -32,8 +32,6 @@
 #include "nkeys.h"
 #include "crypto.h"
 
-static const char *inboxPrefix = "_INBOX.";
-
 #define WAIT_LIB_INITIALIZED \
         natsMutex_Lock(gLib.lock); \
         while (!(gLib.initialized) && !(gLib.initAborted)) \
@@ -1084,42 +1082,26 @@ natsInbox_Create(natsInbox **newInbox)
 {
     natsStatus  s;
     char        *inbox = NULL;
-    char        tmpInbox[NATS_INBOX_ARRAY_SIZE];
+    const int   size   = NATS_DEFAULT_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1;
 
     s = nats_Open(-1);
     if (s != NATS_OK)
         return s;
 
-    sprintf(tmpInbox, "%s", inboxPrefix);
-    s = natsNUID_Next(tmpInbox + NATS_INBOX_PRE_LEN, NUID_BUFFER_LEN + 1);
+    inbox = NATS_MALLOC(size);
+    if (inbox == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    memcpy(inbox, NATS_DEFAULT_INBOX_PRE, NATS_DEFAULT_INBOX_PRE_LEN);
+    s = natsNUID_Next(inbox + NATS_DEFAULT_INBOX_PRE_LEN, NUID_BUFFER_LEN + 1);
     if (s == NATS_OK)
     {
-        inbox = NATS_STRDUP(tmpInbox);
-        if (inbox == NULL)
-            s = NATS_NO_MEMORY;
+        inbox[size-1] = '\0';
+        *newInbox = (natsInbox*) inbox;
     }
-    if (s == NATS_OK)
-        *newInbox = inbox;
-
-    return s;
-}
-
-natsStatus
-natsInbox_init(char *inbox, int inboxLen)
-{
-    natsStatus s;
-
-    s = nats_Open(-1);
-    if (s != NATS_OK)
-        return s;
-
-    if (inboxLen < (NATS_INBOX_ARRAY_SIZE))
-        return NATS_INSUFFICIENT_BUFFER;
-
-    sprintf(inbox, "%s", inboxPrefix);
-    s = natsNUID_Next(inbox + NATS_INBOX_PRE_LEN, NUID_BUFFER_LEN + 1);
-
-    return s;
+    else
+        NATS_FREE(inbox);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void

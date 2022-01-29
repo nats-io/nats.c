@@ -45,7 +45,6 @@ const int        jsBase                  = 62;
 const int64_t    jsOrderedHBInterval     = 5*(int64_t)1E9;
 
 #define jsReplyTokenSize    (8)
-#define jsReplyPrefixLen    (NATS_INBOX_PRE_LEN + (jsReplyTokenSize) + 1)
 #define jsDefaultMaxMsgs    (512 * 1024)
 
 #define jsLastConsumerSeqHdr    "Nats-Last-Consumer"
@@ -257,6 +256,9 @@ natsConnection_JetStream(jsCtx **new_js, natsConnection *nc, jsOptions *opts)
     // we properly release the NATS connection.
     natsConn_retain(nc);
     js->nc = nc;
+    // This will be immutable and is computed based on the possible custom
+    // inbox prefix length (or the default "_INBOX.")
+    js->rpreLen = nc->inboxPfxLen+jsReplyTokenSize+1;
 
     s = natsMutex_Create(&(js->mu));
     if (s == NATS_OK)
@@ -536,28 +538,27 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
 {
     const char      *subject    = natsMsg_GetSubject(msg);
     char            *id         = NULL;
-    jsCtx           *js         = NULL;
+    jsCtx           *js         = (jsCtx*) closure;
     natsMsg         *pmsg       = NULL;
     char            errTxt[256] = {'\0'};
     jsPubAckErr     pae;
     struct jsOptionsPublishAsync *opa = NULL;
 
-    if ((subject == NULL) || (int) strlen(subject) <= jsReplyPrefixLen)
+    if ((subject == NULL) || (int) strlen(subject) <= js->rpreLen)
     {
         natsMsg_Destroy(msg);
         return;
     }
 
-    id = (char*) (subject+jsReplyPrefixLen);
-    js = (jsCtx*) closure;
+    id = (char*) (subject+js->rpreLen);
 
     js_lock(js);
 
     pmsg = natsStrHash_Remove(js->pm, id);
     if (pmsg == NULL)
     {
-        natsMsg_Destroy(msg);
         js_unlock(js);
+        natsMsg_Destroy(msg);
         return;
     }
 
@@ -653,32 +654,38 @@ _newAsyncReply(char *reply, jsCtx *js)
         IFOK(s, natsStrHash_Create(&(js->pm), 64));
         if (s == NATS_OK)
         {
-            js->rpre = NATS_MALLOC(jsReplyPrefixLen+1);
+            js->rpre = NATS_MALLOC(js->rpreLen+1);
             if (js->rpre == NULL)
                 s = nats_setDefaultError(NATS_NO_MEMORY);
             else
             {
-                char tmp[NATS_INBOX_ARRAY_SIZE];
+                char nuid[NUID_BUFFER_LEN+1];
 
-                natsInbox_init(tmp, sizeof(tmp));
-                memcpy(js->rpre, tmp, NATS_INBOX_PRE_LEN);
-                memcpy(js->rpre+NATS_INBOX_PRE_LEN, tmp+((int)strlen(tmp)-jsReplyTokenSize), jsReplyTokenSize);
-                js->rpre[jsReplyPrefixLen-1] = '.';
-                js->rpre[jsReplyPrefixLen]   = '\0';
+                s = natsNUID_Next(nuid, sizeof(nuid));
+                if (s == NATS_OK)
+                {
+                    memcpy(js->rpre, js->nc->inboxPfx, js->nc->inboxPfxLen);
+                    memcpy(js->rpre+js->nc->inboxPfxLen, nuid+((int)strlen(nuid)-jsReplyTokenSize), jsReplyTokenSize);
+                    js->rpre[js->rpreLen-1] = '.';
+                    js->rpre[js->rpreLen]   = '\0';
+                }
             }
         }
         if (s == NATS_OK)
         {
-            char subj[jsReplyPrefixLen + 2];
+            char *subj = NULL;
 
-            snprintf(subj, sizeof(subj), "%s*", js->rpre);
-            s = natsConn_subscribeNoPool(&(js->rsub), js->nc, subj, _handleAsyncReply, (void*) js);
+            if (nats_asprintf(&subj, "%s*", js->rpre) < 0)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+            else
+                s = natsConn_subscribeNoPool(&(js->rsub), js->nc, subj, _handleAsyncReply, (void*) js);
             if (s == NATS_OK)
             {
                 _retain(js);
                 natsSubscription_SetPendingLimits(js->rsub, -1, -1);
                 natsSubscription_SetOnCompleteCB(js->rsub, _subComplete, (void*) js);
             }
+            NATS_FREE(subj);
         }
         if (s != NATS_OK)
         {
@@ -698,14 +705,14 @@ _newAsyncReply(char *reply, jsCtx *js)
         int64_t l;
         int     i;
 
-        memcpy(reply, js->rpre, jsReplyPrefixLen);
+        memcpy(reply, js->rpre, js->rpreLen);
         l = nats_Rand64();
         for (i=0; i < jsReplyTokenSize; i++)
         {
-            reply[jsReplyPrefixLen+i] = jsDigits[l%jsBase];
+            reply[js->rpreLen+i] = jsDigits[l%jsBase];
             l /= jsBase;
         }
-        reply[jsReplyPrefixLen+jsReplyTokenSize] = '\0';
+        reply[js->rpreLen+jsReplyTokenSize] = '\0';
     }
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -726,7 +733,7 @@ _registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg)
     js->pmcount++;
     s = _newAsyncReply(reply, js);
     if (s == NATS_OK)
-        id = reply+jsReplyPrefixLen;
+        id = reply+js->rpreLen;
     if ((s == NATS_OK)
             && (maxp > 0)
             && (js->pmcount > maxp))
@@ -780,10 +787,18 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
 {
     natsStatus      s   = NATS_OK;
     natsConnection  *nc = NULL;
-    char            reply[jsReplyPrefixLen + jsReplyTokenSize + 1];
+    char            replyBuf[32 + jsReplyTokenSize + 1];
+    char            *reply = replyBuf;
 
     if ((js == NULL) || (msg == NULL) || (*msg == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (js->rpreLen > 32)
+    {
+        reply = NATS_MALLOC(js->rpreLen + jsReplyTokenSize + 1);
+        if (reply == NULL)
+            return nats_setDefaultError(NATS_NO_MEMORY);
+    }
 
     if (opts != NULL)
         s = _setHeadersFromOptions(*msg, opts);
@@ -795,7 +810,7 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
         s = natsConn_publish(nc, *msg, (const char*) reply, false);
         if (s != NATS_OK)
         {
-            char *id = reply+jsReplyPrefixLen;
+            char *id = reply+js->rpreLen;
 
             // The message may or may not have been sent, we don't know for sure.
             // We are going to attempt to remove from the map. If we can, then
@@ -818,6 +833,9 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
     // they would call with natsMsg_Destroy(NULL), which is a no-op.
     if (s == NATS_OK)
         *msg = NULL;
+
+    if (reply != replyBuf)
+        NATS_FREE(reply);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -1865,7 +1883,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     natsSubscription    *sub        = NULL;
     natsMsgHandler      cb          = NULL;
     void                *cbClosure  = NULL;
-    char                inbox[NATS_INBOX_ARRAY_SIZE];
+    natsInbox           *inbox      = NULL;
     jsOptions           jo;
     jsSubOptions        o;
     jsConsumerConfig    cfgStack;
@@ -2007,7 +2025,7 @@ PROCESS_INFO:
         if (!isPullMode)
         {
             // Attempt to create consumer if not found nor binding.
-            natsInbox_init(inbox, sizeof(inbox));
+            natsConn_newInbox(nc, &inbox);
             deliver = (const char*) inbox;
             cfg->DeliverSubject = deliver;
         }
@@ -2090,7 +2108,7 @@ PROCESS_INFO:
     {
         if (isPullMode)
         {
-            s = natsInbox_init(inbox, sizeof(inbox));
+            s = natsConn_newInbox(nc, &inbox);
             deliver = (const char*) inbox;
         }
         // Create the NATS subscription on given deliver subject. Note that
@@ -2181,6 +2199,7 @@ END:
         NATS_FREE((char*) jo.Prefix);
     if (freeStream)
         NATS_FREE((char*) stream);
+    natsInbox_Destroy(inbox);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -2566,7 +2585,7 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
     }
 
     // Grab new inbox.
-    s = natsInbox_Create(&newDeliver);
+    s = natsConn_newInbox(nc, &newDeliver);
     if (s != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 

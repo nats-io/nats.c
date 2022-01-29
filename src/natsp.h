@@ -89,12 +89,10 @@
 #define _OK_OP_LEN_         (3)
 #define _ERR_OP_LEN_        (4)
 
-#define NATS_INBOX_PRE_LEN  (7)
+#define NATS_DEFAULT_INBOX_PRE      "_INBOX."
+#define NATS_DEFAULT_INBOX_PRE_LEN  (7)
 
-#define NATS_REQ_ID_OFFSET  (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1)
 #define NATS_MAX_REQ_ID_LEN (19) // to display 2^63-1 number
-
-#define NATS_INBOX_ARRAY_SIZE   (NATS_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1)
 
 #define WAIT_FOR_READ       (0)
 #define WAIT_FOR_WRITE      (1)
@@ -306,6 +304,9 @@ struct __natsOptions
 
     // Disable the "no responders" feature.
     bool disableNoResponders;
+
+    // Custom inbox prefix
+    char *inboxPfx;
 };
 
 typedef struct __nats_MsgList
@@ -337,6 +338,7 @@ struct __jsCtx
     natsStrHash         *pm;
     natsSubscription    *rsub;
     char                *rpre;
+    int                 rpreLen;
     int                 pacw;
     int64_t             pmcount;
     int                 stalled;
@@ -659,6 +661,12 @@ struct __natsConnection
     int                 respPoolSize;
     int                 respPoolIdx;
 
+    // For inboxes. We now support custom prefixes, so we can't rely
+    // on constants based on hardcoded "_INBOX." prefix.
+    const char          *inboxPfx;
+    int                 inboxPfxLen;
+    int                 reqIdOffset;
+
     struct
     {
         bool            attached;
@@ -713,9 +721,6 @@ nats_sslRegisterThreadForCleanup(void);
 
 natsStatus
 nats_sslInit(void);
-
-natsStatus
-natsInbox_init(char *inbox, int inboxLen);
 
 natsStatus
 natsLib_msgDeliveryPostControlMsg(natsSubscription *sub);

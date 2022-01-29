@@ -338,9 +338,11 @@ _oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
 {
     natsStatus          s       = NATS_OK;
     natsSubscription    *sub    = NULL;
-    char                inbox[NATS_INBOX_ARRAY_SIZE];
+    char                inboxBuf[32 + NUID_BUFFER_LEN + 1];
+    char                *inbox  = NULL;
+    bool                freeIbx = false;
 
-    s = natsInbox_init(inbox, sizeof(inbox));
+    s = natsConn_initInbox(nc, inboxBuf, sizeof(inboxBuf), &inbox, &freeIbx);
     if (s == NATS_OK)
         s = natsConn_subscribeSyncNoPool(&sub, nc, inbox);
     if (s == NATS_OK)
@@ -350,6 +352,8 @@ _oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
     if (s == NATS_OK)
         s = natsSubscription_NextMsg(replyMsg, sub, timeout);
 
+    if (freeIbx)
+        NATS_FREE(inbox);
     natsSubscription_Destroy(sub);
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -374,10 +378,10 @@ _respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clos
     // We look for the reply token by first checking that the message subject
     // prefix matches the subscription's subject (without the last '*').
     // It is possible that it does not due to subject rewrite (JetStream).
-    if ((strlen(subj) > NATS_REQ_ID_OFFSET)
+    if (((int) strlen(subj) > nc->reqIdOffset)
         && (memcmp((const void*) sub->subject, (const void*) subj, strlen(sub->subject) - 1) == 0))
     {
-        rt = (char*) (natsMsg_GetSubject(msg) + NATS_REQ_ID_OFFSET);
+        rt = (char*) (natsMsg_GetSubject(msg) + nc->reqIdOffset);
         resp = (respInfo*) natsStrHash_Remove(nc->respMap, rt);
     }
     else if (natsStrHash_Count(nc->respMap) == 1)
@@ -422,7 +426,8 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     natsStatus          s           = NATS_OK;
     respInfo            *resp       = NULL;
     bool                needsRemoval= true;
-    char                respInbox[NATS_INBOX_ARRAY_SIZE + NATS_MAX_REQ_ID_LEN + 1]; // _INBOX.<nuid>.<reqId>
+    char                respInboxBuf[32 + NUID_BUFFER_LEN + NATS_MAX_REQ_ID_LEN + 1]; // <inbox prefix>.<nuid>.<reqId>
+    char                *respInbox = respInboxBuf;
 
     if ((replyMsg == NULL) || (nc == NULL) || (m == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -433,12 +438,24 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     if (natsConn_isClosed(nc))
     {
         natsConn_Unlock(nc);
-        return NATS_CONNECTION_CLOSED;
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
     if (nc->opts->useOldRequestStyle)
     {
         natsConn_Unlock(nc);
         return _oldRequestMsg(replyMsg, nc, m, timeout);
+    }
+
+    // If the custom inbox prefix is more than the reserved 32 characters
+    // in respInboxBuf, then we need to allocate...
+    if (nc->inboxPfxLen > 32)
+    {
+        respInbox = NATS_MALLOC(nc->inboxPfxLen + NUID_BUFFER_LEN + NATS_MAX_REQ_ID_LEN + 1);
+        if (respInbox == NULL)
+        {
+            natsConn_Unlock(nc);
+            return nats_setDefaultError(NATS_NO_MEMORY);
+        }
     }
 
     // Since we are going to release the lock and connection
@@ -501,12 +518,15 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     {
         natsConn_Lock(nc);
         if (nc->respMap != NULL)
-            natsStrHash_Remove(nc->respMap, respInbox+NATS_REQ_ID_OFFSET);
+            natsStrHash_Remove(nc->respMap, respInbox+nc->reqIdOffset);
         natsConn_Unlock(nc);
     }
     natsConn_disposeRespInfo(nc, resp, true);
 
     natsConn_release(nc);
+
+    if (respInbox != respInboxBuf)
+        NATS_FREE(respInbox);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

@@ -1339,6 +1339,49 @@ natsOptions_DisableNoResponders(natsOptions *opts, bool disabled)
     return NATS_OK;
 }
 
+natsStatus
+natsOptions_SetCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix)
+{
+    natsStatus s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    NATS_FREE(opts->inboxPfx);
+    opts->inboxPfx = NULL;
+
+    if (!nats_IsStringEmpty(inboxPrefix))
+    {
+        int i;
+        int last = (int)strlen(inboxPrefix)-1;
+
+        for (i=0; i<=last; i++)
+        {
+            char c = inboxPrefix[i];
+
+            if ((c == ' ') || (c == '*') || (c == '>')
+                || ((c == '.') && (i > 0) && (inboxPrefix[i-1] == '.')))
+            {
+                s = nats_setError(NATS_INVALID_ARG, "Invalid inbox prefix '%s'", inboxPrefix);
+                break;
+            }
+        }
+        if (s == NATS_OK)
+        {
+            if (inboxPrefix[last] != '.')
+            {
+                if (nats_asprintf(&opts->inboxPfx, "%s.", inboxPrefix) < 0)
+                    s = nats_setDefaultError(NATS_NO_MEMORY);
+            }
+            else
+                DUP_STRING(s, opts->inboxPfx, inboxPrefix);
+        }
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return s;
+}
+
 static void
 _freeOptions(natsOptions *opts)
 {
@@ -1354,6 +1397,7 @@ _freeOptions(natsOptions *opts)
     NATS_FREE(opts->nkey);
     natsSSLCtx_release(opts->sslCtx);
     _freeUserCreds(opts->userCreds);
+    NATS_FREE(opts->inboxPfx);
     natsMutex_Destroy(opts->mu);
     NATS_FREE(opts);
 }
@@ -1432,6 +1476,7 @@ natsOptions_clone(natsOptions *opts)
     cloned->token   = NULL;
     cloned->nkey    = NULL;
     cloned->userCreds = NULL;
+    cloned->inboxPfx  = NULL;
 
     // Also, set the number of servers count to 0, until we update
     // it (if necessary) when calling SetServers.
@@ -1470,6 +1515,8 @@ natsOptions_clone(natsOptions *opts)
                                                     opts->userCreds->userOrChainedFile,
                                                     opts->userCreds->seedFile);
     }
+    if ((s == NATS_OK) && (opts->inboxPfx != NULL))
+        s = natsOptions_SetCustomInboxPrefix(cloned, opts->inboxPfx);
 
     if (s != NATS_OK)
     {

@@ -2921,6 +2921,18 @@ test_natsOptions(void)
     s = natsOptions_DisableNoResponders(opts, false);
     testCond((s == NATS_OK) && !opts->disableNoResponders);
 
+    test("Set custom inbox prefix: ");
+    s = natsOptions_SetCustomInboxPrefix(opts, "my.prefix.");
+    testCond((s == NATS_OK)
+                && (opts->inboxPfx != NULL)
+                && (strcmp(opts->inboxPfx, "my.prefix.") == 0));
+
+    test("Clear custom inbox prefix: ");
+    s = natsOptions_SetCustomInboxPrefix(opts, NULL);
+    if ((s == NATS_OK) && (opts->inboxPfx == NULL))
+        s = natsOptions_SetCustomInboxPrefix(opts, "");
+    testCond((s == NATS_OK) && (opts->inboxPfx == NULL));
+
     // Prepare some values for the clone check
     s = natsOptions_SetURL(opts, "url");
     IFOK(s, natsOptions_SetServers(opts, servers, 3));
@@ -12138,6 +12150,144 @@ test_RequestClose(void)
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
 
+    _stopServer(serverPid);
+}
+
+
+static void
+test_CustomInbox(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsSubscription    *sub1     = NULL;
+    natsSubscription    *sub2     = NULL;
+    natsMsg             *msg      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    const char          *badPfx[] = {"bad prefix", "bad..prefix", "bad.*.prefix",
+                                     "bad.>.prefix", "bad.prefix.*", "bad.prefix.>",
+                                     "bad.prefix.."};
+    struct threadArg    arg;
+    int                 i;
+    int                 mode;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Create options: ");
+    s = natsOptions_Create(&opts);
+    testCond(s == NATS_OK);
+
+    for (i = 0; i<(int)(sizeof(badPfx)/sizeof(char*)); i++)
+    {
+        char tmp[128];
+
+        snprintf(tmp, sizeof(tmp), "Bad prefix '%s': ", badPfx[i]);
+        test(tmp);
+        s = natsOptions_SetCustomInboxPrefix(opts, badPfx[i]);
+        testCond((s == NATS_INVALID_ARG) && (opts->inboxPfx == NULL));
+        nats_clearLastError();
+    }
+
+    test("Good prefix (1): ");
+    s = natsOptions_SetCustomInboxPrefix(opts, "my.prefix");
+    testCond((s == NATS_OK) && (opts->inboxPfx != NULL)
+                && (strcmp(opts->inboxPfx, "my.prefix.") == 0));
+
+    test("Good prefix (2): ");
+    s = natsOptions_SetCustomInboxPrefix(opts, "my.prefix.");
+    testCond((s == NATS_OK) && (opts->inboxPfx != NULL)
+                && (strcmp(opts->inboxPfx, "my.prefix.") == 0));
+
+    arg.string = "I will help you";
+    arg.control= 4;
+
+    for (mode=0; mode<2; mode++)
+    {
+        test("Set old request style: ");
+        s = natsOptions_UseOldRequestStyle(opts, true);
+        testCond(s == NATS_OK);
+
+        test("Connect and setup sub: ");
+        s = natsConnection_Connect(&nc, opts);
+        IFOK(s, natsConnection_SubscribeSync(&sub1, nc, "my.prefix.>"));
+        IFOK(s, natsConnection_Subscribe(&sub2, nc, "foo", _recvTestString, (void*) &arg));
+        testCond(s == NATS_OK);
+
+        test("Send request: ");
+        s = natsConnection_RequestString(&msg, nc, "foo", "help", 1000);
+        testCond((s == NATS_OK) && (msg != NULL));
+        natsMsg_Destroy(msg);
+        msg = NULL;
+
+        test("Check custom inbox: ");
+        s = natsSubscription_NextMsg(&msg, sub1, 500);
+        testCond((s == NATS_OK) && (msg != NULL)
+                    && (strstr(natsMsg_GetSubject(msg), "my.prefix.") == natsMsg_GetSubject(msg)));
+        natsMsg_Destroy(msg);
+        msg = NULL;
+
+        natsSubscription_Destroy(sub1);
+        sub1 = NULL;
+        natsSubscription_Destroy(sub2);
+        sub2 = NULL;
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+
+    for (mode = 0; mode < 2; mode++)
+    {
+        test("Set option: ");
+        s = natsOptions_SetCustomInboxPrefix(opts, (mode == 0 ? NULL : "my.prefix."));
+        testCond(s == NATS_OK);
+
+        test("Connect: ");
+        s = natsConnection_Connect(&nc, opts);
+        testCond(s == NATS_OK);
+
+        test("Inbox init: ");
+        {
+            char inboxBuf[NATS_DEFAULT_INBOX_PRE_LEN+NUID_BUFFER_LEN+1];
+            char *inbox = NULL;
+            bool allocated = false;
+
+            s = natsConn_initInbox(nc, inboxBuf, sizeof(inboxBuf), &inbox, &allocated);
+            if (s == NATS_OK)
+            {
+                if (mode == 0)
+                {
+                    if (allocated || (inbox != inboxBuf) ||
+                            (strstr(inbox, NATS_DEFAULT_INBOX_PRE) != inbox))
+                    {
+                        s = NATS_ERR;
+                    }
+                }
+                else
+                {
+                    // Since the custom prefix "my.prefix." is more than "_INBOX.",
+                    // init should have allocated memory
+                    if (!allocated || (inbox == inboxBuf) ||
+                            (strstr(inbox, "my.prefix.") != inbox))
+                    {
+                        s = NATS_ERR;
+                    }
+                    else if (allocated)
+                        free(inbox);
+                }
+            }
+        }
+        testCond(s == NATS_OK);
+
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
     _stopServer(serverPid);
 }
 
@@ -24685,9 +24835,9 @@ test_JetStreamSubscribeConfigCheck(void)
     for (i=0; i<4; i++)
     {
         jsConsumerConfig    cc;
-        char                inbox[64];
+        natsInbox           *inbox = NULL;
 
-        natsInbox_init(inbox, sizeof(inbox));
+        natsInbox_Create(&inbox);
         natsNUID_Next(durName, sizeof(durName));
         jsConsumerConfig_Init(&cc);
         switch (i)
@@ -24725,6 +24875,8 @@ test_JetStreamSubscribeConfigCheck(void)
                 s = NATS_ERR;
             testCond(s == NATS_OK);
         }
+        natsInbox_Destroy(inbox);
+        inbox = NULL;
     }
 
     // Verify that we don't fail if user did not set it.
@@ -29937,6 +30089,7 @@ static testInfo allTests[] =
     {"OldRequest",                      test_OldRequest},
     {"SimultaneousRequests",            test_SimultaneousRequest},
     {"RequestClose",                    test_RequestClose},
+    {"CustomInbox",                     test_CustomInbox},
     {"FlushInCb",                       test_FlushInCb},
     {"ReleaseFlush",                    test_ReleaseFlush},
     {"FlushErrOnDisconnect",            test_FlushErrOnDisconnect},

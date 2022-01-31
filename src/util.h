@@ -237,4 +237,7 @@ nats_marshalLong(natsBuffer *buf, bool comma, const char *fieldName, int64_t lva
 natsStatus
 nats_marshalULong(natsBuffer *buf, bool comma, const char *fieldName, uint64_t uval);
 
+bool
+nats_IsSubjectValid(const char *subject, bool wcAllowed);
+
 #endif /* UTIL_H_ */

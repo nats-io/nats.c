@@ -1339,8 +1339,8 @@ natsOptions_DisableNoResponders(natsOptions *opts, bool disabled)
     return NATS_OK;
 }
 
-natsStatus
-natsOptions_SetCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix)
+static natsStatus
+_setCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix, bool check)
 {
     natsStatus s = NATS_OK;
 
@@ -1351,35 +1351,38 @@ natsOptions_SetCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix)
 
     if (!nats_IsStringEmpty(inboxPrefix))
     {
-        int i;
-        int last = (int)strlen(inboxPrefix)-1;
+        // If not called from clone(), we need to check the validity of the
+        // inbox prefix.
+        if (check && !nats_IsSubjectValid(inboxPrefix, false))
+            s = nats_setError(NATS_INVALID_ARG, "Invalid inbox prefix '%s'", inboxPrefix);
 
-        for (i=0; i<=last; i++)
-        {
-            char c = inboxPrefix[i];
-
-            if ((c == ' ') || (c == '*') || (c == '>')
-                || ((c == '.') && (i > 0) && (inboxPrefix[i-1] == '.')))
-            {
-                s = nats_setError(NATS_INVALID_ARG, "Invalid inbox prefix '%s'", inboxPrefix);
-                break;
-            }
-        }
         if (s == NATS_OK)
         {
-            if (inboxPrefix[last] != '.')
+            // If invoked from user, there will not be the last '.', which
+            // we will add here.
+            if (check)
             {
                 if (nats_asprintf(&opts->inboxPfx, "%s.", inboxPrefix) < 0)
                     s = nats_setDefaultError(NATS_NO_MEMORY);
             }
             else
+            {
+                // We are invoked from clone(), simply duplicate the string.
                 DUP_STRING(s, opts->inboxPfx, inboxPrefix);
+            }
         }
     }
 
     UNLOCK_OPTS(opts);
 
     return s;
+}
+
+natsStatus
+natsOptions_SetCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix)
+{
+    natsStatus s = _setCustomInboxPrefix(opts, inboxPrefix, true);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static void
@@ -1516,7 +1519,7 @@ natsOptions_clone(natsOptions *opts)
                                                     opts->userCreds->seedFile);
     }
     if ((s == NATS_OK) && (opts->inboxPfx != NULL))
-        s = natsOptions_SetCustomInboxPrefix(cloned, opts->inboxPfx);
+        s = _setCustomInboxPrefix(cloned, opts->inboxPfx, false);
 
     if (s != NATS_OK)
     {

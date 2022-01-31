@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <ctype.h>
 
 #include "conn.h"
 #include "mem.h"
@@ -2929,41 +2930,21 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub)
 }
 
 static bool
-_checkSubjOrQueue(const char *name, bool checkToken)
+_isQueueNameValid(const char *name)
 {
-    int     i       = 0;
-    int     len     = 0;
-    int     lastDot = -1;
-    char    c;
+    int i;
+    int len;
+
+    if (nats_IsStringEmpty(name))
+        return false;
 
     len = (int) strlen(name);
     for (i=0; i<len ; i++)
     {
-        c = name[i];
-        if ((c == ' ') || (c == '\t') || (c == '\r') || (c == '\n'))
-            return true;
-
-        if (checkToken && (c == '.'))
-        {
-            if ((i == len-1) || (i == lastDot+1))
-                return true;
-
-            lastDot = i;
-        }
+        if (isspace(name[i]))
+            return false;
     }
-    return false;
-}
-
-static bool
-_badSubject(const char *subj)
-{
-    return _checkSubjOrQueue(subj, true);
-}
-
-static bool
-_badQueue(const char *queue)
-{
-    return _checkSubjOrQueue(queue, false);
+    return true;
 }
 
 // subscribe is the internal subscribe function that indicates interest in a subject.
@@ -2979,10 +2960,10 @@ natsConn_subscribeImpl(natsSubscription **newSub,
     if (nc == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if ((subj == NULL) || (strlen(subj) == 0) || _badSubject(subj))
+    if (!nats_IsSubjectValid(subj, true))
         return nats_setDefaultError(NATS_INVALID_SUBJECT);
 
-    if ((queue != NULL) && ((strlen(subj) == 0) || _badQueue(queue)))
+    if ((queue != NULL) && !_isQueueNameValid(queue))
         return nats_setDefaultError(NATS_INVALID_QUEUE_NAME);
 
     if (lock)

@@ -2176,3 +2176,58 @@ nats_marshalULong(natsBuffer *buf, bool comma, const char *fieldName, uint64_t u
     natsStatus s = _marshalLongVal(buf, comma, fieldName, false, 0, uval);
     return NATS_UPDATE_ERR_STACK(s);
 }
+
+
+bool
+nats_IsSubjectValid(const char *subject, bool wcAllowed)
+{
+    int     i       = 0;
+    int     len     = 0;
+    int     lastDot = -1;
+    char    c;
+
+    if (nats_IsStringEmpty(subject))
+        return false;
+
+    len = (int) strlen(subject);
+    for (i=0; i<len ; i++)
+    {
+        c = subject[i];
+        if (isspace(c))
+            return false;
+
+        if (c == '.')
+        {
+            if ((i == len-1) || (i == lastDot+1))
+                return false;
+
+            // If the last token was 1 character long...
+            if (i == lastDot+2)
+            {
+                char prevToken = subject[i-1];
+
+                // If that token was `>`, then it is not a valid subject,
+                // regardless if wildcards are allowed or not.
+                if (prevToken == '>')
+                    return false;
+                else if (!wcAllowed && (prevToken == '*'))
+                    return false;
+            }
+
+            lastDot = i;
+        }
+
+        // Check the last character to see if it is a wildcard. Others
+        // are handled when processing the next '.' character (since
+        // if not a token of their own, they are not considered wildcards).
+        if (i == len-1)
+        {
+            // If they are a token of their own, that is, the preceeding
+            // character is the `.` or they are the first and only character,
+            // then the result will depend if wilcards are allowed or not.
+            if (((c == '>') || (c == '*')) && (i == lastDot+1))
+                return wcAllowed;
+        }
+    }
+    return true;
+}

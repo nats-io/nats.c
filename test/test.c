@@ -2922,7 +2922,7 @@ test_natsOptions(void)
     testCond((s == NATS_OK) && !opts->disableNoResponders);
 
     test("Set custom inbox prefix: ");
-    s = natsOptions_SetCustomInboxPrefix(opts, "my.prefix.");
+    s = natsOptions_SetCustomInboxPrefix(opts, "my.prefix");
     testCond((s == NATS_OK)
                 && (opts->inboxPfx != NULL)
                 && (strcmp(opts->inboxPfx, "my.prefix.") == 0));
@@ -12164,9 +12164,9 @@ test_CustomInbox(void)
     natsSubscription    *sub2     = NULL;
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
-    const char          *badPfx[] = {"bad prefix", "bad..prefix", "bad.*.prefix",
+    const char          *badPfx[] = {"bad prefix", "bad\tprefix", "bad..prefix", "bad.*.prefix",
                                      "bad.>.prefix", "bad.prefix.*", "bad.prefix.>",
-                                     "bad.prefix.."};
+                                     "bad.prefix.", "bad.prefix.."};
     struct threadArg    arg;
     int                 i;
     int                 mode;
@@ -12193,13 +12193,8 @@ test_CustomInbox(void)
         nats_clearLastError();
     }
 
-    test("Good prefix (1): ");
+    test("Good prefix: ");
     s = natsOptions_SetCustomInboxPrefix(opts, "my.prefix");
-    testCond((s == NATS_OK) && (opts->inboxPfx != NULL)
-                && (strcmp(opts->inboxPfx, "my.prefix.") == 0));
-
-    test("Good prefix (2): ");
-    s = natsOptions_SetCustomInboxPrefix(opts, "my.prefix.");
     testCond((s == NATS_OK) && (opts->inboxPfx != NULL)
                 && (strcmp(opts->inboxPfx, "my.prefix.") == 0));
 
@@ -12242,7 +12237,7 @@ test_CustomInbox(void)
     for (mode = 0; mode < 2; mode++)
     {
         test("Set option: ");
-        s = natsOptions_SetCustomInboxPrefix(opts, (mode == 0 ? NULL : "my.prefix."));
+        s = natsOptions_SetCustomInboxPrefix(opts, (mode == 0 ? NULL : "my.prefix"));
         testCond(s == NATS_OK);
 
         test("Connect: ");
@@ -12602,9 +12597,14 @@ test_SubBadSubjectAndQueueName(void)
     natsConnection      *nc         = NULL;
     natsSubscription    *sub        = NULL;
     natsPid             pid         = NATS_INVALID_PID;
-    const char          *badSubs[]  = {"foo bar", "foo..bar", ".foo", "bar.baz.", "baz\t.foo"};
-    const char          *badQueues[]= {"foo group", "group\t1", "g1\r\n2"};
-    const char          *goodSubs[] = {"foo.bar", "a.bcd", "abc.d"};
+    const char          *badSubjs[] = {NULL, "", "foo bar", "foo..bar", ".foo", "bar.baz.", "baz\t.foo"};
+    const char          *goodSubjs[]= {"foo.bar", "a.bcd", "abc.d"};
+    const char          *wcSubjs[]  = {"*", "*.*", "*.foo.bar", "foo.*.bar", "foo.bar.*", ">", "foo.bar.>"};
+    const char          *badWCs[]   = {">.foo", "foo.>.bar", ">.>"};
+    const char          *badQueues[]= {"queue name", "queue.name ", " queue.name",
+                                       "queue\tname", "\tqueue.name", "\t.queue.name", "queue.name\t", "queue.name.\t",
+                                       "queue\rname", "\rqueue.name", "\r.queue.name", "queue.name\r", "queue.name.\r",
+                                       "queue\nname", "\nqueue.name", "\n.queue.name", "queue.name\n", "queue.name.\n"};
     char                buf[256];
     int                 i;
 
@@ -12615,23 +12615,20 @@ test_SubBadSubjectAndQueueName(void)
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
     testCond(s == NATS_OK);
 
-    for (i=0; i<(int) (sizeof(badSubs)/sizeof(char*)); i++)
+    for (i=0; i<(int) (sizeof(badSubjs)/sizeof(char*)); i++)
     {
-        snprintf(buf, sizeof(buf), "test subject '%s': ", badSubs[i]);
+        snprintf(buf, sizeof(buf), "test subject '%s': ", badSubjs[i]);
         test(buf)
-        s = natsConnection_SubscribeSync(&sub, nc, badSubs[i]);
-        testCond((s == NATS_INVALID_SUBJECT) && (sub == NULL));
-        nats_clearLastError();
+        s = (nats_IsSubjectValid(badSubjs[i], true) ? NATS_ERR : NATS_OK);
+        testCond(s == NATS_OK);
     }
 
-    for (i=0; i<(int) (sizeof(goodSubs)/sizeof(char*)); i++)
+    for (i=0; i<(int) (sizeof(goodSubjs)/sizeof(char*)); i++)
     {
-        snprintf(buf, sizeof(buf), "test subject '%s': ", goodSubs[i]);
+        snprintf(buf, sizeof(buf), "test subject '%s': ", goodSubjs[i]);
         test(buf)
-        s = natsConnection_SubscribeSync(&sub, nc, goodSubs[i]);
+        s = (nats_IsSubjectValid(goodSubjs[i], true) ? NATS_OK : NATS_ERR);
         testCond(s == NATS_OK);
-        natsSubscription_Destroy(sub);
-        sub = NULL;
     }
 
     for (i=0; i<(int) (sizeof(badQueues)/sizeof(char*)); i++)
@@ -12641,6 +12638,30 @@ test_SubBadSubjectAndQueueName(void)
         s = natsConnection_QueueSubscribeSync(&sub, nc, "foo", badQueues[i]);
         testCond((s == NATS_INVALID_QUEUE_NAME) && (sub == NULL));
         nats_clearLastError();
+    }
+
+    for (i=0; i<(int) (sizeof(wcSubjs)/sizeof(char*)); i++)
+    {
+        snprintf(buf, sizeof(buf), "test wildcard ok '%s': ", wcSubjs[i]);
+        test(buf)
+        s = (nats_IsSubjectValid(wcSubjs[i], true) ? NATS_OK : NATS_ERR);
+        testCond(s == NATS_OK);
+    }
+
+    for (i=0; i<(int) (sizeof(wcSubjs)/sizeof(char*)); i++)
+    {
+        snprintf(buf, sizeof(buf), "test no wildcard allowed '%s': ", wcSubjs[i]);
+        test(buf)
+        s = (nats_IsSubjectValid(wcSubjs[i], false) ? NATS_ERR : NATS_OK);
+        testCond(s == NATS_OK);
+    }
+
+    for (i=0; i<(int) (sizeof(badWCs)/sizeof(char*)); i++)
+    {
+        snprintf(buf, sizeof(buf), "bad wildcard '%s': ", badWCs[i]);
+        test(buf)
+        s = (nats_IsSubjectValid(badWCs[i], true) ? NATS_ERR : NATS_OK);
+        testCond(s == NATS_OK);
     }
 
     natsConnection_Destroy(nc);

@@ -2756,14 +2756,12 @@ natsOptions_DisableNoResponders(natsOptions *opts, bool disabled);
 
 /** \brief Sets a custom inbox prefix
  *
- * The default inbox prefix is "_INBOX.", but you can change it
+ * The default inbox prefix is "_INBOX", but you can change it
  * using this option. This can be useful when setting permissions
  * and/or with import/exports across different accounts.
  *
- * The prefix must not contain the `*` or `>` wildcard and must
- * be a well formed subject. The exception is that the prefix
- * can be set by the user with a terminal token separator. If not
- * set, the library will internally add it.
+ * The prefix must be a valid subject and not contain any of the
+ * wildcards tokens `*` nor `>`.
  *
  * To clear the custom inbox prefix, call this function with `NULL`
  * or the empty string.

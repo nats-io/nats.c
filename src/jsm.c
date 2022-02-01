@@ -1,4 +1,4 @@
-// Copyright 2021 The NATS Authors
+// Copyright 2021-2022 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -1706,6 +1706,10 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         s = nats_marshalLong(buf, true, "idle_heartbeat", cfg->Heartbeat);
     if ((s == NATS_OK) && cfg->HeadersOnly)
         s = natsBuf_Append(buf, ",\"headers_only\":true", -1);
+    if ((s == NATS_OK) && (cfg->MaxRequestBatch > 0))
+        s = nats_marshalLong(buf, true, "max_batch", cfg->MaxRequestBatch);
+    if ((s == NATS_OK) && (cfg->MaxRequestExpires > 0))
+        s = nats_marshalLong(buf, true, "max_expires", cfg->MaxRequestExpires);
     IFOK(s, natsBuf_Append(buf, "}}", -1));
 
     if (s == NATS_OK)
@@ -1840,6 +1844,8 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
         IFOK(s, nats_JSONGetBool(cjson, "flow_control", &(cc->FlowControl)));
         IFOK(s, nats_JSONGetLong(cjson, "idle_heartbeat", &(cc->Heartbeat)));
         IFOK(s, nats_JSONGetBool(cjson, "headers_only", &(cc->HeadersOnly)));
+        IFOK(s, nats_JSONGetLong(cjson, "max_batch", &(cc->MaxRequestBatch)));
+        IFOK(s, nats_JSONGetLong(cjson, "max_expires", &(cc->MaxRequestExpires)));
     }
 
     if (s == NATS_OK)
@@ -1989,6 +1995,23 @@ js_AddConsumer(jsConsumerInfo **new_ci, jsCtx *js,
     natsMsg_Destroy(resp);
     natsBuf_Destroy(buf);
 
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_UpdateConsumer(jsConsumerInfo **ci, jsCtx *js,
+                  const char *stream, jsConsumerConfig *cfg,
+                  jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s;
+
+    if (cfg == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (nats_IsStringEmpty(cfg->Durable))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrDurRequired);
+
+    s = js_AddConsumer(ci, js, stream, cfg, opts, errCode);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2022 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -21487,6 +21487,8 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"replay_policy\":\"" jsReplayOriginalStr "\"}}",
         "{\"config\":{\"deliver_group\":\"queue_name\"}}",
         "{\"config\":{\"headers_only\":true}}",
+        "{\"config\":{\"max_batch\":1}}",
+        "{\"config\":{\"max_expires\":123456789}}",
     };
     const char          *bad[] = {
         "{\"stream_name\":123}",
@@ -21512,6 +21514,8 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"idle_heartbeat\":\"abc\"}}",
         "{\"config\":{\"deliver_group\":123}}",
         "{\"config\":{\"headers_only\":123}}",
+        "{\"config\":{\"max_batch\":\"1\"}}",
+        "{\"config\":{\"max_expires\":\"123456789\"}}",
         "{\"delivered\":123}",
         "{\"delivered\":{\"consumer_seq\":\"abc\"}}",
         "{\"delivered\":{\"stream_seq\":\"abc\"}}",
@@ -22458,7 +22462,7 @@ test_JetStreamMgtConsumers(void)
     jsReplayPolicy          replayPolicies[] = {
         js_ReplayInstant, js_ReplayOriginal};
 
-    JS_SETUP(2, 3, 3);
+    JS_SETUP(2, 7, 0);
 
     test("Consumer config init, bad args: ");
     s = jsConsumerConfig_Init(NULL);
@@ -22761,8 +22765,99 @@ test_JetStreamMgtConsumers(void)
     s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
     testCond((s == NATS_ERR) && (ci == NULL) && (jerr == JSConsumerDescriptionTooLongErr));
     nats_clearLastError();
-
     free(desc);
+
+    test("Create consumer: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Durable = "update_push_consumer";
+    cfg.DeliverSubject = "bar";
+    cfg.AckPolicy = js_AckExplicit;
+    s = js_AddConsumer(NULL, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    // We will update this config and pass it to UpdateConsumer
+    // and check that the result after UpdateConsumer matches...
+    // Currently, server supports these fields:
+    // description, ack_wait, max_deliver, sample_freq, max_ack_pending, max_waiting and headers_only
+    cfg.Description = "my description";
+    cfg.AckWait = 2*(int64_t)1E9;
+    cfg.MaxDeliver = 1;
+    cfg.SampleFrequency = "30";
+    cfg.MaxAckPending = 10;
+    cfg.HeadersOnly = true;
+
+    test("Update needs stream name: ");
+    s = js_UpdateConsumer(&ci, js, NULL, &cfg, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_UpdateConsumer(&ci, js, "", &cfg, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (ci == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Update needs durable name: ");
+    cfg.Durable = NULL;
+    s = js_UpdateConsumer(&ci, js, NULL, &cfg, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+    {
+        cfg.Durable = "";
+        s = js_UpdateConsumer(&ci, js, NULL, &cfg, NULL, &jerr);
+    }
+    testCond((s == NATS_INVALID_ARG) && (ci == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrDurRequired) != NULL));
+    nats_clearLastError();
+    cfg.Durable = "update_push_consumer";
+
+    test("Update needs config: ");
+    s = js_UpdateConsumer(&ci, js, "MY_STREAM", NULL, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (ci == NULL) && (jerr == 0));
+    nats_clearLastError();
+
+    test("Update works ok: ");
+    s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL) && (ci->Config != NULL)
+                && (strcmp(ci->Config->Description, "my description") == 0)
+                && (ci->Config->AckWait == 2*(int64_t)1E9)
+                && (ci->Config->MaxDeliver == 1)
+                && (strcmp(ci->Config->SampleFrequency, "30") == 0)
+                && (ci->Config->MaxAckPending == 10)
+                && (ci->Config->HeadersOnly));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+    test("Add pull consumer: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Durable = "update_pull_consumer";
+    cfg.AckPolicy = js_AckExplicit;
+    cfg.MaxWaiting = 1;
+    s = js_AddConsumer(NULL, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    cfg.Description = "my description";
+    cfg.AckWait = 2*(int64_t)1E9;
+    cfg.MaxDeliver = 1;
+    cfg.SampleFrequency = "30";
+    cfg.MaxAckPending = 10;
+    cfg.MaxWaiting = 20;
+    cfg.HeadersOnly = true;
+    cfg.MaxRequestBatch = 10;
+    cfg.MaxRequestExpires = 2*(int64_t)1E9;
+
+    test("Update works ok: ");
+    s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL) && (ci->Config != NULL)
+                && (strcmp(ci->Config->Description, "my description") == 0)
+                && (ci->Config->AckWait == 2*(int64_t)1E9)
+                && (ci->Config->MaxDeliver == 1)
+                && (strcmp(ci->Config->SampleFrequency, "30") == 0)
+                && (ci->Config->MaxAckPending == 10)
+                && (ci->Config->MaxWaiting == 20)
+                && (ci->Config->HeadersOnly)
+                && (ci->Config->MaxRequestBatch == 10)
+                && (ci->Config->MaxRequestExpires == 2*(int64_t)1E9));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+
     JS_TEARDOWN;
 }
 
@@ -24296,10 +24391,11 @@ test_JetStreamSubscribeSync(void)
     natsMsg             *msg = NULL;
     const char          *consName;
     jsConsumerInfo      *ci = NULL;
+    jsConsumerInfo      *ci2 = NULL;
     jsMsgMetaData       *meta = NULL;
     jsSubOptions        so;
 
-    JS_SETUP(2, 3, 5);
+    JS_SETUP(2, 7, 0);
 
     test("Create sync sub (invalid args): ");
     s = js_SubscribeSync(NULL, js, "foo", NULL, NULL, &jerr);
@@ -24686,6 +24782,7 @@ test_JetStreamSubscribeSync(void)
     IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", consName, NULL, &jerr));
     testCond((s == NATS_OK) && (ci != NULL) && (jerr == 0));
     jsConsumerInfo_Destroy(ci);
+    ci = NULL;
 
     test("Wait for drain to complete: ");
     s = natsSubscription_NextMsg(&msg, sub, 1000);
@@ -24722,7 +24819,63 @@ test_JetStreamSubscribeSync(void)
     testCond((s == NATS_TIMEOUT) && (msg == NULL));
 
     natsSubscription_Destroy(sub);
+    sub = NULL;
     natsSubscription_Destroy(ackSub);
+    ackSub = NULL;
+
+    test("Test InactiveThreshold (bad value): ");
+    jsSubOptions_Init(&so);
+    so.Config.InactiveThreshold = -100*1E6;
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), "invalid InactiveThreshold") != NULL));
+    nats_clearLastError();
+
+    test("Create normal sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "test");
+    testCond((s == NATS_OK) && (sub != NULL));
+
+    test("sub get info (invalid args): ");
+    s = natsSubscription_GetConsumerInfo(NULL, sub, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = natsSubscription_GetConsumerInfo(&ci, NULL, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (jerr == 0));
+    nats_clearLastError();
+
+    test("sub get info (invalid sub): ");
+    s = natsSubscription_GetConsumerInfo(&ci, sub, NULL, &jerr);
+    testCond((s == NATS_INVALID_SUBSCRIPTION) && (ci == NULL) && (jerr == 0));
+    nats_clearLastError();
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Create sub: ");
+    jsSubOptions_Init(&so);
+    so.Config.InactiveThreshold = 50*1E6;
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Get consumer info: ");
+    s = natsSubscription_GetConsumerInfo(&ci, sub, NULL, &jerr);
+    testCond((s == NATS_OK) && (ci != NULL) && (jerr == 0));
+
+    test("Close conn: ");
+    jsCtx_Destroy(js);
+    js = NULL;
+    natsConnection_Destroy(nc);
+    nc = NULL;
+    testCond(true);
+
+    nats_Sleep(150);
+
+    test("Check consumer gone: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_JetStream(&js, nc, NULL));
+    IFOK(s, js_GetConsumerInfo(&ci2, js, "TEST", ci->Name, NULL, &jerr));
+    testCond((s == NATS_OK) && (jerr == 0) && (ci2 != NULL));
+    jsConsumerInfo_Destroy(ci);
+    jsConsumerInfo_Destroy(ci2);
+    natsSubscription_Destroy(sub);
     JS_TEARDOWN;
 }
 
@@ -25565,7 +25718,7 @@ test_JetStreamSubscribePull(void)
     jsAckPolicy         badAck[] = {js_AckNone, js_AckAll};
     jsConsumerConfig    cc;
 
-    JS_SETUP(2, 3, 3);
+    JS_SETUP(2, 7, 0);
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)
@@ -25831,8 +25984,8 @@ test_JetStreamSubscribePull(void)
     test("Create stream: ");
     jsStreamConfig_Init(&sc);
     sc.Name = "TEST2";
-    sc.Subjects = (const char*[1]){"bar"};
-    sc.SubjectsLen = 1;
+    sc.Subjects = (const char*[2]){"bar", "baz"};
+    sc.SubjectsLen = 2;
     s = js_AddStream(NULL, js, &sc, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
 
@@ -25865,6 +26018,29 @@ test_JetStreamSubscribePull(void)
         s = (((s == NATS_TIMEOUT) && (list.Count == 0) && (dur >= 200)) ? NATS_OK : NATS_ERR);
     }
     testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Max request batch: ");
+    jsSubOptions_Init(&so);
+    so.Config.MaxRequestBatch = 2;
+    s = js_PullSubscribe(&sub, js, "baz", "max-request-batch", NULL, &so, &jerr);
+    IFOK(s, natsSubscription_Fetch(&list, sub, 10, 1000, &jerr));
+    testCond((s != NATS_OK) && (list.Count == 0) && (list.Msgs == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), "MaxRequestBatch of 2") != NULL));
+    nats_clearLastError();
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Max request expires: ");
+    jsSubOptions_Init(&so);
+    so.Config.MaxRequestExpires = 50*1E6;
+    s = js_PullSubscribe(&sub, js, "baz", "max-request-expires", NULL, &so, &jerr);
+    IFOK(s, natsSubscription_Fetch(&list, sub, 10, 1000, &jerr));
+    testCond((s != NATS_OK) && (list.Count == 0) && (list.Msgs == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), "MaxRequestExpires of 50ms") != NULL));
+    nats_clearLastError();
 
     natsSubscription_Destroy(sub);
     JS_TEARDOWN;

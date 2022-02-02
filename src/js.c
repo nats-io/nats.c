@@ -1,4 +1,4 @@
-// Copyright 2021 The NATS Authors
+// Copyright 2021-2022 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -1365,6 +1365,36 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg
 }
 
 natsStatus
+natsSubscription_GetConsumerInfo(jsConsumerInfo **ci, natsSubscription *sub,
+                                 jsOptions *opts, jsErrCode *errCode)
+{
+    const char  *consumer = NULL;
+    const char  *stream   = NULL;
+    jsCtx       *js       = NULL;
+    natsStatus  s;
+
+    if ((ci == NULL) || (sub == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsSub_Lock(sub);
+    if ((sub->jsi == NULL) || (sub->jsi->consumer == NULL))
+    {
+        natsSub_Unlock(sub);
+        return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
+    }
+    js = sub->jsi->js;
+    stream = (const char*) sub->jsi->stream;
+    consumer = (const char*) sub->jsi->consumer;
+    sub->refs++;
+    natsSub_Unlock(sub);
+
+    s = js_GetConsumerInfo(ci, js, stream, consumer, opts, errCode);
+
+    natsSub_release(sub);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 natsSubscription_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscription *sub)
 {
     jsSub *jsi;
@@ -1423,15 +1453,13 @@ jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply)
 }
 
 static natsStatus
-_checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, jsErrCode *jerr)
+_checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg)
 {
     natsStatus  s    = NATS_OK;
     const char  *val = NULL;
     const char  *desc= NULL;
 
     *usrMsg = true;
-    if (jerr != NULL)
-        *jerr = 0;
 
     if ((msg->dataLen > 0) || (msg->hdrLen <= 0))
         return NATS_OK;
@@ -1560,7 +1588,7 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
         if (s == NATS_OK)
         {
             // Here we care only about user messages.
-            s = _checkMsg(msg, false, &usrMsg, errCode);
+            s = _checkMsg(msg, false, &usrMsg);
             if ((s == NATS_OK) && usrMsg)
                 msgs[count++] = msg;
             else
@@ -1596,7 +1624,7 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
             IFOK(s, natsSub_nextMsg(&msg, sub, timeout, true));
             if (s == NATS_OK)
             {
-                s = _checkMsg(msg, true, &usrMsg, errCode);
+                s = _checkMsg(msg, true, &usrMsg);
                 if ((s == NATS_OK) && usrMsg)
                     msgs[count++] = msg;
                 else
@@ -1903,6 +1931,11 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
         jsSubOptions_Init(&o);
         opts = &o;
     }
+    if (opts->Config.InactiveThreshold < 0)
+        return nats_setError(NATS_INVALID_ARG,
+                             "invalid InactiveThreshold value (%d), needs to be greater or equal to 0",
+                             (int) opts->Config.InactiveThreshold);
+
     // If user configures optional start sequence or time, the deliver policy
     // need to be updated accordingly. Server will return error if user tries to have both set.
     if (opts->Config.OptStartSeq > 0)

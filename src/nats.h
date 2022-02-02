@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2022 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -620,6 +620,13 @@ typedef struct jsConsumerConfig
         bool                    FlowControl;
         int64_t                 Heartbeat;              ///< Heartbeat interval expressed in number of nanoseconds.
         bool                    HeadersOnly;
+
+        // Pull based options.
+        int64_t                 MaxRequestBatch;
+        int64_t                 MaxRequestExpires;      ///< Maximum Pull Consumer request expiration, expressed in number of nanoseconds.
+
+        // Ephemeral inactivity threshold.
+        int64_t                 InactiveThreshold;      ///< How long the server keeps an ephemeral after detecting loss of interest, expressed in number of nanoseconds.
 
 } jsConsumerConfig;
 
@@ -5315,6 +5322,30 @@ js_AddConsumer(jsConsumerInfo **ci, jsCtx *js,
                    const char *stream, jsConsumerConfig *cfg,
                    jsOptions *opts, jsErrCode *errCode);
 
+/** \brief Updates a JetStream consumer.
+ *
+ * Updates a consumer based on the provided configuration (that cannot be `NULL`).
+ *
+ * \note If you do not need a #jsConsumerInfo to be returned, you can pass `NULL`,
+ * otherwise, on success you are responsible for freeing this object.
+ *
+ * @see jsConsumerConfig_Init
+ * @see jsConsumerInfo_Destroy
+ *
+ * @param ci the location where to store the pointer to the new #jsConsumerInfo object in
+ * response to the creation request, or `NULL` if the consumer information is not needed.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param cfg the pointer to the #jsConsumerConfig.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_UpdateConsumer(jsConsumerInfo **ci, jsCtx *js,
+                  const char *stream, jsConsumerConfig *cfg,
+                  jsOptions *opts, jsErrCode *errCode);
+
 /** \brief Retrieves information about a consumer.
  *
  * \note The returned object should be destroyed using #jsConsumerInfo_Destroy in order
@@ -5654,6 +5685,19 @@ NATS_EXTERN natsStatus
 natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int64_t timeout,
                        jsErrCode *errCode);
 
+/** \brief Returns the jsConsumerInfo associated with this subscription.
+ *
+ * Returns the #jsConsumerInfo associated with this subscription.
+ *
+ * @param ci the location where to store the pointer to the new #jsConsumerInfo object.
+ * @param sub the pointer to the #natsSubscription object.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetConsumerInfo(jsConsumerInfo **ci, natsSubscription *sub,
+                                 jsOptions *opts, jsErrCode *errCode);
 
 /** \brief Returns the consumer sequence mismatch information.
  *

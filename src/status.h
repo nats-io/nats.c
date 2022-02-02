@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2022 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -243,6 +243,11 @@ typedef enum {
     JSStreamSealedErr = 10109,                          ///< Invalid operation on sealed stream
     JSStreamPurgeFailedErr = 10110,                     ///< Generic stream purge failure
     JSStreamRollupFailedErr = 10111,                    ///< Generic stream rollup failure
+    JSConsumerInvalidDeliverSubjectErr = 10112,         ///< Invalid push consumer deliver subject
+    JSStreamMaxBytesRequiredErr = 10113,                ///< Account requires a stream config to have max bytes set
+    JSConsumerMaxRequestBatchNegativeErr = 10114,       ///< Consumer max request batch needs to be > 0
+    JSConsumerMaxRequestExpiresToSmallErr = 10115,      ///< Consumer max request expires needs to be > 1ms
+    JSConsumerMaxDeliverBackoffErr = 10116,             ///< Max deliver is required to be > length of backoff values
 
 } jsErrCode;
 

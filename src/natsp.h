@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2022 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -132,6 +132,9 @@
 #endif
 
 #define IFOK(s, c)      if (s == NATS_OK) { s = (c); }
+
+#define NATS_MILLIS_TO_NANOS(d)     (((int64_t)d)*(int64_t)1E6)
+#define NATS_SECONDS_TO_NANOS(d)    (((int64_t)d)*(int64_t)1E9)
 
 extern int64_t gLockSpinCount;
 

@@ -1710,6 +1710,21 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         s = nats_marshalLong(buf, true, "max_batch", cfg->MaxRequestBatch);
     if ((s == NATS_OK) && (cfg->MaxRequestExpires > 0))
         s = nats_marshalLong(buf, true, "max_expires", cfg->MaxRequestExpires);
+    if ((s == NATS_OK) && (cfg->BackOff != NULL) && (cfg->BackOffLen > 0))
+    {
+        char    tmp[32];
+        int     i;
+
+        s = natsBuf_Append(buf, ",\"backoff\":[", -1);
+        for (i=0; (s == NATS_OK) && (i<cfg->BackOffLen); i++)
+        {
+            snprintf(tmp, sizeof(tmp), "%" PRId64, cfg->BackOff[i]);
+            if (i > 0)
+                s = natsBuf_AppendByte(buf, ',');
+            IFOK(s, natsBuf_Append(buf, tmp, -1));
+        }
+        IFOK(s, natsBuf_AppendByte(buf, ']'));
+    }
     IFOK(s, natsBuf_Append(buf, "}}", -1));
 
     if (s == NATS_OK)
@@ -1732,6 +1747,7 @@ _destroyConsumerConfig(jsConsumerConfig *cc)
     NATS_FREE((char*) cc->DeliverGroup);
     NATS_FREE((char*) cc->FilterSubject);
     NATS_FREE((char*) cc->SampleFrequency);
+    NATS_FREE(cc->BackOff);
     NATS_FREE(cc);
 }
 
@@ -1846,6 +1862,7 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
         IFOK(s, nats_JSONGetBool(cjson, "headers_only", &(cc->HeadersOnly)));
         IFOK(s, nats_JSONGetLong(cjson, "max_batch", &(cc->MaxRequestBatch)));
         IFOK(s, nats_JSONGetLong(cjson, "max_expires", &(cc->MaxRequestExpires)));
+        IFOK(s, nats_JSONGetArrayLong(cjson, "backoff", &(cc->BackOff), &(cc->BackOffLen)));
     }
 
     if (s == NATS_OK)

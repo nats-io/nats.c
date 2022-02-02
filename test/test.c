@@ -21489,6 +21489,7 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"headers_only\":true}}",
         "{\"config\":{\"max_batch\":1}}",
         "{\"config\":{\"max_expires\":123456789}}",
+        "{\"config\":{\"backoff\":[50000000,250000000]}}",
     };
     const char          *bad[] = {
         "{\"stream_name\":123}",
@@ -21516,6 +21517,7 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"headers_only\":123}}",
         "{\"config\":{\"max_batch\":\"1\"}}",
         "{\"config\":{\"max_expires\":\"123456789\"}}",
+        "{\"config\":{\"backoff\":true}}",
         "{\"delivered\":123}",
         "{\"delivered\":{\"consumer_seq\":\"abc\"}}",
         "{\"delivered\":{\"stream_seq\":\"abc\"}}",
@@ -22780,7 +22782,7 @@ test_JetStreamMgtConsumers(void)
     // Currently, server supports these fields:
     // description, ack_wait, max_deliver, sample_freq, max_ack_pending, max_waiting and headers_only
     cfg.Description = "my description";
-    cfg.AckWait = 2*(int64_t)1E9;
+    cfg.AckWait = NATS_SECONDS_TO_NANOS(2);
     cfg.MaxDeliver = 1;
     cfg.SampleFrequency = "30";
     cfg.MaxAckPending = 10;
@@ -22816,7 +22818,7 @@ test_JetStreamMgtConsumers(void)
     s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL) && (ci->Config != NULL)
                 && (strcmp(ci->Config->Description, "my description") == 0)
-                && (ci->Config->AckWait == 2*(int64_t)1E9)
+                && (ci->Config->AckWait == NATS_SECONDS_TO_NANOS(2))
                 && (ci->Config->MaxDeliver == 1)
                 && (strcmp(ci->Config->SampleFrequency, "30") == 0)
                 && (ci->Config->MaxAckPending == 10)
@@ -22833,30 +22835,29 @@ test_JetStreamMgtConsumers(void)
     testCond((s == NATS_OK) && (jerr == 0));
 
     cfg.Description = "my description";
-    cfg.AckWait = 2*(int64_t)1E9;
+    cfg.AckWait = NATS_SECONDS_TO_NANOS(2);
     cfg.MaxDeliver = 1;
     cfg.SampleFrequency = "30";
     cfg.MaxAckPending = 10;
     cfg.MaxWaiting = 20;
     cfg.HeadersOnly = true;
     cfg.MaxRequestBatch = 10;
-    cfg.MaxRequestExpires = 2*(int64_t)1E9;
+    cfg.MaxRequestExpires = NATS_SECONDS_TO_NANOS(2);
 
     test("Update works ok: ");
     s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL) && (ci->Config != NULL)
                 && (strcmp(ci->Config->Description, "my description") == 0)
-                && (ci->Config->AckWait == 2*(int64_t)1E9)
+                && (ci->Config->AckWait == NATS_SECONDS_TO_NANOS(2))
                 && (ci->Config->MaxDeliver == 1)
                 && (strcmp(ci->Config->SampleFrequency, "30") == 0)
                 && (ci->Config->MaxAckPending == 10)
                 && (ci->Config->MaxWaiting == 20)
                 && (ci->Config->HeadersOnly)
                 && (ci->Config->MaxRequestBatch == 10)
-                && (ci->Config->MaxRequestExpires == 2*(int64_t)1E9));
+                && (ci->Config->MaxRequestExpires == NATS_SECONDS_TO_NANOS(2)));
     jsConsumerInfo_Destroy(ci);
     ci = NULL;
-
 
     JS_TEARDOWN;
 }
@@ -24317,7 +24318,7 @@ test_JetStreamSubscribe(void)
     jsSubOptions_Init(&so);
     so.Stream = "TEST";
     so.Queue = "queue";
-    so.Config.Heartbeat = (int64_t) 1E9;
+    so.Config.Heartbeat = NATS_SECONDS_TO_NANOS(2);
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
     testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
                 && (strstr(nats_GetLastError(NULL), jsErrNoHeartbeatForQueueSub) != NULL));
@@ -24825,7 +24826,7 @@ test_JetStreamSubscribeSync(void)
 
     test("Test InactiveThreshold (bad value): ");
     jsSubOptions_Init(&so);
-    so.Config.InactiveThreshold = -100*1E6;
+    so.Config.InactiveThreshold = NATS_MILLIS_TO_NANOS(-100);
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
     testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
                 && (strstr(nats_GetLastError(NULL), "invalid InactiveThreshold") != NULL));
@@ -24851,7 +24852,7 @@ test_JetStreamSubscribeSync(void)
 
     test("Create sub: ");
     jsSubOptions_Init(&so);
-    so.Config.InactiveThreshold = 50*1E6;
+    so.Config.InactiveThreshold = NATS_MILLIS_TO_NANOS(50);
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
@@ -24944,8 +24945,8 @@ test_JetStreamSubscribeConfigCheck(void)
             case 4:
             {
                 name = "ack wait";
-                so1.Config.AckWait = 10*(int64_t)1E9;
-                so2.Config.AckWait = 15*(int64_t)1E9;
+                so1.Config.AckWait = NATS_SECONDS_TO_NANOS(10);
+                so2.Config.AckWait = NATS_SECONDS_TO_NANOS(15);
                 break;
             }
             case 5:
@@ -25019,7 +25020,7 @@ test_JetStreamSubscribeConfigCheck(void)
             case 0: cc.AckPolicy = js_AckAll; break;
             case 1: cc.RateLimit = 10; break;
             case 2: cc.FlowControl = false; break;
-            case 3: cc.Heartbeat = 10*(int64_t)1E9; break;
+            case 3: cc.Heartbeat = NATS_SECONDS_TO_NANOS(10); break;
         }
         cc.Durable = durName;
         cc.DeliverSubject = inbox;
@@ -25035,7 +25036,7 @@ test_JetStreamSubscribeConfigCheck(void)
                 case 0: name="ack policy"; so.Config.AckPolicy = js_AckNone; break;
                 case 1: name="rate limit"; so.Config.RateLimit = 100; break;
                 case 2: name="flow control"; so.Config.FlowControl = true; break;
-                case 3: name="heartbeat"; so.Config.Heartbeat = 20*(int64_t)1E9; break;
+                case 3: name="heartbeat"; so.Config.Heartbeat = NATS_SECONDS_TO_NANOS(20); break;
             }
             snprintf(testName, sizeof(testName), "Check %s: ", name);
             test(testName);
@@ -25066,7 +25067,7 @@ test_JetStreamSubscribeConfigCheck(void)
             case 1: name = "deliver policy"; so.Config.DeliverPolicy = js_DeliverLast; break;
             case 2: name = "optional start sequence"; so.Config.OptStartSeq = 10; break;
             case 3: name = "optional start time"; so.Config.OptStartTime = 1000000000; break;
-            case 4: name = "ack wait"; so.Config.AckWait = 10*(int64_t)1E9; break;
+            case 4: name = "ack wait"; so.Config.AckWait = NATS_SECONDS_TO_NANOS(10); break;
             case 5: name = "max deliver"; so.Config.MaxDeliver = 3; break;
             case 6: name = "replay policy"; so.Config.ReplayPolicy = js_ReplayInstant; break;
             case 7: name = "max waiting"; so.Config.MaxWaiting = 10; break;
@@ -25103,7 +25104,7 @@ test_JetStreamSubscribeConfigCheck(void)
         switch (i)
         {
             case 1: name = "default deliver policy"; so.Config.DeliverPolicy = js_DeliverAll; break;
-            case 4: name = "default ack wait"; so.Config.AckWait = 30*(int64_t)1E9; break;
+            case 4: name = "default ack wait"; so.Config.AckWait = NATS_SECONDS_TO_NANOS(30); break;
             case 6: name = "default replay policy"; so.Config.ReplayPolicy = js_ReplayInstant; break;
             case 7: name = "default max waiting"; so.Config.MaxWaiting = 512; break;
             case 8: name = "default max ack pending"; so.Config.MaxAckPending = 65536; break;
@@ -25135,7 +25136,7 @@ test_JetStreamSubscribeConfigCheck(void)
         switch (i)
         {
             case 0: name = "deliver policy"; so.Config.DeliverPolicy = js_DeliverNew; break;
-            case 1: name = "ack wait"; so.Config.AckWait = 31*(int64_t)1E9; break;
+            case 1: name = "ack wait"; so.Config.AckWait = NATS_SECONDS_TO_NANOS(31); break;
             case 2: name = "replay policy"; so.Config.ReplayPolicy = js_ReplayOriginal; break;
             case 3: name = "max waiting"; so.Config.MaxWaiting = 513; break;
             case 4: name = "max ack pending"; so.Config.MaxAckPending = 2; break;
@@ -25427,6 +25428,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     testCond(s == NATS_OK);
 
     // For sync subs, we should not get async error
+    test("No async error: ");
     natsMutex_Lock(args.m);
     while ((s != NATS_TIMEOUT) && !args.done)
         s = natsCondition_TimedWait(args.c, args.m, 300);
@@ -25582,7 +25584,7 @@ test_JetStreamSubscribeFlowControl(void)
     test("Subscribe async: ");
     jsSubOptions_Init(&so);
     so.Config.FlowControl = true;
-    so.Config.Heartbeat = (int64_t) 1E9;
+    so.Config.Heartbeat = NATS_SECONDS_TO_NANOS(1);
     s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
@@ -25611,7 +25613,7 @@ test_JetStreamSubscribeFlowControl(void)
     test("Subscribe sync: ");
     jsSubOptions_Init(&so);
     so.Config.FlowControl = true;
-    so.Config.Heartbeat = (int64_t) 1E9;
+    so.Config.Heartbeat = NATS_SECONDS_TO_NANOS(1);
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
@@ -25643,7 +25645,7 @@ test_JetStreamSubscribeFlowControl(void)
     test("Subscribe: ");
     jsSubOptions_Init(&so);
     so.Config.FlowControl = true;
-    so.Config.Heartbeat = (int64_t) 1E9;
+    so.Config.Heartbeat = NATS_SECONDS_TO_NANOS(1);
     s = js_Subscribe(&sub, js, "bar", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
@@ -26035,7 +26037,7 @@ test_JetStreamSubscribePull(void)
 
     test("Max request expires: ");
     jsSubOptions_Init(&so);
-    so.Config.MaxRequestExpires = 50*1E6;
+    so.Config.MaxRequestExpires = NATS_MILLIS_TO_NANOS(50);
     s = js_PullSubscribe(&sub, js, "baz", "max-request-expires", NULL, &so, &jerr);
     IFOK(s, natsSubscription_Fetch(&list, sub, 10, 1000, &jerr));
     testCond((s != NATS_OK) && (list.Count == 0) && (list.Msgs == NULL) && (jerr == 0)
@@ -27050,6 +27052,180 @@ test_JetStreamGetMsgAndLastMsg(void)
 }
 
 static void
+test_JetStreamNakWithDelay(void)
+{
+    natsStatus          s;
+    natsSubscription    *sub= NULL;
+    jsErrCode           jerr= 0;
+    jsStreamConfig      sc;
+    natsMsg             *msg = NULL;
+    int64_t             start=0;
+    int64_t             dur  = 0;
+    jsOptions           o;
+
+    JS_SETUP(2, 7, 2);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Publish: ");
+    s = js_Publish(NULL, js, "foo", "ok", 2, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Create sub: ");
+    s = js_SubscribeSync(&sub, js, "foo", NULL, NULL, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Get message: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK) && (msg != NULL));
+
+    test("Nak with 500ms: ");
+    s = natsMsg_NakWithDelay(msg, 500, NULL);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Should not be redelivered yet: ");
+    s = natsSubscription_NextMsg(&msg, sub, 250);
+    testCond((s == NATS_TIMEOUT) && (msg == NULL));
+    nats_clearLastError();
+
+    test("Wait for redelivery: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK) && (msg != NULL));
+
+    test("NakWithDelay with 0: ");
+    s = natsMsg_NakWithDelay(msg, 0, NULL);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Wait for redelivery: ");
+    s = natsSubscription_NextMsg(&msg, sub, 250);
+    testCond((s == NATS_OK) && (msg != NULL));
+
+    natsSub_retain(sub);
+    natsSubscription_Destroy(sub);
+
+    // Stop the server...
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+
+    test("Check ack sync with options: ");
+    jsOptions_Init(&o);
+    o.Wait = 500;
+    start = nats_Now();
+    s = natsMsg_Ack(msg, &o);
+    dur = nats_Now()-start;
+    testCond((s == NATS_TIMEOUT) && (dur > 250) && (dur < 750));
+    natsMsg_Destroy(msg);
+    natsSub_release(sub);
+    JS_TEARDOWN;
+}
+
+static void
+test_JetStreamBackOffRedeliveries(void)
+{
+    natsStatus          s;
+    natsSubscription    *sub= NULL;
+    jsErrCode           jerr= 0;
+    jsStreamConfig      sc;
+    natsMsg             *msg = NULL;
+    int64_t             start =0;
+    int64_t             dur = 0;
+    natsInbox           *inbox = NULL;
+    jsConsumerInfo      *ci = NULL;
+    jsSubOptions        so;
+    int                 i;
+
+    JS_SETUP(2, 7, 2);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Create inbox: ");
+    s = natsInbox_Create(&inbox);
+    testCond(s == NATS_OK);
+
+    test("Wrong MaxDeliver: ");
+    jsSubOptions_Init(&so);
+    so.Stream = "TEST";
+    so.Config.Durable = "backoff";
+    so.Config.AckPolicy = js_AckExplicit;
+    so.Config.DeliverPolicy = js_DeliverAll;
+    so.Config.DeliverSubject = inbox;
+    so.Config.BackOff = (int64_t[]){NATS_MILLIS_TO_NANOS(50), NATS_MILLIS_TO_NANOS(250)};
+    so.Config.BackOffLen = 2;
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s != NATS_OK) && (sub == NULL) && (jerr == JSConsumerMaxDeliverBackoffErr)
+                && (strstr(nats_GetLastError(NULL), "max deliver is required") != NULL));
+    nats_clearLastError();
+
+    test("Create ok: ");
+    so.Config.MaxDeliver = 4;
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Send: ");
+    s = js_Publish(NULL, js, "foo", "ok", 2, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Consume msg: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    // We should get a redelivery at around 50ms
+    test("Redelivered at 50ms: ");
+    start = nats_Now();
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    dur = (nats_Now()-start);
+    testCond((s == NATS_OK) && (dur > 25) && (dur < 100));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    // Now it should be every 250ms or so
+    for (i=0; i<2; i++)
+    {
+        test("Redelivered at 250ms: ");
+        start = nats_Now();
+        s = natsSubscription_NextMsg(&msg, sub, 1000);
+        dur = (nats_Now()-start);
+        testCond((s == NATS_OK) && (dur > 200) && (dur < 300));
+        natsMsg_Destroy(msg);
+        msg = NULL;
+    }
+
+    // At this point, we should have go reach MaxDeliver
+    test("No more: ");
+    s = natsSubscription_NextMsg(&msg, sub, 300);
+    testCond(s == NATS_TIMEOUT);
+
+    test("Check consumer info: ");
+    s = js_GetConsumerInfo(&ci, js, "TEST", "backoff", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL) && (ci->Config != NULL)
+                && (ci->Config->BackOffLen == 2)
+                && (ci->Config->BackOff[0] == NATS_MILLIS_TO_NANOS(50))
+                && (ci->Config->BackOff[1] == NATS_MILLIS_TO_NANOS(250)));
+    jsConsumerInfo_Destroy(ci);
+    natsInbox_Destroy(inbox);
+    natsSubscription_Destroy(sub);
+    JS_TEARDOWN;
+}
+
+static void
 test_KeyValueManager(void)
 {
     natsStatus          s;
@@ -27188,7 +27364,7 @@ test_KeyValueBasics(void)
     kvConfig_Init(&kvc);
     kvc.Bucket = "TEST";
     kvc.History = 5;
-    kvc.TTL = 3600*(int64_t)1E9;
+    kvc.TTL = NATS_SECONDS_TO_NANOS(3600);
     kvc.Replicas = 1;
     s = js_CreateKeyValue(&kv, js, &kvc);
     testCond((s == NATS_OK) && (kv != NULL));
@@ -27398,7 +27574,7 @@ test_KeyValueBasics(void)
     testCond(s == NATS_OK);
 
     test("Check TTL: ");
-    s = (kvStatus_TTL(sts) == 3600*(int64_t)1E9 ? NATS_OK : NATS_ERR);
+    s = (kvStatus_TTL(sts) == NATS_SECONDS_TO_NANOS(3600) ? NATS_OK : NATS_ERR);
     testCond(s == NATS_OK);
 
     test("Check values: ");
@@ -30611,6 +30787,8 @@ static testInfo allTests[] =
     {"JetStreamSubscribeWithFWC",       test_JetStreamSubscribeWithFWC},
     {"JetStreamStreamsSealAndRollup",   test_JetStreamStreamsSealAndRollup},
     {"JetStreamGetMsgAndLastMsg",       test_JetStreamGetMsgAndLastMsg},
+    {"JetStreamNakWithDelay",           test_JetStreamNakWithDelay},
+    {"JetStreamBackOffRedeliveries",    test_JetStreamBackOffRedeliveries},
 
     {"KeyValueManager",                 test_KeyValueManager},
     {"KeyValueBasics",                  test_KeyValueBasics},

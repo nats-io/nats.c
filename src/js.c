@@ -42,7 +42,7 @@ const int64_t    jsDefaultRequestWait    = 5000;
 const int64_t    jsDefaultStallWait      = 200;
 const char       *jsDigits               = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const int        jsBase                  = 62;
-const int64_t    jsOrderedHBInterval     = 5*(int64_t)1E9;
+const int64_t    jsOrderedHBInterval     = NATS_SECONDS_TO_NANOS(5);
 
 #define jsReplyTokenSize    (8)
 #define jsDefaultMaxMsgs    (512 * 1024)
@@ -2071,7 +2071,7 @@ PROCESS_INFO:
             cfg->FlowControl = true;
             cfg->AckPolicy   = js_AckNone;
             cfg->MaxDeliver  = 1;
-            cfg->AckWait     = (24*60*60)*(int64_t)1E9; // Just set to something known, not utilized.
+            cfg->AckWait     = NATS_SECONDS_TO_NANOS(24*60*60); // Just set to something known, not utilized.
             if (opts->Config.Heartbeat <= 0)
                 cfg->Heartbeat = jsOrderedHBInterval;
         }
@@ -2296,14 +2296,27 @@ js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject, const c
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+typedef struct __ackOpts
+{
+    const char  *ackType;
+    bool        inProgress;
+    bool        sync;
+    int64_t     nakDelay;
+
+} _ackOpts;
+
 static natsStatus
-_ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool inProgress, bool sync, jsErrCode *errCode)
+_ackMsg(natsMsg *msg, jsOptions *opts, _ackOpts *o, jsErrCode *errCode)
 {
     natsSubscription    *sub = NULL;
     natsConnection      *nc  = NULL;
     jsCtx               *js  = NULL;
     jsSub               *jsi = NULL;
     natsStatus          s    = NATS_OK;
+    const char          *body= o->ackType;
+    bool                sync = o->sync;
+    int64_t             wait = 0;
+    char                tmp[64];
 
     if (msg == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -2323,10 +2336,21 @@ _ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool inProgress, boo
     js = jsi->js;
     nc = sub->conn;
 
+    // If option with Wait is specified, transform all Acks as sync operation.
+    if ((opts != NULL) && (opts->Wait > 0))
+    {
+        wait = opts->Wait;
+        sync = true;
+    }
+    if (o->nakDelay > 0)
+    {
+        int64_t v = NATS_MILLIS_TO_NANOS(o->nakDelay);
+        snprintf(tmp, sizeof(tmp), "%s {\"delay\":%" PRId64 "}", o->ackType, v);
+        body = (const char*) tmp;
+    }
     if (sync)
     {
         natsMsg *rply   = NULL;
-        int64_t wait    = (opts != NULL ? opts->Wait : 0);
 
         if (wait == 0)
         {
@@ -2336,15 +2360,15 @@ _ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool inProgress, boo
             wait = js->opts.Wait;
             js_unlock(js);
         }
-        IFOK_JSR(s, natsConnection_RequestString(&rply, nc, msg->reply, ackType, wait));
+        IFOK_JSR(s, natsConnection_RequestString(&rply, nc, msg->reply, body, wait));
         natsMsg_Destroy(rply);
     }
     else
     {
-        s = natsConnection_PublishString(nc, msg->reply, ackType);
+        s = natsConnection_PublishString(nc, msg->reply, body);
     }
     // Indicate that we have ack'ed the message
-    if ((s == NATS_OK) && !inProgress)
+    if ((s == NATS_OK) && !o->inProgress)
         natsMsg_setAcked(msg);
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -2353,31 +2377,61 @@ _ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool inProgress, boo
 natsStatus
 natsMsg_Ack(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckAck, false, false, NULL);
+    natsStatus  s;
+    _ackOpts    o = {jsAckAck, false, false, 0};
+
+    s = _ackMsg(msg, opts, &o, NULL);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsMsg_AckSync(natsMsg *msg, jsOptions *opts, jsErrCode *errCode)
 {
-    return _ackMsg(msg, opts, jsAckAck, false, true, errCode);
+    natsStatus  s;
+    _ackOpts    o = {jsAckAck, false, true, 0};
+
+    s = _ackMsg(msg, opts, &o, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsMsg_Nak(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckNak, false, false, NULL);
+    natsStatus  s;
+    _ackOpts    o = {jsAckNak, false, false, 0};
+
+    s = _ackMsg(msg, opts, &o, NULL);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsMsg_NakWithDelay(natsMsg *msg, int64_t delay, jsOptions *opts)
+{
+    natsStatus  s;
+    _ackOpts    o = {jsAckNak, false, false, delay};
+
+    s = _ackMsg(msg, opts, &o, NULL);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsMsg_InProgress(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckInProgress, true, false, NULL);
+    natsStatus  s;
+    _ackOpts    o = {jsAckInProgress, true, false, 0};
+
+    s = _ackMsg(msg, opts, &o, NULL);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsMsg_Term(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckTerm, false, false, NULL);
+    natsStatus  s;
+    _ackOpts    o = {jsAckTerm, false, false, 0};
+
+    s = _ackMsg(msg, opts, &o, NULL);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -2548,7 +2602,7 @@ _recreateOrderedCons(void *closure)
         cc.FlowControl      = true;
         cc.AckPolicy        = js_AckNone;
         cc.MaxDeliver       = 1;
-        cc.AckWait          = (24*60*60)*(int64_t)1E9; // Just set to something known, not utilized.
+        cc.AckWait          = NATS_SECONDS_TO_NANOS(24*60*60); // Just set to something known, not utilized.
         cc.Heartbeat        = jsi->hbi * 1000000;
         cc.DeliverSubject   = sub->subject;
         cc.DeliverPolicy    = js_DeliverByStartSequence;

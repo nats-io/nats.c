@@ -230,6 +230,8 @@ JetStreamOrderedConsAutoUnsub
 JetStreamSubscribeWithFWC
 JetStreamStreamsSealAndRollup
 JetStreamGetMsgAndLastMsg
+JetStreamNakWithDelay
+JetStreamBackOffRedeliveries
 KeyValueManager
 KeyValueBasics
 KeyValueWatch

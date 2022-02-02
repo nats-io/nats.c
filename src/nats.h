@@ -611,6 +611,8 @@ typedef struct jsConsumerConfig
         jsAckPolicy             AckPolicy;
         int64_t                 AckWait;
         int64_t                 MaxDeliver;
+        int64_t                 *BackOff;               ///< Redelivery durations expressed in nanoseconds
+        int                     BackOffLen;
         const char              *FilterSubject;
         jsReplayPolicy          ReplayPolicy;
         uint64_t                RateLimit;
@@ -5800,6 +5802,21 @@ natsMsg_AckSync(natsMsg *msg, jsOptions *opts, jsErrCode *errCode);
  */
 NATS_EXTERN natsStatus
 natsMsg_Nak(natsMsg *msg, jsOptions *opts);
+
+/** \brief Negatively acknowledges a message.
+ *
+ * This tells the server to redeliver the message after the given `delay`
+ * duration expressed in milliseconds. You can configure the number of
+ * redeliveries by passing `MaxDeliver` when you subscribe.
+ *
+ * The default is infinite redeliveries.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param delay the amount of time before the redelivery expressed in milliseconds.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+natsMsg_NakWithDelay(natsMsg *msg, int64_t delay, jsOptions *opts);
 
 /** \brief Resets redelivery timer on the server.
  *

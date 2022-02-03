@@ -1577,6 +1577,32 @@ nats_JSONGetArrayArray(nats_JSON *json, const char *fieldName, nats_JSONArray **
     JSON_GET_ARRAY(TYPE_ARRAY, nats_JSONArrayAsArrays);
 }
 
+natsStatus
+nats_JSONRange(nats_JSON *json, int expectedType, int expectedNumType, jsonRangeCB cb, void *userInfo)
+{
+    natsStrHashIter iter;
+    char            *fname  = NULL;
+    void            *val    = NULL;
+    natsStatus      s       = NATS_OK;
+
+    natsStrHashIter_Init(&iter, json->fields);
+    while ((s == NATS_OK) && natsStrHashIter_Next(&iter, &fname, &val))
+    {
+        nats_JSONField *f = (nats_JSONField*) val;
+
+        if (f->typ != expectedType)
+            s = nats_setError(NATS_ERR, "field '%s': expected value type of %d, got %d",
+                              f->name, expectedType, f->typ);
+        else if ((f->typ == TYPE_NUM) && (f->numTyp != expectedNumType))
+            s = nats_setError(NATS_ERR, "field '%s': expected numeric type of %d, got %d",
+                              f->name, expectedNumType, f->numTyp);
+        else
+            s = cb(userInfo, (const char*) f->name, f);
+    }
+    natsStrHashIter_Done(&iter);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 void
 nats_JSONDestroy(nats_JSON *json)
 {

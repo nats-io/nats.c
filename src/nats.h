@@ -485,6 +485,54 @@ typedef struct jsLostStreamData
 } jsLostStreamData;
 
 /**
+ * This indicate that the given `Subject` in a stream contains `Msgs` messages.
+ *
+ * @see jsStreamStateSubjects
+ */
+typedef struct jsStreamStateSubject
+{
+        const char              *Subject;
+        uint64_t                Msgs;
+
+} jsStreamStateSubject;
+
+/**
+ * List of subjects optionally returned in the stream information request.
+ *
+ * This structure indicates the number of elements in the list, that is,
+ * the list contains `Count` #jsStreamStateSubject elements.
+ *
+ * To get this list in #jsStreamState, you have to ask for it through #jsOptions.
+ *
+ * \code{.unparsed}
+ * jsStreamInfo *si = NULL;
+ * jsOptions    o;
+ *
+ * jsOptions_Init(&o);
+ * o.Stream.Info.SubjectsFilter = "foo.>";
+ * s = js_GetStreamInfo(&si, js, "MY_STREAM", &o, &jerr);
+ *
+ * // handle errors and assume si->State.Subjects is not NULL
+ *
+ * for (i=0; i<si->State.Subjects->Count; i++)
+ * {
+ *      jsStreamStateSubject *subj = &(si->State.Subjects->List[i]);
+ *      printf("Subject=%s Messages count=%d\n", subj->Subject, (int) subj->Msgs);
+ * }
+ * \endcode
+ *
+ * @see jsStreamStateSubject
+ * @see js_GetStreamInfo
+ * @see jsOptions.Stream.Info.SubjectsFilter
+ */
+typedef struct jsStreamStateSubjects
+{
+        jsStreamStateSubject    *List;
+        const int               Count;
+
+} jsStreamStateSubjects;
+
+/**
  * Information about the given stream
  *
  * \note `FirstTime` and `LastTime` are message timestamps expressed as the number
@@ -498,6 +546,8 @@ typedef struct jsStreamState
         int64_t                 FirstTime;      ///< UTC time expressed as number of nanoseconds since epoch.
         uint64_t                LastSeq;
         int64_t                 LastTime;       ///< UTC time expressed as number of nanoseconds since epoch.
+        int64_t                 NumSubjects;
+        jsStreamStateSubjects   *Subjects;
         uint64_t                NumDeleted;
         uint64_t                *Deleted;
         int                     DeletedLen;
@@ -917,7 +967,8 @@ typedef struct jsOptions
                  */
                 struct jsOptionsStreamInfo
                 {
-                        bool            DeletedDetails; ///< Get the list of deleted message sequences.
+                        bool            DeletedDetails;         ///< Get the list of deleted message sequences.
+                        const char      *SubjectsFilter;        ///< Get the list of subjects in this stream.
 
                 } Info;                                 ///< Optional stream information retrieval options.
 

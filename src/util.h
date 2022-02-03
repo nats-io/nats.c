@@ -66,6 +66,8 @@ typedef struct
 
 } nats_JSONField;
 
+typedef natsStatus (*jsonRangeCB)(void *userInfo, const char *fieldName, nats_JSONField *f);
+
 #define nats_IsStringEmpty(s) (((s == NULL) || (s[0] == '\0')) ? true : false)
 
 #define snprintf_truncate(d, szd, f, ...) if (snprintf((d), (szd), (f), __VA_ARGS__) >= (int) (szd)) { \
@@ -185,6 +187,9 @@ nats_JSONArrayAsArrays(nats_JSONArray *arr, nats_JSONArray ***array, int *arrayS
 
 natsStatus
 nats_JSONGetArrayArray(nats_JSON *json, const char *fieldName, nats_JSONArray ***array, int *arraySize);
+
+natsStatus
+nats_JSONRange(nats_JSON *json, int expectedType, int expectedNumType, jsonRangeCB cb, void *userInfo);
 
 void
 nats_JSONDestroy(nats_JSON *json);

@@ -154,6 +154,20 @@ _destroyLostStreamData(jsLostStreamData *lost)
     NATS_FREE(lost);
 }
 
+static void
+_destroyStreamStateSubjects(jsStreamStateSubjects *subjects)
+{
+    int i;
+
+    if (subjects == NULL)
+        return;
+
+    for (i=0; i<subjects->Count; i++)
+        NATS_FREE((char*) subjects->List[i].Subject);
+    NATS_FREE(subjects->List);
+    NATS_FREE(subjects);
+}
+
 void
 js_cleanStreamState(jsStreamState *state)
 {
@@ -162,6 +176,7 @@ js_cleanStreamState(jsStreamState *state)
 
     NATS_FREE(state->Deleted);
     _destroyLostStreamData(state->Lost);
+    _destroyStreamStateSubjects(state->Subjects);
 }
 
 void
@@ -670,6 +685,56 @@ _unmarshalLostStreamData(nats_JSON *pjson, const char *fieldName, jsLostStreamDa
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_fillSubjectsList(void *userInfo, const char *subject, nats_JSONField *f)
+{
+    jsStreamStateSubjects   *subjs  = (jsStreamStateSubjects*) userInfo;
+    natsStatus              s       = NATS_OK;
+    int                     i       = subjs->Count;
+
+    DUP_STRING(s, subjs->List[i].Subject, subject);
+    if (s == NATS_OK)
+    {
+        subjs->List[i].Msgs = f->value.vuint;
+        *(int*)&(subjs->Count) = i+1;
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_unmarshalStreamStateSubjects(nats_JSON *pjson, const char *fieldName, jsStreamStateSubjects **subjects)
+{
+    nats_JSON               *json = NULL;
+    natsStatus              s     = NATS_OK;
+    jsStreamStateSubjects   *subjs= NULL;
+    int                     n;
+
+    s = nats_JSONGetObject(pjson, fieldName, &json);
+    if (json == NULL)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    if ((n = natsStrHash_Count(json->fields)) > 0)
+    {
+        subjs = NATS_CALLOC(1, sizeof(jsStreamStateSubjects));
+        if (subjs == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        if (s == NATS_OK)
+        {
+            subjs->List = NATS_CALLOC(n, sizeof(jsStreamStateSubject));
+            if (subjs->List == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+        }
+        IFOK(s, nats_JSONRange(json, TYPE_NUM, TYPE_UINT, _fillSubjectsList, (void*) subjs));
+
+        if (s == NATS_OK)
+            *subjects = subjs;
+        else
+            _destroyStreamStateSubjects(subjs);
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 natsStatus
 js_unmarshalStreamState(nats_JSON *pjson, const char *fieldName, jsStreamState *state)
 {
@@ -690,6 +755,8 @@ js_unmarshalStreamState(nats_JSON *pjson, const char *fieldName, jsStreamState *
     IFOK(s, nats_JSONGetArrayULong(json, "deleted", &(state->Deleted), &(state->DeletedLen)));
     IFOK(s, _unmarshalLostStreamData(json, "lost", &(state->Lost)));
     IFOK(s, nats_JSONGetLong(json, "consumer_count", &(state->Consumers)));
+    IFOK(s, nats_JSONGetLong(json, "num_subjects", &(state->NumSubjects)));
+    IFOK(s, _unmarshalStreamStateSubjects(json, "subjects", &(state->Subjects)));
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -895,13 +962,28 @@ jsStreamConfig_Init(jsStreamConfig *cfg)
 }
 
 static natsStatus
-_marshalStreamInfoReq(natsBuffer **new_buf)
+_marshalStreamInfoReq(natsBuffer **new_buf, struct jsOptionsStreamInfo *o)
 {
     natsBuffer  *buf = NULL;
     natsStatus  s;
 
+    *new_buf = NULL;
+    if (!o->DeletedDetails && nats_IsStringEmpty(o->SubjectsFilter))
+        return NATS_OK;
+
     s = natsBuf_Create(&buf, 30);
-    IFOK(s, natsBuf_Append(buf, "{\"deleted_details\":true}", -1));
+    IFOK(s, natsBuf_AppendByte(buf, '{'));
+    if ((s == NATS_OK) && o->DeletedDetails)
+        s = natsBuf_Append(buf, "\"deleted_details\":true", -1);
+    if ((s == NATS_OK) && !nats_IsStringEmpty(o->SubjectsFilter))
+    {
+        if (o->DeletedDetails)
+            s = natsBuf_AppendByte(buf, ',');
+        IFOK(s, natsBuf_Append(buf, "\"subjects_filter\":\"", -1));
+        IFOK(s, natsBuf_Append(buf, o->SubjectsFilter, -1));
+        IFOK(s, natsBuf_AppendByte(buf, '\"'));
+    }
+    IFOK(s, natsBuf_AppendByte(buf, '}'));
 
     if (s == NATS_OK)
         *new_buf = buf;
@@ -959,11 +1041,10 @@ _addUpdateOrGet(jsStreamInfo **new_si, jsStreamAction action, jsCtx *js, jsStrea
         // Marshal the stream create/update request
         IFOK(s, js_marshalStreamConfig(&buf, cfg));
     }
-    else if (o.Stream.Info.DeletedDetails)
+    else
     {
-        // For GetStreamInfo, if there is an option to get deleted details,
-        // we need to request it.
-        IFOK(s, _marshalStreamInfoReq(&buf));
+        // For GetStreamInfo, if there are options, we need to marshal the request.
+        IFOK(s, _marshalStreamInfoReq(&buf, &(o.Stream.Info)));
     }
     if ((s == NATS_OK) && (buf != NULL))
     {

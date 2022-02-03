@@ -370,6 +370,7 @@ js_setOpts(natsConnection **nc, bool *freePfx, jsCtx *js, jsOptions *opts, jsOpt
 
         // Stream info options
         resOpts->Stream.Info.DeletedDetails = (opts == NULL ? js->opts.Stream.Info.DeletedDetails : opts->Stream.Info.DeletedDetails);
+        resOpts->Stream.Info.SubjectsFilter = (opts == NULL ? js->opts.Stream.Info.SubjectsFilter : opts->Stream.Info.SubjectsFilter);
 
         *nc = js->nc;
         js_unlock(js);

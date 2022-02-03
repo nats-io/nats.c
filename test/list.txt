@@ -232,6 +232,7 @@ JetStreamStreamsSealAndRollup
 JetStreamGetMsgAndLastMsg
 JetStreamNakWithDelay
 JetStreamBackOffRedeliveries
+JetStreamInfoWithSubjects
 KeyValueManager
 KeyValueBasics
 KeyValueWatch

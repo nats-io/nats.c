@@ -21489,6 +21489,7 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"headers_only\":true}}",
         "{\"config\":{\"max_batch\":1}}",
         "{\"config\":{\"max_expires\":123456789}}",
+        "{\"config\":{\"inactive_threshold\":123456789}}",
         "{\"config\":{\"backoff\":[50000000,250000000]}}",
     };
     const char          *bad[] = {
@@ -21517,6 +21518,7 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"headers_only\":123}}",
         "{\"config\":{\"max_batch\":\"1\"}}",
         "{\"config\":{\"max_expires\":\"123456789\"}}",
+        "{\"config\":{\"inactive_threshold\":\"123456789\"}}",
         "{\"config\":{\"backoff\":true}}",
         "{\"delivered\":123}",
         "{\"delivered\":{\"consumer_seq\":\"abc\"}}",
@@ -24858,7 +24860,8 @@ test_JetStreamSubscribeSync(void)
 
     test("Get consumer info: ");
     s = natsSubscription_GetConsumerInfo(&ci, sub, NULL, &jerr);
-    testCond((s == NATS_OK) && (ci != NULL) && (jerr == 0));
+    testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL) && (ci->Config != NULL)
+                && (ci->Config->InactiveThreshold == NATS_MILLIS_TO_NANOS(50)));
 
     test("Close conn: ");
     jsCtx_Destroy(js);
@@ -24873,9 +24876,8 @@ test_JetStreamSubscribeSync(void)
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
     IFOK(s, natsConnection_JetStream(&js, nc, NULL));
     IFOK(s, js_GetConsumerInfo(&ci2, js, "TEST", ci->Name, NULL, &jerr));
-    testCond((s == NATS_OK) && (jerr == 0) && (ci2 != NULL));
+    testCond((s == NATS_NOT_FOUND) && (jerr == JSConsumerNotFoundErr) && (ci2 == NULL));
     jsConsumerInfo_Destroy(ci);
-    jsConsumerInfo_Destroy(ci2);
     natsSubscription_Destroy(sub);
     JS_TEARDOWN;
 }

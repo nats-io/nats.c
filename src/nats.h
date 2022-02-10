@@ -686,7 +686,7 @@ typedef struct jsSubOptions
          * attempt to create a subscription for this matching consumer.
          *
          * That is, the consumer should exist prior to the call,
-         * either created by the application calling #js_AddStream
+         * either created by the application calling #js_AddConsumer
          * or it should have been created with some other tools
          * such as the NATS cli.
          */

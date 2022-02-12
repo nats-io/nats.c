@@ -148,6 +148,9 @@ natsConn_initInbox(natsConnection *nc, char *buf, int bufSize, char **newInbox, 
 natsStatus
 natsConn_newInbox(natsConnection *nc, natsInbox **newInbox);
 
+bool
+natsConn_srvVersionAtLeast(natsConnection *nc, int major, int minor, int update);
+
 void
 natsConn_close(natsConnection *nc);
 

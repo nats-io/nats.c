@@ -18,6 +18,8 @@
 #include "mem.h"
 #include "util.h"
 #include "js.h"
+#include "conn.h"
+#include "sub.h"
 
 static const char *kvBucketNameTmpl  = "KV_%s";
 static const char *kvSubjectsTmpl    = "$KV.%s.>";
@@ -234,6 +236,10 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
         sc.AllowRollup = true;
         sc.DenyDelete = true;
 
+        // If connecting to a v2.7.2+, create with discard new policy
+        if (natsConn_srvVersionAtLeast(kv->js->nc, 2, 7, 2))
+            sc.Discard = js_DiscardNew;
+
         s = js_AddStream(NULL, js, &sc, NULL, NULL);
     }
     if (s == NATS_OK)
@@ -339,8 +345,7 @@ validKey(const char *key)
 static natsStatus
 _createEntry(kvEntry **new_entry, kvStore *kv, natsMsg **msg)
 {
-    kvEntry     *e   = NULL;
-    const char  *val = NULL;
+    kvEntry *e = NULL;
 
     e = (kvEntry*) NATS_CALLOC(1, sizeof(kvEntry));
     if (e == NULL)
@@ -350,20 +355,29 @@ _createEntry(kvEntry **new_entry, kvStore *kv, natsMsg **msg)
     e->kv  = kv;
     e->msg = *msg;
     e->key = e->msg->subject+(int)strlen(kv->pre);
-
-    if (natsMsgHeader_Get(e->msg, kvOpHeader, &val) == NATS_OK)
-    {
-        if (strcmp(val, kvOpDeleteStr) == 0)
-            e->op = kvOp_Delete;
-        else if (strcmp(val, kvOpPurgeStr) == 0)
-            e->op = kvOp_Purge;
-    }
+    e->op  = kvOp_Put;
 
     // Indicate that we took ownership of the message
     *msg = NULL;
     *new_entry = e;
 
     return NATS_OK;
+}
+
+static kvOperation
+_getKVOp(natsMsg *msg)
+{
+    const char  *val = NULL;
+    kvOperation op   = kvOp_Put;
+
+    if (natsMsgHeader_Get(msg, kvOpHeader, &val) == NATS_OK)
+    {
+        if (strcmp(val, kvOpDeleteStr) == 0)
+            op = kvOp_Delete;
+        else if (strcmp(val, kvOpPurgeStr) == 0)
+            op = kvOp_Purge;
+    }
+    return op;
 }
 
 static natsStatus
@@ -383,6 +397,8 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key)
     BUILD_SUBJECT(KEY_NAME_ONLY);
     IFOK(s, js_GetLastMsg(&msg, kv->js, kv->stream, natsBuf_Data(&buf), NULL, NULL));
     IFOK(s, _createEntry(&e, kv, &msg));
+    if (s == NATS_OK)
+        e->op = _getKVOp(e->msg);
 
     natsBuf_Cleanup(&buf);
     natsMsg_Destroy(msg);
@@ -716,6 +732,7 @@ GET_NEXT:
     {
         natsMsg     *msg = NULL;
         uint64_t    delta= 0;
+        bool        next = false;
 
         w->refs++;
         natsMutex_Unlock(w->mu);
@@ -742,29 +759,47 @@ GET_NEXT:
         IFOK(s, js_getMetaData(msg->reply+jsAckPrefixLen,
                                NULL, NULL, NULL, NULL, &(msg->seq),
                                NULL, &(msg->time), &delta, 3));
-        IFOK(s, _createEntry(&e, w->kv, &msg));
         if (s == NATS_OK)
         {
-            e->delta = delta;
+            kvOperation op = _getKVOp(msg);
 
-            // Check if done with initial values
-            if (!w->initDone && (delta == 0))
+            if (!w->ignoreDel || (op != kvOp_Delete && op != kvOp_Purge))
             {
-                w->initDone = true;
-                w->retMarker = true;
+                s = _createEntry(&e, w->kv, &msg);
+                if (s == NATS_OK)
+                {
+                    e->op    = op;
+                    e->delta = delta;
+                }
             }
-            if (w->ignoreDel && ((e->op == kvOp_Delete) || e->op == kvOp_Purge))
+            else
             {
-                kvEntry_Destroy(e);
-                e = NULL;
                 timeout -= (nats_Now() - start);
                 if (timeout > 0)
-                    goto GET_NEXT;
+                    next = true;
                 else
                     s = nats_setDefaultError(NATS_TIMEOUT);
             }
+            // Here, regardless of status, need to update this
+            if (!w->initDone)
+            {
+                w->received++;
+                // We set this on the first trip through..
+                if (w->initPending == 0)
+                    w->initPending = delta;
+                if ((w->received > w->initPending) || (delta == 0))
+                {
+                    w->initDone  = true;
+                    w->retMarker = true;
+                }
+            }
         }
+        // The `msg` variable may be NULL if an entry was created
+        // and took ownership. It is ok since then destroy will be a no-op.
         natsMsg_Destroy(msg);
+
+        if (next)
+            goto GET_NEXT;
     }
     natsMutex_Unlock(w->mu);
 
@@ -806,26 +841,8 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
     IFOK(s, natsMutex_Create(&(w->mu)));
     if (s == NATS_OK)
     {
-        natsStatus  ls;
-        natsMsg     *msg = NULL;
+        // Use ordered consumer to deliver results
 
-        // Check if we have anything pending.
-        ls = js_GetLastMsg(&msg, kv->js, kv->stream, natsBuf_Data(&buf), NULL, NULL);
-        if (ls == NATS_OK)
-            natsMsg_Destroy(msg);
-        else
-        {
-            nats_clearLastError();
-            if (ls == NATS_NOT_FOUND)
-            {
-                w->initDone  = true;
-                w->retMarker = true;
-            }
-        }
-    }
-    // Use ordered consumer to deliver results
-    if (s == NATS_OK)
-    {
         jsSubOptions_Init(&so);
         so.Ordered = true;
         if ((opts == NULL) || !opts->IncludeHistory)
@@ -838,6 +855,18 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
                 w->ignoreDel = true;
         }
         s = js_SubscribeSync(&(w->sub), kv->js, natsBuf_Data(&buf), NULL, &so, NULL);
+        if (s == NATS_OK)
+        {
+            natsSubscription *sub = w->sub;
+
+            natsSub_Lock(sub);
+            if ((sub->jsi != NULL) && (sub->jsi->pending == 0))
+            {
+                w->initDone = true;
+                w->retMarker = true;
+            }
+            natsSub_Unlock(sub);
+        }
     }
 
     natsBuf_Cleanup(&buf);

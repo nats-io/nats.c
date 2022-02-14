@@ -5189,6 +5189,76 @@ test_natsMsgIsJSCtrl(void)
     }
 }
 
+static void
+test_natsSrvVersionAtLeast(void)
+{
+    natsOptions     *opts   = NULL;
+    natsConnection  *nc     = NULL;
+    const char      *infos[]= {
+        "INFO {\"version\":\"2.7.2\"}\r\n",
+        "INFO {\"version\":\"bad.version\"}\r\n",
+        "INFO {\"no_version\":\"2.7.2\"}\r\n",
+        "INFO {\"version\":\"2.7.3-beta01\"}\r\n",
+    };
+    const int res[][3] = {
+        {2, 7, 2},
+        {0, 0, 0},
+        {0, 0, 0},
+        {2, 7, 3},
+    };
+    const int checksOK[][3] = {
+        {1, 0, 0},
+        {1, 1, 4},
+        {1, 8, 0},
+        {1, 8, 4},
+        {2, 7, 3},
+        {2, 6, 4},
+    };
+    const int checksBad[][3] = {
+        {2, 7, 4},
+        {2, 8, 0},
+        {3, 0, 0},
+    };
+    natsStatus s = NATS_OK;
+    int i;
+
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
+    if (s != NATS_OK)
+        FAIL("Unable to setup the test");
+
+    test("Check version parsing: ");
+    for (i=0; (s == NATS_OK) && (i<(int)(sizeof(infos)/sizeof(char*))); i++)
+    {
+        IFOK(s, natsParser_Parse(nc, (char*) infos[i], (int) strlen(infos[i])));
+        if (s == NATS_OK)
+        {
+            natsConn_Lock(nc);
+            if ((nc->srvVersion.ma != res[i][0]) || (nc->srvVersion.mi != res[i][1])
+                || (nc->srvVersion.up != res[i][2]))
+            {
+                s = NATS_ERR;
+            }
+        }
+    }
+    testCond(s == NATS_OK);
+
+    // Server version is 2.7.3 from last parsing
+
+    test("Check OK: ");
+    for (i=0; (s == NATS_OK) && (i<(int)(sizeof(checksOK)/sizeof(int[3]))); i++)
+        s = natsConn_srvVersionAtLeast(nc, checksOK[i][0], checksOK[i][1], checksOK[i][2]) ? NATS_OK : NATS_ERR;
+    testCond(s == NATS_OK);
+
+    test("Check Bad: ");
+    for (i=0; (s == NATS_OK) && (i<(int)(sizeof(checksBad)/sizeof(int[3]))); i++)
+        s = natsConn_srvVersionAtLeast(nc, checksBad[i][0], checksBad[i][1], checksBad[i][2]) ? NATS_ERR : NATS_OK;
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+}
+
 static natsStatus
 _checkStart(const char *url, int orderIP, int maxAttempts)
 {
@@ -21491,6 +21561,7 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"max_expires\":123456789}}",
         "{\"config\":{\"inactive_threshold\":123456789}}",
         "{\"config\":{\"backoff\":[50000000,250000000]}}",
+        "{\"config\":{\"direct\":true}}",
     };
     const char          *bad[] = {
         "{\"stream_name\":123}",
@@ -21520,6 +21591,7 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"max_expires\":\"123456789\"}}",
         "{\"config\":{\"inactive_threshold\":\"123456789\"}}",
         "{\"config\":{\"backoff\":true}}",
+        "{\"config\":{\"direct\":\"abc\"}}",
         "{\"delivered\":123}",
         "{\"delivered\":{\"consumer_seq\":\"abc\"}}",
         "{\"delivered\":{\"stream_seq\":\"abc\"}}",
@@ -27235,8 +27307,9 @@ test_KeyValueManager(void)
     kvConfig            kvc;
     jsStreamConfig      sc;
     jsErrCode           jerr = 0;
+    jsStreamInfo        *si = NULL;
 
-    JS_SETUP(2, 6, 2);
+    JS_SETUP(2, 7, 2);
 
     test("kvConfig Init (bad args): ");
     s = kvConfig_Init(NULL);
@@ -27277,6 +27350,13 @@ test_KeyValueManager(void)
     kvc.History = 3;
     s = js_CreateKeyValue(&kv, js, &kvc);
     testCond((s == NATS_OK) && (kv != NULL));
+
+    test("Check discard policy: ");
+    s = js_GetStreamInfo(&si, js, "KV_TEST", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (si != NULL) && (si->Config != NULL)
+                && (si->Config->Discard == js_DiscardNew));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
 
     test("Destroy kv store: ")
     kvStore_Destroy(kv);
@@ -30588,6 +30668,7 @@ static testInfo allTests[] =
     {"HeadersLift",                     test_natsMsgHeadersLift},
     {"HeadersAPIs",                     test_natsMsgHeaderAPIs},
     {"MsgIsJSControl",                  test_natsMsgIsJSCtrl},
+    {"SrvVersionAtLeast",               test_natsSrvVersionAtLeast},
 
     // Package Level Tests
 

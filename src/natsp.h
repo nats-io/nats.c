@@ -358,6 +358,14 @@ typedef struct __jsSub
     bool                dc; // delete JS consumer in Unsub()/Drain()
     bool                ackNone;
 
+    // This is ConsumerInfo's Pending+Consumer.Delivered that we get from the
+    // add consumer response. Note that some versions of the server gather the
+    // consumer info *after* the creation of the consumer, which means that
+    // some messages may have been already delivered. So the sum of the two
+    // is a more accurate representation of the number of messages pending or
+    // in the process of being delivered to the subscription when created.
+    uint64_t            pending;
+
     int64_t             hbi;
     int64_t             active;
     natsTimer           *hbTimer;
@@ -432,6 +440,8 @@ struct __kvWatcher
     int                 refs;
     kvStore             *kv;
     natsSubscription    *sub;
+    uint64_t            initPending;
+    uint64_t            received;
     bool                ignoreDel;
     bool                initDone;
     bool                retMarker;
@@ -683,6 +693,14 @@ struct __natsConnection
     // Protected by subsMu
     natsMsgFilter       filter;
     void                *filterClosure;
+
+    // Server version
+    struct
+    {
+        int             ma;
+        int             mi;
+        int             up;
+    } srvVersion;
 };
 
 //

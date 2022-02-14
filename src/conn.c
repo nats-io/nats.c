@@ -493,6 +493,31 @@ _readOp(natsConnection *nc, natsControl *control)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static void
+_unpackSrvVersion(natsConnection *nc)
+{
+    nc->srvVersion.ma  = 0;
+    nc->srvVersion.mi = 0;
+    nc->srvVersion.up  = 0;
+
+    if (nats_IsStringEmpty(nc->info.version))
+        return;
+
+    sscanf(nc->info.version, "%d.%d.%d", &(nc->srvVersion.ma), &(nc->srvVersion.mi), &(nc->srvVersion.up));
+}
+
+bool
+natsConn_srvVersionAtLeast(natsConnection *nc, int major, int minor, int update)
+{
+    bool ok;
+    natsConn_Lock(nc);
+    ok = (((nc->srvVersion.ma > major)
+            || ((nc->srvVersion.ma == major) && (nc->srvVersion.mi > minor))
+            || ((nc->srvVersion.ma == major) && (nc->srvVersion.mi == minor) && (nc->srvVersion.up >= update))) ? true : false);
+    natsConn_Unlock(nc);
+    return ok;
+}
+
 // _processInfo is used to parse the info messages sent
 // from the server.
 // This function may update the server pool.
@@ -527,6 +552,9 @@ _processInfo(natsConnection *nc, char *info, int len)
     IFOK(s, nats_JSONGetStr(json, "client_ip", &(nc->info.clientIP)));
     IFOK(s, nats_JSONGetBool(json, "ldm", &(nc->info.lameDuckMode)));
     IFOK(s, nats_JSONGetBool(json, "headers", &(nc->info.headers)));
+
+    if (s == NATS_OK)
+        _unpackSrvVersion(nc);
 
     // The array could be empty/not present on initial connect,
     // if advertise is disabled on that server, or servers that

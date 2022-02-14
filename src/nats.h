@@ -630,6 +630,9 @@ typedef struct jsConsumerConfig
         // Ephemeral inactivity threshold.
         int64_t                 InactiveThreshold;      ///< How long the server keeps an ephemeral after detecting loss of interest, expressed in number of nanoseconds.
 
+        // Internal Use
+        bool                    Direct;
+
 } jsConsumerConfig;
 
 /**

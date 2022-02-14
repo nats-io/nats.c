@@ -2072,6 +2072,7 @@ PROCESS_INFO:
             cfg->AckPolicy   = js_AckNone;
             cfg->MaxDeliver  = 1;
             cfg->AckWait     = NATS_SECONDS_TO_NANOS(24*60*60); // Just set to something known, not utilized.
+            cfg->Direct      = true;
             if (opts->Config.Heartbeat <= 0)
                 cfg->Heartbeat = jsOrderedHBInterval;
         }
@@ -2117,7 +2118,7 @@ PROCESS_INFO:
                 jsi->pull   = isPullMode;
                 jsi->ordered= opts->Ordered;
                 jsi->dseq   = 1;
-                jsi->ackNone= opts->Config.AckPolicy == js_AckNone;
+                jsi->ackNone= (opts->Config.AckPolicy == js_AckNone || opts->Ordered);
                 js_retain(js);
 
                 if ((usrCB != NULL) && !opts->ManualAck && !jsi->ackNone)
@@ -2201,6 +2202,7 @@ PROCESS_INFO:
         {
             natsSub_Lock(sub);
             jsi->dc = true;
+            jsi->pending = info->NumPending + info->Delivered.Consumer;
             // There may be a race in the case of an ordered consumer where by this
             // time, the consumer has been recreated (jsResetOrderedConsumer). So
             // set only if jsi->consumer is NULL!

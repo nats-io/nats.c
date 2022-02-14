@@ -41,6 +41,7 @@ natsSign
 HeadersLift
 HeadersAPIs
 MsgIsJSControl
+SrvVersionAtLeast
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize

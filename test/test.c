@@ -27539,6 +27539,23 @@ test_KeyValueBasics(void)
     e = NULL;
     testCond(true);
 
+    test("Get revision (bad args): ");
+    s = kvStore_GetRevision(&e, kv, "key", 0);
+    testCond((s == NATS_INVALID_ARG) && (e == NULL)
+                && (strstr(nats_GetLastError(NULL), kvErrInvalidRevision) != NULL));
+    nats_clearLastError();
+
+    test("Get revision: ");
+    s = kvStore_GetRevision(&e, kv, "key", 1);
+    testCond((s == NATS_OK) && (e != NULL)
+                && (strcmp(kvEntry_ValueString(e), "value") == 0)
+                && (kvEntry_Revision(e) == 1));
+
+    test("Destroy entry: ");
+    kvEntry_Destroy(e);
+    e = NULL;
+    testCond(true);
+
     test("Delete key (bad args): ");
     s = kvStore_Delete(NULL, "key");
     testCond(s == NATS_INVALID_ARG);
@@ -27681,6 +27698,29 @@ test_KeyValueBasics(void)
     // Check that this is ok
     kvStatus_Destroy(NULL);
     testCond(true);
+
+    test("Put for revision check: ");
+    s = kvStore_PutString(&rev, kv, "test.rev.one", "val1");
+    IFOK(s, kvStore_PutString(NULL, kv, "test.rev.two", "val2"));
+    testCond(s == NATS_OK);
+
+    test("Get revision (bad args): ");
+    s = kvStore_GetRevision(&e, kv, "test.rev.one", 0);
+    testCond((s == NATS_INVALID_ARG) && (e == NULL)
+                && (strstr(nats_GetLastError(NULL), kvErrInvalidRevision) != NULL));
+    nats_clearLastError();
+
+    test("Get revision: ");
+    s = kvStore_GetRevision(&e, kv, "test.rev.one", rev);
+    testCond((s == NATS_OK) && (e != NULL)
+                && (strcmp(kvEntry_ValueString(e), "val1") == 0)
+                && (kvEntry_Revision(e) == rev));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Get wrong revision for the key: ");
+    s = kvStore_GetRevision(&e, kv, "test.rev.two", rev);
+    testCond((s == NATS_NOT_FOUND) && (e == NULL));
 
     test("Destroy kv store: ");
     kvStore_Destroy(kv);

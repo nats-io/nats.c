@@ -1,4 +1,4 @@
-// Copyright 2021 The NATS Authors
+// Copyright 2021-2022 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -381,7 +381,7 @@ _getKVOp(natsMsg *msg)
 }
 
 static natsStatus
-_getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key)
+_getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key, uint64_t revision)
 {
     natsStatus  s       = NATS_OK;
     natsMsg     *msg    = NULL;
@@ -395,7 +395,15 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key)
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
     BUILD_SUBJECT(KEY_NAME_ONLY);
-    IFOK(s, js_GetLastMsg(&msg, kv->js, kv->stream, natsBuf_Data(&buf), NULL, NULL));
+    if (revision == 0)
+    {
+        IFOK(s, js_GetLastMsg(&msg, kv->js, kv->stream, natsBuf_Data(&buf), NULL, NULL));
+    }
+    else
+    {
+        IFOK(s, js_GetMsg(&msg, kv->js, kv->stream, revision, NULL, NULL));
+        IFOK(s, (strcmp(natsMsg_GetSubject(msg), natsBuf_Data(&buf)) == 0 ? NATS_OK : NATS_NOT_FOUND));
+    }
     IFOK(s, _createEntry(&e, kv, &msg));
     if (s == NATS_OK)
         e->op = _getKVOp(e->msg);
@@ -423,7 +431,7 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key)
 }
 
 natsStatus
-kvStore_Get(kvEntry **new_entry, kvStore *kv, const char *key)
+_get(kvEntry **new_entry, kvStore *kv, const char *key, uint64_t revision)
 {
     natsStatus  s;
     bool        deleted = false;
@@ -431,7 +439,7 @@ kvStore_Get(kvEntry **new_entry, kvStore *kv, const char *key)
     if ((new_entry == NULL) || (kv == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = _getEntry(new_entry, &deleted, kv, key);
+    s = _getEntry(new_entry, &deleted, kv, key, revision);
     if (s == NATS_OK)
     {
         if (deleted)
@@ -444,6 +452,31 @@ kvStore_Get(kvEntry **new_entry, kvStore *kv, const char *key)
     else if (s == NATS_NOT_FOUND)
         return s;
 
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+kvStore_Get(kvEntry **new_entry, kvStore *kv, const char *key)
+{
+    natsStatus s = _get(new_entry, kv, key, 0);
+    // We don't want stack trace for this error
+    if (s == NATS_NOT_FOUND)
+        return s;
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+kvStore_GetRevision(kvEntry **new_entry, kvStore *kv, const char *key, uint64_t revision)
+{
+    natsStatus s;
+
+    if (revision <= 0)
+        return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidRevision);
+
+    s = _get(new_entry, kv, key, revision);
+    // We don't want stack trace for this error
+    if (s == NATS_NOT_FOUND)
+        return s;
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -515,7 +548,7 @@ kvStore_Create(uint64_t *rev, kvStore *kv, const char *key, const void *data, in
 
     // Since we have tombstones for DEL ops for watchers, this could be from that
     // so we need to double check.
-    ls = _getEntry(&e, &deleted, kv, key);
+    ls = _getEntry(&e, &deleted, kv, key, 0);
     if (ls == NATS_OK)
     {
         if (deleted)

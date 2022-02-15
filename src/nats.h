@@ -6082,6 +6082,21 @@ kvEntry_Destroy(kvEntry *e);
 NATS_EXTERN natsStatus
 kvStore_Get(kvEntry **new_entry, kvStore *kv, const char *key);
 
+/** \brief Returns the entry at the specific revision for the key.
+ *
+ * Returns the entry at the specific revision for the key, or #NATS_NOT_FOUND if there is no
+ * entry for that key and revision.
+ *
+ * \note The entry should be destroyed to release memory using #kvEntry_Destroy.
+ *
+ * @param new_entry the location where to store the pointer to the entry associated with the `key`.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ * @param revision the revision of the entry (must be > 0).
+ */
+NATS_EXTERN natsStatus
+kvStore_GetRevision(kvEntry **new_entry, kvStore *kv, const char *key, uint64_t revision);
+
 /** \brief Places the new value for the key into the store.
  *
  * Places the new value for the key into the store.

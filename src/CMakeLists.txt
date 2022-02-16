@@ -64,7 +64,7 @@ if(NATS_BUILD_LIB_SHARED)
   install(EXPORT cnats-targets
         NAMESPACE cnats::
         FILE cnats-config.cmake
-        DESTINATION lib/cmake/cnats)
+        DESTINATION ${NATS_LIBDIR}/cmake/cnats)
 endif(NATS_BUILD_LIB_SHARED)
 
 if(NATS_BUILD_LIB_STATIC)
@@ -76,7 +76,7 @@ if(NATS_BUILD_LIB_STATIC)
   install(EXPORT cnats-targets
         NAMESPACE cnats::
         FILE cnats-config.cmake
-        DESTINATION lib/cmake/cnats)
+        DESTINATION ${NATS_LIBDIR}/cmake/cnats)
 endif(NATS_BUILD_LIB_STATIC)
 
 install(FILES deprnats.h DESTINATION ${NATS_INCLUDE_DIR} RENAME nats.h)

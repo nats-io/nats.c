@@ -248,6 +248,7 @@ typedef enum {
     JSConsumerMaxRequestBatchNegativeErr = 10114,       ///< Consumer max request batch needs to be > 0
     JSConsumerMaxRequestExpiresToSmallErr = 10115,      ///< Consumer max request expires needs to be > 1ms
     JSConsumerMaxDeliverBackoffErr = 10116,             ///< Max deliver is required to be > length of backoff values
+    JSStreamInfoMaxSubjectsErr = 10117,                 ///< Subject details would exceed maximum allowed
 
 } jsErrCode;
 

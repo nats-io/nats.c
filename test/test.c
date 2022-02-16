@@ -3017,6 +3017,19 @@ test_natsSock_ReadLine(void)
     testCond(s != NATS_OK);
 }
 
+static natsStatus
+_dummyJSONCb(void *userInfo, const char *fieldName, nats_JSONField *f)
+{
+    if (userInfo == NULL)
+        return NATS_OK;
+
+    if (strcmp(fieldName, "fail") == 0)
+        return nats_setError(NATS_INVALID_ARG, "%s", "on purpose");
+
+    *(uint64_t*)userInfo = f->value.vuint;
+    return NATS_OK;
+}
+
 static void
 test_natsJSON(void)
 {
@@ -3993,6 +4006,35 @@ test_natsJSON(void)
     nats_JSONDestroy(json);
     json = NULL;
     free(bytes);
+
+    test("Range with wrong type: ");
+    s = nats_JSONParse(&json, "{\"test\":123}", -1);
+    IFOK(s, nats_JSONRange(json, TYPE_STR, 0, _dummyJSONCb, NULL));
+    testCond((s == NATS_ERR)
+                && (strstr(nats_GetLastError(NULL), "expected value type of")));
+    nats_clearLastError();
+
+    test("Range with wrong num type: ");
+    s = nats_JSONRange(json, TYPE_NUM, TYPE_INT, _dummyJSONCb, NULL);
+    testCond((s == NATS_ERR)
+                && (strstr(nats_GetLastError(NULL), "expected numeric type of")));
+    nats_clearLastError();
+
+    test("Range ok: ");
+    ulongVal = 0;
+    s = nats_JSONRange(json, TYPE_NUM, TYPE_UINT, _dummyJSONCb, &ulongVal);
+    testCond((s == NATS_OK) && (ulongVal == 123));
+    nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Range cb returns error: ");
+    ulongVal = 0;
+    s = nats_JSONParse(&json, "{\"fail\":123}", -1);
+    IFOK(s, nats_JSONRange(json, TYPE_NUM, TYPE_UINT, _dummyJSONCb, &ulongVal));
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), "on purpose")));
+    nats_clearLastError();
+    nats_JSONDestroy(json);
 }
 
 static void
@@ -21094,12 +21136,14 @@ test_JetStreamUnmarshalStreamState(void)
         "{\"state\":{\"lost\":{\"msgs\":\"abc\"}}}",
         "{\"state\":{\"lost\":{\"bytes\":\"abc\"}}}",
         "{\"state\":{\"consumer_count\":\"abc\"}}",
+        "{\"state\":{\"num_subjects\":\"abc\"}}",
     };
     int i;
 
     for (i=0; i<(int)(sizeof(bad)/sizeof(char*)); i++)
     {
         test("Bad fields: ");
+        memset(&state, 0, sizeof(jsStreamState));
         s = nats_JSONParse(&json, bad[i], (int) strlen(bad[i]));
         IFOK(s, js_unmarshalStreamState(json, "state", &state));
         testCond(s != NATS_OK);
@@ -21109,12 +21153,13 @@ test_JetStreamUnmarshalStreamState(void)
     }
 
     test("Unmarshal: ");
+    memset(&state, 0, sizeof(jsStreamState));
     s = nats_JSONParse(&json, "{\"state\":{\"messages\":1,\"bytes\":2,"\
         "\"first_seq\":3,\"first_ts\":\"2021-06-23T18:22:00.123Z\","\
         "\"last_seq\":4,\"last_ts\":\"2021-06-23T18:22:00.123456789Z\","\
         "\"num_deleted\":5,\"deleted\":[6,7,8,9,10],"\
         "\"lost\":{\"msgs\":[11,12,13],\"bytes\":14},"\
-        "\"consumer_count\":15}}", -1);
+        "\"consumer_count\":15,\"num_subjects\":3}}", -1);
     IFOK(s, js_unmarshalStreamState(json, "state", &state));
     testCond((s == NATS_OK) && (json != NULL)
                 && (state.Msgs == 1)
@@ -21138,7 +21183,8 @@ test_JetStreamUnmarshalStreamState(void)
                 && (state.Lost->Msgs[1] == 12)
                 && (state.Lost->Msgs[2] == 13)
                 && (state.Lost->Bytes == 14)
-                && (state.Consumers == 15));
+                && (state.Consumers == 15)
+                && (state.NumSubjects == 3));
 
     test("Cleanup: ");
     js_cleanStreamState(&state);
@@ -27300,6 +27346,92 @@ test_JetStreamBackOffRedeliveries(void)
 }
 
 static void
+test_JetStreamInfoWithSubjects(void)
+{
+    natsStatus          s;
+    jsStreamInfo        *si = NULL;
+    jsStreamConfig      cfg;
+    jsErrCode           jerr = 0;
+    jsOptions           o;
+
+    JS_SETUP(2, 7, 2);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "TEST";
+    cfg.Subjects = (const char*[1]){"foo.>"};
+    cfg.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Send to different subjects: ");
+    s = js_Publish(NULL, js, "foo.bar", "m1", 2, NULL, &jerr);
+    IFOK(s, js_Publish(NULL, js, "foo.baz", "m1", 2, NULL, &jerr));
+    IFOK(s, js_Publish(NULL, js, "foo.baz", "m2", 2, NULL, &jerr));
+    IFOK(s, js_Publish(NULL, js, "foo.baz.bat", "m1", 2, NULL, &jerr));
+    IFOK(s, js_Publish(NULL, js, "foo.baz.bat", "m2", 2, NULL, &jerr));
+    IFOK(s, js_Publish(NULL, js, "foo.baz.bat", "m3", 2, NULL, &jerr));
+    testCond(s == NATS_OK);
+
+    test("Check number subjects: ");
+    s = js_GetStreamInfo(&si, js, "TEST", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (si != NULL) && (si->State.NumSubjects == 3));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Get subjects list (no match): ");
+    jsOptions_Init(&o);
+    o.Stream.Info.SubjectsFilter = "none";
+    s = js_GetStreamInfo(&si, js, "TEST", &o, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (si != NULL) && (si->State.NumSubjects == 3)
+                && (si->State.Subjects == NULL));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Get subjects list (1 match): ");
+    jsOptions_Init(&o);
+    o.Stream.Info.SubjectsFilter = "foo.bar";
+    s = js_GetStreamInfo(&si, js, "TEST", &o, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (si != NULL) && (si->State.NumSubjects == 3)
+                && (si->State.Subjects != NULL)
+                && (si->State.Subjects->Count == 1)
+                && (strcmp(si->State.Subjects->List[0].Subject, "foo.bar") == 0)
+                && (si->State.Subjects->List[0].Msgs == 1));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Get subjects list (all matches): ");
+    jsOptions_Init(&o);
+    o.Stream.Info.SubjectsFilter = "foo.>";
+    s = js_GetStreamInfo(&si, js, "TEST", &o, &jerr);
+    if ((s == NATS_OK) && ((si == NULL) || (si->State.Subjects == NULL) || (si->State.Subjects->Count != 3)))
+        s = NATS_ERR;
+    else
+    {
+        int i;
+        bool got1, got2, got3;
+
+        for (i=0; i<si->State.Subjects->Count; i++)
+        {
+            jsStreamStateSubject *subj = &(si->State.Subjects->List[i]);
+
+            if ((strcmp(subj->Subject, "foo.bar") == 0) && (subj->Msgs == 1))
+                got1 = true;
+            else if ((strcmp(subj->Subject, "foo.baz") == 0) && (subj->Msgs == 2))
+                got2 = true;
+            else if ((strcmp(subj->Subject, "foo.baz.bat") == 0) && (subj->Msgs == 3))
+                got3 = true;
+        }
+        s = (got1 && got2 && got3 ? NATS_OK : NATS_ERR);
+    }
+    testCond((s == NATS_OK) && (jerr == 0) && (si->State.NumSubjects == 3));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    JS_TEARDOWN;
+}
+
+static void
 test_KeyValueManager(void)
 {
     natsStatus          s;
@@ -31016,6 +31148,7 @@ static testInfo allTests[] =
     {"JetStreamGetMsgAndLastMsg",       test_JetStreamGetMsgAndLastMsg},
     {"JetStreamNakWithDelay",           test_JetStreamNakWithDelay},
     {"JetStreamBackOffRedeliveries",    test_JetStreamBackOffRedeliveries},
+    {"JetStreamInfoWithSubjects",       test_JetStreamInfoWithSubjects},
 
     {"KeyValueManager",                 test_KeyValueManager},
     {"KeyValueBasics",                  test_KeyValueBasics},

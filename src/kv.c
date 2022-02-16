@@ -589,10 +589,12 @@ kvStore_UpdateString(uint64_t *rev, kvStore *kv, const char *key, const char *da
 }
 
 static natsStatus
-_delete(kvStore *kv, const char *key, bool purge)
+_delete(kvStore *kv, const char *key, bool purge, kvPurgeOptions *opts)
 {
-    natsStatus  s;
-    natsMsg     *msg = NULL;
+    natsStatus      s;
+    natsMsg         *msg = NULL;
+    jsPubOptions    o;
+    jsPubOptions    *po = NULL;
     DEFINE_BUF_FOR_SUBJECT;
 
     if (kv == NULL)
@@ -615,7 +617,13 @@ _delete(kvStore *kv, const char *key, bool purge)
             s = natsMsgHeader_Set(msg, kvOpHeader, kvOpDeleteStr);
         }
     }
-    IFOK(s, js_PublishMsg(NULL, kv->js, msg, NULL, NULL));
+    if (purge && (opts != NULL) && (opts->Timeout > 0))
+    {
+        jsPubOptions_Init(&o);
+        o.MaxWait = opts->Timeout;
+        po = &o;
+    }
+    IFOK(s, js_PublishMsg(NULL, kv->js, msg, po, NULL));
 
     natsBuf_Cleanup(&buf);
     natsMsg_Destroy(msg);
@@ -625,19 +633,29 @@ _delete(kvStore *kv, const char *key, bool purge)
 natsStatus
 kvStore_Delete(kvStore *kv, const char *key)
 {
-    natsStatus s = _delete(kv, key, false);
+    natsStatus s = _delete(kv, key, false, NULL);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
-kvStore_Purge(kvStore *kv, const char *key)
+kvStore_Purge(kvStore *kv, const char *key, kvPurgeOptions *opts)
 {
-    natsStatus s = _delete(kv, key, true);
+    natsStatus s = _delete(kv, key, true, opts);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
-kvStore_PurgeDeletes(kvStore *kv, kvWatchOptions *opts)
+kvPurgeOptions_Init(kvPurgeOptions *opts)
+{
+    if (opts == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    memset(opts, 0, sizeof(kvPurgeOptions));
+    return NATS_OK;
+}
+
+natsStatus
+kvStore_PurgeDeletes(kvStore *kv, kvPurgeOptions *opts)
 {
     natsStatus      s;
     kvWatcher       *w = NULL;
@@ -646,8 +664,16 @@ kvStore_PurgeDeletes(kvStore *kv, kvWatchOptions *opts)
     kvEntry         *t = NULL;
     natsBuffer      buf;
     char            buffer[128];
+    kvWatchOptions  wo;
+    kvWatchOptions  *wpo = NULL;
 
-    s = kvStore_WatchAll(&w, kv, opts);
+    if ((opts != NULL) && (opts->Timeout > 0))
+    {
+        kvWatchOptions_Init(&wo);
+        wo.Timeout = opts->Timeout;
+        wpo = &wo;
+    }
+    s = kvStore_WatchAll(&w, kv, wpo);
     if (s != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
@@ -670,7 +696,16 @@ kvStore_PurgeDeletes(kvStore *kv, kvWatchOptions *opts)
     }
     if ((s == NATS_OK) && (h != NULL))
     {
-        jsOptions po;
+        jsOptions   po;
+        int64_t     olderThan = (opts != NULL ? opts->DeleteMarkersOlderThan : 0);
+        int64_t     limit = 0;
+
+        // Negative value is used to instruct to always remove markers, regardless
+        // of age. If set to 0 (or not set), use our default value.
+        if (olderThan == 0)
+            olderThan = NATS_SECONDS_TO_NANOS(30*60); // 30 minutes
+        else if (olderThan > 0)
+            limit = nats_NowInNanoSeconds() - olderThan;
 
         jsOptions_Init(&po);
 
@@ -687,6 +722,12 @@ kvStore_PurgeDeletes(kvStore *kv, kvWatchOptions *opts)
             if (s == NATS_OK)
             {
                 po.Stream.Purge.Subject = (const char*) natsBuf_Data(&buf);
+                po.Stream.Purge.Keep = 0;
+                if ((olderThan > 0) && (kvEntry_Created(h) >= limit))
+                {
+                    // Keep this marker since it is more recent than the threshold.
+                    po.Stream.Purge.Keep = 1;
+                }
                 s = js_PurgeStream(kv->js, kv->stream, &po, NULL);
             }
             e = h;
@@ -1056,6 +1097,12 @@ kvStore_History(kvEntryList *list, kvStore *kv, const char *key, kvWatchOptions 
         else
             kvEntry_Destroy(e);
     }
+    // Go client returns "not found" if the subject exists, but
+    // there is nothing to return, so basically after a purge deletes,
+    // a key has no data and no marker, and we return "not found".
+    if ((s == NATS_OK) && (list->Count == 0))
+        return NATS_NOT_FOUND;
+
     return NATS_UPDATE_ERR_STACK(s);
 }
 

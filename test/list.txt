@@ -240,6 +240,7 @@ KeyValueHistory
 KeyValueKeys
 KeyValueDeleteVsPurge
 KeyValueDeleteTombstones
+KeyValueDeleteMarkerThreshold
 KeyValueCrossAccount
 StanPBufAllocator
 StanConnOptions

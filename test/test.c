@@ -28061,7 +28061,7 @@ test_KeyValueKeys(void)
     testCond(s == NATS_OK);
 
     test("Purge country: ");
-    s = kvStore_Purge(kv, "country");
+    s = kvStore_Purge(kv, "country", NULL);
     testCond(s == NATS_OK);
 
     test("Get keys: ");
@@ -28128,7 +28128,7 @@ test_KeyValueDeleteVsPurge(void)
     kvEntryList_Destroy(&l);
 
     test("Purge name: ");
-    s = kvStore_Purge(kv, "name");
+    s = kvStore_Purge(kv, "name", NULL);
     testCond(s == NATS_OK);
 
     test("Check marker: ");
@@ -28158,6 +28158,7 @@ test_KeyValueDeleteTombstones(void)
     char                *v  = NULL;
     jsStreamInfo        *si = NULL;
     kvConfig            kvc;
+    kvPurgeOptions      po;
     int                 i;
 
     JS_SETUP(2, 6, 2);
@@ -28204,7 +28205,9 @@ test_KeyValueDeleteTombstones(void)
     nats_clearLastError();
 
     test("Purge deletes: ");
-    s = kvStore_PurgeDeletes(kv, NULL);
+    kvPurgeOptions_Init(&po);
+    po.DeleteMarkersOlderThan = -1;
+    s = kvStore_PurgeDeletes(kv, &po);
     testCond(s == NATS_OK);
 
     test("Check stream: ");
@@ -28212,6 +28215,67 @@ test_KeyValueDeleteTombstones(void)
     testCond((s == NATS_OK) && (si != NULL) && (si->State.Msgs == 0));
     jsStreamInfo_Destroy(si);
 
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
+static void
+test_KeyValuePurgeDeletesMarkerThreshold(void)
+{
+    natsStatus          s;
+    kvStore             *kv = NULL;
+    kvConfig            kvc;
+    kvPurgeOptions      po;
+    kvEntryList         list;
+
+    JS_SETUP(2, 7, 2);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "KVS";
+    kvc.History = 10;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Put keys: ")
+    s = kvStore_PutString(NULL, kv, "foo", "foo1");
+    IFOK(s, kvStore_PutString(NULL, kv, "bar", "bar1"));
+    IFOK(s, kvStore_PutString(NULL, kv, "foo", "foo2"));
+    testCond(s == NATS_OK);
+
+    test("Delete foo: ");
+    s = kvStore_Delete(kv, "foo");
+    testCond(s == NATS_OK);
+
+    nats_Sleep(200);
+
+    test("Delete bar: ");
+    s = kvStore_Delete(kv, "bar");
+    testCond(s == NATS_OK);
+
+    test("PurgeOptions init bad args: ");
+    s = kvPurgeOptions_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Purge deletes: ");
+    kvPurgeOptions_Init(&po);
+    po.DeleteMarkersOlderThan = NATS_MILLIS_TO_NANOS(100);
+    s = kvStore_PurgeDeletes(kv, &po);
+    testCond(s == NATS_OK);
+
+	// The key foo should have been completely cleared of the data
+	// and the delete marker.
+    test("Check foo history: ")
+    s = kvStore_History(&list, kv, "foo", NULL);
+    testCond((s == NATS_NOT_FOUND) && (list.Entries == NULL) && (list.Count == 0));
+
+    test("Check bar history: ");
+    s = kvStore_History(&list, kv, "bar", NULL);
+    testCond((s == NATS_OK) && (list.Count == 1) && (list.Entries != NULL)
+                && (kvEntry_Operation(list.Entries[0]) == kvOp_Delete));
+    kvEntryList_Destroy(&list);
     kvStore_Destroy(kv);
 
     JS_TEARDOWN;
@@ -28238,6 +28302,7 @@ test_KeyValueCrossAccount(void)
     char                datastore[256] = {'\0'};
     char                cmdLine[1024] = {'\0'};
     char                confFile[256] = {'\0'};
+    kvPurgeOptions      po;
 
     ENSURE_JS_VERSION(2, 6, 2);
 
@@ -28350,7 +28415,7 @@ test_KeyValueCrossAccount(void)
     e = NULL;
 
     test("Purge key from kv2: ");
-    s = kvStore_Purge(kv2, "map");
+    s = kvStore_Purge(kv2, "map", NULL);
     testCond(s == NATS_OK);
 
     test("Check purge ok from w1: ");
@@ -28366,7 +28431,9 @@ test_KeyValueCrossAccount(void)
     e = NULL;
 
     test("Delete purge records: ");
-    s = kvStore_PurgeDeletes(kv2, NULL);
+    kvPurgeOptions_Init(&po);
+    po.DeleteMarkersOlderThan = -1;
+    s = kvStore_PurgeDeletes(kv2, &po);
     testCond(s == NATS_OK);
 
     test("All gone: ");
@@ -30880,6 +30947,7 @@ static testInfo allTests[] =
     {"KeyValueKeys",                    test_KeyValueKeys},
     {"KeyValueDeleteVsPurge",           test_KeyValueDeleteVsPurge},
     {"KeyValueDeleteTombstones",        test_KeyValueDeleteTombstones},
+    {"KeyValueDeleteMarkerThreshold",   test_KeyValuePurgeDeletesMarkerThreshold},
     {"KeyValueCrossAccount",            test_KeyValueCrossAccount},
 
 #if defined(NATS_HAS_STREAMING)

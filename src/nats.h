@@ -981,7 +981,7 @@ typedef struct kvConfig
 /**
  * KeyValue watcher options object.
  *
- * Initialize the object with #kvWatchOptions_Init;
+ * Initialize the object with #kvWatchOptions_Init
  */
 typedef struct kvWatchOptions
 {
@@ -991,6 +991,28 @@ typedef struct kvWatchOptions
         int64_t         Timeout;        ///< How long to wait (in milliseconds) for some operations to complete.
 
 } kvWatchOptions;
+
+/**
+ * KeyValue purge options object.
+ *
+ * Initialize the object with #kvPurgeOptions_Init
+ */
+typedef struct kvPurgeOptions
+{
+        // How long to wait (in milliseconds) for some operations to complete.
+        int64_t         Timeout;
+
+        // When calling kvStore_PurgeDeletes(), all keys that have a delete or
+        // purge marker as the last entry are gathered and then those keys
+        // are purged of their content, including the marker.
+        // Starting with NATS C client v3.3.0, if this option is not specified,
+        // only the markers older than 30 minutes will be deleted. Use this
+        // option to set the limit or a negative value to force removal of
+        // markers regardless of their age.
+        // The value is expressed as a time in nanoseconds.
+        int64_t         DeleteMarkersOlderThan;
+
+} kvPurgeOptions;
 
 /** \brief A list of KeyValue store entries.
  *
@@ -6187,9 +6209,10 @@ kvStore_Delete(kvStore *kv, const char *key);
  *
  * @param kv the pointer to the #kvStore object.
  * @param key the name of the key.
+ * @param opts the pointer to the #kvPurgeOptions, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_Purge(kvStore *kv, const char *key);
+kvStore_Purge(kvStore *kv, const char *key, kvPurgeOptions *opts);
 
 /** \brief Initializes a KeyValue watcher options structure.
  *
@@ -6201,24 +6224,35 @@ kvStore_Purge(kvStore *kv, const char *key);
 NATS_EXTERN natsStatus
 kvWatchOptions_Init(kvWatchOptions *opts);
 
-/** \brief Removes all current delete markers.
+/** \brief Initializes a KeyValue purge options structure.
  *
- * Removes all current delete markers.
+ * Use this before setting specific purge options and passing it
+ * to #kvStore_Purge or #kvStore_PurgeDeletes.
+ *
+ * @param opts the pointer to the #kvPurgeOptions to initialize.
+ */
+NATS_EXTERN natsStatus
+kvPurgeOptions_Init(kvPurgeOptions *opts);
+
+/** \brief Purge and removes delete markers.
+ *
+ * Removes data and delete markers, but may keep the markers that are considered
+ * more recent than a certain threshold (default is 30 minutes).
  *
  * This is a maintenance option if there is a larger buildup of delete markers.
  *
- * \note Use #kvWatchOptions.Timeout to specify how long to wait (in milliseconds)
+ * \note Use #kvPurgeOptions.Timeout to specify how long to wait (in milliseconds)
  * in gathering all keys that have purge markers. This function will still
  * purge some of the keys and return #NATS_TIMEOUT to indicate that it may not
  * have deleted them all.
  *
- * @see kvWatchOptions_Init
+ * @see kvPurgeOptions_Init
  *
  * @param kv the pointer to the #kvStore object.
- * @param opts the pointer to the #kvWatchOptions, possibly `NULL`.
+ * @param opts the pointer to the #kvPurgeOptions, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_PurgeDeletes(kvStore *kv, kvWatchOptions *opts);
+kvStore_PurgeDeletes(kvStore *kv, kvPurgeOptions *opts);
 
 /** \brief Returns a watcher for any updates to keys that match the `keys` argument.
  *

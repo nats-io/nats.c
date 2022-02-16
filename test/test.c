@@ -28337,6 +28337,7 @@ test_KeyValueCrossAccount(void)
     kvWatcher           *w2  = NULL;
     kvEntry             *e   = NULL;
     jsStreamInfo        *si  = NULL;
+    uint64_t            rev  = 0;
     kvConfig            kvc;
     jsOptions           o;
     char                datastore[256] = {'\0'};
@@ -28419,7 +28420,7 @@ test_KeyValueCrossAccount(void)
     testCond((s == NATS_OK) && (e == NULL));
 
     test("Put: ");
-    s = kvStore_PutString(NULL, kv2, "map", "value");
+    s = kvStore_PutString(&rev, kv2, "map", "value");
     testCond(s == NATS_OK);
 
     test("Get from kv1: ");
@@ -28451,6 +28452,42 @@ test_KeyValueCrossAccount(void)
     testCond((s == NATS_OK) && (e != NULL)
             && (strcmp(kvEntry_Key(e), "map") == 0)
             && (strcmp(kvEntry_ValueString(e), "value") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Update from kv2: ");
+    s = kvStore_UpdateString(NULL, kv2, "map", "updated", rev);
+    testCond(s == NATS_OK);
+
+    test("Get from kv1: ");
+    s = kvStore_Get(&e, kv1, "map");
+    testCond((s == NATS_OK) && (e != NULL)
+            && (strcmp(kvEntry_Key(e), "map") == 0)
+            && (strcmp(kvEntry_ValueString(e), "updated") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Get from kv2: ");
+    s = kvStore_Get(&e, kv2, "map");
+    testCond((s == NATS_OK) && (e != NULL)
+            && (strcmp(kvEntry_Key(e), "map") == 0)
+            && (strcmp(kvEntry_ValueString(e), "updated") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Watcher1 Next: ");
+    s = kvWatcher_Next(&e, w1, 1000);
+    testCond((s == NATS_OK) && (e != NULL)
+            && (strcmp(kvEntry_Key(e), "map") == 0)
+            && (strcmp(kvEntry_ValueString(e), "updated") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Watcher2 Next: ");
+    s = kvWatcher_Next(&e, w2, 1000);
+    testCond((s == NATS_OK) && (e != NULL)
+            && (strcmp(kvEntry_Key(e), "map") == 0)
+            && (strcmp(kvEntry_ValueString(e), "updated") == 0));
     kvEntry_Destroy(e);
     e = NULL;
 

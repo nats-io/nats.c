@@ -28420,7 +28420,7 @@ test_KeyValuePurgeDeletesMarkerThreshold(void)
     s = kvStore_Delete(kv, "foo");
     testCond(s == NATS_OK);
 
-    nats_Sleep(200);
+    nats_Sleep(500);
 
     test("Delete bar: ");
     s = kvStore_Delete(kv, "bar");

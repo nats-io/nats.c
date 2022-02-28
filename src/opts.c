@@ -552,24 +552,25 @@ natsOptions_SetCertificatesChain(natsOptions *opts, const char *certStr, const c
     }
     if (s == NATS_OK)
     {
-        RSA *rsa  = NULL;
-        BIO *bio  = NULL;
+        BIO         *bio  = NULL;
+        EVP_PKEY    *pkey = NULL;
 
         bio = BIO_new_mem_buf((char*) keyStr, -1);
-        if ((bio == NULL) || ((rsa = PEM_read_bio_RSAPrivateKey(bio, NULL, 0, NULL)) == NULL))
+        if ((bio == NULL) || ((pkey = PEM_read_bio_PrivateKey(bio, NULL, 0, NULL)) == NULL))
         {
             s = nats_setError(NATS_SSL_ERROR,
                               "Error creating key: %s",
                               NATS_SSL_ERR_REASON_STRING);
         }
-        if ((s == NATS_OK) && (SSL_CTX_use_RSAPrivateKey(opts->sslCtx->ctx, rsa) != 1))
+
+        if ((s == NATS_OK) && (SSL_CTX_use_PrivateKey(opts->sslCtx->ctx, pkey) != 1))
         {
             s = nats_setError(NATS_SSL_ERROR,
                               "Error using private key: %s",
                               NATS_SSL_ERR_REASON_STRING);
         }
-        if (rsa != NULL)
-            RSA_free(rsa);
+        if (pkey != NULL)
+            EVP_PKEY_free(pkey);
         if (bio != NULL)
             BIO_free(bio);
     }

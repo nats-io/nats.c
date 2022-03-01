@@ -1025,7 +1025,7 @@ _autoAckCB(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closur
     // Invoke user callback
     (jsi->usrCb)(nc, sub, msg, jsi->usrCbClosure);
 
-    natsMsg_Ack(msg, &(jsi->js->opts));
+    natsMsg_Ack(msg, NULL);
     natsMsg_clearNoDestroy(msg);
     natsMsg_Destroy(msg);
 }

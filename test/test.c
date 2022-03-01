@@ -24009,6 +24009,11 @@ test_JetStreamSubscribe(void)
     for (i=0; (s == NATS_OK) && (i < 3); i++)
     {
         s = natsSubscription_NextMsg(&ack, ackSub, 1000);
+        if (s == NATS_OK)
+        {
+            // Make sure this was not a sync call...
+            s = (natsMsg_GetReply(ack) == NULL ? NATS_OK : NATS_ERR);
+        }
         natsMsg_Destroy(ack);
         ack = NULL;
     }

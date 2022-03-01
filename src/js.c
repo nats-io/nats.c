@@ -1913,6 +1913,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     natsMsgHandler      cb          = NULL;
     void                *cbClosure  = NULL;
     natsInbox           *inbox      = NULL;
+    int64_t             maxap       = 0;
     jsOptions           jo;
     jsSubOptions        o;
     jsConsumerConfig    cfgStack;
@@ -2038,6 +2039,7 @@ PROCESS_INFO:
 
         // Capture the HB interval (convert in millsecond since Go duration is in nanos)
         hbi = info->Config->Heartbeat / 1000000;
+        maxap = info->Config->MaxAckPending;
     }
     else if (((s != NATS_OK) && (s != NATS_NOT_FOUND)) || ((s == NATS_NOT_FOUND) && consBound))
     {
@@ -2085,11 +2087,6 @@ PROCESS_INFO:
 
             // Set DeliverGroup to queue name, possibly NULL
             cfg->DeliverGroup = opts->Queue;
-
-            // If we have acks at all and the MaxAckPending is not set go ahead
-            // and set to the internal max.
-            if ((cfg->MaxAckPending == 0) && (cfg->AckPolicy != js_AckNone))
-                cfg->MaxAckPending = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
         }
 
         // Capture the HB interval (convert in millsecond since Go duration is in nanos)
@@ -2201,6 +2198,7 @@ PROCESS_INFO:
         }
         else
         {
+            maxap = info->Config->MaxAckPending;
             natsSub_Lock(sub);
             jsi->dc = true;
             jsi->pending = info->NumPending + info->Delivered.Consumer;
@@ -2216,6 +2214,21 @@ PROCESS_INFO:
 END:
     if (s == NATS_OK)
     {
+        int64_t ml = 0;
+        int64_t bl = 0;
+
+        natsSub_Lock(sub);
+        ml = (int64_t) sub->msgsLimit;
+        bl = (int64_t) sub->bytesLimit;
+        natsSub_Unlock(sub);
+        if (maxap > ml)
+        {
+            ml = maxap;
+            if (maxap*1024*1024 > bl)
+                bl = maxap*1024*1024;
+
+            natsSubscription_SetPendingLimits(sub, (int) ml, (int) bl);
+        }
         *new_sub = sub;
     }
     else

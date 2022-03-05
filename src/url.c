@@ -46,61 +46,21 @@ _parsePort(int *port, const char *sport)
     return s;
 }
 
-static natsStatus
-_parseHostAndPort(natsUrl *url, char *host, bool uInfo)
-{
-    natsStatus  s      = NATS_OK;
-    char        *sport = NULL;
-
-    sport = strrchr(host, ':');
-    if (sport != NULL)
-    {
-        const char *startPort = (const char*) (sport+1);
-        char       *endPort   = strchr(startPort, '/');
-
-        if (endPort != NULL)
-            *endPort = '\0';
-
-        s = _parsePort(&(url->port), startPort);
-        if (s != NATS_OK)
-            return NATS_UPDATE_ERR_STACK(s);
-
-        *sport = '\0';
-    }
-
-    if (uInfo)
-    {
-        url->host = NATS_STRDUP(host + 1);
-        *host = '\0';
-
-        if (url->host == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-    }
-    else
-    {
-        if (*host == '\0')
-            url->host = NATS_STRDUP("localhost");
-        else
-            url->host = NATS_STRDUP(host);
-        if (url->host == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-    }
-
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
 natsStatus
 natsUrl_Create(natsUrl **newUrl, const char *urlStr)
 {
     natsStatus  s      = NATS_OK;
-    bool        uInfo  = false;
     char        *copy  = NULL;
     char        *ptr   = NULL;
-    char        *host  = NULL;
-    char        *pwd   = NULL;
+    const char  *scheme= NULL;
+    const char  *user  = NULL;
+    const char  *pwd   = NULL;
+    const char  *host  = NULL;
+    const char  *port  = NULL;
+    const char  *path  = NULL;
     natsUrl     *url   = NULL;
 
-    if ((urlStr == NULL) || (strlen(urlStr) == 0))
+    if (nats_IsStringEmpty(urlStr))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     url = (natsUrl*) NATS_CALLOC(1, sizeof(natsUrl));
@@ -109,106 +69,111 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
 
     s = nats_Trim(&copy, urlStr);
 
-    // Add scheme if missing.
-    if ((s == NATS_OK) && (strstr(copy, "://") == NULL))
-    {
-        char *str = NULL;
-
-        if (nats_asprintf(&str, "nats://%s", copy) == -1)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-        else
-        {
-            NATS_FREE(copy);
-            copy = str;
-        }
-    }
-    // Add default host/port if missing.
+    // Scheme
     if (s == NATS_OK)
     {
-        char *start = NULL;
-
-        // Now that we know that there is a scheme, move past it.
-        start = strstr(copy, "://");
-        start += 3;
-
-        // If we are at then end, will add "localhost:4222".
-        if (*start != '\0')
+        ptr = strstr(copy, "://");
+        if (ptr == NULL)
         {
-            // First, search for end of IPv6 address (if applicable)
-            ptr = strrchr(start, ']');
-            if (ptr == NULL)
-                ptr = start;
-
-            // From that point, search for the last ':' character
-            ptr = strrchr(ptr, ':');
+            scheme = "nats";
+            ptr = copy;
         }
-        if ((*start == '\0') || (ptr == NULL) || (*(ptr+1) == '\0'))
+        else
         {
-            char        *str = NULL;
-            int         res  = 0;
-
-            if (*start == '\0')
-                res = nats_asprintf(&str, "%slocalhost:%s", copy, DEFAULT_PORT_STRING);
-            else if (ptr != NULL)
-                res = nats_asprintf(&str, "%s%s", copy, DEFAULT_PORT_STRING);
-            else
-                res = nats_asprintf(&str, "%s:%s", copy, DEFAULT_PORT_STRING);
-
-            if (res == -1)
-                s = nats_setDefaultError(NATS_NO_MEMORY);
-            else
-            {
-                NATS_FREE(copy);
-                copy = str;
-            }
+            *ptr = '\0';
+            scheme = (const char*) copy;
+            ptr += 3;
         }
     }
-
-    // Keep a copy of the full URL.
+    // User info
     if (s == NATS_OK)
     {
-        url->fullUrl = NATS_STRDUP(copy);
-        if (url->fullUrl == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-    }
+        char *sep  = strrchr(ptr, '@');
 
-    // At this point, we are guaranteed to have '://' in the string
-    if ((s == NATS_OK)
-            && ((ptr = strstr(copy, "://")) != NULL)
-            && (*(ptr += 3) != '\0'))
-    {
-        // If '@' is present, everything after is the host
-        // everything before is username/password combo.
-
-        host = strrchr(ptr, '@');
-        if (host != NULL)
-            uInfo = true;
-        else
-            host = ptr;
-
-        if ((host != NULL) && (host[1] != '\0'))
+        if (sep != NULL)
         {
-            s = _parseHostAndPort(url, host, uInfo);
+            host = (const char*) (sep+1);
+            *sep = '\0';
+
+            if (ptr != sep)
+            {
+                sep = strchr(ptr, ':');
+                if (sep != NULL)
+                {
+                    *sep = '\0';
+                    if (sep != ptr)
+                        user = (const char*) ptr;
+                    if (sep+1 != host)
+                        pwd = (const char*) (sep+1);
+                }
+                else
+                {
+                    user = (const char*) ptr;
+                }
+            }
         }
-
-        if ((s == NATS_OK) && uInfo)
+        else
         {
-            pwd = strchr(ptr, ':');
-            if ((pwd != NULL) && (pwd[1] != '\0'))
-            {
-                url->password = NATS_STRDUP(pwd + 1);
-                *pwd = '\0';
+            host = (const char*) ptr;
+        }
+    }
+    // Host
+    if (s == NATS_OK)
+    {
+        // Search for end of IPv6 address (if applicable)
+        ptr = strrchr(host, ']');
+        if (ptr == NULL)
+            ptr = (char*) host;
 
-                if (url->password == NULL)
-                    s = nats_setDefaultError(NATS_NO_MEMORY);
-            }
+        // From that point, search for the last ':' character
+        ptr = strrchr(ptr, ':');
+        if (ptr != NULL)
+        {
+            *ptr = '\0';
+            port = (const char*) (ptr+1);
+        }
+        if (nats_IsStringEmpty(host))
+            host = "localhost";
+    }
+    // Port
+    if (s == NATS_OK)
+    {
+        if (port != NULL)
+        {
+            char *sep = strchr(port, '/');
 
-            if ((s == NATS_OK) && (strlen(ptr) > 0))
+            if (sep != NULL)
             {
-                url->username = NATS_STRDUP(ptr);
-                if (url->username == NULL)
-                    s = nats_setDefaultError(NATS_NO_MEMORY);
+                *sep = '\0';
+                path = (const char*) (sep+1);
             }
+        }
+        if (nats_IsStringEmpty(port))
+            url->port = 4222;
+        else
+            s = _parsePort(&url->port, port);
+    }
+    // Assemble everything
+    if (s == NATS_OK)
+    {
+        const char  *userval    = (nats_IsStringEmpty(user) ? "" : user);
+        const char  *usep       = (nats_IsStringEmpty(pwd) ? "" : ":");
+        const char  *pwdval     = (nats_IsStringEmpty(pwd) ? "" : pwd);
+        const char  *hsep       = (nats_IsStringEmpty(user) ? "" : "@");
+        const char  *pathsep    = (nats_IsStringEmpty(path) ? "" : "/");
+        const char  *pathval    = (nats_IsStringEmpty(path) ? "" : path);
+
+        DUP_STRING(s, url->host, host);
+
+        if (user != NULL)
+            IF_OK_DUP_STRING(s, url->username, user);
+        if (pwd != NULL)
+            IF_OK_DUP_STRING(s, url->password, pwd);
+
+        if ((s == NATS_OK) && nats_asprintf(&url->fullUrl, "%s://%s%s%s%s%s:%d%s%s",
+                scheme, userval, usep, pwdval, hsep, host, url->port, pathsep, pathval) < 0)
+        {
+            s = nats_setDefaultError(NATS_NO_MEMORY);
         }
     }
 

@@ -21690,7 +21690,6 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"max_expires\":123456789}}",
         "{\"config\":{\"inactive_threshold\":123456789}}",
         "{\"config\":{\"backoff\":[50000000,250000000]}}",
-        "{\"config\":{\"direct\":true}}",
     };
     const char          *bad[] = {
         "{\"stream_name\":123}",
@@ -21720,7 +21719,6 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"max_expires\":\"123456789\"}}",
         "{\"config\":{\"inactive_threshold\":\"123456789\"}}",
         "{\"config\":{\"backoff\":true}}",
-        "{\"config\":{\"direct\":\"abc\"}}",
         "{\"delivered\":123}",
         "{\"delivered\":{\"consumer_seq\":\"abc\"}}",
         "{\"delivered\":{\"stream_seq\":\"abc\"}}",

@@ -1808,8 +1808,6 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         }
         IFOK(s, natsBuf_AppendByte(buf, ']'));
     }
-    if ((s == NATS_OK) && cfg->Direct)
-        s = natsBuf_Append(buf, ",\"direct\":true", -1);
     IFOK(s, natsBuf_Append(buf, "}}", -1));
 
     if (s == NATS_OK)
@@ -1949,7 +1947,6 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
         IFOK(s, nats_JSONGetLong(cjson, "max_expires", &(cc->MaxRequestExpires)));
         IFOK(s, nats_JSONGetLong(cjson, "inactive_threshold", &(cc->InactiveThreshold)));
         IFOK(s, nats_JSONGetArrayLong(cjson, "backoff", &(cc->BackOff), &(cc->BackOffLen)));
-        IFOK(s, nats_JSONGetBool(cjson, "direct", &(cc->Direct)));
     }
 
     if (s == NATS_OK)

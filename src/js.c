@@ -2075,7 +2075,6 @@ PROCESS_INFO:
             cfg->AckPolicy   = js_AckNone;
             cfg->MaxDeliver  = 1;
             cfg->AckWait     = NATS_SECONDS_TO_NANOS(24*60*60); // Just set to something known, not utilized.
-            cfg->Direct      = true;
             if (opts->Config.Heartbeat <= 0)
                 cfg->Heartbeat = jsOrderedHBInterval;
         }

@@ -98,8 +98,6 @@
 #define WAIT_FOR_WRITE      (1)
 #define WAIT_FOR_CONNECT    (2)
 
-#define DEFAULT_PORT_STRING "4222"
-
 #define DEFAULT_DRAIN_TIMEOUT   30000 // 30 seconds
 
 #define MAX_FRAMES (50)

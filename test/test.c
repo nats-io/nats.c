@@ -1416,6 +1416,32 @@ test_natsUrl(void)
 
     nats_clearLastError();
 
+    test("'localhost:':");
+    s = natsUrl_Create(&u, "localhost:");
+    testCond((s == NATS_OK)
+            && (u != NULL)
+            && (u->host != NULL)
+            && (strcmp(u->host, "localhost") == 0)
+            && (u->username == NULL)
+            && (u->password == NULL)
+            && (u->port == 4222)
+            && (strcmp(u->fullUrl, "nats://localhost:4222") == 0));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("'localhost:4223':");
+    s = natsUrl_Create(&u, "localhost:4223");
+    testCond((s == NATS_OK)
+            && (u != NULL)
+            && (u->host != NULL)
+            && (strcmp(u->host, "localhost") == 0)
+            && (u->username == NULL)
+            && (u->password == NULL)
+            && (u->port == 4223)
+            && (strcmp(u->fullUrl, "nats://localhost:4223") == 0));
+    natsUrl_Destroy(u);
+    u = NULL;
+
     test("'tcp://localhost:4222':");
     s = natsUrl_Create(&u, "tcp://localhost:4222");
     testCond((s == NATS_OK)
@@ -1563,6 +1589,20 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
+    test("'tcp://ivan:pwd@localhost':");
+    s = natsUrl_Create(&u, "tcp://ivan:pwd@localhost");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "localhost") == 0)
+              && (u->username != NULL)
+              && (strcmp(u->username, "ivan") == 0)
+              && (u->password != NULL)
+              && (strcmp(u->password, "pwd") == 0)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
     test("'tcp://@localhost:4222':");
     s = natsUrl_Create(&u, "tcp://@localhost:4222");
     testCond((s == NATS_OK)
@@ -1642,6 +1682,34 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
+    test("'tcp://a:b@[::1]:4222':");
+    s = natsUrl_Create(&u, "tcp://a:b@[::1]:4222");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "[::1]") == 0)
+              && (u->username != NULL)
+              && (strcmp(u->username, "a") == 0)
+              && (u->password != NULL)
+              && (strcmp(u->password, "b") == 0)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("'tcp://a:b@[::1]':");
+    s = natsUrl_Create(&u, "tcp://a:b@[::1]");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "[::1]") == 0)
+              && (u->username != NULL)
+              && (strcmp(u->username, "a") == 0)
+              && (u->password != NULL)
+              && (strcmp(u->password, "b") == 0)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
     test("' tcp://localhost:4222':");
     s = natsUrl_Create(&u, " tcp://localhost:4222");
     testCond((s == NATS_OK)
@@ -1686,7 +1754,8 @@ test_natsUrl(void)
               && (strcmp(u->host, "localhost") == 0)
               && (u->username == NULL)
               && (u->password == NULL)
-              && (u->port == 4222));
+              && (u->port == 4222)
+              && (strcmp(u->fullUrl, "nats://localhost:4222/subject") == 0));
     natsUrl_Destroy(u);
     u = NULL;
 
@@ -7943,6 +8012,13 @@ test_DefaultConnection(void)
     natsConnection      *nc       = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     natsOptions         *opts     = NULL;
+    int                 i;
+    const char          *urls[] = {
+        NATS_DEFAULT_URL,
+        "tcp://",
+        "nats://localhost",
+        ":4222",
+    };
 
     s = natsOptions_Create(&opts);
     IFOK(s, natsOptions_SetTimeout(opts, 500));
@@ -7960,11 +8036,18 @@ test_DefaultConnection(void)
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
-    test("Test default connection: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(s == NATS_OK);
+    for (i=0; i<(int)(sizeof(urls)/sizeof(char*)); i++)
+    {
+        char buf[256];
 
-    natsConnection_Destroy(nc);
+        snprintf(buf, sizeof(buf), "Test connect with '%s':", urls[i]);
+        test(buf);
+        s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+        testCond(s == NATS_OK);
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+
     natsOptions_Destroy(opts);
 
     _stopServer(serverPid);

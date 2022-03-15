@@ -25,5 +25,7 @@ var searchData=
   ['jsstreamsource_22',['jsStreamSource',['../group__types_group.html#gab4c43c87d81917aab748a50eee028449',1,'nats.h']]],
   ['jsstreamsourceinfo_23',['jsStreamSourceInfo',['../group__types_group.html#gab2f33f57188a550f2f747d4f27bc24bd',1,'nats.h']]],
   ['jsstreamstate_24',['jsStreamState',['../group__types_group.html#ga2bfd6de6ffc84d767482b3dd57cb9271',1,'nats.h']]],
-  ['jssuboptions_25',['jsSubOptions',['../group__types_group.html#gaccfaac2079656ffd40d003e4de5d2280',1,'nats.h']]]
+  ['jsstreamstatesubject_25',['jsStreamStateSubject',['../group__types_group.html#ga55dce2fa9ecd215716cc9ceece7dfefa',1,'nats.h']]],
+  ['jsstreamstatesubjects_26',['jsStreamStateSubjects',['../group__types_group.html#gae8b57d9c40364f97a705f3e61a1156b0',1,'nats.h']]],
+  ['jssuboptions_27',['jsSubOptions',['../group__types_group.html#gaccfaac2079656ffd40d003e4de5d2280',1,'nats.h']]]
 ];

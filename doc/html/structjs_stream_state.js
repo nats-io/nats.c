@@ -6,6 +6,8 @@ var structjs_stream_state =
     [ "FirstTime", "structjs_stream_state.html#afb7a708022faff518c060b33e99b04b0", null ],
     [ "LastSeq", "structjs_stream_state.html#a22da809fe7a1ec3101841e86d6708827", null ],
     [ "LastTime", "structjs_stream_state.html#a67cbd0d8b43d8c05c8b4cd6b0e44dab0", null ],
+    [ "NumSubjects", "structjs_stream_state.html#aaa43db17641826e7c6ecc1954f641960", null ],
+    [ "Subjects", "structjs_stream_state.html#a4af56e8bee7262ab050f2a25114c5909", null ],
     [ "NumDeleted", "structjs_stream_state.html#acbec2f01830b56cb4c0bf54ae5170e51", null ],
     [ "Deleted", "structjs_stream_state.html#abcf4d3c581c06d820f1ad21d640bef3f", null ],
     [ "DeletedLen", "structjs_stream_state.html#a34a08a64c97269165630bf2e0c78c2c0", null ],

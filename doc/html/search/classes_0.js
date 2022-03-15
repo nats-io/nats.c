@@ -27,5 +27,7 @@ var searchData=
   ['jsstreamsource_24',['jsStreamSource',['../structjs_stream_source.html',1,'']]],
   ['jsstreamsourceinfo_25',['jsStreamSourceInfo',['../structjs_stream_source_info.html',1,'']]],
   ['jsstreamstate_26',['jsStreamState',['../structjs_stream_state.html',1,'']]],
-  ['jssuboptions_27',['jsSubOptions',['../structjs_sub_options.html',1,'']]]
+  ['jsstreamstatesubject_27',['jsStreamStateSubject',['../structjs_stream_state_subject.html',1,'']]],
+  ['jsstreamstatesubjects_28',['jsStreamStateSubjects',['../structjs_stream_state_subjects.html',1,'']]],
+  ['jssuboptions_29',['jsSubOptions',['../structjs_sub_options.html',1,'']]]
 ];

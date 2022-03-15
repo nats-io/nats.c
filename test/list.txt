@@ -243,6 +243,7 @@ KeyValueDeleteVsPurge
 KeyValueDeleteTombstones
 KeyValueDeleteMarkerThreshold
 KeyValueCrossAccount
+KeyValueDiscardOldToNew
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

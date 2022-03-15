@@ -11,5 +11,6 @@ var searchData=
   ['libuv_20adapter_8',['Libuv Adapter',['../group__libuv_functions.html',1,'']]],
   ['libuv_2eh_9',['libuv.h',['../libuv_8h.html',1,'']]],
   ['limits_10',['Limits',['../structjs_account_info.html#aad93cf4bb6c1fbb09ae8545c03f315a9',1,'jsAccountInfo']]],
-  ['lost_11',['Lost',['../structjs_stream_state.html#a1adf8991f31fc4db9d6907a0316f8eec',1,'jsStreamState']]]
+  ['list_11',['List',['../structjs_stream_state_subjects.html#aef3d1e886b16961daa84c43650fa80c0',1,'jsStreamStateSubjects']]],
+  ['lost_12',['Lost',['../structjs_stream_state.html#a1adf8991f31fc4db9d6907a0316f8eec',1,'jsStreamState']]]
 ];

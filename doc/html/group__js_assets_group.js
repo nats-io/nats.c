@@ -16,6 +16,7 @@ var group__js_assets_group =
     [ "jsStreamInfo_Destroy", "group__js_assets_group.html#ga8ee87ef86e94be42685941abe9638bbd", null ],
     [ "jsConsumerConfig_Init", "group__js_assets_group.html#ga3381bb05c05bf4a8979adde68d37dd66", null ],
     [ "js_AddConsumer", "group__js_assets_group.html#gaf2efb63db150e782d9007090b49d4115", null ],
+    [ "js_UpdateConsumer", "group__js_assets_group.html#gad13ec256e24710bb237995814871e554", null ],
     [ "js_GetConsumerInfo", "group__js_assets_group.html#ga2dda04757b4ab27a794b64f8d727fe23", null ],
     [ "js_DeleteConsumer", "group__js_assets_group.html#ga52fbc61759b11494db91f348a733c490", null ],
     [ "jsConsumerInfo_Destroy", "group__js_assets_group.html#ga9c1d5ed2f24ba836c10e415231f80088", null ],

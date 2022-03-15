@@ -10,6 +10,8 @@ var structjs_consumer_config =
     [ "AckPolicy", "structjs_consumer_config.html#a8a311af614dfae1b0f4e4af7db467aab", null ],
     [ "AckWait", "structjs_consumer_config.html#a651a94b9b78668dde830dc7869610e67", null ],
     [ "MaxDeliver", "structjs_consumer_config.html#ad47e15e1d6a4a8b0b155f9d3d5873c95", null ],
+    [ "BackOff", "structjs_consumer_config.html#aa2d0aff64a2c46122d0f0fe89e8ae011", null ],
+    [ "BackOffLen", "structjs_consumer_config.html#ad2f6ca3f2d0f977aedb8687c462c1cfc", null ],
     [ "FilterSubject", "structjs_consumer_config.html#af56ab7708b11e85e0b9115d152d281ca", null ],
     [ "ReplayPolicy", "structjs_consumer_config.html#ade510daf7c5d67553d2cd20b64ab9939", null ],
     [ "RateLimit", "structjs_consumer_config.html#a351b388a36ccb7978e6e85a6f4fc0816", null ],
@@ -18,5 +20,8 @@ var structjs_consumer_config =
     [ "MaxAckPending", "structjs_consumer_config.html#aeb2336d480e3885385d1b08410e89892", null ],
     [ "FlowControl", "structjs_consumer_config.html#a484c64b6c54f6f758f54315470ed20d0", null ],
     [ "Heartbeat", "structjs_consumer_config.html#ac439828c3bedb8826a1e92de13280d53", null ],
-    [ "HeadersOnly", "structjs_consumer_config.html#a30d4142bac47ab6dc583c5ee193704e6", null ]
+    [ "HeadersOnly", "structjs_consumer_config.html#a30d4142bac47ab6dc583c5ee193704e6", null ],
+    [ "MaxRequestBatch", "structjs_consumer_config.html#a4e86deefe08854b9a82b4908397aad32", null ],
+    [ "MaxRequestExpires", "structjs_consumer_config.html#aa71aa3dfe5826466be301097b1bae04d", null ],
+    [ "InactiveThreshold", "structjs_consumer_config.html#af6376a6009124c25d7016bc548f3855d", null ]
 ];

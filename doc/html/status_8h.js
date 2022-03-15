@@ -157,6 +157,12 @@ var status_8h =
       [ "JSConsumerWithFlowControlNeedsHeartbeatsErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70abc25cc794fce2ab7b9757ff506de51c3", null ],
       [ "JSStreamSealedErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a9bd3f4f7a2eca1f1ed49cc0499cb9c78", null ],
       [ "JSStreamPurgeFailedErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a33f2e301313339eded6163982a680186", null ],
-      [ "JSStreamRollupFailedErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70affa3c8139019a077fac6d403d7ed0522", null ]
+      [ "JSStreamRollupFailedErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70affa3c8139019a077fac6d403d7ed0522", null ],
+      [ "JSConsumerInvalidDeliverSubjectErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aa1242d9e6509f08c01c3373d0e66dc96", null ],
+      [ "JSStreamMaxBytesRequiredErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a61cd7aa9b9e02f410465a61a085fa209", null ],
+      [ "JSConsumerMaxRequestBatchNegativeErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70abca8571110c4244d218c2dc1779d8786", null ],
+      [ "JSConsumerMaxRequestExpiresToSmallErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a9c1c31813a713fcee44ec06728cc6382", null ],
+      [ "JSConsumerMaxDeliverBackoffErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70af7c1cf2c692140c4b28ebfc47acb0c41", null ],
+      [ "JSStreamInfoMaxSubjectsErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a7b5cebb5aaebd7b3bfa43f5457e97553", null ]
     ] ]
 ];

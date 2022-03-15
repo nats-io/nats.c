@@ -7,5 +7,6 @@ var searchData=
   ['numdelivered_4',['NumDelivered',['../structjs_msg_meta_data.html#a9a50965fac061a9728b160702d3f56ff',1,'jsMsgMetaData']]],
   ['numpending_5',['NumPending',['../structjs_consumer_info.html#aeaefd5a500996013b1ce13d8872e869b',1,'jsConsumerInfo::NumPending()'],['../structjs_msg_meta_data.html#a02f1bbd37e9650ed6bfda0210f038e30',1,'jsMsgMetaData::NumPending()']]],
   ['numredelivered_6',['NumRedelivered',['../structjs_consumer_info.html#a932bf14ebb9ce167af8975e3b1f8d001',1,'jsConsumerInfo']]],
-  ['numwaiting_7',['NumWaiting',['../structjs_consumer_info.html#a57e4a4139310c50a1f3d51af67197af0',1,'jsConsumerInfo']]]
+  ['numsubjects_7',['NumSubjects',['../structjs_stream_state.html#aaa43db17641826e7c6ecc1954f641960',1,'jsStreamState']]],
+  ['numwaiting_8',['NumWaiting',['../structjs_consumer_info.html#a57e4a4139310c50a1f3d51af67197af0',1,'jsConsumerInfo']]]
 ];

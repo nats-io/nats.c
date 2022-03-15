@@ -28790,6 +28790,88 @@ test_KeyValueCrossAccount(void)
     remove(confFile);
 }
 
+static natsStatus
+_checkDiscard(jsCtx *js, jsDiscardPolicy expected, kvStore **newKV)
+{
+    kvStore             *kv = NULL;
+    jsStreamInfo        *si = NULL;
+    kvConfig            kvc;
+    natsStatus          s;
+
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "TEST";
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    IFOK(s, js_GetStreamInfo(&si, js, "KV_TEST", NULL, NULL));
+    IFOK(s, (si->Config->Discard == expected ? NATS_OK : NATS_ERR));
+
+    jsStreamInfo_Destroy(si);
+
+    *newKV = kv;
+
+    return s;
+}
+
+static void
+test_KeyValueDiscardOldToNew(void)
+{
+    kvStore             *kv = NULL;
+    kvEntry             *e  = NULL;
+    kvConfig            kvc;
+    natsStatus          s;
+    int                 i;
+
+    JS_SETUP(2, 7, 2);
+
+    // We are going to go from 2.7.1->2.7.2->2.7.1 and 2.7.2 again.
+    for (i=0; i<2; i++)
+    {
+        // Change the server version in the connection to
+        // create as-if we were connecting to a v2.7.1 server.
+        natsConn_Lock(nc);
+        nc->srvVersion.ma = 2;
+        nc->srvVersion.mi = 7;
+        nc->srvVersion.up = 1;
+        natsConn_Unlock(nc);
+
+        test("Check discard (old): ");
+        s = _checkDiscard(js, js_DiscardOld, &kv);
+        if ((s == NATS_OK) && (i == 0))
+            s = kvStore_PutString(NULL, kv, "foo", "value");
+        testCond(s == NATS_OK);
+        kvStore_Destroy(kv);
+        kv = NULL;
+
+        // Now change version to 2.7.2
+        natsConn_Lock(nc);
+        nc->srvVersion.ma = 2;
+        nc->srvVersion.mi = 7;
+        nc->srvVersion.up = 2;
+        natsConn_Unlock(nc);
+
+        test("Check discard (new): ");
+        s = _checkDiscard(js, js_DiscardNew, &kv);
+        IFOK(s, kvStore_Get(&e, kv, "foo"));
+        if ((s == NATS_OK) && (strcmp(kvEntry_ValueString(e), "value") != 0))
+            s = NATS_ERR;
+        testCond(s == NATS_OK);
+        kvEntry_Destroy(e);
+        e = NULL;
+        kvStore_Destroy(kv);
+        kv = NULL;
+    }
+
+    test("Check that other changes are rejected: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "TEST";
+    kvc.MaxBytes = 1024*1024;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond((s == NATS_ERR)
+                && (strstr(nats_GetLastError(NULL), "configuration is different") != NULL));
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -31245,6 +31327,7 @@ static testInfo allTests[] =
     {"KeyValueDeleteTombstones",        test_KeyValueDeleteTombstones},
     {"KeyValueDeleteMarkerThreshold",   test_KeyValuePurgeDeletesMarkerThreshold},
     {"KeyValueCrossAccount",            test_KeyValueCrossAccount},
+    {"KeyValueDiscardOldToNew",         test_KeyValueDiscardOldToNew},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

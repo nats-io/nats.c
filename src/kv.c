@@ -188,6 +188,54 @@ _createKV(kvStore **new_kv, jsCtx *js, const char *bucket)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static bool
+_sameStrings(const char *s1, const char *s2)
+{
+    bool s1Empty = nats_IsStringEmpty(s1);
+    bool s2Empty = nats_IsStringEmpty(s2);
+
+    // Same if both empty.
+    if (s1Empty && s2Empty)
+        return true;
+
+    // Not same if one is empty while other is not.
+    if ((s1Empty && !s2Empty) || (!s1Empty && s2Empty))
+        return false;
+
+    // Return result of comparison of s1 and s2
+    return (strcmp(s1, s2) == 0 ? true : false);
+}
+
+static bool
+_sameStreamCfg(jsStreamConfig *oc, jsStreamConfig *nc)
+{
+    // Check some of the stream's configuration properties only,
+    // the ones that we set when creating a KV stream.
+    if (!_sameStrings(oc->Description, nc->Description))
+        return false;
+    if (oc->SubjectsLen != nc->SubjectsLen)
+        return false;
+    if (!_sameStrings(oc->Subjects[0], nc->Subjects[0]))
+        return false;
+    if (oc->MaxMsgsPerSubject != nc->MaxMsgsPerSubject)
+        return false;
+    if (oc->MaxBytes != nc->MaxBytes)
+        return false;
+    if (oc->MaxAge != nc->MaxAge)
+        return false;
+    if (oc->MaxMsgSize != nc->MaxMsgSize)
+        return false;
+    if (oc->Storage != nc->Storage)
+        return false;
+    if (oc->Replicas != nc->Replicas)
+        return false;
+    if (oc->AllowRollup != nc->AllowRollup)
+        return false;
+    if (oc->DenyDelete != nc->DenyDelete)
+        return false;
+    return true;
+}
+
 natsStatus
 js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
 {
@@ -222,15 +270,19 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
     }
     if (s == NATS_OK)
     {
+        int64_t     maxBytes    = (cfg->MaxBytes == 0 ? -1 : cfg->MaxBytes);
+        int32_t     maxMsgSize  = (cfg->MaxValueSize == 0 ? -1 : cfg->MaxValueSize);
+        jsErrCode   jerr        = 0;
+
         jsStreamConfig_Init(&sc);
         sc.Name = kv->stream;
         sc.Description = cfg->Description;
         sc.Subjects = (const char*[1]){subject};
         sc.SubjectsLen = 1;
         sc.MaxMsgsPerSubject = history;
-        sc.MaxBytes = cfg->MaxBytes;
+        sc.MaxBytes = maxBytes;
         sc.MaxAge = cfg->TTL;
-        sc.MaxMsgSize = cfg->MaxValueSize;
+        sc.MaxMsgSize = maxMsgSize;
         sc.Storage = cfg->StorageType;
         sc.Replicas = replicas;
         sc.AllowRollup = true;
@@ -240,7 +292,24 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
         if (natsConn_srvVersionAtLeast(kv->js->nc, 2, 7, 2))
             sc.Discard = js_DiscardNew;
 
-        s = js_AddStream(NULL, js, &sc, NULL, NULL);
+        s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+        if ((s != NATS_OK) && (jerr == JSStreamNameExistErr))
+        {
+            jsStreamInfo *si = NULL;
+
+            nats_clearLastError();
+            s = js_GetStreamInfo(&si, js, sc.Name, NULL, NULL);
+            if (s == NATS_OK)
+            {
+                si->Config->Discard = sc.Discard;
+                if (_sameStreamCfg(si->Config, &sc))
+                    s = js_UpdateStream(NULL, js, &sc, NULL, NULL);
+                else
+                    s = nats_setError(NATS_ERR, "%s",
+                        "Existing configuration is different");
+            }
+            jsStreamInfo_Destroy(si);
+        }
     }
     if (s == NATS_OK)
         *new_kv = kv;

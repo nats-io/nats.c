@@ -61,6 +61,14 @@ var group__types_group =
       [ "MsgsLen", "structjs_lost_stream_data.html#abdc373ed7fc9b7cf161c13da1913fc9a", null ],
       [ "Bytes", "structjs_lost_stream_data.html#a841fcadca3f66e9170a51080dc1acf30", null ]
     ] ],
+    [ "jsStreamStateSubject", "structjs_stream_state_subject.html", [
+      [ "Subject", "structjs_stream_state_subject.html#aa766824a7f8b69db592971af3262640e", null ],
+      [ "Msgs", "structjs_stream_state_subject.html#a8b9b2edc5afe82b7b3bc7dbdd67a4384", null ]
+    ] ],
+    [ "jsStreamStateSubjects", "structjs_stream_state_subjects.html", [
+      [ "List", "structjs_stream_state_subjects.html#aef3d1e886b16961daa84c43650fa80c0", null ],
+      [ "Count", "structjs_stream_state_subjects.html#afc21709c254215ce6c766d9313868b7f", null ]
+    ] ],
     [ "jsStreamState", "structjs_stream_state.html", [
       [ "Msgs", "structjs_stream_state.html#a495269fe83c6bbf2023cca94add0a888", null ],
       [ "Bytes", "structjs_stream_state.html#ae603fa6ecfb63c93b61272b7d1b8fb4d", null ],
@@ -68,6 +76,8 @@ var group__types_group =
       [ "FirstTime", "structjs_stream_state.html#afb7a708022faff518c060b33e99b04b0", null ],
       [ "LastSeq", "structjs_stream_state.html#a22da809fe7a1ec3101841e86d6708827", null ],
       [ "LastTime", "structjs_stream_state.html#a67cbd0d8b43d8c05c8b4cd6b0e44dab0", null ],
+      [ "NumSubjects", "structjs_stream_state.html#aaa43db17641826e7c6ecc1954f641960", null ],
+      [ "Subjects", "structjs_stream_state.html#a4af56e8bee7262ab050f2a25114c5909", null ],
       [ "NumDeleted", "structjs_stream_state.html#acbec2f01830b56cb4c0bf54ae5170e51", null ],
       [ "Deleted", "structjs_stream_state.html#abcf4d3c581c06d820f1ad21d640bef3f", null ],
       [ "DeletedLen", "structjs_stream_state.html#a34a08a64c97269165630bf2e0c78c2c0", null ],
@@ -113,6 +123,8 @@ var group__types_group =
       [ "AckPolicy", "structjs_consumer_config.html#a8a311af614dfae1b0f4e4af7db467aab", null ],
       [ "AckWait", "structjs_consumer_config.html#a651a94b9b78668dde830dc7869610e67", null ],
       [ "MaxDeliver", "structjs_consumer_config.html#ad47e15e1d6a4a8b0b155f9d3d5873c95", null ],
+      [ "BackOff", "structjs_consumer_config.html#aa2d0aff64a2c46122d0f0fe89e8ae011", null ],
+      [ "BackOffLen", "structjs_consumer_config.html#ad2f6ca3f2d0f977aedb8687c462c1cfc", null ],
       [ "FilterSubject", "structjs_consumer_config.html#af56ab7708b11e85e0b9115d152d281ca", null ],
       [ "ReplayPolicy", "structjs_consumer_config.html#ade510daf7c5d67553d2cd20b64ab9939", null ],
       [ "RateLimit", "structjs_consumer_config.html#a351b388a36ccb7978e6e85a6f4fc0816", null ],
@@ -121,7 +133,10 @@ var group__types_group =
       [ "MaxAckPending", "structjs_consumer_config.html#aeb2336d480e3885385d1b08410e89892", null ],
       [ "FlowControl", "structjs_consumer_config.html#a484c64b6c54f6f758f54315470ed20d0", null ],
       [ "Heartbeat", "structjs_consumer_config.html#ac439828c3bedb8826a1e92de13280d53", null ],
-      [ "HeadersOnly", "structjs_consumer_config.html#a30d4142bac47ab6dc583c5ee193704e6", null ]
+      [ "HeadersOnly", "structjs_consumer_config.html#a30d4142bac47ab6dc583c5ee193704e6", null ],
+      [ "MaxRequestBatch", "structjs_consumer_config.html#a4e86deefe08854b9a82b4908397aad32", null ],
+      [ "MaxRequestExpires", "structjs_consumer_config.html#aa71aa3dfe5826466be301097b1bae04d", null ],
+      [ "InactiveThreshold", "structjs_consumer_config.html#af6376a6009124c25d7016bc548f3855d", null ]
     ] ],
     [ "jsConsumerSequenceMismatch", "structjs_consumer_sequence_mismatch.html", [
       [ "Stream", "structjs_consumer_sequence_mismatch.html#aad6a17af1719c023c38a6fd254b73f8e", null ],
@@ -208,7 +223,8 @@ var group__types_group =
       ] ],
       [ "jsOptionsStream", "structjs_options_1_1js_options_stream.html", [
         [ "jsOptionsStreamInfo", "structjs_options_1_1js_options_stream_1_1js_options_stream_info.html", [
-          [ "DeletedDetails", "structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#a73f847afe18f56eaaf6788900270bef7", null ]
+          [ "DeletedDetails", "structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#a73f847afe18f56eaaf6788900270bef7", null ],
+          [ "SubjectsFilter", "structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#af874e0f5aa15fb2a41504631ed786e6d", null ]
         ] ],
         [ "jsOptionsStreamPurge", "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html", [
           [ "Subject", "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html#aa99e6ee3bef1c22243f01544181315fe", null ],
@@ -240,6 +256,10 @@ var group__types_group =
       [ "MetaOnly", "structkv_watch_options.html#ac9094bce4f3c6513431ba32fb49e5605", null ],
       [ "Timeout", "structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66", null ]
     ] ],
+    [ "kvPurgeOptions", "structkv_purge_options.html", [
+      [ "Timeout", "structkv_purge_options.html#a245c2def0f3aabe617219772cf7680a8", null ],
+      [ "DeleteMarkersOlderThan", "structkv_purge_options.html#a47fed1e95073666cbe441aba7c149da6", null ]
+    ] ],
     [ "kvEntryList", "structkv_entry_list.html", [
       [ "Entries", "structkv_entry_list.html#a179d4d3e5844d005be1ed9134b969a50", null ],
       [ "Count", "structkv_entry_list.html#a156badf833c14826a022a60c61c6766c", null ]
@@ -262,6 +282,8 @@ var group__types_group =
     [ "jsStreamSource", "group__types_group.html#gab4c43c87d81917aab748a50eee028449", null ],
     [ "jsStreamConfig", "group__types_group.html#ga26fd6a73df327ca3c271e46ddefc8acf", null ],
     [ "jsLostStreamData", "group__types_group.html#gaf80828510450faf84bbf456e94f5b784", null ],
+    [ "jsStreamStateSubject", "group__types_group.html#ga55dce2fa9ecd215716cc9ceece7dfefa", null ],
+    [ "jsStreamStateSubjects", "group__types_group.html#gae8b57d9c40364f97a705f3e61a1156b0", null ],
     [ "jsStreamState", "group__types_group.html#ga2bfd6de6ffc84d767482b3dd57cb9271", null ],
     [ "jsPeerInfo", "group__types_group.html#ga1e938dab794089f9329d7b7ece8f3e9b", null ],
     [ "jsClusterInfo", "group__types_group.html#gaaf92318ce94a1ae3547c9a7af5a3f4f6", null ],
@@ -286,6 +308,7 @@ var group__types_group =
     [ "kvWatcher", "group__types_group.html#ga526fa6d37e818784b94cdc1713f3a043", null ],
     [ "kvConfig", "group__types_group.html#ga6d594b091b4bb46192336413066a8edf", null ],
     [ "kvWatchOptions", "group__types_group.html#gac32f992fe797a1f7befc7dc3452640b6", null ],
+    [ "kvPurgeOptions", "group__types_group.html#ga90e8de23c4468005488bde690a2ffe9d", null ],
     [ "kvEntryList", "group__types_group.html#ga0125d394a3cbae2a1713eed8fab7f78e", null ],
     [ "kvKeysList", "group__types_group.html#gab36492d9d4370337cfed80edce4144e0", null ],
     [ "stanConnection", "group__types_group.html#ga9e826493769d23086cfccefe95cdf64c", null ],

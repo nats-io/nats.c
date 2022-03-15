@@ -69,9 +69,10 @@ var searchData=
   ['streaming_20subscription_66',['Streaming Subscription',['../group__stan_sub_group.html',1,'']]],
   ['streaming_20subscription_20options_67',['Streaming Subscription Options',['../group__stan_sub_opts_group.html',1,'']]],
   ['streams_68',['Streams',['../structjs_account_info.html#a17317abf03effdcdedc2003fca8adc71',1,'jsAccountInfo']]],
-  ['subject_69',['Subject',['../structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html#aa99e6ee3bef1c22243f01544181315fe',1,'jsOptions::jsOptionsStream::jsOptionsStreamPurge']]],
-  ['subjects_70',['Subjects',['../structjs_stream_config.html#a0c5f3354073dbe72650e3db7f59a47af',1,'jsStreamConfig']]],
-  ['subjectslen_71',['SubjectsLen',['../structjs_stream_config.html#ab2186aae798df6c222b3fa69e31597e1',1,'jsStreamConfig']]],
-  ['subscribing_72',['Subscribing',['../group__conn_sub_group.html',1,'(Global Namespace)'],['../group__js_sub_group.html',1,'(Global Namespace)'],['../group__stan_conn_sub_group.html',1,'(Global Namespace)']]],
-  ['subscription_73',['Subscription',['../group__sub_group.html',1,'']]]
+  ['subject_69',['Subject',['../structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html#aa99e6ee3bef1c22243f01544181315fe',1,'jsOptions::jsOptionsStream::jsOptionsStreamPurge::Subject()'],['../structjs_stream_state_subject.html#aa766824a7f8b69db592971af3262640e',1,'jsStreamStateSubject::Subject()']]],
+  ['subjects_70',['Subjects',['../structjs_stream_state.html#a4af56e8bee7262ab050f2a25114c5909',1,'jsStreamState::Subjects()'],['../structjs_stream_config.html#a0c5f3354073dbe72650e3db7f59a47af',1,'jsStreamConfig::Subjects()']]],
+  ['subjectsfilter_71',['SubjectsFilter',['../structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#af874e0f5aa15fb2a41504631ed786e6d',1,'jsOptions::jsOptionsStream::jsOptionsStreamInfo']]],
+  ['subjectslen_72',['SubjectsLen',['../structjs_stream_config.html#ab2186aae798df6c222b3fa69e31597e1',1,'jsStreamConfig']]],
+  ['subscribing_73',['Subscribing',['../group__conn_sub_group.html',1,'(Global Namespace)'],['../group__js_sub_group.html',1,'(Global Namespace)'],['../group__stan_conn_sub_group.html',1,'(Global Namespace)']]],
+  ['subscription_74',['Subscription',['../group__sub_group.html',1,'']]]
 ];

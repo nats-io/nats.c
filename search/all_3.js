@@ -8,7 +8,7 @@ var searchData=
   ['consumerclient_5',['ConsumerClient',['../structjs_consumer_sequence_mismatch.html#adb383429dadb1ab0e1f7d013bc546a28',1,'jsConsumerSequenceMismatch']]],
   ['consumers_6',['Consumers',['../structjs_stream_state.html#a27f4cfb85c0f1b0c5c7ad5275bd25d85',1,'jsStreamState::Consumers()'],['../structjs_account_info.html#a1237c3f19a42a3203825971b429312e9',1,'jsAccountInfo::Consumers()']]],
   ['consumerserver_7',['ConsumerServer',['../structjs_consumer_sequence_mismatch.html#ac1df353001d853c8a56cef9f82fb831c',1,'jsConsumerSequenceMismatch']]],
-  ['count_8',['Count',['../structnats_msg_list.html#a325f44c02d08d9f568d1dc89b65f2b1d',1,'natsMsgList::Count()'],['../structkv_entry_list.html#a156badf833c14826a022a60c61c6766c',1,'kvEntryList::Count()'],['../structkv_keys_list.html#a78022e66c593ab41414be9d11403f082',1,'kvKeysList::Count()']]],
+  ['count_8',['Count',['../structnats_msg_list.html#a325f44c02d08d9f568d1dc89b65f2b1d',1,'natsMsgList::Count()'],['../structjs_stream_state_subjects.html#afc21709c254215ce6c766d9313868b7f',1,'jsStreamStateSubjects::Count()'],['../structkv_entry_list.html#a156badf833c14826a022a60c61c6766c',1,'kvEntryList::Count()'],['../structkv_keys_list.html#a78022e66c593ab41414be9d11403f082',1,'kvKeysList::Count()']]],
   ['created_9',['Created',['../structjs_stream_info.html#a578ce52a275c690dd4627c1d119c7838',1,'jsStreamInfo::Created()'],['../structjs_consumer_info.html#a670d38f2e9ba5c354ca3560a8064d00c',1,'jsConsumerInfo::Created()']]],
   ['current_10',['Current',['../structjs_peer_info.html#ad8cecd039a8ad1c68daba89007b055d4',1,'jsPeerInfo']]]
 ];

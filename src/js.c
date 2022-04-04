@@ -1884,7 +1884,7 @@ natsStatus
 js_checkDurName(const char *dur)
 {
     if (strchr(dur, '.') != NULL)
-        return nats_setError(NATS_INVALID_ARG, "invalid durable name '%s' (cannot contain '.')", dur);
+        return nats_setError(NATS_INVALID_ARG, "%s '%s' (cannot contain '.')", jsErrInvalidDurableName, dur);
     return NATS_OK;
 }
 

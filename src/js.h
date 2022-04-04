@@ -60,6 +60,11 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsErrOrderedConsNoQueue             "queue can not be set for an ordered consumer"
 #define jsErrOrderedConsNoBind              "can not bind existing consumer for an ordered consumer"
 #define jsErrOrderedConsNoPullMode          "can not use pull mode for an ordered consumer"
+#define jsErrStreamConfigRequired           "stream configuration required"
+#define jsErrInvalidStreamName              "invalid stream name"
+#define jsErrConsumerConfigRequired         "consumer configuration required"
+#define jsErrInvalidDurableName             "invalid durable name"
+#define jsErrInvalidConsumerName            "invalid consumer name"
 
 #define jsCtrlHeartbeat     (1)
 #define jsCtrlFlowControl   (2)

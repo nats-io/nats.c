@@ -47,6 +47,18 @@ _marshalTimeUTC(natsBuffer *buf, const char *fieldName, int64_t timeUTC)
 // Stream related functions
 //
 
+static natsStatus
+_checkStreamName(const char *stream)
+{
+    if (nats_IsStringEmpty(stream))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
+
+    if (strchr(stream, '.') != NULL)
+        return nats_setError(NATS_INVALID_ARG, "%s '%s' (cannot contain '.')", jsErrInvalidStreamName, stream);
+
+    return NATS_OK;
+}
+
 static void
 _destroyPlacement(jsPlacement *placement)
 {
@@ -1013,11 +1025,12 @@ _addUpdateOrGet(jsStreamInfo **new_si, jsStreamAction action, jsCtx *js, jsStrea
     if (js == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if ((cfg == NULL) || nats_IsStringEmpty(cfg->Name))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
+    if (cfg == NULL)
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamConfigRequired);
 
-    if (strchr(cfg->Name, '.'))
-        return nats_setError(NATS_INVALID_ARG, "invalid stream name '%s' (cannot contain '.')", cfg->Name);
+    s = _checkStreamName(cfg->Name);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
 
     switch (action)
     {
@@ -1202,8 +1215,9 @@ _purgeOrDelete(bool purge, jsCtx *js, const char *stream, jsOptions *opts, jsErr
     if (js == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if (nats_IsStringEmpty(stream))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
+    s = _checkStreamName(stream);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
 
     s = js_setOpts(&nc, &freePfx, js, opts, &o);
     if (s == NATS_OK)
@@ -1644,6 +1658,18 @@ jsExternalStream_Init(jsExternalStream *external)
 //
 
 static natsStatus
+_checkConsumerName(const char *consumer)
+{
+    if (nats_IsStringEmpty(consumer))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrConsumerNameRequired);
+
+    if (strchr(consumer, '.') != NULL)
+        return nats_setError(NATS_INVALID_ARG, "%s '%s' (cannot contain '.')", jsErrInvalidConsumerName, consumer);
+
+    return NATS_OK;
+}
+
+static natsStatus
 _marshalDeliverPolicy(natsBuffer *buf, jsDeliverPolicy p)
 {
     natsStatus  s;
@@ -2053,11 +2079,15 @@ js_AddConsumer(jsConsumerInfo **new_ci, jsCtx *js,
     if (errCode != NULL)
         *errCode = 0;
 
-    if ((js == NULL) || (cfg == NULL))
+    if (js == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if (nats_IsStringEmpty(stream))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
+    if (cfg == NULL)
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrConsumerConfigRequired);
+
+    s = _checkStreamName(stream);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
 
     if (!nats_IsStringEmpty(cfg->Durable))
     {
@@ -2106,10 +2136,7 @@ js_UpdateConsumer(jsConsumerInfo **ci, jsCtx *js,
 {
     natsStatus s;
 
-    if (cfg == NULL)
-        return nats_setDefaultError(NATS_INVALID_ARG);
-
-    if (nats_IsStringEmpty(cfg->Durable))
+    if ((cfg != NULL) && nats_IsStringEmpty(cfg->Durable))
         return nats_setError(NATS_INVALID_ARG, "%s", jsErrDurRequired);
 
     s = js_AddConsumer(ci, js, stream, cfg, opts, errCode);
@@ -2134,11 +2161,10 @@ js_GetConsumerInfo(jsConsumerInfo **new_ci, jsCtx *js,
     if ((js == NULL) || (new_ci == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if (nats_IsStringEmpty(stream))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
-
-    if (nats_IsStringEmpty(consumer))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrConsumerNameRequired);
+    s = _checkStreamName(stream);
+    IFOK(s, _checkConsumerName(consumer))
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
 
     s = js_setOpts(&nc, &freePfx, js, opts, &o);
     if (s == NATS_OK)
@@ -2189,11 +2215,10 @@ js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
     if (js == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if (nats_IsStringEmpty(stream))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
-
-    if (nats_IsStringEmpty(consumer))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrConsumerNameRequired);
+    s = _checkStreamName(stream);
+    IFOK(s, _checkConsumerName(consumer))
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
 
     s = js_setOpts(&nc, &freePfx, js, opts, &o);
     if (s == NATS_OK)

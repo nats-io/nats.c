@@ -22282,6 +22282,27 @@ test_JetStreamMgtStreams(void)
     s = js_AddStream(NULL, js, &cfg, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0) && (si == NULL));
 
+    test("Update stream config missing: ");
+    s = js_UpdateStream(&si, js, NULL, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamConfigRequired) != NULL));
+    nats_clearLastError();
+
+    test("Update stream stream name missing: ");
+    cfg.Name = "";
+    s = js_UpdateStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Update stream stream name invalid: ");
+    cfg.Name = "bad.stream.name";
+    s = js_UpdateStream(&si, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidStreamName) != NULL));
+    nats_clearLastError();
+    cfg.Name = "TEST";
+
     test("Update stream: ");
     cfg.MaxMsgs = 1000;
     s = js_UpdateStream(&si, js, &cfg, NULL, &jerr);
@@ -22319,6 +22340,13 @@ test_JetStreamMgtStreams(void)
                 && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
     nats_clearLastError();
 
+    test("Get stream info (invalid stream name): ");
+    s = js_GetStreamInfo(&si, js, "bad.stream.name", NULL, NULL);
+    testCond((s == NATS_INVALID_ARG)
+                && (si == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidStreamName) != NULL));
+    nats_clearLastError();
+
     test("Get stream info: ");
     s = js_GetStreamInfo(&si, js, "TEST2", NULL, &jerr);
     testCond((s == NATS_OK)
@@ -22344,9 +22372,18 @@ test_JetStreamMgtStreams(void)
 
     test("Purge stream (stream name missing): ");
     s = js_PurgeStream(js, NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_PurgeStream(js, "", NULL, &jerr);
     testCond((s == NATS_INVALID_ARG)
                 && (jerr == 0)
                 && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Purge stream (stream name invalid): ");
+    s = js_PurgeStream(js, "bad.stream.name", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidStreamName) != NULL));
     nats_clearLastError();
 
     test("Purge stream: ");
@@ -22544,9 +22581,18 @@ test_JetStreamMgtStreams(void)
 
     test("Delete stream (stream name missing): ");
     s = js_DeleteStream(js, NULL, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_DeleteStream(js, "", NULL, &jerr);
     testCond((s == NATS_INVALID_ARG)
                 && (jerr == 0)
                 && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Delete stream (stream name invalid): ");
+    s = js_DeleteStream(js, "bad.stream.name", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidStreamName) != NULL));
     nats_clearLastError();
 
     test("Delete stream (not found): ");
@@ -22676,11 +22722,15 @@ test_JetStreamMgtConsumers(void)
     s = jsConsumerConfig_Init(&cfg);
     testCond(s == NATS_OK);
 
-    test("Add consumer, bad args: ");
+    test("Add consumer, ctx missing: ");
     s = js_AddConsumer(&ci, NULL, "MY_STREAM", &cfg, NULL, NULL);
-    if (s == NATS_INVALID_ARG)
-        s = js_AddConsumer(&ci, js, "MY_STREAM", NULL, NULL, NULL);
     testCond((s == NATS_INVALID_ARG) && (ci == NULL));
+    nats_clearLastError();
+
+    test("Add consumer, config missing: ");
+    s = js_AddConsumer(&ci, js, "MY_STREAM", NULL, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (ci == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrConsumerConfigRequired) != NULL));
     nats_clearLastError();
 
     test("Add consumer, stream name required: ");
@@ -22691,11 +22741,17 @@ test_JetStreamMgtConsumers(void)
                 && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
     nats_clearLastError();
 
+    test("Add consumer, stream name invalid: ");
+    s = js_AddConsumer(&ci, js, "bad.stream.name", &cfg, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (ci == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidStreamName) != NULL));
+    nats_clearLastError();
+
     test("Add consumer, invalid durable name: ");
     cfg.Durable = "invalid.durable.name";
     s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, NULL);
     testCond((s == NATS_INVALID_ARG) && (ci == NULL)
-                && (strstr(nats_GetLastError(NULL), "invalid durable name") != NULL));
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidDurableName) != NULL));
     nats_clearLastError();
 
     test("Create check sub: ");
@@ -22880,7 +22936,7 @@ test_JetStreamMgtConsumers(void)
     testCond(s == NATS_INVALID_ARG);
     nats_clearLastError();
 
-    test("Get consumer info (stream required): ");
+    test("Get consumer info, stream name missing: ");
     s = js_GetConsumerInfo(&ci, js, NULL, "dur", NULL, &jerr);
     if (s == NATS_INVALID_ARG)
         s = js_GetConsumerInfo(&ci, js, "", "dur", NULL, &jerr);
@@ -22888,12 +22944,24 @@ test_JetStreamMgtConsumers(void)
                 && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
     nats_clearLastError();
 
-    test("Get consumer info (consumer required): ");
+    test("Get consumer info, stream name invalid: ");
+    s = js_GetConsumerInfo(&ci, js, "bad.stream.name", "dur", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidStreamName) != NULL));
+    nats_clearLastError();
+
+    test("Get consumer info, consumer name missing: ");
     s = js_GetConsumerInfo(&ci, js, "MY_STREAM", NULL, NULL, &jerr);
     if (s == NATS_INVALID_ARG)
         s = js_GetConsumerInfo(&ci, js, "MY_STREAM", "", NULL, &jerr);
     testCond((s == NATS_INVALID_ARG)
                 && (strstr(nats_GetLastError(NULL), jsErrConsumerNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Get consumer info, consumer name invalid: ");
+    s = js_GetConsumerInfo(&ci, js, "MY_STREAM", "bad.consumer.name", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidConsumerName) != NULL));
     nats_clearLastError();
 
     test("Get consumer info: ");
@@ -22919,7 +22987,7 @@ test_JetStreamMgtConsumers(void)
     testCond(s == NATS_INVALID_ARG);
     nats_clearLastError();
 
-    test("Delete consumer (stream required): ");
+    test("Delete consumer, stream name missing: ");
     s = js_DeleteConsumer(js, NULL, "dur", NULL, &jerr);
     if (s == NATS_INVALID_ARG)
         s = js_DeleteConsumer(js, "", "dur", NULL, &jerr);
@@ -22927,12 +22995,24 @@ test_JetStreamMgtConsumers(void)
                 && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
     nats_clearLastError();
 
-    test("Delete consumer (consumer required): ");
+    test("Delete consumer, stream name invalid: ");
+    s = js_DeleteConsumer(js, "bad.stream.name", "dur", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidStreamName) != NULL));
+    nats_clearLastError();
+
+    test("Delete consumer, consumer name missing: ");
     s = js_DeleteConsumer(js, "MY_STREAM", NULL, NULL, &jerr);
     if (s == NATS_INVALID_ARG)
         s = js_DeleteConsumer(js, "MY_STREAM", "", NULL, &jerr);
     testCond((s == NATS_INVALID_ARG)
                 && (strstr(nats_GetLastError(NULL), jsErrConsumerNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Get consumer info, consumer name invalid: ");
+    s = js_DeleteConsumer(js, "MY_STREAM", "bad.consumer.name", NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidConsumerName) != NULL));
     nats_clearLastError();
 
     test("Delete consumer: ");
@@ -22989,7 +23069,13 @@ test_JetStreamMgtConsumers(void)
     cfg.MaxAckPending = 10;
     cfg.HeadersOnly = true;
 
-    test("Update needs stream name: ");
+    test("Update consumer, config missing: ");
+    s = js_UpdateConsumer(&ci, js, "MY_STREAM", NULL, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (ci == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrConsumerConfigRequired) != NULL));
+    nats_clearLastError();
+
+    test("Update consumer, stream name missing: ");
     s = js_UpdateConsumer(&ci, js, NULL, &cfg, NULL, &jerr);
     if (s == NATS_INVALID_ARG)
         s = js_UpdateConsumer(&ci, js, "", &cfg, NULL, &jerr);
@@ -22997,23 +23083,24 @@ test_JetStreamMgtConsumers(void)
                 && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
     nats_clearLastError();
 
+    test("Update consumer, stream name invalid: ");
+    s = js_UpdateConsumer(&ci, js, "bad.stream.name", &cfg, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (ci == NULL) && (jerr == 0)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidStreamName) != NULL));
+    nats_clearLastError();
+
     test("Update needs durable name: ");
     cfg.Durable = NULL;
-    s = js_UpdateConsumer(&ci, js, NULL, &cfg, NULL, &jerr);
+    s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
     if (s == NATS_INVALID_ARG)
     {
         cfg.Durable = "";
-        s = js_UpdateConsumer(&ci, js, NULL, &cfg, NULL, &jerr);
+        s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
     }
     testCond((s == NATS_INVALID_ARG) && (ci == NULL) && (jerr == 0)
                 && (strstr(nats_GetLastError(NULL), jsErrDurRequired) != NULL));
     nats_clearLastError();
     cfg.Durable = "update_push_consumer";
-
-    test("Update needs config: ");
-    s = js_UpdateConsumer(&ci, js, "MY_STREAM", NULL, NULL, &jerr);
-    testCond((s == NATS_INVALID_ARG) && (ci == NULL) && (jerr == 0));
-    nats_clearLastError();
 
     test("Update works ok: ");
     s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
@@ -25827,6 +25914,7 @@ test_JetStreamSubscribeFlowControl(void)
     for (i=0; (s == NATS_OK) && (i<total); i++)
     {
         s = natsSubscription_NextMsg(&msg, sub, 1000);
+        IFOK(s, natsMsg_Ack(msg, NULL));
         natsMsg_Destroy(msg);
         msg = NULL;
     }

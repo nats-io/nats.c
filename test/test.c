@@ -25497,6 +25497,17 @@ _jsSeqMismatch(natsConnection *nc, natsSubscription *sub, natsStatus err, void *
 }
 
 static void
+_setMsgReply(natsConnection *nc, natsMsg **msg, void* closure)
+{
+    natsMsg *m = NULL;
+
+    natsMsg_Create(&m, (*msg)->subject, (const char*) closure, (*msg)->data, (*msg)->dataLen);
+    natsMsg_Destroy(*msg);
+    *msg = m;
+    natsConn_setFilter(nc, NULL);
+}
+
+static void
 test_JetStreamSubscribeIdleHearbeat(void)
 {
     natsStatus          s;
@@ -25613,7 +25624,8 @@ test_JetStreamSubscribeIdleHearbeat(void)
     inbox = sub->subject;
     natsSub_Unlock(sub);
     // Cheat by pretending that the server sends message seq 3, while client received only seq 1.
-    s = natsConnection_PublishRequestString(nc, inbox, "$JS.ACK.TEST.dur1.1.3.3.1624472520000000000.0", "msg3");
+    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur1.1.3.3.1624472520000000000.0");
+    s = natsConnection_PublishString(nc, inbox, "msg3");
     // Wait for past the next HB and we should get an async error
     natsMutex_Lock(args.m);
     while ((s != NATS_TIMEOUT) && !args.done)
@@ -25652,7 +25664,8 @@ test_JetStreamSubscribeIdleHearbeat(void)
     testCond(s == NATS_OK);
 
     test("Skip again: ");
-    s = natsConnection_PublishRequestString(nc, inbox, "$JS.ACK.TEST.dur1.1.4.4.1624482520000000000.0", "msg4");
+    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur1.1.4.4.1624482520000000000.0");
+    s = natsConnection_PublishString(nc, inbox, "msg4");
     testCond(s == NATS_OK);
 
     test("Check async cb invoked: ");
@@ -25717,7 +25730,8 @@ test_JetStreamSubscribeIdleHearbeat(void)
     natsSub_Lock(sub);
     inbox = sub->subject;
     natsSub_Unlock(sub);
-    s = natsConnection_PublishRequestString(nc, inbox, "$JS.ACK.TEST.dur2.1.4.4.1624482520000000000.0", "msg4");
+    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur2.1.4.4.1624482520000000000.0");
+    s = natsConnection_PublishString(nc, inbox, "msg4");
     testCond(s == NATS_OK);
 
     // For sync subs, we should not get async error
@@ -25757,7 +25771,8 @@ test_JetStreamSubscribeIdleHearbeat(void)
     testCond(s == NATS_OK);
 
     test("Skip again: ");
-    s = natsConnection_PublishRequestString(nc, inbox, "$JS.ACK.TEST.dur1.1.5.5.1624492520000000000.0", "msg4");
+    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur1.1.5.5.1624492520000000000.0");
+    s = natsConnection_PublishString(nc, inbox, "msg5");
     testCond(s == NATS_OK);
 
     test("NextMsg reports error: ");
@@ -25828,12 +25843,12 @@ test_JetStreamSubscribeFlowControl(void)
 
     JS_SETUP(2, 3, 3);
 
-    data = malloc(1024);
+    data = malloc(100*1024);
     if (data == NULL)
         FAIL("Unable to allocate data");
 
     if (valgrind)
-        total = 200;
+        total = 2000;
 
     if (data == NULL)
         FAIL("Unable to allocate data");

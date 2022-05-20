@@ -1817,6 +1817,8 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         s = nats_marshalLong(buf, true, "max_batch", cfg->MaxRequestBatch);
     if ((s == NATS_OK) && (cfg->MaxRequestExpires > 0))
         s = nats_marshalLong(buf, true, "max_expires", cfg->MaxRequestExpires);
+    if ((s == NATS_OK) && (cfg->MaxRequestMaxBytes > 0))
+        s = nats_marshalLong(buf, true, "max_bytes", cfg->MaxRequestMaxBytes);
     if ((s == NATS_OK) && (cfg->InactiveThreshold > 0))
         s = nats_marshalLong(buf, true, "inactive_threshold", cfg->InactiveThreshold);
     if ((s == NATS_OK) && (cfg->BackOff != NULL) && (cfg->BackOffLen > 0))
@@ -1971,6 +1973,7 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
         IFOK(s, nats_JSONGetBool(cjson, "headers_only", &(cc->HeadersOnly)));
         IFOK(s, nats_JSONGetLong(cjson, "max_batch", &(cc->MaxRequestBatch)));
         IFOK(s, nats_JSONGetLong(cjson, "max_expires", &(cc->MaxRequestExpires)));
+        IFOK(s, nats_JSONGetLong(cjson, "max_bytes", &(cc->MaxRequestMaxBytes)));
         IFOK(s, nats_JSONGetLong(cjson, "inactive_threshold", &(cc->InactiveThreshold)));
         IFOK(s, nats_JSONGetArrayLong(cjson, "backoff", &(cc->BackOff), &(cc->BackOffLen)));
     }

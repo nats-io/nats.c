@@ -674,8 +674,9 @@ typedef struct jsConsumerConfig
         bool                    HeadersOnly;
 
         // Pull based options.
-        int64_t                 MaxRequestBatch;
+        int64_t                 MaxRequestBatch;        ///< Maximum Pull Consumer request batch size.
         int64_t                 MaxRequestExpires;      ///< Maximum Pull Consumer request expiration, expressed in number of nanoseconds.
+        int64_t                 MaxRequestMaxBytes;     ///< Maximum number of bytes that the server will send for a given pull request.
 
         // Ephemeral inactivity threshold.
         int64_t                 InactiveThreshold;      ///< How long the server keeps an ephemeral after detecting loss of interest, expressed in number of nanoseconds.

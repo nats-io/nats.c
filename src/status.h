@@ -249,6 +249,15 @@ typedef enum {
     JSConsumerMaxRequestExpiresToSmallErr = 10115,      ///< Consumer max request expires needs to be > 1ms
     JSConsumerMaxDeliverBackoffErr = 10116,             ///< Max deliver is required to be > length of backoff values
     JSStreamInfoMaxSubjectsErr = 10117,                 ///< Subject details would exceed maximum allowed
+    JSStreamOfflineErr = 10118,                         ///< Stream is offline
+    JSConsumerOfflineErr = 10119,                       ///< Consumer is offline
+    JSNoLimitsErr = 10120,                              ///< No JetStream default or applicable tiered limit present
+    JSConsumerMaxPendingAckExcessErr = 10121,           ///< Consumer max ack pending exceeds system limit
+    JSStreamMaxStreamBytesExceededErr = 10122,          ///< Stream max bytes exceeds account limit max stream bytes
+    JSStreamMoveAndScaleErr = 10123,                    ///< Cannot move and scale a stream in a single update
+    JSStreamMoveInProgressErr = 10124,                  ///< Stream move already in progress
+    JSConsumerMaxRequestBatchExceededErr = 10125,       ///< Consumer max request batch exceeds server limit
+    JSConsumerReplicasExceedsStreamErr = 10126,         ///< Consumer config replica count exceeds parent stream
 
 } jsErrCode;
 

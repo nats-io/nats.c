@@ -21690,6 +21690,9 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"max_expires\":123456789}}",
         "{\"config\":{\"inactive_threshold\":123456789}}",
         "{\"config\":{\"backoff\":[50000000,250000000]}}",
+        "{\"config\":{\"max_batch\":100}}",
+        "{\"config\":{\"max_expires\":1000000000}}",
+        "{\"config\":{\"max_bytes\":1048576}}",
     };
     const char          *bad[] = {
         "{\"stream_name\":123}",
@@ -21719,6 +21722,9 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"max_expires\":\"123456789\"}}",
         "{\"config\":{\"inactive_threshold\":\"123456789\"}}",
         "{\"config\":{\"backoff\":true}}",
+        "{\"config\":{\"max_batch\":\"abc\"}}",
+        "{\"config\":{\"max_expires\":false}}",
+        "{\"config\":{\"max_bytes\":true}}",
         "{\"delivered\":123}",
         "{\"delivered\":{\"consumer_seq\":\"abc\"}}",
         "{\"delivered\":{\"stream_seq\":\"abc\"}}",
@@ -22711,7 +22717,7 @@ test_JetStreamMgtConsumers(void)
     jsReplayPolicy          replayPolicies[] = {
         js_ReplayInstant, js_ReplayOriginal};
 
-    JS_SETUP(2, 7, 0);
+    JS_SETUP(2, 8, 3);
 
     test("Consumer config init, bad args: ");
     s = jsConsumerConfig_Init(NULL);
@@ -23131,6 +23137,7 @@ test_JetStreamMgtConsumers(void)
     cfg.HeadersOnly = true;
     cfg.MaxRequestBatch = 10;
     cfg.MaxRequestExpires = NATS_SECONDS_TO_NANOS(2);
+    cfg.MaxRequestMaxBytes = 1024*1024;
 
     test("Update works ok: ");
     s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
@@ -23143,7 +23150,8 @@ test_JetStreamMgtConsumers(void)
                 && (ci->Config->MaxWaiting == 20)
                 && (ci->Config->HeadersOnly)
                 && (ci->Config->MaxRequestBatch == 10)
-                && (ci->Config->MaxRequestExpires == NATS_SECONDS_TO_NANOS(2)));
+                && (ci->Config->MaxRequestExpires == NATS_SECONDS_TO_NANOS(2))
+                && (ci->Config->MaxRequestMaxBytes == 1024*1024));
     jsConsumerInfo_Destroy(ci);
     ci = NULL;
 

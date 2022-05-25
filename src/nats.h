@@ -128,6 +128,11 @@ extern "C" {
  */
  #define JSMsgRollupAll         "all"
 
+ // Headers for republished messages.
+ #define JSStream       "Nats-Stream"
+ #define JSSequence     "Nats-Sequence"
+ #define JSLastSequence "Nats-Last-Sequence"
+
 //
 // Types.
 //
@@ -372,6 +377,16 @@ typedef struct jsStreamSource
 } jsStreamSource;
 
 /**
+ * Allows a source subject to be mapped to a destination subject for republishing.
+ */
+typedef struct jsSubjectMapping
+{
+        const char              *Source;
+        const char              *Destination;
+
+} jsSubjectMapping;
+
+/**
  * Configuration of a JetStream stream.
  *
  * There are sensible defaults for most. If no subjects are
@@ -397,6 +412,7 @@ typedef struct jsStreamSource
  * const char       *subjects[]     = {"foo", "bar"};
  * const char       *tags[]         = {"tag1", "tag2"};
  * jsStreamSource   *sources[]      = {&s1, &s2};
+ * jsSubjectMapping sm;
  *
  * jsStreamConfig_Init(&sc);
  *
@@ -437,6 +453,10 @@ typedef struct jsStreamSource
  * sc.Sources = sources;
  * sc.SourcesLen = 2;
  *
+ * // For RePublish subject:
+ * jsSubjectMapping_Init(&sm, ">", "RP.>")
+ * sc.RePublish = &sm;
+ *
  * s = js_AddStream(&si, js, &sc, NULL, &jerr);
  * \endcode
  */
@@ -470,6 +490,9 @@ typedef struct jsStreamConfig {
          * all older messages using a special message header.
          */
         bool                    AllowRollup;
+
+        // Allow republish of the message after being sequenced and stored.
+        jsSubjectMapping        *RePublish;
 
 } jsStreamConfig;
 
@@ -653,8 +676,6 @@ typedef struct jsConsumerConfig
 {
         const char              *Durable;
         const char              *Description;
-        const char              *DeliverSubject;
-        const char              *DeliverGroup;
         jsDeliverPolicy         DeliverPolicy;
         uint64_t                OptStartSeq;
         int64_t                 OptStartTime;           ///< UTC time expressed as number of nanoseconds since epoch.
@@ -676,10 +697,18 @@ typedef struct jsConsumerConfig
         // Pull based options.
         int64_t                 MaxRequestBatch;        ///< Maximum Pull Consumer request batch size.
         int64_t                 MaxRequestExpires;      ///< Maximum Pull Consumer request expiration, expressed in number of nanoseconds.
-        int64_t                 MaxRequestMaxBytes;     ///< Maximum number of bytes that the server will send for a given pull request.
+
+        // Push based options.
+        const char              *DeliverSubject;
+        const char              *DeliverGroup;
 
         // Ephemeral inactivity threshold.
         int64_t                 InactiveThreshold;      ///< How long the server keeps an ephemeral after detecting loss of interest, expressed in number of nanoseconds.
+
+        // Generally inherited by parent stream and other markers, now can be configured directly.
+        int64_t                 Replicas;
+        // Force memory storage.
+        bool                    MemoryStorage;
 
 } jsConsumerConfig;
 
@@ -5166,6 +5195,17 @@ jsStreamSource_Init(jsStreamSource *source);
  */
 NATS_EXTERN natsStatus
 jsExternalStream_Init(jsExternalStream *external);
+
+/** \brief Initializes a subject mapping structure.
+ *
+ * Use this to set the source and destination for a subject mapping.
+ *
+ * @param sm the pointer to the #jsSubjectMapping to initialize.
+ * @param src the string for the source.
+ * @param dst the string for the destination.
+ */
+NATS_EXTERN natsStatus
+jsSubjectMapping_Init(jsSubjectMapping *sm, const char *src, const char *dst);
 
 /** \brief Creates a stream.
  *

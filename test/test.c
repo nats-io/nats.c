@@ -21471,6 +21471,7 @@ test_JetStreamMarshalStreamConfig(void)
     nats_JSON           *json          = NULL;
     jsStreamConfig      *rsc           = NULL;
     int64_t             optStartTime   = 1624583232123456000;
+    jsSubjectMapping    sm;
 
     test("init bad args: ");
     s = jsStreamConfig_Init(NULL);
@@ -21546,6 +21547,23 @@ test_JetStreamMarshalStreamConfig(void)
     sc.DenyPurge = true;
     sc.AllowRollup = true;
 
+    test("Subject mapping init err: ");
+    s = jsSubjectMapping_Init(NULL, "a", "b");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+    s = NATS_OK;
+
+    test("Subject mapping init, NULL or empty are ok: ");
+    s = jsSubjectMapping_Init(&sm, "A", NULL);
+    IFOK(s, jsSubjectMapping_Init(&sm, "A", ""));
+    IFOK(s, jsSubjectMapping_Init(&sm, NULL, "B"));
+    IFOK(s, jsSubjectMapping_Init(&sm, "", "B"));
+    testCond(s == NATS_OK);
+
+    // Republish
+    jsSubjectMapping_Init(&sm, ">", "RP.>");
+    sc.RePublish = &sm;
+
     test("Marshal stream config: ");
     s = js_marshalStreamConfig(&buf, &sc);
     testCond((s == NATS_OK) && (buf != NULL) && (natsBuf_Len(buf) > 0));
@@ -21606,7 +21624,12 @@ test_JetStreamMarshalStreamConfig(void)
                 && rsc->Sealed
                 && rsc->DenyDelete
                 && rsc->DenyPurge
-                && rsc->AllowRollup);
+                && rsc->AllowRollup
+                && (rsc->RePublish != NULL)
+                && (rsc->RePublish->Source != NULL)
+                && (strcmp(rsc->RePublish->Source, ">") == 0)
+                && (rsc->RePublish->Destination != NULL)
+                && (strcmp(rsc->RePublish->Destination, "RP.>") == 0));
     js_destroyStreamConfig(rsc);
     rsc = NULL;
     // Check that this does not crash
@@ -21692,7 +21715,8 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"backoff\":[50000000,250000000]}}",
         "{\"config\":{\"max_batch\":100}}",
         "{\"config\":{\"max_expires\":1000000000}}",
-        "{\"config\":{\"max_bytes\":1048576}}",
+        "{\"config\":{\"num_replicas\":1}}",
+        "{\"config\":{\"mem_storage\":true}}",
     };
     const char          *bad[] = {
         "{\"stream_name\":123}",
@@ -21724,7 +21748,7 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"backoff\":true}}",
         "{\"config\":{\"max_batch\":\"abc\"}}",
         "{\"config\":{\"max_expires\":false}}",
-        "{\"config\":{\"max_bytes\":true}}",
+        "{\"config\":{\"mem_storage\":\"abc\"}}",
         "{\"delivered\":123}",
         "{\"delivered\":{\"consumer_seq\":\"abc\"}}",
         "{\"delivered\":{\"stream_seq\":\"abc\"}}",
@@ -22854,6 +22878,8 @@ test_JetStreamMgtConsumers(void)
     cfg.MaxAckPending = 600;
     cfg.FlowControl = true;
     cfg.Heartbeat = 700;
+    cfg.Replicas = 1;
+    cfg.MemoryStorage = true;
     // We create a consumer with non existing stream, so we
     // expect this to fail. We are just checking that the config
     // is properly serialized.
@@ -22874,7 +22900,8 @@ test_JetStreamMgtConsumers(void)
                     "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","\
                     "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"\
                     "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"\
-                    "\"flow_control\":true,\"idle_heartbeat\":700}}",
+                    "\"flow_control\":true,\"idle_heartbeat\":700,"\
+                    "\"num_replicas\":1,\"mem_storage\":true}}",
                     natsMsg_GetDataLength(resp)) == 0));
     natsMsg_Destroy(resp);
     resp = NULL;
@@ -22904,7 +22931,8 @@ test_JetStreamMgtConsumers(void)
                     "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","\
                     "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"\
                     "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"\
-                    "\"flow_control\":true,\"idle_heartbeat\":700}}",
+                    "\"flow_control\":true,\"idle_heartbeat\":700,"\
+                    "\"num_replicas\":1,\"mem_storage\":true}}",
                     natsMsg_GetDataLength(resp)) == 0));
     natsMsg_Destroy(resp);
     resp = NULL;
@@ -23137,7 +23165,6 @@ test_JetStreamMgtConsumers(void)
     cfg.HeadersOnly = true;
     cfg.MaxRequestBatch = 10;
     cfg.MaxRequestExpires = NATS_SECONDS_TO_NANOS(2);
-    cfg.MaxRequestMaxBytes = 1024*1024;
 
     test("Update works ok: ");
     s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
@@ -23150,8 +23177,7 @@ test_JetStreamMgtConsumers(void)
                 && (ci->Config->MaxWaiting == 20)
                 && (ci->Config->HeadersOnly)
                 && (ci->Config->MaxRequestBatch == 10)
-                && (ci->Config->MaxRequestExpires == NATS_SECONDS_TO_NANOS(2))
-                && (ci->Config->MaxRequestMaxBytes == 1024*1024));
+                && (ci->Config->MaxRequestExpires == NATS_SECONDS_TO_NANOS(2)));
     jsConsumerInfo_Destroy(ci);
     ci = NULL;
 

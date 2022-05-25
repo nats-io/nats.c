@@ -97,6 +97,17 @@ _destroyStreamSource(jsStreamSource *source)
     NATS_FREE(source);
 }
 
+static void
+_destroySubjectMapping(jsSubjectMapping *sm)
+{
+    if (sm == NULL)
+        return;
+
+    NATS_FREE((char*) sm->Source);
+    NATS_FREE((char*) sm->Destination);
+    NATS_FREE(sm);
+}
+
 void
 js_destroyStreamConfig(jsStreamConfig *cfg)
 {
@@ -116,6 +127,7 @@ js_destroyStreamConfig(jsStreamConfig *cfg)
     for (i=0; i<cfg->SourcesLen; i++)
         _destroyStreamSource(cfg->Sources[i]);
     NATS_FREE(cfg->Sources);
+    _destroySubjectMapping(cfg->RePublish);
     NATS_FREE(cfg);
 }
 
@@ -497,6 +509,33 @@ _marshalStorageType(jsStorageType storage, natsBuffer *buf)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_unmarshalRePublish(nats_JSON *json, const char *fieldName, jsSubjectMapping **new_mapping)
+{
+    jsSubjectMapping    *sm     = NULL;
+    nats_JSON           *jsm    = NULL;
+    natsStatus          s;
+
+    s = nats_JSONGetObject(json, fieldName, &jsm);
+    if (jsm == NULL)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    sm = (jsSubjectMapping*) NATS_CALLOC(1, sizeof(jsSubjectMapping));
+    if (sm == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    s = nats_JSONGetStr(jsm, "src", (char**) &(sm->Source));
+    IFOK(s, nats_JSONGetStr(jsm, "dest", (char**) &(sm->Destination)));
+
+    if (s == NATS_OK)
+        *new_mapping = sm;
+    else
+        _destroySubjectMapping(sm);
+
+    return NATS_UPDATE_ERR_STACK(s);
+
+}
+
 natsStatus
 js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig **new_cfg)
 {
@@ -562,6 +601,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_JSONGetBool(jcfg, "deny_delete", &(cfg->DenyDelete)));
     IFOK(s, nats_JSONGetBool(jcfg, "deny_purge", &(cfg->DenyPurge)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_rollup_hdrs", &(cfg->AllowRollup)));
+    IFOK(s, _unmarshalRePublish(jcfg, "republish", &(cfg->RePublish)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -660,6 +700,21 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         IFOK(s, natsBuf_Append(buf, ",\"deny_purge\":true", -1));
     if ((s == NATS_OK) && cfg->AllowRollup)
         IFOK(s, natsBuf_Append(buf, ",\"allow_rollup_hdrs\":true", -1));
+    if ((s == NATS_OK) && (cfg->RePublish != NULL))
+    {
+        // "dest" is not omitempty, in that the field will always be present.
+        IFOK(s, natsBuf_Append(buf, ",\"republish\":{\"dest\":\"", -1));
+        // Still check that our value is not NULL
+        if (!nats_IsStringEmpty(cfg->RePublish->Destination))
+            IFOK(s, natsBuf_Append(buf, cfg->RePublish->Destination, -1));
+        // Now the source...
+        if (!nats_IsStringEmpty(cfg->RePublish->Source))
+        {
+            IFOK(s, natsBuf_Append(buf, "\",\"src\":\"", -1))
+            IFOK(s, natsBuf_Append(buf, cfg->RePublish->Source, -1));
+        }
+        IFOK(s, natsBuf_Append(buf, "\"}", -1));
+    }
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
@@ -1653,6 +1708,17 @@ jsExternalStream_Init(jsExternalStream *external)
     return NATS_OK;
 }
 
+natsStatus
+jsSubjectMapping_Init(jsSubjectMapping *sm, const char *src, const char *dst)
+{
+    if (sm == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    sm->Source = src;
+    sm->Destination = dst;
+    return NATS_OK;
+}
+
 //
 // Consumer related functions
 //
@@ -1817,8 +1883,6 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         s = nats_marshalLong(buf, true, "max_batch", cfg->MaxRequestBatch);
     if ((s == NATS_OK) && (cfg->MaxRequestExpires > 0))
         s = nats_marshalLong(buf, true, "max_expires", cfg->MaxRequestExpires);
-    if ((s == NATS_OK) && (cfg->MaxRequestMaxBytes > 0))
-        s = nats_marshalLong(buf, true, "max_bytes", cfg->MaxRequestMaxBytes);
     if ((s == NATS_OK) && (cfg->InactiveThreshold > 0))
         s = nats_marshalLong(buf, true, "inactive_threshold", cfg->InactiveThreshold);
     if ((s == NATS_OK) && (cfg->BackOff != NULL) && (cfg->BackOffLen > 0))
@@ -1836,6 +1900,10 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         }
         IFOK(s, natsBuf_AppendByte(buf, ']'));
     }
+    if ((s == NATS_OK) && (cfg->Replicas > 0))
+        s = nats_marshalLong(buf, true, "num_replicas", cfg->Replicas);
+    if ((s == NATS_OK) && cfg->MemoryStorage)
+        s = natsBuf_Append(buf, ",\"mem_storage\":true", -1);
     IFOK(s, natsBuf_Append(buf, "}}", -1));
 
     if (s == NATS_OK)
@@ -1973,9 +2041,10 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
         IFOK(s, nats_JSONGetBool(cjson, "headers_only", &(cc->HeadersOnly)));
         IFOK(s, nats_JSONGetLong(cjson, "max_batch", &(cc->MaxRequestBatch)));
         IFOK(s, nats_JSONGetLong(cjson, "max_expires", &(cc->MaxRequestExpires)));
-        IFOK(s, nats_JSONGetLong(cjson, "max_bytes", &(cc->MaxRequestMaxBytes)));
         IFOK(s, nats_JSONGetLong(cjson, "inactive_threshold", &(cc->InactiveThreshold)));
         IFOK(s, nats_JSONGetArrayLong(cjson, "backoff", &(cc->BackOff), &(cc->BackOffLen)));
+        IFOK(s, nats_JSONGetLong(cjson, "num_replicas", &(cc->Replicas)));
+        IFOK(s, nats_JSONGetBool(cjson, "mem_storage", &(cc->MemoryStorage)));
     }
 
     if (s == NATS_OK)

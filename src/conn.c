@@ -560,7 +560,7 @@ _processInfo(natsConnection *nc, char *info, int len)
     // if advertise is disabled on that server, or servers that
     // did not include themselves in the async INFO protocol.
     // If empty, do not remove the implicit servers from the pool.
-    if ((s == NATS_OK) && (nc->info.connectURLsCount > 0))
+    if ((s == NATS_OK) && !nc->opts->ignoreDiscoveredServers && (nc->info.connectURLsCount > 0))
     {
         bool        added    = false;
         const char  *tlsName = NULL;

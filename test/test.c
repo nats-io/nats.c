@@ -2584,7 +2584,8 @@ test_natsOptions(void)
              && (opts->orderIP == 0)
              && (opts->writeDeadline == natsLib_defaultWriteDeadline())
              && !opts->noEcho
-             && !opts->retryOnFailedConnect)
+             && !opts->retryOnFailedConnect
+             && !opts->ignoreDiscoveredServers)
 
     test("Add URL: ");
     s = natsOptions_SetURL(opts, "test");
@@ -3001,6 +3002,14 @@ test_natsOptions(void)
     if ((s == NATS_OK) && (opts->inboxPfx == NULL))
         s = natsOptions_SetCustomInboxPrefix(opts, "");
     testCond((s == NATS_OK) && (opts->inboxPfx == NULL));
+
+    test("Set ignore discovered servers: ");
+    s = natsOptions_SetIgnoreDiscoveredServers(opts, true);
+    testCond((s == NATS_OK) && opts->ignoreDiscoveredServers);
+
+    test("Reset ignore discovered servers: ");
+    s = natsOptions_SetIgnoreDiscoveredServers(opts, false);
+    testCond((s == NATS_OK) && !opts->ignoreDiscoveredServers);
 
     // Prepare some values for the clone check
     s = natsOptions_SetURL(opts, "url");
@@ -15621,6 +15630,61 @@ test_DiscoveredServersCb(void)
     natsOptions_Destroy(opts);
 
     _stopServer(s3Pid);
+    _stopServer(s2Pid);
+    _stopServer(s1Pid);
+
+    _destroyDefaultThreadArgs(&arg);
+}
+
+static void
+test_IgnoreDiscoveredServers(void)
+{
+   natsStatus          s;
+    natsConnection      *conn = NULL;
+    natsPid             s1Pid = NATS_INVALID_PID;
+    natsPid             s2Pid = NATS_INVALID_PID;
+    natsOptions         *opts = NULL;
+    struct threadArg    arg;
+    int                 invoked = 0;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetIgnoreDiscoveredServers(opts, true));
+    IFOK(s, natsOptions_SetDiscoveredServersCB(opts, _discoveredServersCb, &arg));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    s1Pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats-route://127.0.0.1:5222 -cluster_name abc", true);
+    CHECK_SERVER_STARTED(s1Pid);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&conn, opts);
+    testCond(s == NATS_OK);
+
+    test("Start new server: ");
+    s2Pid = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats-route://127.0.0.1:5223 -cluster_name abc -routes nats-route://127.0.0.1:5222", true);
+    CHECK_SERVER_STARTED(s2Pid);
+    testCond(true);
+
+    test("Check discovered ignored: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && (arg.sum == 0))
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    invoked = arg.sum;
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_TIMEOUT) && (invoked == 0));
+    nats_clearLastError();
+
+    test("Check server pool: ");
+    natsConn_Lock(conn);
+    s = (natsSrvPool_GetSize(conn->srvPool) == 1 ? NATS_OK : NATS_ERR);
+    natsConn_Unlock(conn);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(conn);
+    natsOptions_Destroy(opts);
+
     _stopServer(s2Pid);
     _stopServer(s1Pid);
 
@@ -31420,6 +31484,7 @@ static testInfo allTests[] =
     {"GetServers",                      test_GetServers},
     {"GetDiscoveredServers",            test_GetDiscoveredServers},
     {"DiscoveredServersCb",             test_DiscoveredServersCb},
+    {"IgnoreDiscoveredServers",         test_IgnoreDiscoveredServers},
     {"INFOAfterFirstPONGisProcessedOK", test_ReceiveINFORightAfterFirstPONG},
     {"ServerPoolUpdatedOnClusterUpdate",test_ServerPoolUpdatedOnClusterUpdate},
     {"ReconnectJitter",                 test_ReconnectJitter},

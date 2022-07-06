@@ -957,6 +957,18 @@ natsOptions_SetDiscoveredServersCB(natsOptions *opts,
 }
 
 natsStatus
+natsOptions_SetIgnoreDiscoveredServers(natsOptions *opts, bool ignore)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->ignoreDiscoveredServers = ignore;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
 natsOptions_SetLameDuckModeCB(natsOptions *opts,
                               natsConnectionHandler lameDuckCb,
                               void *closure)

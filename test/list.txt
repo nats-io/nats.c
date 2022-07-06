@@ -201,6 +201,7 @@ PingReconnect
 GetServers
 GetDiscoveredServers
 DiscoveredServersCb
+IgnoreDiscoveredServers
 INFOAfterFirstPONGisProcessedOK
 ServerPoolUpdatedOnClusterUpdate
 ReconnectJitter

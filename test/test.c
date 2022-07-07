@@ -22805,7 +22805,7 @@ test_JetStreamMgtConsumers(void)
     jsReplayPolicy          replayPolicies[] = {
         js_ReplayInstant, js_ReplayOriginal};
 
-    JS_SETUP(2, 8, 3);
+    JS_SETUP(2, 9, 0);
 
     test("Consumer config init, bad args: ");
     s = jsConsumerConfig_Init(NULL);
@@ -23152,6 +23152,7 @@ test_JetStreamMgtConsumers(void)
     jsConsumerConfig_Init(&cfg);
     cfg.Durable = "update_push_consumer";
     cfg.DeliverSubject = "bar";
+    cfg.FilterSubject = "bar.baz";
     cfg.AckPolicy = js_AckExplicit;
     s = js_AddConsumer(NULL, js, "MY_STREAM", &cfg, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
@@ -23199,6 +23200,7 @@ test_JetStreamMgtConsumers(void)
                 && (strstr(nats_GetLastError(NULL), jsErrDurRequired) != NULL));
     nats_clearLastError();
     cfg.Durable = "update_push_consumer";
+    cfg.FilterSubject = "bar.bat";
 
     test("Update works ok: ");
     s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
@@ -23208,7 +23210,9 @@ test_JetStreamMgtConsumers(void)
                 && (ci->Config->MaxDeliver == 1)
                 && (strcmp(ci->Config->SampleFrequency, "30") == 0)
                 && (ci->Config->MaxAckPending == 10)
-                && (ci->Config->HeadersOnly));
+                && (ci->Config->HeadersOnly)
+                && (ci->Config->FilterSubject != NULL)
+                && (strcmp(ci->Config->FilterSubject, "bar.bat") == 0));
     jsConsumerInfo_Destroy(ci);
     ci = NULL;
 

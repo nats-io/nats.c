@@ -329,6 +329,14 @@ typedef struct __natsMsgDlvWorker
 
 } natsMsgDlvWorker;
 
+typedef struct __pmInfo
+{
+    char                *subject;
+    int64_t             deadline;
+    struct __pmInfo     *next;
+
+} pmInfo;
+
 struct __jsCtx
 {
     natsMutex		    *mu;
@@ -337,12 +345,16 @@ struct __jsCtx
     int				    refs;
     natsCondition       *cond;
     natsStrHash         *pm;
+    natsTimer           *pmtmr;
+    pmInfo              *pmHead;
+    pmInfo              *pmTail;
     natsSubscription    *rsub;
     char                *rpre;
     int                 rpreLen;
     int                 pacw;
     int64_t             pmcount;
     int                 stalled;
+    bool                closed;
 };
 
 typedef struct __jsSub

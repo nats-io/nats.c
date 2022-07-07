@@ -940,8 +940,9 @@ typedef struct jsPubAckErr
 } jsPubAckErr;
 
 #ifndef BUILD_IN_DOXYGEN
-// Forward declaration
+// Forward declarations
 typedef void (*jsPubAckErrHandler)(jsCtx *js, jsPubAckErr *pae, void *closure);
+typedef void (*jsPubAckHandler)(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, void *closure);
 #endif
 
 /**
@@ -961,8 +962,22 @@ typedef struct jsOptions
         struct jsOptionsPublishAsync
         {
                 int64_t                 MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
+
+                // If jsPubAckHandler is specified, the callback will be invoked
+                // for every asynchronous published message, either as a positive
+                // result, or with the error encountered when publishing that
+                // message. If this callback is specified, ErrHandler (see below)
+                // will be ignored.
+                jsPubAckHandler         AckHandler;             ///< Callback invoked for each asynchronous published message.
+                void                    *AckHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckHandler callback.
+
+                // This callback is invoked for messages published asynchronously
+                // when an error is returned by the server or if the library has
+                // timed-out waiting for an acknowledgment back from the server
+                // (if publish uses the jsPubOptions.MaxWait).
                 jsPubAckErrHandler      ErrHandler;             ///< Callback invoked when error encountered publishing a given message.
                 void                    *ErrHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckErrHandler callback.
+
                 int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.
 
         } PublishAsync;
@@ -1420,6 +1435,49 @@ typedef int64_t (*natsCustomReconnectDelayHandler)(natsConnection *nc, int attem
  * registering the callback.
  */
 typedef void (*jsPubAckErrHandler)(jsCtx *js, jsPubAckErr *pae, void *closure);
+
+/** \brief Callback used to process asynchronous publish responses from JetStream.
+ *
+ * Callback used to process asynchronous publish responses (positive and negatives)
+ * from JetStream #js_PublishAsync and #js_PublishMsgAsync calls. The provided
+ * #jsPubAck or #jsPubAckErr objects give the user access to the successful
+ * acknowledgment from the server or the encountered error along with the original
+ * message sent to the server for possible restransmitting.
+ *
+ * \warning The user is responsible for destroying the message. If the message
+ * is resent using the #js_PublishMsgAsync call, the library is taking ownership
+ * of the message and calling #natsMsg_Destroy will have no effect because
+ * the pointer will have been set to `NULL`. So it is recommended to always
+ * call #natsMsg_Destroy at the end of the function.
+ *
+ * \code{.unparsed}
+ * void myAckHandler(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, void *closure)
+ * {
+ *      if (pa != NULL)
+ *      {
+ *              // Success case...
+ *      }
+ *      else if (pae != NULL)
+ *      {
+ *              // Error case...
+ *              // If the application wants to resend the message:
+ *              js_PublishMsgAsync(js, &msg, NULL);
+ *      }
+ *      natsMsg_Destroy(msg);
+ * }
+ * \endcode
+ *
+ * \warning The #jsPubAck and #jsPubAckErr objects and their content will be
+ * invalid as soon as the callback returns.
+ *
+ * @param js the pointer to the #jsCtx object.
+ * @param msg the pointer to the original published #natsMsg.
+ * @param pa the pointer to the #jsPubAck object.
+ * @param pae the pointer to the #jsPubAckErr object.
+ * @param closure an optional pointer to a user defined object that was specified when
+ * registering the callback.
+ */
+typedef void (*jsPubAckHandler)(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, void *closure);
 #endif
 
 #if defined(NATS_HAS_STREAMING)

@@ -23530,7 +23530,7 @@ _jsPubAckErrHandler(jsCtx *js, jsPubAckErr *pae, void *closure)
         args->done = true;
         natsCondition_Broadcast(args->c);
     }
-    else if (pae->Err == NATS_NO_RESPONDERS)
+    else if ((pae->Err == NATS_NO_RESPONDERS) || (pae->Err == NATS_TIMEOUT))
     {
         args->msgReceived = true;
         natsCondition_Broadcast(args->c);
@@ -23894,6 +23894,7 @@ test_JetStreamPublishAsync(void)
     natsMutex_Lock(args.m);
     while ((s != NATS_TIMEOUT) && !args.msgReceived)
         s = natsCondition_TimedWait(args.c, args.m, 2000);
+    args.msgReceived = false;
     natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
@@ -24005,6 +24006,222 @@ test_JetStreamPublishAsync(void)
 
     natsMsg_Destroy(msg1);
     natsMsg_Destroy(msg2);
+
+    test("Publish timeout: ");
+    jsCtx_Destroy(js);
+    js = NULL;
+    o.PublishAsync.ErrHandler = _jsPubAckErrHandler;
+    o.PublishAsync.ErrHandlerClosure = (void*) &args;
+    s = natsConnection_JetStream(&js, nc, &o);
+    if (s == NATS_OK)
+    {
+        opts.MaxWait = 100;
+        s = js_PublishAsync(js, "foo", "timeout", 7, &opts);
+    }
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args.m);
+        while ((s != NATS_TIMEOUT) && !args.msgReceived)
+            s = natsCondition_TimedWait(args.c, args.m, 2000);
+        args.msgReceived = false;
+        natsMutex_Unlock(args.m);
+    }
+    testCond(s == NATS_OK);
+
+    JS_TEARDOWN;
+    _destroyDefaultThreadArgs(&args);
+}
+
+static void
+_jsPubAckHandler(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, void *closure)
+{
+    struct threadArg *args = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    args->sum++;
+    args->status = NATS_ERR;
+    switch (args->sum) {
+        case 1:
+            if ((pae == NULL) && (pa != NULL)
+                && ((pa->Stream != NULL) && (strcmp(pa->Stream, "TEST") == 0))
+                && (pa->Sequence == 1))
+            {
+                // Test resending message from callback...
+                args->status = js_PublishMsgAsync(js, &msg, NULL);
+            }
+            break;
+        case 2:
+            if ((pae == NULL) && (pa != NULL)
+                && ((pa->Stream != NULL) && (strcmp(pa->Stream, "TEST") == 0))
+                && (pa->Sequence == 1) && (pa->Duplicate))
+            {
+                args->status = NATS_OK;
+            }
+            break;
+        case 3:
+            if ((pa == NULL) && (pae != NULL)
+                && (pae->Err == NATS_ERR) && (pae->ErrCode == JSStreamStoreFailedErr)
+                && (strstr(pae->ErrText, "maximum messages exceeded") != NULL))
+            {
+                args->status = NATS_OK;
+            }
+            break;
+        case 4:
+            if ((msg != NULL) && (natsMsg_GetData(msg)[0] == '1')
+                && (pa == NULL) && (pae != NULL)
+                && (pae->Err == NATS_TIMEOUT) && (pae->ErrCode == 0))
+            {
+                args->status = NATS_OK;
+            }
+            break;
+        case 5:
+            if ((msg != NULL) && (natsMsg_GetData(msg)[0] == '2')
+                && (pa == NULL) && (pae != NULL)
+                && (pae->Err == NATS_TIMEOUT) && (pae->ErrCode == 0))
+            {
+                args->status = NATS_OK;
+            }
+            break;
+        case 6:
+            if ((msg != NULL) && (natsMsg_GetData(msg)[0] == '3')
+                    && (pa == NULL) && (pae != NULL)
+                    && (pae->Err == NATS_TIMEOUT) && (pae->ErrCode == 0))
+            {
+                args->status = NATS_OK;
+            }
+            break;
+    }
+    natsMsg_Destroy(msg);
+    args->done = true;
+    natsCondition_Broadcast(args->c);
+    natsMutex_Unlock(args->m);
+}
+
+static natsStatus
+_checkPubAckResult(natsStatus s, struct threadArg *args)
+{
+    if (s != NATS_OK)
+        return s;
+
+    natsMutex_Lock(args->m);
+    while ((s != NATS_TIMEOUT) && !args->done)
+        s = natsCondition_TimedWait(args->c, args->m, 1000);
+    IFOK(s, args->status);
+    args->done = false;
+    args->status = NATS_OK;
+    natsMutex_Unlock(args->m);
+
+    return s;
+}
+
+static void
+test_JetStreamPublishAckHandler(void)
+{
+    natsStatus          s;
+    jsOptions           o;
+    jsStreamConfig      cfg;
+    jsPubOptions        opts;
+    // natsMsg             *msg = NULL;
+    struct threadArg    args;
+
+
+    JS_SETUP(2, 3, 3);
+    jsCtx_Destroy(js);
+    js = NULL;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Prepare JS options: ");
+    s = jsOptions_Init(&o);
+    if (s == NATS_OK)
+    {
+        o.PublishAsync.AckHandler        = _jsPubAckHandler;
+        o.PublishAsync.AckHandlerClosure = &args;
+    }
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, &o);
+    testCond(s == NATS_OK);
+
+    test("Add stream: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "TEST";
+    cfg.Subjects = (const char*[1]){"foo"};
+    cfg.SubjectsLen = 1;
+    cfg.MaxMsgs = 1;
+    cfg.Discard = js_DiscardNew;
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Publish async ok: ");
+    jsPubOptions_Init(&opts);
+    opts.MsgId = "msg1";
+    s = js_PublishAsync(js, "foo", (const void*) "ok", 2, &opts);
+    s = _checkPubAckResult(s, &args);
+    testCond(s == NATS_OK);
+
+    test("Publish async (duplicate): ");
+    // Message above is resent from the ack handler callback.
+    s = _checkPubAckResult(s, &args);
+    testCond(s == NATS_OK);
+
+    test("Publish async (max msgs): ");
+    s = js_PublishAsync(js, "foo", (const void*) "ok", 2, NULL);
+    s = _checkPubAckResult(s, &args);
+    testCond(s == NATS_OK);
+
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+
+    test("Publish async with timeouts: ");
+    opts.MsgId = NULL;
+    opts.MaxWait = 250;
+    s = js_PublishAsync(js, "foo", (const void*) "2", 1, &opts);
+    opts.MaxWait = 500;
+    IFOK(s, js_PublishAsync(js, "foo", (const void*) "3", 1, &opts));
+    opts.MaxWait = 100;
+    IFOK(s, js_PublishAsync(js, "foo", (const void*) "1", 1, &opts));
+    testCond(s == NATS_OK);
+
+    test("Publish async timeout (1): ");
+    s = _checkPubAckResult(s, &args);
+    testCond(s == NATS_OK);
+
+    test("Publish async timeout (2): ");
+    s = _checkPubAckResult(s, &args);
+    testCond(s == NATS_OK);
+
+    test("Publish async timeout (3): ");
+    s = _checkPubAckResult(s, &args);
+    testCond(s == NATS_OK);
+
+    test("Ctx destroy releases timer: ");
+    opts.MaxWait = 250;
+    s = js_PublishAsync(js, "foo", (const void*) "4", 1, &opts);
+    IFOK(s, js_PublishAsync(js, "foo", (const void*) "5", 1, &opts));
+    if (s == NATS_OK)
+    {
+        js_lock(js);
+        js->refs++;
+        nats_Sleep(300);
+        jsCtx_Destroy(js);
+        js_unlock(js);
+    }
+    testCond(s == NATS_OK);
+
+    test("Check refs: ");
+    nats_Sleep(100);
+    js_lock(js);
+    s = (js->refs == 1 ? NATS_OK : NATS_ERR);
+    js_unlock(js);
+    testCond(s == NATS_OK);
+
+    js_release(js);
+    nats_Sleep(100);
+    js = NULL;
 
     JS_TEARDOWN;
     _destroyDefaultThreadArgs(&args);
@@ -31438,6 +31655,7 @@ static testInfo allTests[] =
     {"JetStreamMgtConsumers",           test_JetStreamMgtConsumers},
     {"JetStreamPublish",                test_JetStreamPublish},
     {"JetStreamPublishAsync",           test_JetStreamPublishAsync},
+    {"JetStreamPublishAckHandler",      test_JetStreamPublishAckHandler},
     {"JetStreamSubscribe",              test_JetStreamSubscribe},
     {"JetStreamSubscribeSync",          test_JetStreamSubscribeSync},
     {"JetStreamSubscribeConfigCheck",   test_JetStreamSubscribeConfigCheck},

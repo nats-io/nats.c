@@ -2502,6 +2502,22 @@ natsOptions_SetDiscoveredServersCB(natsOptions *opts,
                                    natsConnectionHandler discoveredServersCb,
                                    void *closure);
 
+/** \brief Sets if the library should ignore or not discovered servers.
+ *
+ * By default, when a server joins a cluster, a client is notified
+ * of the new URL and added to the list so it can be used in case
+ * of a reconnect.
+ *
+ * The servers can be configured to disable this gossip, however, if
+ * not done at the servers level, this option allows the discovered
+ * servers to be ignored.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param ignore if discovered server should be ignored or not.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetIgnoreDiscoveredServers(natsOptions *opts, bool ignore);
+
 /** \brief Sets the callback to be invoked when server enters lame duck mode.
  *
  * Specifies the callback to invoke when the server notifies

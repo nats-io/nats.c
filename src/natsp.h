@@ -233,6 +233,7 @@ struct __natsOptions
 
     natsConnectionHandler   discoveredServersCb;
     void                    *discoveredServersClosure;
+    bool                    ignoreDiscoveredServers;
 
     natsConnectionHandler   connectedCb;
     void                    *connectedCbClosure;

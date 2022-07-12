@@ -1292,8 +1292,8 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
     char        utcOff[7]   = {'\0'};
     int64_t     nanosecs    = 0;
     char        *p          = NULL;
-    char        orgStr[35]  = {'\0'};
-    char        timeStr[35] = {'\0'};
+    char        orgStr[36]  = {'\0'};
+    char        timeStr[36] = {'\0'};
     char        offSign     = '+';
     int         offHours    = 0;
     int         offMin      = 0;
@@ -1319,7 +1319,7 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
     l = (int) strlen(str);
     // The smallest date/time should be: "YYYY:MM:DDTHH:MM:SSZ", which is 20
     // while the longest should be: "YYYY:MM:DDTHH:MM:SS.123456789-12:34" which is 35
-    if ((l < 20) || (l > (int) sizeof(timeStr)))
+    if ((l < 20) || (l > (int) (sizeof(timeStr) - 1)))
     {
         if (l < 20)
             s = nats_setError(NATS_INVALID_ARG, "time '%s' too small", str);

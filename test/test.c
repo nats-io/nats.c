@@ -13092,6 +13092,65 @@ test_ClientAutoUnsubAndReconnect(void)
     _stopServer(serverPid);
 }
 
+static void
+_autoUnsub(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    struct threadArg *args = (struct threadArg*) closure;
+
+    natsMsg_Destroy(msg);
+    natsSubscription_Destroy(sub);
+    natsMutex_Lock(args->m);
+    args->done = true;
+    natsCondition_Signal(args->c);
+    natsMutex_Unlock(args->m);
+}
+
+
+static void
+test_AutoUnsubNoUnsubOnDestroy(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsBuffer          *buf      = NULL;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if ( s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    arg.status = NATS_OK;
+    arg.control= 9;
+
+    serverPid = _startServer("nats://127.0.0.1:4222", "-DV", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Auto-unsub: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _autoUnsub, (void*) &arg));
+    IFOK(s, natsSubscription_AutoUnsubscribe(sub, 1));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "hello"));
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+
+    test("Read logfile: ");
+    s = nats_ReadFile(&buf, 1024, LOGFILE_NAME);
+    testCond(s == NATS_OK);
+
+    test("Check UNSUB not sent: ");
+    s = (strstr(natsBuf_Data(buf), "[UNSUB 1 ]") == NULL ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+
+    natsBuf_Destroy(buf);
+}
 
 static void
 test_NextMsgOnClosedSub(void)
@@ -31633,6 +31692,7 @@ static testInfo allTests[] =
     {"ClientAsyncAutoUnsub",            test_ClientAsyncAutoUnsub},
     {"ClientSyncAutoUnsub",             test_ClientSyncAutoUnsub},
     {"ClientAutoUnsubAndReconnect",     test_ClientAutoUnsubAndReconnect},
+    {"AutoUnsubNoUnsubOnDestroy",       test_AutoUnsubNoUnsubOnDestroy},
     {"NextMsgOnClosedSub",              test_NextMsgOnClosedSub},
     {"CloseSubRelease",                 test_CloseSubRelease},
     {"IsValidSubscriber",               test_IsValidSubscriber},

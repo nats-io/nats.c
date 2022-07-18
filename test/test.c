@@ -28440,6 +28440,8 @@ test_KeyValueWatch(void)
     kvWatcher           *w  = NULL;
     kvEntry             *e  = NULL;
     natsThread          *t  = NULL;
+    int                 plc = 0;
+    int                 plb = 0;
     kvConfig            kvc;
     int64_t             start;
 
@@ -28550,6 +28552,12 @@ test_KeyValueWatch(void)
     test("Create watcher: ");
     s = kvStore_Watch(&w, kv, "t.*", NULL);
     testCond(s == NATS_OK);
+
+    test("Check pending limits: ");
+    natsMutex_Lock(w->mu);
+    s = natsSubscription_GetPendingLimits(w->sub, &plc, &plb);
+    natsMutex_Unlock(w->mu);
+    testCond((s == NATS_OK) && (plc == -1) && (plb == -1));
 
     testCond(_expectUpdate(w, "t.name", "ik", 8));
     testCond(_expectUpdate(w, "t.age", "49", 10));

@@ -998,6 +998,7 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
                 w->ignoreDel = true;
         }
         s = js_SubscribeSync(&(w->sub), kv->js, natsBuf_Data(&buf), NULL, &so, NULL);
+        IFOK(s, natsSubscription_SetPendingLimits(w->sub, -1, -1));
         if (s == NATS_OK)
         {
             natsSubscription *sub = w->sub;

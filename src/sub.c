@@ -1401,6 +1401,11 @@ natsSubscription_Destroy(natsSubscription *sub)
     natsSub_Lock(sub);
 
     doUnsub = !(sub->closed);
+    // If not yet closed but user is closing from message callback but it
+    // happens that auto-unsub was used and the max number was delivered, then
+    // we can suppress the UNSUB protocol.
+    if (doUnsub && (sub->max > 0))
+        doUnsub = sub->delivered < sub->max;
 
     natsSub_Unlock(sub);
 

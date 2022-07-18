@@ -132,6 +132,7 @@ SubBadSubjectAndQueueNames
 ClientAsyncAutoUnsub
 ClientSyncAutoUnsub
 ClientAutoUnsubAndReconnect
+AutoUnsubNoUnsubOnDestroy
 NextMsgOnClosedSub
 CloseSubRelease
 IsValidSubscriber

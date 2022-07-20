@@ -244,6 +244,7 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
     int64_t         replicas= 1;
     kvStore         *kv     = NULL;
     char            *subject= NULL;
+    jsStreamInfo    *si     = NULL;
     jsStreamConfig  sc;
 
     if ((new_kv == NULL) || (js == NULL) || (cfg == NULL))
@@ -287,15 +288,17 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
         sc.Replicas = replicas;
         sc.AllowRollup = true;
         sc.DenyDelete = true;
+        sc.AllowDirect = true;
 
         // If connecting to a v2.7.2+, create with discard new policy
         if (natsConn_srvVersionAtLeast(kv->js->nc, 2, 7, 2))
             sc.Discard = js_DiscardNew;
 
-        s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+        s = js_AddStream(&si, js, &sc, NULL, &jerr);
         if ((s != NATS_OK) && (jerr == JSStreamNameExistErr))
         {
-            jsStreamInfo *si = NULL;
+            jsStreamInfo_Destroy(si);
+            si = NULL;
 
             nats_clearLastError();
             s = js_GetStreamInfo(&si, js, sc.Name, NULL, NULL);
@@ -303,13 +306,22 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
             {
                 si->Config->Discard = sc.Discard;
                 if (_sameStreamCfg(si->Config, &sc))
-                    s = js_UpdateStream(NULL, js, &sc, NULL, NULL);
+                {
+                    jsStreamInfo_Destroy(si);
+                    si = NULL;
+                    s = js_UpdateStream(&si, js, &sc, NULL, NULL);
+                }
                 else
                     s = nats_setError(NATS_ERR, "%s",
                         "Existing configuration is different");
             }
-            jsStreamInfo_Destroy(si);
         }
+        if (s == NATS_OK)
+        {
+            // If the stream allow direct get message calls, then we will do so.
+            kv->useDirect = si->Config->AllowDirect;
+        }
+        jsStreamInfo_Destroy(si);
     }
     if (s == NATS_OK)
         *new_kv = kv;
@@ -338,6 +350,9 @@ js_KeyValue(kvStore **new_kv, jsCtx *js, const char *bucket)
     s = js_GetStreamInfo(&si, js, kv->stream, NULL, NULL);
     if (s == NATS_OK)
     {
+        // If the stream allow direct get message calls, then we will do so.
+        kv->useDirect = si->Config->AllowDirect;
+
         // Do some quick sanity checks that this is a correctly formed stream for KV.
         // Max msgs per subject should be > 0.
         if (si->Config->MaxMsgsPerSubject < 1)
@@ -456,6 +471,7 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key, uint
     natsMsg     *msg    = NULL;
     kvEntry     *e      = NULL;
     DEFINE_BUF_FOR_SUBJECT;
+    jsDirectGetMsgOptions dgo;
 
     *new_entry = NULL;
     *deleted   = false;
@@ -464,15 +480,29 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key, uint
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
     BUILD_SUBJECT(KEY_NAME_ONLY);
-    if (revision == 0)
+
+    if (kv->useDirect)
+    {
+        jsDirectGetMsgOptions_Init(&dgo);
+        if (revision == 0)
+            dgo.LastBySubject = natsBuf_Data(&buf);
+        else
+            dgo.Sequence = revision;
+
+        IFOK(s, js_DirectGetMsg(&msg, kv->js, kv->stream, NULL, &dgo));
+    }
+    else if (revision == 0)
     {
         IFOK(s, js_GetLastMsg(&msg, kv->js, kv->stream, natsBuf_Data(&buf), NULL, NULL));
     }
     else
     {
         IFOK(s, js_GetMsg(&msg, kv->js, kv->stream, revision, NULL, NULL));
-        IFOK(s, (strcmp(natsMsg_GetSubject(msg), natsBuf_Data(&buf)) == 0 ? NATS_OK : NATS_NOT_FOUND));
     }
+    // If a sequence was provided, just make sure that the retrieved
+    // message subject matches the request.
+    if (revision != 0)
+        IFOK(s, (strcmp(natsMsg_GetSubject(msg), natsBuf_Data(&buf)) == 0 ? NATS_OK : NATS_NOT_FOUND));
     IFOK(s, _createEntry(&e, kv, &msg));
     if (s == NATS_OK)
         e->op = _getKVOp(e->msg);

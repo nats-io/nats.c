@@ -234,6 +234,8 @@ JetStreamOrderedConsAutoUnsub
 JetStreamSubscribeWithFWC
 JetStreamStreamsSealAndRollup
 JetStreamGetMsgAndLastMsg
+JetStreamConvertDirectMsg
+JetStreamDirectGetMsg
 JetStreamNakWithDelay
 JetStreamBackOffRedeliveries
 JetStreamInfoWithSubjects

@@ -424,6 +424,7 @@ struct __kvStore
     char                *stream;
     char                *pre;
     bool                useJSPrefix;
+    bool                useDirect;
 
 };
 

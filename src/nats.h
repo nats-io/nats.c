@@ -128,10 +128,12 @@ extern "C" {
  */
  #define JSMsgRollupAll         "all"
 
- // Headers for republished messages.
+ // Headers for republished messages and direct get.
  #define JSStream       "Nats-Stream"
  #define JSSequence     "Nats-Sequence"
  #define JSLastSequence "Nats-Last-Sequence"
+ #define JSTimeStamp    "Nats-Time-Stamp"
+ #define JSSubject      "Nats-Subject"
 
 //
 // Types.
@@ -493,6 +495,11 @@ typedef struct jsStreamConfig {
 
         // Allow republish of the message after being sequenced and stored.
         jsSubjectMapping        *RePublish;
+
+        // Allow higher performance, direct access to get individual messages. E.g. KeyValue
+        bool                    AllowDirect;
+        // Allow higher performance and unified direct access for mirrors as well.
+        bool                    MirrorDirect;
 
 } jsStreamConfig;
 
@@ -944,6 +951,23 @@ typedef struct jsPubAckErr
 typedef void (*jsPubAckErrHandler)(jsCtx *js, jsPubAckErr *pae, void *closure);
 typedef void (*jsPubAckHandler)(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, void *closure);
 #endif
+
+/**
+ * Options for the js_DirectGetMsg() call, which retrieves a message
+ * from any server (not only the leader) as long as the stream has
+ * been created with a AllowDirect option.
+ *
+ * Note that some options are mutually exclusive but are not checked
+ * byt the library. The server will reject invalid requests and
+ * the library will return the error returned from the server.
+ */
+typedef struct jsDirectGetMsgOptions
+{
+        uint64_t        Sequence;               ///< Get the message at this sequence
+        const char      *NextBySubject;         ///< Get the next message (based on sequence) for that subject
+        const char      *LastBySubject;         ///< Get the last message on that subject
+
+} jsDirectGetMsgOptions;
 
 /**
  * JetStream context options.
@@ -5402,6 +5426,37 @@ js_GetMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, jsOptions 
  */
 NATS_EXTERN natsStatus
 js_GetLastMsg(natsMsg **msg, jsCtx *js, const char *stream, const char *subject, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Initializes a direct get message options structure.
+ *
+ * Use this before setting specific direct get message options and passing it
+ * to #js_DirectGetMsg API.
+ *
+ * @param opts the pointer to the #jsDirectGetMsgOptions object.
+ */
+NATS_EXTERN natsStatus
+jsDirectGetMsgOptions_Init(jsDirectGetMsgOptions *opts);
+
+/** \brief Retrieves directly a JetStream message based on provided options.
+ *
+ * If a stream is created with `AllowDirect`, it is possible to retrieve a message
+ * without going through the leader.
+ *
+ * To specify the options, call #jsDirectGetMsgOptions_Init first and the set
+ * the appropriate options, then invoke this function.
+ *
+ * \note Some options are mutually exclusive but the library is not doing the
+ * check and leave it to the server to do it and return the error returned by
+ * the server.
+ *
+ * @param msg the location where to store the pointer to the retrieved message.
+ * @param js  the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param dgOpts the pointer to the #jsDirectGetMsgOptions object, cannot be `NULL`.
+ */
+NATS_EXTERN natsStatus
+js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, jsDirectGetMsgOptions *dgOpts);
 
 /** \brief Deletes a message from the stream.
  *

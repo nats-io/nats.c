@@ -1284,10 +1284,9 @@ nats_JSONGetObject(nats_JSON *json, const char *fieldName, nats_JSON **value)
 }
 
 natsStatus
-nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
+nats_parseTime(char *str, int64_t *timeUTC)
 {
     natsStatus  s           = NATS_OK;
-    char        *str        = NULL;
     char        *dotPos     = NULL;
     char        utcOff[7]   = {'\0'};
     int64_t     nanosecs    = 0;
@@ -1300,20 +1299,11 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
     int         i, l;
     struct tm   tp;
 
-    s = nats_JSONGetStr(json, fieldName, &str);
-    if ((s == NATS_OK) && (str == NULL))
-    {
-        *timeUTC = 0;
-        return NATS_OK;
-    }
-    else if (s != NATS_OK)
-        return NATS_UPDATE_ERR_STACK(s);
-
     // Check for "0"
     if (strcmp(str, "0001-01-01T00:00:00Z") == 0)
     {
         *timeUTC = 0;
-        goto END;
+        return NATS_OK;
     }
 
     l = (int) strlen(str);
@@ -1325,7 +1315,7 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
             s = nats_setError(NATS_INVALID_ARG, "time '%s' too small", str);
         else
             s = nats_setError(NATS_INVALID_ARG, "time '%s' too long", str);
-        goto END;
+        return NATS_UPDATE_ERR_STACK(s);
     }
 
     snprintf(orgStr, sizeof(orgStr), "%s", str);
@@ -1345,7 +1335,7 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
         if ((strlen(p) != 6) || ((*p != '+') && (*p != '-')) || (*(p+3) != ':'))
         {
             s = nats_setError(NATS_INVALID_ARG, "time '%s' has invalid UTC offset", orgStr);
-            goto END;
+            return NATS_UPDATE_ERR_STACK(s);
         }
         snprintf(utcOff, sizeof(utcOff), "%s", p);
         // Set end of 'str' to beginning of the offset.
@@ -1366,7 +1356,7 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
         if (val == -1)
         {
             s = nats_setError(NATS_INVALID_ARG, "time '%s' is invalid", orgStr);
-            goto END;
+            return NATS_UPDATE_ERR_STACK(s);
         }
 
         for (i=0; i<9-l; i++)
@@ -1375,7 +1365,7 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
         if (val > 999999999)
         {
             s = nats_setError(NATS_INVALID_ARG, "time '%s' second fraction too big", orgStr);
-            goto END;
+            return NATS_UPDATE_ERR_STACK(s);
         }
 
         nanosecs = val;
@@ -1402,7 +1392,7 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
         if (res == -1)
         {
             s = nats_setError(NATS_ERR, "error parsing time '%s'", orgStr);
-            goto END;
+            return NATS_UPDATE_ERR_STACK(s);
         }
         // Compute the offset
         off = (int64_t) ((offHours * 60 * 60) + (offMin * 60));
@@ -1420,7 +1410,25 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
     {
         s = nats_setError(NATS_ERR, "error parsing time '%s'", orgStr);
     }
-END:
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
+{
+    natsStatus  s           = NATS_OK;
+    char        *str        = NULL;
+
+    s = nats_JSONGetStr(json, fieldName, &str);
+    if ((s == NATS_OK) && (str == NULL))
+    {
+        *timeUTC = 0;
+        return NATS_OK;
+    }
+    else if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    s = nats_parseTime(str, timeUTC);
     NATS_FREE(str);
     return NATS_UPDATE_ERR_STACK(s);
 }

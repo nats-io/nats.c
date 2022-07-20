@@ -602,6 +602,8 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_JSONGetBool(jcfg, "deny_purge", &(cfg->DenyPurge)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_rollup_hdrs", &(cfg->AllowRollup)));
     IFOK(s, _unmarshalRePublish(jcfg, "republish", &(cfg->RePublish)));
+    IFOK(s, nats_JSONGetBool(jcfg, "allow_direct", &(cfg->AllowDirect)));
+    IFOK(s, nats_JSONGetBool(jcfg, "mirror_direct", &(cfg->MirrorDirect)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -715,6 +717,10 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         }
         IFOK(s, natsBuf_Append(buf, "\"}", -1));
     }
+    if ((s == NATS_OK) && cfg->AllowDirect)
+        IFOK(s, natsBuf_Append(buf, ",\"allow_direct\":true", -1));
+    if ((s == NATS_OK) && cfg->MirrorDirect)
+        IFOK(s, natsBuf_Append(buf, ",\"mirror_direct\":true", -1));
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
@@ -1438,7 +1444,7 @@ _getMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, const char *
     IFOK(s, natsBuf_AppendByte(&buf, '{'));
     if ((s == NATS_OK) && (seq > 0))
     {
-        nats_marshalULong(&buf, false, "seq", seq);
+       s = nats_marshalULong(&buf, false, "seq", seq);
     }
     else
     {
@@ -1487,6 +1493,172 @@ js_GetLastMsg(natsMsg **msg, jsCtx *js, const char *stream, const char *subject,
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     s = _getMsg(msg, js, stream, 0, subject, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+jsDirectGetMsgOptions_Init(jsDirectGetMsgOptions *opts)
+{
+    if (opts == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    memset(opts, 0, sizeof(jsDirectGetMsgOptions));
+    return NATS_OK;
+}
+
+natsStatus
+js_directGetMsgToJSMsg(const char *stream, natsMsg *msg)
+{
+    natsStatus          s;
+    const char          *val = NULL;
+    int64_t             seq  = 0;
+    int64_t             tm   = 0;
+
+    if ((msg->hdrLen == 0) && (msg->headers == NULL))
+        return nats_setError(NATS_ERR, "%s", "direct get message response should have headers");
+
+    // If the server returns an error (not found/bad request), we would receive
+    // an empty body message with the Status header. Check for that.
+    if ((natsMsg_GetDataLength(msg) == 0)
+        && (natsMsgHeader_Get(msg, STATUS_HDR, &val) == NATS_OK))
+    {
+        if (strcmp(val, NOT_FOUND_STATUS) == 0)
+            return nats_setDefaultError(NATS_NOT_FOUND);
+        else
+        {
+            natsMsgHeader_Get(msg, DESCRIPTION_HDR, &val);
+            return nats_setError(NATS_ERR, "error getting message: %s", val);
+        }
+    }
+
+    s = natsMsgHeader_Get(msg, JSStream, &val);
+    if ((s != NATS_OK) || (strcmp(val, stream) != 0))
+        return nats_setError(NATS_ERR, "missing or invalid stream name '%s'", val);
+
+    val = NULL;
+    s = natsMsgHeader_Get(msg, JSSequence, &val);
+    if ((s != NATS_OK) || ((seq = nats_ParseInt64(val, (int) strlen(val))) == -1))
+        return nats_setError(NATS_ERR, "missing or invalid sequence '%s'", val);
+
+    val = NULL;
+    s = natsMsgHeader_Get(msg, JSTimeStamp, &val);
+    if ((s == NATS_OK) && !nats_IsStringEmpty(val))
+    {
+        // The server sends the time in this format (always UTC):
+        // 2006-01-02 15:04:05.999999999 +0000 UTC
+        // But for our parsing to work (from JSON) we will convert this
+        // to something like that:
+        // 2006-01-02T15:04:05.999999999Z
+        char tmpTime[40] = {'\0'};
+        char *ptr = NULL;
+
+        if (snprintf(tmpTime, sizeof(tmpTime), "%s", val) >= (int) sizeof(tmpTime)) {
+            tmpTime[39] = '\0';
+        }
+
+        ptr = strchr(tmpTime, ' ');
+        if (ptr != NULL)
+        {
+            *ptr = 'T';
+            ptr++;
+
+            ptr = strchr(ptr, ' ');
+            if (ptr != NULL)
+            {
+                *ptr = 'Z';
+                ptr++;
+                *ptr = '\0';
+
+                s = nats_parseTime((char*) tmpTime, &tm);
+            }
+        }
+    }
+    if ((s != NATS_OK) || (tm == 0))
+        return nats_setError(NATS_ERR, "missing or invalid timestamp '%s'", val);
+
+    val = NULL;
+    s = natsMsgHeader_Get(msg, JSSubject, &val);
+    if ((s != NATS_OK) || nats_IsStringEmpty(val))
+        return nats_setError(NATS_ERR, "missing or invalid subject '%s'", val);
+
+    // Will point the message subject to the JSSubject header value.
+    // This will remain in the message memory allocated block, even
+    // if later the user changes the JSSubject header.
+    msg->subject = val;
+    msg->seq = seq;
+    msg->time = tm;
+    return NATS_OK;
+}
+
+natsStatus
+js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, jsDirectGetMsgOptions *dgOpts)
+{
+    natsStatus          s = NATS_OK;
+    char                *subj   = NULL;
+    natsMsg             *resp   = NULL;
+    natsConnection      *nc     = NULL;
+    bool                freePfx = false;
+    bool                comma   = false;
+    jsOptions           o;
+    char                buffer[64];
+    natsBuffer          buf;
+
+    if ((msg == NULL) || (js == NULL) || (dgOpts == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (nats_IsStringEmpty(stream))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
+
+    s = js_setOpts(&nc, &freePfx, js, opts, &o);
+    if (s == NATS_OK)
+    {
+        if (nats_asprintf(&subj, jsApiDirectMsgGetT, js_lenWithoutTrailingDot(o.Prefix), o.Prefix, stream) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        if (freePfx)
+            NATS_FREE((char*) o.Prefix);
+    }
+    IFOK(s, natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer)));
+    IFOK(s, natsBuf_AppendByte(&buf, '{'));
+    if ((s == NATS_OK) && (dgOpts->Sequence > 0))
+    {
+        comma = true;
+        s = nats_marshalULong(&buf, false, "seq", dgOpts->Sequence);
+    }
+    if ((s == NATS_OK) && !nats_IsStringEmpty(dgOpts->NextBySubject))
+    {
+        if (comma)
+            s = natsBuf_AppendByte(&buf, ',');
+
+        comma = true;
+        IFOK(s, natsBuf_Append(&buf, "\"next_by_subj\":\"", -1));
+        IFOK(s, natsBuf_Append(&buf, dgOpts->NextBySubject, -1));
+        IFOK(s, natsBuf_AppendByte(&buf, '"'));
+    }
+    if ((s == NATS_OK) && !nats_IsStringEmpty(dgOpts->LastBySubject))
+    {
+        if (comma)
+            s = natsBuf_AppendByte(&buf, ',');
+
+        IFOK(s, natsBuf_Append(&buf, "\"last_by_subj\":\"", -1));
+        IFOK(s, natsBuf_Append(&buf, dgOpts->LastBySubject, -1));
+        IFOK(s, natsBuf_AppendByte(&buf, '"'));
+    }
+    IFOK(s, natsBuf_AppendByte(&buf, '}'));
+
+    // Send the request
+    IFOK(s, natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), o.Wait));
+    // Convert the response to a JS message returned to the user.
+    IFOK(s, js_directGetMsgToJSMsg(stream, resp));
+
+    natsBuf_Cleanup(&buf);
+    NATS_FREE(subj);
+
+    if (s == NATS_OK)
+        *msg = resp;
+    else
+        natsMsg_Destroy(resp);
+
     return NATS_UPDATE_ERR_STACK(s);
 }
 

@@ -21417,7 +21417,7 @@ test_JetStreamUnmarshalStreamConfig(void)
         "{\"name\":\"TEST\",\"retention\":\"limits\",\"max_consumers\":5,\"max_msgs\":10,\"max_bytes\":1000,\"max_age\":20000000,\"discard\":\"new\"}",
         "{\"name\":\"TEST\",\"retention\":\"limits\",\"max_consumers\":5,\"max_msgs\":10,\"max_bytes\":1000,\"max_age\":20000000,\"discard\":\"new\",\"storage\":\"memory\"}",
     };
-    char tmp[1024];
+    char tmp[2048];
     int i;
 
     for (i=0; i<(int)(sizeof(missing)/sizeof(char*)); i++)
@@ -21461,7 +21461,9 @@ test_JetStreamUnmarshalStreamConfig(void)
         "\"num_replicas\":3,\"no_ack\":true,\"template_owner\":\"owner\","\
         "\"duplicate_window\":100000000000,\"placement\":{\"cluster\":\"cluster\",\"tags\":[\"tag1\",\"tag2\"]},"\
         "\"mirror\":{\"name\":\"TEST2\",\"opt_start_seq\":10,\"filter_subject\":\"foo\",\"external\":{\"api\":\"my_prefix\",\"deliver\":\"deliver_prefix\"}},"\
-        "\"sources\":[{\"name\":\"TEST3\",\"opt_start_seq\":20,\"filter_subject\":\"bar\",\"external\":{\"api\":\"my_prefix2\",\"deliver\":\"deliver_prefix2\"}}]}") >= (int) sizeof(tmp))
+        "\"sources\":[{\"name\":\"TEST3\",\"opt_start_seq\":20,\"filter_subject\":\"bar\",\"external\":{\"api\":\"my_prefix2\",\"deliver\":\"deliver_prefix2\"}}],"\
+        "\"sealed\":true,\"deny_delete\":true,\"deny_purge\":true,\"allow_rollup_hdrs\":true,\"republish\":{\"src\":\"foo\",\"dest\":\"bar\"},"\
+        "\"allow_direct\":true,\"mirror_direct\":true}") >= (int) sizeof(tmp))
     {
         abort();
     }
@@ -21499,7 +21501,14 @@ test_JetStreamUnmarshalStreamConfig(void)
                 && (strcmp(sc->Sources[0]->FilterSubject, "bar") == 0)
                 && (sc->Sources[0]->External != NULL)
                 && (strcmp(sc->Sources[0]->External->APIPrefix, "my_prefix2") == 0)
-                && (strcmp(sc->Sources[0]->External->DeliverPrefix, "deliver_prefix2") == 0));
+                && (strcmp(sc->Sources[0]->External->DeliverPrefix, "deliver_prefix2") == 0)
+                && sc->Sealed && sc->DenyDelete && sc->DenyPurge && sc->AllowRollup
+                && ((sc->RePublish != NULL)
+                    && (sc->RePublish->Source != NULL)
+                    && (strcmp(sc->RePublish->Source, "foo") == 0)
+                    && (sc->RePublish->Destination != NULL)
+                    && (strcmp(sc->RePublish->Destination, "bar") == 0))
+                && sc->AllowDirect && sc->MirrorDirect);
     js_destroyStreamConfig(sc);
     sc = NULL;
     nats_JSONDestroy(json);
@@ -21669,6 +21678,8 @@ test_JetStreamMarshalStreamConfig(void)
     sc.DenyDelete = true;
     sc.DenyPurge = true;
     sc.AllowRollup = true;
+    sc.AllowDirect = true;
+    sc.MirrorDirect = true;
 
     test("Subject mapping init err: ");
     s = jsSubjectMapping_Init(NULL, "a", "b");
@@ -21752,7 +21763,9 @@ test_JetStreamMarshalStreamConfig(void)
                 && (rsc->RePublish->Source != NULL)
                 && (strcmp(rsc->RePublish->Source, ">") == 0)
                 && (rsc->RePublish->Destination != NULL)
-                && (strcmp(rsc->RePublish->Destination, "RP.>") == 0));
+                && (strcmp(rsc->RePublish->Destination, "RP.>") == 0)
+                && rsc->AllowDirect
+                && rsc->MirrorDirect);
     js_destroyStreamConfig(rsc);
     rsc = NULL;
     // Check that this does not crash
@@ -27739,6 +27752,220 @@ test_JetStreamGetMsgAndLastMsg(void)
 }
 
 static void
+test_JetStreamConvertDirectMsg(void)
+{
+    natsStatus  s;
+    natsMsg     *msg = NULL;
+    const char  *val = NULL;
+
+    test("Bad request: ");
+    s = natsMsg_Create(&msg, "inbox", NULL, NULL, 0);
+    IFOK(s, natsMsgHeader_Set(msg, STATUS_HDR, REQ_TIMEOUT));
+    IFOK(s, natsMsgHeader_Set(msg, DESCRIPTION_HDR, "Bad Request"));
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "Bad Request") != NULL));
+    nats_clearLastError();
+
+    test("Not found: ");
+    s = natsMsgHeader_Set(msg, STATUS_HDR, NOT_FOUND_STATUS);
+    IFOK(s, natsMsgHeader_Set(msg, DESCRIPTION_HDR, "Message Not Found"));
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_NOT_FOUND) && (strstr(nats_GetLastError(NULL), natsStatus_GetText(NATS_NOT_FOUND)) != NULL));
+    nats_clearLastError();
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Msg has no header: ");
+    s = natsMsg_Create(&msg, "inbox", NULL, "1", 1);
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "should have headers") != NULL));
+    nats_clearLastError();
+
+    test("Missing stream: ");
+    s = natsMsgHeader_Set(msg, "some", "header");
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "invalid stream") != NULL));
+    nats_clearLastError();
+
+    test("Stream header not same: ");
+    s = natsMsgHeader_Set(msg, JSStream, "other");
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "invalid stream name 'other'") != NULL));
+    nats_clearLastError();
+
+    test("Missing sequence: ");
+    s = natsMsgHeader_Set(msg, JSStream, "test");
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "invalid sequence") != NULL));
+    nats_clearLastError();
+
+    test("Invalid sequence: ");
+    s = natsMsgHeader_Set(msg, JSSequence, "abc");
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "invalid sequence 'abc'") != NULL));
+    nats_clearLastError();
+
+    test("Missing timestamp: ");
+    s = natsMsgHeader_Set(msg, JSSequence, "1");
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "missing or invalid timestamp") != NULL));
+    nats_clearLastError();
+
+    test("Invalid timestamp: ");
+    s = natsMsgHeader_Set(msg, JSTimeStamp, "aaaaaaaaa bbbbbbbbbbbb cccccccccc ddddddddddd eeeeeeeeee ffffff");
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "missing or invalid timestamp 'aaaaaaaaa bbbbbbbbbbbb cccccccccc ddddddddddd eeeeeeeeee ffffff'") != NULL));
+    nats_clearLastError();
+
+    test("Missing subject: ");
+    s = natsMsgHeader_Set(msg, JSTimeStamp, "2006-01-02 15:04:05.999999999 +0000 UTC");
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "missing or invalid subject") != NULL));
+    nats_clearLastError();
+
+    test("Invalid subject: ");
+    s = natsMsgHeader_Set(msg, JSSubject, "");
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "missing or invalid subject ''") != NULL));
+    nats_clearLastError();
+
+    test("Valid msg: ");
+    s = natsMsgHeader_Set(msg, JSSubject, "foo");
+    IFOK(s, js_directGetMsgToJSMsg("test", msg));
+    testCond((s == NATS_OK)
+                && (strcmp(natsMsg_GetSubject(msg), "foo") == 0)
+                && (natsMsg_GetSequence(msg) == 1)
+                && (natsMsg_GetTime(msg) == 1136214245999999999L)
+                && (natsMsgHeader_Get(msg, "some", &val) == NATS_OK)
+                && (strcmp(val, "header") == 0));
+
+    natsMsg_Destroy(msg);
+}
+
+static natsStatus
+_checkDirectGet(jsCtx *js, uint64_t seq, const char *nextBySubj, const char *lastBySubj,
+                const char *expectedSubj, uint64_t expectedSeq)
+{
+    natsStatus              s    = NATS_OK;
+    natsMsg                 *msg = NULL;
+    jsDirectGetMsgOptions   o;
+
+    jsDirectGetMsgOptions_Init(&o);
+    o.Sequence = seq;
+    o.NextBySubject = nextBySubj;
+    o.LastBySubject = lastBySubj;
+
+    s = js_DirectGetMsg(&msg, js, "DGM", NULL, &o);
+    if ((s != NATS_OK)
+        || (msg == NULL)
+        || (strcmp(natsMsg_GetSubject(msg), expectedSubj) != 0)
+        || (natsMsg_GetSequence(msg) != expectedSeq)
+        || (natsMsg_GetTime(msg) == 0))
+    {
+        s = NATS_ERR;
+    }
+
+    natsMsg_Destroy(msg);
+    return s;
+}
+
+static void
+test_JetStreamDirectGetMsg(void)
+{
+    natsStatus              s;
+    natsMsg                 *msg = NULL;
+    jsStreamConfig          cfg;
+    jsErrCode               jerr = 0;
+    const char              *val = NULL;
+    jsDirectGetMsgOptions   dgo;
+
+    JS_SETUP(2, 9, 0);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "DGM";
+    cfg.Subjects = (const char*[2]){"foo", "bar"};
+    cfg.SubjectsLen = 2;
+    cfg.Storage = js_MemoryStorage;
+    cfg.AllowDirect = true;
+    s = js_AddStream(NULL, js, &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Populate: ");
+    s = js_Publish(NULL, js, "foo", "a", 1, NULL, NULL);
+    IFOK(s, js_Publish(NULL, js, "foo", "b", 1, NULL, NULL));
+    IFOK(s, js_Publish(NULL, js, "foo", "c", 1, NULL, NULL));
+    IFOK(s, js_Publish(NULL, js, "bar", "d", 1, NULL, NULL));
+    IFOK(s, js_Publish(NULL, js, "foo", "e", 1, NULL, NULL));
+    testCond(s == NATS_OK);
+
+    test("DirecGetMsg bad args: ");
+    s = js_DirectGetMsg(NULL, js, "DGM", NULL, &dgo);
+    if (s == NATS_INVALID_ARG)
+        s = js_DirectGetMsg(&msg, NULL, "DGM", NULL, &dgo);
+    if (s == NATS_INVALID_ARG)
+        s = js_DirectGetMsg(&msg, js, "DGM", NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (msg == NULL));
+    nats_clearLastError();
+
+    test("GetMsg stream name required: ");
+    s = js_DirectGetMsg(&msg, js, NULL, NULL, &dgo);
+    if (s == NATS_INVALID_ARG)
+        s = js_DirectGetMsg(&msg, js, "", NULL, &dgo);
+    testCond((s == NATS_INVALID_ARG) && (msg == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("DirectGetMsg options init bad args: ");
+    s = jsDirectGetMsgOptions_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Seq==0 next_by_subj(bar): ");
+    testCond(_checkDirectGet(js, 0, "bar", NULL, "bar", 4) == NATS_OK);
+
+    test("Seq==0 last_by_subj: ");
+    testCond(_checkDirectGet(js, 0, NULL, "foo", "foo", 5) == NATS_OK);
+
+    test("Seq==0 next_by_subj(foo): ");
+    testCond(_checkDirectGet(js, 0, "foo", NULL, "foo", 1) == NATS_OK);
+
+    test("Seq==4 next_by_subj: ");
+    testCond(_checkDirectGet(js, 4, "foo", NULL, "foo", 5) == NATS_OK);
+
+    test("Seq==2 next_by_subj: ");
+    testCond(_checkDirectGet(js, 2, "foo", NULL, "foo", 2) == NATS_OK);
+
+    test("Publish msg with header: ");
+    s = natsMsg_Create(&msg, "foo", NULL, "f", 1);
+    IFOK(s, natsMsgHeader_Add(msg, "MyHeader", "MyValue"));
+    IFOK(s, js_PublishMsg(NULL, js, msg, NULL, NULL));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check headers preserved: ");
+    jsDirectGetMsgOptions_Init(&dgo);
+    dgo.Sequence = 6;
+    s = js_DirectGetMsg(&msg, js, "DGM", NULL, &dgo);
+    testCond((s == NATS_OK)
+                && (natsMsgHeader_Get(msg, "MyHeader", &val) == NATS_OK)
+                && (val != NULL)
+                && (strcmp(val, "MyValue") == 0));
+
+    test("Change subject header: ");
+    s = natsMsgHeader_Set(msg, JSSubject, "xxx");
+    testCond(s == NATS_OK);
+
+    test("Msg subject not affected: ");
+    testCond(strcmp(natsMsg_GetSubject(msg), "foo") == 0);
+
+    natsMsg_Destroy(msg);
+
+    JS_TEARDOWN;
+}
+
+static void
 test_JetStreamNakWithDelay(void)
 {
     natsStatus          s;
@@ -28138,292 +28365,315 @@ test_KeyValueBasics(void)
     kvStatus            *sts= NULL;
     uint64_t            rev = 0;
     kvConfig            kvc;
+    int                 iterMax = 1;
+    int                 i;
+    char                bucketName[10];
 
     JS_SETUP(2, 6, 2);
 
-    test("Create KV: ");
-    kvConfig_Init(&kvc);
-    kvc.Bucket = "TEST";
-    kvc.History = 5;
-    kvc.TTL = NATS_SECONDS_TO_NANOS(3600);
-    kvc.Replicas = 1;
-    s = js_CreateKeyValue(&kv, js, &kvc);
-    testCond((s == NATS_OK) && (kv != NULL));
-
-    test("Check bucket: ");
-    s = (strcmp(kvStore_Bucket(kv), "TEST") == 0 ? NATS_OK : NATS_ERR);
-    testCond(s == NATS_OK);
-
-    test("Check bucket (returns NULL): ");
-    s = (kvStore_Bucket(NULL) == NULL ? NATS_OK : NATS_ERR);
-    testCond(s == NATS_OK);
-
-    test("Simple put (bad args): ");
-    rev = 1234;
-    s = kvStore_Put(&rev, NULL, "key", (const void*) "value", 5);
-    testCond((s == NATS_INVALID_ARG) && (rev == 0));
-    nats_clearLastError();
-
-    test("Simple put (bad key): ");
-    rev = 1234;
-    s = kvStore_Put(&rev, kv, NULL, (const void*) "value", 5);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Put(&rev, kv, "", (const void*) "value", 5);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Put(&rev, kv, ".bad.key", (const void*) "value", 5);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Put(&rev, kv, "bad.key.", (const void*) "value", 5);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Put(&rev, kv, "this is a bad key", (const void*) "value", 5);
-    testCond((s == NATS_INVALID_ARG) && (rev == 0)
-                && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
-    nats_clearLastError();
-
-    test("Simple put: ");
-    s = kvStore_Put(&rev, kv, "key", (const void*) "value", 5);
-    testCond((s == NATS_OK) && (rev == 1));
-
-    test("Get (bad args): ");
-    s = kvStore_Get(NULL, kv, "key");
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Get(&e, NULL, "key");
-    testCond((s == NATS_INVALID_ARG) && (e == NULL));
-    nats_clearLastError();
-
-    test("Get (bad key): ");
-    s = kvStore_Get(&e, kv, NULL);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Get(&e, kv, "");
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Get(&e, kv, ".bad.key");
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Get(&e, kv, "bad.key.");
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Get(&e, kv, "this is a bad key");
-    testCond((s == NATS_INVALID_ARG) && (e == NULL)
-                && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
-    nats_clearLastError();
-
-    test("Simple get: ");
-    s = kvStore_Get(&e, kv, "key");
-    testCond((s == NATS_OK) && (e != NULL)
-                && (kvEntry_ValueLen(e) == 5)
-                && (memcmp(kvEntry_Value(e), "value", 5) == 0)
-                && (kvEntry_Revision(e) == 1));
-
-    test("Destroy entry: ");
-    kvEntry_Destroy(e);
-    e = NULL;
-    // Check that this is ok
-    kvEntry_Destroy(NULL);
-    testCond(true);
-
-    test("Get not found: ");
-    s = kvStore_Get(&e, kv, "not.found");
-    testCond((s == NATS_NOT_FOUND) && (e == NULL)
-                && (nats_GetLastError(NULL) == NULL));
-
-    test("Simple put string: ");
-    s = kvStore_PutString(&rev, kv, "key", "value2");
-    testCond((s == NATS_OK) && (rev == 2));
-
-    test("Simple get string: ");
-    s = kvStore_Get(&e, kv, "key");
-    testCond((s == NATS_OK) && (e != NULL)
-                && (strcmp(kvEntry_ValueString(e), "value2") == 0)
-                && (kvEntry_Revision(e) == 2));
-
-    test("Destroy entry: ");
-    kvEntry_Destroy(e);
-    e = NULL;
-    testCond(true);
-
-    test("Get revision (bad args): ");
-    s = kvStore_GetRevision(&e, kv, "key", 0);
-    testCond((s == NATS_INVALID_ARG) && (e == NULL)
-                && (strstr(nats_GetLastError(NULL), kvErrInvalidRevision) != NULL));
-    nats_clearLastError();
-
-    test("Get revision: ");
-    s = kvStore_GetRevision(&e, kv, "key", 1);
-    testCond((s == NATS_OK) && (e != NULL)
-                && (strcmp(kvEntry_ValueString(e), "value") == 0)
-                && (kvEntry_Revision(e) == 1));
-
-    test("Destroy entry: ");
-    kvEntry_Destroy(e);
-    e = NULL;
-    testCond(true);
-
-    test("Delete key (bad args): ");
-    s = kvStore_Delete(NULL, "key");
-    testCond(s == NATS_INVALID_ARG);
-    nats_clearLastError();
-
-    test("Delete key (bad key): ");
-    s = kvStore_Delete(kv, NULL);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Delete(kv, "");
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Delete(kv, ".bad.key");
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Delete(kv, "bad.key.");
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Delete(kv, "this is a bad key");
-    testCond((s == NATS_INVALID_ARG)
-                && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
-    nats_clearLastError();
-
-    test("Delete key: ");
-    s = kvStore_Delete(kv, "key");
-    testCond(s == NATS_OK);
-
-    test("Check key gone: ");
-    s = kvStore_Get(&e, kv, "key");
-    testCond((s == NATS_NOT_FOUND) && (e == NULL)
-                && (nats_GetLastError(NULL) == NULL));
-
-    test("Create (bad args): ");
-    s = kvStore_Create(&rev, NULL, "key", (const void*) "value3", 6);
-    testCond(s == NATS_INVALID_ARG);
-    nats_clearLastError();
-
-    test("Create (bad key): ");
-    s = kvStore_Create(&rev, kv, NULL, (const void*) "value3", 6);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Create(&rev, kv, "", (const void*) "value3", 6);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Create(&rev, kv, ".bad.key", (const void*) "value3", 6);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Create(&rev, kv, "bad.key.", (const void*) "value3", 6);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Create(&rev, kv, "this..is a bad key", (const void*) "value3", 6);
-    testCond((s == NATS_INVALID_ARG)
-                && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
-    nats_clearLastError();
-
-    test("Create: ");
-    s = kvStore_Create(&rev, kv, "key", (const void*) "value3", 6);
-    testCond((s == NATS_OK) && (rev == 4));
-
-    test("Create fail, since already exists: ");
-    s = kvStore_Create(&rev, kv, "key", (const void*) "value4", 6);
-    testCond((s == NATS_ERR) && (rev == 0));
-    nats_clearLastError();
-
-    test("Update (bad args): ");
-    s = kvStore_Update(&rev, NULL, "key", (const void*) "value4", 6, 4);
-    testCond((s == NATS_INVALID_ARG) && (rev == 0));
-    nats_clearLastError();
-
-    test("Update (bad key): ");
-    s = kvStore_Update(&rev, kv, NULL, (const void*) "value4", 6, 4);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Update(&rev, kv, "", (const void*) "value4", 6, 4);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Update(&rev, kv, ".bad.key", (const void*) "value4", 6, 4);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Update(&rev, kv, "bad.key.", (const void*) "value4", 6, 4);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Update(&rev, kv, "bad&key", (const void*) "value4", 6, 4);
-    testCond((s == NATS_INVALID_ARG) && (rev == 0)
-                && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
-    nats_clearLastError();
-
-    test("Update: ");
-    s = kvStore_Update(&rev, kv, "key", (const void*) "value4", 6, 4);
-    testCond((s == NATS_OK) && (rev == 5));
-
-    test("Update fail because wrong rev: ");
-    s = kvStore_Update(NULL, kv, "key", (const void*) "value5", 6, 4);
-    testCond(s == NATS_ERR);
-    nats_clearLastError();
-
-    test("Update ok: ");
-    s = kvStore_Update(&rev, kv, "key", (const void*) "value5", 6, rev);
-    testCond((s == NATS_OK) && (rev == 6));
-    nats_clearLastError();
-
-    test("Create (string): ");
-    s = kvStore_CreateString(&rev, kv, "key2", "value1");
-    testCond((s == NATS_OK) && (rev == 7));
-
-    test("Update ok (string): ");
-    s = kvStore_UpdateString(&rev, kv, "key2", "value2", rev);
-    testCond((s == NATS_OK) && (rev == 8));
-
-    test("Status (bad args): ");
-    s = kvStore_Status(NULL, kv);
-    if (s == NATS_INVALID_ARG)
-        s = kvStore_Status(&sts, NULL);
-    testCond((s == NATS_INVALID_ARG) && (sts == NULL));
-    nats_clearLastError();
-
-    test("Status: ");
-    s = kvStore_Status(&sts, kv);
-    testCond((s == NATS_OK) && (sts != NULL));
-
-    test("Check history: ");
-    s = (kvStatus_History(sts) == 5 ? NATS_OK : NATS_ERR);
-    testCond(s == NATS_OK);
-
-    test("Check bucket: ");
-    s = (strcmp(kvStatus_Bucket(sts), "TEST") == 0 ? NATS_OK : NATS_ERR);
-    testCond(s == NATS_OK);
-
-    test("Check TTL: ");
-    s = (kvStatus_TTL(sts) == NATS_SECONDS_TO_NANOS(3600) ? NATS_OK : NATS_ERR);
-    testCond(s == NATS_OK);
-
-    test("Check values: ");
-    s = (kvStatus_Values(sts) == 7 ? NATS_OK : NATS_ERR);
-    testCond(s == NATS_OK);
-
-    test("Check replicas: ");
-    s = (kvStatus_Replicas(sts) == 1 ? NATS_OK : NATS_ERR);
-    testCond(s == NATS_OK);
-
-    test("Check status with NULL: ");
-    if ((kvStatus_History(NULL) != 0) || (kvStatus_Bucket(NULL) != NULL)
-        || (kvStatus_TTL(NULL) != 0) || (kvStatus_Values(NULL) != 0))
-    {
-        s = NATS_ERR;
+    if (serverVersionAtLeast(2, 9, 0)) {
+        iterMax = 2;
     }
-    testCond(s == NATS_OK);
 
-    test("Destroy status: ");
-    kvStatus_Destroy(sts);
-    sts = NULL;
-    // Check that this is ok
-    kvStatus_Destroy(NULL);
-    testCond(true);
+    for (i=0; i<iterMax; i++)
+    {
+        sprintf(bucketName, "TEST%d", i);
 
-    test("Put for revision check: ");
-    s = kvStore_PutString(&rev, kv, "test.rev.one", "val1");
-    IFOK(s, kvStore_PutString(NULL, kv, "test.rev.two", "val2"));
-    testCond(s == NATS_OK);
+        test("Create KV: ");
+        kvConfig_Init(&kvc);
+        kvc.Bucket = bucketName;
+        kvc.History = 5;
+        kvc.TTL = NATS_SECONDS_TO_NANOS(3600);
+        kvc.Replicas = 1;
+        s = js_CreateKeyValue(&kv, js, &kvc);
+        testCond((s == NATS_OK) && (kv != NULL));
 
-    test("Get revision (bad args): ");
-    s = kvStore_GetRevision(&e, kv, "test.rev.one", 0);
-    testCond((s == NATS_INVALID_ARG) && (e == NULL)
-                && (strstr(nats_GetLastError(NULL), kvErrInvalidRevision) != NULL));
-    nats_clearLastError();
+        if (i == 1)
+        {
+            // This means that we are running against 2.9.0+ server and
+            // so we want to try without "direct get", so we will
+            // artificially set the kv store to not use direct get API.
+            natsMutex_Lock(kv->mu);
+            kv->useDirect = false;
+            natsMutex_Unlock(kv->mu);
+        }
 
-    test("Get revision: ");
-    s = kvStore_GetRevision(&e, kv, "test.rev.one", rev);
-    testCond((s == NATS_OK) && (e != NULL)
-                && (strcmp(kvEntry_ValueString(e), "val1") == 0)
-                && (kvEntry_Revision(e) == rev));
-    kvEntry_Destroy(e);
-    e = NULL;
+        test("Check bucket: ");
+        s = (strcmp(kvStore_Bucket(kv), bucketName) == 0 ? NATS_OK : NATS_ERR);
+        testCond(s == NATS_OK);
 
-    test("Get wrong revision for the key: ");
-    s = kvStore_GetRevision(&e, kv, "test.rev.two", rev);
-    testCond((s == NATS_NOT_FOUND) && (e == NULL));
+        test("Check bucket (returns NULL): ");
+        s = (kvStore_Bucket(NULL) == NULL ? NATS_OK : NATS_ERR);
+        testCond(s == NATS_OK);
 
-    test("Destroy kv store: ");
-    kvStore_Destroy(kv);
-    testCond(true);
+        test("Simple put (bad args): ");
+        rev = 1234;
+        s = kvStore_Put(&rev, NULL, "key", (const void*) "value", 5);
+        testCond((s == NATS_INVALID_ARG) && (rev == 0));
+        nats_clearLastError();
+
+        test("Simple put (bad key): ");
+        rev = 1234;
+        s = kvStore_Put(&rev, kv, NULL, (const void*) "value", 5);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Put(&rev, kv, "", (const void*) "value", 5);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Put(&rev, kv, ".bad.key", (const void*) "value", 5);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Put(&rev, kv, "bad.key.", (const void*) "value", 5);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Put(&rev, kv, "this is a bad key", (const void*) "value", 5);
+        testCond((s == NATS_INVALID_ARG) && (rev == 0)
+                    && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
+        nats_clearLastError();
+
+        test("Simple put: ");
+        s = kvStore_Put(&rev, kv, "key", (const void*) "value", 5);
+        testCond((s == NATS_OK) && (rev == 1));
+
+        test("Get (bad args): ");
+        s = kvStore_Get(NULL, kv, "key");
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Get(&e, NULL, "key");
+        testCond((s == NATS_INVALID_ARG) && (e == NULL));
+        nats_clearLastError();
+
+        test("Get (bad key): ");
+        s = kvStore_Get(&e, kv, NULL);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Get(&e, kv, "");
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Get(&e, kv, ".bad.key");
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Get(&e, kv, "bad.key.");
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Get(&e, kv, "this is a bad key");
+        testCond((s == NATS_INVALID_ARG) && (e == NULL)
+                    && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
+        nats_clearLastError();
+
+        test("Simple get: ");
+        s = kvStore_Get(&e, kv, "key");
+        testCond((s == NATS_OK) && (e != NULL)
+                    && (kvEntry_ValueLen(e) == 5)
+                    && (memcmp(kvEntry_Value(e), "value", 5) == 0)
+                    && (kvEntry_Revision(e) == 1));
+
+        test("Destroy entry: ");
+        kvEntry_Destroy(e);
+        e = NULL;
+        // Check that this is ok
+        kvEntry_Destroy(NULL);
+        testCond(true);
+
+        test("Get not found: ");
+        s = kvStore_Get(&e, kv, "not.found");
+        testCond((s == NATS_NOT_FOUND) && (e == NULL)
+                    && (nats_GetLastError(NULL) == NULL));
+
+        test("Simple put string: ");
+        s = kvStore_PutString(&rev, kv, "key", "value2");
+        testCond((s == NATS_OK) && (rev == 2));
+
+        test("Simple get string: ");
+        s = kvStore_Get(&e, kv, "key");
+        testCond((s == NATS_OK) && (e != NULL)
+                    && (strcmp(kvEntry_ValueString(e), "value2") == 0)
+                    && (kvEntry_Revision(e) == 2));
+
+        test("Destroy entry: ");
+        kvEntry_Destroy(e);
+        e = NULL;
+        testCond(true);
+
+        test("Get revision (bad args): ");
+        s = kvStore_GetRevision(&e, kv, "key", 0);
+        testCond((s == NATS_INVALID_ARG) && (e == NULL)
+                    && (strstr(nats_GetLastError(NULL), kvErrInvalidRevision) != NULL));
+        nats_clearLastError();
+
+        test("Get revision: ");
+        s = kvStore_GetRevision(&e, kv, "key", 1);
+        testCond((s == NATS_OK) && (e != NULL)
+                    && (strcmp(kvEntry_ValueString(e), "value") == 0)
+                    && (kvEntry_Revision(e) == 1));
+
+        test("Destroy entry: ");
+        kvEntry_Destroy(e);
+        e = NULL;
+        testCond(true);
+
+        test("Delete key (bad args): ");
+        s = kvStore_Delete(NULL, "key");
+        testCond(s == NATS_INVALID_ARG);
+        nats_clearLastError();
+
+        test("Delete key (bad key): ");
+        s = kvStore_Delete(kv, NULL);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Delete(kv, "");
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Delete(kv, ".bad.key");
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Delete(kv, "bad.key.");
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Delete(kv, "this is a bad key");
+        testCond((s == NATS_INVALID_ARG)
+                    && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
+        nats_clearLastError();
+
+        test("Delete key: ");
+        s = kvStore_Delete(kv, "key");
+        testCond(s == NATS_OK);
+
+        test("Check key gone: ");
+        s = kvStore_Get(&e, kv, "key");
+        testCond((s == NATS_NOT_FOUND) && (e == NULL)
+                    && (nats_GetLastError(NULL) == NULL));
+
+        test("Create (bad args): ");
+        s = kvStore_Create(&rev, NULL, "key", (const void*) "value3", 6);
+        testCond(s == NATS_INVALID_ARG);
+        nats_clearLastError();
+
+        test("Create (bad key): ");
+        s = kvStore_Create(&rev, kv, NULL, (const void*) "value3", 6);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Create(&rev, kv, "", (const void*) "value3", 6);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Create(&rev, kv, ".bad.key", (const void*) "value3", 6);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Create(&rev, kv, "bad.key.", (const void*) "value3", 6);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Create(&rev, kv, "this..is a bad key", (const void*) "value3", 6);
+        testCond((s == NATS_INVALID_ARG)
+                    && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
+        nats_clearLastError();
+
+        test("Create: ");
+        s = kvStore_Create(&rev, kv, "key", (const void*) "value3", 6);
+        testCond((s == NATS_OK) && (rev == 4));
+
+        test("Create fail, since already exists: ");
+        s = kvStore_Create(&rev, kv, "key", (const void*) "value4", 6);
+        testCond((s == NATS_ERR) && (rev == 0));
+        nats_clearLastError();
+
+        test("Update (bad args): ");
+        s = kvStore_Update(&rev, NULL, "key", (const void*) "value4", 6, 4);
+        testCond((s == NATS_INVALID_ARG) && (rev == 0));
+        nats_clearLastError();
+
+        test("Update (bad key): ");
+        s = kvStore_Update(&rev, kv, NULL, (const void*) "value4", 6, 4);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Update(&rev, kv, "", (const void*) "value4", 6, 4);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Update(&rev, kv, ".bad.key", (const void*) "value4", 6, 4);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Update(&rev, kv, "bad.key.", (const void*) "value4", 6, 4);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Update(&rev, kv, "bad&key", (const void*) "value4", 6, 4);
+        testCond((s == NATS_INVALID_ARG) && (rev == 0)
+                    && (strstr(nats_GetLastError(NULL), kvErrInvalidKey) != NULL));
+        nats_clearLastError();
+
+        test("Update: ");
+        s = kvStore_Update(&rev, kv, "key", (const void*) "value4", 6, 4);
+        testCond((s == NATS_OK) && (rev == 5));
+
+        test("Update fail because wrong rev: ");
+        s = kvStore_Update(NULL, kv, "key", (const void*) "value5", 6, 4);
+        testCond(s == NATS_ERR);
+        nats_clearLastError();
+
+        test("Update ok: ");
+        s = kvStore_Update(&rev, kv, "key", (const void*) "value5", 6, rev);
+        testCond((s == NATS_OK) && (rev == 6));
+        nats_clearLastError();
+
+        test("Create (string): ");
+        s = kvStore_CreateString(&rev, kv, "key2", "value1");
+        testCond((s == NATS_OK) && (rev == 7));
+
+        test("Update ok (string): ");
+        s = kvStore_UpdateString(&rev, kv, "key2", "value2", rev);
+        testCond((s == NATS_OK) && (rev == 8));
+
+        test("Status (bad args): ");
+        s = kvStore_Status(NULL, kv);
+        if (s == NATS_INVALID_ARG)
+            s = kvStore_Status(&sts, NULL);
+        testCond((s == NATS_INVALID_ARG) && (sts == NULL));
+        nats_clearLastError();
+
+        test("Status: ");
+        s = kvStore_Status(&sts, kv);
+        testCond((s == NATS_OK) && (sts != NULL));
+
+        test("Check history: ");
+        s = (kvStatus_History(sts) == 5 ? NATS_OK : NATS_ERR);
+        testCond(s == NATS_OK);
+
+        test("Check bucket: ");
+        s = (strcmp(kvStatus_Bucket(sts), bucketName) == 0 ? NATS_OK : NATS_ERR);
+        testCond(s == NATS_OK);
+
+        test("Check TTL: ");
+        s = (kvStatus_TTL(sts) == NATS_SECONDS_TO_NANOS(3600) ? NATS_OK : NATS_ERR);
+        testCond(s == NATS_OK);
+
+        test("Check values: ");
+        s = (kvStatus_Values(sts) == 7 ? NATS_OK : NATS_ERR);
+        testCond(s == NATS_OK);
+
+        test("Check replicas: ");
+        s = (kvStatus_Replicas(sts) == 1 ? NATS_OK : NATS_ERR);
+        testCond(s == NATS_OK);
+
+        test("Check status with NULL: ");
+        if ((kvStatus_History(NULL) != 0) || (kvStatus_Bucket(NULL) != NULL)
+            || (kvStatus_TTL(NULL) != 0) || (kvStatus_Values(NULL) != 0))
+        {
+            s = NATS_ERR;
+        }
+        testCond(s == NATS_OK);
+
+        test("Destroy status: ");
+        kvStatus_Destroy(sts);
+        sts = NULL;
+        // Check that this is ok
+        kvStatus_Destroy(NULL);
+        testCond(true);
+
+        test("Put for revision check: ");
+        s = kvStore_PutString(&rev, kv, "test.rev.one", "val1");
+        IFOK(s, kvStore_PutString(NULL, kv, "test.rev.two", "val2"));
+        testCond(s == NATS_OK);
+
+        test("Get revision (bad args): ");
+        s = kvStore_GetRevision(&e, kv, "test.rev.one", 0);
+        testCond((s == NATS_INVALID_ARG) && (e == NULL)
+                    && (strstr(nats_GetLastError(NULL), kvErrInvalidRevision) != NULL));
+        nats_clearLastError();
+
+        test("Get revision: ");
+        s = kvStore_GetRevision(&e, kv, "test.rev.one", rev);
+        testCond((s == NATS_OK) && (e != NULL)
+                    && (strcmp(kvEntry_ValueString(e), "val1") == 0)
+                    && (kvEntry_Revision(e) == rev));
+        kvEntry_Destroy(e);
+        e = NULL;
+
+        test("Get wrong revision for the key: ");
+        s = kvStore_GetRevision(&e, kv, "test.rev.two", rev);
+        testCond((s == NATS_NOT_FOUND) && (e == NULL));
+
+        test("Destroy kv store: ");
+        kvStore_Destroy(kv);
+        testCond(true);
+        kv = NULL;
+    }
 
     JS_TEARDOWN;
 }
@@ -31806,6 +32056,8 @@ static testInfo allTests[] =
     {"JetStreamSubscribeWithFWC",       test_JetStreamSubscribeWithFWC},
     {"JetStreamStreamsSealAndRollup",   test_JetStreamStreamsSealAndRollup},
     {"JetStreamGetMsgAndLastMsg",       test_JetStreamGetMsgAndLastMsg},
+    {"JetStreamConvertDirectMsg",       test_JetStreamConvertDirectMsg},
+    {"JetStreamDirectGetMsg",           test_JetStreamDirectGetMsg},
     {"JetStreamNakWithDelay",           test_JetStreamNakWithDelay},
     {"JetStreamBackOffRedeliveries",    test_JetStreamBackOffRedeliveries},
     {"JetStreamInfoWithSubjects",       test_JetStreamInfoWithSubjects},

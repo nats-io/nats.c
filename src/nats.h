@@ -381,12 +381,13 @@ typedef struct jsStreamSource
 /**
  * Allows a source subject to be mapped to a destination subject for republishing.
  */
-typedef struct jsSubjectMapping
+typedef struct jsRePublish
 {
         const char              *Source;
         const char              *Destination;
+        bool                    HeadersOnly;
 
-} jsSubjectMapping;
+} jsRePublish;
 
 /**
  * Configuration of a JetStream stream.
@@ -414,7 +415,7 @@ typedef struct jsSubjectMapping
  * const char       *subjects[]     = {"foo", "bar"};
  * const char       *tags[]         = {"tag1", "tag2"};
  * jsStreamSource   *sources[]      = {&s1, &s2};
- * jsSubjectMapping sm;
+ * jsRePublish      rp;
  *
  * jsStreamConfig_Init(&sc);
  *
@@ -456,8 +457,10 @@ typedef struct jsSubjectMapping
  * sc.SourcesLen = 2;
  *
  * // For RePublish subject:
- * jsSubjectMapping_Init(&sm, ">", "RP.>")
- * sc.RePublish = &sm;
+ * jsRePublish_Init(&rp);
+ * rp.Source = ">";
+ * rp.Destination = "RP.>";
+ * sc.RePublish = &rp;
  *
  * s = js_AddStream(&si, js, &sc, NULL, &jerr);
  * \endcode
@@ -494,7 +497,7 @@ typedef struct jsStreamConfig {
         bool                    AllowRollup;
 
         // Allow republish of the message after being sequenced and stored.
-        jsSubjectMapping        *RePublish;
+        jsRePublish             *RePublish;
 
         // Allow higher performance, direct access to get individual messages. E.g. KeyValue
         bool                    AllowDirect;
@@ -5294,16 +5297,14 @@ jsStreamSource_Init(jsStreamSource *source);
 NATS_EXTERN natsStatus
 jsExternalStream_Init(jsExternalStream *external);
 
-/** \brief Initializes a subject mapping structure.
+/** \brief Initializes a republish structure.
  *
- * Use this to set the source and destination for a subject mapping.
+ * Use this to set the source, destination and/or headers only for a stream re-publish.
  *
- * @param sm the pointer to the #jsSubjectMapping to initialize.
- * @param src the string for the source.
- * @param dst the string for the destination.
+ * @param rp the pointer to the #jsRePublish to initialize.
  */
 NATS_EXTERN natsStatus
-jsSubjectMapping_Init(jsSubjectMapping *sm, const char *src, const char *dst);
+jsRePublish_Init(jsRePublish *rp);
 
 /** \brief Creates a stream.
  *

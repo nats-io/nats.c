@@ -98,14 +98,14 @@ _destroyStreamSource(jsStreamSource *source)
 }
 
 static void
-_destroySubjectMapping(jsSubjectMapping *sm)
+_destroyRePublish(jsRePublish *rp)
 {
-    if (sm == NULL)
+    if (rp == NULL)
         return;
 
-    NATS_FREE((char*) sm->Source);
-    NATS_FREE((char*) sm->Destination);
-    NATS_FREE(sm);
+    NATS_FREE((char*) rp->Source);
+    NATS_FREE((char*) rp->Destination);
+    NATS_FREE(rp);
 }
 
 void
@@ -127,7 +127,7 @@ js_destroyStreamConfig(jsStreamConfig *cfg)
     for (i=0; i<cfg->SourcesLen; i++)
         _destroyStreamSource(cfg->Sources[i]);
     NATS_FREE(cfg->Sources);
-    _destroySubjectMapping(cfg->RePublish);
+    _destroyRePublish(cfg->RePublish);
     NATS_FREE(cfg);
 }
 
@@ -510,9 +510,9 @@ _marshalStorageType(jsStorageType storage, natsBuffer *buf)
 }
 
 static natsStatus
-_unmarshalRePublish(nats_JSON *json, const char *fieldName, jsSubjectMapping **new_mapping)
+_unmarshalRePublish(nats_JSON *json, const char *fieldName, jsRePublish **new_republish)
 {
-    jsSubjectMapping    *sm     = NULL;
+    jsRePublish         *rp     = NULL;
     nats_JSON           *jsm    = NULL;
     natsStatus          s;
 
@@ -520,17 +520,18 @@ _unmarshalRePublish(nats_JSON *json, const char *fieldName, jsSubjectMapping **n
     if (jsm == NULL)
         return NATS_UPDATE_ERR_STACK(s);
 
-    sm = (jsSubjectMapping*) NATS_CALLOC(1, sizeof(jsSubjectMapping));
-    if (sm == NULL)
+    rp = (jsRePublish*) NATS_CALLOC(1, sizeof(jsRePublish));
+    if (rp == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    s = nats_JSONGetStr(jsm, "src", (char**) &(sm->Source));
-    IFOK(s, nats_JSONGetStr(jsm, "dest", (char**) &(sm->Destination)));
+    s = nats_JSONGetStr(jsm, "src", (char**) &(rp->Source));
+    IFOK(s, nats_JSONGetStr(jsm, "dest", (char**) &(rp->Destination)));
+    IFOK(s, nats_JSONGetBool(jsm, "headers_only", &(rp->HeadersOnly)));
 
     if (s == NATS_OK)
-        *new_mapping = sm;
+        *new_republish = rp;
     else
-        _destroySubjectMapping(sm);
+        _destroyRePublish(rp);
 
     return NATS_UPDATE_ERR_STACK(s);
 
@@ -702,20 +703,22 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         IFOK(s, natsBuf_Append(buf, ",\"deny_purge\":true", -1));
     if ((s == NATS_OK) && cfg->AllowRollup)
         IFOK(s, natsBuf_Append(buf, ",\"allow_rollup_hdrs\":true", -1));
-    if ((s == NATS_OK) && (cfg->RePublish != NULL))
+    if ((s == NATS_OK) && (cfg->RePublish != NULL) && !nats_IsStringEmpty(cfg->RePublish->Destination))
     {
         // "dest" is not omitempty, in that the field will always be present.
         IFOK(s, natsBuf_Append(buf, ",\"republish\":{\"dest\":\"", -1));
-        // Still check that our value is not NULL
-        if (!nats_IsStringEmpty(cfg->RePublish->Destination))
-            IFOK(s, natsBuf_Append(buf, cfg->RePublish->Destination, -1));
+        IFOK(s, natsBuf_Append(buf, cfg->RePublish->Destination, -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
         // Now the source...
         if (!nats_IsStringEmpty(cfg->RePublish->Source))
         {
-            IFOK(s, natsBuf_Append(buf, "\",\"src\":\"", -1))
+            IFOK(s, natsBuf_Append(buf, ",\"src\":\"", -1))
             IFOK(s, natsBuf_Append(buf, cfg->RePublish->Source, -1));
+            IFOK(s, natsBuf_AppendByte(buf, '"'));
         }
-        IFOK(s, natsBuf_Append(buf, "\"}", -1));
+        if (cfg->RePublish->HeadersOnly)
+            IFOK(s, natsBuf_Append(buf, ",\"headers_only\":true", -1));
+        IFOK(s, natsBuf_AppendByte(buf, '}'));
     }
     if ((s == NATS_OK) && cfg->AllowDirect)
         IFOK(s, natsBuf_Append(buf, ",\"allow_direct\":true", -1));
@@ -1881,13 +1884,12 @@ jsExternalStream_Init(jsExternalStream *external)
 }
 
 natsStatus
-jsSubjectMapping_Init(jsSubjectMapping *sm, const char *src, const char *dst)
+jsRePublish_Init(jsRePublish *rp)
 {
-    if (sm == NULL)
+    if (rp == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    sm->Source = src;
-    sm->Destination = dst;
+    memset(rp, 0, sizeof(jsRePublish));
     return NATS_OK;
 }
 

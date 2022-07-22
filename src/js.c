@@ -1981,6 +1981,9 @@ _checkConfig(jsConsumerConfig *s, jsConsumerConfig *u)
     if (u->MaxDeliver > 0 && u->MaxDeliver != s->MaxDeliver)
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max deliver", u->MaxDeliver, s->MaxDeliver);
 
+    if (u->BackOffLen > 0 && u->BackOffLen != s->BackOffLen)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%d" CFG_CHECK_ERR_END "%d", "backoff list length", u->BackOffLen, s->BackOffLen);
+
     if ((int) u->ReplayPolicy >= 0 && u->ReplayPolicy != s->ReplayPolicy)
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%d" CFG_CHECK_ERR_END "%d", "replay policy", u->ReplayPolicy, s->ReplayPolicy);
 
@@ -1994,9 +1997,7 @@ _checkConfig(jsConsumerConfig *s, jsConsumerConfig *u)
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max waiting", u->MaxWaiting, s->MaxWaiting);
 
     if (u->MaxAckPending > 0 && u->MaxAckPending != s->MaxAckPending)
-    {
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max ack pending", u->MaxAckPending, s->MaxAckPending);
-    }
 
     // For flow control, we want to fail if the user explicit wanted it, but
     // it is not set in the existing consumer. If it is not asked by the user,
@@ -2006,6 +2007,24 @@ _checkConfig(jsConsumerConfig *s, jsConsumerConfig *u)
 
     if (u->Heartbeat > 0 && u->Heartbeat != s->Heartbeat)
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "heartbeat", u->Heartbeat, s->Heartbeat);
+
+    if (u->HeadersOnly != s->HeadersOnly)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%d" CFG_CHECK_ERR_END "%d", "headers only", u->HeadersOnly, s->HeadersOnly);
+
+    if (u->MaxRequestBatch > 0 && u->MaxRequestBatch != s->MaxRequestBatch)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max request batch", u->Heartbeat, s->Heartbeat);
+
+    if (u->MaxRequestExpires > 0 && u->MaxRequestExpires != s->MaxRequestExpires)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max request expires", u->MaxRequestExpires, s->MaxRequestExpires);
+
+    if (u->InactiveThreshold > 0 && u->InactiveThreshold != s->InactiveThreshold)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "inactive threshold", u->InactiveThreshold, s->InactiveThreshold);
+
+    if (u->Replicas > 0 && u->Replicas != s->Replicas)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "replicas", u->Replicas, s->Replicas);
+
+    if (u->MemoryStorage != s->MemoryStorage)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%d" CFG_CHECK_ERR_END "%d", "memory storage", u->MemoryStorage, s->MemoryStorage);
 
     return NATS_OK;
 }

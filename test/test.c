@@ -21603,7 +21603,7 @@ test_JetStreamMarshalStreamConfig(void)
     nats_JSON           *json          = NULL;
     jsStreamConfig      *rsc           = NULL;
     int64_t             optStartTime   = 1624583232123456000;
-    jsSubjectMapping    sm;
+    jsRePublish         rp;
 
     test("init bad args: ");
     s = jsStreamConfig_Init(NULL);
@@ -21681,22 +21681,18 @@ test_JetStreamMarshalStreamConfig(void)
     sc.AllowDirect = true;
     sc.MirrorDirect = true;
 
-    test("Subject mapping init err: ");
-    s = jsSubjectMapping_Init(NULL, "a", "b");
+    test("RePublish init err: ");
+    s = jsRePublish_Init(NULL);
     testCond(s == NATS_INVALID_ARG);
     nats_clearLastError();
     s = NATS_OK;
 
-    test("Subject mapping init, NULL or empty are ok: ");
-    s = jsSubjectMapping_Init(&sm, "A", NULL);
-    IFOK(s, jsSubjectMapping_Init(&sm, "A", ""));
-    IFOK(s, jsSubjectMapping_Init(&sm, NULL, "B"));
-    IFOK(s, jsSubjectMapping_Init(&sm, "", "B"));
-    testCond(s == NATS_OK);
-
     // Republish
-    jsSubjectMapping_Init(&sm, ">", "RP.>");
-    sc.RePublish = &sm;
+    jsRePublish_Init(&rp);
+    rp.Source = ">";
+    rp.Destination = "RP.>";
+    rp.HeadersOnly = true;
+    sc.RePublish = &rp;
 
     test("Marshal stream config: ");
     s = js_marshalStreamConfig(&buf, &sc);
@@ -21764,6 +21760,7 @@ test_JetStreamMarshalStreamConfig(void)
                 && (strcmp(rsc->RePublish->Source, ">") == 0)
                 && (rsc->RePublish->Destination != NULL)
                 && (strcmp(rsc->RePublish->Destination, "RP.>") == 0)
+                && rsc->RePublish->HeadersOnly
                 && rsc->AllowDirect
                 && rsc->MirrorDirect);
     js_destroyStreamConfig(rsc);
@@ -26562,9 +26559,9 @@ test_JetStreamSubscribePull(void)
 
     test("Ack: ");
     for (i=0; (s == NATS_OK) && (i<list.Count); i++)
-        s = natsMsg_Ack(list.Msgs[i], NULL);
+        s = natsMsg_AckSync(list.Msgs[i], NULL, &jerr);
     natsMsgList_Destroy(&list);
-    testCond(s == NATS_OK);
+    testCond((s == NATS_OK) && (jerr == 0));
 
     test("Send a message: ");
     s = js_Publish(NULL, js, "foo", "hello", 5, NULL, &jerr);

@@ -25573,8 +25573,10 @@ test_JetStreamSubscribeConfigCheck(void)
     jsStreamConfig      sc;
     jsConsumerConfig    cc;
     int                 i;
+    int64_t             backOffListOf3[3] = {1, 2, 3};
+    int64_t             backOffListOf2[2] = {1, 2};
 
-    JS_SETUP(2, 2, 0);
+    JS_SETUP(2, 9, 0);
 
     test("Create stream: ");
     jsStreamConfig_Init(&sc);
@@ -25584,7 +25586,7 @@ test_JetStreamSubscribeConfigCheck(void)
     s = js_AddStream(NULL, js, &sc, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
 
-    for (i=0; i<10; i++)
+    for (i=0; i<17; i++)
     {
         jsSubOptions    so1;
         jsSubOptions    so2;
@@ -25665,6 +25667,59 @@ test_JetStreamSubscribeConfigCheck(void)
                 so2.Config.SampleFrequency = "50%";
                 break;
             }
+            case 10:
+            {
+                name = "backoff";
+                so1.Config.BackOff = backOffListOf3;
+                so1.Config.BackOffLen = 3;
+                so1.Config.MaxDeliver = 5;
+                so2.Config.BackOff = backOffListOf2;
+                so2.Config.BackOffLen = 2;
+                so2.Config.MaxDeliver = 5;
+                break;
+            }
+            case 11:
+            {
+                name = "headers only";
+                so1.Config.HeadersOnly = true;
+                // Not setting it for the 2nd subscribe call should fail.
+                break;
+            }
+            case 12:
+            {
+                name = "max request batch";
+                so1.Config.MaxRequestBatch = 100;
+                so2.Config.MaxRequestBatch = 200;
+                break;
+            }
+            case 13:
+            {
+                name = "max request expires";
+                so1.Config.MaxRequestExpires = NATS_SECONDS_TO_NANOS(1);
+                so2.Config.MaxRequestExpires = NATS_SECONDS_TO_NANOS(2);
+                break;
+            }
+            case 14:
+            {
+                name = "inactive threshold";
+                so1.Config.InactiveThreshold = NATS_SECONDS_TO_NANOS(1);
+                so2.Config.InactiveThreshold = NATS_SECONDS_TO_NANOS(2);
+                break;
+            }
+            case 15:
+            {
+                name = "replicas";
+                so1.Config.Replicas = 1;
+                so2.Config.Replicas = 3;
+                break;
+            }
+            case 16:
+            {
+                name = "memory storage";
+                so1.Config.MemoryStorage = true;
+                // Not setting it for the 2nd subscribe call should fail.
+                break;
+            }
         }
         snprintf(testName, sizeof(testName), "Check %s: ", name);
         test(testName);
@@ -25736,7 +25791,7 @@ test_JetStreamSubscribeConfigCheck(void)
     }
 
     // Verify that we don't fail if user did not set it.
-    for (i=0; i<9; i++)
+    for (i=0; i<14; i++)
     {
         natsSubscription *nsub = NULL;
         jsSubOptions so;
@@ -25753,6 +25808,18 @@ test_JetStreamSubscribeConfigCheck(void)
             case 6: name = "replay policy"; so.Config.ReplayPolicy = js_ReplayInstant; break;
             case 7: name = "max waiting"; so.Config.MaxWaiting = 10; break;
             case 8: name = "max ack pending"; so.Config.MaxAckPending = 10; break;
+            case 9:
+            {
+                name = "backoff";
+                so.Config.BackOff = backOffListOf3;
+                so.Config.BackOffLen = 3;
+                so.Config.MaxDeliver = 4;
+                break;
+            }
+            case 10: name = "max request batch"; so.Config.MaxRequestBatch = 100; break;
+            case 11: name = "max request expires"; so.Config.MaxRequestExpires = NATS_SECONDS_TO_NANOS(2); break;
+            case 12: name = "inactive threshold"; so.Config.InactiveThreshold = NATS_SECONDS_TO_NANOS(2); break;
+            case 13: name = "replicas"; so.Config.Replicas = 1; break;
         }
 
         natsNUID_Next(durName, sizeof(durName));

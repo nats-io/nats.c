@@ -4564,16 +4564,27 @@ natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max);
 NATS_EXTERN natsStatus
 natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
 
-/** \brief Returns the subscription id and subject name.
+/** \brief Gets the subscription id.
  *
- * Returns the subscription id and subject name of this subscription.
+ * Returns the id of the given subscription.
  *
  * @param sub the pointer to the #natsSubscription object.
- * @param sid if not `NULL`, the memory location where to store the subscription id.
+ * @param id if not `NULL`, the memory location where to store the subscription id.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetID(natsSubscription* sub, int64_t* id);
+
+/** \brief Gets the subject name.
+ *
+ * Returns the subject of the given subscription.
+ *
+ * \warning The string belongs to the subscription and must not be freed. Copy it if needed.
+ *
+ * @param sub the pointer to the #natsSubscription object.
  * @param subject if not `NULL`, the memory location where to store the subject name.
  */
 NATS_EXTERN natsStatus
-natsSubscription_GetInfo(natsSubscription* sub, int64_t* sid, char* subject);
+natsSubscription_GetSubject(natsSubscription* sub, const char* subject);
 
 /** \brief Sets the limit for pending messages and bytes.
  *

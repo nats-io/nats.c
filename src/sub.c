@@ -1125,7 +1125,7 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
 }
 
 natsStatus
-natsSubscription_GetInfo(natsSubscription* sub, int64_t* sid, char* subject)
+natsSubscription_GetID(natsSubscription* sub, int64_t* id)
 {
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1140,11 +1140,34 @@ natsSubscription_GetInfo(natsSubscription* sub, int64_t* sid, char* subject)
 
     SUB_DLV_WORKER_LOCK(sub);
 
-    if (sid != NULL)
-        *sid = sub->sid;
+    if (id != NULL)
+        *id = sub->sid;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
+
+    natsSub_Unlock(sub);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsSubscription_GetSubject(natsSubscription* sub, const char* subject)
+{
+    if (sub == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsSub_Lock(sub);
+
+    if (sub->closed)
+    {
+        natsSub_Unlock(sub);
+        return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
+    }
+
+    SUB_DLV_WORKER_LOCK(sub);
 
     if (subject != NULL)
-        *subject = sub->subject;
+        subject = (const char*)sub->subject;
 
     SUB_DLV_WORKER_UNLOCK(sub);
 

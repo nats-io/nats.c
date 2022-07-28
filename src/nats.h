@@ -4567,24 +4567,26 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
 /** \brief Gets the subscription id.
  *
  * Returns the id of the given subscription.
+ * 
+ * \note Invalid or closed subscriptions will cause a value of 0 to be returned.
  *
  * @param sub the pointer to the #natsSubscription object.
- * @param id if not `NULL`, the memory location where to store the subscription id.
  */
-NATS_EXTERN natsStatus
-natsSubscription_GetID(natsSubscription* sub, int64_t* id);
+NATS_EXTERN int64_t
+natsSubscription_GetID(natsSubscription* sub);
 
 /** \brief Gets the subject name.
  *
  * Returns the subject of the given subscription.
  *
+ * \note Invalid or closed subscriptions will cause a value of NULL to be returned.
+ *
  * \warning The string belongs to the subscription and must not be freed. Copy it if needed.
  *
  * @param sub the pointer to the #natsSubscription object.
- * @param subject if not `NULL`, the memory location where to store the subject name.
  */
-NATS_EXTERN natsStatus
-natsSubscription_GetSubject(natsSubscription* sub, const char* subject);
+NATS_EXTERN const char*
+natsSubscription_GetSubject(natsSubscription* sub);
 
 /** \brief Sets the limit for pending messages and bytes.
  *

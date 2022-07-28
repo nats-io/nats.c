@@ -1124,56 +1124,52 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
     return s;
 }
 
-natsStatus
-natsSubscription_GetID(natsSubscription* sub, int64_t* id)
+int64_t
+natsSubscription_GetID(natsSubscription* sub)
 {
     if (sub == NULL)
-        return nats_setDefaultError(NATS_INVALID_ARG);
+        return 0;
 
     natsSub_Lock(sub);
 
     if (sub->closed)
     {
         natsSub_Unlock(sub);
-        return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
+        return 0;
     }
 
+    int64_t id = 0;
     SUB_DLV_WORKER_LOCK(sub);
-
-    if (id != NULL)
-        *id = sub->sid;
-
+    id = sub->sid;
     SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
-    return NATS_OK;
+    return id;
 }
 
-natsStatus
-natsSubscription_GetSubject(natsSubscription* sub, const char* subject)
+const char*
+natsSubscription_GetSubject(natsSubscription* sub)
 {
     if (sub == NULL)
-        return nats_setDefaultError(NATS_INVALID_ARG);
+        return NULL;
 
     natsSub_Lock(sub);
 
     if (sub->closed)
     {
         natsSub_Unlock(sub);
-        return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
+        return NULL;
     }
 
+    const char* subject = NULL;
     SUB_DLV_WORKER_LOCK(sub);
-
-    if (subject != NULL)
-        subject = (const char*)sub->subject;
-
+    subject = (const char*)sub->subject;
     SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
-    return NATS_OK;
+    return subject;
 }
 
 natsStatus

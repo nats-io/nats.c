@@ -897,5 +897,5 @@ natsMsgList_Destroy(natsMsgList *list)
         natsMsg_Destroy(list->Msgs[i]);
     NATS_FREE(list->Msgs);
     list->Msgs = NULL;
-    *(int*)&(list->Count) = 0;
+    list->Count = 0;
 }

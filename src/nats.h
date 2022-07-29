@@ -212,7 +212,7 @@ typedef char                        natsInbox;
 typedef struct natsMsgList
 {
         natsMsg         **Msgs;
-        const int       Count;
+        int             Count;
 
 } natsMsgList;
 
@@ -561,7 +561,7 @@ typedef struct jsStreamStateSubject
 typedef struct jsStreamStateSubjects
 {
         jsStreamStateSubject    *List;
-        const int               Count;
+        int                     Count;
 
 } jsStreamStateSubjects;
 
@@ -1154,7 +1154,7 @@ typedef struct kvPurgeOptions
 typedef struct kvEntryList
 {
         kvEntry         **Entries;
-        const int       Count;
+        int             Count;
 
 } kvEntryList;
 
@@ -1178,7 +1178,7 @@ typedef struct kvEntryList
 typedef struct kvKeysList
 {
         char            **Keys;
-        const int       Count;
+        int             Count;
 
 } kvKeysList;
 
@@ -4567,7 +4567,7 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
 /** \brief Gets the subscription id.
  *
  * Returns the id of the given subscription.
- * 
+ *
  * \note Invalid or closed subscriptions will cause a value of 0 to be returned.
  *
  * @param sub the pointer to the #natsSubscription object.

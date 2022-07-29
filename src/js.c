@@ -1147,7 +1147,7 @@ js_PublishAsyncGetPendingList(natsMsgList *pending, jsCtx *js)
             if (js->pmcount > 0)
                 js->pmcount--;
         }
-        *(int*)&(pending->Count) = count;
+        pending->Count = count;
     }
     js_unlock(js);
 
@@ -1892,7 +1892,7 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
 
         // Update the list with what we have collected.
         list->Msgs = msgs;
-        *(int*)&(list->Count) = count;
+        list->Count = count;
 
         return NATS_OK;
     }

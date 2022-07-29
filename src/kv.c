@@ -1073,7 +1073,7 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     list->Keys = NULL;
-    *(int*)&(list->Count) = 0;
+    list->Count = 0;
 
     kvWatchOptions_Init(&o);
     if (opts != NULL)
@@ -1116,7 +1116,7 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
     // Set the list's Count to `count`, not `n` since `count`
     // will reflect the actual number of keys that have been
     // properly strdup'ed.
-    *(int*)&(list->Count) = count;
+    list->Count = count;
 
     // If there was a failure (especially when strdup'ing) keys,
     // this will do the proper cleanup and re-initialize the list.
@@ -1138,7 +1138,7 @@ kvKeysList_Destroy(kvKeysList *list)
         NATS_FREE(list->Keys[i]);
     NATS_FREE(list->Keys);
     list->Keys = NULL;
-    *(int*)&(list->Count) = 0;
+    list->Count = 0;
 }
 
 natsStatus
@@ -1159,7 +1159,7 @@ kvStore_History(kvEntryList *list, kvStore *kv, const char *key, kvWatchOptions 
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     list->Entries = NULL;
-    *(int*)&(list->Count) = 0;
+    list->Count = 0;
 
     kvWatchOptions_Init(&o);
     if (opts != NULL)
@@ -1184,7 +1184,7 @@ kvStore_History(kvEntryList *list, kvStore *kv, const char *key, kvWatchOptions 
         if (list->Entries == NULL)
             s = nats_setDefaultError(NATS_NO_MEMORY);
         else
-            *(int*)&(list->Count) = n;
+            list->Count = n;
     }
     // Transfer entries to the array (on success), or destroy
     // the entries if there was an error.
@@ -1218,7 +1218,7 @@ kvEntryList_Destroy(kvEntryList *list)
         kvEntry_Destroy(list->Entries[i]);
     NATS_FREE(list->Entries);
     list->Entries = NULL;
-    *(int*)&(list->Count) = 0;
+    list->Count = 0;
 }
 
 natsStatus

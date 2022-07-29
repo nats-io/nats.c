@@ -1124,6 +1124,52 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
     return s;
 }
 
+int64_t
+natsSubscription_GetID(natsSubscription* sub)
+{
+    int64_t id = 0;
+
+    if (sub == NULL)
+        return 0;
+
+    natsSub_Lock(sub);
+
+    if (sub->closed)
+    {
+        natsSub_Unlock(sub);
+        return 0;
+    }
+    
+    id = sub->sid;
+
+    natsSub_Unlock(sub);
+
+    return id;
+}
+
+const char*
+natsSubscription_GetSubject(natsSubscription* sub)
+{
+    const char* subject = NULL;
+
+    if (sub == NULL)
+        return NULL;
+
+    natsSub_Lock(sub);
+
+    if (sub->closed)
+    {
+        natsSub_Unlock(sub);
+        return NULL;
+    }
+
+    subject = (const char*)sub->subject;
+
+    natsSub_Unlock(sub);
+
+    return subject;
+}
+
 natsStatus
 natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes)
 {

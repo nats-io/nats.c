@@ -1127,6 +1127,8 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
 int64_t
 natsSubscription_GetID(natsSubscription* sub)
 {
+    int64_t id = 0;
+
     if (sub == NULL)
         return 0;
 
@@ -1137,11 +1139,8 @@ natsSubscription_GetID(natsSubscription* sub)
         natsSub_Unlock(sub);
         return 0;
     }
-
-    int64_t id = 0;
-    SUB_DLV_WORKER_LOCK(sub);
+    
     id = sub->sid;
-    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -1151,6 +1150,8 @@ natsSubscription_GetID(natsSubscription* sub)
 const char*
 natsSubscription_GetSubject(natsSubscription* sub)
 {
+    const char* subject = NULL;
+
     if (sub == NULL)
         return NULL;
 
@@ -1162,10 +1163,7 @@ natsSubscription_GetSubject(natsSubscription* sub)
         return NULL;
     }
 
-    const char* subject = NULL;
-    SUB_DLV_WORKER_LOCK(sub);
     subject = (const char*)sub->subject;
-    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 

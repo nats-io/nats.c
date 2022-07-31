@@ -772,7 +772,7 @@ _fillSubjectsList(void *userInfo, const char *subject, nats_JSONField *f)
     if (s == NATS_OK)
     {
         subjs->List[i].Msgs = f->value.vuint;
-        *(int*)&(subjs->Count) = i+1;
+        subjs->Count = i+1;
     }
     return NATS_UPDATE_ERR_STACK(s);
 }

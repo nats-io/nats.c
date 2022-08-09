@@ -29675,6 +29675,78 @@ test_KeyValueDiscardOldToNew(void)
     JS_TEARDOWN;
 }
 
+static void
+test_KeyValueRePublish(void)
+{
+    kvStore             *kv     = NULL;
+    jsStreamInfo        *si     = NULL;
+    natsSubscription    *sub    = NULL;
+    natsMsg             *msg    = NULL;
+    kvConfig            kvc;
+    jsRePublish         rp;
+    natsStatus          s;
+
+    JS_SETUP(2, 9, 0);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "TEST_UPDATE";
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    kvStore_Destroy(kv);
+    kv = NULL;
+
+    test("Set RePublish should fail: ");
+    jsRePublish_Init(&rp);
+    rp.Source = ">";
+    rp.Destination = "bar.>";
+    kvc.RePublish =&rp;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "can not change RePublish") != NULL));
+    nats_clearLastError();
+
+    test("Create with repub: ");
+    kvc.Bucket = "TEST";
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Check set: ");
+    s = js_GetStreamInfo(&si, js, "KV_TEST", NULL, NULL);
+    testCond((s == NATS_OK) && (si->Config != NULL) && (si->Config->RePublish != NULL));
+    jsStreamInfo_Destroy(si);
+
+    test("Sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "bar.>");
+    testCond(s == NATS_OK);
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv, "foo", "value");
+    testCond(s == NATS_OK);
+
+    test("Get msg: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond(s == NATS_OK);
+
+    test("Check msg: ");
+    s = (strcmp(natsMsg_GetData(msg), "value") == 0 ? NATS_OK : NATS_ERR);
+    if (s == NATS_OK)
+    {
+        const char *subj = NULL;
+
+        s = natsMsgHeader_Get(msg, JSSubject, &subj);
+        if (s == NATS_OK)
+            s = (strcmp(subj, "$KV.TEST.foo") == 0 ? NATS_OK : NATS_ERR);
+    }
+    testCond(s == NATS_OK);
+
+    natsMsg_Destroy(msg);
+    natsSubscription_Destroy(sub);
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -32136,6 +32208,7 @@ static testInfo allTests[] =
     {"KeyValueDeleteMarkerThreshold",   test_KeyValuePurgeDeletesMarkerThreshold},
     {"KeyValueCrossAccount",            test_KeyValueCrossAccount},
     {"KeyValueDiscardOldToNew",         test_KeyValueDiscardOldToNew},
+    {"KeyValueRePublish",               test_KeyValueRePublish},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

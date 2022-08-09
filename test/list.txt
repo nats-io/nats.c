@@ -249,6 +249,7 @@ KeyValueDeleteTombstones
 KeyValueDeleteMarkerThreshold
 KeyValueCrossAccount
 KeyValueDiscardOldToNew
+KeyValueRePublish
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

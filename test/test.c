@@ -23298,7 +23298,6 @@ test_JetStreamMgtConsumers(void)
     cfg.MaxDeliver = 1;
     cfg.SampleFrequency = "30";
     cfg.MaxAckPending = 10;
-    cfg.MaxWaiting = 20;
     cfg.HeadersOnly = true;
     cfg.MaxRequestBatch = 10;
     cfg.MaxRequestExpires = NATS_SECONDS_TO_NANOS(2);
@@ -23311,7 +23310,6 @@ test_JetStreamMgtConsumers(void)
                 && (ci->Config->MaxDeliver == 1)
                 && (strcmp(ci->Config->SampleFrequency, "30") == 0)
                 && (ci->Config->MaxAckPending == 10)
-                && (ci->Config->MaxWaiting == 20)
                 && (ci->Config->HeadersOnly)
                 && (ci->Config->MaxRequestBatch == 10)
                 && (ci->Config->MaxRequestExpires == NATS_SECONDS_TO_NANOS(2)));

@@ -289,6 +289,7 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
         sc.AllowRollup = true;
         sc.DenyDelete = true;
         sc.AllowDirect = true;
+        sc.RePublish = cfg->RePublish;
 
         // If connecting to a v2.7.2+, create with discard new policy
         if (natsConn_srvVersionAtLeast(kv->js->nc, 2, 7, 2))

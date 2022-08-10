@@ -1095,6 +1095,7 @@ typedef struct kvConfig
         int64_t         MaxBytes;
         jsStorageType   StorageType;
         int             Replicas;
+        jsRePublish     *RePublish;
 
 } kvConfig;
 

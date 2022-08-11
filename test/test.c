@@ -27880,7 +27880,7 @@ test_JetStreamConvertDirectMsg(void)
     nats_clearLastError();
 
     test("Missing subject: ");
-    s = natsMsgHeader_Set(msg, JSTimeStamp, "2006-01-02 15:04:05.999999999 +0000 UTC");
+    s = natsMsgHeader_Set(msg, JSTimeStamp, "2006-01-02T15:04:05Z");
     IFOK(s, js_directGetMsgToJSMsg("test", msg));
     testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "missing or invalid subject") != NULL));
     nats_clearLastError();
@@ -27897,7 +27897,7 @@ test_JetStreamConvertDirectMsg(void)
     testCond((s == NATS_OK)
                 && (strcmp(natsMsg_GetSubject(msg), "foo") == 0)
                 && (natsMsg_GetSequence(msg) == 1)
-                && (natsMsg_GetTime(msg) == 1136214245999999999L)
+                && (natsMsg_GetTime(msg) == 1136214245000000000L)
                 && (natsMsgHeader_Get(msg, "some", &val) == NATS_OK)
                 && (strcmp(val, "header") == 0));
 
@@ -31729,6 +31729,9 @@ test_StanInternalSubsNotPooled(void)
     stanConnOptions_Destroy(sopts);
     stanSubscription_Destroy(sub);
     stanConnection_Destroy(sc);
+
+    if (valgrind)
+        nats_Sleep(900);
 
     _stopServer(pid);
 }

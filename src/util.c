@@ -1284,15 +1284,16 @@ nats_JSONGetObject(nats_JSON *json, const char *fieldName, nats_JSON **value)
 }
 
 natsStatus
-nats_parseTime(char *str, int64_t *timeUTC)
+nats_parseTime(char *orgStr, int64_t *timeUTC)
 {
     natsStatus  s           = NATS_OK;
     char        *dotPos     = NULL;
     char        utcOff[7]   = {'\0'};
     int64_t     nanosecs    = 0;
     char        *p          = NULL;
-    char        orgStr[36]  = {'\0'};
-    char        timeStr[36] = {'\0'};
+    char        timeStr[42] = {'\0'};
+    char        tmpStr[36]  = {'\0'};
+    char        *str        = NULL;
     char        offSign     = '+';
     int         offHours    = 0;
     int         offMin      = 0;
@@ -1300,25 +1301,28 @@ nats_parseTime(char *str, int64_t *timeUTC)
     struct tm   tp;
 
     // Check for "0"
-    if (strcmp(str, "0001-01-01T00:00:00Z") == 0)
+    if (strcmp(orgStr, "0001-01-01T00:00:00Z") == 0)
     {
         *timeUTC = 0;
         return NATS_OK;
     }
 
-    l = (int) strlen(str);
+    l = (int) strlen(orgStr);
     // The smallest date/time should be: "YYYY:MM:DDTHH:MM:SSZ", which is 20
     // while the longest should be: "YYYY:MM:DDTHH:MM:SS.123456789-12:34" which is 35
-    if ((l < 20) || (l > (int) (sizeof(timeStr) - 1)))
+    if ((l < 20) || (l > (int) (sizeof(tmpStr) - 1)))
     {
         if (l < 20)
-            s = nats_setError(NATS_INVALID_ARG, "time '%s' too small", str);
+            s = nats_setError(NATS_INVALID_ARG, "time '%s' too small", orgStr);
         else
-            s = nats_setError(NATS_INVALID_ARG, "time '%s' too long", str);
+            s = nats_setError(NATS_INVALID_ARG, "time '%s' too long", orgStr);
         return NATS_UPDATE_ERR_STACK(s);
     }
 
-    snprintf(orgStr, sizeof(orgStr), "%s", str);
+    // Copy the user provided string in our temporary buffer since we may alter
+    // the string as we parse.
+    snprintf(tmpStr, sizeof(tmpStr), "%s", orgStr);
+    str = (char*) tmpStr;
     memset(&tp, 0, sizeof(struct tm));
 
     // If ends with 'Z', the time is already UTC

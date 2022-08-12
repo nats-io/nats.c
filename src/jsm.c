@@ -1546,36 +1546,7 @@ js_directGetMsgToJSMsg(const char *stream, natsMsg *msg)
     val = NULL;
     s = natsMsgHeader_Get(msg, JSTimeStamp, &val);
     if ((s == NATS_OK) && !nats_IsStringEmpty(val))
-    {
-        // The server sends the time in this format (always UTC):
-        // 2006-01-02 15:04:05.999999999 +0000 UTC
-        // But for our parsing to work (from JSON) we will convert this
-        // to something like that:
-        // 2006-01-02T15:04:05.999999999Z
-        char tmpTime[40] = {'\0'};
-        char *ptr = NULL;
-
-        if (snprintf(tmpTime, sizeof(tmpTime), "%s", val) >= (int) sizeof(tmpTime)) {
-            tmpTime[39] = '\0';
-        }
-
-        ptr = strchr(tmpTime, ' ');
-        if (ptr != NULL)
-        {
-            *ptr = 'T';
-            ptr++;
-
-            ptr = strchr(ptr, ' ');
-            if (ptr != NULL)
-            {
-                *ptr = 'Z';
-                ptr++;
-                *ptr = '\0';
-
-                s = nats_parseTime((char*) tmpTime, &tm);
-            }
-        }
-    }
+        s = nats_parseTime((char*) val, &tm);
     if ((s != NATS_OK) || (tm == 0))
         return nats_setError(NATS_ERR, "missing or invalid timestamp '%s'", val);
 

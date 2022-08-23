@@ -147,6 +147,9 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiMsgGetT is the endpoint to get a message, either by sequence or last per subject.
 #define jsApiDirectMsgGetT "%.*s.DIRECT.GET.%s"
 
+// jsApiDirectMsgGetLastBySubjectT is the endpoint to perform a direct get of a message by subject.
+#define jsApiDirectMsgGetLastBySubjectT "%.*s.DIRECT.GET.%s.%s"
+
 // Creates a subject based on the option's prefix, the subject format and its values.
 #define js_apiSubj(s, o, f, ...) (nats_asprintf((s), (f), (o)->Prefix, __VA_ARGS__) < 0 ? NATS_NO_MEMORY : NATS_OK)
 

@@ -1573,6 +1573,7 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
     natsConnection      *nc     = NULL;
     bool                freePfx = false;
     bool                comma   = false;
+    bool                doLBS   = false;
     jsOptions           o;
     char                buffer[64];
     natsBuffer          buf;
@@ -1583,49 +1584,56 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
     if (nats_IsStringEmpty(stream))
         return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
 
+    doLBS = !nats_IsStringEmpty(dgOpts->LastBySubject);
+
     s = js_setOpts(&nc, &freePfx, js, opts, &o);
     if (s == NATS_OK)
     {
-        if (nats_asprintf(&subj, jsApiDirectMsgGetT, js_lenWithoutTrailingDot(o.Prefix), o.Prefix, stream) < 0)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-
+        if (doLBS)
+        {
+            if (nats_asprintf(&subj, jsApiDirectMsgGetLastBySubjectT, js_lenWithoutTrailingDot(o.Prefix), o.Prefix, stream, dgOpts->LastBySubject) < 0)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+        }
+        else
+        {
+            if (nats_asprintf(&subj, jsApiDirectMsgGetT, js_lenWithoutTrailingDot(o.Prefix), o.Prefix, stream) < 0)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+        }
         if (freePfx)
             NATS_FREE((char*) o.Prefix);
     }
-    IFOK(s, natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer)));
-    IFOK(s, natsBuf_AppendByte(&buf, '{'));
-    if ((s == NATS_OK) && (dgOpts->Sequence > 0))
+    if ((s == NATS_OK) && doLBS)
     {
-        comma = true;
-        s = nats_marshalULong(&buf, false, "seq", dgOpts->Sequence);
+        IFOK(s, natsConnection_Request(&resp, js->nc, subj, NULL, 0, o.Wait));
     }
-    if ((s == NATS_OK) && !nats_IsStringEmpty(dgOpts->NextBySubject))
+    else if (s == NATS_OK)
     {
-        if (comma)
-            s = natsBuf_AppendByte(&buf, ',');
+        IFOK(s, natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer)));
+        IFOK(s, natsBuf_AppendByte(&buf, '{'));
+        if ((s == NATS_OK) && (dgOpts->Sequence > 0))
+        {
+            comma = true;
+            s = nats_marshalULong(&buf, false, "seq", dgOpts->Sequence);
+        }
+        if ((s == NATS_OK) && !nats_IsStringEmpty(dgOpts->NextBySubject))
+        {
+            if (comma)
+                s = natsBuf_AppendByte(&buf, ',');
 
-        comma = true;
-        IFOK(s, natsBuf_Append(&buf, "\"next_by_subj\":\"", -1));
-        IFOK(s, natsBuf_Append(&buf, dgOpts->NextBySubject, -1));
-        IFOK(s, natsBuf_AppendByte(&buf, '"'));
+            comma = true;
+            IFOK(s, natsBuf_Append(&buf, "\"next_by_subj\":\"", -1));
+            IFOK(s, natsBuf_Append(&buf, dgOpts->NextBySubject, -1));
+            IFOK(s, natsBuf_AppendByte(&buf, '"'));
+        }
+        IFOK(s, natsBuf_AppendByte(&buf, '}'));
+        // Send the request
+        IFOK(s, natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), o.Wait));
+
+        natsBuf_Cleanup(&buf);
     }
-    if ((s == NATS_OK) && !nats_IsStringEmpty(dgOpts->LastBySubject))
-    {
-        if (comma)
-            s = natsBuf_AppendByte(&buf, ',');
-
-        IFOK(s, natsBuf_Append(&buf, "\"last_by_subj\":\"", -1));
-        IFOK(s, natsBuf_Append(&buf, dgOpts->LastBySubject, -1));
-        IFOK(s, natsBuf_AppendByte(&buf, '"'));
-    }
-    IFOK(s, natsBuf_AppendByte(&buf, '}'));
-
-    // Send the request
-    IFOK(s, natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), o.Wait));
     // Convert the response to a JS message returned to the user.
     IFOK(s, js_directGetMsgToJSMsg(stream, resp));
 
-    natsBuf_Cleanup(&buf);
     NATS_FREE(subj);
 
     if (s == NATS_OK)

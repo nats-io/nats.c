@@ -5475,6 +5475,10 @@ jsDirectGetMsgOptions_Init(jsDirectGetMsgOptions *opts);
  * check and leave it to the server to do it and return the error returned by
  * the server.
  *
+ * \note This API can only be used against servers that support the direct
+ * get feature, which is `v2.9.0+`. If running against an older server the
+ * call will likely timeout.
+ *
  * @param msg the location where to store the pointer to the retrieved message.
  * @param js  the pointer to the #jsCtx context.
  * @param stream the name of the stream.

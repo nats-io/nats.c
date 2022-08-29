@@ -26499,14 +26499,6 @@ test_JetStreamSubscribePull(void)
     testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0));
     nats_clearLastError();
 
-    test("Durable name required: ");
-    s = js_PullSubscribe(&sub, js, "foo", NULL, NULL, NULL, &jerr);
-    if (s == NATS_INVALID_ARG)
-        s = js_PullSubscribe(&sub, js, "foo", "", NULL, NULL, &jerr);
-    testCond((s == NATS_INVALID_ARG)
-                && (strstr(nats_GetLastError(NULL), jsErrDurRequired) != NULL));
-    nats_clearLastError();
-
     for (i=0; i<2; i++)
     {
         test("Create pull sub (invalid ack mode): ");
@@ -26807,6 +26799,35 @@ test_JetStreamSubscribePull(void)
     nats_clearLastError();
 
     natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Ephemeral pull allowed (NULL): ");
+    s = js_PullSubscribe(&sub, js, "bar", NULL, NULL, NULL, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Send a message: ");
+    s = js_Publish(NULL, js, "bar", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Msgs received: ");
+    s = natsSubscription_Fetch(&list, sub, 1, 1000, &jerr);
+    testCond((s == NATS_OK) && (list.Msgs != NULL) && (list.Count == 1) && (jerr == 0));
+
+    natsMsgList_Destroy(&list);
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Ephemeral pull allowed (empty): ");
+    s = js_PullSubscribe(&sub, js, "bar", "", NULL, NULL, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Msgs received: ");
+    s = natsSubscription_Fetch(&list, sub, 1, 1000, &jerr);
+    testCond((s == NATS_OK) && (list.Msgs != NULL) && (list.Count == 1) && (jerr == 0));
+
+    natsMsgList_Destroy(&list);
+    natsSubscription_Destroy(sub);
+
     JS_TEARDOWN;
     _destroyDefaultThreadArgs(&args);
 }

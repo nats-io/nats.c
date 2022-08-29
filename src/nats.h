@@ -5921,14 +5921,15 @@ js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
  * A pull based consumer is a type of consumer that does not have a delivery subject,
  * that is the library has to request for the messages to be delivered as needed from the server.
  *
- * \note All pull subscriptions must have a durable name.
- *
- * \note A durable name cannot contain the character ".".
+ * \note If no durable name is provided, the pull subscription will create an ephemeral
+ * JetStream consumer. The requirement for a durable name is lifted in NATS C client v3.4.0+
+ * and NATS Server v2.7.0+.
+ * \note If a durable name is specified, it cannot contain the character ".".
  *
  * @param sub the location where to store the pointer to the newly created #natsSubscription object.
  * @param js the pointer to the #jsCtx object.
  * @param subject the subject this subscription is created for.
- * @param durable the durable name, which is required for pull subscriptions.
+ * @param durable the optional durable name.
  * @param opts the pointer to the #jsOptions object, possibly `NULL`.
  * @param subOpts the subscribe options, possibly `NULL`.
  * @param errCode the location where to store the JetStream specific error code, or `NULL`

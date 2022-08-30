@@ -2347,7 +2347,7 @@ PROCESS_INFO:
             s = nats_setDefaultError(NATS_NO_MEMORY);
         else
         {
-            if (isPullMode)
+            if (isPullMode && !nats_IsStringEmpty(consumer))
             {
                 if (nats_asprintf(&(jsi->nxtMsgSubj), jsApiRequestNextT, jo.Prefix, stream, consumer) < 0)
                     s = nats_setDefaultError(NATS_NO_MEMORY);
@@ -2452,7 +2452,16 @@ PROCESS_INFO:
             // time, the consumer has been recreated (jsResetOrderedConsumer). So
             // set only if jsi->consumer is NULL!
             if (jsi->consumer == NULL)
+            {
                 DUP_STRING(s, jsi->consumer, info->Name);
+                if (s == NATS_OK)
+                {
+                    NATS_FREE(jsi->nxtMsgSubj);
+                    jsi->nxtMsgSubj = NULL;
+                    if (nats_asprintf(&(jsi->nxtMsgSubj), jsApiRequestNextT, jo.Prefix, stream, jsi->consumer) < 0)
+                        s = nats_setDefaultError(NATS_NO_MEMORY);
+                }
+            }
             natsSub_Unlock(sub);
         }
     }
@@ -2537,9 +2546,6 @@ js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject, const c
 
     if (errCode != NULL)
         *errCode = 0;
-
-    if (nats_IsStringEmpty(durable))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrDurRequired);
 
     // Check for invalid ack policy
     if (opts != NULL)

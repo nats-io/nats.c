@@ -250,6 +250,7 @@ KeyValueDeleteMarkerThreshold
 KeyValueCrossAccount
 KeyValueDiscardOldToNew
 KeyValueRePublish
+KeyValueMirrorDirectGet
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

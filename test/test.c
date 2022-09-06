@@ -27867,13 +27867,7 @@ test_JetStreamConvertDirectMsg(void)
     test("Missing stream: ");
     s = natsMsgHeader_Set(msg, "some", "header");
     IFOK(s, js_directGetMsgToJSMsg("test", msg));
-    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "invalid stream") != NULL));
-    nats_clearLastError();
-
-    test("Stream header not same: ");
-    s = natsMsgHeader_Set(msg, JSStream, "other");
-    IFOK(s, js_directGetMsgToJSMsg("test", msg));
-    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "invalid stream name 'other'") != NULL));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "missing stream") != NULL));
     nats_clearLastError();
 
     test("Missing sequence: ");
@@ -29761,6 +29755,62 @@ test_KeyValueRePublish(void)
 
     natsMsg_Destroy(msg);
     natsSubscription_Destroy(sub);
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
+static void
+test_KeyValueMirrorDirectGet(void)
+{
+    kvStore             *kv     = NULL;
+    kvConfig            kvc;
+    jsStreamConfig      sc;
+    jsStreamSource      ss;
+    natsStatus          s;
+    int                 i;
+
+    JS_SETUP(2, 9, 0);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "DIRECT_GET";
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Add mirror: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "MIRROR";
+    jsStreamSource_Init(&ss);
+    ss.Name = "KV_DIRECT_GET";
+    sc.Mirror = &ss;
+    sc.MirrorDirect = true;
+    s = js_AddStream(NULL, js, &sc, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Populate: ");
+    for (i=0; (s==NATS_OK) && (i<100); i++)
+    {
+        char key[64];
+
+        snprintf(key, sizeof(key), "KEY.%d", i);
+        s = kvStore_PutString(NULL, kv, key, key);
+    }
+    testCond(s == NATS_OK);
+
+    test("Check get: ");
+    for (i=0; (s==NATS_OK) && (i<100); i++)
+    {
+        kvEntry *e = NULL;
+        s = kvStore_Get(&e, kv, "KEY.22");
+        if (s == NATS_OK)
+        {
+            s = (strcmp(kvEntry_ValueString(e), "KEY.22") == 0 ? NATS_OK : NATS_ERR);
+            kvEntry_Destroy(e);
+        }
+    }
+    testCond(s == NATS_OK);
+
     kvStore_Destroy(kv);
 
     JS_TEARDOWN;
@@ -32231,6 +32281,7 @@ static testInfo allTests[] =
     {"KeyValueCrossAccount",            test_KeyValueCrossAccount},
     {"KeyValueDiscardOldToNew",         test_KeyValueDiscardOldToNew},
     {"KeyValueRePublish",               test_KeyValueRePublish},
+    {"KeyValueMirrorDirectGet",         test_KeyValueMirrorDirectGet},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

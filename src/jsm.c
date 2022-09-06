@@ -1535,8 +1535,8 @@ js_directGetMsgToJSMsg(const char *stream, natsMsg *msg)
     }
 
     s = natsMsgHeader_Get(msg, JSStream, &val);
-    if ((s != NATS_OK) || (strcmp(val, stream) != 0))
-        return nats_setError(NATS_ERR, "missing or invalid stream name '%s'", val);
+    if ((s != NATS_OK) || nats_IsStringEmpty(val))
+        return nats_setError(NATS_ERR, "missing stream name '%s'", val);
 
     val = NULL;
     s = natsMsgHeader_Get(msg, JSSequence, &val);

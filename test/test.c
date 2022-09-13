@@ -23316,6 +23316,133 @@ test_JetStreamMgtConsumers(void)
     jsConsumerInfo_Destroy(ci);
     ci = NULL;
 
+    test("Create stream: ");
+    jsStreamConfig_Init(&scfg);
+    scfg.Name = "A";
+    scfg.Subjects = (const char*[2]){"foo", "bar"};
+    scfg.SubjectsLen = 2;
+    s = js_AddStream(NULL, js, &scfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Create sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.CONSUMER.>");
+    testCond(s == NATS_OK);
+
+    test("Ephemeral with name: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Name = "a";
+    cfg.AckPolicy = js_AckExplicit;
+    cfg.InactiveThreshold = NATS_SECONDS_TO_NANOS(1);
+    s = js_AddConsumer(&ci, js, "A", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK)
+                && (strcmp(ci->Name, "a") == 0)
+                && (ci->Config->Durable == NULL)
+                && (ci->Config->InactiveThreshold == NATS_SECONDS_TO_NANOS(1))
+                && (jerr == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+    test("Check: ");
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK)
+                && (resp != NULL)
+                && (strcmp(natsMsg_GetSubject(resp), "$JS.API.CONSUMER.CREATE.A.a") == 0)
+                && (strstr(natsMsg_GetData(resp), "\"name\":\"a\"") != NULL));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Durable: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Durable = "b";
+    cfg.AckPolicy = js_AckExplicit;
+    s = js_AddConsumer(&ci, js, "A", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK)
+                && (strcmp(ci->Name, "b") == 0)
+                && (strcmp(ci->Config->Durable, "b") == 0)
+                && (ci->Config->InactiveThreshold == 0)
+                && (jerr == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+    test("Check: ");
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK)
+                && (resp != NULL)
+                && (strcmp(natsMsg_GetSubject(resp), "$JS.API.CONSUMER.DURABLE.CREATE.A.b") == 0)
+                && (strstr(natsMsg_GetData(resp), "\"name\":") == NULL));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Durable and Name same: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Name = "b";
+    cfg.Durable = "b";
+    cfg.AckPolicy = js_AckExplicit;
+    s = js_AddConsumer(&ci, js, "A", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK)
+                && (strcmp(ci->Name, "b") == 0)
+                && (strcmp(ci->Config->Durable, "b") == 0)
+                && (ci->Config->InactiveThreshold == 0)
+                && (jerr == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+    test("Check subject: ");
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK)
+                && (resp != NULL)
+                && (strcmp(natsMsg_GetSubject(resp), "$JS.API.CONSUMER.CREATE.A.b") == 0)
+                && (strstr(natsMsg_GetData(resp), "\"name\":\"b\"") != NULL));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Ephemeral with filter: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Name = "c";
+    cfg.AckPolicy = js_AckExplicit;
+    cfg.FilterSubject = "bar";
+    s = js_AddConsumer(&ci, js, "A", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK)
+                && (strcmp(ci->Name, "c") == 0)
+                && (ci->Config->Durable == NULL)
+                && (ci->Config->InactiveThreshold != 0)
+                && (jerr == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+    test("Check subject: ");
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK)
+                && (resp != NULL)
+                && (strcmp(natsMsg_GetSubject(resp), "$JS.API.CONSUMER.CREATE.A.c.bar") == 0)
+                && (strstr(natsMsg_GetData(resp), "\"name\":\"c\"") != NULL));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    test("Legacy ephemeral: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.AckPolicy = js_AckExplicit;
+    cfg.FilterSubject = "bar";
+    s = js_AddConsumer(&ci, js, "A", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK)
+                && (ci->Name != NULL)
+                && (ci->Config->Durable == NULL)
+                && (ci->Config->InactiveThreshold != 0)
+                && (jerr == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
+    test("Check subject: ");
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK)
+                && (resp != NULL)
+                && (strcmp(natsMsg_GetSubject(resp), "$JS.API.CONSUMER.CREATE.A") == 0)
+                && (strstr(natsMsg_GetData(resp), "\"name\":") == NULL));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
+    natsSubscription_Destroy(sub);
+
     JS_TEARDOWN;
 }
 

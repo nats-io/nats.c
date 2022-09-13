@@ -1974,6 +1974,12 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
     // Marshal something that is always present first, so that the optionals
     // will always start with a "," and we know that there will be a field before that.
     IFOK(s, _marshalDeliverPolicy(buf, cfg->DeliverPolicy));
+    if ((s == NATS_OK) && !nats_IsStringEmpty(cfg->Name))
+    {
+        s = natsBuf_Append(buf, ",\"name\":\"", -1);
+        IFOK(s, natsBuf_Append(buf, cfg->Name, -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+    }
     if ((s == NATS_OK) && (!nats_IsStringEmpty(cfg->Description)))
     {
         s = natsBuf_Append(buf, ",\"description\":\"", -1);
@@ -2314,9 +2320,14 @@ js_AddConsumer(jsConsumerInfo **new_ci, jsCtx *js,
     if (s != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
+    if (!nats_IsStringEmpty(cfg->Name))
+    {
+        if ((s = js_checkConsName(cfg->Name, false)) != NATS_OK)
+            return NATS_UPDATE_ERR_STACK(s);
+    }
     if (!nats_IsStringEmpty(cfg->Durable))
     {
-        if ((s = js_checkDurName(cfg->Durable)) != NATS_OK)
+        if ((s = js_checkConsName(cfg->Durable, true)) != NATS_OK)
             return NATS_UPDATE_ERR_STACK(s);
     }
 
@@ -2325,7 +2336,21 @@ js_AddConsumer(jsConsumerInfo **new_ci, jsCtx *js,
     {
         int res;
 
-        if (nats_IsStringEmpty(cfg->Durable))
+        // If there is a Name in the config, this takes precedence.
+        if (!nats_IsStringEmpty(cfg->Name))
+        {
+            // No subject filter, use <stream>.<consumer name>
+            // otherwise, the filter subject goes at the end.
+            if (nats_IsStringEmpty(cfg->FilterSubject))
+                res = nats_asprintf(&subj, jsApiConsumerCreateExT,
+                                    js_lenWithoutTrailingDot(o.Prefix), o.Prefix,
+                                    stream, cfg->Name);
+            else
+                res = nats_asprintf(&subj, jsApiConsumerCreateExWithFilterT,
+                                    js_lenWithoutTrailingDot(o.Prefix), o.Prefix,
+                                    stream, cfg->Name, cfg->FilterSubject);
+        }
+        else if (nats_IsStringEmpty(cfg->Durable))
             res = nats_asprintf(&subj, jsApiConsumerCreateT,
                                 js_lenWithoutTrailingDot(o.Prefix), o.Prefix,
                                 stream);

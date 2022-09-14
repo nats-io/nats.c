@@ -126,6 +126,12 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiDurableCreateT is used to create durable consumers.
 #define jsApiDurableCreateT "%.*s.CONSUMER.DURABLE.CREATE.%s.%s"
 
+// jsApiConsumerCreateExT is used to create a named consumer.
+#define jsApiConsumerCreateExT "%.*s.CONSUMER.CREATE.%s.%s"
+
+// jsApiConsumerCreateExWithFilterT is used to create a named consumer with a filter subject.
+#define jsApiConsumerCreateExWithFilterT "%.*s.CONSUMER.CREATE.%s.%s.%s"
+
 // jsApiConsumerInfoT is used to get information about consumers.
 #define jsApiConsumerInfoT "%.*s.CONSUMER.INFO.%s.%s"
 
@@ -218,7 +224,7 @@ void
 js_cleanStreamState(jsStreamState *state);
 
 natsStatus
-js_checkDurName(const char *dur);
+js_checkConsName(const char *cons, bool isDurable);
 
 natsStatus
 js_getMetaData(const char *reply,

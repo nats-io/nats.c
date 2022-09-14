@@ -684,6 +684,7 @@ typedef struct jsStreamInfo
  */
 typedef struct jsConsumerConfig
 {
+        const char              *Name;
         const char              *Durable;
         const char              *Description;
         jsDeliverPolicy         DeliverPolicy;

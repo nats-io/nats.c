@@ -2128,10 +2128,11 @@ _processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig
 }
 
 natsStatus
-js_checkDurName(const char *dur)
+js_checkConsName(const char *cons, bool isDurable)
 {
-    if (strchr(dur, '.') != NULL)
-        return nats_setError(NATS_INVALID_ARG, "%s '%s' (cannot contain '.')", jsErrInvalidDurableName, dur);
+    if (strchr(cons, '.') != NULL)
+        return nats_setError(NATS_INVALID_ARG, "%s '%s' (cannot contain '.')",
+            (isDurable ? jsErrInvalidDurableName : jsErrInvalidConsumerName), cons);
     return NATS_OK;
 }
 
@@ -2243,7 +2244,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     // If a durable name is specified, check that it is valid
     if (!nats_IsStringEmpty(durable))
     {
-        if ((s = js_checkDurName(durable)) != NATS_OK)
+        if ((s = js_checkConsName(durable, true)) != NATS_OK)
             return NATS_UPDATE_ERR_STACK(s);
     }
 

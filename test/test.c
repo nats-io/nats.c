@@ -23396,6 +23396,25 @@ test_JetStreamMgtConsumers(void)
     natsMsg_Destroy(resp);
     resp = NULL;
 
+    test("Durable and Name different: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Name = "x";
+    cfg.Durable = "y";
+    cfg.AckPolicy = js_AckExplicit;
+    s = js_AddConsumer(&ci, js, "A", &cfg, NULL, &jerr);
+    testCond((s == NATS_ERR)
+                && (jerr == JSConsumerDurableNameNotMatchSubjectErr)
+                && (strstr(nats_GetLastError(NULL), "consumer name in subject does not match durable name in request") != NULL));
+
+    test("Check subject: ");
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK)
+                && (resp != NULL)
+                && (strcmp(natsMsg_GetSubject(resp), "$JS.API.CONSUMER.CREATE.A.x") == 0)
+                && (strstr(natsMsg_GetData(resp), "\"name\":\"x\"") != NULL));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+
     test("Ephemeral with filter: ");
     jsConsumerConfig_Init(&cfg);
     cfg.Name = "c";

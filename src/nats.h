@@ -5884,6 +5884,37 @@ jsSubOptions_Init(jsSubOptions *opts);
 
 /** \brief Create an asynchronous subscription.
  *
+ * Typically the user or administrator will have created a JetStream
+ * consumer and this call will reference the stream/consumer to bind
+ * to with the use of #jsSubOptions's `Stream` and `Consumer`.
+ *
+ * Without the stream information, the library will use the provided
+ * `subject` to try figure out which stream this subscription is for.
+ *
+ * If a `Durable` is specified (with #jsSubOptions' `Config.Durable`),
+ * the subscription will be durable. However, note the behavior described
+ * below regarding JetStream consumers created by this call.
+ *
+ * If no `Durable` is specified, the subscription will be ephemeral
+ * and removed by the server either after calling #natsSubscription_Unsubscribe
+ * or after the subscription is destroyed and the `InactivityThreshold`
+ * has elapsed.
+ *
+ * \note If a JetStream consumer does not exist and this call creates
+ * it, it will be removed in the server once the user calls #natsSubscription_Unsubscribe
+ * or #natsSubscription_Drain, even if this is a `Durable` subscription.
+ * If the subscription should be maintained, it should be explicitly
+ * created using #js_AddConsumer and then bound to with the use
+ * of #jsSubOptions' `Stream` and `Consumer`.
+ *
+ * \warning Prior to release v3.4.0, calling #natsSubscription_Destroy
+ * would delete the JetStream consumer if it was created by this call.
+ * The original intent was that it would be deleted only with explicit
+ * calls to unsubscribe or drain. Therefore, starting v3.4.0, if
+ * the user calls only #natsSubscription_Destroy (to free memory),
+ * the JetStream consumer will no longer be deleted. The user would
+ * have to explicitly call #natsSubscription_Unsubscribe or #js_DeleteConsumer.
+ *
  * @param sub the location where to store the pointer to the newly created
  * #natsSubscription object.
  * @param js the pointer to the #jsCtx object.
@@ -5902,6 +5933,8 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
              jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
 
 /** \brief Create a synchronous subscription.
+ *
+ * See important notes in #js_Subscribe.
  *
  * @param sub the location where to store the pointer to the newly created
  * #natsSubscription object.
@@ -5926,6 +5959,8 @@ js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
  * JetStream consumer. The requirement for a durable name is lifted in NATS C client v3.4.0+
  * and NATS Server v2.7.0+.
  * \note If a durable name is specified, it cannot contain the character ".".
+ *
+ * See important notes in #js_Subscribe.
  *
  * @param sub the location where to store the pointer to the newly created #natsSubscription object.
  * @param js the pointer to the #jsCtx object.

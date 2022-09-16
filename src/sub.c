@@ -1139,7 +1139,7 @@ natsSubscription_GetID(natsSubscription* sub)
         natsSub_Unlock(sub);
         return 0;
     }
-    
+
     id = sub->sid;
 
     natsSub_Unlock(sub);
@@ -1452,6 +1452,11 @@ natsSubscription_Destroy(natsSubscription *sub)
     // we can suppress the UNSUB protocol.
     if (doUnsub && (sub->max > 0))
         doUnsub = sub->delivered < sub->max;
+
+    // For a JetStream subscription, disable the "delete consumer" flag
+    // because we auto-delete only on explicit calls to unsub/drain.
+    if (sub->jsi != NULL)
+        sub->jsi->dc = false;
 
     natsSub_Unlock(sub);
 

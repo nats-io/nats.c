@@ -25139,6 +25139,20 @@ test_JetStreamSubscribe(void)
     natsSubscription_Destroy(sub);
     sub = NULL;
 
+    test("Destroy sub does not delete consumer: ");
+    jsSubOptions_Init(&so);
+    so.Config.Durable = "delcons5";
+    s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, (void*) &args, NULL, &so, &jerr);
+    if (s == NATS_OK)
+    {
+        natsSubscription_Destroy(sub);
+        sub = NULL;
+        s = js_GetConsumerInfo(&ci, js, "TEST", "delcons5", NULL, &jerr);
+    }
+    testCond((s == NATS_OK) && (ci != NULL) && (jerr == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
+
     test("Queue and HB is invalid: ");
     jsSubOptions_Init(&so);
     so.Stream = "TEST";

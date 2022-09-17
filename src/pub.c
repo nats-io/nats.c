@@ -120,14 +120,16 @@ natsConn_publish(natsConnection *nc, natsMsg *msg, const char *reply, bool direc
             totalLen = hdrl;
         }
     }
+    // This will represent headers + data
+    totalLen += msg->dataLen;
 
-    if (!nc->initc && ((int64_t) msg->dataLen > nc->info.maxPayload))
+    if (!nc->initc && ((int64_t) totalLen > nc->info.maxPayload))
     {
         natsConn_Unlock(nc);
 
         return nats_setError(NATS_MAX_PAYLOAD,
                              "Payload %d greater than maximum allowed: %" PRId64,
-                             msg->dataLen, nc->info.maxPayload);
+                             totalLen, nc->info.maxPayload);
     }
 
     // Check if we are reconnecting, and if so check if
@@ -142,7 +144,6 @@ natsConn_publish(natsConnection *nc, natsMsg *msg, const char *reply, bool direc
         }
     }
 
-    totalLen += msg->dataLen;
     GETBYTES_SIZE(totalLen, dlb, dli)
     dlSize = (BYTES_SIZE_MAX - dli);
 

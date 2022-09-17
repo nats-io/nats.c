@@ -2592,7 +2592,6 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     natsMsgDlvWorker *ldw = NULL;
     bool             sc   = false;
     bool             sm   = false;
-    int              dl   = 0;
     nats_MsgList     *list = NULL;
     natsMutex        *mu   = NULL;
     natsCondition    *cond = NULL;
@@ -2626,10 +2625,9 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     s = _createMsg(&msg, nc, buf, bufLen, nc->ps->ma.hdr);
     if (s != NATS_OK)
         return s;
-    // bufLen is the overall buffer len. In presence of headers, we need
-    // to capture the real message payload data length, which has been
-    // computed as the bufLen - header size.
-    dl = msg->dataLen;
+    // bufLen is the total length of headers + data. Since headers become
+    // more and more prevalent, it makes sense to count them both toward
+    // the subscription's pending limit. So use bufLen for accounting.
 
     if (mf != NULL)
     {
@@ -2692,7 +2690,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     if (!ctrlMsg)
     {
         sub->msgList.msgs++;
-        sub->msgList.bytes += dl;
+        sub->msgList.bytes += bufLen;
 
         if (((sub->msgsLimit > 0) && (sub->msgList.msgs > sub->msgsLimit))
             || ((sub->bytesLimit > 0) && (sub->msgList.bytes > sub->bytesLimit)))
@@ -2706,7 +2704,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
             // Undo stats from above.
             sub->msgList.msgs--;
-            sub->msgList.bytes -= dl;
+            sub->msgList.bytes -= bufLen;
         }
         else
         {

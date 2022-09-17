@@ -239,7 +239,7 @@ natsSub_deliverMsgs(void *arg)
             sub->msgList.tail = NULL;
 
         sub->msgList.msgs--;
-        sub->msgList.bytes -= msg->dataLen;
+        sub->msgList.bytes -= natsMsg_dataAndHdrLen(msg);
 
         msg->next = NULL;
 
@@ -731,7 +731,7 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
                 sub->msgList.tail = NULL;
 
             sub->msgList.msgs--;
-            sub->msgList.bytes -= msg->dataLen;
+            sub->msgList.bytes -= natsMsg_dataAndHdrLen(msg);
 
             msg->next = NULL;
 

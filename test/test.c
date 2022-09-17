@@ -24142,7 +24142,7 @@ test_JetStreamPublishAsync(void)
         rsub->msgList.head = msg;
         rsub->msgList.tail = msg;
         rsub->msgList.msgs = 1;
-        rsub->msgList.bytes = msg->dataLen;
+        rsub->msgList.bytes = natsMsg_dataAndHdrLen(msg);
         natsCondition_Signal(rsub->cond);
         natsSub_Unlock(rsub);
 

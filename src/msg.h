@@ -62,6 +62,7 @@ struct __natsMsg
     const char          *data;
     int                 dataLen;
     int                 hdrLen;
+    int                 wsz;
     int                 flags;
     uint64_t            seq;
     int64_t             time;

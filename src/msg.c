@@ -829,6 +829,10 @@ natsMsg_create(natsMsg **newMsg,
         memcpy(ptr, buf, dataLen);
     ptr += dataLen;
     *(ptr) = '\0';
+    // This is essentially to match server's view of a message size
+    // when sending messages to pull consumers and keeping track
+    // of size in regards to a max_bytes setting.
+    msg->wsz = subjLen + replyLen + bufLen;
 
     // Setting the callback will trigger garbage collection when
     // natsMsg_Destroy() is invoked.

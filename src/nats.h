@@ -708,6 +708,7 @@ typedef struct jsConsumerConfig
         // Pull based options.
         int64_t                 MaxRequestBatch;        ///< Maximum Pull Consumer request batch size.
         int64_t                 MaxRequestExpires;      ///< Maximum Pull Consumer request expiration, expressed in number of nanoseconds.
+        int64_t                 MaxRequestMaxBytes;     ///< Maximum Pull Consumer request maximum bytes.
 
         // Push based options.
         const char              *DeliverSubject;
@@ -972,6 +973,21 @@ typedef struct jsDirectGetMsgOptions
         const char      *LastBySubject;         ///< Get the last message on that subject
 
 } jsDirectGetMsgOptions;
+
+/**
+ * Options for the natsSubscription_FetchRequest() call, which is
+ * similar to natsSubscription_Fetch() but gives more control in
+ * the configuration of the fetch.
+ */
+typedef struct jsFetchRequest
+{
+        int64_t         Expires;        ///< Expiration of the request, expressed in nanoseconds
+        int             Batch;          ///< Maximum number of messages to be received (see MaxBytes)
+        int64_t         MaxBytes;       ///< Maximum bytes for the request (request complete based on whichever Batch or MaxBytes comes first)
+        bool            NoWait;         ///< Will not wait if the request cannot be completed
+        int64_t         Heartbeat;      ///< Have server sends heartbeats to help detect communication failures
+
+} jsFetchRequest;
 
 /**
  * JetStream context options.
@@ -5996,6 +6012,30 @@ js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject, const c
 NATS_EXTERN natsStatus
 natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int64_t timeout,
                        jsErrCode *errCode);
+
+/** \brief Initializes a fetch request options structure.
+ *
+ * Use this before setting specific fetch options and passing it to #natsSubscription_FetchRequest.
+ *
+ * @param request the pointer to the #jsFetchRequest object.
+ */
+NATS_EXTERN natsStatus
+jsFetchRequest_Init(jsFetchRequest *request);
+
+/** \brief Fetches messages for a pull subscription with a complete request configuration
+ *
+ * Similar to #natsSubscription_Fetch but a full #jsFetchRequest configuration is provided
+ * for maximum control.
+ *
+ * Initialize the #jsFetchRequest structure using #jsFetchRequest_Init and then set
+ * the parameters desired, then invoke this function.
+ *
+ * @param list the location to a #natsMsgList that will be filled by the result of this call.
+ * @param sub the pointer to the #natsSubscription object.
+ * @param request the pointer to a #jsFetchRequest configuration.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_FetchRequest(natsMsgList *list, natsSubscription *sub, jsFetchRequest *request);
 
 /** \brief Returns the jsConsumerInfo associated with this subscription.
  *

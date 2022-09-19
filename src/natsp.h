@@ -365,6 +365,7 @@ typedef struct __jsSub
     char                *consumer;
     char                *nxtMsgSubj;
     bool                pull;
+    bool                inFetch;
     bool                ordered;
     bool                dc; // delete JS consumer in Unsub()/Drain()
     bool                ackNone;
@@ -378,8 +379,9 @@ typedef struct __jsSub
     uint64_t            pending;
 
     int64_t             hbi;
-    int64_t             active;
+    bool                active;
     natsTimer           *hbTimer;
+    natsMsg             *mhMsg;
 
     char                *cmeta;
     uint64_t            sseq;

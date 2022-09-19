@@ -2663,7 +2663,9 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         return NATS_OK;
     }
 
-    if ((jsi = sub->jsi) != NULL)
+    jsi = sub->jsi;
+    // For JS subscriptions (but not pull ones), handle hearbeat and flow control here.
+    if (jsi && !jsi->pull)
     {
         ctrlMsg = natsMsg_isJSCtrl(msg, &jct);
         if (ctrlMsg && jct == jsCtrlHeartbeat)

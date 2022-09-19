@@ -2130,9 +2130,20 @@ _processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig
 natsStatus
 js_checkConsName(const char *cons, bool isDurable)
 {
-    if (strchr(cons, '.') != NULL)
-        return nats_setError(NATS_INVALID_ARG, "%s '%s' (cannot contain '.')",
-            (isDurable ? jsErrInvalidDurableName : jsErrInvalidConsumerName), cons);
+    int i;
+
+    if (nats_IsStringEmpty(cons))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrConsumerNameRequired);
+
+    for (i=0; i<(int)strlen(cons); i++)
+    {
+        char c = cons[i];
+        if ((c == '.') || (c == ' ') || (c == '*') || (c == '>'))
+        {
+            return nats_setError(NATS_INVALID_ARG, "%s '%s' (cannot contain '%c')",
+                (isDurable ? jsErrInvalidDurableName : jsErrInvalidConsumerName), cons, c);
+        }
+    }
     return NATS_OK;
 }
 

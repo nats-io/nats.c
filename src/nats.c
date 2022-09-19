@@ -1750,7 +1750,7 @@ _deliverMsgs(void *arg)
 
         // Update before checking closed state.
         sub->msgList.msgs--;
-        sub->msgList.bytes -= msg->dataLen;
+        sub->msgList.bytes -= natsMsg_dataAndHdrLen(msg);
 
         // Need to check for closed subscription again here.
         // The subscription could have been unsubscribed from a callback

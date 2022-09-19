@@ -848,7 +848,7 @@ _timeoutPubAsync(natsTimer *t, void *closure)
         }
         js->rsub->msgList.tail = m;
         js->rsub->msgList.msgs++;
-        js->rsub->msgList.bytes += m->dataLen;
+        js->rsub->msgList.bytes += natsMsg_dataAndHdrLen(m);
         natsSub_Unlock(js->rsub);
 
         js->pmHead = pm->next;

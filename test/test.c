@@ -21270,6 +21270,7 @@ test_JetStreamUnmarshalAccountInfo(void)
     natsStatus          s;
     nats_JSON           *json = NULL;
     jsAccountInfo       *ai   = NULL;
+    jsTier              *r    = NULL;
     const char          *bad[] = {
         "{\"memory\":\"abc\"}",
         "{\"storage\":\"abc\"}",
@@ -21284,8 +21285,16 @@ test_JetStreamUnmarshalAccountInfo(void)
         "{\"limits\":{\"max_storage\":\"abc\"}}",
         "{\"limits\":{\"max_streams\":\"abc\"}}",
         "{\"limits\":{\"max_consumers\":\"abc\"}}",
+        "{\"limits\":{\"max_ack_pending\":\"abc\"}}",
+        "{\"limits\":{\"memory_max_stream_bytes\":\"abc\"}}",
+        "{\"limits\":{\"storage_max_stream_bytes\":\"abc\"}}",
+        "{\"limits\":{\"max_bytes_required\":\"abc\"}}",
+        "{\"tier\":123}",
+        "{\"tier\":{1, 2}}",
+        "{\"tier\":{\"R1\":123}}",
+        "{\"tier\":{\"R1\":{\"memory\":\"abc\"}}}",
     };
-    char tmp[512];
+    char tmp[2048];
     int i;
 
     for (i=0; i<(int)(sizeof(bad)/sizeof(char*)); i++)
@@ -21303,7 +21312,14 @@ test_JetStreamUnmarshalAccountInfo(void)
     snprintf(tmp, sizeof(tmp), "{\"memory\":1000,\"storage\":2000,\"streams\":5,\"consumers\":7,"\
         "\"domain\":\"MyDomain\","\
         "\"api\":{\"total\":8,\"errors\":2},"\
-        "\"limits\":{\"max_memory\":3000,\"max_storage\":4000,\"max_streams\":10,\"max_consumers\":20}}");
+        "\"limits\":{\"max_memory\":3000,\"max_storage\":4000,\"max_streams\":10,\"max_consumers\":20,"\
+        "\"max_ack_pending\":100,\"memory_max_stream_bytes\":1000000,\"storage_max_stream_bytes\":2000000,\"max_bytes_required\":true},"\
+        "\"tier\":{\"R1\":{\"memory\":1000,\"storage\":2000,\"streams\":5,\"consumers\":7,"\
+        "\"limits\":{\"max_memory\":3000,\"max_storage\":4000,\"max_streams\":10,\"max_consumers\":20,"\
+        "\"max_ack_pending\":100,\"memory_max_stream_bytes\":1000000,\"storage_max_stream_bytes\":2000000,\"max_bytes_required\":true}},"\
+        "\"R2\":{\"memory\":2000,\"storage\":3000,\"streams\":8,\"consumers\":9,"\
+        "\"limits\":{\"max_memory\":4000,\"max_storage\":5000,\"max_streams\":20,\"max_consumers\":30,"\
+        "\"max_ack_pending\":200,\"memory_max_stream_bytes\":2000000,\"storage_max_stream_bytes\":3000000}}}}");
     s = nats_JSONParse(&json, tmp, (int) strlen(tmp));
     IFOK(s, js_unmarshalAccountInfo(json, &ai));
     testCond((s == NATS_OK) && (ai != NULL)
@@ -21318,7 +21334,56 @@ test_JetStreamUnmarshalAccountInfo(void)
                 && (ai->Limits.MaxMemory == 3000)
                 && (ai->Limits.MaxStore == 4000)
                 && (ai->Limits.MaxStreams == 10)
-                && (ai->Limits.MaxConsumers == 20));
+                && (ai->Limits.MaxConsumers == 20)
+                && (ai->Limits.MaxAckPending == 100)
+                && (ai->Limits.MemoryMaxStreamBytes == 1000000)
+                && (ai->Limits.StoreMaxStreamBytes == 2000000)
+                && (ai->Limits.MaxBytesRequired)
+                && (ai->Tiers != NULL)
+                && (ai->TiersLen == 2));
+
+    test("Check tier R1: ");
+    if (strcmp(ai->Tiers[0]->Name, "R1") == 0)
+        r = ai->Tiers[0];
+    else if (strcmp(ai->Tiers[1]->Name, "R1") == 0)
+        r = ai->Tiers[1];
+    else
+        s = NATS_ERR;
+    testCond((s == NATS_OK)
+                && (r->Memory == 1000)
+                && (r->Store == 2000)
+                && (r->Streams == 5)
+                && (r->Consumers == 7)
+                && (r->Limits.MaxMemory == 3000)
+                && (r->Limits.MaxStore == 4000)
+                && (r->Limits.MaxStreams == 10)
+                && (r->Limits.MaxConsumers == 20)
+                && (r->Limits.MaxAckPending == 100)
+                && (r->Limits.MemoryMaxStreamBytes == 1000000)
+                && (r->Limits.StoreMaxStreamBytes == 2000000)
+                && r->Limits.MaxBytesRequired);
+
+    test("Check tier R2: ");
+    if (strcmp(ai->Tiers[0]->Name, "R2") == 0)
+        r = ai->Tiers[0];
+    else if (strcmp(ai->Tiers[1]->Name, "R2") == 0)
+        r = ai->Tiers[1];
+    else
+        s = NATS_ERR;
+    testCond((s == NATS_OK)
+                && (r->Memory == 2000)
+                && (r->Store == 3000)
+                && (r->Streams == 8)
+                && (r->Consumers == 9)
+                && (r->Limits.MaxMemory == 4000)
+                && (r->Limits.MaxStore == 5000)
+                && (r->Limits.MaxStreams == 20)
+                && (r->Limits.MaxConsumers == 30)
+                && (r->Limits.MaxAckPending == 200)
+                && (r->Limits.MemoryMaxStreamBytes == 2000000)
+                && (r->Limits.StoreMaxStreamBytes == 3000000)
+                && (!r->Limits.MaxBytesRequired));
+
     nats_JSONDestroy(json);
     jsAccountInfo_Destroy(ai);
 }

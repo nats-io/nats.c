@@ -1718,6 +1718,75 @@ js_EraseMsg(jsCtx *js, const char *stream, uint64_t seq, jsOptions *opts, jsErrC
 // Account related functions
 //
 
+static natsStatus
+_unmarshalAccLimits(nats_JSON *json, jsAccountLimits *limits)
+{
+    natsStatus  s;
+    nats_JSON   *obj = NULL;
+
+    s = nats_JSONGetObject(json, "limits", &obj);
+    if (obj == NULL)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    IFOK(s, nats_JSONGetLong(obj, "max_memory", &(limits->MaxMemory)));
+    IFOK(s, nats_JSONGetLong(obj, "max_storage", &(limits->MaxStore)));
+    IFOK(s, nats_JSONGetLong(obj, "max_streams", &(limits->MaxStreams)));
+    IFOK(s, nats_JSONGetLong(obj, "max_consumers", &(limits->MaxConsumers)));
+    IFOK(s, nats_JSONGetLong(obj, "max_ack_pending", &(limits->MaxAckPending)));
+    IFOK(s, nats_JSONGetLong(obj, "memory_max_stream_bytes", &(limits->MemoryMaxStreamBytes)));
+    IFOK(s, nats_JSONGetLong(obj, "storage_max_stream_bytes", &(limits->StoreMaxStreamBytes)));
+    IFOK(s, nats_JSONGetBool(obj, "max_bytes_required", &(limits->MaxBytesRequired)));
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_fillTier(void *userInfo, const char *subject, nats_JSONField *f)
+{
+    jsAccountInfo   *ai     = (jsAccountInfo*) userInfo;
+    natsStatus      s       = NATS_OK;
+    jsTier          *t      = NULL;
+    nats_JSON       *json   = f->value.vobj;
+
+    t = (jsTier*) NATS_CALLOC(1, sizeof(jsTier));
+    if (t == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    ai->Tiers[ai->TiersLen++] = t;
+
+    DUP_STRING(s, t->Name, subject);
+    IFOK(s, nats_JSONGetULong(json, "memory", &(t->Memory)));
+    IFOK(s, nats_JSONGetULong(json, "storage", &(t->Store)));
+    IFOK(s, nats_JSONGetLong(json, "streams", &(t->Streams)));
+    IFOK(s, nats_JSONGetLong(json, "consumers", &(t->Consumers)));
+    IFOK(s, _unmarshalAccLimits(json, &(t->Limits)));
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_unmarshalAccTiers(nats_JSON *json, jsAccountInfo *ai)
+{
+    nats_JSON               *obj    = NULL;
+    natsStatus              s       = NATS_OK;
+    int                     n;
+
+    s = nats_JSONGetObject(json, "tier", &obj);
+    if (obj == NULL)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    n = natsStrHash_Count(obj->fields);
+    if (n == 0)
+        return NATS_OK;
+
+    ai->Tiers = (jsTier**) NATS_CALLOC(n, sizeof(jsTier*));
+    if (ai->Tiers == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    s = nats_JSONRange(obj, TYPE_OBJECT, 0, _fillTier, (void*) ai);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 natsStatus
 js_unmarshalAccountInfo(nats_JSON *json, jsAccountInfo **new_ai)
 {
@@ -1741,15 +1810,8 @@ js_unmarshalAccountInfo(nats_JSON *json, jsAccountInfo **new_ai)
         IFOK(s, nats_JSONGetULong(obj, "errors", &(ai->API.Errors)));
         obj = NULL;
     }
-    IFOK(s, nats_JSONGetObject(json, "limits", &obj));
-    if ((s == NATS_OK) && (obj != NULL))
-    {
-        IFOK(s, nats_JSONGetLong(obj, "max_memory", &(ai->Limits.MaxMemory)));
-        IFOK(s, nats_JSONGetLong(obj, "max_storage", &(ai->Limits.MaxStore)));
-        IFOK(s, nats_JSONGetLong(obj, "max_streams", &(ai->Limits.MaxStreams)));
-        IFOK(s, nats_JSONGetLong(obj, "max_consumers", &(ai->Limits.MaxConsumers)));
-        obj = NULL;
-    }
+    IFOK(s, _unmarshalAccLimits(json, &(ai->Limits)));
+    IFOK(s, _unmarshalAccTiers(json, ai));
 
     if (s == NATS_OK)
         *new_ai = ai;
@@ -1827,6 +1889,18 @@ jsAccountInfo_Destroy(jsAccountInfo *ai)
     if (ai == NULL)
         return;
 
+    if (ai->Tiers != NULL)
+    {
+        int i;
+        for (i=0; i<ai->TiersLen; i++)
+        {
+            jsTier *t = ai->Tiers[i];
+
+            NATS_FREE((char*) t->Name);
+            NATS_FREE(t);
+        }
+        NATS_FREE(ai->Tiers);
+    }
     NATS_FREE(ai->Domain);
     NATS_FREE(ai);
 }

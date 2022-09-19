@@ -889,8 +889,23 @@ typedef struct  jsAccountLimits
         int64_t MaxStore;
         int64_t MaxStreams;
         int64_t MaxConsumers;
+        int64_t MaxAckPending;
+        int64_t MemoryMaxStreamBytes;
+        int64_t StoreMaxStreamBytes;
+        bool    MaxBytesRequired;
 
 } jsAccountLimits;
+
+typedef struct jsTier
+{
+        const char              *Name;
+        uint64_t                Memory;
+        uint64_t                Store;
+        int64_t                 Streams;
+        int64_t                 Consumers;
+        jsAccountLimits         Limits;
+
+} jsTier;
 
 /**
  * Information about the JetStream usage from the current account.
@@ -904,6 +919,8 @@ typedef struct jsAccountInfo
         char                    *Domain;
         jsAPIStats              API;
         jsAccountLimits         Limits;
+        jsTier                  **Tiers;
+        int                     TiersLen;
 
 } jsAccountInfo;
 

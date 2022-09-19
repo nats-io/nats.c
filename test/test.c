@@ -22874,6 +22874,20 @@ test_JetStreamMgtConsumers(void)
     };
     jsReplayPolicy          replayPolicies[] = {
         js_ReplayInstant, js_ReplayOriginal};
+    const char              *badConsNames[] = {
+        "foo.bar",
+        ".foobar",
+        "foobar.",
+        "foo bar",
+        " foobar",
+        "foobar ",
+        "foo*bar",
+        "*foobar",
+        "foobar*",
+        "foo>bar",
+        ">foobar",
+        "foobar>",
+    };
 
     JS_SETUP(2, 9, 0);
 
@@ -22917,6 +22931,27 @@ test_JetStreamMgtConsumers(void)
     testCond((s == NATS_INVALID_ARG) && (ci == NULL)
                 && (strstr(nats_GetLastError(NULL), jsErrInvalidDurableName) != NULL));
     nats_clearLastError();
+
+    s = NATS_OK;
+    test("Add consumer, invalid name: ");
+    jsConsumerConfig_Init(&cfg);
+    for (i=0; (s == NATS_OK) && (i<(int)(sizeof(badConsNames)/sizeof(char*))); i++)
+    {
+        cfg.Name = badConsNames[i];
+        fprintf(stderr, "@@IK: trying with cons=%s\n", cfg.Name);
+        fflush(stderr);
+        s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, NULL);
+        if ((s == NATS_INVALID_ARG) && (ci == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidConsumerName) != NULL))
+        {
+            nats_clearLastError();
+            s = NATS_OK;
+        } else {
+            printf("@@IK: s=%d\n", s);
+            nats_PrintLastErrorStack(stderr);
+        }
+    }
+    testCond(s == NATS_OK);
 
     test("Create check sub: ");
     s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.CONSUMER.CREATE.MY_STREAM");

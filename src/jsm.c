@@ -1877,18 +1877,6 @@ jsRePublish_Init(jsRePublish *rp)
 //
 
 static natsStatus
-_checkConsumerName(const char *consumer)
-{
-    if (nats_IsStringEmpty(consumer))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrConsumerNameRequired);
-
-    if (strchr(consumer, '.') != NULL)
-        return nats_setError(NATS_INVALID_ARG, "%s '%s' (cannot contain '.')", jsErrInvalidConsumerName, consumer);
-
-    return NATS_OK;
-}
-
-static natsStatus
 _marshalDeliverPolicy(natsBuffer *buf, jsDeliverPolicy p)
 {
     natsStatus  s;
@@ -2415,7 +2403,7 @@ js_GetConsumerInfo(jsConsumerInfo **new_ci, jsCtx *js,
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     s = _checkStreamName(stream);
-    IFOK(s, _checkConsumerName(consumer))
+    IFOK(s, js_checkConsName(consumer, false))
     if (s != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
@@ -2469,7 +2457,7 @@ js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     s = _checkStreamName(stream);
-    IFOK(s, _checkConsumerName(consumer))
+    IFOK(s, js_checkConsName(consumer, false))
     if (s != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 

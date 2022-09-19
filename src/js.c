@@ -2686,19 +2686,6 @@ js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject, const c
     if (errCode != NULL)
         *errCode = 0;
 
-    // Check for invalid ack policy
-    if (opts != NULL)
-    {
-        jsAckPolicy p = (opts->Config.AckPolicy);
-
-        if ((p == js_AckNone) || (p == js_AckAll))
-        {
-            const char *ap = (p == js_AckNone ? jsAckNoneStr : jsAckAllStr);
-            return nats_setError(NATS_INVALID_ARG,
-                                 "invalid ack mode '%s' for pull consumers", ap);
-        }
-    }
-
     s = _subscribe(sub, js, subject, durable, NULL, NULL, true, jsOpts, opts, errCode);
     return NATS_UPDATE_ERR_STACK(s);
 }

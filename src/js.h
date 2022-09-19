@@ -65,6 +65,7 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsErrConsumerConfigRequired         "consumer configuration required"
 #define jsErrInvalidDurableName             "invalid durable name"
 #define jsErrInvalidConsumerName            "invalid consumer name"
+#define jsErrConcurrentFetchNotAllowed      "concurrent fetch request not allowed"
 
 #define jsCtrlHeartbeat     (1)
 #define jsCtrlFlowControl   (2)

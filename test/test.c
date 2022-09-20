@@ -21609,6 +21609,24 @@ test_JetStreamUnmarshalStreamInfo(void)
         "{\"config\":{\"mirror\":{\"external\":{\"api\":123}}}}",
         "{\"config\":{\"mirror\":{\"external\":{\"deliver\":123}}}}",
         "{\"state\":123}",
+        "{\"state\":{\"messages\":\"abc\"}}",
+        "{\"state\":{\"bytes\":\"abc\"}}",
+        "{\"state\":{\"first_seq\":\"abc\"}}",
+        "{\"state\":{\"first_ts\":\"abc\"}}",
+        "{\"state\":{\"last_seq\":\"abc\"}}",
+        "{\"state\":{\"last_ts\":\"abc\"}}",
+        "{\"state\":{\"num_deleted\":\"abc\"}}",
+        "{\"state\":{\"deleted\":\"abc\"}}",
+        "{\"state\":{\"deleted\":[\"abc\",\"def\"]}}",
+        "{\"state\":{\"lost\":\"abc\"}}",
+        "{\"state\":{\"lost\":{\"msgs\":\"abc\"}}}",
+        "{\"state\":{\"lost\":{\"msgs\":[\"abc\",\"def\"]}}}",
+        "{\"state\":{\"lost\":{\"bytes\":\"abc\"}}}",
+        "{\"state\":{\"consumer_count\":\"abc\"}}",
+        "{\"state\":{\"num_subjects\":\"abc\"}}",
+        "{\"state\":{\"subjects\":\"abc\"}}",
+        "{\"state\":{\"subjects\":{\"abc\"}}}",
+        "{\"state\":{\"subjects\":{\"abc\":1,\"def\":\"ghi\"}}}",
         "{\"cluster\":123}",
         "{\"cluster\":{\"name\":123}}",
         "{\"cluster\":{\"name\":\"S1\",\"leader\":123}}",
@@ -23003,17 +23021,12 @@ test_JetStreamMgtConsumers(void)
     for (i=0; (s == NATS_OK) && (i<(int)(sizeof(badConsNames)/sizeof(char*))); i++)
     {
         cfg.Name = badConsNames[i];
-        fprintf(stderr, "@@IK: trying with cons=%s\n", cfg.Name);
-        fflush(stderr);
         s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, NULL);
         if ((s == NATS_INVALID_ARG) && (ci == NULL)
                 && (strstr(nats_GetLastError(NULL), jsErrInvalidConsumerName) != NULL))
         {
             nats_clearLastError();
             s = NATS_OK;
-        } else {
-            printf("@@IK: s=%d\n", s);
-            nats_PrintLastErrorStack(stderr);
         }
     }
     testCond(s == NATS_OK);
@@ -28675,6 +28688,52 @@ test_JetStreamBackOffRedeliveries(void)
 }
 
 static void
+_subjectsInfoReq(natsConnection *nc, natsMsg **msg, void *closure)
+{
+    natsMsg     *newMsg     = NULL;
+    int         *count      = (int*) closure;
+    const char  *payload    = NULL;
+
+    if (strstr((*msg)->data, "stream_info_response") == NULL)
+        return;
+
+    (*count)++;
+    if (*count == 1)
+    {
+        // Pretend that we have 5 subjects and a limit of 2
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.stream_info_response\",\"total\":5,\"offset\":0,\"limit\":2,"\
+        "\"config\":{\"name\":\"TEST\",\"subjects\":[\"foo.>\"]},"\
+        "\"state\":{\"num_subjects\":5,\"subjects\":{\"foo.bar\":1,\"foo.baz\":2}}}";
+    }
+    else if (*count == 2)
+    {
+        // Continue with the pagination
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.stream_info_response\",\"total\":5,\"offset\":2,\"limit\":2,"\
+        "\"config\":{\"name\":\"TEST\",\"subjects\":[\"foo.>\"]},"\
+        "\"state\":{\"num_subjects\":5,\"subjects\":{\"foo.bat\":3,\"foo.box\":4}}}";
+    }
+    else if (*count == 3)
+    {
+        // Pretend that the number went down in between page requests and the
+        // last request got nothing in return.
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.stream_info_response\",\"total\":3,\"offset\":3,\"limit\":2,"\
+        "\"config\":{\"name\":\"TEST\",\"subjects\":[\"foo.>\"]},"\
+        "\"state\":{\"num_subjects\":3}}";
+    }
+    else
+    {
+        // Keep the original message
+        return;
+    }
+    if (natsMsg_create(&newMsg, (*msg)->subject, (int) strlen((*msg)->subject),
+                        NULL, 0, payload, (int) strlen(payload), 0) == NATS_OK)
+    {
+        natsMsg_Destroy(*msg);
+        *msg = newMsg;
+    }
+}
+
+static void
 test_JetStreamInfoWithSubjects(void)
 {
     natsStatus          s;
@@ -28682,8 +28741,11 @@ test_JetStreamInfoWithSubjects(void)
     jsStreamConfig      cfg;
     jsErrCode           jerr = 0;
     jsOptions           o;
+    int                 count = 0;
+    natsSubscription    *sub  = NULL;
+    natsMsg             *msg  = NULL;
 
-    JS_SETUP(2, 7, 2);
+    JS_SETUP(2, 9, 0);
 
     test("Create stream: ");
     jsStreamConfig_Init(&cfg);
@@ -28756,6 +28818,48 @@ test_JetStreamInfoWithSubjects(void)
     testCond((s == NATS_OK) && (jerr == 0) && (si->State.NumSubjects == 3));
     jsStreamInfo_Destroy(si);
     si = NULL;
+
+    test("Create sub for pagination check: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.STREAM.INFO.TEST");
+    testCond(s == NATS_OK);
+
+    natsConn_setFilterWithClosure(nc, _subjectsInfoReq, (void*) &count);
+
+    test("Get all subjects with pagination: ");
+    jsOptions_Init(&o);
+    o.Stream.Info.SubjectsFilter = ">";
+    s = js_GetStreamInfo(&si, js, "TEST", &o, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (si != NULL) && (si->State.NumSubjects == 3)
+                && (si->State.Subjects != NULL)
+                && (si->State.Subjects->List != NULL)
+                && (si->State.Subjects->Count == 4));
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    natsConn_setFilter(nc, NULL);
+
+    test("Check 1st request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset") == NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check 2nd request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":2") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check 3rd request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":4") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    natsSubscription_Destroy(sub);
 
     JS_TEARDOWN;
 }

@@ -26719,14 +26719,12 @@ test_JetStreamSubscribePull(void)
     int64_t             start, dur;
     int                 i;
     natsThread          *t = NULL;
-    const char          *badAckStr[] = {jsAckNoneStr, jsAckAllStr};
-    jsAckPolicy         badAck[] = {js_AckNone, js_AckAll};
     jsConsumerConfig    cc;
     jsFetchRequest      fr;
     natsSubscription    *sub2 = NULL;
     natsSubscription    *sub3 = NULL;
 
-    JS_SETUP(2, 7, 0);
+    JS_SETUP(2, 9, 0);
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)
@@ -26742,17 +26740,6 @@ test_JetStreamSubscribePull(void)
         s = js_PullSubscribe(&sub, js, "", "dur", NULL, NULL, &jerr);
     testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0));
     nats_clearLastError();
-
-    for (i=0; i<2; i++)
-    {
-        test("Create pull sub (invalid ack mode): ");
-        jsSubOptions_Init(&so);
-        so.Config.AckPolicy = badAck[i];
-        s = js_PullSubscribe(&sub, js, "foo", "dur", NULL, &so, &jerr);
-        testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0)
-                    && (strstr(nats_GetLastError(NULL), badAckStr[i]) != NULL));
-        nats_clearLastError();
-    }
 
     test("Create reg sync sub: ");
     s = natsConnection_SubscribeSync(&sub, nc, "foo");
@@ -26805,6 +26792,24 @@ test_JetStreamSubscribePull(void)
     sc.SubjectsLen = 1;
     s = js_AddStream(NULL, js, &sc, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
+
+    test("AckNone ok: ");
+    jsSubOptions_Init(&so);
+    so.Config.AckPolicy = js_AckNone;
+    s = js_PullSubscribe(&sub, js, "foo", "ackNone", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+    natsSubscription_Unsubscribe(sub);
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("AckAll ok: ");
+    jsSubOptions_Init(&so);
+    so.Config.AckPolicy = js_AckAll;
+    s = js_PullSubscribe(&sub, js, "foo", "ackAll", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+    natsSubscription_Unsubscribe(sub);
+    natsSubscription_Destroy(sub);
+    sub = NULL;
 
     test("Create push consumer: ");
     jsConsumerConfig_Init(&cc);

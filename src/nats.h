@@ -647,6 +647,34 @@ typedef struct jsStreamInfo
 } jsStreamInfo;
 
 /**
+ * List of stream information objects returned by #js_Streams
+ *
+ * \note Once done, the list should be destroyed calling #jsStreamInfoList_Destroy
+ *
+ * @see jsStreamInfoList_Destroy
+ */
+typedef struct jsStreamInfoList
+{
+        jsStreamInfo    **List;
+        int             Count;
+
+} jsStreamInfoList;
+
+/**
+ * List of stream names returned by #js_StreamNames
+ *
+ * \note Once done, the list should be destroyed calling #jsStreamNamesList_Destroy
+ *
+ * @see jsStreamNamesList_Destroy
+ */
+typedef struct jsStreamNamesList
+{
+        char    **List;
+        int     Count;
+
+} jsStreamNamesList;
+
+/**
  * Configuration of a JetStream consumer.
  *
  * In order to add a consumer, a configuration needs to be set.
@@ -5595,6 +5623,64 @@ js_GetStreamInfo(jsStreamInfo **si, jsCtx *js, const char *stream, jsOptions *op
  */
 NATS_EXTERN void
 jsStreamInfo_Destroy(jsStreamInfo *si);
+
+/** \brief Retrieves the list of all available streams.
+ *
+ * Retrieves the list of all #jsStreamInfo. It is possible to filter
+ * which streams are to be retrieved based on a subject filter.
+ *
+ * \warning The list should be destroyed when no longer used by
+ * calling #jsStreamInfoList_Destroy.
+ *
+ * @param list the location where to store the pointer to the new #jsStreamInfoList object.
+ * @param js the pointer to the #jsCtx context.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_Streams(jsStreamInfoList **list, jsCtx *js, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the stream information list object.
+ *
+ * Releases memory allocated for this stream information list.
+ *
+ * \warning All #jsStreamInfo pointers contained in the list will
+ * be destroyed by this call.
+ *
+ * @param list the pointer to the #jsStreamInfoList object.
+ */
+NATS_EXTERN void
+jsStreamInfoList_Destroy(jsStreamInfoList *list);
+
+/** \brief Retrieves the list of all available stream names.
+ *
+ * Retrieves the list of all stream names. It is possible to filter
+ * which streams are to be retrieved based on a subject filter.
+ *
+ * \warning The list should be destroyed when no longer used by
+ * calling #jsStreamNamesList_Destroy.
+ *
+ * @param list the location where to store the pointer to the new #jsStreamNamesList object.
+ * @param js the pointer to the #jsCtx context.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_StreamNames(jsStreamNamesList **list, jsCtx *js, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the stream names list object.
+ *
+ * Releases memory allocated for this list of stream names.
+ *
+ * \warning All string pointers contained in the list will
+ * be destroyed by this call.
+ *
+ * @param list the pointer to the #jsStreamNamesList object.
+ */
+NATS_EXTERN void
+jsStreamNamesList_Destroy(jsStreamNamesList *list);
 
 /** \brief Initializes a consumer configuration structure.
  *

@@ -157,6 +157,12 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiDirectMsgGetLastBySubjectT is the endpoint to perform a direct get of a message by subject.
 #define jsApiDirectMsgGetLastBySubjectT "%.*s.DIRECT.GET.%s.%s"
 
+// jsApiStreamListT is the endpoint to get the list of stream infos.
+#define jsApiStreamListT "%.*s.STREAM.LIST"
+
+// jsApiStreamNamesT is the endpoint to get the list of stream names.
+#define jsApiStreamNamesT "%.*s.STREAM.NAMES"
+
 // Creates a subject based on the option's prefix, the subject format and its values.
 #define js_apiSubj(s, o, f, ...) (nats_asprintf((s), (f), (o)->Prefix, __VA_ARGS__) < 0 ? NATS_NO_MEMORY : NATS_OK)
 

@@ -3198,6 +3198,7 @@ test_natsJSON(void)
             "{ \"test\": [\"abc,def\"]}",
             "{ \"test\": [{\"a\": 1}, {\"b\": \"c\"}]}",
             "{ \"test\": [[{\"a\": 1}], [{\"b\": \"c\"}]]}",
+            "{ \"test\": []}",
             "{ \"test\": {\"inner\":\"a\",\"inner2\":2,\"inner3\":false,\"inner4\":{\"inner_inner1\" : 1.234}}}",
             "{ \"test\": \"a\\\"b\\\"c\"}",
             "{ \"test\": \"\\\"\\\\/\b\f\n\r\t\\uabcd\"}",
@@ -4113,6 +4114,47 @@ test_natsJSON(void)
                 && (strstr(nats_GetLastError(NULL), "on purpose")));
     nats_clearLastError();
     nats_JSONDestroy(json);
+    json = NULL;
+
+    test("Parse empty array: ");
+    s = nats_JSONParse(&json, "{\"empty\":[]}", -1);
+    testCond(s == NATS_OK);
+
+    test("Get empty array array: ");
+    s = nats_JSONGetArrayArray(json, "empty", &arrArrVal, &arrCount);
+    testCond((s == NATS_OK) && (arrArrVal == NULL) && (arrCount == 0));
+
+    test("Get empty obj array: ");
+    s = nats_JSONGetArrayObject(json, "empty", &arrObjVal, &arrCount);
+    testCond((s == NATS_OK) && (arrObjVal == NULL) && (arrCount == 0));
+
+    test("Get empty ulong array: ");
+    s = nats_JSONGetArrayULong(json, "empty", &arrULongVal, &arrCount);
+    testCond((s == NATS_OK) && (arrULongVal == NULL) && (arrCount == 0));
+
+    test("Get empty long array: ");
+    s = nats_JSONGetArrayLong(json, "empty", &arrLongVal, &arrCount);
+    testCond((s == NATS_OK) && (arrLongVal == NULL) && (arrCount == 0));
+
+    test("Get empty int array: ");
+    s = nats_JSONGetArrayInt(json, "empty", &arrIntVal, &arrCount);
+    testCond((s == NATS_OK) && (arrIntVal == NULL) && (arrCount == 0));
+
+    test("Get empty double array: ");
+    s = nats_JSONGetArrayDouble(json, "empty", &arrDoubleVal, &arrCount);
+    testCond((s == NATS_OK) && (arrDoubleVal == NULL) && (arrCount == 0));
+
+    test("Get empty bool array: ");
+    s = nats_JSONGetArrayBool(json, "empty", &arrBoolVal, &arrCount);
+    testCond((s == NATS_OK) && (arrBoolVal == NULL) && (arrCount == 0));
+
+    test("Get empty string array: ");
+    s = nats_JSONGetArrayStr(json, "empty", &arrVal, &arrCount);
+    testCond((s == NATS_OK) && (arrVal == NULL) && (arrCount == 0));
+
+    nats_JSONDestroy(json);
+    json = NULL;
+
 }
 
 static void

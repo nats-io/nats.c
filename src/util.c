@@ -717,6 +717,13 @@ _jsonGetArray(char **ptr, nats_JSONArray **newArray, int nested)
     {
         p = _jsonTrimSpace(p);
 
+        if ((typ == TYPE_NOT_SET) && (*p == ']'))
+        {
+            array.typ = TYPE_NULL;
+            end = true;
+            break;
+        }
+
         // Initialize the field before parsing.
         memset(&field, 0, sizeof(nats_JSONField));
 
@@ -1454,6 +1461,12 @@ nats_JSONGetArrayField(nats_JSON *json, const char *fieldName, int fieldType, na
         return nats_setError(NATS_INVALID_ARG,
                              "Field '%s' is not an array, it has type: %d",
                              field->name, field->typ);
+    // If empty array, return NULL/OK
+    if (field->value.varr->typ == TYPE_NULL)
+    {
+        *retField = NULL;
+        return NATS_OK;
+    }
     if (fieldType != field->value.varr->typ)
         return nats_setError(NATS_INVALID_ARG,
                              "Asked for field '%s' as an array of type: %d, but it is an array of type: %d",

@@ -504,6 +504,9 @@ typedef struct jsStreamConfig {
         // Allow higher performance and unified direct access for mirrors as well.
         bool                    MirrorDirect;
 
+        // Allow KV like semantics to also discard new on a per subject basis
+        bool                    DiscardNewPerSubject;
+
 } jsStreamConfig;
 
 /**

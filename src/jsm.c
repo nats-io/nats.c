@@ -613,6 +613,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, _unmarshalRePublish(jcfg, "republish", &(cfg->RePublish)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_direct", &(cfg->AllowDirect)));
     IFOK(s, nats_JSONGetBool(jcfg, "mirror_direct", &(cfg->MirrorDirect)));
+    IFOK(s, nats_JSONGetBool(jcfg, "discard_new_per_subject", &(cfg->DiscardNewPerSubject)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -732,6 +733,8 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         IFOK(s, natsBuf_Append(buf, ",\"allow_direct\":true", -1));
     if ((s == NATS_OK) && cfg->MirrorDirect)
         IFOK(s, natsBuf_Append(buf, ",\"mirror_direct\":true", -1));
+    if ((s == NATS_OK) && cfg->DiscardNewPerSubject)
+        IFOK(s, natsBuf_Append(buf, ",\"discard_new_per_subject\":true", -1));
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 

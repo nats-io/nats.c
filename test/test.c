@@ -23192,6 +23192,95 @@ test_JetStreamMgtStreams(void)
 }
 
 static void
+_consumersInfoListReq(natsConnection *nc, natsMsg **msg, void *closure)
+{
+    int         *count      = (int*) closure;
+    const char  *payload    = NULL;
+    natsMsg     *newMsg     = NULL;
+
+
+    if (strstr(natsMsg_GetData(*msg), "consumer_list_response") == NULL)
+        return;
+
+    (*count)++;
+    if (*count == 1)
+    {
+        // Pretend limit is 2 and send 2 simplified consumer infos
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.consumer_list_response\",\"total\":5,\"offset\":0,\"limit\":2,"\
+            "\"consumers\":[{\"stream_name\":\"A\",\"name\":\"a\"},{\"stream_name\":\"A\",\"name\":\"b\"}]}";
+    }
+    else if (*count == 2)
+    {
+        // Pretend that there is a repeat of a stream name to check
+        // that we are properly replacing and not leaking memory.
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.consumer_list_response\",\"total\":5,\"offset\":2,\"limit\":2,"\
+            "\"consumers\":[{\"stream_name\":\"A\",\"name\":\"b\"},{\"stream_name\":\"A\",\"name\":\"c\"}]}";
+    }
+    else if (*count == 3)
+    {
+        // Pretend that our next page was over the limit (say streams were removed)
+        // and therefore the server returned no streams (but set offset to total)
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.consumer_list_response\",\"total\":3,\"offset\":3,\"limit\":2,"\
+            "\"consumers\":[]}";
+    }
+    else
+    {
+        // Use original message
+        return;
+    }
+    if (natsMsg_create(&newMsg, (*msg)->subject, (int) strlen((*msg)->subject), NULL, 0,
+                        payload, (int) strlen(payload), 0) == NATS_OK)
+    {
+        natsMsg_Destroy(*msg);
+        *msg = newMsg;
+    }
+}
+
+static void
+_consumerNamesListReq(natsConnection *nc, natsMsg **msg, void *closure)
+{
+    int         *count      = (int*) closure;
+    const char  *payload    = NULL;
+    natsMsg     *newMsg     = NULL;
+
+    if (strstr(natsMsg_GetData(*msg), "consumer_names_response") == NULL)
+        return;
+
+    (*count)++;
+    if (*count == 1)
+    {
+        // Pretend limit is 2 and send 2 stream names
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.consumer_names_response\",\"total\":5,\"offset\":0,\"limit\":2,"\
+            "\"consumers\":[\"a\",\"b\"]}";
+    }
+    else if (*count == 2)
+    {
+        // Pretend that there is a repeat of a stream name to check
+        // that we are properly replacing and not leaking memory.
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.consumer_names_response\",\"total\":5,\"offset\":0,\"limit\":2,"\
+            "\"consumers\":[\"b\",\"c\"]}";
+    }
+    else if (*count == 3)
+    {
+        // Pretend that our next page was over the limit (say streams were removed)
+        // and therefore the server returned no streams (but set offset to total)
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.consumer_names_response\",\"total\":3,\"offset\":3,\"limit\":2,"\
+            "\"consumers\":[]}";
+    }
+    else
+    {
+        // Use original message
+        return;
+    }
+    if (natsMsg_create(&newMsg, (*msg)->subject, (int) strlen((*msg)->subject), NULL, 0,
+                        payload, (int) strlen(payload), 0) == NATS_OK)
+    {
+        natsMsg_Destroy(*msg);
+        *msg = newMsg;
+    }
+}
+
+static void
 test_JetStreamMgtConsumers(void)
 {
     natsStatus              s;
@@ -23241,6 +23330,10 @@ test_JetStreamMgtConsumers(void)
         ">foobar",
         "foobar>",
     };
+    jsConsumerInfoList  *ciList = NULL;
+    jsConsumerNamesList *cnList = NULL;
+    int                 count   = 0;
+    natsMsg             *msg    = NULL;
 
     JS_SETUP(2, 9, 0);
 
@@ -23845,6 +23938,134 @@ test_JetStreamMgtConsumers(void)
     resp = NULL;
 
     natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("List consumer infos (bad args): ");
+    s = js_Consumers(NULL, js, "A", NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_Consumers(&ciList, NULL, "A", NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_Consumers(&ciList, js, NULL, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_Consumers(&ciList, js, "", NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_Consumers(&ciList, js, "invalid.stream.name", NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("List consumer infos (unknown stream): ");
+    s = js_Consumers(&ciList, js, "unknown", NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND) && (jerr == JSStreamNotFoundErr));
+    nats_clearLastError();
+
+    test("Create sub for pagination check: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.CONSUMER.LIST.A");
+    testCond(s == NATS_OK);
+
+    natsConn_setFilterWithClosure(nc, _consumersInfoListReq, (void*) &count);
+
+    test("List consumers infos: ");
+    s = js_Consumers(&ciList, js, "A", NULL, &jerr);
+    testCond((s == NATS_OK) && (ciList != NULL) && (ciList->List != NULL) && (ciList->Count == 3));
+
+    natsConn_setFilter(nc, NULL);
+
+    test("Check 1st request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":0") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check 2nd request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":2") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check 3rd request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":4") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Destroy list: ");
+    // Will see with valgrind if this is doing the right thing
+    jsConsumerInfoList_Destroy(ciList);
+    ciList = NULL;
+    // Check this does not crash
+    jsConsumerInfoList_Destroy(ciList);
+    testCond(true);
+
+    // Do names now
+
+    test("List consumer names (bad args): ");
+    s = js_ConsumerNames(NULL, js, "A", NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_ConsumerNames(&cnList, NULL, "A", NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_ConsumerNames(&cnList, js, NULL, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_ConsumerNames(&cnList, js, "", NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_ConsumerNames(&cnList, js, "invalid.stream.name", NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("List consumer names (unknown stream): ");
+    s = js_ConsumerNames(&cnList, js, "unknown", NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND) && (jerr == JSStreamNotFoundErr));
+    nats_clearLastError();
+
+    test("Create sub for pagination check: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.CONSUMER.NAMES.A");
+    testCond(s == NATS_OK);
+
+    count = 0;
+    natsConn_setFilterWithClosure(nc, _consumerNamesListReq, (void*) &count);
+
+    test("List consumer names: ");
+    s = js_ConsumerNames(&cnList, js, "A", NULL, &jerr);
+    testCond((s == NATS_OK) && (cnList != NULL) && (cnList->List != NULL) && (cnList->Count == 3));
+
+    natsConn_setFilter(nc, NULL);
+
+    test("Check 1st request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":0") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check 2nd request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":2") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check 3rd request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":4") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Destroy list: ");
+    // Will see with valgrind if this is doing the right thing
+    jsConsumerNamesList_Destroy(cnList);
+    cnList = NULL;
+    // Check this does not crash
+    jsConsumerNamesList_Destroy(cnList);
+    testCond(true);
 
     JS_TEARDOWN;
 }

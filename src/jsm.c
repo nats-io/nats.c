@@ -2040,7 +2040,7 @@ jsStreamInfoList_Destroy(jsStreamInfoList *list)
 }
 
 static natsStatus
-_unmarshalStreamNamesListResp(natsStrHash *m, apiPaged *page, natsMsg *resp, jsErrCode *errCode)
+_unmarshalNamesListResp(const char *fieldName, natsStrHash *m, apiPaged *page, natsMsg *resp, jsErrCode *errCode)
 {
     nats_JSON           *json = NULL;
     jsApiResponse       ar;
@@ -2063,24 +2063,24 @@ _unmarshalStreamNamesListResp(natsStrHash *m, apiPaged *page, natsMsg *resp, jsE
     }
     else
     {
-        char    **streams  = NULL;
-        int     streamsLen = 0;
+        char    **names  = NULL;
+        int     namesLen = 0;
 
         IFOK(s, nats_JSONGetLong(json, "total", &page->total));
         IFOK(s, nats_JSONGetLong(json, "offset", &page->offset));
         IFOK(s, nats_JSONGetLong(json, "limit", &page->limit));
-        IFOK(s, nats_JSONGetArrayStr(json, "streams", &streams, &streamsLen));
-        if ((s == NATS_OK) && (streams != NULL))
+        IFOK(s, nats_JSONGetArrayStr(json, fieldName, &names, &namesLen));
+        if ((s == NATS_OK) && (names != NULL))
         {
             int i;
 
-            for (i=0; (s == NATS_OK) && (i<streamsLen); i++)
-                s = natsStrHash_Set(m, streams[i], true, NULL, NULL);
+            for (i=0; (s == NATS_OK) && (i<namesLen); i++)
+                s = natsStrHash_Set(m, names[i], true, NULL, NULL);
 
             // Free the array of JSON objects that was allocated by nats_JSONGetArrayStr.
-            for (i=0; i<streamsLen; i++)
-                NATS_FREE(streams[i]);
-            NATS_FREE(streams);
+            for (i=0; i<namesLen; i++)
+                NATS_FREE(names[i]);
+            NATS_FREE(names);
         }
     }
     js_freeApiRespContent(&ar);
@@ -2149,7 +2149,7 @@ js_StreamNames(jsStreamNamesList **new_list, jsCtx *js, jsOptions *opts, jsErrCo
         // Send the request
         IFOK_JSR(s, natsConnection_Request(&resp, nc, subj, natsBuf_Data(buf), natsBuf_Len(buf), timeout));
 
-        IFOK(s, _unmarshalStreamNamesListResp(names, &page, resp, errCode));
+        IFOK(s, _unmarshalNamesListResp("streams", names, &page, resp, errCode));
         if (s == NATS_OK)
         {
             offset += page.limit;
@@ -3100,4 +3100,349 @@ jsConsumerInfo_Destroy(jsConsumerInfo *ci)
     _destroyConsumerConfig(ci->Config);
     _destroyClusterInfo(ci->Cluster);
     NATS_FREE(ci);
+}
+
+static natsStatus
+_unmarshalConsumerInfoListResp(natsStrHash *m, apiPaged *page, natsMsg *resp, jsErrCode *errCode)
+{
+    nats_JSON           *json = NULL;
+    jsApiResponse       ar;
+    natsStatus          s;
+
+    s = js_unmarshalResponse(&ar, &json, resp);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    if (js_apiResponseIsErr(&ar))
+    {
+        if (errCode != NULL)
+            *errCode = (int) ar.Error.ErrCode;
+
+        // If the error code is JSStreamNotFoundErr then pick NATS_NOT_FOUND.
+        if (ar.Error.ErrCode == JSStreamNotFoundErr)
+            s = NATS_NOT_FOUND;
+        else
+            s = nats_setError(NATS_ERR, "%s", ar.Error.Description);
+    }
+    else
+    {
+        nats_JSON   **consumers  = NULL;
+        int         consumersLen = 0;
+
+        IFOK(s, nats_JSONGetLong(json, "total", &page->total));
+        IFOK(s, nats_JSONGetLong(json, "offset", &page->offset));
+        IFOK(s, nats_JSONGetLong(json, "limit", &page->limit));
+        IFOK(s, nats_JSONGetArrayObject(json, "consumers", &consumers, &consumersLen));
+        if ((s == NATS_OK) && (consumers != NULL))
+        {
+            int i;
+
+            for (i=0; (s == NATS_OK) && (i<consumersLen); i++)
+            {
+                jsConsumerInfo *ci    = NULL;
+                jsConsumerInfo *oci   = NULL;
+
+                s = js_unmarshalConsumerInfo(consumers[i], &ci);
+                if ((s == NATS_OK) && ((ci->Config == NULL) || nats_IsStringEmpty(ci->Name)))
+                    s = nats_setError(NATS_ERR, "%s", "consumer name missing");
+                IFOK(s, natsStrHash_SetEx(m, (char*) ci->Name, true, true, ci, (void**) &oci));
+                if (oci != NULL)
+                    jsConsumerInfo_Destroy(oci);
+            }
+            // Free the array of JSON objects that was allocated by nats_JSONGetArrayObject.
+            NATS_FREE(consumers);
+        }
+    }
+    js_freeApiRespContent(&ar);
+    nats_JSONDestroy(json);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_Consumers(jsConsumerInfoList **new_list, jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus          s       = NATS_OK;
+    natsBuffer          *buf    = NULL;
+    char                *subj   = NULL;
+    natsMsg             *resp   = NULL;
+    natsConnection      *nc     = NULL;
+    bool                freePfx = false;
+    bool                done    = false;
+    int64_t             offset  = 0;
+    int64_t             start   = 0;
+    int64_t             timeout = 0;
+    natsStrHash         *cons   = NULL;
+    jsConsumerInfoList  *list   = NULL;
+    jsOptions           o;
+    apiPaged            page;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if ((new_list == NULL) || (js == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _checkStreamName(stream);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    s = js_setOpts(&nc, &freePfx, js, opts, &o);
+    if (s == NATS_OK)
+    {
+        if (nats_asprintf(&subj, jsApiConsumerListT, js_lenWithoutTrailingDot(o.Prefix), o.Prefix, stream) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        if (freePfx)
+            NATS_FREE((char*) o.Prefix);
+    }
+    IFOK(s, natsBuf_Create(&buf, 16));
+    IFOK(s, natsStrHash_Create(&cons, 16));
+
+    if (s == NATS_OK)
+    {
+        memset(&page, 0, sizeof(apiPaged));
+        start = nats_Now();
+    }
+
+    do
+    {
+        IFOK(s, natsBuf_AppendByte(buf, '{'));
+        IFOK(s, nats_marshalLong(buf, false, "offset", offset));
+        IFOK(s, natsBuf_AppendByte(buf, '}'));
+
+        timeout = o.Wait - (nats_Now() - start);
+        if (timeout <= 0)
+            s = NATS_TIMEOUT;
+
+        // Send the request
+        IFOK_JSR(s, natsConnection_Request(&resp, nc, subj, natsBuf_Data(buf), natsBuf_Len(buf), timeout));
+
+        IFOK(s, _unmarshalConsumerInfoListResp(cons, &page, resp, errCode));
+        if (s == NATS_OK)
+        {
+            offset += page.limit;
+            done = offset >= page.total;
+            if (!done)
+            {
+                // Reset the request buffer, we may be able to reuse.
+                natsBuf_Reset(buf);
+            }
+        }
+        natsMsg_Destroy(resp);
+        resp = NULL;
+    }
+    while ((s == NATS_OK) && !done);
+
+    natsBuf_Destroy(buf);
+    NATS_FREE(subj);
+
+    if (s == NATS_OK)
+    {
+        if (natsStrHash_Count(cons) == 0)
+        {
+            natsStrHash_Destroy(cons);
+            return NATS_NOT_FOUND;
+        }
+        list = (jsConsumerInfoList*) NATS_CALLOC(1, sizeof(jsConsumerInfoList));
+        if (list == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+        {
+            list->List = (jsConsumerInfo**) NATS_CALLOC(natsStrHash_Count(cons), sizeof(jsConsumerInfo*));
+            if (list->List == NULL)
+            {
+                NATS_FREE(list);
+                list = NULL;
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+            }
+            else
+            {
+                natsStrHashIter iter;
+                void            *val = NULL;
+
+                natsStrHashIter_Init(&iter, cons);
+                while (natsStrHashIter_Next(&iter, NULL, (void**) &val))
+                {
+                    jsConsumerInfo *ci = (jsConsumerInfo*) val;
+
+                    list->List[list->Count++] = ci;
+                    natsStrHashIter_RemoveCurrent(&iter);
+                }
+                natsStrHashIter_Done(&iter);
+
+                *new_list = list;
+            }
+        }
+    }
+    if (s != NATS_OK)
+    {
+        natsStrHashIter iter;
+        void            *val = NULL;
+
+        natsStrHashIter_Init(&iter, cons);
+        while (natsStrHashIter_Next(&iter, NULL, (void**) &val))
+        {
+            jsStreamInfo *si = (jsStreamInfo*) val;
+
+            natsStrHashIter_RemoveCurrent(&iter);
+            jsStreamInfo_Destroy(si);
+        }
+        natsStrHashIter_Done(&iter);
+    }
+    natsStrHash_Destroy(cons);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+jsConsumerInfoList_Destroy(jsConsumerInfoList *list)
+{
+    int i;
+
+    if (list == NULL)
+        return;
+
+    for (i=0; i<list->Count; i++)
+        jsConsumerInfo_Destroy(list->List[i]);
+
+    NATS_FREE(list->List);
+    NATS_FREE(list);
+}
+
+natsStatus
+js_ConsumerNames(jsConsumerNamesList **new_list, jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus          s       = NATS_OK;
+    natsBuffer          *buf    = NULL;
+    char                *subj   = NULL;
+    natsMsg             *resp   = NULL;
+    natsConnection      *nc     = NULL;
+    bool                freePfx = false;
+    bool                done    = false;
+    int64_t             offset  = 0;
+    int64_t             start   = 0;
+    int64_t             timeout = 0;
+    natsStrHash         *names  = NULL;
+    jsConsumerNamesList *list   = NULL;
+    jsOptions           o;
+    apiPaged            page;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if ((new_list == NULL) || (js == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _checkStreamName(stream);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    s = js_setOpts(&nc, &freePfx, js, opts, &o);
+    if (s == NATS_OK)
+    {
+        if (nats_asprintf(&subj, jsApiConsumerNamesT, js_lenWithoutTrailingDot(o.Prefix), o.Prefix, stream) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        if (freePfx)
+            NATS_FREE((char*) o.Prefix);
+    }
+    IFOK(s, natsBuf_Create(&buf, 16));
+    IFOK(s, natsStrHash_Create(&names, 16));
+
+    if (s == NATS_OK)
+    {
+        memset(&page, 0, sizeof(apiPaged));
+        start = nats_Now();
+    }
+
+    do
+    {
+        IFOK(s, natsBuf_AppendByte(buf, '{'));
+        IFOK(s, nats_marshalLong(buf, false, "offset", offset));
+        IFOK(s, natsBuf_AppendByte(buf, '}'));
+
+        timeout = o.Wait - (nats_Now() - start);
+        if (timeout <= 0)
+            s = NATS_TIMEOUT;
+
+        // Send the request
+        IFOK_JSR(s, natsConnection_Request(&resp, nc, subj, natsBuf_Data(buf), natsBuf_Len(buf), timeout));
+
+        IFOK(s, _unmarshalNamesListResp("consumers", names, &page, resp, errCode));
+        if (s == NATS_OK)
+        {
+            offset += page.limit;
+            done = offset >= page.total;
+            if (!done)
+            {
+                // Reset the request buffer, we may be able to reuse.
+                natsBuf_Reset(buf);
+            }
+        }
+        natsMsg_Destroy(resp);
+        resp = NULL;
+    }
+    while ((s == NATS_OK) && !done);
+
+    natsBuf_Destroy(buf);
+    NATS_FREE(subj);
+
+    if (s == NATS_OK)
+    {
+        if (natsStrHash_Count(names) == 0)
+        {
+            natsStrHash_Destroy(names);
+            return NATS_NOT_FOUND;
+        }
+        list = (jsConsumerNamesList*) NATS_CALLOC(1, sizeof(jsConsumerNamesList));
+        if (list == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+        {
+            list->List = (char**) NATS_CALLOC(natsStrHash_Count(names), sizeof(char*));
+            if (list->List == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+            else
+            {
+                natsStrHashIter iter;
+                char            *sname = NULL;
+
+                natsStrHashIter_Init(&iter, names);
+                while ((s == NATS_OK) && natsStrHashIter_Next(&iter, &sname, NULL))
+                {
+                    char *copyName = NULL;
+
+                    DUP_STRING(s, copyName, sname);
+                    if (s == NATS_OK)
+                    {
+                        list->List[list->Count++] = copyName;
+                        natsStrHashIter_RemoveCurrent(&iter);
+                    }
+                }
+                natsStrHashIter_Done(&iter);
+            }
+            if (s == NATS_OK)
+                *new_list = list;
+            else
+                jsConsumerNamesList_Destroy(list);
+        }
+    }
+    natsStrHash_Destroy(names);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+jsConsumerNamesList_Destroy(jsConsumerNamesList *list)
+{
+    int i;
+
+    if (list == NULL)
+        return;
+
+    for (i=0; i<list->Count; i++)
+        NATS_FREE(list->List[i]);
+
+    NATS_FREE(list->List);
+    NATS_FREE(list);
 }

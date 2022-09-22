@@ -899,6 +899,34 @@ typedef struct jsConsumerInfo
 } jsConsumerInfo;
 
 /**
+ * List of consumers information objects returned by #js_Consumers
+ *
+ * \note Once done, the list should be destroyed calling #jsConsumerInfoList_Destroy
+ *
+ * @see jsStreamInfoList_Destroy
+ */
+typedef struct jsConsumerInfoList
+{
+        jsConsumerInfo  **List;
+        int             Count;
+
+} jsConsumerInfoList;
+
+/**
+ * List of consumer names returned by #js_ConsumerNames
+ *
+ * \note Once done, the list should be destroyed calling #jsConsumerNamesList_Destroy
+ *
+ * @see jsConsumerNamesList_Destroy
+ */
+typedef struct jsConsumerNamesList
+{
+        char    **List;
+        int     Count;
+
+} jsConsumerNamesList;
+
+/**
  * Reports on API calls to JetStream for this account.
  */
 typedef struct jsAPIStats
@@ -5782,6 +5810,64 @@ js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
  */
 NATS_EXTERN void
 jsConsumerInfo_Destroy(jsConsumerInfo *ci);
+
+/** \brief Retrieves the list of all available consumers for a stream.
+ *
+ * Retrieves the list of all #jsConsumerInfo for a given stream.
+ *
+ * \warning The list should be destroyed when no longer used by
+ * calling #jsConsumerInfoList_Destroy.
+ *
+ * @param list the location where to store the pointer to the new #jsConsumerInfoList object.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the stream name whose consumer list is requested.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_Consumers(jsConsumerInfoList **list, jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the consumer information list object.
+ *
+ * Releases memory allocated for this consumer information list.
+ *
+ * \warning All #jsConsumerInfo pointers contained in the list will
+ * be destroyed by this call.
+ *
+ * @param list the pointer to the #jsConsumerInfoList object.
+ */
+NATS_EXTERN void
+jsConsumerInfoList_Destroy(jsConsumerInfoList *list);
+
+/** \brief Retrieves the list of all available consumer names for a stream.
+ *
+ * Retrieves the list of all consumer names for a given stream.
+ *
+ * \warning The list should be destroyed when no longer used by
+ * calling #jsConsumerNamesList_Destroy.
+ *
+ * @param list the location where to store the pointer to the new #jsConsumerNamesList object.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the stream name whose consumer list is requested.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_ConsumerNames(jsConsumerNamesList **list, jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the consumer names list object.
+ *
+ * Releases memory allocated for this list of consumer names.
+ *
+ * \warning All string pointers contained in the list will
+ * be destroyed by this call.
+ *
+ * @param list the pointer to the #jsConsumerNamesList object.
+ */
+NATS_EXTERN void
+jsConsumerNamesList_Destroy(jsConsumerNamesList *list);
 
 /** \brief Retrieves information about the JetStream usage from an account.
  *

@@ -22483,6 +22483,94 @@ test_JetStreamContextDomain(void)
 }
 
 static void
+_streamsInfoListReq(natsConnection *nc, natsMsg **msg, void *closure)
+{
+    int         *count      = (int*) closure;
+    const char  *payload    = NULL;
+    natsMsg     *newMsg     = NULL;
+
+    if (strstr(natsMsg_GetData(*msg), "stream_list_response") == NULL)
+        return;
+
+    (*count)++;
+    if (*count == 1)
+    {
+        // Pretend limit is 2 and send 2 simplified stream infos
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.stream_list_response\",\"total\":5,\"offset\":0,\"limit\":2,"\
+            "\"streams\":[{\"config\":{\"name\":\"S1\"}},{\"config\":{\"name\":\"S2\"}}]}";
+    }
+    else if (*count == 2)
+    {
+        // Pretend that there is a repeat of a stream name to check
+        // that we are properly replacing and not leaking memory.
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.stream_list_response\",\"total\":5,\"offset\":2,\"limit\":2,"\
+            "\"streams\":[{\"config\":{\"name\":\"S2\"}},{\"config\":{\"name\":\"S3\"}}]}";
+    }
+    else if (*count == 3)
+    {
+        // Pretend that our next page was over the limit (say streams were removed)
+        // and therefore the server returned no streams (but set offset to total)
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.stream_list_response\",\"total\":3,\"offset\":3,\"limit\":2,"\
+            "\"streams\":[]}";
+    }
+    else
+    {
+        // Use original message
+        return;
+    }
+    if (natsMsg_create(&newMsg, (*msg)->subject, (int) strlen((*msg)->subject), NULL, 0,
+                        payload, (int) strlen(payload), 0) == NATS_OK)
+    {
+        natsMsg_Destroy(*msg);
+        *msg = newMsg;
+    }
+}
+
+static void
+_streamsNamesListReq(natsConnection *nc, natsMsg **msg, void *closure)
+{
+    int         *count      = (int*) closure;
+    const char  *payload    = NULL;
+    natsMsg     *newMsg     = NULL;
+
+    if (strstr(natsMsg_GetData(*msg), "stream_names_response") == NULL)
+        return;
+
+    (*count)++;
+    if (*count == 1)
+    {
+        // Pretend limit is 2 and send 2 stream names
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.stream_names_response\",\"total\":5,\"offset\":0,\"limit\":2,"\
+            "\"streams\":[\"S1\",\"S2\"]}";
+    }
+    else if (*count == 2)
+    {
+        // Pretend that there is a repeat of a stream name to check
+        // that we are properly replacing and not leaking memory.
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.stream_names_response\",\"total\":5,\"offset\":2,\"limit\":2,"\
+            "\"streams\":[\"S2\",\"S3\"]}";
+    }
+    else if (*count == 3)
+    {
+        // Pretend that our next page was over the limit (say streams were removed)
+        // and therefore the server returned no streams (but set offset to total)
+        payload = "{\"type\":\"io.nats.jetstream.api.v1.stream_names_response\",\"total\":3,\"offset\":3,\"limit\":2,"\
+            "\"streams\":null}";
+    }
+    else
+    {
+        // Use original message
+        return;
+    }
+    if (natsMsg_create(&newMsg, (*msg)->subject, (int) strlen((*msg)->subject), NULL, 0,
+                        payload, (int) strlen(payload), 0) == NATS_OK)
+    {
+        natsMsg_Destroy(*msg);
+        *msg = newMsg;
+    }
+}
+
+static void
 test_JetStreamMgtStreams(void)
 {
     natsStatus          s;
@@ -22494,6 +22582,9 @@ test_JetStreamMgtStreams(void)
     natsMsg             *msg  = NULL;
     natsSubscription    *sub  = NULL;
     char                *desc = NULL;
+    jsStreamInfoList    *siList = NULL;
+    jsStreamNamesList   *snList = NULL;
+    int                 count   = 0;
     jsOptions           o;
     int                 i;
 
@@ -22948,6 +23039,7 @@ test_JetStreamMgtStreams(void)
     free(desc);
     jsCtx_Destroy(js2);
     natsSubscription_Destroy(sub);
+    sub = NULL;
 
     test("Create stream with wilcards: ");
     jsStreamConfig_Init(&cfg);
@@ -22960,6 +23052,142 @@ test_JetStreamMgtStreams(void)
                 && (strcmp(si->Config->Subjects[0], "foo.>") == 0)
                 && (strcmp(si->Config->Subjects[1], "bar.*") == 0));
     jsStreamInfo_Destroy(si);
+
+    test("List stream infos (bad args): ");
+    s = js_Streams(NULL, js, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_Streams(&siList, NULL, NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Create sub for pagination check: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.STREAM.LIST");
+    testCond(s == NATS_OK);
+
+    natsConn_setFilterWithClosure(nc, _streamsInfoListReq, (void*) &count);
+
+    test("List stream infos: ");
+    s = js_Streams(&siList, js, NULL, &jerr);
+    testCond((s == NATS_OK) && (siList != NULL) && (siList->List != NULL) && (siList->Count == 3));
+
+    natsConn_setFilter(nc, NULL);
+
+    test("Check 1st request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":0") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check 2nd request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":2") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check 3rd request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":4") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Destroy list: ");
+    // Will see with valgrind if this is doing the right thing
+    jsStreamInfoList_Destroy(siList);
+    siList = NULL;
+    // Check this does not crash
+    jsStreamInfoList_Destroy(siList);
+    testCond(true);
+
+    test("List stream infos with filter: ");
+    jsOptions_Init(&o);
+    o.Stream.Info.SubjectsFilter = "TEST";
+    s = js_Streams(&siList, js, &o, &jerr);
+    testCond((s == NATS_OK) && (siList != NULL) && (siList->List != NULL) && (siList->Count == 1)
+                && (strcmp(siList->List[0]->Config->Name, "TEST") == 0));
+    jsStreamInfoList_Destroy(siList);
+    siList = NULL;
+
+    test("List stream infos with filter no match: ");
+    jsOptions_Init(&o);
+    o.Stream.Info.SubjectsFilter = "no.match";
+    s = js_Streams(&siList, js, &o, &jerr);
+    testCond((s == NATS_NOT_FOUND) && (siList == NULL));
+
+    // Do names now
+
+    test("List stream names (bad args): ");
+    s = js_StreamNames(NULL, js, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_StreamNames(&snList, NULL, NULL, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Create sub for pagination check: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.STREAM.NAMES");
+    testCond(s == NATS_OK);
+
+    count = 0;
+    natsConn_setFilterWithClosure(nc, _streamsNamesListReq, (void*) &count);
+
+    test("List stream names: ");
+    s = js_StreamNames(&snList, js, NULL, &jerr);
+    testCond((s == NATS_OK) && (snList != NULL) && (snList->List != NULL) && (snList->Count == 3));
+
+    natsConn_setFilter(nc, NULL);
+
+    test("Check 1st request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":0") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check 2nd request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":2") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check 3rd request: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+                && (strstr(natsMsg_GetData(msg), "offset\":4") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Destroy list: ");
+    // Will see with valgrind if this is doing the right thing
+    jsStreamNamesList_Destroy(snList);
+    snList = NULL;
+    // Check this does not crash
+    jsStreamNamesList_Destroy(snList);
+    testCond(true);
+
+    test("List stream names with filter: ");
+    jsOptions_Init(&o);
+    o.Stream.Info.SubjectsFilter = "TEST";
+    s = js_StreamNames(&snList, js, &o, &jerr);
+    testCond((s == NATS_OK) && (snList != NULL) && (snList->List != NULL) && (snList->Count == 1)
+                && (strcmp(snList->List[0], "TEST") == 0));
+    jsStreamNamesList_Destroy(snList);
+    snList = NULL;
+
+    test("List stream names with filter no match: ");
+    jsOptions_Init(&o);
+    o.Stream.Info.SubjectsFilter = "no.match";
+    s = js_StreamNames(&snList, js, &o, &jerr);
+    testCond((s == NATS_NOT_FOUND) && (snList == NULL));
+
     JS_TEARDOWN;
 }
 

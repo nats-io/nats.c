@@ -1830,6 +1830,404 @@ js_EraseMsg(jsCtx *js, const char *stream, uint64_t seq, jsOptions *opts, jsErrC
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_unmarshalStreamInfoListResp(natsStrHash *m, apiPaged *page, natsMsg *resp, jsErrCode *errCode)
+{
+    nats_JSON           *json = NULL;
+    jsApiResponse       ar;
+    natsStatus          s;
+
+    s = js_unmarshalResponse(&ar, &json, resp);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    if (js_apiResponseIsErr(&ar))
+    {
+        if (errCode != NULL)
+            *errCode = (int) ar.Error.ErrCode;
+
+        // If the error code is JSStreamNotFoundErr then pick NATS_NOT_FOUND.
+        if (ar.Error.ErrCode == JSStreamNotFoundErr)
+            s = NATS_NOT_FOUND;
+        else
+            s = nats_setError(NATS_ERR, "%s", ar.Error.Description);
+    }
+    else
+    {
+        nats_JSON   **streams  = NULL;
+        int         streamsLen = 0;
+
+        IFOK(s, nats_JSONGetLong(json, "total", &page->total));
+        IFOK(s, nats_JSONGetLong(json, "offset", &page->offset));
+        IFOK(s, nats_JSONGetLong(json, "limit", &page->limit));
+        IFOK(s, nats_JSONGetArrayObject(json, "streams", &streams, &streamsLen));
+        if ((s == NATS_OK) && (streams != NULL))
+        {
+            int i;
+
+            for (i=0; (s == NATS_OK) && (i<streamsLen); i++)
+            {
+                jsStreamInfo *si    = NULL;
+                jsStreamInfo *osi   = NULL;
+
+                s = js_unmarshalStreamInfo(streams[i], &si);
+                if ((s == NATS_OK) && ((si->Config == NULL) || nats_IsStringEmpty(si->Config->Name)))
+                    s = nats_setError(NATS_ERR, "%s", "stream name missing from configuration");
+                IFOK(s, natsStrHash_SetEx(m, (char*) si->Config->Name, true, true, si, (void**) &osi));
+                if (osi != NULL)
+                    jsStreamInfo_Destroy(osi);
+            }
+            // Free the array of JSON objects that was allocated by nats_JSONGetArrayObject.
+            NATS_FREE(streams);
+        }
+    }
+    js_freeApiRespContent(&ar);
+    nats_JSONDestroy(json);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_Streams(jsStreamInfoList **new_list, jsCtx *js, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus          s       = NATS_OK;
+    natsBuffer          *buf    = NULL;
+    char                *subj   = NULL;
+    natsMsg             *resp   = NULL;
+    natsConnection      *nc     = NULL;
+    bool                freePfx = false;
+    bool                done    = false;
+    int64_t             offset  = 0;
+    int64_t             start   = 0;
+    int64_t             timeout = 0;
+    natsStrHash         *streams= NULL;
+    jsStreamInfoList    *list   = NULL;
+    jsOptions           o;
+    apiPaged            page;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if ((new_list == NULL) || (js == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = js_setOpts(&nc, &freePfx, js, opts, &o);
+    if (s == NATS_OK)
+    {
+        if (nats_asprintf(&subj, jsApiStreamListT, js_lenWithoutTrailingDot(o.Prefix), o.Prefix) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        if (freePfx)
+            NATS_FREE((char*) o.Prefix);
+    }
+    IFOK(s, natsBuf_Create(&buf, 64));
+    IFOK(s, natsStrHash_Create(&streams, 16));
+
+    if (s == NATS_OK)
+    {
+        memset(&page, 0, sizeof(apiPaged));
+        start = nats_Now();
+    }
+
+    do
+    {
+        IFOK(s, natsBuf_AppendByte(buf, '{'));
+        IFOK(s, nats_marshalLong(buf, false, "offset", offset));
+        if (!nats_IsStringEmpty(o.Stream.Info.SubjectsFilter))
+        {
+            IFOK(s, natsBuf_Append(buf, ",\"subject\":\"", -1));
+            IFOK(s, natsBuf_Append(buf, o.Stream.Info.SubjectsFilter, -1));
+            IFOK(s, natsBuf_AppendByte(buf, '\"'));
+        }
+        IFOK(s, natsBuf_AppendByte(buf, '}'));
+
+        timeout = o.Wait - (nats_Now() - start);
+        if (timeout <= 0)
+            s = NATS_TIMEOUT;
+
+        // Send the request
+        IFOK_JSR(s, natsConnection_Request(&resp, nc, subj, natsBuf_Data(buf), natsBuf_Len(buf), timeout));
+
+        IFOK(s, _unmarshalStreamInfoListResp(streams, &page, resp, errCode));
+        if (s == NATS_OK)
+        {
+            offset += page.limit;
+            done = offset >= page.total;
+            if (!done)
+            {
+                // Reset the request buffer, we may be able to reuse.
+                natsBuf_Reset(buf);
+            }
+        }
+        natsMsg_Destroy(resp);
+        resp = NULL;
+    }
+    while ((s == NATS_OK) && !done);
+
+    natsBuf_Destroy(buf);
+    NATS_FREE(subj);
+
+    if (s == NATS_OK)
+    {
+        if (natsStrHash_Count(streams) == 0)
+        {
+            natsStrHash_Destroy(streams);
+            return NATS_NOT_FOUND;
+        }
+        list = (jsStreamInfoList*) NATS_CALLOC(1, sizeof(jsStreamInfoList));
+        if (list == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+        {
+            list->List = (jsStreamInfo**) NATS_CALLOC(natsStrHash_Count(streams), sizeof(jsStreamInfo*));
+            if (list->List == NULL)
+            {
+                NATS_FREE(list);
+                list = NULL;
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+            }
+            else
+            {
+                natsStrHashIter iter;
+                void            *val = NULL;
+
+                natsStrHashIter_Init(&iter, streams);
+                while (natsStrHashIter_Next(&iter, NULL, (void**) &val))
+                {
+                    jsStreamInfo *si = (jsStreamInfo*) val;
+
+                    list->List[list->Count++] = si;
+                    natsStrHashIter_RemoveCurrent(&iter);
+                }
+                natsStrHashIter_Done(&iter);
+
+                *new_list = list;
+            }
+        }
+    }
+    if (s != NATS_OK)
+    {
+        natsStrHashIter iter;
+        void            *val = NULL;
+
+        natsStrHashIter_Init(&iter, streams);
+        while (natsStrHashIter_Next(&iter, NULL, (void**) &val))
+        {
+            jsStreamInfo *si = (jsStreamInfo*) val;
+
+            natsStrHashIter_RemoveCurrent(&iter);
+            jsStreamInfo_Destroy(si);
+        }
+        natsStrHashIter_Done(&iter);
+    }
+    natsStrHash_Destroy(streams);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+jsStreamInfoList_Destroy(jsStreamInfoList *list)
+{
+    int i;
+
+    if (list == NULL)
+        return;
+
+    for (i=0; i<list->Count; i++)
+        jsStreamInfo_Destroy(list->List[i]);
+
+    NATS_FREE(list->List);
+    NATS_FREE(list);
+}
+
+static natsStatus
+_unmarshalStreamNamesListResp(natsStrHash *m, apiPaged *page, natsMsg *resp, jsErrCode *errCode)
+{
+    nats_JSON           *json = NULL;
+    jsApiResponse       ar;
+    natsStatus          s;
+
+    s = js_unmarshalResponse(&ar, &json, resp);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    if (js_apiResponseIsErr(&ar))
+    {
+        if (errCode != NULL)
+            *errCode = (int) ar.Error.ErrCode;
+
+        // If the error code is JSStreamNotFoundErr then pick NATS_NOT_FOUND.
+        if (ar.Error.ErrCode == JSStreamNotFoundErr)
+            s = NATS_NOT_FOUND;
+        else
+            s = nats_setError(NATS_ERR, "%s", ar.Error.Description);
+    }
+    else
+    {
+        char    **streams  = NULL;
+        int     streamsLen = 0;
+
+        IFOK(s, nats_JSONGetLong(json, "total", &page->total));
+        IFOK(s, nats_JSONGetLong(json, "offset", &page->offset));
+        IFOK(s, nats_JSONGetLong(json, "limit", &page->limit));
+        IFOK(s, nats_JSONGetArrayStr(json, "streams", &streams, &streamsLen));
+        if ((s == NATS_OK) && (streams != NULL))
+        {
+            int i;
+
+            for (i=0; (s == NATS_OK) && (i<streamsLen); i++)
+                s = natsStrHash_Set(m, streams[i], true, NULL, NULL);
+
+            // Free the array of JSON objects that was allocated by nats_JSONGetArrayStr.
+            for (i=0; i<streamsLen; i++)
+                NATS_FREE(streams[i]);
+            NATS_FREE(streams);
+        }
+    }
+    js_freeApiRespContent(&ar);
+    nats_JSONDestroy(json);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_StreamNames(jsStreamNamesList **new_list, jsCtx *js, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus          s       = NATS_OK;
+    natsBuffer          *buf    = NULL;
+    char                *subj   = NULL;
+    natsMsg             *resp   = NULL;
+    natsConnection      *nc     = NULL;
+    bool                freePfx = false;
+    bool                done    = false;
+    int64_t             offset  = 0;
+    int64_t             start   = 0;
+    int64_t             timeout = 0;
+    natsStrHash         *names  = NULL;
+    jsStreamNamesList   *list   = NULL;
+    jsOptions           o;
+    apiPaged            page;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if ((new_list == NULL) || (js == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = js_setOpts(&nc, &freePfx, js, opts, &o);
+    if (s == NATS_OK)
+    {
+        if (nats_asprintf(&subj, jsApiStreamNamesT, js_lenWithoutTrailingDot(o.Prefix), o.Prefix) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        if (freePfx)
+            NATS_FREE((char*) o.Prefix);
+    }
+    IFOK(s, natsBuf_Create(&buf, 64));
+    IFOK(s, natsStrHash_Create(&names, 16));
+
+    if (s == NATS_OK)
+    {
+        memset(&page, 0, sizeof(apiPaged));
+        start = nats_Now();
+    }
+
+    do
+    {
+        IFOK(s, natsBuf_AppendByte(buf, '{'));
+        IFOK(s, nats_marshalLong(buf, false, "offset", offset));
+        if (!nats_IsStringEmpty(o.Stream.Info.SubjectsFilter))
+        {
+            IFOK(s, natsBuf_Append(buf, ",\"subject\":\"", -1));
+            IFOK(s, natsBuf_Append(buf, o.Stream.Info.SubjectsFilter, -1));
+            IFOK(s, natsBuf_AppendByte(buf, '\"'));
+        }
+        IFOK(s, natsBuf_AppendByte(buf, '}'));
+
+        timeout = o.Wait - (nats_Now() - start);
+        if (timeout <= 0)
+            s = NATS_TIMEOUT;
+
+        // Send the request
+        IFOK_JSR(s, natsConnection_Request(&resp, nc, subj, natsBuf_Data(buf), natsBuf_Len(buf), timeout));
+
+        IFOK(s, _unmarshalStreamNamesListResp(names, &page, resp, errCode));
+        if (s == NATS_OK)
+        {
+            offset += page.limit;
+            done = offset >= page.total;
+            if (!done)
+            {
+                // Reset the request buffer, we may be able to reuse.
+                natsBuf_Reset(buf);
+            }
+        }
+        natsMsg_Destroy(resp);
+        resp = NULL;
+    }
+    while ((s == NATS_OK) && !done);
+
+    natsBuf_Destroy(buf);
+    NATS_FREE(subj);
+
+    if (s == NATS_OK)
+    {
+        if (natsStrHash_Count(names) == 0)
+        {
+            natsStrHash_Destroy(names);
+            return NATS_NOT_FOUND;
+        }
+        list = (jsStreamNamesList*) NATS_CALLOC(1, sizeof(jsStreamNamesList));
+        if (list == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+        {
+            list->List = (char**) NATS_CALLOC(natsStrHash_Count(names), sizeof(char*));
+            if (list->List == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+            else
+            {
+                natsStrHashIter iter;
+                char            *sname = NULL;
+
+                natsStrHashIter_Init(&iter, names);
+                while ((s == NATS_OK) && natsStrHashIter_Next(&iter, &sname, NULL))
+                {
+                    char *copyName = NULL;
+
+                    DUP_STRING(s, copyName, sname);
+                    if (s == NATS_OK)
+                    {
+                        list->List[list->Count++] = copyName;
+                        natsStrHashIter_RemoveCurrent(&iter);
+                    }
+                }
+                natsStrHashIter_Done(&iter);
+            }
+            if (s == NATS_OK)
+                *new_list = list;
+            else
+                jsStreamNamesList_Destroy(list);
+        }
+    }
+    natsStrHash_Destroy(names);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+jsStreamNamesList_Destroy(jsStreamNamesList *list)
+{
+    int i;
+
+    if (list == NULL)
+        return;
+
+    for (i=0; i<list->Count; i++)
+        NATS_FREE(list->List[i]);
+
+    NATS_FREE(list->List);
+    NATS_FREE(list);
+}
+
 //
 // Account related functions
 //

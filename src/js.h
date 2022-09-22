@@ -163,6 +163,12 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiStreamNamesT is the endpoint to get the list of stream names.
 #define jsApiStreamNamesT "%.*s.STREAM.NAMES"
 
+// jsApiConsumerListT is the endpoint to get the list of consumers for a stream.
+#define jsApiConsumerListT "%.*s.CONSUMER.LIST.%s"
+
+// jsApiConsumerNamesT is the endpoint to get the list of consumer names for a stream.
+#define jsApiConsumerNamesT "%.*s.CONSUMER.NAMES.%s"
+
 // Creates a subject based on the option's prefix, the subject format and its values.
 #define js_apiSubj(s, o, f, ...) (nats_asprintf((s), (f), (o)->Prefix, __VA_ARGS__) < 0 ? NATS_NO_MEMORY : NATS_OK)
 

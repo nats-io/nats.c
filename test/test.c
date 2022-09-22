@@ -21805,6 +21805,7 @@ test_JetStreamMarshalStreamConfig(void)
     sc.AllowRollup = true;
     sc.AllowDirect = true;
     sc.MirrorDirect = true;
+    sc.DiscardNewPerSubject = true;
 
     test("RePublish init err: ");
     s = jsRePublish_Init(NULL);
@@ -21887,7 +21888,8 @@ test_JetStreamMarshalStreamConfig(void)
                 && (strcmp(rsc->RePublish->Destination, "RP.>") == 0)
                 && rsc->RePublish->HeadersOnly
                 && rsc->AllowDirect
-                && rsc->MirrorDirect);
+                && rsc->MirrorDirect
+                && rsc->DiscardNewPerSubject);
     js_destroyStreamConfig(rsc);
     rsc = NULL;
     // Check that this does not crash

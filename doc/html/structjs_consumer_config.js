@@ -1,9 +1,8 @@
 var structjs_consumer_config =
 [
+    [ "Name", "structjs_consumer_config.html#a201217d93cfed17eb4d3e2d9579b826a", null ],
     [ "Durable", "structjs_consumer_config.html#a36cf121162cf0b40edf051991d851ee0", null ],
     [ "Description", "structjs_consumer_config.html#a36a14d666d99bdade87a5e21a25491d6", null ],
-    [ "DeliverSubject", "structjs_consumer_config.html#a95aa4184ed77f69b7674756572da1ded", null ],
-    [ "DeliverGroup", "structjs_consumer_config.html#ae0765f3b5effe365187d3cf809c6ed3c", null ],
     [ "DeliverPolicy", "structjs_consumer_config.html#a364127e68bf0d3bf13efdc0b416667f4", null ],
     [ "OptStartSeq", "structjs_consumer_config.html#a2f0243899885dc97f304f48ca52b5356", null ],
     [ "OptStartTime", "structjs_consumer_config.html#a802ea3bf0669395bee28611f4ecede80", null ],
@@ -23,5 +22,10 @@ var structjs_consumer_config =
     [ "HeadersOnly", "structjs_consumer_config.html#a30d4142bac47ab6dc583c5ee193704e6", null ],
     [ "MaxRequestBatch", "structjs_consumer_config.html#a4e86deefe08854b9a82b4908397aad32", null ],
     [ "MaxRequestExpires", "structjs_consumer_config.html#aa71aa3dfe5826466be301097b1bae04d", null ],
-    [ "InactiveThreshold", "structjs_consumer_config.html#af6376a6009124c25d7016bc548f3855d", null ]
+    [ "MaxRequestMaxBytes", "structjs_consumer_config.html#a74a026cdd92c538bcf84297f4468bb21", null ],
+    [ "DeliverSubject", "structjs_consumer_config.html#a95aa4184ed77f69b7674756572da1ded", null ],
+    [ "DeliverGroup", "structjs_consumer_config.html#ae0765f3b5effe365187d3cf809c6ed3c", null ],
+    [ "InactiveThreshold", "structjs_consumer_config.html#af6376a6009124c25d7016bc548f3855d", null ],
+    [ "Replicas", "structjs_consumer_config.html#acfba6d6ecb6323fd8ffe6c0bb4fbffae", null ],
+    [ "MemoryStorage", "structjs_consumer_config.html#a046177256938d6a601c629f9fd82f888", null ]
 ];

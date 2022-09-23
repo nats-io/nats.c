@@ -24,5 +24,9 @@ var structjs_stream_config =
     [ "Sealed", "structjs_stream_config.html#aede3fd2ab13d230eda14c96f9997e1b7", null ],
     [ "DenyDelete", "structjs_stream_config.html#af2d42dd29b9a35257937aeeb53c9f287", null ],
     [ "DenyPurge", "structjs_stream_config.html#a575ffbaa85b0300032963296b090583a", null ],
-    [ "AllowRollup", "structjs_stream_config.html#aba71cdb342181f52bb9f7ff5f770a1fa", null ]
+    [ "AllowRollup", "structjs_stream_config.html#aba71cdb342181f52bb9f7ff5f770a1fa", null ],
+    [ "RePublish", "structjs_stream_config.html#a95ab0061b6e935b129a4a9c133e6b11c", null ],
+    [ "AllowDirect", "structjs_stream_config.html#a28630f6f07ca02553c5d5718d7c29721", null ],
+    [ "MirrorDirect", "structjs_stream_config.html#a9d67ddcc7c54c345dd60ed5e59234f1e", null ],
+    [ "DiscardNewPerSubject", "structjs_stream_config.html#a3fb7d5e1a09829fe742749da880afe4a", null ]
 ];

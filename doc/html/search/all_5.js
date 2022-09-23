@@ -13,5 +13,6 @@ var searchData=
   ['expectlastsubjectseq_10',['ExpectLastSubjectSeq',['../structjs_pub_options.html#aeefec1d2c7644562d23b87e55bf2e253',1,'jsPubOptions']]],
   ['expectnomessage_11',['ExpectNoMessage',['../structjs_pub_options.html#a740a7edee8c832a75b75fded6046ba90',1,'jsPubOptions']]],
   ['expectstream_12',['ExpectStream',['../structjs_pub_options.html#ac7ac74d2557d772c3092288dacf3711f',1,'jsPubOptions']]],
-  ['external_13',['External',['../structjs_stream_source.html#a295458d156af5373bb3f5ab06612a888',1,'jsStreamSource::External()'],['../structjs_stream_source_info.html#a7eb19dd2637079fd1e970a2b38d33e05',1,'jsStreamSourceInfo::External()']]]
+  ['expires_13',['Expires',['../structjs_fetch_request.html#ac3351138ce8ac3b321ac1eb78887116e',1,'jsFetchRequest']]],
+  ['external_14',['External',['../structjs_stream_source.html#a295458d156af5373bb3f5ab06612a888',1,'jsStreamSource::External()'],['../structjs_stream_source_info.html#a7eb19dd2637079fd1e970a2b38d33e05',1,'jsStreamSourceInfo::External()']]]
 ];

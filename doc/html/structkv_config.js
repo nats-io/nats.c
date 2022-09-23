@@ -7,5 +7,6 @@ var structkv_config =
     [ "TTL", "structkv_config.html#ad2f5503e2f2522cb52e0ba1b86983dba", null ],
     [ "MaxBytes", "structkv_config.html#a1bc37777aa91b8b57a70e7647670cd12", null ],
     [ "StorageType", "structkv_config.html#ad5db9a58224d93ab86b4cfc4c46f1897", null ],
-    [ "Replicas", "structkv_config.html#a48f0f70383eff868321f9c94ae1a87cd", null ]
+    [ "Replicas", "structkv_config.html#a48f0f70383eff868321f9c94ae1a87cd", null ],
+    [ "RePublish", "structkv_config.html#ae172d3e442eef1a57cd7cf266d9e8951", null ]
 ];

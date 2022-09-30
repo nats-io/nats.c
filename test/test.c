@@ -29538,6 +29538,13 @@ test_KeyValueBasics(void)
         s = (kvStore_Bucket(NULL) == NULL ? NATS_OK : NATS_ERR);
         testCond(s == NATS_OK);
 
+        test("Check bytes is 0: ");
+        s = kvStore_Status(&sts, kv);
+        IFOK(s, (kvStatus_Bytes(sts) == 0 ? NATS_OK : NATS_ERR));
+        testCond(s == NATS_OK);
+        kvStatus_Destroy(sts);
+        sts = NULL;
+
         test("Simple put (bad args): ");
         rev = 1234;
         s = kvStore_Put(&rev, NULL, "key", (const void*) "value", 5);
@@ -29763,9 +29770,24 @@ test_KeyValueBasics(void)
         s = (kvStatus_Replicas(sts) == 1 ? NATS_OK : NATS_ERR);
         testCond(s == NATS_OK);
 
+        test("Check bytes: ");
+        {
+            jsStreamInfo *si = NULL;
+
+            if (i == 0)
+                s = js_GetStreamInfo(&si, js, "KV_TEST0", NULL, NULL);
+            else
+                s = js_GetStreamInfo(&si, js, "KV_TEST1", NULL, NULL);
+            IFOK(s, (kvStatus_Bytes(sts) == si->State.Bytes ? NATS_OK : NATS_ERR));
+
+            jsStreamInfo_Destroy(si);
+        }
+        testCond(s == NATS_OK);
+
         test("Check status with NULL: ");
         if ((kvStatus_History(NULL) != 0) || (kvStatus_Bucket(NULL) != NULL)
-            || (kvStatus_TTL(NULL) != 0) || (kvStatus_Values(NULL) != 0))
+            || (kvStatus_TTL(NULL) != 0) || (kvStatus_Values(NULL) != 0)
+            || (kvStatus_Bytes(NULL) != 0))
         {
             s = NATS_ERR;
         }

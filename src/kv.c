@@ -1312,6 +1312,12 @@ kvStatus_Replicas(kvStatus *sts)
     return (sts == NULL || sts->si->Config == NULL ? 0 : sts->si->Config->Replicas);
 }
 
+uint64_t
+kvStatus_Bytes(kvStatus *sts)
+{
+    return (sts == NULL ? 0 : sts->si->State.Bytes);
+}
+
 void
 kvStatus_Destroy(kvStatus *sts)
 {

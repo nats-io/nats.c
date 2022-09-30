@@ -7028,6 +7028,15 @@ kvStatus_TTL(kvStatus *sts);
 NATS_EXTERN int64_t
 kvStatus_Replicas(kvStatus *sts);
 
+/** \brief Returns the size (in bytes) of this bucket.
+ *
+ * Returns the size (in bytes) of this bucket, or `0` if `sts` itself is `NULL`.
+ *
+ * @param sts the pointer to the #kvStatus object.
+ */
+NATS_EXTERN uint64_t
+kvStatus_Bytes(kvStatus *sts);
+
 /** \brief Destroys the KeyValue status object.
  *
  * Releases memory allocated for this #kvStatus object.

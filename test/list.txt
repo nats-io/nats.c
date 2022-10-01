@@ -231,6 +231,7 @@ JetStreamSubscribeHeadersOnly
 JetStreamOrderedCons
 JetStreamOrderedConsWithErrors
 JetStreamOrderedConsAutoUnsub
+JetStreamOrderedConsSrvRestart
 JetStreamSubscribeWithFWC
 JetStreamStreamsSealAndRollup
 JetStreamGetMsgAndLastMsg

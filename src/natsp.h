@@ -876,7 +876,7 @@ natsStatus
 jsSub_trackSequences(jsSub *jsi, const char *reply);
 
 natsStatus
-jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *sm);
+jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm);
 
 char*
 jsSub_checkForFlowControlResponse(natsSubscription *sub);
@@ -885,10 +885,10 @@ natsStatus
 jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply);
 
 natsStatus
-jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *reset);
+jsSub_checkOrderedMsg(natsSubscription *sub, natsMsg *msg, bool *reset);
 
 natsStatus
-jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq);
+jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq);
 
 bool
 natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType);

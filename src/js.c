@@ -1533,7 +1533,7 @@ jsSub_trackSequences(jsSub *jsi, const char *reply)
 }
 
 natsStatus
-jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *sm)
+jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm)
 {
     jsSub       *jsi   = sub->jsi;
     const char  *str   = NULL;
@@ -1585,7 +1585,7 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg
     {
         if (jsi->ordered)
         {
-            s = jsSub_resetOrderedConsumer(sub, mu, jsi->sseq+1);
+            s = jsSub_resetOrderedConsumer(sub, jsi->sseq+1);
         }
         else if (!jsi->ssmn)
         {
@@ -2019,9 +2019,12 @@ _hbTimerFired(natsTimer *timer, void* closure)
     jsSub               *jsi = sub->jsi;
     bool                alert= false;
     natsConnection      *nc  = NULL;
+    bool                oc   = false;
+    natsStatus          s    = NATS_OK;
 
     natsSub_Lock(sub);
     alert = !jsi->active;
+    oc = jsi->ordered;
     jsi->active = false;
     if (alert && jsi->pull)
     {
@@ -2046,12 +2049,29 @@ _hbTimerFired(natsTimer *timer, void* closure)
     if (!alert)
         return;
 
+    // For ordered consumers, we will need to reset
+    if (oc)
+    {
+        natsSub_Lock(sub);
+        if (!sub->closed)
+        {
+            // If we fail in that call, we will report to async err callback
+            // (if one is specified).
+            s = jsSub_resetOrderedConsumer(sub, sub->jsi->sseq+1);
+        }
+        natsSub_Unlock(sub);
+    }
+
     natsConn_Lock(nc);
-    // We did create the timer only knowing that there was a async err
-    // handler, but check anyway in case we decide to have timer set
-    // regardless.
     if (nc->opts->asyncErrCb != NULL)
-        natsAsyncCb_PostErrHandler(nc, sub, NATS_MISSED_HEARTBEAT, NULL);
+    {
+        // Even if we have called resetOrderedConsumer, we will post something
+        // to the async error callback, either "missed heartbeats", or the error
+        // that occurred trying to do the reset.
+        if (s == NATS_OK)
+            s = NATS_MISSED_HEARTBEAT;
+        natsAsyncCb_PostErrHandler(nc, sub, s, NULL);
+    }
     natsConn_Unlock(nc);
 }
 
@@ -2463,6 +2483,8 @@ PROCESS_INFO:
             cfg->AckWait     = NATS_SECONDS_TO_NANOS(24*60*60); // Just set to something known, not utilized.
             if (opts->Config.Heartbeat <= 0)
                 cfg->Heartbeat = jsOrderedHBInterval;
+            cfg->MemoryStorage = true;
+            cfg->Replicas      = 1;
         }
         else
         {
@@ -2534,13 +2556,15 @@ PROCESS_INFO:
                                        opts->Queue, 0, cb, cbClosure, false, jsi));
         if ((s == NATS_OK) && (hbi > 0) && !isPullMode)
         {
-            bool ct = false; // create timer or not.
+            // We will create a timer if we use create an ordered consumer, or
+            // if the async error callback is registered.
+            bool ct = opts->Ordered;
 
             // Check to see if it is even worth creating a timer to check
             // on missed heartbeats, since the way to notify the user will be
             // through async callback.
             natsConn_Lock(nc);
-            ct = (nc->opts->asyncErrCb != NULL ? true : false);
+            ct = ct || (nc->opts->asyncErrCb != NULL ? true : false);
             natsConn_Unlock(nc);
 
             if (ct)
@@ -2928,13 +2952,13 @@ natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType)
 // Update and replace sid.
 // Lock should be held on entry but will be unlocked to prevent lock inversion.
 int64_t
-applyNewSID(natsSubscription *sub, natsMutex *mu)
+applyNewSID(natsSubscription *sub)
 {
     int64_t         osid = 0;
     int64_t         nsid = 0;
     natsConnection  *nc  = sub->conn;
 
-    natsMutex_Unlock(mu);
+    natsSub_Unlock(sub);
 
     natsMutex_Lock(nc->subsMu);
     osid = sub->sid;
@@ -2945,7 +2969,7 @@ applyNewSID(natsSubscription *sub, natsMutex *mu)
     natsHash_Set(nc->subs, nsid, sub, NULL);
     natsMutex_Unlock(nc->subsMu);
 
-    natsMutex_Lock(mu);
+    natsSub_Lock(sub);
     sub->sid = nsid;
     return osid;
 }
@@ -2961,6 +2985,9 @@ _recreateOrderedCons(void *closure)
     jsConsumerInfo      *ci  = NULL;
     jsConsumerConfig    cc;
     natsStatus          s;
+
+    // Note: if anything fail here, the reset/recreate of the ordered consumer
+    // will happen again based on the missed HB timer.
 
     // Unsubscribe and subscribe with new inbox and sid.
     // Remap a new low level sub into this sub since its client accessible.
@@ -2980,7 +3007,7 @@ _recreateOrderedCons(void *closure)
 
     if (!oci->done && (s == NATS_OK))
     {
-        natsSubAndLdw_Lock(sub);
+        natsSub_Lock(sub);
         t = oci->thread;
         jsi = sub->jsi;
         // Reset some items in jsi.
@@ -3001,7 +3028,7 @@ _recreateOrderedCons(void *closure)
         cc.DeliverSubject   = sub->subject;
         cc.DeliverPolicy    = js_DeliverByStartSequence;
         cc.OptStartSeq      = oci->sseq;
-        natsSubAndLdw_Unlock(sub);
+        natsSub_Unlock(sub);
 
         s = js_AddConsumer(&ci, jsi->js, jsi->stream, &cc, NULL, NULL);
         if (s == NATS_OK)
@@ -3021,13 +3048,11 @@ _recreateOrderedCons(void *closure)
         if (nc->opts->asyncErrCb != NULL)
         {
             char tmp[256];
-            snprintf(tmp, sizeof(tmp), "failed recreating ordered consumer: %u (%s)",
+            snprintf(tmp, sizeof(tmp), "failed recreating ordered consumer: %u (%s), will try again",
                      s, natsStatus_GetText(s));
             natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
         }
         natsConn_Unlock(nc);
-
-        natsConn_unsubscribe(nc, sub, 0, true, 0);
     }
 
     NATS_FREE(oci);
@@ -3040,7 +3065,7 @@ _recreateOrderedCons(void *closure)
 // We will create a new consumer and rewire the low level subscription.
 // Lock should be held.
 natsStatus
-jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
+jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq)
 {
     natsStatus          s           = NATS_OK;
     natsConnection      *nc         = sub->conn;
@@ -3052,6 +3077,9 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
 
     if ((sub->jsi == NULL) || (nc == NULL) || sub->closed)
         return NATS_OK;
+
+    // Note: if anything fail here, the reset/recreate of the ordered consumer
+    // will happen again based on the missed HB timer.
 
     // If there was an AUTO_UNSUB, we need to adjust the new value and send
     // an UNSUB for the new sid with new value.
@@ -3071,7 +3099,7 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
         return NATS_UPDATE_ERR_STACK(s);
 
     // Quick unsubscribe. Since we know this is a simple push subscriber we do in place.
-    osid = applyNewSID(sub, mu);
+    osid = applyNewSID(sub);
 
     NATS_FREE(sub->subject);
     sub->subject = (char*) newDeliver;
@@ -3110,7 +3138,7 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
 // The caller has verified that sub.jsi != nil and that this is not a control message.
 // Lock should be held.
 natsStatus
-jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *reset)
+jsSub_checkOrderedMsg(natsSubscription *sub, natsMsg *msg, bool *reset)
 {
     natsStatus  s    = NATS_OK;
     jsSub       *jsi = NULL;
@@ -3131,7 +3159,7 @@ jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *
         if (dseq != jsi->dseq)
         {
             *reset = true;
-            s = jsSub_resetOrderedConsumer(sub, mu, jsi->sseq+1);
+            s = jsSub_resetOrderedConsumer(sub, jsi->sseq+1);
         }
         else
         {

@@ -2602,6 +2602,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     int              jct     = 0;
     natsMsgFilter    mf      = NULL;
     void             *mfc    = NULL;
+    bool             unlock  = false;
 
     natsMutex_Lock(nc->subsMu);
 
@@ -2647,6 +2648,11 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         mu   = ldw->lock;
         cond = ldw->cond;
         list = &(ldw->msgList);
+        if (sub->jsi != NULL)
+        {
+            natsSub_Lock(sub);
+            unlock = true;
+        }
     }
     else
     {
@@ -2659,6 +2665,8 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     if (sub->closed || sub->drainSkip)
     {
         natsMutex_Unlock(mu);
+        if (unlock)
+            natsSub_Unlock(sub);
         natsMsg_Destroy(msg);
         return NATS_OK;
     }
@@ -2679,10 +2687,12 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         {
             bool replaced = false;
 
-            s = jsSub_checkOrderedMsg(sub, mu, msg, &replaced);
+            s = jsSub_checkOrderedMsg(sub, msg, &replaced);
             if ((s != NATS_OK) || replaced)
             {
                 natsMutex_Unlock(mu);
+                if (unlock)
+                    natsSub_Unlock(sub);
                 natsMsg_Destroy(msg);
                 return s;
             }
@@ -2747,7 +2757,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     else if ((jct == jsCtrlHeartbeat) && (msg->reply == NULL))
     {
         // Handle control heartbeat messages.
-        s = jsSub_processSequenceMismatch(sub, mu, msg, &sm);
+        s = jsSub_processSequenceMismatch(sub, msg, &sm);
     }
     else if ((jct == jsCtrlFlowControl) && (msg->reply != NULL))
     {
@@ -2765,6 +2775,8 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     }
 
     natsMutex_Unlock(mu);
+    if (unlock)
+        natsSub_Unlock(sub);
 
     if ((s == NATS_OK) && fcReply)
         s = natsConnection_Publish(nc, fcReply, NULL, 0);

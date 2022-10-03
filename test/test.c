@@ -27884,7 +27884,7 @@ _testOrderedCons(jsCtx *js, jsStreamInfo *si, char *asset, int assetLen, struct 
 
     jsSubOptions_Init(&so);
     so.Ordered = true;
-    so.Config.Heartbeat = 250*1000000;
+    so.Config.Heartbeat = NATS_MILLIS_TO_NANOS(250);
 
     s = natsBuf_Create(&args->buf, assetLen);
     if ((s == NATS_OK) && async)
@@ -28174,12 +28174,12 @@ test_JetStreamOrderedConsumer(void)
     s = _testOrderedCons(js, si, asset, assetLen, &args, false);
     testCond(s == NATS_OK);
 
-    test("Test with single loss (async): ");
+    test("Test with multi loss (async): ");
     natsConn_setFilter(nc, _multiLoss);
     s = _testOrderedCons(js, si, asset, assetLen, &args, true);
     testCond(s == NATS_OK);
 
-    test("Test with single loss (sync): ");
+    test("Test with multi loss (sync): ");
     natsConn_setFilter(nc, _multiLoss);
     s = _testOrderedCons(js, si, asset, assetLen, &args, false);
     testCond(s == NATS_OK);
@@ -28472,6 +28472,99 @@ test_JetStreamOrderedConsumerWithAutoUnsub(void)
     natsSubscription_Destroy(sub);
     jsCtx_Destroy(js2);
     natsConnection_Destroy(nc2);
+    _destroyDefaultThreadArgs(&args);
+    JS_TEARDOWN;
+}
+
+static void
+test_JetStreamOrderedConsSrvRestart(void)
+{
+    natsStatus          s;
+    natsSubscription    *sub    = NULL;
+    natsMsg             *msg    = NULL;
+    natsOptions         *opts   = NULL;
+    jsErrCode           jerr= 0;
+    jsStreamConfig      sc;
+    jsSubOptions        so;
+    struct threadArg    args;
+
+    JS_SETUP(2, 9, 2);
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    // JS_SETUP creates a basic connection, we want to know when
+    // we reconnected, so create a new one.
+    test("Connect: ");
+    natsConnection_Destroy(nc);
+    nc = NULL;
+    jsCtx_Destroy(js);
+    js = NULL;
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &args));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_JetStream(&js, nc, NULL));
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "OCRESTART";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Subscribe: ");
+    jsSubOptions_Init(&so);
+    so.Ordered = true;
+    so.Config.Heartbeat = NATS_MILLIS_TO_NANOS(250);
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Send 1 message: ");
+    s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
+    testCond(s == NATS_OK)
+
+    test("Consume: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Stopping server: ");
+    _stopServer(pid);
+    testCond(true);
+    // Wait more than the HB failure detection so that we check
+    // that resetting the ordered consumer works even while the
+    // server is still down.
+    test("Waiting before restarting: ");
+    nats_Sleep(1500);
+    testCond(true);
+    // Restart
+    test("Restarting server: ");
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Wait for reconnect: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.reconnected)
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    testCond(s == NATS_OK);
+
+    test("Send 1 message: ");
+    s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
+    testCond(s == NATS_OK)
+
+    test("Consume: ");
+    s = natsSubscription_NextMsg(&msg, sub, 5000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    natsSubscription_Destroy(sub);
+    natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&args);
     JS_TEARDOWN;
 }
@@ -33338,6 +33431,7 @@ static testInfo allTests[] =
     {"JetStreamOrderedCons",            test_JetStreamOrderedConsumer},
     {"JetStreamOrderedConsWithErrors",  test_JetStreamOrderedConsumerWithErrors},
     {"JetStreamOrderedConsAutoUnsub",   test_JetStreamOrderedConsumerWithAutoUnsub},
+    {"JetStreamOrderedConsSrvRestart",  test_JetStreamOrderedConsSrvRestart},
     {"JetStreamSubscribeWithFWC",       test_JetStreamSubscribeWithFWC},
     {"JetStreamStreamsSealAndRollup",   test_JetStreamStreamsSealAndRollup},
     {"JetStreamGetMsgAndLastMsg",       test_JetStreamGetMsgAndLastMsg},

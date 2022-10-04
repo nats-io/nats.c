@@ -693,7 +693,6 @@ _makeTLSConn(natsConnection *nc)
     }
     if (s == NATS_OK)
     {
-#if defined(NATS_HAS_TLS)
         if (nc->opts->sslCtx->skipVerify)
         {
             SSL_set_verify(ssl, SSL_VERIFY_NONE, NULL);
@@ -728,7 +727,6 @@ _makeTLSConn(natsConnection *nc)
             if (s == NATS_OK)
                 SSL_set_verify(ssl, SSL_VERIFY_PEER, _collectSSLErr);
         }
-#endif
     }
     if ((s == NATS_OK) && (SSL_do_handshake(ssl) != 1))
     {

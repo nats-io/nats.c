@@ -28483,6 +28483,8 @@ test_JetStreamOrderedConsSrvRestart(void)
     natsSubscription    *sub    = NULL;
     natsMsg             *msg    = NULL;
     natsOptions         *opts   = NULL;
+    const char          *cons   = NULL;
+    jsConsumerInfo      *ci     = NULL;
     jsErrCode           jerr= 0;
     jsStreamConfig      sc;
     jsSubOptions        so;
@@ -28562,6 +28564,15 @@ test_JetStreamOrderedConsSrvRestart(void)
     testCond(s == NATS_OK);
     natsMsg_Destroy(msg);
     msg = NULL;
+
+    test("Check still memory storage: ");
+    natsSub_Lock(sub);
+    if (sub->jsi != NULL)
+        cons = sub->jsi->consumer;
+    natsSub_Unlock(sub);
+    s = js_GetConsumerInfo(&ci, js, "OCRESTART", cons, NULL, NULL);
+    testCond((s == NATS_OK) && (ci->Config->MemoryStorage) && (ci->Config->Replicas == 1))
+    jsConsumerInfo_Destroy(ci);
 
     natsSubscription_Destroy(sub);
     natsOptions_Destroy(opts);

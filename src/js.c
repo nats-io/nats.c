@@ -3028,6 +3028,8 @@ _recreateOrderedCons(void *closure)
         cc.DeliverSubject   = sub->subject;
         cc.DeliverPolicy    = js_DeliverByStartSequence;
         cc.OptStartSeq      = oci->sseq;
+        cc.MemoryStorage    = true;
+        cc.Replicas         = 1;
         natsSub_Unlock(sub);
 
         s = js_AddConsumer(&ci, jsi->js, jsi->stream, &cc, NULL, NULL);
@@ -3048,8 +3050,11 @@ _recreateOrderedCons(void *closure)
         if (nc->opts->asyncErrCb != NULL)
         {
             char tmp[256];
-            snprintf(tmp, sizeof(tmp), "failed recreating ordered consumer: %u (%s), will try again",
-                     s, natsStatus_GetText(s));
+            const char *lastErr = nats_GetLastError(NULL);
+
+            snprintf(tmp, sizeof(tmp),
+                        "error recreating ordered consumer, will try again: status=%u error=%s",
+                        s, (nats_IsStringEmpty(lastErr) ? natsStatus_GetText(s) : lastErr));
             natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
         }
         natsConn_Unlock(nc);

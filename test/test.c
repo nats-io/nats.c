@@ -21976,6 +21976,7 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"backoff\":[50000000,250000000]}}",
         "{\"config\":{\"num_replicas\":1}}",
         "{\"config\":{\"mem_storage\":true}}",
+        "{\"config\":{\"name\":\"my_name\"}}",
     };
     const char          *bad[] = {
         "{\"stream_name\":123}",
@@ -23551,6 +23552,41 @@ test_JetStreamMgtConsumers(void)
     natsSubscription_Destroy(sub);
     sub = NULL;
 
+    test("Create check sub: ");
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    s = natsConnection_SubscribeSync(&sub, nc, "$JS.API.CONSUMER.CREATE.MY_STREAM.>");
+    testCond(s == NATS_OK);
+
+    test("Add consumer (name): ");
+    cfg.Durable = NULL;
+    cfg.Name = "my_name";
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+    nats_clearLastError();
+
+    test("Verify config: ");
+    s = natsSubscription_NextMsg(&resp, sub, 1000);
+    testCond((s == NATS_OK) && (resp != NULL)
+                && (strncmp(natsMsg_GetData(resp),
+                    "{\"stream_name\":\"MY_STREAM\","\
+                    "\"config\":{\"deliver_policy\":\"last\","\
+                    "\"name\":\"my_name\","\
+                    "\"description\":\"MyDescription\","\
+                    "\"deliver_subject\":\"foo\","\
+                    "\"opt_start_seq\":100,"\
+                    "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","\
+                    "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","\
+                    "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"\
+                    "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"\
+                    "\"flow_control\":true,\"idle_heartbeat\":700,"\
+                    "\"num_replicas\":1,\"mem_storage\":true}}",
+                    natsMsg_GetDataLength(resp)) == 0));
+    natsMsg_Destroy(resp);
+    resp = NULL;
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
     test("Create stream: ");
     jsStreamConfig_Init(&scfg);
     scfg.Name = "MY_STREAM";
@@ -23558,6 +23594,19 @@ test_JetStreamMgtConsumers(void)
     scfg.SubjectsLen = 1;
     s = js_AddStream(NULL, js, &scfg, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Add consumer (name): ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Name = "my_name";
+    cfg.DeliverSubject = "mn.foo";
+    cfg.FilterSubject = "bar.>";
+    s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL)
+                && (strcmp(ci->Stream, "MY_STREAM") == 0)
+                && (strcmp(ci->Name, "my_name") == 0)
+                && (strcmp(ci->Config->Name, "my_name") == 0));
+    jsConsumerInfo_Destroy(ci);
+    ci = NULL;
 
     test("Add consumer (durable): ");
     jsConsumerConfig_Init(&cfg);

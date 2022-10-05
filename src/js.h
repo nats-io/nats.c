@@ -259,3 +259,9 @@ js_release(jsCtx *js);
 
 natsStatus
 js_directGetMsgToJSMsg(const char *stream, natsMsg *msg);
+
+natsStatus
+js_cloneConsumerConfig(jsConsumerConfig *org, jsConsumerConfig **clone);
+
+void
+js_destroyConsumerConfig(jsConsumerConfig *cc);

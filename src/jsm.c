@@ -2660,6 +2660,7 @@ _destroyConsumerConfig(jsConsumerConfig *cc)
     if (cc == NULL)
         return;
 
+    NATS_FREE((char*) cc->Name);
     NATS_FREE((char*) cc->Durable);
     NATS_FREE((char*) cc->Description);
     NATS_FREE((char*) cc->DeliverSubject);
@@ -2761,6 +2762,7 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
     if ((s == NATS_OK) && (cjson != NULL))
     {
         s = nats_JSONGetStr(cjson, "durable_name", (char**) &(cc->Durable));
+        IFOK(s, nats_JSONGetStr(cjson, "name", (char**) &(cc->Name)));
         IFOK(s, nats_JSONGetStr(cjson, "description", (char**) &(cc->Description)));
         IFOK(s, nats_JSONGetStr(cjson, "deliver_subject", (char**) &(cc->DeliverSubject)));
         IFOK(s, nats_JSONGetStr(cjson, "deliver_group", (char**) &(cc->DeliverGroup)));

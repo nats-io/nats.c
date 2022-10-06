@@ -1246,7 +1246,7 @@ jsSub_free(jsSub *jsi)
     NATS_FREE(jsi->nxtMsgSubj);
     NATS_FREE(jsi->cmeta);
     NATS_FREE(jsi->fcReply);
-    NATS_FREE(jsi->fsubj);
+    js_destroyConsumerConfig(jsi->ocCfg);
     NATS_FREE(jsi);
 
     js_release(js);
@@ -1538,6 +1538,7 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm)
     jsSub       *jsi   = sub->jsi;
     const char  *str   = NULL;
     int64_t     val    = 0;
+    struct mismatch *m = &jsi->mismatch;
     natsStatus  s;
 
     *sm = false;
@@ -1548,7 +1549,7 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm)
     if (jsi->cmeta == NULL)
         return NATS_OK;
 
-    s = js_getMetaData(jsi->cmeta, NULL, NULL, NULL, NULL, &jsi->sseq, &jsi->dseq, NULL, NULL, 2);
+    s = js_getMetaData(jsi->cmeta, NULL, NULL, NULL, NULL, &m->sseq, &m->dseq, NULL, NULL, 2);
     if (s != NATS_OK)
     {
         if (s == NATS_ERR)
@@ -1568,9 +1569,9 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm)
         if (val == -1)
             return nats_setError(NATS_ERR, "invalid last consumer sequence: '%s'", str);
 
-        jsi->ldseq = (uint64_t) val;
+        m->ldseq = (uint64_t) val;
     }
-    if (jsi->ldseq == jsi->dseq)
+    if (m->ldseq == m->dseq)
     {
         // Sync subs use this flag to get the NextMsg() to error out and
         // return NATS_MISMATCH to indicate that a mismatch was discovered,
@@ -1636,6 +1637,7 @@ natsStatus
 natsSubscription_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscription *sub)
 {
     jsSub *jsi;
+    struct mismatch *m = NULL;
 
     if ((csm == NULL) || (sub == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1647,15 +1649,16 @@ natsSubscription_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscr
         return nats_setError(NATS_INVALID_SUBSCRIPTION, "%s", jsErrNotAJetStreamSubscription);
     }
     jsi = sub->jsi;
-    if (jsi->dseq == jsi->ldseq)
+    m = &jsi->mismatch;
+    if (m->dseq == m->ldseq)
     {
         natsSubAndLdw_Unlock(sub);
         return NATS_NOT_FOUND;
     }
     memset(csm, 0, sizeof(jsConsumerSequenceMismatch));
-    csm->Stream = jsi->sseq;
-    csm->ConsumerClient = jsi->dseq;
-    csm->ConsumerServer = jsi->ldseq;
+    csm->Stream = m->sseq;
+    csm->ConsumerClient = m->dseq;
+    csm->ConsumerServer = m->ldseq;
     natsSubAndLdw_Unlock(sub);
     return NATS_OK;
 }
@@ -2324,6 +2327,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     jsSubOptions        o;
     jsConsumerConfig    cfgStack;
     jsConsumerConfig    *cfg = NULL;
+    jsConsumerConfig    *ocCfg = NULL;
 
     if ((new_sub == NULL) || (js == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -2485,6 +2489,8 @@ PROCESS_INFO:
                 cfg->Heartbeat = jsOrderedHBInterval;
             cfg->MemoryStorage = true;
             cfg->Replicas      = 1;
+
+            s = js_cloneConsumerConfig(cfg, &ocCfg);
         }
         else
         {
@@ -2514,14 +2520,13 @@ PROCESS_INFO:
                     s = nats_setDefaultError(NATS_NO_MEMORY);
             }
             IF_OK_DUP_STRING(s, jsi->stream, stream);
-            if ((s == NATS_OK) && (opts->Ordered))
-                DUP_STRING(s, jsi->fsubj, cfg->FilterSubject);
             if (s == NATS_OK)
             {
                 jsi->js     = js;
                 jsi->hbi    = hbi;
                 jsi->pull   = isPullMode;
                 jsi->ordered= opts->Ordered;
+                jsi->ocCfg  = ocCfg;
                 jsi->dseq   = 1;
                 jsi->ackNone= (opts->Config.AckPolicy == js_AckNone || opts->Ordered);
                 js_retain(js);
@@ -2983,7 +2988,7 @@ _recreateOrderedCons(void *closure)
     natsThread          *t   = NULL;
     jsSub               *jsi = NULL;
     jsConsumerInfo      *ci  = NULL;
-    jsConsumerConfig    cc;
+    jsConsumerConfig    *cc  = NULL;
     natsStatus          s;
 
     // Note: if anything fail here, the reset/recreate of the ordered consumer
@@ -3010,36 +3015,39 @@ _recreateOrderedCons(void *closure)
         natsSub_Lock(sub);
         t = oci->thread;
         jsi = sub->jsi;
-        // Reset some items in jsi.
-        jsi->dseq = 1;
-        NATS_FREE(jsi->cmeta);
-        jsi->cmeta = NULL;
-        NATS_FREE(jsi->fcReply);
-        jsi->fcReply = NULL;
-        jsi->fcDelivered = 0;
-        // Create consumer request for starting policy.
-        jsConsumerConfig_Init(&cc);
-        cc.FilterSubject    = jsi->fsubj;
-        cc.FlowControl      = true;
-        cc.AckPolicy        = js_AckNone;
-        cc.MaxDeliver       = 1;
-        cc.AckWait          = NATS_SECONDS_TO_NANOS(24*60*60); // Just set to something known, not utilized.
-        cc.Heartbeat        = jsi->hbi * 1000000;
-        cc.DeliverSubject   = sub->subject;
-        cc.DeliverPolicy    = js_DeliverByStartSequence;
-        cc.OptStartSeq      = oci->sseq;
-        natsSub_Unlock(sub);
 
-        s = js_AddConsumer(&ci, jsi->js, jsi->stream, &cc, NULL, NULL);
+        NATS_FREE((char*) jsi->ocCfg->DeliverSubject);
+        jsi->ocCfg->DeliverSubject = NULL;
+        DUP_STRING(s, jsi->ocCfg->DeliverSubject, sub->subject);
         if (s == NATS_OK)
         {
-            natsSub_Lock(sub);
-            NATS_FREE(jsi->consumer);
-            jsi->consumer = NULL;
-            DUP_STRING(s, jsi->consumer, ci->Name);
-            natsSub_Unlock(sub);
+            // Reset some items in jsi.
+            jsi->dseq = 1;
+            NATS_FREE(jsi->cmeta);
+            jsi->cmeta = NULL;
+            NATS_FREE(jsi->fcReply);
+            jsi->fcReply = NULL;
+            jsi->fcDelivered = 0;
+            // Create consumer request for starting policy.
+            cc = jsi->ocCfg;
+            cc->DeliverPolicy = js_DeliverByStartSequence;
+            cc->OptStartSeq   = oci->sseq;
+        }
+        natsSub_Unlock(sub);
 
-            jsConsumerInfo_Destroy(ci);
+        if (s == NATS_OK)
+        {
+            s = js_AddConsumer(&ci, jsi->js, jsi->stream, cc, NULL, NULL);
+            if (s == NATS_OK)
+            {
+                natsSub_Lock(sub);
+                NATS_FREE(jsi->consumer);
+                jsi->consumer = NULL;
+                DUP_STRING(s, jsi->consumer, ci->Name);
+                natsSub_Unlock(sub);
+
+                jsConsumerInfo_Destroy(ci);
+            }
         }
     }
     if (s != NATS_OK)
@@ -3048,8 +3056,11 @@ _recreateOrderedCons(void *closure)
         if (nc->opts->asyncErrCb != NULL)
         {
             char tmp[256];
-            snprintf(tmp, sizeof(tmp), "failed recreating ordered consumer: %u (%s), will try again",
-                     s, natsStatus_GetText(s));
+            const char *lastErr = nats_GetLastError(NULL);
+
+            snprintf(tmp, sizeof(tmp),
+                        "error recreating ordered consumer, will try again: status=%u error=%s",
+                        s, (nats_IsStringEmpty(lastErr) ? natsStatus_GetText(s) : lastErr));
             natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
         }
         natsConn_Unlock(nc);

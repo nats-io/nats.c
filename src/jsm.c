@@ -2654,12 +2654,13 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static void
-_destroyConsumerConfig(jsConsumerConfig *cc)
+void
+js_destroyConsumerConfig(jsConsumerConfig *cc)
 {
     if (cc == NULL)
         return;
 
+    NATS_FREE((char*) cc->Name);
     NATS_FREE((char*) cc->Durable);
     NATS_FREE((char*) cc->Description);
     NATS_FREE((char*) cc->DeliverSubject);
@@ -2761,6 +2762,7 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
     if ((s == NATS_OK) && (cjson != NULL))
     {
         s = nats_JSONGetStr(cjson, "durable_name", (char**) &(cc->Durable));
+        IFOK(s, nats_JSONGetStr(cjson, "name", (char**) &(cc->Name)));
         IFOK(s, nats_JSONGetStr(cjson, "description", (char**) &(cc->Description)));
         IFOK(s, nats_JSONGetStr(cjson, "deliver_subject", (char**) &(cc->DeliverSubject)));
         IFOK(s, nats_JSONGetStr(cjson, "deliver_group", (char**) &(cc->DeliverGroup)));
@@ -2791,7 +2793,7 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
     if (s == NATS_OK)
         *new_cc = cc;
     else
-        _destroyConsumerConfig(cc);
+        js_destroyConsumerConfig(cc);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -3100,7 +3102,7 @@ jsConsumerInfo_Destroy(jsConsumerInfo *ci)
 
     NATS_FREE(ci->Stream);
     NATS_FREE(ci->Name);
-    _destroyConsumerConfig(ci->Config);
+    js_destroyConsumerConfig(ci->Config);
     _destroyClusterInfo(ci->Cluster);
     NATS_FREE(ci);
 }
@@ -3448,4 +3450,54 @@ jsConsumerNamesList_Destroy(jsConsumerNamesList *list)
 
     NATS_FREE(list->List);
     NATS_FREE(list);
+}
+
+natsStatus
+js_cloneConsumerConfig(jsConsumerConfig *org, jsConsumerConfig **clone)
+{
+    natsStatus          s   = NATS_OK;
+    jsConsumerConfig    *c  = NULL;
+
+    *clone = NULL;
+    if (org == NULL)
+        return NATS_OK;
+
+    c = (jsConsumerConfig*) NATS_CALLOC(1, sizeof(jsConsumerConfig));
+    if (c == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    memcpy(c, org, sizeof(jsConsumerConfig));
+
+    // Need to first set all pointers to NULL in case we fail to dup and then
+    // do the cleanup.
+    c->Name = NULL;
+    c->Durable = NULL;
+    c->Description = NULL;
+    c->BackOff = NULL;
+    c->FilterSubject = NULL;
+    c->SampleFrequency = NULL;
+    c->DeliverSubject = NULL;
+    c->DeliverGroup = NULL;
+    // Now dup all strings, etc...
+    IF_OK_DUP_STRING(s, c->Name, org->Name);
+    IF_OK_DUP_STRING(s, c->Durable, org->Durable);
+    IF_OK_DUP_STRING(s, c->Description, org->Description);
+    IF_OK_DUP_STRING(s, c->FilterSubject, org->FilterSubject);
+    IF_OK_DUP_STRING(s, c->SampleFrequency, org->SampleFrequency);
+    IF_OK_DUP_STRING(s, c->DeliverSubject, org->DeliverSubject);
+    IF_OK_DUP_STRING(s, c->DeliverGroup, org->DeliverGroup);
+    if ((s == NATS_OK) && (org->BackOff != NULL) && (org->BackOffLen > 0))
+    {
+        c->BackOff = (int64_t*) NATS_CALLOC(org->BackOffLen, sizeof(int64_t));
+        if (c->BackOff == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+            memcpy(c->BackOff, org->BackOff, org->BackOffLen*sizeof(int64_t));
+    }
+    if (s == NATS_OK)
+        *clone = c;
+    else
+        js_destroyConsumerConfig(c);
+
+    return NATS_UPDATE_ERR_STACK(s);
 }

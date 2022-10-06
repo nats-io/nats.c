@@ -102,6 +102,8 @@
 
 #define MAX_FRAMES (50)
 
+#define nats_IsStringEmpty(s) ((((s) == NULL) || ((s)[0] == '\0')) ? true : false)
+
 #define DUP_STRING(s, s1, s2) \
         { \
             (s1) = NATS_STRDUP(s2); \
@@ -110,7 +112,7 @@
         }
 
 #define IF_OK_DUP_STRING(s, s1, s2) \
-        if ((s) == NATS_OK) \
+        if (((s) == NATS_OK) && !nats_IsStringEmpty(s2)) \
             DUP_STRING((s), (s1), (s2))
 
 
@@ -399,6 +401,13 @@ typedef struct __jsSub
     // the sequence mismatch report. Should the mismatch be
     // resolved, this will be cleared.
     bool                sm;
+    // These are the mismatch seq info
+    struct mismatch
+    {
+        uint64_t        sseq;
+        uint64_t        dseq;
+        uint64_t        ldseq;
+    } mismatch;
 
     // When in auto-ack mode, we have an internal callback
     // that will call natsMsg_Ack after the user callback returns.
@@ -412,8 +421,8 @@ typedef struct __jsSub
     uint64_t            fciseq;
     char                *fcReply;
 
-    // When reseting an OrderedConsumer, need the original filter subject.
-    char                *fsubj;
+    // When reseting an OrderedConsumer, need the original configuration.
+    jsConsumerConfig    *ocCfg;
 
 } jsSub;
 

@@ -23337,6 +23337,7 @@ test_JetStreamMgtConsumers(void)
     jsConsumerNamesList *cnList = NULL;
     int                 count   = 0;
     natsMsg             *msg    = NULL;
+    jsConsumerConfig    *cloneCfg = NULL;
 
     JS_SETUP(2, 9, 0);
 
@@ -24117,6 +24118,32 @@ test_JetStreamMgtConsumers(void)
     // Check this does not crash
     jsConsumerNamesList_Destroy(cnList);
     testCond(true);
+
+    test("Check clone: ");
+    jsConsumerConfig_Init(&cfg);
+    cfg.Name = "A";
+    cfg.Durable = "B";
+    cfg.Description = "C";
+    cfg.FilterSubject = "D";
+    cfg.SampleFrequency = "E";
+    cfg.DeliverSubject = "F";
+    cfg.DeliverGroup = "G";
+    cfg.BackOff = (int64_t[]){NATS_MILLIS_TO_NANOS(50), NATS_MILLIS_TO_NANOS(250)};
+    cfg.BackOffLen = 2;
+    s = js_cloneConsumerConfig(&cfg, &cloneCfg);
+    testCond((s == NATS_OK) && (cloneCfg != NULL)
+                && (cloneCfg->Name != NULL) && (strcmp(cloneCfg->Name, "A") == 0)
+                && (cloneCfg->Durable != NULL) && (strcmp(cloneCfg->Durable, "B") == 0)
+                && (cloneCfg->Description != NULL) && (strcmp(cloneCfg->Description, "C") == 0)
+                && (cloneCfg->FilterSubject != NULL) && (strcmp(cloneCfg->FilterSubject, "D") == 0)
+                && (cloneCfg->SampleFrequency != NULL) && (strcmp(cloneCfg->SampleFrequency, "E") == 0)
+                && (cloneCfg->DeliverSubject != NULL) && (strcmp(cloneCfg->DeliverSubject, "F") == 0)
+                && (cloneCfg->DeliverGroup != NULL) && (strcmp(cloneCfg->DeliverGroup, "G") == 0)
+                && (cloneCfg->BackOffLen == 2)
+                && (cloneCfg->BackOff != NULL)
+                && (cloneCfg->BackOff[0] == NATS_MILLIS_TO_NANOS(50))
+                && (cloneCfg->BackOff[1] == NATS_MILLIS_TO_NANOS(250)));
+    js_destroyConsumerConfig(cloneCfg);
 
     JS_TEARDOWN;
 }
@@ -26852,7 +26879,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     test("Check HB received: ");
     nats_Sleep(300);
     natsSubAndLdw_Lock(sub);
-    s = (sub->jsi->dseq == 1 ? NATS_OK : NATS_ERR);
+    s = (sub->jsi->mismatch.dseq == 1 ? NATS_OK : NATS_ERR);
     natsSubAndLdw_Unlock(sub);
     testCond(s == NATS_OK);
 
@@ -26986,7 +27013,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     test("Check HB received: ");
     nats_Sleep(300);
     natsMutex_Lock(sub->mu);
-    s = (sub->jsi->dseq == 3 ? NATS_OK : NATS_ERR);
+    s = (sub->jsi->mismatch.dseq == 3 ? NATS_OK : NATS_ERR);
     natsMutex_Unlock(sub->mu);
     testCond(s == NATS_OK);
 
@@ -27344,7 +27371,7 @@ test_JetStreamSubscribePull(void)
     natsSubscription    *sub2 = NULL;
     natsSubscription    *sub3 = NULL;
 
-    JS_SETUP(2, 9, 0);
+    JS_SETUP(2, 9, 2);
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)
@@ -28090,6 +28117,8 @@ test_JetStreamOrderedConsumer(void)
     int                 assetLen = 1024*1024;
     const int           chunkSize = 1024;
     jsStreamInfo        *si = NULL;
+    jsConsumerInfo      *ci1 = NULL;
+    jsConsumerInfo      *ci2 = NULL;
 
     JS_SETUP(2, 3, 3);
 
@@ -28253,6 +28282,48 @@ test_JetStreamOrderedConsumer(void)
     s = _testOrderedCons(js, si, asset, assetLen, &args, false);
     testCond(s == NATS_OK);
 
+    // A bug was causing the ordered consumer to be recreated at
+    // each hearbeat. Use a low hearbeat and check that name
+    // does not change after some HB intervals.
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TESTNAME";
+    sc.Subjects = (const char*[1]){"b"};
+    sc.SubjectsLen = 1;
+    sc.Storage = js_MemoryStorage;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Send 1 message: ");
+    s = js_Publish(NULL, js, "b", "hello", 5, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create ordered cons with small HB: ");
+    jsSubOptions_Init(&so);
+    so.Ordered = true;
+    so.Config.Heartbeat = NATS_MILLIS_TO_NANOS(100);
+    s = js_SubscribeSync(&sub, js, "b", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Get name: ");
+    s = natsSubscription_GetConsumerInfo(&ci1, sub, NULL, NULL);
+    testCond((s == NATS_OK) && (ci1 != NULL));
+
+    nats_Sleep(300);
+
+    test("Send 1 message: ");
+    s = js_Publish(NULL, js, "b", "hello", 5, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    nats_Sleep(300);
+
+    test("Check name does not change: ");
+    s = natsSubscription_GetConsumerInfo(&ci2, sub, NULL, NULL);
+    testCond((s == NATS_OK) && (ci2 != NULL)
+                && (strcmp(ci1->Name, ci2->Name) == 0));
+    jsConsumerInfo_Destroy(ci1);
+    jsConsumerInfo_Destroy(ci2);
+
     free(asset);
     jsStreamInfo_Destroy(si);
     natsSubscription_Destroy(sub);
@@ -28348,7 +28419,7 @@ test_JetStreamOrderedConsumerWithErrors(void)
         test("Create ordered sub: ");
         jsSubOptions_Init(&so);
         so.Ordered = true;
-        so.Config.Heartbeat = 200*1000000;
+        so.Config.Heartbeat = NATS_MILLIS_TO_NANOS(200);
         s = js_SubscribeSync(&sub, js, "a", NULL, &so, &jerr);
         testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
@@ -28532,12 +28603,12 @@ test_JetStreamOrderedConsSrvRestart(void)
     natsSubscription    *sub    = NULL;
     natsMsg             *msg    = NULL;
     natsOptions         *opts   = NULL;
-    const char          *cons   = NULL;
     jsConsumerInfo      *ci     = NULL;
     jsErrCode           jerr= 0;
     jsStreamConfig      sc;
     jsSubOptions        so;
     struct threadArg    args;
+    int                 i;
 
     JS_SETUP(2, 9, 2);
 
@@ -28570,6 +28641,7 @@ test_JetStreamOrderedConsSrvRestart(void)
     jsSubOptions_Init(&so);
     so.Ordered = true;
     so.Config.Heartbeat = NATS_MILLIS_TO_NANOS(250);
+    so.Config.HeadersOnly = true;
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
@@ -28614,13 +28686,23 @@ test_JetStreamOrderedConsSrvRestart(void)
     natsMsg_Destroy(msg);
     msg = NULL;
 
-    test("Check still memory storage: ");
-    natsSub_Lock(sub);
-    if (sub->jsi != NULL)
-        cons = sub->jsi->consumer;
-    natsSub_Unlock(sub);
-    s = js_GetConsumerInfo(&ci, js, "OCRESTART", cons, NULL, NULL);
-    testCond((s == NATS_OK) && (ci->Config->MemoryStorage) && (ci->Config->Replicas == 1))
+    test("Check configuration is similar: ");
+    for (i=0; (s==NATS_OK) && (i<10); i++)
+    {
+        s = natsSubscription_GetConsumerInfo(&ci, sub, NULL, NULL);
+        if (s == NATS_OK)
+            break;
+        else if (s == NATS_NOT_FOUND)
+        {
+            s = NATS_OK;
+            nats_Sleep(100);
+        }
+    }
+    testCond((s == NATS_OK)
+                && (ci != NULL) && (ci->Config != NULL)
+                && (ci->Config->MemoryStorage)
+                && (ci->Config->Replicas == 1)
+                && (ci->Config->HeadersOnly));
     jsConsumerInfo_Destroy(ci);
 
     natsSubscription_Destroy(sub);

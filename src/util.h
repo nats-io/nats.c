@@ -68,8 +68,6 @@ typedef struct
 
 typedef natsStatus (*jsonRangeCB)(void *userInfo, const char *fieldName, nats_JSONField *f);
 
-#define nats_IsStringEmpty(s) (((s == NULL) || (s[0] == '\0')) ? true : false)
-
 #define snprintf_truncate(d, szd, f, ...) if (snprintf((d), (szd), (f), __VA_ARGS__) >= (int) (szd)) { \
     int offset = (int) (szd) - 2;         \
     if (offset > 0) (d)[offset--] = '.';  \

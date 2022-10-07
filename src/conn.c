@@ -1112,6 +1112,15 @@ _resendSubscriptions(natsConnection *nc)
 
         adjustedMax = 0;
         natsSub_Lock(sub);
+        // If JS ordered consumer, trigger a reset. Don't check the error
+        // condition here. If there is a failure, it will be retried
+        // at the next HB interval.
+        if ((sub->jsi != NULL) && (sub->jsi->ordered))
+        {
+            jsSub_resetOrderedConsumer(sub, sub->jsi->sseq+1);
+            natsSub_Unlock(sub);
+            continue;
+        }
         if (natsSub_drainStarted(sub))
         {
             natsSub_Unlock(sub);

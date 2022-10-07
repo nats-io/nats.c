@@ -3021,13 +3021,6 @@ _recreateOrderedCons(void *closure)
         DUP_STRING(s, jsi->ocCfg->DeliverSubject, sub->subject);
         if (s == NATS_OK)
         {
-            // Reset some items in jsi.
-            jsi->dseq = 1;
-            NATS_FREE(jsi->cmeta);
-            jsi->cmeta = NULL;
-            NATS_FREE(jsi->fcReply);
-            jsi->fcReply = NULL;
-            jsi->fcDelivered = 0;
             // Create consumer request for starting policy.
             cc = jsi->ocCfg;
             cc->DeliverPolicy = js_DeliverByStartSequence;
@@ -3066,6 +3059,7 @@ _recreateOrderedCons(void *closure)
         natsConn_Unlock(nc);
     }
 
+    NATS_FREE(oci->ndlv);
     NATS_FREE(oci);
     natsThread_Detach(t);
     natsThread_Destroy(t);
@@ -3085,8 +3079,9 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq)
     jsOrderedConsInfo   *oci        = NULL;
     int                 max         = 0;
     bool                done        = false;
+    jsSub               *jsi        = sub->jsi;
 
-    if ((sub->jsi == NULL) || (nc == NULL) || sub->closed)
+    if ((jsi == NULL) || (nc == NULL) || sub->closed)
         return NATS_OK;
 
     // Note: if anything fail here, the reset/recreate of the ordered consumer
@@ -3099,7 +3094,7 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq)
         // If we are at or anove sub->max, then we are done with this sub
         // and will send an UNSUB in the _recreateOrderedCons thread function.
         if (sub->jsi->fciseq < sub->max)
-            max = (int)(sub->max - sub->jsi->fciseq);
+            max = (int)(sub->max - jsi->fciseq);
         else
             done = true;
     }
@@ -3121,15 +3116,24 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq)
     oci = NATS_CALLOC(1, sizeof(jsOrderedConsInfo));
     if (oci == NULL)
         s = nats_setDefaultError(NATS_NO_MEMORY);
+    else
+        DUP_STRING(s, oci->ndlv, (char*) newDeliver);
 
     if (s == NATS_OK)
     {
+        // Reset some items in jsi.
+        jsi->dseq = 1;
+        NATS_FREE(jsi->fcReply);
+        jsi->fcReply = NULL;
+        jsi->fcDelivered = 0;
+        NATS_FREE(jsi->cmeta);
+        jsi->cmeta = NULL;
+
         oci->osid = osid;
         oci->nsid = sub->sid;
         oci->sseq = sseq;
         oci->nc   = nc;
         oci->sub  = sub;
-        oci->ndlv = (char*) newDeliver;
         oci->max  = max;
         oci->done = done;
         natsSub_retain(sub);
@@ -3140,6 +3144,11 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq)
             NATS_FREE(oci);
             natsSub_release(sub);
         }
+    }
+    if ((s != NATS_OK) && (oci != NULL))
+    {
+        NATS_FREE(oci->ndlv);
+        NATS_FREE(oci);
     }
     return s;
 }

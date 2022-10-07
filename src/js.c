@@ -1607,10 +1607,10 @@ natsStatus
 natsSubscription_GetConsumerInfo(jsConsumerInfo **ci, natsSubscription *sub,
                                  jsOptions *opts, jsErrCode *errCode)
 {
-    const char  *consumer = NULL;
+    char        *consumer = NULL;
     const char  *stream   = NULL;
     jsCtx       *js       = NULL;
-    natsStatus  s;
+    natsStatus  s         = NATS_OK;
 
     if ((ci == NULL) || (sub == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1623,13 +1623,17 @@ natsSubscription_GetConsumerInfo(jsConsumerInfo **ci, natsSubscription *sub,
     }
     js = sub->jsi->js;
     stream = (const char*) sub->jsi->stream;
-    consumer = (const char*) sub->jsi->consumer;
-    sub->refs++;
+    DUP_STRING(s, consumer, sub->jsi->consumer);
+    if (s == NATS_OK)
+        sub->refs++;
     natsSub_Unlock(sub);
 
-    s = js_GetConsumerInfo(ci, js, stream, consumer, opts, errCode);
-
-    natsSub_release(sub);
+    if (s == NATS_OK)
+    {
+        s = js_GetConsumerInfo(ci, js, stream, consumer, opts, errCode);
+        NATS_FREE(consumer);
+        natsSub_release(sub);
+    }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -3034,9 +3038,14 @@ _recreateOrderedCons(void *closure)
             if (s == NATS_OK)
             {
                 natsSub_Lock(sub);
-                NATS_FREE(jsi->consumer);
-                jsi->consumer = NULL;
-                DUP_STRING(s, jsi->consumer, ci->Name);
+                // Set the consumer name only if the consumer's info delivery subject
+                // matches the subscription's current subject.
+                if (strcmp(ci->Config->DeliverSubject, sub->subject) == 0)
+                {
+                    NATS_FREE(jsi->consumer);
+                    jsi->consumer = NULL;
+                    DUP_STRING(s, jsi->consumer, ci->Name);
+                }
                 natsSub_Unlock(sub);
 
                 jsConsumerInfo_Destroy(ci);

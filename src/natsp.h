@@ -388,7 +388,6 @@ typedef struct __jsSub
     char                *cmeta;
     uint64_t            sseq;
     uint64_t            dseq;
-    uint64_t            ldseq;
     // Skip sequence mismatch notification. This is used for
     // async subscriptions to notify the asyn err handler only
     // once. Should the mismatch be resolved, this will be

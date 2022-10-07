@@ -27987,7 +27987,7 @@ _testOrderedCons(jsCtx *js, jsStreamInfo *si, char *asset, int assetLen, struct 
             start = nats_Now();
             while ((s == NATS_OK) && !done)
             {
-                s = natsSubscription_NextMsg(&msg, sub, 1000);
+                s = natsSubscription_NextMsg(&msg, sub, 5000);
                 if (s == NATS_OK)
                 {
                     done = (natsMsg_GetDataLength(msg) == 0 ? true : false);
@@ -27999,7 +27999,7 @@ _testOrderedCons(jsCtx *js, jsStreamInfo *si, char *asset, int assetLen, struct 
                     natsMsg_Destroy(msg);
                     msg = NULL;
                 }
-                if ((s == NATS_OK) && (nats_Now() - start > 5000))
+                if ((s == NATS_OK) && (nats_Now() - start > 5500))
                     s = NATS_TIMEOUT;
             }
         }
@@ -28511,7 +28511,7 @@ test_JetStreamOrderedConsumerWithAutoUnsub(void)
     test("Subscribe: ");
     jsSubOptions_Init(&so);
     so.Ordered = true;
-    so.Config.Heartbeat = 250*1000000;
+    so.Config.Heartbeat = NATS_MILLIS_TO_NANOS(250);
     s = js_Subscribe(&sub, js, "a", _jsMsgHandler, (void*)&args, NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
@@ -28625,6 +28625,7 @@ test_JetStreamOrderedConsSrvRestart(void)
     js = NULL;
     s = natsOptions_Create(&opts);
     IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &args));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
     IFOK(s, natsConnection_Connect(&nc, opts));
     IFOK(s, natsConnection_JetStream(&js, nc, NULL));
     testCond(s == NATS_OK);

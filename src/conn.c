@@ -899,6 +899,23 @@ _connectProto(natsConnection *nc, char **proto)
         pwd   = opts->password;
         token = opts->token;
         nkey  = opts->nkey;
+
+        // Options take precedence for an implicit URL. If above is still
+        // empty, we will check if we have saved a user from an explicit
+        // URL in the server pool.
+        if (nats_IsStringEmpty(user)
+            && nats_IsStringEmpty(token)
+            && (nc->srvPool->user != NULL))
+        {
+            user = nc->srvPool->user;
+            pwd  = nc->srvPool->pwd;
+            // Again, if there is no password, assume username is token.
+            if (pwd == NULL)
+            {
+                token = user;
+                user = NULL;
+            }
+        }
     }
 
     if (opts->userJWTHandler != NULL)

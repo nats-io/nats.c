@@ -208,6 +208,7 @@ ServerPoolUpdatedOnClusterUpdate
 ReconnectJitter
 CustomReconnectDelay
 LameDuckMode
+ReconnectImplicitUserInfo
 JetStreamUnmarshalAccInfo
 JetStreamUnmarshalStreamState
 JetStreamUnmarshalStreamCfg

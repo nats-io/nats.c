@@ -36,6 +36,8 @@ typedef struct __natsSrvPool
     int         size;
     int         cap;
     bool        randomize;
+    char        *user;
+    char        *pwd;
 
 } natsSrvPool;
 

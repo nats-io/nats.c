@@ -132,6 +132,8 @@ natsSrvPool_Destroy(natsSrvPool *pool)
     NATS_FREE(pool->srvrs);
     pool->srvrs = NULL;
     pool->size  = 0;
+    NATS_FREE(pool->user);
+    NATS_FREE(pool->pwd);
     NATS_FREE(pool);
 }
 
@@ -145,7 +147,18 @@ _addURLToPool(natsSrvPool *pool, char *sURL, bool implicit, const char *tlsName)
 
     s = _createSrv(&srv, sURL, implicit, tlsName);
     if (s != NATS_OK)
-        return s;
+        return NATS_UPDATE_ERR_STACK(s);
+
+    // For and explicit URL, we will save the user info if one is provided
+    // and if not already done.
+    if (!implicit && (pool->user == NULL) && (srv->url->username != NULL))
+    {
+        DUP_STRING(s, pool->user, srv->url->username);
+        if ((s == NATS_OK) && !nats_IsStringEmpty(srv->url->password))
+            DUP_STRING(s, pool->pwd, srv->url->password);
+        if (s != NATS_OK)
+            return NATS_UPDATE_ERR_STACK(s);
+    }
 
     // In the map, we need to add an URL that is just host:port
     snprintf(bareURL, sizeof(bareURL), "%s:%d", srv->url->host, srv->url->port);

@@ -14681,7 +14681,10 @@ test_AuthServers(void)
     testCond((s == NATS_OK)
              && (nc != NULL)
              && (natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer)) == NATS_OK)
-             && (strcmp(buffer, authServers[1]) == 0));
+             // Even though we are using the url nats://127.0.0.1:1222, the library
+             // will use the user/pwd info found in the second url. So we should have
+             // connected OK to the first (no randomization option set at beginning of test).
+             && (strcmp(buffer, authServers[0]) == 0));
 
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
@@ -21156,7 +21159,7 @@ test_SSLReconnectWithAuthError(void)
     IFOK(s, natsOptions_SetMaxReconnect(opts, 1000));
     IFOK(s, natsOptions_SetReconnectWait(opts, 100));
     IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &args));
-    IFOK(s, natsOptions_SetURL(opts, "tls://user:pwd@127.0.0.1:4443"));
+    IFOK(s, natsOptions_SetServers(opts, (const char*[2]){"tls://user:pwd@127.0.0.1:4443", "tls://bad:pwd@127.0.0.1:4444"}, 2));
     if (opts == NULL)
         FAIL("Unable to create reconnect options!");
 
@@ -21304,6 +21307,98 @@ _createConfFile(char *buf, int bufLen, const char *content)
 
     fputs(content, f);
     fclose(f);
+}
+
+static void
+test_ReconnectImplicitUserInfo(void)
+{
+    natsStatus          s;
+    natsPid             pid1    = NATS_INVALID_PID;
+    natsPid             pid2    = NATS_INVALID_PID;
+    natsOptions         *o1     = NULL;
+    natsConnection      *nc1 = NULL;
+    natsSubscription    *sub = NULL;
+    natsConnection      *nc2 = NULL;
+    natsMsg             *msg = NULL;
+    char conf[256];
+    char cmdLine[1024];
+    struct threadArg args;
+
+    _createConfFile(conf, sizeof(conf),
+    "accounts { "\
+    "   A { "\
+    "       users: [{user: a, password: pwd}] "\
+    "   }\n"\
+    "   B { "\
+    "       users: [{user: b, password: pwd}] "\
+    "   }\n"\
+    "}\n"\
+    "no_auth_user: b\n");
+    test("Start server1: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-cluster_name \"local\" -cluster nats://127.0.0.1:6222 -c %s", conf);
+    pid1 = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid1);
+    testCond(true);
+
+    test("Connect1: ");
+    s = _createDefaultThreadArgsForCbTests(&args);
+    IFOK(s, natsOptions_Create(&o1));
+    IFOK(s, natsOptions_SetDiscoveredServersCB(o1, _discoveredServersCb, (void*) &args));
+    IFOK(s, natsOptions_SetURL(o1, "nats://a:pwd@127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetReconnectWait(o1, 100));
+    IFOK(s, natsOptions_SetReconnectedCB(o1, _reconnectedCb, (void*) &args));
+    IFOK(s, natsConnection_Connect(&nc1, o1));
+    testCond(s == NATS_OK);
+
+    test("Start server2: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-p 4223 -cluster_name \"local\" -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222 -c %s", conf);
+    pid2 = _startServer("nats://127.0.0.1:4223", cmdLine, true);
+    CHECK_SERVER_STARTED(pid2);
+    testCond(true);
+
+    test("Check s2 discovered: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && (args.sum == 0))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Stop srv1: ");
+    _stopServer(pid1);
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.reconnected)
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Create sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc1, "foo");
+    testCond(s == NATS_OK);
+
+    test("Flush: ");
+    s = natsConnection_Flush(nc1);
+    testCond(s == NATS_OK);
+
+    test("Connect 2: ");
+    s = natsConnection_ConnectTo(&nc2, "nats://a:pwd@127.0.0.1:4223");
+    testCond(s == NATS_OK);
+
+    test("Publish: ");
+    s = natsConnection_PublishString(nc2, "foo", "msg");
+    testCond(s == NATS_OK);
+
+    test("Check received: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc1);
+    natsOptions_Destroy(o1);
+    natsConnection_Destroy(nc2);
+    _stopServer(pid2);
+    _destroyDefaultThreadArgs(&args);
+    remove(conf);
 }
 
 static void
@@ -33550,6 +33645,7 @@ static testInfo allTests[] =
     {"ReconnectJitter",                 test_ReconnectJitter},
     {"CustomReconnectDelay",            test_CustomReconnectDelay},
     {"LameDuckMode",                    test_LameDuckMode},
+    {"ReconnectImplicitUserInfo",       test_ReconnectImplicitUserInfo},
 
     {"JetStreamUnmarshalAccInfo",       test_JetStreamUnmarshalAccountInfo},
     {"JetStreamUnmarshalStreamState",   test_JetStreamUnmarshalStreamState},

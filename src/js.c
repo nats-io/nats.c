@@ -2485,6 +2485,8 @@ PROCESS_INFO:
 
         if (opts->Ordered)
         {
+            const char *tmp = NULL;
+
             cfg->FlowControl = true;
             cfg->AckPolicy   = js_AckNone;
             cfg->MaxDeliver  = 1;
@@ -2494,7 +2496,12 @@ PROCESS_INFO:
             cfg->MemoryStorage = true;
             cfg->Replicas      = 1;
 
+            // Let's clone without the delivery subject because it will need
+            // to be set to something new when recreating it anyway.
+            tmp = cfg->DeliverSubject;
+            cfg->DeliverSubject = NULL;
             s = js_cloneConsumerConfig(cfg, &ocCfg);
+            cfg->DeliverSubject = tmp;
         }
         else
         {
@@ -3019,21 +3026,16 @@ _recreateOrderedCons(void *closure)
         natsSub_Lock(sub);
         t = oci->thread;
         jsi = sub->jsi;
-
-        NATS_FREE((char*) jsi->ocCfg->DeliverSubject);
-        jsi->ocCfg->DeliverSubject = NULL;
-        DUP_STRING(s, jsi->ocCfg->DeliverSubject, sub->subject);
-        if (s == NATS_OK)
-        {
-            // Create consumer request for starting policy.
-            cc = jsi->ocCfg;
-            cc->DeliverPolicy = js_DeliverByStartSequence;
-            cc->OptStartSeq   = oci->sseq;
-        }
+        s = js_cloneConsumerConfig(jsi->ocCfg, &cc);
         natsSub_Unlock(sub);
 
         if (s == NATS_OK)
         {
+            // Create consumer request for starting policy.
+            cc->DeliverSubject = oci->ndlv;
+            cc->DeliverPolicy  = js_DeliverByStartSequence;
+            cc->OptStartSeq    = oci->sseq;
+
             s = js_AddConsumer(&ci, jsi->js, jsi->stream, cc, NULL, NULL);
             if (s == NATS_OK)
             {
@@ -3050,6 +3052,11 @@ _recreateOrderedCons(void *closure)
 
                 jsConsumerInfo_Destroy(ci);
             }
+
+            // Clear cc->DeliverSubject now before destroying it (since
+            // cc->DeliverSubject points to oci->ndlv (not a copy)
+            cc->DeliverSubject = NULL;
+            js_destroyConsumerConfig(cc);
         }
     }
     if (s != NATS_OK)

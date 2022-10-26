@@ -31039,50 +31039,48 @@ static void
 test_KeyValueDiscardOldToNew(void)
 {
     kvStore             *kv = NULL;
-    kvEntry             *e  = NULL;
     kvConfig            kvc;
     natsStatus          s;
-    int                 i;
 
     JS_SETUP(2, 7, 2);
 
-    // We are going to go from 2.7.1->2.7.2->2.7.1 and 2.7.2 again.
-    for (i=0; i<2; i++)
-    {
-        // Change the server version in the connection to
-        // create as-if we were connecting to a v2.7.1 server.
-        natsConn_Lock(nc);
-        nc->srvVersion.ma = 2;
-        nc->srvVersion.mi = 7;
-        nc->srvVersion.up = 1;
-        natsConn_Unlock(nc);
+    // Change the server version in the connection to
+    // create as-if we were connecting to a v2.7.1 server.
+    natsConn_Lock(nc);
+    nc->srvVersion.ma = 2;
+    nc->srvVersion.mi = 7;
+    nc->srvVersion.up = 1;
+    natsConn_Unlock(nc);
 
-        test("Check discard (old): ");
-        s = _checkDiscard(js, js_DiscardOld, &kv);
-        if ((s == NATS_OK) && (i == 0))
-            s = kvStore_PutString(NULL, kv, "foo", "value");
-        testCond(s == NATS_OK);
-        kvStore_Destroy(kv);
-        kv = NULL;
+    test("Check discard (old): ");
+    s = _checkDiscard(js, js_DiscardOld, &kv);
+    testCond(s == NATS_OK);
+    kvStore_Destroy(kv);
+    kv = NULL;
 
-        // Now change version to 2.7.2
-        natsConn_Lock(nc);
-        nc->srvVersion.ma = 2;
-        nc->srvVersion.mi = 7;
-        nc->srvVersion.up = 2;
-        natsConn_Unlock(nc);
+    // Now change version to 2.7.2
+    natsConn_Lock(nc);
+    nc->srvVersion.ma = 2;
+    nc->srvVersion.mi = 7;
+    nc->srvVersion.up = 2;
+    natsConn_Unlock(nc);
 
-        test("Check discard (new): ");
-        s = _checkDiscard(js, js_DiscardNew, &kv);
-        IFOK(s, kvStore_Get(&e, kv, "foo"));
-        if ((s == NATS_OK) && (strcmp(kvEntry_ValueString(e), "value") != 0))
-            s = NATS_ERR;
-        testCond(s == NATS_OK);
-        kvEntry_Destroy(e);
-        e = NULL;
-        kvStore_Destroy(kv);
-        kv = NULL;
-    }
+    test("Check discard (old, no auto-update): ");
+    s = _checkDiscard(js, js_DiscardOld, &kv);
+    testCond((s == NATS_ERR) && (kv == NULL)
+                && (strstr(nats_GetLastError(NULL), "different configuration") != NULL));
+    nats_clearLastError();
+
+    // Now delete the kv store and create against 2.7.2+
+    test("Delete KV: ");
+    s = js_DeleteStream(js, "KV_TEST", NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check discard (new): ");
+    s = _checkDiscard(js, js_DiscardNew, &kv);
+    testCond(s == NATS_OK);
+    kvStore_Destroy(kv);
+    kv = NULL;
 
     test("Check that other changes are rejected: ");
     kvConfig_Init(&kvc);
@@ -31090,7 +31088,7 @@ test_KeyValueDiscardOldToNew(void)
     kvc.MaxBytes = 1024*1024;
     s = js_CreateKeyValue(&kv, js, &kvc);
     testCond((s == NATS_ERR)
-                && (strstr(nats_GetLastError(NULL), "configuration is different") != NULL));
+                && (strstr(nats_GetLastError(NULL), "different configuration") != NULL));
     kvStore_Destroy(kv);
 
     JS_TEARDOWN;
@@ -31124,7 +31122,7 @@ test_KeyValueRePublish(void)
     rp.Destination = "bar.>";
     kvc.RePublish =&rp;
     s = js_CreateKeyValue(&kv, js, &kvc);
-    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "can not change RePublish") != NULL));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "different configuration") != NULL));
     nats_clearLastError();
 
     test("Create with repub: ");

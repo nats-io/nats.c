@@ -296,32 +296,9 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
             sc.Discard = js_DiscardNew;
 
         s = js_AddStream(&si, js, &sc, NULL, &jerr);
-        if ((s != NATS_OK) && (jerr == JSStreamNameExistErr))
-        {
-            jsStreamInfo_Destroy(si);
-            si = NULL;
-
-            nats_clearLastError();
-            s = js_GetStreamInfo(&si, js, sc.Name, NULL, NULL);
-            if (s == NATS_OK)
-            {
-                si->Config->Discard = sc.Discard;
-                if (_sameStreamCfg(si->Config, &sc))
-                {
-                    jsStreamInfo_Destroy(si);
-                    si = NULL;
-                    s = js_UpdateStream(&si, js, &sc, NULL, NULL);
-                }
-                else
-                    s = nats_setError(NATS_ERR, "%s",
-                        "Existing configuration is different");
-            }
-        }
+        // If the stream allow direct get message calls, then we will do so.
         if (s == NATS_OK)
-        {
-            // If the stream allow direct get message calls, then we will do so.
             kv->useDirect = si->Config->AllowDirect;
-        }
         jsStreamInfo_Destroy(si);
     }
     if (s == NATS_OK)

@@ -31259,6 +31259,40 @@ test_KeyValueMirrorDirectGet(void)
     JS_TEARDOWN;
 }
 
+static natsStatus
+_connectToHubAndCheckLeaf(natsConnection **hub, natsConnection *lnc)
+{
+    natsStatus          s       = NATS_OK;
+    natsConnection      *nc     = NULL;
+    natsSubscription    *sub    = NULL;
+    int                 i;
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "check"));
+    IFOK(s, natsConnection_Flush(nc));
+    if (s == NATS_OK)
+    {
+        for (i=0; i<10; i++)
+        {
+            s = natsConnection_PublishString(lnc, "check", "hello");
+            if (s == NATS_OK)
+            {
+                natsMsg *msg = NULL;
+                s = natsSubscription_NextMsg(&msg, sub, 500);
+                natsMsg_Destroy(msg);
+                if (s == NATS_OK)
+                    break;
+            }
+        }
+    }
+    natsSubscription_Destroy(sub);
+    if (s == NATS_OK)
+        *hub = nc;
+    else
+        natsConnection_Destroy(nc);
+    return s;
+}
+
 static void
 test_KeyValueMirrorCrossDomains(void)
 {
@@ -31283,7 +31317,9 @@ test_KeyValueMirrorCrossDomains(void)
     kvStore             *rkv    = NULL;
     kvEntry             *e      = NULL;
     jsStreamInfo        *si     = NULL;
-    natsSubscription    *sub    = NULL;
+    kvWatcher           *w      = NULL;
+    int                 ok      = 0;
+    kvPurgeOptions      po;
     kvConfig            kvc;
     jsStreamSource      src;
     int                 i;
@@ -31318,13 +31354,16 @@ test_KeyValueMirrorCrossDomains(void)
     CHECK_SERVER_STARTED(pid2);
     testCond(true);
 
-    test("Connect to hub: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    test("Connect to leaf: ");
+    s = natsConnection_ConnectTo(&lnc, "nats://127.0.0.1:4223");
     testCond(s == NATS_OK);
 
-    test("Sub to check LF connectivity: ");
-    s = natsConnection_SubscribeSync(&sub, nc, "check");
-    IFOK(s, natsConnection_Flush(nc));
+    test("Get context: ");
+    s = natsConnection_JetStream(&ljs, lnc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Connect to hub and check connectivity through leaf: ");
+    s = _connectToHubAndCheckLeaf(&nc, lnc);
     testCond(s == NATS_OK);
 
     test("Get context: ");
@@ -31340,29 +31379,6 @@ test_KeyValueMirrorCrossDomains(void)
     test("Put keys: ");
     s = kvStore_PutString(NULL, kv, "name", "derek");
     IFOK(s, kvStore_PutString(NULL, kv, "age", "22"));
-    testCond(s == NATS_OK);
-
-    test("Connect to leaf: ");
-    s = natsConnection_ConnectTo(&lnc, "nats://127.0.0.1:4223");
-    testCond(s == NATS_OK);
-
-    test("Check connectivity: ");
-    for (i=0; i<10; i++)
-    {
-        s = natsConnection_PublishString(lnc, "check", "hello");
-        if (s == NATS_OK)
-        {
-            natsMsg *msg = NULL;
-            s = natsSubscription_NextMsg(&msg, sub, 500);
-            natsMsg_Destroy(msg);
-            if (s == NATS_OK)
-                break;
-        }
-    }
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&ljs, lnc, NULL);
     testCond(s == NATS_OK);
 
     test("Create KV: ");
@@ -31452,6 +31468,7 @@ test_KeyValueMirrorCrossDomains(void)
     jsCtx_Destroy(js);
     kvStore_Destroy(kv);
     natsConnection_Destroy(nc);
+    nc = NULL;
     _stopServer(pid);
     pid = NATS_INVALID_PID;
     testCond(true);
@@ -31466,7 +31483,118 @@ test_KeyValueMirrorCrossDomains(void)
     kvEntry_Destroy(e);
     e = NULL;
 
-    natsSubscription_Destroy(sub);
+    test("Create watcher (name): ");
+    s = kvStore_Watch(&w, mkv, "name", NULL);
+    testCond(s == NATS_OK);
+
+    test("Check watcher: ");
+    s = kvWatcher_Next(&e, w, 1000);
+    if (s == NATS_OK)
+    {
+        if ((strcmp(kvEntry_Key(e), "name") != 0) || (strcmp(kvEntry_ValueString(e), "ivan") != 0))
+            s = NATS_ERR;
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    IFOK(s, kvWatcher_Next(&e, w, 1000));
+    if (s == NATS_OK)
+    {
+        if ((kvEntry_Key(e) != NULL) || (kvEntry_ValueString(e) != NULL))
+            s = NATS_ERR;
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("No more: ");
+    s = kvWatcher_Next(&e, w, 250);
+    testCond((s == NATS_TIMEOUT) && (e == NULL));
+    nats_clearLastError();
+
+    kvWatcher_Destroy(w);
+    w = NULL;
+
+    test("Create watcher (all): ")
+    s = kvStore_WatchAll(&w, mkv, NULL);
+    testCond((s == NATS_OK) && (w != NULL));
+
+    test("Check watcher: ");
+    s = kvWatcher_Next(&e, w, 1000);
+    if (s == NATS_OK)
+    {
+        if ((strcmp(kvEntry_Key(e), "age") != 0) || (strcmp(kvEntry_ValueString(e), "22") != 0))
+            s = NATS_ERR;
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    IFOK(s, kvWatcher_Next(&e, w, 1000));
+    if (s == NATS_OK)
+    {
+        if ((strcmp(kvEntry_Key(e), "name") != 0) || (strcmp(kvEntry_ValueString(e), "ivan") != 0))
+            s = NATS_ERR;
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    IFOK(s, kvWatcher_Next(&e, w, 1000));
+    if (s == NATS_OK)
+    {
+        if ((kvEntry_Key(e) != NULL) || (kvEntry_ValueString(e) != NULL))
+            s = NATS_ERR;
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("No more: ");
+    s = kvWatcher_Next(&e, w, 250);
+    testCond((s == NATS_TIMEOUT) && (e == NULL));
+    nats_clearLastError();
+
+    test("Restart hub: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect to hub and check connectivity through leaf: ");
+    s = _connectToHubAndCheckLeaf(&nc, lnc);
+    testCond(s == NATS_OK);
+
+    test("Delete keys: ");
+    s = kvStore_Delete(mkv, "age");
+    IFOK(s, kvStore_Delete(mkv, "name"));
+    testCond(s == NATS_OK);
+
+    test("Check mirror syncs: ");
+    for (i=0; (ok != 2) && (i < 10); i++)
+    {
+        if (kvWatcher_Next(&e, w, 1000) == NATS_OK)
+        {
+            if (((strcmp(kvEntry_Key(e), "age") == 0) || (strcmp(kvEntry_Key(e), "name") == 0))
+                && (kvEntry_Operation(e) == kvOp_Delete))
+            {
+                ok++;
+            }
+            kvEntry_Destroy(e);
+            e = NULL;
+        }
+    }
+    testCond((s == NATS_OK) && (ok == 2));
+
+    test("Purge deletes: ");
+    kvPurgeOptions_Init(&po);
+    po.DeleteMarkersOlderThan = -1;
+    s = kvStore_PurgeDeletes(mkv, &po);
+    testCond(s == NATS_OK);
+
+    nats_clearLastError();
+    test("Check stream: ");
+    s = js_GetStreamInfo(&si, ljs, "KV_MIRROR", NULL, NULL);
+    testCond((s == NATS_OK) && (si != NULL) && (si->State.Msgs == 0));
+    jsStreamInfo_Destroy(si);
+
+    kvWatcher_Destroy(w);
+    natsConnection_Destroy(nc);
     kvStore_Destroy(rkv);
     kvStore_Destroy(mkv);
     kvStore_Destroy(lkv);

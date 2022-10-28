@@ -36,14 +36,17 @@ natsBuffer  buf;
 #define USE_JS_PREFIX   true
 #define KEY_NAME_ONLY   false
 
-#define BUILD_SUBJECT(p) \
+#define FOR_A_PUT       true
+#define NOT_FOR_A_PUT   false
+
+#define BUILD_SUBJECT(p, fp) \
 s = natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer)); \
 if ((p) && kv->useJSPrefix) \
 { \
     IFOK(s, natsBuf_Append(&buf, kv->js->opts.Prefix, -1)); \
     IFOK(s, natsBuf_AppendByte(&buf, '.')); \
 } \
-IFOK(s, natsBuf_Append(&buf, kv->pre, -1)); \
+IFOK(s, natsBuf_Append(&buf, ((fp) ? (kv->usePutPre ? kv->putPre : kv->pre) : kv->pre), -1)); \
 IFOK(s, natsBuf_Append(&buf, key, -1)); \
 IFOK(s, natsBuf_AppendByte(&buf, 0));
 
@@ -192,7 +195,7 @@ _createKV(kvStore **new_kv, jsCtx *js, const char *bucket)
 }
 
 static natsStatus
-_changeBucketNameAndPutPrefixIfMirrorPresent(kvStore *kv, jsStreamInfo *si)
+_changePutPrefixIfMirrorPresent(kvStore *kv, jsStreamInfo *si)
 {
     natsStatus      s       = NATS_OK;
     const char      *bucket = NULL;
@@ -355,7 +358,7 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
             // If the stream allow direct get message calls, then we will do so.
             kv->useDirect = si->Config->AllowDirect;
 
-            s = _changeBucketNameAndPutPrefixIfMirrorPresent(kv, si);
+            s = _changePutPrefixIfMirrorPresent(kv, si);
         }
         jsStreamInfo_Destroy(si);
 
@@ -417,7 +420,7 @@ js_KeyValue(kvStore **new_kv, jsCtx *js, const char *bucket)
         if (si->Config->MaxMsgsPerSubject < 1)
             s = nats_setError(NATS_INVALID_ARG, "%s", kvErrBadBucket);
 
-        IFOK(s, _changeBucketNameAndPutPrefixIfMirrorPresent(kv, si));
+        IFOK(s, _changePutPrefixIfMirrorPresent(kv, si));
 
         jsStreamInfo_Destroy(si);
     }
@@ -540,7 +543,7 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key, uint
     if (!validKey(key))
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
-    BUILD_SUBJECT(KEY_NAME_ONLY);
+    BUILD_SUBJECT(KEY_NAME_ONLY, NOT_FOR_A_PUT);
 
     if (kv->useDirect)
     {
@@ -646,8 +649,7 @@ _putEntry(uint64_t *rev, kvStore *kv, jsPubOptions *po, const char *key, const v
     natsStatus  s       = NATS_OK;
     jsPubAck    *pa     = NULL;
     jsPubAck    **ppa   = NULL;
-    char        buffer[128];
-    natsBuffer  buf;
+    DEFINE_BUF_FOR_SUBJECT;
 
     if (rev != NULL)
     {
@@ -661,15 +663,7 @@ _putEntry(uint64_t *rev, kvStore *kv, jsPubOptions *po, const char *key, const v
     if (!validKey(key))
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
-    s = natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
-    if (kv->useJSPrefix)
-    {
-        IFOK(s, natsBuf_Append(&buf, kv->js->opts.Prefix, -1));
-        IFOK(s, natsBuf_AppendByte(&buf, '.'));
-    }
-    IFOK(s, natsBuf_Append(&buf, (kv->usePutPre ? kv->putPre : kv->pre), -1));
-    IFOK(s, natsBuf_Append(&buf, key, -1));
-    IFOK(s, natsBuf_AppendByte(&buf, 0));
+    BUILD_SUBJECT(USE_JS_PREFIX, FOR_A_PUT);
     IFOK(s, js_Publish(ppa, kv->js, natsBuf_Data(&buf), data, len, po, NULL));
 
     if ((s == NATS_OK) && (rev != NULL))
@@ -772,7 +766,7 @@ _delete(kvStore *kv, const char *key, bool purge, kvPurgeOptions *opts)
     if (!validKey(key))
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
-    BUILD_SUBJECT(USE_JS_PREFIX);
+    BUILD_SUBJECT(USE_JS_PREFIX, FOR_A_PUT);
     IFOK(s, natsMsg_Create(&msg, natsBuf_Data(&buf), NULL, NULL, 0));
     if (s == NATS_OK)
     {
@@ -885,6 +879,7 @@ kvStore_PurgeDeletes(kvStore *kv, kvPurgeOptions *opts)
         for (; h != NULL; )
         {
             natsBuf_Reset(&buf);
+            // Use kv->pre here, always.
             IFOK(s, natsBuf_Append(&buf, kv->pre, -1));
             IFOK(s, natsBuf_Append(&buf, h->key, -1));
             IFOK(s, natsBuf_AppendByte(&buf, '\0'));
@@ -991,6 +986,7 @@ GET_NEXT:
         }
         w->refs--;
 
+        // Use kv->pre here, always.
         if ((s == NATS_OK) && (strlen(msg->subject) <= strlen(w->kv->pre)))
             s = nats_setError(NATS_ERR, "invalid update's subject '%s'", msg->subject);
 
@@ -1080,7 +1076,7 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
     w->kv = kv;
     w->refs = 1;
 
-    BUILD_SUBJECT(KEY_NAME_ONLY);
+    BUILD_SUBJECT(KEY_NAME_ONLY, NOT_FOR_A_PUT);
     IFOK(s, natsMutex_Create(&(w->mu)));
     if (s == NATS_OK)
     {
@@ -1097,6 +1093,9 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
             if (opts->IgnoreDeletes)
                 w->ignoreDel = true;
         }
+        // Need to explicitly bind to the stream here because the subject
+        // we construct may not help find the stream when using mirrors.
+        so.Stream = kv->stream;
         s = js_SubscribeSync(&(w->sub), kv->js, natsBuf_Data(&buf), NULL, &so, NULL);
         IFOK(s, natsSubscription_SetPendingLimits(w->sub, -1, -1));
         if (s == NATS_OK)

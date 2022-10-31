@@ -375,6 +375,10 @@ typedef struct jsStreamSource
         int64_t                 OptStartTime;   ///< UTC time expressed as number of nanoseconds since epoch.
         const char              *FilterSubject;
         jsExternalStream        *External;
+        // Domain and External are mutually exclusive.
+        // If Domain is set, an External value will be created with
+        // the APIPrefix constructed based on the Domain value.
+        const char              *Domain;
 
 } jsStreamSource;
 
@@ -1189,6 +1193,9 @@ typedef struct kvConfig
         jsStorageType   StorageType;
         int             Replicas;
         jsRePublish     *RePublish;
+        jsStreamSource  *Mirror;
+        jsStreamSource  **Sources;
+        int             SourcesLen;
 
 } kvConfig;
 

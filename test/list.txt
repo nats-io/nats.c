@@ -253,6 +253,7 @@ KeyValueCrossAccount
 KeyValueDiscardOldToNew
 KeyValueRePublish
 KeyValueMirrorDirectGet
+KeyValueMirrorCrossDomains
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

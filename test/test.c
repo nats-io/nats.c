@@ -27448,6 +27448,24 @@ _fetchRequest(void *closure)
 }
 
 static void
+_dropIdleHBs(natsConnection *nc, natsMsg **msg, void* closure)
+{
+    int ct = 0;
+
+    if (natsMsg_GetDataLength(*msg) > 0)
+        return;
+
+    if (!natsMsg_isJSCtrl(*msg, &ct))
+        return;
+
+    if (ct != jsCtrlHeartbeat)
+        return;
+
+    natsMsg_Destroy(*msg);
+    *msg = NULL;
+}
+
+static void
 test_JetStreamSubscribePull(void)
 {
     natsStatus          s;
@@ -27948,21 +27966,16 @@ test_JetStreamSubscribePull(void)
     fr.Expires = NATS_SECONDS_TO_NANOS(2);
     // And have HBs every 50ms
     fr.Heartbeat = NATS_MILLIS_TO_NANOS(50);
-    // Schedule the server to be stopped in a different thread
-    s = natsThread_Create(&t, _stopServerInThread, (void*) &pid);
+    // Set a message filter that will drop HB messages
+    natsConn_setFilter(nc, _dropIdleHBs);
     start = nats_Now();
     // We should be kicked out of the fetch request with an error indicating
     // that we missed hearbeats.
-    IFOK(s, natsSubscription_FetchRequest(&list, sub, &fr));
+    s = natsSubscription_FetchRequest(&list, sub, &fr);
     dur = nats_Now() - start;
     testCond((s == NATS_MISSED_HEARTBEAT) && (dur < 500));
 
-    natsThread_Join(t);
-    natsThread_Destroy(t);
-    pid = NATS_INVALID_PID;
-
     natsSubscription_Destroy(sub);
-
     JS_TEARDOWN;
     _destroyDefaultThreadArgs(&args);
 }

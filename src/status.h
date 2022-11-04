@@ -258,6 +258,13 @@ typedef enum {
     JSStreamMoveInProgressErr = 10124,                  ///< Stream move already in progress
     JSConsumerMaxRequestBatchExceededErr = 10125,       ///< Consumer max request batch exceeds server limit
     JSConsumerReplicasExceedsStreamErr = 10126,         ///< Consumer config replica count exceeds parent stream
+    JSConsumerNameContainsPathSeparatorsErr = 10127,    ///< Consumer name can not contain path separators
+    JSStreamNameContainsPathSeparatorsErr = 10128,      ///< Stream name can not contain path separators
+    JSStreamMoveNotInProgressErr = 10129,               ///< Stream move not in progress
+    JSStreamNameExistRestoreFailedErr = 10130,          ///< Stream name already in use, cannot restore
+    JSConsumerCreateFilterSubjectMismatchErr = 10131,   ///< Consumer create request did not match filtered subject from create subject
+    JSConsumerCreateDurableAndNameMismatchErr = 10132,  ///< Consumer Durable and Name have to be equal if both are provided
+    JSReplicasCountCannotBeNegativeErr = 10133,         ///< Replicas count cannot be negative
 
 } jsErrCode;
 

@@ -636,6 +636,17 @@ typedef struct jsStreamSourceInfo
 } jsStreamSourceInfo;
 
 /**
+ * Information about an alternate stream represented by a mirror.
+ */
+typedef struct jsStreamAlternate
+{
+        const char              *Name;
+        const char              *Domain;
+        const char              *Cluster;
+
+} jsStreamAlternate;
+
+/**
  * Configuration and current state for this stream.
  *
  * \note `Created` is the timestamp when the stream was created, expressed as
@@ -650,6 +661,8 @@ typedef struct jsStreamInfo
         jsStreamSourceInfo      *Mirror;
         jsStreamSourceInfo      **Sources;
         int                     SourcesLen;
+        jsStreamAlternate       **Alternates;
+        int                     AlternatesLen;
 
 } jsStreamInfo;
 

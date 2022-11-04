@@ -211,6 +211,18 @@ js_cleanStreamState(jsStreamState *state)
     _destroyStreamStateSubjects(state->Subjects);
 }
 
+static void
+_destroyStreamAlternate(jsStreamAlternate *sa)
+{
+    if (sa == NULL)
+        return;
+
+    NATS_FREE((char*) sa->Name);
+    NATS_FREE((char*) sa->Domain);
+    NATS_FREE((char*) sa->Cluster);
+    NATS_FREE(sa);
+}
+
 void
 jsStreamInfo_Destroy(jsStreamInfo *si)
 {
@@ -226,6 +238,9 @@ jsStreamInfo_Destroy(jsStreamInfo *si)
     for (i=0; i<si->SourcesLen; i++)
         _destroyStreamSourceInfo(si->Sources[i]);
     NATS_FREE(si->Sources);
+    for (i=0; i<si->AlternatesLen; i++)
+        _destroyStreamAlternate(si->Alternates[i]);
+    NATS_FREE(si->Alternates);
     NATS_FREE(si);
 }
 
@@ -956,11 +971,35 @@ _unmarshalStreamSourceInfo(nats_JSON *pjson, const char *fieldName, jsStreamSour
 }
 
 static natsStatus
+_unmarshalStreamAlternate(nats_JSON *json, jsStreamAlternate **new_alt)
+{
+    jsStreamAlternate   *sa         = NULL;
+    natsStatus          s           = NATS_OK;
+
+    sa = (jsStreamAlternate*) NATS_CALLOC(1, sizeof(jsStreamAlternate));
+    if (sa == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    s = nats_JSONGetStr(json, "name", (char**) &(sa->Name));
+    IFOK(s, nats_JSONGetStr(json, "domain", (char**) &(sa->Domain)));
+    IFOK(s, nats_JSONGetStr(json, "cluster", (char**) &(sa->Cluster)));
+
+    if (s == NATS_OK)
+        *new_alt = sa;
+    else
+        _destroyStreamAlternate(sa);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
 _unmarshalStreamInfoPaged(nats_JSON *json, jsStreamInfo **new_si, apiPaged *page)
 {
     jsStreamInfo        *si         = NULL;
     nats_JSON           **sources   = NULL;
     int                 sourcesLen  = 0;
+    nats_JSON           **alts      = NULL;
+    int                 altsLen     = 0;
     natsStatus          s;
 
     si = (jsStreamInfo*) NATS_CALLOC(1, sizeof(jsStreamInfo));
@@ -990,6 +1029,24 @@ _unmarshalStreamInfoPaged(nats_JSON *json, jsStreamInfo **new_si, apiPaged *page
         }
         // Free the array of JSON objects that was allocated by nats_JSONGetArrayObject.
         NATS_FREE(sources);
+    }
+    IFOK(s, nats_JSONGetArrayObject(json, "alternates", &alts, &altsLen));
+    if ((s == NATS_OK) && (alts != NULL))
+    {
+        int i;
+
+        si->Alternates = (jsStreamAlternate**) NATS_CALLOC(altsLen, sizeof(jsStreamAlternate*));
+        if (si->Alternates == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        for (i=0; (s == NATS_OK) && (i<altsLen); i++)
+        {
+            s = _unmarshalStreamAlternate(alts[i], &(si->Alternates[i]));
+            if (s == NATS_OK)
+                si->AlternatesLen++;
+        }
+        // Free the array of JSON objects that was allocated by nats_JSONGetArrayObject.
+        NATS_FREE(alts);
     }
     if ((s == NATS_OK) && (page != NULL))
     {

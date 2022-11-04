@@ -21732,8 +21732,11 @@ test_JetStreamUnmarshalStreamInfo(void)
         "{\"cluster\":{\"name\":\"S1\",\"leader\":\"S2\",\"replicas\":[{\"name\":\"S1\",\"current\":true,\"offline\":false,\"active\":123,\"lag\":456},{\"name\":\"S1\",\"current\":false,\"offline\":true,\"active\":123,\"lag\":456}]}}",
         "{\"mirror\":{\"name\":\"M\",\"lag\":123,\"active\":456}}",
         "{\"mirror\":{\"name\":\"M\",\"external\":{\"api\":\"MyApi\",\"deliver\":\"deliver.prefix\"},\"lag\":123,\"active\":456}}",
+        "{\"sources\":[{\"name\":\"S1\",\"lag\":123,\"active\":456}]}",
         "{\"sources\":[{\"name\":\"S1\",\"lag\":123,\"active\":456},{\"name\":\"S2\",\"lag\":123,\"active\":456}]}",
         "{\"sources\":[{\"name\":\"S1\",\"external\":{\"api\":\"MyApi\",\"deliver\":\"deliver.prefix\"},\"lag\":123,\"active\":456},{\"name\":\"S2\",\"lag\":123,\"active\":456}]}",
+        "{\"alternates\":[{\"name\":\"S1\",\"domain\":\"domain\",\"cluster\":\"abc\"}]}",
+        "{\"alternates\":[{\"name\":\"S1\",\"domain\":\"domain\",\"cluster\":\"abc\"},{\"name\":\"S2\",\"domain\":\"domain\",\"cluster\":\"abc\"}]}",
     };
     const char          *bad[] = {
         "{\"config\":123}",
@@ -21781,6 +21784,10 @@ test_JetStreamUnmarshalStreamInfo(void)
         "{\"sources\":[{\"name\":123}]}",
         "{\"sources\":[{\"name\":\"S1\",\"external\":123}]}",
         "{\"sources\":[{\"name\":\"S1\",\"external\":{\"deliver\":123}}]}",
+        "{\"alternates\":123}",
+        "{\"alternates\":[{\"name\":123}]}",
+        "{\"alternates\":[{\"name\":\"S1\",\"domain\":123}]}",
+        "{\"alternates\":[{\"name\":\"S1\",\"domain\":\"domain\",\"cluster\":123}]}",
     };
     int i;
     char tmp[64];
@@ -29738,6 +29745,137 @@ test_JetStreamInfoWithSubjects(void)
     JS_TEARDOWN;
 }
 
+static natsStatus
+_checkJSClusterReady(const char *url)
+{
+    natsStatus          s   = NATS_OK;
+    natsConnection      *nc = NULL;
+    jsCtx               *js = NULL;
+    jsErrCode           jerr= 0;
+    int                 i;
+    jsOptions           jo;
+
+    jsOptions_Init(&jo);
+    jo.Wait = 1000;
+
+    s = natsConnection_ConnectTo(&nc, url);
+    IFOK(s, natsConnection_JetStream(&js, nc, &jo));
+    for (i=0; (s == NATS_OK) && (i<10); i++)
+    {
+        jsStreamInfo *si = NULL;
+
+        s = js_GetStreamInfo(&si, js, "CHECK_CLUSTER", &jo, &jerr);
+        if (jerr == JSStreamNotFoundErr)
+        {
+            nats_clearLastError();
+            s = NATS_OK;
+            break;
+        }
+        if ((s != NATS_OK) && (i < 9))
+        {
+            s = NATS_OK;
+            nats_Sleep(500);
+        }
+    }
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    return s;
+}
+
+static void
+test_JetStreamInfoAlternates(void)
+{
+    char                datastore1[256] = {'\0'};
+    char                datastore2[256] = {'\0'};
+    char                datastore3[256] = {'\0'};
+    char                cmdLine[1024]   = {'\0'};
+    natsPid             pid1            = NATS_INVALID_PID;
+    natsPid             pid2            = NATS_INVALID_PID;
+    natsPid             pid3            = NATS_INVALID_PID;
+    natsConnection      *nc             = NULL;
+    jsCtx               *js             = NULL;
+    jsStreamInfo        *si             = NULL;
+    jsStreamConfig      sc;
+    jsStreamSource      ss;
+    natsStatus          s;
+
+    ENSURE_JS_VERSION(2, 9, 0);
+
+    test("Start cluster: ");
+    _makeUniqueDir(datastore1, sizeof(datastore1), "datastore_");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -cluster_name abc -server_name A -cluster nats://127.0.0.1:6222 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223,nats://127.0.0.1:6224 -p 4222", datastore1);
+    pid1 = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid1);
+
+    _makeUniqueDir(datastore2, sizeof(datastore2), "datastore_");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -cluster_name abc -server_name B -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223,nats://127.0.0.1:6224 -p 4223", datastore2);
+    pid2 = _startServer("nats://127.0.0.1:4223", cmdLine, true);
+    CHECK_SERVER_STARTED(pid1);
+
+    _makeUniqueDir(datastore3, sizeof(datastore3), "datastore_");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -cluster_name abc -server_name C -cluster nats://127.0.0.1:6224 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223,nats://127.0.0.1:6224 -p 4224", datastore3);
+    pid3 = _startServer("nats://127.0.0.1:4224", cmdLine, true);
+    CHECK_SERVER_STARTED(pid1);
+    testCond(true);
+
+    test("Check cluster: ");
+    s = _checkJSClusterReady("nats://127.0.0.1:4224");
+    testCond(s == NATS_OK);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create mirror: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "MIRROR";
+    jsStreamSource_Init(&ss);
+    ss.Name = "TEST";
+    sc.Mirror = &ss;
+    s = js_AddStream(NULL, js, &sc, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check for alternate: ");
+    s = js_GetStreamInfo(&si, js, "TEST", NULL, NULL);
+    testCond((s == NATS_OK) && (si != NULL) && (si->AlternatesLen == 2));
+
+    test("Check alternate content: ");
+    if ((strcmp(si->Alternates[0]->Cluster, "abc") != 0)
+        || (strcmp(si->Alternates[1]->Cluster, "abc") != 0))
+    {
+        s = NATS_ERR;
+    }
+    else if (((strcmp(si->Alternates[0]->Name, "TEST") == 0) && (strcmp(si->Alternates[1]->Name, "MIRROR") != 0))
+                || ((strcmp(si->Alternates[0]->Name, "MIRROR") == 0) && (strcmp(si->Alternates[1]->Name, "TEST") != 0)))
+    {
+        s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+    jsStreamInfo_Destroy(si);
+
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+
+    _stopServer(pid3);
+    _stopServer(pid2);
+    _stopServer(pid1);
+    rmtree(datastore1);
+    rmtree(datastore2);
+    rmtree(datastore3);
+}
+
 static void
 test_KeyValueManager(void)
 {
@@ -34077,6 +34215,7 @@ static testInfo allTests[] =
     {"JetStreamNakWithDelay",           test_JetStreamNakWithDelay},
     {"JetStreamBackOffRedeliveries",    test_JetStreamBackOffRedeliveries},
     {"JetStreamInfoWithSubjects",       test_JetStreamInfoWithSubjects},
+    {"JetStreamInfoAlternates",         test_JetStreamInfoAlternates},
 
     {"KeyValueManager",                 test_KeyValueManager},
     {"KeyValueBasics",                  test_KeyValueBasics},

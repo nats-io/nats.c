@@ -241,6 +241,7 @@ JetStreamDirectGetMsg
 JetStreamNakWithDelay
 JetStreamBackOffRedeliveries
 JetStreamInfoWithSubjects
+JetStreamInfoAlternates
 KeyValueManager
 KeyValueBasics
 KeyValueWatch

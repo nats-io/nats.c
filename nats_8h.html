@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.4.1</span>
+   &#160;<span id="projectnumber">3.5.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -140,6 +140,8 @@ Classes</h2></td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_cluster_info.html">jsClusterInfo</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_source_info.html">jsStreamSourceInfo</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_alternate.html">jsStreamAlternate</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_info.html">jsStreamInfo</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -288,6 +290,8 @@ Typedefs</h2></td></tr>
 <tr class="separator:gaaf92318ce94a1ae3547c9a7af5a3f4f6"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gab2f33f57188a550f2f747d4f27bc24bd"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_stream_source_info.html">jsStreamSourceInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gab2f33f57188a550f2f747d4f27bc24bd">jsStreamSourceInfo</a></td></tr>
 <tr class="separator:gab2f33f57188a550f2f747d4f27bc24bd"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga22c26dd5dd31df7982130ef203ad3490"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_stream_alternate.html">jsStreamAlternate</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga22c26dd5dd31df7982130ef203ad3490">jsStreamAlternate</a></td></tr>
+<tr class="separator:ga22c26dd5dd31df7982130ef203ad3490"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga2629c9454996edf7914be36a9e44921b"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_stream_info.html">jsStreamInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga2629c9454996edf7914be36a9e44921b">jsStreamInfo</a></td></tr>
 <tr class="separator:ga2629c9454996edf7914be36a9e44921b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga1e54c2a1bc94834d1670875fc151f565"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_stream_info_list.html">jsStreamInfoList</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga1e54c2a1bc94834d1670875fc151f565">jsStreamInfoList</a></td></tr>
@@ -1361,6 +1365,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga86b114f4dac9f06df86101f84bd497b2"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_status.html#ga86b114f4dac9f06df86101f84bd497b2">kvStatus_Replicas</a> (<a class="el" href="group__types_group.html#gad3a0dd2dac950d5709ee5772b104fc80">kvStatus</a> *sts)</td></tr>
 <tr class="memdesc:ga86b114f4dac9f06df86101f84bd497b2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of replicas to keep for a bucket.  <a href="group__kv_status.html#ga86b114f4dac9f06df86101f84bd497b2">More...</a><br /></td></tr>
 <tr class="separator:ga86b114f4dac9f06df86101f84bd497b2"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga6db13a3b26c7c17633623da5f27978ff"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> uint64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_status.html#ga6db13a3b26c7c17633623da5f27978ff">kvStatus_Bytes</a> (<a class="el" href="group__types_group.html#gad3a0dd2dac950d5709ee5772b104fc80">kvStatus</a> *sts)</td></tr>
+<tr class="memdesc:ga6db13a3b26c7c17633623da5f27978ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the size (in bytes) of this bucket.  <a href="group__kv_status.html#ga6db13a3b26c7c17633623da5f27978ff">More...</a><br /></td></tr>
+<tr class="separator:ga6db13a3b26c7c17633623da5f27978ff"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga5eb3d824c1873af705beee4798246a08"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_status.html#ga5eb3d824c1873af705beee4798246a08">kvStatus_Destroy</a> (<a class="el" href="group__types_group.html#gad3a0dd2dac950d5709ee5772b104fc80">kvStatus</a> *sts)</td></tr>
 <tr class="memdesc:ga5eb3d824c1873af705beee4798246a08"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys the KeyValue status object.  <a href="group__kv_status.html#ga5eb3d824c1873af705beee4798246a08">More...</a><br /></td></tr>
 <tr class="separator:ga5eb3d824c1873af705beee4798246a08"><td class="memSeparator" colspan="2">&#160;</td></tr>

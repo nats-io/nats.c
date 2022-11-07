@@ -15,7 +15,7 @@ var searchData=
   ['destination_12',['Destination',['../structjs_re_publish.html#a662b2e57d237b171b2b61509f7e1023a',1,'jsRePublish']]],
   ['discard_13',['Discard',['../structjs_stream_config.html#a0b44ea5251ef20bf5b5658bcfbea832d',1,'jsStreamConfig']]],
   ['discardnewpersubject_14',['DiscardNewPerSubject',['../structjs_stream_config.html#a3fb7d5e1a09829fe742749da880afe4a',1,'jsStreamConfig']]],
-  ['domain_15',['Domain',['../structjs_account_info.html#ab6ba03298e1863132550b9b08d06048c',1,'jsAccountInfo::Domain()'],['../structjs_msg_meta_data.html#a388e38ccea591181436d199dc7c2f8ea',1,'jsMsgMetaData::Domain()'],['../structjs_pub_ack.html#a0b73200c0b035db3c9c96421706d51b0',1,'jsPubAck::Domain()'],['../structjs_options.html#ae4df6c9c01c0ea9ab0e6d5a6ec8af74e',1,'jsOptions::Domain()']]],
+  ['domain_15',['Domain',['../structjs_stream_source.html#aa304239ee823ef87fcb53ebb0c077e7b',1,'jsStreamSource::Domain()'],['../structjs_stream_alternate.html#a7c25ab1a427b78c4e1ba58ff7cdb5a8f',1,'jsStreamAlternate::Domain()'],['../structjs_account_info.html#ab6ba03298e1863132550b9b08d06048c',1,'jsAccountInfo::Domain()'],['../structjs_msg_meta_data.html#a388e38ccea591181436d199dc7c2f8ea',1,'jsMsgMetaData::Domain()'],['../structjs_pub_ack.html#a0b73200c0b035db3c9c96421706d51b0',1,'jsPubAck::Domain()'],['../structjs_options.html#ae4df6c9c01c0ea9ab0e6d5a6ec8af74e',1,'jsOptions::Domain()']]],
   ['duplicate_16',['Duplicate',['../structjs_pub_ack.html#a0381a49ff62e8fac7a52cad6a5eb7243',1,'jsPubAck']]],
   ['duplicates_17',['Duplicates',['../structjs_stream_config.html#a9e0ff10273d0182f885615b4f7d1cc20',1,'jsStreamConfig']]],
   ['durable_18',['Durable',['../structjs_consumer_config.html#a36cf121162cf0b40edf051991d851ee0',1,'jsConsumerConfig']]]

@@ -103,6 +103,9 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsAckInProgress     "+WPI"
 #define jsAckTerm           "+TERM"
 
+// jsExtDomainT is used to create a StreamSource External APIPrefix
+#define jsExtDomainT "$JS.%s.API"
+
 // jsApiAccountInfo is for obtaining general information about JetStream.
 #define jsApiAccountInfo "%.*s.INFO"
 

@@ -375,6 +375,10 @@ typedef struct jsStreamSource
         int64_t                 OptStartTime;   ///< UTC time expressed as number of nanoseconds since epoch.
         const char              *FilterSubject;
         jsExternalStream        *External;
+        // Domain and External are mutually exclusive.
+        // If Domain is set, an External value will be created with
+        // the APIPrefix constructed based on the Domain value.
+        const char              *Domain;
 
 } jsStreamSource;
 
@@ -632,6 +636,17 @@ typedef struct jsStreamSourceInfo
 } jsStreamSourceInfo;
 
 /**
+ * Information about an alternate stream represented by a mirror.
+ */
+typedef struct jsStreamAlternate
+{
+        const char              *Name;
+        const char              *Domain;
+        const char              *Cluster;
+
+} jsStreamAlternate;
+
+/**
  * Configuration and current state for this stream.
  *
  * \note `Created` is the timestamp when the stream was created, expressed as
@@ -646,6 +661,8 @@ typedef struct jsStreamInfo
         jsStreamSourceInfo      *Mirror;
         jsStreamSourceInfo      **Sources;
         int                     SourcesLen;
+        jsStreamAlternate       **Alternates;
+        int                     AlternatesLen;
 
 } jsStreamInfo;
 
@@ -1189,6 +1206,9 @@ typedef struct kvConfig
         jsStorageType   StorageType;
         int             Replicas;
         jsRePublish     *RePublish;
+        jsStreamSource  *Mirror;
+        jsStreamSource  **Sources;
+        int             SourcesLen;
 
 } kvConfig;
 
@@ -7027,6 +7047,15 @@ kvStatus_TTL(kvStatus *sts);
  */
 NATS_EXTERN int64_t
 kvStatus_Replicas(kvStatus *sts);
+
+/** \brief Returns the size (in bytes) of this bucket.
+ *
+ * Returns the size (in bytes) of this bucket, or `0` if `sts` itself is `NULL`.
+ *
+ * @param sts the pointer to the #kvStatus object.
+ */
+NATS_EXTERN uint64_t
+kvStatus_Bytes(kvStatus *sts);
 
 /** \brief Destroys the KeyValue status object.
  *

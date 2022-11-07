@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.4.1</span>
+   &#160;<span id="projectnumber">3.5.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -320,6 +320,15 @@ Enumerations</h2></td></tr>
 , <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70abf7739c7a0569149ed24ae8b9fbaf889">JSStreamMoveInProgressErr</a> = 10124
 , <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a597c98a0637cec454b724b049098cee8">JSConsumerMaxRequestBatchExceededErr</a> = 10125
 , <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a1d159f128cd9b261b5270f7e36ed22d1">JSConsumerReplicasExceedsStreamErr</a> = 10126
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aab479befe55dfbc113b128367ea3739e">JSConsumerNameContainsPathSeparatorsErr</a> = 10127
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a6a833a78d95a6946e7ead515393c01ff">JSStreamNameContainsPathSeparatorsErr</a> = 10128
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70abd66e18ccdc8c7e5737f09d39bc64e7b">JSStreamMoveNotInProgressErr</a> = 10129
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a9698a9c41a36783ff8bd8738dbce16cf">JSStreamNameExistRestoreFailedErr</a> = 10130
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aaee714daa8b2d00c09d202bbf682a099">JSConsumerCreateFilterSubjectMismatchErr</a> = 10131
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a2fd5f6bb7dac1ef16bdc0818886f78ac">JSConsumerCreateDurableAndNameMismatchErr</a> = 10132
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a0e2194a4bb7565834982a39deddea878">JSReplicasCountCannotBeNegativeErr</a> = 10133
 <br />
  }</td></tr>
 <tr class="separator:a10731415ffcd3e2330df10c4d5fd3d70"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -704,6 +713,20 @@ Enumerations</h2></td></tr>
 <tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a597c98a0637cec454b724b049098cee8" name="a10731415ffcd3e2330df10c4d5fd3d70a597c98a0637cec454b724b049098cee8"></a>JSConsumerMaxRequestBatchExceededErr&#160;</td><td class="fielddoc"><p >Consumer max request batch exceeds server limit. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a1d159f128cd9b261b5270f7e36ed22d1" name="a10731415ffcd3e2330df10c4d5fd3d70a1d159f128cd9b261b5270f7e36ed22d1"></a>JSConsumerReplicasExceedsStreamErr&#160;</td><td class="fielddoc"><p >Consumer config replica count exceeds parent stream. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70aab479befe55dfbc113b128367ea3739e" name="a10731415ffcd3e2330df10c4d5fd3d70aab479befe55dfbc113b128367ea3739e"></a>JSConsumerNameContainsPathSeparatorsErr&#160;</td><td class="fielddoc"><p >Consumer name can not contain path separators. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a6a833a78d95a6946e7ead515393c01ff" name="a10731415ffcd3e2330df10c4d5fd3d70a6a833a78d95a6946e7ead515393c01ff"></a>JSStreamNameContainsPathSeparatorsErr&#160;</td><td class="fielddoc"><p >Stream name can not contain path separators. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70abd66e18ccdc8c7e5737f09d39bc64e7b" name="a10731415ffcd3e2330df10c4d5fd3d70abd66e18ccdc8c7e5737f09d39bc64e7b"></a>JSStreamMoveNotInProgressErr&#160;</td><td class="fielddoc"><p >Stream move not in progress. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a9698a9c41a36783ff8bd8738dbce16cf" name="a10731415ffcd3e2330df10c4d5fd3d70a9698a9c41a36783ff8bd8738dbce16cf"></a>JSStreamNameExistRestoreFailedErr&#160;</td><td class="fielddoc"><p >Stream name already in use, cannot restore. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70aaee714daa8b2d00c09d202bbf682a099" name="a10731415ffcd3e2330df10c4d5fd3d70aaee714daa8b2d00c09d202bbf682a099"></a>JSConsumerCreateFilterSubjectMismatchErr&#160;</td><td class="fielddoc"><p >Consumer create request did not match filtered subject from create subject. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a2fd5f6bb7dac1ef16bdc0818886f78ac" name="a10731415ffcd3e2330df10c4d5fd3d70a2fd5f6bb7dac1ef16bdc0818886f78ac"></a>JSConsumerCreateDurableAndNameMismatchErr&#160;</td><td class="fielddoc"><p >Consumer Durable and Name have to be equal if both are provided. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a0e2194a4bb7565834982a39deddea878" name="a10731415ffcd3e2330df10c4d5fd3d70a0e2194a4bb7565834982a39deddea878"></a>JSReplicasCountCannotBeNegativeErr&#160;</td><td class="fielddoc"><p >Replicas count cannot be negative. </p>
 </td></tr>
 </table>
 

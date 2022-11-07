@@ -1,7 +1,7 @@
 var searchData=
 [
   ['callbacks_0',['Callbacks',['../group__callbacks_group.html',1,'']]],
-  ['cluster_1',['Cluster',['../structjs_placement.html#ad8c83588d57f0e30959cfb6f3d5d61bf',1,'jsPlacement::Cluster()'],['../structjs_stream_info.html#a8d10d6fdc3f713ac726c72cae06a209a',1,'jsStreamInfo::Cluster()'],['../structjs_consumer_info.html#a6f4401563a9fd102226d82cdc6136e32',1,'jsConsumerInfo::Cluster()']]],
+  ['cluster_1',['Cluster',['../structjs_placement.html#ad8c83588d57f0e30959cfb6f3d5d61bf',1,'jsPlacement::Cluster()'],['../structjs_stream_alternate.html#a3e85014d03dd425435ed5a0b6a5dfb1d',1,'jsStreamAlternate::Cluster()'],['../structjs_stream_info.html#a8d10d6fdc3f713ac726c72cae06a209a',1,'jsStreamInfo::Cluster()'],['../structjs_consumer_info.html#a6f4401563a9fd102226d82cdc6136e32',1,'jsConsumerInfo::Cluster()']]],
   ['config_2',['Config',['../structjs_stream_info.html#adcc402d28e0ee443419e9b549da233c6',1,'jsStreamInfo::Config()'],['../structjs_sub_options.html#acab25d71a2efe26bb3b084071435c2b5',1,'jsSubOptions::Config()'],['../structjs_consumer_info.html#a2f63940ca1f024ad3840418c2f6a1ae1',1,'jsConsumerInfo::Config()']]],
   ['connection_3',['Connection',['../group__conn_group.html',1,'']]],
   ['consumer_4',['Consumer',['../structjs_sub_options.html#a7aa5b8439ed288b858943f28c291cb36',1,'jsSubOptions::Consumer()'],['../structjs_sequence_pair.html#a6d205effd29f8994f0028bfaf2e8d816',1,'jsSequencePair::Consumer()'],['../structjs_sequence_info.html#ae4416a5d766e07db207e563668edd06f',1,'jsSequenceInfo::Consumer()'],['../structjs_msg_meta_data.html#a6dcc2a442984b0ca070b3d8077192127',1,'jsMsgMetaData::Consumer()']]],

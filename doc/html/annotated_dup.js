@@ -23,6 +23,7 @@ var annotated_dup =
     [ "jsRePublish", "structjs_re_publish.html", "structjs_re_publish" ],
     [ "jsSequenceInfo", "structjs_sequence_info.html", "structjs_sequence_info" ],
     [ "jsSequencePair", "structjs_sequence_pair.html", "structjs_sequence_pair" ],
+    [ "jsStreamAlternate", "structjs_stream_alternate.html", "structjs_stream_alternate" ],
     [ "jsStreamConfig", "structjs_stream_config.html", "structjs_stream_config" ],
     [ "jsStreamInfo", "structjs_stream_info.html", "structjs_stream_info" ],
     [ "jsStreamInfoList", "structjs_stream_info_list.html", "structjs_stream_info_list" ],

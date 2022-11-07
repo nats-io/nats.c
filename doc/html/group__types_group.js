@@ -27,7 +27,8 @@ var group__types_group =
       [ "OptStartSeq", "structjs_stream_source.html#ad6948b7a34c202f324b6d2beb32fe5ed", null ],
       [ "OptStartTime", "structjs_stream_source.html#a67eb1dac41b2d826a923cfb23baa24a5", null ],
       [ "FilterSubject", "structjs_stream_source.html#af787b51dde9d77626f33860564eb08c3", null ],
-      [ "External", "structjs_stream_source.html#a295458d156af5373bb3f5ab06612a888", null ]
+      [ "External", "structjs_stream_source.html#a295458d156af5373bb3f5ab06612a888", null ],
+      [ "Domain", "structjs_stream_source.html#aa304239ee823ef87fcb53ebb0c077e7b", null ]
     ] ],
     [ "jsRePublish", "structjs_re_publish.html", [
       [ "Source", "structjs_re_publish.html#a1acb593929fd69bbe0f4dc8300dfaeb2", null ],
@@ -112,6 +113,11 @@ var group__types_group =
       [ "Lag", "structjs_stream_source_info.html#ab2ee0ca3ecd98c2df6d4e9bd88686863", null ],
       [ "Active", "structjs_stream_source_info.html#a28b8cc0a9d487672955d3a3fa03de247", null ]
     ] ],
+    [ "jsStreamAlternate", "structjs_stream_alternate.html", [
+      [ "Name", "structjs_stream_alternate.html#a07f36f98c7dcdf435f803e4f0ccaac57", null ],
+      [ "Domain", "structjs_stream_alternate.html#a7c25ab1a427b78c4e1ba58ff7cdb5a8f", null ],
+      [ "Cluster", "structjs_stream_alternate.html#a3e85014d03dd425435ed5a0b6a5dfb1d", null ]
+    ] ],
     [ "jsStreamInfo", "structjs_stream_info.html", [
       [ "Config", "structjs_stream_info.html#adcc402d28e0ee443419e9b549da233c6", null ],
       [ "Created", "structjs_stream_info.html#a578ce52a275c690dd4627c1d119c7838", null ],
@@ -119,7 +125,9 @@ var group__types_group =
       [ "Cluster", "structjs_stream_info.html#a8d10d6fdc3f713ac726c72cae06a209a", null ],
       [ "Mirror", "structjs_stream_info.html#ab71aae7e4f6c62e2a09a3a52c9e4fa2a", null ],
       [ "Sources", "structjs_stream_info.html#a2e7ca48a93fe57265609e7e0cd3fa386", null ],
-      [ "SourcesLen", "structjs_stream_info.html#af14110cb1f8e16e3dade8d9f7c2fd672", null ]
+      [ "SourcesLen", "structjs_stream_info.html#af14110cb1f8e16e3dade8d9f7c2fd672", null ],
+      [ "Alternates", "structjs_stream_info.html#a720c4ff9090bafda50000843810ab1bb", null ],
+      [ "AlternatesLen", "structjs_stream_info.html#ad37a5fd700bd5df54e5002c7de51c3ad", null ]
     ] ],
     [ "jsStreamInfoList", "structjs_stream_info_list.html", [
       [ "List", "structjs_stream_info_list.html#a7b096ee7a25363f231f56419a244daef", null ],
@@ -306,7 +314,10 @@ var group__types_group =
       [ "MaxBytes", "structkv_config.html#a1bc37777aa91b8b57a70e7647670cd12", null ],
       [ "StorageType", "structkv_config.html#ad5db9a58224d93ab86b4cfc4c46f1897", null ],
       [ "Replicas", "structkv_config.html#a48f0f70383eff868321f9c94ae1a87cd", null ],
-      [ "RePublish", "structkv_config.html#ae172d3e442eef1a57cd7cf266d9e8951", null ]
+      [ "RePublish", "structkv_config.html#ae172d3e442eef1a57cd7cf266d9e8951", null ],
+      [ "Mirror", "structkv_config.html#ac86ca661d283627bccecf70cd286c8f8", null ],
+      [ "Sources", "structkv_config.html#afbfd6725c0b0c9fb661a96c06d788ac9", null ],
+      [ "SourcesLen", "structkv_config.html#af1d95d5434b10e929d6ce6fa6129a789", null ]
     ] ],
     [ "kvWatchOptions", "structkv_watch_options.html", [
       [ "IgnoreDeletes", "structkv_watch_options.html#a0535edd21b26affc0057575bafc21a07", null ],
@@ -347,6 +358,7 @@ var group__types_group =
     [ "jsPeerInfo", "group__types_group.html#ga1e938dab794089f9329d7b7ece8f3e9b", null ],
     [ "jsClusterInfo", "group__types_group.html#gaaf92318ce94a1ae3547c9a7af5a3f4f6", null ],
     [ "jsStreamSourceInfo", "group__types_group.html#gab2f33f57188a550f2f747d4f27bc24bd", null ],
+    [ "jsStreamAlternate", "group__types_group.html#ga22c26dd5dd31df7982130ef203ad3490", null ],
     [ "jsStreamInfo", "group__types_group.html#ga2629c9454996edf7914be36a9e44921b", null ],
     [ "jsStreamInfoList", "group__types_group.html#ga1e54c2a1bc94834d1670875fc151f565", null ],
     [ "jsStreamNamesList", "group__types_group.html#gaf4d31a4dc83b2805422beafb1f8fa000", null ],

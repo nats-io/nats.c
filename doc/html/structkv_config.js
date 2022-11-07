@@ -8,5 +8,8 @@ var structkv_config =
     [ "MaxBytes", "structkv_config.html#a1bc37777aa91b8b57a70e7647670cd12", null ],
     [ "StorageType", "structkv_config.html#ad5db9a58224d93ab86b4cfc4c46f1897", null ],
     [ "Replicas", "structkv_config.html#a48f0f70383eff868321f9c94ae1a87cd", null ],
-    [ "RePublish", "structkv_config.html#ae172d3e442eef1a57cd7cf266d9e8951", null ]
+    [ "RePublish", "structkv_config.html#ae172d3e442eef1a57cd7cf266d9e8951", null ],
+    [ "Mirror", "structkv_config.html#ac86ca661d283627bccecf70cd286c8f8", null ],
+    [ "Sources", "structkv_config.html#afbfd6725c0b0c9fb661a96c06d788ac9", null ],
+    [ "SourcesLen", "structkv_config.html#af1d95d5434b10e929d6ce6fa6129a789", null ]
 ];

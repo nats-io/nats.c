@@ -241,6 +241,7 @@ JetStreamDirectGetMsg
 JetStreamNakWithDelay
 JetStreamBackOffRedeliveries
 JetStreamInfoWithSubjects
+JetStreamInfoAlternates
 KeyValueManager
 KeyValueBasics
 KeyValueWatch
@@ -253,6 +254,7 @@ KeyValueCrossAccount
 KeyValueDiscardOldToNew
 KeyValueRePublish
 KeyValueMirrorDirectGet
+KeyValueMirrorCrossDomains
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

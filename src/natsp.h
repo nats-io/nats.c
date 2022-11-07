@@ -433,6 +433,8 @@ struct __kvStore
     char                *bucket;
     char                *stream;
     char                *pre;
+    char                *putPre;
+    bool                usePutPre;
     bool                useJSPrefix;
     bool                useDirect;
 

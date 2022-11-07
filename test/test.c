@@ -5509,7 +5509,8 @@ _stopServer(natsPid pid)
     CloseHandle(pid->hThread);
 
     natsMutex_Lock(slMu);
-    natsHash_Remove(slMap, (int64_t) pid);
+    if (slMap != NULL)
+        natsHash_Remove(slMap, (int64_t) pid);
     natsMutex_Unlock(slMu);
 
     free(pid);
@@ -5614,7 +5615,8 @@ _startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts
     }
 
     natsMutex_Lock(slMu);
-    natsHash_Set(slMap, (int64_t) pid, NULL, NULL);
+    if (slMap != NULL)
+        natsHash_Set(slMap, (int64_t) pid, NULL, NULL);
     natsMutex_Unlock(slMu);
 
     return (natsPid) pid;
@@ -5644,7 +5646,8 @@ _stopServer(natsPid pid)
     waitpid(pid, &status, 0);
 
     natsMutex_Lock(slMu);
-    natsHash_Remove(slMap, (int64_t) pid);
+    if (slMap != NULL)
+        natsHash_Remove(slMap, (int64_t) pid);
     natsMutex_Unlock(slMu);
 }
 
@@ -5720,7 +5723,8 @@ _startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts
     }
 
     natsMutex_Lock(slMu);
-    natsHash_Set(slMap, (int64_t) pid, NULL, NULL);
+    if (slMap != NULL)
+        natsHash_Set(slMap, (int64_t) pid, NULL, NULL);
     natsMutex_Unlock(slMu);
 
     // parent, return the child's PID back.
@@ -21728,8 +21732,11 @@ test_JetStreamUnmarshalStreamInfo(void)
         "{\"cluster\":{\"name\":\"S1\",\"leader\":\"S2\",\"replicas\":[{\"name\":\"S1\",\"current\":true,\"offline\":false,\"active\":123,\"lag\":456},{\"name\":\"S1\",\"current\":false,\"offline\":true,\"active\":123,\"lag\":456}]}}",
         "{\"mirror\":{\"name\":\"M\",\"lag\":123,\"active\":456}}",
         "{\"mirror\":{\"name\":\"M\",\"external\":{\"api\":\"MyApi\",\"deliver\":\"deliver.prefix\"},\"lag\":123,\"active\":456}}",
+        "{\"sources\":[{\"name\":\"S1\",\"lag\":123,\"active\":456}]}",
         "{\"sources\":[{\"name\":\"S1\",\"lag\":123,\"active\":456},{\"name\":\"S2\",\"lag\":123,\"active\":456}]}",
         "{\"sources\":[{\"name\":\"S1\",\"external\":{\"api\":\"MyApi\",\"deliver\":\"deliver.prefix\"},\"lag\":123,\"active\":456},{\"name\":\"S2\",\"lag\":123,\"active\":456}]}",
+        "{\"alternates\":[{\"name\":\"S1\",\"domain\":\"domain\",\"cluster\":\"abc\"}]}",
+        "{\"alternates\":[{\"name\":\"S1\",\"domain\":\"domain\",\"cluster\":\"abc\"},{\"name\":\"S2\",\"domain\":\"domain\",\"cluster\":\"abc\"}]}",
     };
     const char          *bad[] = {
         "{\"config\":123}",
@@ -21777,6 +21784,10 @@ test_JetStreamUnmarshalStreamInfo(void)
         "{\"sources\":[{\"name\":123}]}",
         "{\"sources\":[{\"name\":\"S1\",\"external\":123}]}",
         "{\"sources\":[{\"name\":\"S1\",\"external\":{\"deliver\":123}}]}",
+        "{\"alternates\":123}",
+        "{\"alternates\":[{\"name\":123}]}",
+        "{\"alternates\":[{\"name\":\"S1\",\"domain\":123}]}",
+        "{\"alternates\":[{\"name\":\"S1\",\"domain\":\"domain\",\"cluster\":123}]}",
     };
     int i;
     char tmp[64];
@@ -22683,6 +22694,8 @@ test_JetStreamMgtStreams(void)
     jsStreamInfoList    *siList = NULL;
     jsStreamNamesList   *snList = NULL;
     int                 count   = 0;
+    jsStreamSource      ss;
+    jsExternalStream    se;
     jsOptions           o;
     int                 i;
 
@@ -23107,6 +23120,7 @@ test_JetStreamMgtStreams(void)
                             natsMsg_GetData(resp),
                             natsMsg_GetDataLength(resp)) == 0));
     jsStreamInfo_Destroy(si);
+    si = NULL;
     natsMsg_Destroy(resp);
     resp = NULL;
 
@@ -23150,6 +23164,7 @@ test_JetStreamMgtStreams(void)
                 && (strcmp(si->Config->Subjects[0], "foo.>") == 0)
                 && (strcmp(si->Config->Subjects[1], "bar.*") == 0));
     jsStreamInfo_Destroy(si);
+    si = NULL;
 
     test("List stream infos (bad args): ");
     s = js_Streams(NULL, js, NULL, NULL);
@@ -23285,6 +23300,35 @@ test_JetStreamMgtStreams(void)
     o.Stream.Info.SubjectsFilter = "no.match";
     s = js_StreamNames(&snList, js, &o, &jerr);
     testCond((s == NATS_NOT_FOUND) && (snList == NULL));
+
+    test("Mirror domain and external set error: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "MDESET";
+    jsStreamSource_Init(&ss);
+    ss.Domain = "Domain";
+    jsExternalStream_Init(&se);
+    se.DeliverPrefix = "some.prefix";
+    ss.External = &se;
+    cfg.Mirror = &ss;
+    s = js_AddStream(&si, js, &cfg, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (si == NULL)
+                && (strstr(nats_GetLastError(NULL), "domain and external are both set") != NULL));
+    nats_clearLastError();
+
+    test("Source domain and external set error: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "SDESET";
+    jsStreamSource_Init(&ss);
+    ss.Domain = "Domain";
+    jsExternalStream_Init(&se);
+    se.DeliverPrefix = "some.prefix";
+    ss.External = &se;
+    cfg.Sources = (jsStreamSource*[1]){&ss};
+    cfg.SourcesLen = 1;
+    s = js_AddStream(&si, js, &cfg, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (si == NULL)
+                && (strstr(nats_GetLastError(NULL), "domain and external are both set") != NULL));
+    nats_clearLastError();
 
     JS_TEARDOWN;
 }
@@ -29701,6 +29745,137 @@ test_JetStreamInfoWithSubjects(void)
     JS_TEARDOWN;
 }
 
+static natsStatus
+_checkJSClusterReady(const char *url)
+{
+    natsStatus          s   = NATS_OK;
+    natsConnection      *nc = NULL;
+    jsCtx               *js = NULL;
+    jsErrCode           jerr= 0;
+    int                 i;
+    jsOptions           jo;
+
+    jsOptions_Init(&jo);
+    jo.Wait = 1000;
+
+    s = natsConnection_ConnectTo(&nc, url);
+    IFOK(s, natsConnection_JetStream(&js, nc, &jo));
+    for (i=0; (s == NATS_OK) && (i<10); i++)
+    {
+        jsStreamInfo *si = NULL;
+
+        s = js_GetStreamInfo(&si, js, "CHECK_CLUSTER", &jo, &jerr);
+        if (jerr == JSStreamNotFoundErr)
+        {
+            nats_clearLastError();
+            s = NATS_OK;
+            break;
+        }
+        if ((s != NATS_OK) && (i < 9))
+        {
+            s = NATS_OK;
+            nats_Sleep(500);
+        }
+    }
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+    return s;
+}
+
+static void
+test_JetStreamInfoAlternates(void)
+{
+    char                datastore1[256] = {'\0'};
+    char                datastore2[256] = {'\0'};
+    char                datastore3[256] = {'\0'};
+    char                cmdLine[1024]   = {'\0'};
+    natsPid             pid1            = NATS_INVALID_PID;
+    natsPid             pid2            = NATS_INVALID_PID;
+    natsPid             pid3            = NATS_INVALID_PID;
+    natsConnection      *nc             = NULL;
+    jsCtx               *js             = NULL;
+    jsStreamInfo        *si             = NULL;
+    jsStreamConfig      sc;
+    jsStreamSource      ss;
+    natsStatus          s;
+
+    ENSURE_JS_VERSION(2, 9, 0);
+
+    test("Start cluster: ");
+    _makeUniqueDir(datastore1, sizeof(datastore1), "datastore_");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -cluster_name abc -server_name A -cluster nats://127.0.0.1:6222 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223,nats://127.0.0.1:6224 -p 4222", datastore1);
+    pid1 = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid1);
+
+    _makeUniqueDir(datastore2, sizeof(datastore2), "datastore_");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -cluster_name abc -server_name B -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223,nats://127.0.0.1:6224 -p 4223", datastore2);
+    pid2 = _startServer("nats://127.0.0.1:4223", cmdLine, true);
+    CHECK_SERVER_STARTED(pid1);
+
+    _makeUniqueDir(datastore3, sizeof(datastore3), "datastore_");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -cluster_name abc -server_name C -cluster nats://127.0.0.1:6224 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223,nats://127.0.0.1:6224 -p 4224", datastore3);
+    pid3 = _startServer("nats://127.0.0.1:4224", cmdLine, true);
+    CHECK_SERVER_STARTED(pid1);
+    testCond(true);
+
+    test("Check cluster: ");
+    s = _checkJSClusterReady("nats://127.0.0.1:4224");
+    testCond(s == NATS_OK);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create mirror: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "MIRROR";
+    jsStreamSource_Init(&ss);
+    ss.Name = "TEST";
+    sc.Mirror = &ss;
+    s = js_AddStream(NULL, js, &sc, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check for alternate: ");
+    s = js_GetStreamInfo(&si, js, "TEST", NULL, NULL);
+    testCond((s == NATS_OK) && (si != NULL) && (si->AlternatesLen == 2));
+
+    test("Check alternate content: ");
+    if ((strcmp(si->Alternates[0]->Cluster, "abc") != 0)
+        || (strcmp(si->Alternates[1]->Cluster, "abc") != 0))
+    {
+        s = NATS_ERR;
+    }
+    else if (((strcmp(si->Alternates[0]->Name, "TEST") == 0) && (strcmp(si->Alternates[1]->Name, "MIRROR") != 0))
+                || ((strcmp(si->Alternates[0]->Name, "MIRROR") == 0) && (strcmp(si->Alternates[1]->Name, "TEST") != 0)))
+    {
+        s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+    jsStreamInfo_Destroy(si);
+
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+
+    _stopServer(pid3);
+    _stopServer(pid2);
+    _stopServer(pid1);
+    rmtree(datastore1);
+    rmtree(datastore2);
+    rmtree(datastore3);
+}
+
 static void
 test_KeyValueManager(void)
 {
@@ -29881,6 +30056,13 @@ test_KeyValueBasics(void)
         test("Check bucket (returns NULL): ");
         s = (kvStore_Bucket(NULL) == NULL ? NATS_OK : NATS_ERR);
         testCond(s == NATS_OK);
+
+        test("Check bytes is 0: ");
+        s = kvStore_Status(&sts, kv);
+        IFOK(s, (kvStatus_Bytes(sts) == 0 ? NATS_OK : NATS_ERR));
+        testCond(s == NATS_OK);
+        kvStatus_Destroy(sts);
+        sts = NULL;
 
         test("Simple put (bad args): ");
         rev = 1234;
@@ -30107,9 +30289,24 @@ test_KeyValueBasics(void)
         s = (kvStatus_Replicas(sts) == 1 ? NATS_OK : NATS_ERR);
         testCond(s == NATS_OK);
 
+        test("Check bytes: ");
+        {
+            jsStreamInfo *si = NULL;
+
+            if (i == 0)
+                s = js_GetStreamInfo(&si, js, "KV_TEST0", NULL, NULL);
+            else
+                s = js_GetStreamInfo(&si, js, "KV_TEST1", NULL, NULL);
+            IFOK(s, (kvStatus_Bytes(sts) == si->State.Bytes ? NATS_OK : NATS_ERR));
+
+            jsStreamInfo_Destroy(si);
+        }
+        testCond(s == NATS_OK);
+
         test("Check status with NULL: ");
         if ((kvStatus_History(NULL) != 0) || (kvStatus_Bucket(NULL) != NULL)
-            || (kvStatus_TTL(NULL) != 0) || (kvStatus_Values(NULL) != 0))
+            || (kvStatus_TTL(NULL) != 0) || (kvStatus_Values(NULL) != 0)
+            || (kvStatus_Bytes(NULL) != 0))
         {
             s = NATS_ERR;
         }
@@ -31030,50 +31227,48 @@ static void
 test_KeyValueDiscardOldToNew(void)
 {
     kvStore             *kv = NULL;
-    kvEntry             *e  = NULL;
     kvConfig            kvc;
     natsStatus          s;
-    int                 i;
 
     JS_SETUP(2, 7, 2);
 
-    // We are going to go from 2.7.1->2.7.2->2.7.1 and 2.7.2 again.
-    for (i=0; i<2; i++)
-    {
-        // Change the server version in the connection to
-        // create as-if we were connecting to a v2.7.1 server.
-        natsConn_Lock(nc);
-        nc->srvVersion.ma = 2;
-        nc->srvVersion.mi = 7;
-        nc->srvVersion.up = 1;
-        natsConn_Unlock(nc);
+    // Change the server version in the connection to
+    // create as-if we were connecting to a v2.7.1 server.
+    natsConn_Lock(nc);
+    nc->srvVersion.ma = 2;
+    nc->srvVersion.mi = 7;
+    nc->srvVersion.up = 1;
+    natsConn_Unlock(nc);
 
-        test("Check discard (old): ");
-        s = _checkDiscard(js, js_DiscardOld, &kv);
-        if ((s == NATS_OK) && (i == 0))
-            s = kvStore_PutString(NULL, kv, "foo", "value");
-        testCond(s == NATS_OK);
-        kvStore_Destroy(kv);
-        kv = NULL;
+    test("Check discard (old): ");
+    s = _checkDiscard(js, js_DiscardOld, &kv);
+    testCond(s == NATS_OK);
+    kvStore_Destroy(kv);
+    kv = NULL;
 
-        // Now change version to 2.7.2
-        natsConn_Lock(nc);
-        nc->srvVersion.ma = 2;
-        nc->srvVersion.mi = 7;
-        nc->srvVersion.up = 2;
-        natsConn_Unlock(nc);
+    // Now change version to 2.7.2
+    natsConn_Lock(nc);
+    nc->srvVersion.ma = 2;
+    nc->srvVersion.mi = 7;
+    nc->srvVersion.up = 2;
+    natsConn_Unlock(nc);
 
-        test("Check discard (new): ");
-        s = _checkDiscard(js, js_DiscardNew, &kv);
-        IFOK(s, kvStore_Get(&e, kv, "foo"));
-        if ((s == NATS_OK) && (strcmp(kvEntry_ValueString(e), "value") != 0))
-            s = NATS_ERR;
-        testCond(s == NATS_OK);
-        kvEntry_Destroy(e);
-        e = NULL;
-        kvStore_Destroy(kv);
-        kv = NULL;
-    }
+    test("Check discard (old, no auto-update): ");
+    s = _checkDiscard(js, js_DiscardOld, &kv);
+    testCond((s == NATS_ERR) && (kv == NULL)
+                && (strstr(nats_GetLastError(NULL), "different configuration") != NULL));
+    nats_clearLastError();
+
+    // Now delete the kv store and create against 2.7.2+
+    test("Delete KV: ");
+    s = js_DeleteStream(js, "KV_TEST", NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check discard (new): ");
+    s = _checkDiscard(js, js_DiscardNew, &kv);
+    testCond(s == NATS_OK);
+    kvStore_Destroy(kv);
+    kv = NULL;
 
     test("Check that other changes are rejected: ");
     kvConfig_Init(&kvc);
@@ -31081,7 +31276,7 @@ test_KeyValueDiscardOldToNew(void)
     kvc.MaxBytes = 1024*1024;
     s = js_CreateKeyValue(&kv, js, &kvc);
     testCond((s == NATS_ERR)
-                && (strstr(nats_GetLastError(NULL), "configuration is different") != NULL));
+                && (strstr(nats_GetLastError(NULL), "different configuration") != NULL));
     kvStore_Destroy(kv);
 
     JS_TEARDOWN;
@@ -31115,7 +31310,7 @@ test_KeyValueRePublish(void)
     rp.Destination = "bar.>";
     kvc.RePublish =&rp;
     s = js_CreateKeyValue(&kv, js, &kvc);
-    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "can not change RePublish") != NULL));
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "different configuration") != NULL));
     nats_clearLastError();
 
     test("Create with repub: ");
@@ -31213,6 +31408,356 @@ test_KeyValueMirrorDirectGet(void)
     kvStore_Destroy(kv);
 
     JS_TEARDOWN;
+}
+
+static natsStatus
+_connectToHubAndCheckLeaf(natsConnection **hub, natsConnection *lnc)
+{
+    natsStatus          s       = NATS_OK;
+    natsConnection      *nc     = NULL;
+    natsSubscription    *sub    = NULL;
+    int                 i;
+
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "check"));
+    IFOK(s, natsConnection_Flush(nc));
+    if (s == NATS_OK)
+    {
+        for (i=0; i<10; i++)
+        {
+            s = natsConnection_PublishString(lnc, "check", "hello");
+            if (s == NATS_OK)
+            {
+                natsMsg *msg = NULL;
+                s = natsSubscription_NextMsg(&msg, sub, 500);
+                natsMsg_Destroy(msg);
+                if (s == NATS_OK)
+                    break;
+            }
+        }
+    }
+    natsSubscription_Destroy(sub);
+    if (s == NATS_OK)
+        *hub = nc;
+    else
+        natsConnection_Destroy(nc);
+    return s;
+}
+
+static void
+test_KeyValueMirrorCrossDomains(void)
+{
+    natsStatus          s;
+    natsConnection      *nc = NULL;
+    natsConnection      *lnc= NULL;
+    jsCtx               *js = NULL;
+    jsCtx               *ljs= NULL;
+    jsCtx               *rjs= NULL;
+    natsPid             pid = NATS_INVALID_PID;
+    natsPid             pid2= NATS_INVALID_PID;
+    jsOptions           o;
+    jsErrCode           jerr = 0;
+    char                datastore[256]  = {'\0'};
+    char                datastore2[256] = {'\0'};
+    char                cmdLine[1024]   = {'\0'};
+    char                confFile[256]   = {'\0'};
+    char                lconfFile[256]  = {'\0'};
+    kvStore             *kv     = NULL;
+    kvStore             *lkv    = NULL;
+    kvStore             *mkv    = NULL;
+    kvStore             *rkv    = NULL;
+    kvEntry             *e      = NULL;
+    jsStreamInfo        *si     = NULL;
+    kvWatcher           *w      = NULL;
+    int                 ok      = 0;
+    kvPurgeOptions      po;
+    kvConfig            kvc;
+    jsStreamSource      src;
+    int                 i;
+
+    ENSURE_JS_VERSION(2, 9, 0);
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+    _createConfFile(confFile, sizeof(confFile),
+        "server_name: HUB\n"\
+        "listen: 127.0.0.1:4222\n"\
+        "jetstream: { domain: HUB }\n"\
+        "leafnodes { listen: 127.0.0.1:7422 }\n");
+
+    test("Start hub: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    _makeUniqueDir(datastore2, sizeof(datastore2), "datastore_");
+    _createConfFile(lconfFile, sizeof(lconfFile),
+        "server_name: LEAF\n"\
+        "listen: 127.0.0.1:4223\n"\
+        "jetstream: { domain: LEAF }\n"\
+        "leafnodes {\n"\
+        "   remotes = [ { url: leaf://127.0.0.1:7422 } ]\n"\
+        "}\n");
+
+    test("Start leaf: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, lconfFile);
+    pid2 = _startServer("nats://127.0.0.1:4223", cmdLine, true);
+    CHECK_SERVER_STARTED(pid2);
+    testCond(true);
+
+    test("Connect to leaf: ");
+    s = natsConnection_ConnectTo(&lnc, "nats://127.0.0.1:4223");
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&ljs, lnc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Connect to hub and check connectivity through leaf: ");
+    s = _connectToHubAndCheckLeaf(&nc, lnc);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create KV value: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "TEST";
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Put keys: ");
+    s = kvStore_PutString(NULL, kv, "name", "derek");
+    IFOK(s, kvStore_PutString(NULL, kv, "age", "22"));
+    testCond(s == NATS_OK);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "MIRROR";
+    jsStreamSource_Init(&src);
+    src.Name = "TEST";
+    src.Domain = "HUB";
+    kvc.Mirror = &src;
+    s = js_CreateKeyValue(&lkv, ljs, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Check config not changed: ");
+    testCond((strcmp(kvc.Bucket, "MIRROR") == 0)
+                && (kvc.Mirror != NULL)
+                && (strcmp(kvc.Mirror->Name, "TEST") == 0)
+                && (strcmp(kvc.Mirror->Domain, "HUB") == 0)
+                && (kvc.Mirror->External == NULL));
+
+    test("Get stream info: ");
+    s = js_GetStreamInfo(&si, ljs, "KV_MIRROR", NULL, &jerr);
+    testCond((s == NATS_OK) && (si != NULL) && (jerr == 0));
+
+    test("Check mirror direct: ");
+    testCond(si->Config->MirrorDirect);
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Check mirror syncs: ");
+    for (i=0; i<10; i++)
+    {
+        s = js_GetStreamInfo(&si, ljs, "KV_MIRROR", NULL, NULL);
+        if (s != NATS_OK)
+            break;
+
+        if (si->State.Msgs != 2)
+            s = NATS_ERR;
+
+        jsStreamInfo_Destroy(si);
+        si = NULL;
+        if (s == NATS_OK)
+            break;
+        nats_Sleep(250);
+    }
+    testCond(s == NATS_OK);
+
+    // Bind locally from leafnode and make sure both get and put work.
+    test("Leaf KV: ");
+    s = js_KeyValue(&mkv, ljs, "MIRROR");
+    testCond(s == NATS_OK);
+
+    test("Put key: ");
+    s = kvStore_PutString(NULL, mkv, "name", "rip");
+    testCond(s == NATS_OK);
+
+    test("Get key: ");
+    s = kvStore_Get(&e, mkv, "name");
+    if ((s == NATS_OK) && (e != NULL))
+        s = (strcmp(kvEntry_ValueString(e), "rip") == 0 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Get context for HUB: ");
+    jsOptions_Init(&o);
+    o.Domain = "HUB";
+    s = natsConnection_JetStream(&rjs, lnc, &o);
+    testCond(s == NATS_OK);
+
+    test("Get KV: ");
+    s = js_KeyValue(&rkv, rjs, "TEST");
+    testCond(s == NATS_OK);
+
+    test("Put key: ");
+    s = kvStore_PutString(NULL, rkv, "name", "ivan");
+    testCond(s == NATS_OK);
+
+    test("Get key: ");
+    s = kvStore_Get(&e, rkv, "name");
+    if ((s == NATS_OK) && (e != NULL))
+        s = (strcmp(kvEntry_ValueString(e), "ivan") == 0 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Shutdown hub: ");
+    jsCtx_Destroy(js);
+    kvStore_Destroy(kv);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+    testCond(true);
+    nats_Sleep(500);
+
+    test("Get key: ");
+    // Use mkv here, not rkv.
+    s = kvStore_Get(&e, mkv, "name");
+    if ((s == NATS_OK) && (e != NULL))
+        s = (strcmp(kvEntry_ValueString(e), "ivan") == 0 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Create watcher (name): ");
+    s = kvStore_Watch(&w, mkv, "name", NULL);
+    testCond(s == NATS_OK);
+
+    test("Check watcher: ");
+    s = kvWatcher_Next(&e, w, 1000);
+    if (s == NATS_OK)
+    {
+        if ((strcmp(kvEntry_Key(e), "name") != 0) || (strcmp(kvEntry_ValueString(e), "ivan") != 0))
+            s = NATS_ERR;
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    IFOK(s, kvWatcher_Next(&e, w, 1000));
+    if (s == NATS_OK)
+    {
+        if ((kvEntry_Key(e) != NULL) || (kvEntry_ValueString(e) != NULL))
+            s = NATS_ERR;
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("No more: ");
+    s = kvWatcher_Next(&e, w, 250);
+    testCond((s == NATS_TIMEOUT) && (e == NULL));
+    nats_clearLastError();
+
+    kvWatcher_Destroy(w);
+    w = NULL;
+
+    test("Create watcher (all): ")
+    s = kvStore_WatchAll(&w, mkv, NULL);
+    testCond((s == NATS_OK) && (w != NULL));
+
+    test("Check watcher: ");
+    s = kvWatcher_Next(&e, w, 1000);
+    if (s == NATS_OK)
+    {
+        if ((strcmp(kvEntry_Key(e), "age") != 0) || (strcmp(kvEntry_ValueString(e), "22") != 0))
+            s = NATS_ERR;
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    IFOK(s, kvWatcher_Next(&e, w, 1000));
+    if (s == NATS_OK)
+    {
+        if ((strcmp(kvEntry_Key(e), "name") != 0) || (strcmp(kvEntry_ValueString(e), "ivan") != 0))
+            s = NATS_ERR;
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    IFOK(s, kvWatcher_Next(&e, w, 1000));
+    if (s == NATS_OK)
+    {
+        if ((kvEntry_Key(e) != NULL) || (kvEntry_ValueString(e) != NULL))
+            s = NATS_ERR;
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("No more: ");
+    s = kvWatcher_Next(&e, w, 250);
+    testCond((s == NATS_TIMEOUT) && (e == NULL));
+    nats_clearLastError();
+
+    test("Restart hub: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect to hub and check connectivity through leaf: ");
+    s = _connectToHubAndCheckLeaf(&nc, lnc);
+    testCond(s == NATS_OK);
+
+    test("Delete keys: ");
+    s = kvStore_Delete(mkv, "age");
+    IFOK(s, kvStore_Delete(mkv, "name"));
+    testCond(s == NATS_OK);
+
+    test("Check mirror syncs: ");
+    for (i=0; (ok != 2) && (i < 10); i++)
+    {
+        if (kvWatcher_Next(&e, w, 1000) == NATS_OK)
+        {
+            if (((strcmp(kvEntry_Key(e), "age") == 0) || (strcmp(kvEntry_Key(e), "name") == 0))
+                && (kvEntry_Operation(e) == kvOp_Delete))
+            {
+                ok++;
+            }
+            kvEntry_Destroy(e);
+            e = NULL;
+        }
+    }
+    testCond((s == NATS_OK) && (ok == 2));
+
+    test("Purge deletes: ");
+    kvPurgeOptions_Init(&po);
+    po.DeleteMarkersOlderThan = -1;
+    s = kvStore_PurgeDeletes(mkv, &po);
+    testCond(s == NATS_OK);
+
+    nats_clearLastError();
+    test("Check stream: ");
+    s = js_GetStreamInfo(&si, ljs, "KV_MIRROR", NULL, NULL);
+    testCond((s == NATS_OK) && (si != NULL) && (si->State.Msgs == 0));
+    jsStreamInfo_Destroy(si);
+
+    kvWatcher_Destroy(w);
+    natsConnection_Destroy(nc);
+    kvStore_Destroy(rkv);
+    kvStore_Destroy(mkv);
+    kvStore_Destroy(lkv);
+    jsCtx_Destroy(rjs);
+    jsCtx_Destroy(ljs);
+    natsConnection_Destroy(lnc);
+    _stopServer(pid2);
+    rmtree(datastore2);
+    _stopServer(pid);
+    rmtree(datastore);
+    remove(confFile);
+    remove(lconfFile);
 }
 
 #if defined(NATS_HAS_STREAMING)
@@ -33670,6 +34215,7 @@ static testInfo allTests[] =
     {"JetStreamNakWithDelay",           test_JetStreamNakWithDelay},
     {"JetStreamBackOffRedeliveries",    test_JetStreamBackOffRedeliveries},
     {"JetStreamInfoWithSubjects",       test_JetStreamInfoWithSubjects},
+    {"JetStreamInfoAlternates",         test_JetStreamInfoAlternates},
 
     {"KeyValueManager",                 test_KeyValueManager},
     {"KeyValueBasics",                  test_KeyValueBasics},
@@ -33683,6 +34229,7 @@ static testInfo allTests[] =
     {"KeyValueDiscardOldToNew",         test_KeyValueDiscardOldToNew},
     {"KeyValueRePublish",               test_KeyValueRePublish},
     {"KeyValueMirrorDirectGet",         test_KeyValueMirrorDirectGet},
+    {"KeyValueMirrorCrossDomains",      test_KeyValueMirrorCrossDomains},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},
@@ -33848,16 +34395,34 @@ int main(int argc, char **argv)
 
     // Shutdown servers that are still running likely due to failed test
     {
+        natsHash     *pids = NULL;
         natsHashIter iter;
         int64_t      key;
 
-        natsMutex_Lock(slMu);
-        natsHashIter_Init(&iter, slMap);
+        if (natsHash_Create(&pids, 16) == NATS_OK)
+        {
+            natsMutex_Lock(slMu);
+            natsHashIter_Init(&iter, slMap);
+            while (natsHashIter_Next(&iter, &key, NULL))
+            {
+                natsHash_Set(pids, key, NULL, NULL);
+                natsHashIter_RemoveCurrent(&iter);
+            }
+            natsHashIter_Done(&iter);
+            natsHash_Destroy(slMap);
+            slMap = NULL;
+            natsMutex_Unlock(slMu);
 
-        while (natsHashIter_Next(&iter, &key, NULL))
-            _stopServer((natsPid) key);
+            natsHashIter_Init(&iter, pids);
+            while (natsHashIter_Next(&iter, &key, NULL))
+                _stopServer((natsPid) key);
 
-        natsHash_Destroy(slMap);
+            natsHash_Destroy(pids);
+        }
+        else
+        {
+            natsHash_Destroy(slMap);
+        }
         natsMutex_Destroy(slMu);
     }
 

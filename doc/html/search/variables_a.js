@@ -24,7 +24,7 @@ var searchData=
   ['memorymaxstreambytes_21',['MemoryMaxStreamBytes',['../structjs_account_limits.html#a38875d969274b0f0fcefc6b04ce56eb8',1,'jsAccountLimits']]],
   ['memorystorage_22',['MemoryStorage',['../structjs_consumer_config.html#a046177256938d6a601c629f9fd82f888',1,'jsConsumerConfig']]],
   ['metaonly_23',['MetaOnly',['../structkv_watch_options.html#ac9094bce4f3c6513431ba32fb49e5605',1,'kvWatchOptions']]],
-  ['mirror_24',['Mirror',['../structjs_stream_config.html#acdba5b22e4e60fd81a54769a7d09bc51',1,'jsStreamConfig::Mirror()'],['../structjs_stream_info.html#ab71aae7e4f6c62e2a09a3a52c9e4fa2a',1,'jsStreamInfo::Mirror()']]],
+  ['mirror_24',['Mirror',['../structjs_stream_config.html#acdba5b22e4e60fd81a54769a7d09bc51',1,'jsStreamConfig::Mirror()'],['../structjs_stream_info.html#ab71aae7e4f6c62e2a09a3a52c9e4fa2a',1,'jsStreamInfo::Mirror()'],['../structkv_config.html#ac86ca661d283627bccecf70cd286c8f8',1,'kvConfig::Mirror()']]],
   ['mirrordirect_25',['MirrorDirect',['../structjs_stream_config.html#a9d67ddcc7c54c345dd60ed5e59234f1e',1,'jsStreamConfig']]],
   ['msg_26',['Msg',['../structjs_pub_ack_err.html#a156ca2f779d132ffa8c519124cf9739b',1,'jsPubAckErr']]],
   ['msgid_27',['MsgId',['../structjs_pub_options.html#ac8708487360b784f7dd5d7a21e5617c0',1,'jsPubOptions']]],

@@ -37,6 +37,7 @@ var nats_8h =
     [ "jsPeerInfo", "group__types_group.html#ga1e938dab794089f9329d7b7ece8f3e9b", null ],
     [ "jsClusterInfo", "group__types_group.html#gaaf92318ce94a1ae3547c9a7af5a3f4f6", null ],
     [ "jsStreamSourceInfo", "group__types_group.html#gab2f33f57188a550f2f747d4f27bc24bd", null ],
+    [ "jsStreamAlternate", "group__types_group.html#ga22c26dd5dd31df7982130ef203ad3490", null ],
     [ "jsStreamInfo", "group__types_group.html#ga2629c9454996edf7914be36a9e44921b", null ],
     [ "jsStreamInfoList", "group__types_group.html#ga1e54c2a1bc94834d1670875fc151f565", null ],
     [ "jsStreamNamesList", "group__types_group.html#gaf4d31a4dc83b2805422beafb1f8fa000", null ],
@@ -425,5 +426,6 @@ var nats_8h =
     [ "kvStatus_History", "group__kv_status.html#gada6f22b5659b184762cea4f45d369ee5", null ],
     [ "kvStatus_TTL", "group__kv_status.html#gaa747ad0a6182ec7a47fb47018c33d1c1", null ],
     [ "kvStatus_Replicas", "group__kv_status.html#ga86b114f4dac9f06df86101f84bd497b2", null ],
+    [ "kvStatus_Bytes", "group__kv_status.html#ga6db13a3b26c7c17633623da5f27978ff", null ],
     [ "kvStatus_Destroy", "group__kv_status.html#ga5eb3d824c1873af705beee4798246a08", null ]
 ];

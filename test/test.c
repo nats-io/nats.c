@@ -20693,7 +20693,7 @@ test_SSLVerifyHostname(void)
     if (opts == NULL)
         FAIL("Unable to create reconnect options!");
 
-    serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tls_noip.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
     test("Check that connect fails if url is IP: ");

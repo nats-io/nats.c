@@ -255,6 +255,7 @@ KeyValueDiscardOldToNew
 KeyValueRePublish
 KeyValueMirrorDirectGet
 KeyValueMirrorCrossDomains
+KeyValueRateLimiting
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

@@ -1223,6 +1223,7 @@ typedef struct kvWatchOptions
         bool            IncludeHistory;
         bool            MetaOnly;
         int64_t         Timeout;        ///< How long to wait (in milliseconds) for some operations to complete.
+        uint64_t        RateLimit;      ///< Expressed in bits per second. Applies to initial entries AND subsequent updates.
 
 } kvWatchOptions;
 

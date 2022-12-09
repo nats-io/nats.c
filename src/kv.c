@@ -1092,6 +1092,7 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
                 so.Config.HeadersOnly = true;
             if (opts->IgnoreDeletes)
                 w->ignoreDel = true;
+            so.Config.RateLimit = opts->RateLimit;
         }
         // Need to explicitly bind to the stream here because the subject
         // we construct may not help find the stream when using mirrors.

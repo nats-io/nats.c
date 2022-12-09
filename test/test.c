@@ -31760,6 +31760,67 @@ test_KeyValueMirrorCrossDomains(void)
     remove(lconfFile);
 }
 
+static void
+test_KeyValueRateLimiting(void)
+{
+    natsStatus          s;
+    kvStore             *kv = NULL;
+    kvWatcher           *w  = NULL;
+    kvEntry             *e  = NULL;
+    int64_t             start, dur;
+    char                data[100];
+    int                 i;
+    kvConfig            kvc;
+    kvWatchOptions      wo;
+
+    for (i=0; i<100; i++)
+        data[i] = 'A';
+
+    JS_SETUP(2, 9, 0);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "RL";
+    kvc.MaxValueSize = 200;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Put some keys: ");
+    for (i=0; (s == NATS_OK) && (i<3); i++)
+    {
+        char key[64];
+
+        snprintf(key, sizeof(key), "key_%d", i);
+        s = kvStore_Put(NULL, kv, key, (const void*) data, 100);
+    }
+    testCond(s == NATS_OK);
+
+    test("Create watcher: ");
+    kvWatchOptions_Init(&wo);
+    wo.RateLimit = 800; // 100 bytes per second
+    start = nats_Now();
+    s = kvStore_WatchAll(&w, kv, &wo);
+    testCond((s == NATS_OK) && (w != NULL));
+
+    test("Get entries: ");
+    for (i=0; (s == NATS_OK) && (i<4); i++)
+    {
+        s = kvWatcher_Next(&e, w, 2000);
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    dur = nats_Now()-start;
+    testCond(s == NATS_OK);
+
+    test("Check rate limit: ");
+    testCond(dur >= 2500);
+
+    kvWatcher_Destroy(w);
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -34230,6 +34291,7 @@ static testInfo allTests[] =
     {"KeyValueRePublish",               test_KeyValueRePublish},
     {"KeyValueMirrorDirectGet",         test_KeyValueMirrorDirectGet},
     {"KeyValueMirrorCrossDomains",      test_KeyValueMirrorCrossDomains},
+    {"KeyValueRateLimiting",            test_KeyValueRateLimiting},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

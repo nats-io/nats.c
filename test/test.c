@@ -2935,13 +2935,36 @@ test_natsOptions(void)
                 && (opts->userCreds != NULL)
                 && (strcmp(opts->userCreds->userOrChainedFile, "foo") == 0)
                 && (strcmp(opts->userCreds->seedFile, "bar") == 0)
-                && (opts->userJWTHandler == natsConn_userFromFile)
+                && (opts->userCreds->jwtAndSeedContent == NULL)
+                && (opts->userJWTHandler == natsConn_userCreds)
                 && (opts->userJWTClosure == (void*) opts->userCreds)
                 && (opts->sigHandler == natsConn_signatureHandler)
                 && (opts->sigClosure == (void*) opts->userCreds));
 
     test("Remove UserCredsFromFile: ");
     s = natsOptions_SetUserCredentialsFromFiles(opts, NULL, NULL);
+    testCond((s == NATS_OK)
+            && (opts->userCreds == NULL)
+            && (opts->userJWTHandler == NULL)
+            && (opts->userJWTClosure == NULL)
+            && (opts->sigHandler == NULL)
+            && (opts->sigClosure == NULL));
+
+    test("Set UserCredsFromMemory: ");
+    const char *jwtAndSeed = "-----BEGIN NATS USER JWT----\nsome user jwt\n-----END NATS USER JWT-----\n\n-----BEGIN USER NKEY SEED-----\nSUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4GY\n-----END USER NKEY SEED-----\n";
+    s = natsOptions_SetUserCredentialsFromMemory(opts, jwtAndSeed);
+    testCond((s == NATS_OK)
+            && (opts->userCreds != NULL)
+            && (opts->userCreds->userOrChainedFile == NULL)
+            && (opts->userCreds->seedFile == NULL)
+            && (strcmp(opts->userCreds->jwtAndSeedContent, jwtAndSeed) == 0)
+            && (opts->userJWTHandler == natsConn_userCreds)
+            && (opts->userJWTClosure == (void*) opts->userCreds)
+            && (opts->sigHandler == natsConn_signatureHandler)
+            && (opts->sigClosure == (void*) opts->userCreds));
+
+    test("Remove UserCredsFromMemory: ");
+    s = natsOptions_SetUserCredentialsFromMemory(opts, NULL);
     testCond((s == NATS_OK)
             && (opts->userCreds == NULL)
             && (opts->userJWTHandler == NULL)
@@ -18926,6 +18949,115 @@ test_UserCredsCallbacks(void)
 }
 
 static void
+test_UserCredsFromMemory(void)
+{
+    natsStatus          s       = NATS_OK;
+    natsConnection      *nc     = NULL;
+    natsOptions         *opts   = NULL;
+    natsOptions         *opts2  = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+    natsThread          *t      = NULL;
+    struct threadArg    arg;
+
+    const char          *jwtAndSeed     = "-----BEGIN NATS USER JWT----\nsome user jwt\n-----END NATS USER JWT-----\n\n-----BEGIN USER NKEY SEED-----\nSUAMK2FG4MI6UE3ACF3FK3OIQBCEIEZV7NSWFFEW63UXMRLFM2XLAXK4GY\n-----END USER NKEY SEED-----\n";
+    const char          *jwtWithoutSeed = "-----BEGIN NATS USER JWT----\nsome user jwt\n-----END NATS USER JWT-----\n";
+
+    s = natsOptions_Create(&opts);
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test UserCredsFromFiles");
+
+    test("Clone: ");
+    s = natsOptions_SetUserCredentialsFromMemory(opts, jwtAndSeed);
+    if (s == NATS_OK)
+    {
+        opts2 = natsOptions_clone(opts);
+        if (opts2 == NULL)
+            s = NATS_NO_MEMORY;
+    }
+    IFOK(s, natsOptions_SetUserCredentialsFromMemory(opts, NULL));
+    testCond((s == NATS_OK)
+                && (opts2->userCreds != NULL)
+                && (opts2->userJWTHandler == natsConn_userCreds)
+                && (opts2->userJWTClosure == (void*) opts2->userCreds)
+                && (opts2->sigHandler == natsConn_signatureHandler)
+                && (opts2->sigClosure == (void*) opts2->userCreds));
+    natsOptions_Destroy(opts2);
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("invalidCreds provided: ");
+    s = natsOptions_SetUserCredentialsFromMemory(opts, "invalidCreds");
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_NOT_FOUND);
+    
+    // Use a file that contains no seed
+    test("jwtAndSeed string has no seed: ");
+    s = natsOptions_SetUserCredentialsFromMemory(opts, jwtWithoutSeed);
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_NOT_FOUND);
+
+    nc = NULL;
+    _stopServer(pid);
+
+    // Start fake server that will send predefined "nonce" so we can check
+    // that connection is sending appropriate jwt and signature.
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+    {
+        // Set this to error, the mock server should set it to OK
+        // if it can start successfully.
+        arg.done = false;
+        arg.status = NATS_ERR;
+        arg.checkInfoCB = _checkJWTAndSigCB;
+        arg.string = "INFO {\"server_id\":\"22\",\"version\":\"latest\",\"go\":\"latest\",\"port\":4222,\"max_payload\":1048576,\"nonce\":\"nonce\"}\r\n";
+        s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
+    }
+    if (s == NATS_OK)
+    {
+        // Wait for server to be ready
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        natsMutex_Unlock(arg.m);
+    }
+    if (s != NATS_OK)
+    {
+        if (t != NULL)
+        {
+            natsThread_Join(t);
+            natsThread_Destroy(t);
+        }
+        natsOptions_Destroy(opts);
+        _destroyDefaultThreadArgs(&arg);
+        FAIL("Unable to setup test");
+    }
+
+    s = NATS_OK;
+    test("Connect with jwtAndSeed string: ");
+    s = natsOptions_SetUserCredentialsFromMemory(opts, jwtAndSeed);
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+
+    // Notify mock server we are done
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    t = NULL;
+
+    _destroyDefaultThreadArgs(&arg);
+    
+    natsOptions_Destroy(opts);
+}
+
+static void
 test_UserCredsFromFiles(void)
 {
     natsStatus          s       = NATS_OK;
@@ -19033,7 +19165,7 @@ test_UserCredsFromFiles(void)
     IFOK(s, natsOptions_SetUserCredentialsFromFiles(opts, NULL, NULL));
     testCond((s == NATS_OK)
                 && (opts2->userCreds != NULL)
-                && (opts2->userJWTHandler == natsConn_userFromFile)
+                && (opts2->userJWTHandler == natsConn_userCreds)
                 && (opts2->userJWTClosure == (void*) opts2->userCreds)
                 && (opts2->sigHandler == natsConn_signatureHandler)
                 && (opts2->sigClosure == (void*) opts2->userCreds));
@@ -19219,7 +19351,7 @@ test_NKey(void)
     s = natsOptions_SetUserCredentialsFromFiles(opts, "foo", "bar");
     testCond((s == NATS_OK)
                 && (opts->nkey == NULL)
-                && (opts->userJWTHandler == natsConn_userFromFile)
+                && (opts->userJWTHandler == natsConn_userCreds)
                 && (opts->userJWTClosure == (void*) opts->userCreds)
                 && (opts->sigHandler == natsConn_signatureHandler)
                 && (opts->sigClosure == (void*) opts->userCreds));
@@ -19358,7 +19490,7 @@ test_NKeyFromSeed(void)
     s = natsOptions_SetUserCredentialsFromFiles(opts, "foo", NULL);
     testCond((s == NATS_OK)
                 && (opts->nkey == NULL)
-                && (opts->userJWTHandler == natsConn_userFromFile)
+                && (opts->userJWTHandler == natsConn_userCreds)
                 && (opts->userJWTClosure == (void*) opts->userCreds)
                 && (opts->sigHandler == natsConn_signatureHandler)
                 && (opts->sigClosure == (void*) opts->userCreds)
@@ -34137,6 +34269,7 @@ static testInfo allTests[] =
     {"GetLocalIPAndPort",               test_GetLocalIPAndPort},
     {"UserCredsCallbacks",              test_UserCredsCallbacks},
     {"UserCredsFromFiles",              test_UserCredsFromFiles},
+    {"UserCredsFromMemory",             test_UserCredsFromMemory},
     {"NKey",                            test_NKey},
     {"NKeyFromSeed",                    test_NKeyFromSeed},
     {"ConnSign",                        test_ConnSign},

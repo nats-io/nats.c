@@ -126,7 +126,7 @@ natsStatus
 natsConn_publish(natsConnection *nc, natsMsg *msg, const char *reply, bool directFlush);
 
 natsStatus
-natsConn_userFromFile(char **userJWT, char **customErrTxt, void *closure);
+natsConn_userCreds(char **userJWT, char **customErrTxt, void *closure);
 
 natsStatus
 natsConn_signatureHandler(char **customErrTxt, unsigned char **sig, int *sigLen, const char *nonce, void *closure);

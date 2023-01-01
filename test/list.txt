@@ -167,6 +167,7 @@ GetRTT
 GetLocalIPAndPort
 UserCredsCallbacks
 UserCredsFromFiles
+UserCredsFromMemory
 NKey
 NKeyFromSeed
 ConnSign

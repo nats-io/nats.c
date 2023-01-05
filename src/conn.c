@@ -921,7 +921,7 @@ _connectProto(natsConnection *nc, char **proto)
     if (opts->userJWTHandler != NULL)
     {
         char *errTxt = NULL;
-        bool userCb  = opts->userJWTHandler != natsConn_userFromFile;
+        bool userCb  = opts->userJWTHandler != natsConn_userCreds;
 
         // If callback is not the internal one, we need to release connection lock.
         if (userCb)
@@ -4222,12 +4222,15 @@ _getJwtOrSeed(char **val, const char *fn, bool seed, int item)
 }
 
 natsStatus
-natsConn_userFromFile(char **userJWT, char **customErrTxt, void *closure)
+natsConn_userCreds(char **userJWT, char **customErrTxt, void *closure)
 {
     natsStatus  s   = NATS_OK;
     userCreds   *uc = (userCreds*) closure;
 
-    s = _getJwtOrSeed(userJWT, uc->userOrChainedFile, false, 0);
+    if (uc->jwtAndSeedContent != NULL)
+        s = nats_GetJWTOrSeed(userJWT, uc->jwtAndSeedContent, 0);
+    else
+        s = _getJwtOrSeed(userJWT, uc->userOrChainedFile, false, 0);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -4238,7 +4241,9 @@ _sign(userCreds *uc, const unsigned char *input, int inputLen, unsigned char *si
     natsStatus      s            = NATS_OK;
     char            *encodedSeed = NULL;
 
-    if (uc->seedFile != NULL)
+    if (uc->jwtAndSeedContent != NULL)
+        s = nats_GetJWTOrSeed(&encodedSeed, uc->jwtAndSeedContent, 1);
+    else if (uc->seedFile != NULL)
         s = _getJwtOrSeed(&encodedSeed, uc->seedFile, true, 0);
     else
         s = _getJwtOrSeed(&encodedSeed, uc->userOrChainedFile, true, 1);

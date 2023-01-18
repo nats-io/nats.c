@@ -3116,6 +3116,22 @@ natsOptions_DisableNoResponders(natsOptions *opts, bool disabled);
 NATS_EXTERN natsStatus
 natsOptions_SetCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix);
 
+/** \brief Sets a custom padding when allocating buffer for incoming messages
+ *
+ * By default library allocates natsMsg with payload buffer size
+ * equal to payload size. Sometimes it can be useful to add some
+ * padding to the end of the buffer which can be tweaked using
+ * this option.
+ *
+ * To clear the custom message buffer padding, call this function with 0.
+ * Changing this option has no effect on existing NATS connections.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param paddingSize the desired inbox prefix.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetMessageBufferPadding(natsOptions *opts, int paddingSize);
+
 /** \brief Destroys a #natsOptions object.
  *
  * Destroys the natsOptions object, freeing used memory. See the note in

@@ -313,6 +313,9 @@ struct __natsOptions
 
     // Custom inbox prefix
     char *inboxPfx;
+
+    // Custom message payload padding size
+    int payloadPaddingSize;
 };
 
 typedef struct __nats_MsgList

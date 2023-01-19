@@ -2600,10 +2600,10 @@ _createMsg(natsMsg **newMsg, natsConnection *nc, char *buf, int bufLen, int hdrL
         replyLen = natsBuf_Len(nc->ps->ma.reply);
     }
 
-    s = natsMsg_create(newMsg,
+    s = natsMsg_createWithPadding(newMsg,
                        (const char*) natsBuf_Data(nc->ps->ma.subject), subjLen,
                        (const char*) reply, replyLen,
-                       (const char*) buf, bufLen, hdrLen);
+                       (const char*) buf, bufLen, nc->opts->payloadPaddingSize, hdrLen);
     return s;
 }
 

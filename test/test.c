@@ -12560,6 +12560,63 @@ test_CustomInbox(void)
 }
 
 static void
+test_MessageBufferPadding(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsSubscription    *sub      = NULL;
+    natsMsg             *msg      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    const char          *string   = "Hello World";
+    const char          *servers[] = { "nats://127.0.0.1:4222" };
+    int                 serversCount = 1;
+    int                 paddingSize = 32;
+    bool                paddingIsZeros = true;
+
+    serverPid = _startServer(servers[0], NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Create options: ");
+    s = natsOptions_Create(&opts);
+    testCond(s == NATS_OK);
+
+    test("Setting message buffer padding: ");
+    s = natsOptions_SetMessageBufferPadding(opts, paddingSize);
+    testCond(s == NATS_OK);
+
+    test("Setting servers: ");
+    s = natsOptions_SetServers(opts, servers, serversCount);
+    testCond(s == NATS_OK);
+
+    test("Test generating message for subscriber: ")
+    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    IFOK(s, natsConnection_PublishString(nc, "foo", string));
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK)
+             && (msg != NULL)
+             && (strncmp(string, natsMsg_GetData(msg), natsMsg_GetDataLength(msg)) == 0));
+
+    test("Test access to memory in message buffer beyond data length: ");
+    // This test can pass even if padding doesn't work as excepted.
+    // But valgrind will show access to unallocated memory
+    for (int i=natsMsg_GetDataLength(msg); i<natsMsg_GetDataLength(msg)+paddingSize; i++) {
+        if (natsMsg_GetData(msg)[i])
+            paddingIsZeros = false;
+    }
+
+    testCond(paddingIsZeros);
+
+    natsMsg_Destroy(msg);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_FlushInCb(void)
 {
     natsStatus          s;
@@ -34224,6 +34281,7 @@ static testInfo allTests[] =
     {"SimultaneousRequests",            test_SimultaneousRequest},
     {"RequestClose",                    test_RequestClose},
     {"CustomInbox",                     test_CustomInbox},
+    {"MessagePadding",                  test_MessageBufferPadding},
     {"FlushInCb",                       test_FlushInCb},
     {"ReleaseFlush",                    test_ReleaseFlush},
     {"FlushErrOnDisconnect",            test_FlushErrOnDisconnect},

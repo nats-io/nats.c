@@ -1440,6 +1440,18 @@ natsOptions_SetCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+natsStatus
+natsOptions_SetMessageBufferPadding(natsOptions *opts, int paddingSize)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, (paddingSize < 0));
+
+    opts->payloadPaddingSize = paddingSize;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
 static void
 _freeOptions(natsOptions *opts)
 {

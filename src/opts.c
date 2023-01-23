@@ -892,6 +892,9 @@ natsOptions_SetErrorHandler(natsOptions *opts, natsErrHandler errHandler,
     opts->asyncErrCb = errHandler;
     opts->asyncErrCbClosure = closure;
 
+    if (opts->asyncErrCb == NULL)
+        opts->asyncErrCb = natsConn_defaultErrHandler;
+
     UNLOCK_OPTS(opts);
 
     return NATS_OK;
@@ -1507,6 +1510,7 @@ natsOptions_Create(natsOptions **newOpts)
     opts->reconnectBufSize      = NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE;
     opts->reconnectJitter       = NATS_OPTS_DEFAULT_RECONNECT_JITTER;
     opts->reconnectJitterTLS    = NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS;
+    opts->asyncErrCb            = natsConn_defaultErrHandler;
 
     *newOpts = opts;
 
@@ -1586,7 +1590,7 @@ natsOptions_clone(natsOptions *opts)
             s = natsOptions_SetUserCredentialsFromMemory(cloned,
                                                         opts->userCreds->jwtAndSeedContent);
         }
-        else 
+        else
         {
             s = natsOptions_SetUserCredentialsFromFiles(cloned,
                                                         opts->userCreds->userOrChainedFile,

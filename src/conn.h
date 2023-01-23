@@ -152,6 +152,9 @@ bool
 natsConn_srvVersionAtLeast(natsConnection *nc, int major, int minor, int update);
 
 void
+natsConn_defaultErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure);
+
+void
 natsConn_close(natsConnection *nc);
 
 void

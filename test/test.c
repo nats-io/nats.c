@@ -2814,7 +2814,7 @@ test_natsOptions(void)
 
     test("Remove Error Handler: ");
     s = natsOptions_SetErrorHandler(opts, NULL, NULL);
-    testCond((s == NATS_OK) && (opts->asyncErrCb == NULL));
+    testCond((s == NATS_OK) && (opts->asyncErrCb == natsConn_defaultErrHandler));
 
     test("Set ClosedCB: ");
     s = natsOptions_SetClosedCB(opts, _dummyConnHandler, NULL);
@@ -3091,6 +3091,18 @@ test_natsOptions(void)
              && (strcmp(cloned->url, "url") == 0));
 
     natsOptions_Destroy(cloned);
+    opts = NULL;
+    cloned = NULL;
+
+    test("If original has default err handler, cloned has it too: ");
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        cloned = natsOptions_clone(opts);
+    testCond((s == NATS_OK) && (cloned != NULL)
+                && (cloned->asyncErrCb == natsConn_defaultErrHandler)
+                && (cloned->asyncErrCbClosure == NULL));
+    natsOptions_Destroy(cloned);
+    natsOptions_Destroy(opts);
 }
 
 static void
@@ -19047,7 +19059,7 @@ test_UserCredsFromMemory(void)
     s = natsOptions_SetUserCredentialsFromMemory(opts, "invalidCreds");
     IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_NOT_FOUND);
-    
+
     // Use a file that contains no seed
     test("jwtAndSeed string has no seed: ");
     s = natsOptions_SetUserCredentialsFromMemory(opts, jwtWithoutSeed);
@@ -19110,7 +19122,7 @@ test_UserCredsFromMemory(void)
     t = NULL;
 
     _destroyDefaultThreadArgs(&arg);
-    
+
     natsOptions_Destroy(opts);
 }
 

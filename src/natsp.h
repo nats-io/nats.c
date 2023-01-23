@@ -370,6 +370,7 @@ typedef struct __jsSub
     jsCtx               *js;
     char                *stream;
     char                *consumer;
+    char                *psubj;
     char                *nxtMsgSubj;
     bool                pull;
     bool                inFetch;

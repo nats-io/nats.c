@@ -192,12 +192,12 @@ nats_Trim(char **pres, const char *s)
     char    *ptr   = (char*) s;
     char    *start = (char*) s;
 
-    while ((*ptr != '\0') && isspace(*ptr))
+    while ((*ptr != '\0') && isspace((unsigned char) *ptr))
         ptr++;
 
     start = ptr;
     ptr = (char*) (s + strlen(s) - 1);
-    while ((ptr != start) && isspace(*ptr))
+    while ((ptr != start) && isspace((unsigned char) *ptr))
         ptr--;
 
     // Compute len of trimmed string
@@ -571,7 +571,7 @@ _jsonGetNum(char **ptr, nats_JSONField *field)
     int         decPCount      = 0;
     int         numTyp         = 0;
 
-    while (isspace(*p))
+    while (isspace((unsigned char) *p))
         p++;
 
     sign = (*p == '-' ? -1.0 : 1.0);
@@ -579,7 +579,7 @@ _jsonGetNum(char **ptr, nats_JSONField *field)
     if ((*p == '-') || (*p == '+'))
         p++;
 
-    while (isdigit(*p))
+    while (isdigit((unsigned char) *p))
         uintVal = uintVal * 10 + (*p++ - '0');
 
     if (*p == '.')
@@ -588,7 +588,7 @@ _jsonGetNum(char **ptr, nats_JSONField *field)
         numTyp = TYPE_DOUBLE;
     }
 
-    while (isdigit(*p))
+    while (isdigit((unsigned char) *p))
     {
         decVal = decVal * 10 + (*p++ - '0');
         decPower *= 10;
@@ -608,7 +608,7 @@ _jsonGetNum(char **ptr, nats_JSONField *field)
         if ((*p == '-') || (*p == '+'))
             p++;
 
-        while (isdigit(*p))
+        while (isdigit((unsigned char) *p))
             eVal = eVal * 10 + (*p++ - '0');
 
         if (expIsNegative)
@@ -884,7 +884,7 @@ _jsonParseValue(char **str, nats_JSONField *field, int nested)
         field->typ = TYPE_BOOL;
         s = _jsonGetBool(&ptr, &field->value.vbool);
     }
-    else if (isdigit(*ptr) || (*ptr == '-'))
+    else if (isdigit((unsigned char) *ptr) || (*ptr == '-'))
     {
         field->typ = TYPE_NUM;
         s = _jsonGetNum(&ptr, field);
@@ -2244,7 +2244,7 @@ nats_IsSubjectValid(const char *subject, bool wcAllowed)
     for (i=0; i<len ; i++)
     {
         c = subject[i];
-        if (isspace(c))
+        if (isspace((unsigned char) c))
             return false;
 
         if (c == '.')

@@ -2940,7 +2940,7 @@ natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType)
     if (*p != ' ')
         return false;
 
-    while ((*p != '\0') && isspace(*p))
+    while ((*p != '\0') && isspace((unsigned char) *p))
         p++;
 
     if ((*p == '\r') || (*p == '\n') || (*p == '\0'))
@@ -2951,10 +2951,10 @@ natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType)
 
     p += HDR_STATUS_LEN;
 
-    if (!isspace(*p))
+    if (!isspace((unsigned char) *p))
         return false;
 
-    while (isspace(*p))
+    while (isspace((unsigned char) *p))
         p++;
 
     if (strstr(p, "Idle") == p)

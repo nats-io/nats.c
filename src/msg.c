@@ -220,7 +220,7 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
         }
         return nats_setError(NATS_PROTOCOL_ERROR, "invalid start of a key: %s", start);
     }
-    if (isspace(*ptr))
+    if (isspace((unsigned char) *ptr))
     {
         if (line == 0)
             return nats_setError(NATS_PROTOCOL_ERROR, "key cannot start with a space: %s", ptr);
@@ -240,7 +240,7 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
         (*col) = '\0';
     }
 
-    while ((ptr != endPtr) && (isspace(*ptr)))
+    while ((ptr != endPtr) && (isspace((unsigned char) *ptr)))
         ptr++;
 
     if (ptr == endPtr)
@@ -259,7 +259,7 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
     endval--;
     if (*endval == '\r')
         endval--;
-    while ((endval != val) && (isspace(*endval)))
+    while ((endval != val) && (isspace((unsigned char) *endval)))
         endval--;
     endval++;
     *(endval) = '\0';
@@ -404,7 +404,7 @@ _liftHeaders(natsMsg *msg, bool setOrAdd)
                     // Restore character of starting description
                     *desc = descb;
                     // Trim left spaces
-                    while ((*desc != '\0') && isspace((int) *desc))
+                    while ((*desc != '\0') && isspace((unsigned char) *desc))
                         desc++;
 
                     // If we are not at the end of description
@@ -412,7 +412,7 @@ _liftHeaders(natsMsg *msg, bool setOrAdd)
                     {
                         // Go to end of description and walk back to trim right.
                         desce = (char*) (desc + (int) strlen(desc) - 1);
-                        while ((desce != desc) && isspace((int) *desce))
+                        while ((desce != desc) && isspace((unsigned char) *desce))
                         {
                             *desce = '\0';
                             desce--;

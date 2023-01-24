@@ -106,7 +106,7 @@ validBucketName(const char *bucket)
     for (i=0; i<(int)strlen(bucket); i++)
     {
         c = bucket[i];
-        if ((isalnum(c) == 0) && (c != '_') && (c != '-'))
+        if ((isalnum((unsigned char) c) == 0) && (c != '_') && (c != '-'))
             return false;
     }
     return true;
@@ -481,8 +481,8 @@ validKey(const char *key)
         {
             return false;
         }
-        else if ((isalnum(c) == 0) && (c != '.') && (c != '_') && (c != '-')
-                    && (c != '/') && (c != '\\') && (c != '='))
+        else if ((isalnum((unsigned char) c) == 0) && (c != '.') && (c != '_')
+                    && (c != '-') && (c != '/') && (c != '\\') && (c != '='))
         {
             return false;
         }

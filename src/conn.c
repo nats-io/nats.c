@@ -3002,7 +3002,7 @@ _isQueueNameValid(const char *name)
     len = (int) strlen(name);
     for (i=0; i<len ; i++)
     {
-        if (isspace(name[i]))
+        if (isspace((unsigned char) name[i]))
             return false;
     }
     return true;

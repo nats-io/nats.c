@@ -921,7 +921,7 @@ _connectProto(natsConnection *nc, char **proto)
     if (opts->userJWTHandler != NULL)
     {
         char *errTxt = NULL;
-        bool userCb  = opts->userJWTHandler != natsConn_userFromFile;
+        bool userCb  = opts->userJWTHandler != natsConn_userCreds;
 
         // If callback is not the internal one, we need to release connection lock.
         if (userCb)
@@ -2600,10 +2600,10 @@ _createMsg(natsMsg **newMsg, natsConnection *nc, char *buf, int bufLen, int hdrL
         replyLen = natsBuf_Len(nc->ps->ma.reply);
     }
 
-    s = natsMsg_create(newMsg,
+    s = natsMsg_createWithPadding(newMsg,
                        (const char*) natsBuf_Data(nc->ps->ma.subject), subjLen,
                        (const char*) reply, replyLen,
-                       (const char*) buf, bufLen, hdrLen);
+                       (const char*) buf, bufLen, nc->opts->payloadPaddingSize, hdrLen);
     return s;
 }
 
@@ -2813,9 +2813,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         natsConn_Lock(nc);
 
         nc->err = (sc ? NATS_SLOW_CONSUMER : NATS_MISMATCH);
-
-        if (nc->opts->asyncErrCb != NULL)
-            natsAsyncCb_PostErrHandler(nc, sub, nc->err, NULL);
+        natsAsyncCb_PostErrHandler(nc, sub, nc->err, NULL);
 
         natsConn_Unlock(nc);
     }
@@ -2837,8 +2835,7 @@ _processPermissionViolation(natsConnection *nc, char *error)
     natsConn_Lock(nc);
     nc->err = NATS_NOT_PERMITTED;
     snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
-    if (nc->opts->asyncErrCb != NULL)
-        natsAsyncCb_PostErrHandler(nc, NULL, nc->err, NATS_STRDUP(error));
+    natsAsyncCb_PostErrHandler(nc, NULL, nc->err, NATS_STRDUP(error));
     natsConn_Unlock(nc);
 }
 
@@ -2852,7 +2849,7 @@ _processAuthError(natsConnection *nc, int errCode, char *error)
     nc->err = NATS_CONNECTION_AUTH_FAILED;
     snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
 
-    if (!nc->initc && nc->opts->asyncErrCb != NULL)
+    if (!nc->initc)
         natsAsyncCb_PostErrHandler(nc, NULL, nc->err, NATS_STRDUP(error));
 
     if (nc->cur->lastAuthErrCode == errCode)
@@ -3572,13 +3569,10 @@ natsConnection_Flush(natsConnection *nc)
 static void
 _pushDrainErr(natsConnection *nc, natsStatus s, const char *errTxt)
 {
+    char tmp[256];
     natsConn_Lock(nc);
-    if (nc->opts->asyncErrCb != NULL)
-    {
-        char tmp[256];
-        snprintf(tmp, sizeof(tmp), "Drain error: %s: %u (%s)", errTxt, s, natsStatus_GetText(s));
-        natsAsyncCb_PostErrHandler(nc, NULL, s, NATS_STRDUP(tmp));
-    }
+    snprintf(tmp, sizeof(tmp), "Drain error: %s: %u (%s)", errTxt, s, natsStatus_GetText(s));
+    natsAsyncCb_PostErrHandler(nc, NULL, s, NATS_STRDUP(tmp));
     natsConn_Unlock(nc);
 }
 
@@ -4222,12 +4216,15 @@ _getJwtOrSeed(char **val, const char *fn, bool seed, int item)
 }
 
 natsStatus
-natsConn_userFromFile(char **userJWT, char **customErrTxt, void *closure)
+natsConn_userCreds(char **userJWT, char **customErrTxt, void *closure)
 {
     natsStatus  s   = NATS_OK;
     userCreds   *uc = (userCreds*) closure;
 
-    s = _getJwtOrSeed(userJWT, uc->userOrChainedFile, false, 0);
+    if (uc->jwtAndSeedContent != NULL)
+        s = nats_GetJWTOrSeed(userJWT, uc->jwtAndSeedContent, 0);
+    else
+        s = _getJwtOrSeed(userJWT, uc->userOrChainedFile, false, 0);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -4238,7 +4235,9 @@ _sign(userCreds *uc, const unsigned char *input, int inputLen, unsigned char *si
     natsStatus      s            = NATS_OK;
     char            *encodedSeed = NULL;
 
-    if (uc->seedFile != NULL)
+    if (uc->jwtAndSeedContent != NULL)
+        s = nats_GetJWTOrSeed(&encodedSeed, uc->jwtAndSeedContent, 1);
+    else if (uc->seedFile != NULL)
         s = _getJwtOrSeed(&encodedSeed, uc->seedFile, true, 0);
     else
         s = _getJwtOrSeed(&encodedSeed, uc->userOrChainedFile, true, 1);
@@ -4402,4 +4401,40 @@ natsConn_setFilterWithClosure(natsConnection *nc, natsMsgFilter f, void* closure
     nc->filter        = f;
     nc->filterClosure = closure;
     natsMutex_Unlock(nc->subsMu);
+}
+
+void
+natsConn_defaultErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
+{
+    uint64_t    cid      = 0;
+    const char  *lastErr = NULL;
+    const char  *errTxt  = NULL;
+
+    natsConn_Lock(nc);
+    cid = nc->info.CID;
+    natsConn_Unlock(nc);
+
+    // Get possibly more detailed error message. If empty, we will print the default
+    // error status text.
+    natsConnection_GetLastError(nc, &lastErr);
+    errTxt = (nats_IsStringEmpty(lastErr) ? natsStatus_GetText(err) : lastErr);
+    // If there is a subscription, check if it is a JetStream one and if so, take
+    // the "public" subject (the one that was provided to the subscribe call).
+    if (sub != NULL)
+    {
+        char *subject = NULL;
+
+        natsSub_Lock(sub);
+        if ((sub->jsi != NULL) && (sub->jsi->psubj != NULL))
+            subject = sub->jsi->psubj;
+        else
+            subject = sub->subject;
+        fprintf(stderr, "Error %d - %s on connection [%" PRIu64 "] on \"%s\"\n", err, errTxt, cid, subject);
+        natsSub_Unlock(sub);
+    }
+    else
+    {
+        fprintf(stderr, "Error %d - %s on connection [%" PRIu64 "]\n", err, errTxt, cid);
+    }
+    fflush(stderr);
 }

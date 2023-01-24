@@ -744,16 +744,18 @@ natsMsg_GetTime(natsMsg *msg)
 }
 
 natsStatus
-natsMsg_create(natsMsg **newMsg,
+natsMsg_createWithPadding(natsMsg **newMsg,
                const char *subject, int subjLen,
                const char *reply, int replyLen,
-               const char *buf, int bufLen, int hdrLen)
+               const char *buf, int bufLen, int bufPaddingSize, int hdrLen)
 {
     natsMsg     *msg      = NULL;
     char        *ptr      = NULL;
     int         bufSize   = 0;
     int         dataLen   = bufLen;
     bool        hasHdrs   = (hdrLen > 0 ? true : false);
+    // Make payload a null-terminated string and add at least one zero byte to the end
+    int         padLen    = (bufPaddingSize > 0 ? bufPaddingSize : 1);
 
     bufSize  = subjLen;
     bufSize += 1;
@@ -763,7 +765,7 @@ natsMsg_create(natsMsg **newMsg,
         bufSize += 1;
     }
     bufSize += bufLen;
-    bufSize += 1;
+    bufSize += padLen;
     if (hasHdrs)
         bufSize++;
 
@@ -828,7 +830,7 @@ natsMsg_create(natsMsg **newMsg,
     if (buf != NULL)
         memcpy(ptr, buf, dataLen);
     ptr += dataLen;
-    *(ptr) = '\0';
+    memset(ptr, 0, padLen);
     // This is essentially to match server's view of a message size
     // when sending messages to pull consumers and keeping track
     // of size in regards to a max_bytes setting.
@@ -841,6 +843,16 @@ natsMsg_create(natsMsg **newMsg,
     *newMsg = msg;
 
     return NATS_OK;
+}
+
+natsStatus
+natsMsg_create(natsMsg **newMsg,
+               const char *subject, int subjLen,
+               const char *reply, int replyLen,
+               const char *buf, int bufLen, int hdrLen)
+{
+    return natsMsg_createWithPadding(newMsg, subject, subjLen, reply, replyLen,
+                                     buf, bufLen, 0, hdrLen);
 }
 
 // Used internally to initialize a message structure, generally defined on the stack,

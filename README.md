@@ -155,15 +155,17 @@ Although we recommend leaving the new default behavior, you can restore the prev
 cmake .. -DNATS_BUILD_TLS_FORCE_HOST_VERIFY=OFF
 ```
 
-The NATS C client is built using APIs from the [OpenSSL](https://github.com/openssl/openssl) library. By default we use `1.0.2` APIs. You can compile the NATS C client with OpenSSL API version `1.1+`. To do that, you need to enable the `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` option:
+The NATS C client is built using APIs from the [OpenSSL](https://github.com/openssl/openssl) library. By default we use `3.0+` APIs. Since OpenSSL `1.0.2` is no longer supported, starting with NATS C Client `v3.6.0` version, the CMake variable `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` is now set to `ON` by default (if you are setting up a new environment) and will use OpenSSL APIs from `1.1+`/`3.0+` APIs. You will still be able to compile with the OpenSSL `1.0.2` library by setting this CMake option to `OFF`:
 
 ```
-cmake .. -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON
+cmake .. -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=OFF
 ```
 
-Since the NATS C client dynamically links to the OpenSSL library, you need to make sure that you are then running your application against an OpenSSL 1.1+ library.
+The variable `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` is deprecated, meaning that in the future this option will simply be removed and only OpenSSL `3.0+` APIs will be used. The code in the library using older OpenSSL APIs will be removed too.
 
-Note that the option `NATS_BUILD_WITH_TLS_CLIENT_METHOD` is deprecated. Its purpose was to make the NATS C client use a method that was introduced in OpenSSL `1.1+`. The new option `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` is more generic and replaces `NATS_BUILD_WITH_TLS_CLIENT_METHOD`. If you are using scripts to automate your build process that makes use of `NATS_BUILD_WITH_TLS_CLIENT_METHOD`, they will still work and using this deprecated option will have the same effect than setting `NATS_BUILD_TLS_USE_OPENSSL_1_1_API` to `ON`.
+Note that the variable `NATS_BUILD_WITH_TLS_CLIENT_METHOD` that was deprecated in `v2.0.0` has now been removed.
+
+Since the NATS C client dynamically links to the OpenSSL library, you need to make sure that you are then running your application against an OpenSSL 1.1+/3.0+ library.
 
 ### Link statically
 

@@ -1246,6 +1246,7 @@ jsSub_free(jsSub *jsi)
     NATS_FREE(jsi->nxtMsgSubj);
     NATS_FREE(jsi->cmeta);
     NATS_FREE(jsi->fcReply);
+    NATS_FREE(jsi->psubj);
     js_destroyConsumerConfig(jsi->ocCfg);
     NATS_FREE(jsi);
 
@@ -1321,14 +1322,11 @@ jsSub_deleteConsumerAfterDrain(natsSubscription *sub)
     s = jsSub_deleteConsumer(sub);
     if (s != NATS_OK)
     {
+        char tmp[256];
         natsConn_Lock(nc);
-        if (nc->opts->asyncErrCb != NULL)
-        {
-            char tmp[256];
-            snprintf(tmp, sizeof(tmp), "failed to delete consumer '%s': %u (%s)",
-                    consumer, s, natsStatus_GetText(s));
-            natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
-        }
+        snprintf(tmp, sizeof(tmp), "failed to delete consumer '%s': %u (%s)",
+                 consumer, s, natsStatus_GetText(s));
+        natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
         natsConn_Unlock(nc);
     }
 
@@ -2070,15 +2068,12 @@ _hbTimerFired(natsTimer *timer, void* closure)
     }
 
     natsConn_Lock(nc);
-    if (nc->opts->asyncErrCb != NULL)
-    {
-        // Even if we have called resetOrderedConsumer, we will post something
-        // to the async error callback, either "missed heartbeats", or the error
-        // that occurred trying to do the reset.
-        if (s == NATS_OK)
-            s = NATS_MISSED_HEARTBEAT;
-        natsAsyncCb_PostErrHandler(nc, sub, s, NULL);
-    }
+    // Even if we have called resetOrderedConsumer, we will post something
+    // to the async error callback, either "missed heartbeats", or the error
+    // that occurred trying to do the reset.
+    if (s == NATS_OK)
+        s = NATS_MISSED_HEARTBEAT;
+    natsAsyncCb_PostErrHandler(nc, sub, s, NULL);
     natsConn_Unlock(nc);
 }
 
@@ -2531,6 +2526,8 @@ PROCESS_INFO:
                     s = nats_setDefaultError(NATS_NO_MEMORY);
             }
             IF_OK_DUP_STRING(s, jsi->stream, stream);
+            if ((s == NATS_OK) && !nats_IsStringEmpty(subject))
+                DUP_STRING(s, jsi->psubj, subject);
             if (s == NATS_OK)
             {
                 jsi->js     = js;
@@ -2572,26 +2569,12 @@ PROCESS_INFO:
                                        opts->Queue, 0, cb, cbClosure, false, jsi));
         if ((s == NATS_OK) && (hbi > 0) && !isPullMode)
         {
-            // We will create a timer if we use create an ordered consumer, or
-            // if the async error callback is registered.
-            bool ct = opts->Ordered;
-
-            // Check to see if it is even worth creating a timer to check
-            // on missed heartbeats, since the way to notify the user will be
-            // through async callback.
-            natsConn_Lock(nc);
-            ct = ct || (nc->opts->asyncErrCb != NULL ? true : false);
-            natsConn_Unlock(nc);
-
-            if (ct)
-            {
-                natsSub_Lock(sub);
-                sub->refs++;
-                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi*2, (void*) sub);
-                if (s != NATS_OK)
-                    sub->refs--;
-                natsSub_Unlock(sub);
-            }
+            natsSub_Lock(sub);
+            sub->refs++;
+            s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi*2, (void*) sub);
+            if (s != NATS_OK)
+                sub->refs--;
+            natsSub_Unlock(sub);
         }
     }
     if ((s == NATS_OK) && create)
@@ -3061,17 +3044,13 @@ _recreateOrderedCons(void *closure)
     }
     if (s != NATS_OK)
     {
+        char tmp[256];
+        const char *lastErr = nats_GetLastError(NULL);
         natsConn_Lock(nc);
-        if (nc->opts->asyncErrCb != NULL)
-        {
-            char tmp[256];
-            const char *lastErr = nats_GetLastError(NULL);
-
-            snprintf(tmp, sizeof(tmp),
-                        "error recreating ordered consumer, will try again: status=%u error=%s",
-                        s, (nats_IsStringEmpty(lastErr) ? natsStatus_GetText(s) : lastErr));
-            natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
-        }
+        snprintf(tmp, sizeof(tmp),
+                 "error recreating ordered consumer, will try again: status=%u error=%s",
+                 s, (nats_IsStringEmpty(lastErr) ? natsStatus_GetText(s) : lastErr));
+        natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
         natsConn_Unlock(nc);
     }
 

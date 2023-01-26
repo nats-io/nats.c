@@ -2970,6 +2970,23 @@ natsOptions_SetUserCredentialsFromFiles(natsOptions *opts,
                                         const char *userOrChainedFile,
                                         const char *seedFile);
 
+/** \brief Sets JWT handler and handler to sign nonce that uses seed.
+ * 
+ * This function acts similarly to natsOptions_SetUserCredentialsFromFiles but reads from memory instead
+ * from a file. Also it assumes that `memory` contains both the JWT and NKey seed.
+ * 
+ * As for the format, @cf `natsOptions_SetUserCredentialsFromFiles` documentation.
+ * 
+ * @see natsOptions_SetUserCredentialsFromFiles()
+ * 
+ * @param opts the pointer to the #natsOptions object.
+ * @param memory string containing user JWT and user NKey seed
+ * 
+*/
+NATS_EXTERN natsStatus
+natsOptions_SetUserCredentialsFromMemory(natsOptions *opts,
+                                         const char *jwtAndSeedContent);
+
 /** \brief Sets the NKey public key and signature callback.
  *
  * Any time the library creates a TCP connection to the server, the server
@@ -3098,6 +3115,22 @@ natsOptions_DisableNoResponders(natsOptions *opts, bool disabled);
  */
 NATS_EXTERN natsStatus
 natsOptions_SetCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix);
+
+/** \brief Sets a custom padding when allocating buffer for incoming messages
+ *
+ * By default library allocates natsMsg with payload buffer size
+ * equal to payload size. Sometimes it can be useful to add some
+ * padding to the end of the buffer which can be tweaked using
+ * this option.
+ *
+ * To clear the custom message buffer padding, call this function with 0.
+ * Changing this option has no effect on existing NATS connections.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param paddingSize the desired inbox prefix.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetMessageBufferPadding(natsOptions *opts, int paddingSize);
 
 /** \brief Destroys a #natsOptions object.
  *

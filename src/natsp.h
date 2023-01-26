@@ -192,6 +192,7 @@ typedef struct __userCreds
 {
     char        *userOrChainedFile;
     char        *seedFile;
+    char        *jwtAndSeedContent;
 
 } userCreds;
 
@@ -281,7 +282,7 @@ struct __natsOptions
     bool                    retryOnFailedConnect;
 
     // Callback/closure used to get the user JWT. Will be set to
-    // internal natsConn_userFromFile function when userCreds != NULL.
+    // internal natsConn_userCreds function when userCreds != NULL.
     natsUserJWTHandler      userJWTHandler;
     void                    *userJWTClosure;
 
@@ -294,8 +295,9 @@ struct __natsOptions
     // to the server.
     char                    *nkey;
 
-    // If user has invoked natsOptions_SetUserCredentialsFromFiles, this
-    // will be set and points to userOrChainedFile and possibly seedFile.
+    // If user has invoked natsOptions_SetUserCredentialsFromFiles or
+    // natsOptions_SetUserCredentialsFromMemory, this will be set and points to
+    // userOrChainedFile, seedFile, or possibly directly contains the JWT+seed content.
     struct __userCreds      *userCreds;
 
     // Reconnect jitter added to reconnect wait
@@ -311,6 +313,9 @@ struct __natsOptions
 
     // Custom inbox prefix
     char *inboxPfx;
+
+    // Custom message payload padding size
+    int payloadPaddingSize;
 };
 
 typedef struct __nats_MsgList
@@ -365,6 +370,7 @@ typedef struct __jsSub
     jsCtx               *js;
     char                *stream;
     char                *consumer;
+    char                *psubj;
     char                *nxtMsgSubj;
     bool                pull;
     bool                inFetch;

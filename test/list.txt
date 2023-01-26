@@ -122,6 +122,7 @@ OldRequest
 SimultaneousRequests
 RequestClose
 CustomInbox
+MessagePadding
 FlushInCb
 ReleaseFlush
 FlushErrOnDisconnect
@@ -167,6 +168,7 @@ GetRTT
 GetLocalIPAndPort
 UserCredsCallbacks
 UserCredsFromFiles
+UserCredsFromMemory
 NKey
 NKeyFromSeed
 ConnSign

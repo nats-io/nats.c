@@ -105,6 +105,13 @@ natsMsg_create(natsMsg **newMsg,
                const char *reply, int replyLen,
                const char *buf, int bufLen, int hdrLen);
 
+natsStatus
+natsMsg_createWithPadding(natsMsg **newMsg,
+                          const char *subject, int subjLen,
+                          const char *reply, int replyLen,
+                          const char *buf, int bufLen, int bufPaddingSize,
+                          int hdrLen);
+
 void
 natsMsg_freeHeaders(natsMsg *msg);
 

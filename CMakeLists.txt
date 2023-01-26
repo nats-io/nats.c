@@ -28,7 +28,7 @@ option(NATS_COVERAGE "Code coverage" OFF)
 option(NATS_BUILD_NO_SPIN "Enable if spin code does not compile on your arch" OFF)
 option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
 option(NATS_BUILD_TLS_FORCE_HOST_VERIFY "Forces hostname verification" ON)
-option(NATS_BUILD_TLS_USE_OPENSSL_1_1_API "Build for OpenSSL 1.1+" OFF)
+option(NATS_BUILD_TLS_USE_OPENSSL_1_1_API "Build for OpenSSL 1.1+" ON)
 option(NATS_BUILD_USE_SODIUM "Build using libsodium library" OFF)
 option(NATS_BUILD_EXAMPLES "Build examples" ON)
 option(NATS_BUILD_LIBUV_EXAMPLE "Build libuv examples" OFF)
@@ -59,11 +59,6 @@ if(NATS_BUILD_WITH_TLS)
   set(OPENSSL_USE_STATIC_LIBS ${NATS_BUILD_OPENSSL_STATIC_LIBS})
   find_package(OpenSSL REQUIRED)
 endif(NATS_BUILD_WITH_TLS)
-
-# Convert deprecated option
-if(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
-  set(NATS_BUILD_TLS_USE_OPENSSL_1_1_API ON)
-endif(NATS_BUILD_WITH_TLS_CLIENT_METHOD)
 
 set(LIBUV_DIR "" CACHE PATH "Libuv install directory")
 set(LIBEVENT_DIR "" CACHE PATH "Libevent install directory")
@@ -241,8 +236,8 @@ endif(NATS_BUILD_WITH_TLS)
 # Versionning and Doc
 
 set(NATS_VERSION_MAJOR  3)
-set(NATS_VERSION_MINOR  5)
-set(NATS_VERSION_PATCH  1)
+set(NATS_VERSION_MINOR  6)
+set(NATS_VERSION_PATCH  0)
 set(NATS_VERSION_SUFFIX "-beta")
 
 set(NATS_VERSION_REQUIRED_NUMBER 0x030500)

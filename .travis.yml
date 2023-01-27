@@ -12,15 +12,15 @@ compiler:
 
 before_install:
   - bash install_deps.sh
+  - if [ "$DO_COVERAGE" = "coverage" ]; then pip install --user cpp-coveralls; fi
   - eval "${MATRIX_EVAL}"
 
 before_script:
   - export PATH=$HOME/deps/cmake-install:$HOME/deps/cmake-install/bin:$HOME/deps/nats-server:$HOME/deps/nats-streaming-server:$PATH
   - mkdir build && cd build
-  - export COVERALLS_SERVICE_NAME=travis-ci
 
 env:
-  - DO_COVERAGE="coverage" BUILD_OPT="-DNATS_COVERAGE=ON -DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Debug -DNATS_COVERAGE_UPLOAD=ON -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON"
+  - DO_COVERAGE="coverage" BUILD_OPT="-DNATS_COVERAGE=ON -DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Debug -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON"
 
 jobs:
   include:
@@ -142,6 +142,10 @@ jobs:
 
 script:
   - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT -DNATS_SANITIZE=ON -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON -DNATS_PROTOBUF_DIR=$HOME/deps/pbuf -DNATS_BUILD_USE_SODIUM=ON -DNATS_SODIUM_DIR=$HOME/deps/sodium" "$CTEST_OPT"
+
+after_success:
+  - cd ..
+  - if [[ "$DO_COVERAGE" == "coverage" && "$TRAVIS_COMPILER" == "gcc" ]]; then coveralls --gcov-options '\-lp' -r . -i "src/" -e "src/win/" -e "src/unix/" -e "src/stan/protocol.pb-c.c" -E ".*\.h$"; fi
 
 notifications:
   email: false

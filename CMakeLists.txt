@@ -25,7 +25,6 @@ endif()
 option(NATS_UPDATE_VERSION "Update the version file" OFF)
 option(NATS_UPDATE_DOC "Update the doc template file" OFF)
 option(NATS_COVERAGE "Code coverage" OFF)
-option(NATS_COVERAGE_UPLOAD "Upload the generated coveralls json" OFF)
 option(NATS_BUILD_NO_SPIN "Enable if spin code does not compile on your arch" OFF)
 option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
 option(NATS_BUILD_TLS_FORCE_HOST_VERIFY "Forces hostname verification" ON)
@@ -50,11 +49,10 @@ if(DEFINED ENV{NATS_SANITIZE})
 endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_BINARY_DIR})
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/coveralls-cmake/cmake)
 
 if(NATS_COVERAGE)
-  include(Coveralls)
-  coveralls_turn_on_coverage()
+  message("-- Coverage Enabled")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
 endif(NATS_COVERAGE)
 
 if(NATS_BUILD_WITH_TLS)
@@ -239,10 +237,10 @@ endif(NATS_BUILD_WITH_TLS)
 
 set(NATS_VERSION_MAJOR  3)
 set(NATS_VERSION_MINOR  6)
-set(NATS_VERSION_PATCH  0)
+set(NATS_VERSION_PATCH  1)
 set(NATS_VERSION_SUFFIX "-beta")
 
-set(NATS_VERSION_REQUIRED_NUMBER 0x030500)
+set(NATS_VERSION_REQUIRED_NUMBER 0x030600)
 
 if(NATS_UPDATE_VERSION OR NATS_UPDATE_DOC)
 configure_file(

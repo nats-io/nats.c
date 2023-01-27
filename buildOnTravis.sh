@@ -37,11 +37,7 @@ if [ $res -ne 0 ]; then
 fi
 export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
 export NATS_TEST_TRAVIS=yes
-if [ "$2" = "coverage" ]; then
-  make coveralls
-else
-  ctest --timeout 60 --output-on-failure $4
-fi
+ctest --timeout 60 --output-on-failure $4
 res=$?
 if [ $res -ne 0 ]; then
   exit $res

@@ -1696,7 +1696,7 @@ jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply)
 }
 
 static natsStatus
-_checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, natsMsg *mhMsg)
+_checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, natsMsg *mhMsg, const char* reqSubj)
 {
     natsStatus  s    = NATS_OK;
     const char  *val = NULL;
@@ -1731,6 +1731,13 @@ _checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, natsMsg *mhMsg)
 
     // 100 Idle hearbeat, return OK
     if (strncmp(val, CTRL_STATUS, HDR_STATUS_LEN) == 0)
+        return NATS_OK;
+
+    // Before checking for "errors", if the incoming status message is
+    // for a previous request (message's subject is not reqSubj), then
+    // simply return NATS_OK. The caller will destroy the message and
+    // proceed as if nothing was received.
+    if (strcmp(natsMsg_GetSubject(msg), reqSubj) != 0)
         return NATS_OK;
 
     // 404 indicating that there are no messages.
@@ -1798,6 +1805,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     bool            sendReq  = true;
     jsSub           *jsi     = NULL;
     natsMsg         *mhMsg   = NULL;
+    char            *reqSubj = NULL;
     bool            noWait;
 
     if (list == NULL)
@@ -1831,11 +1839,15 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     }
     natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
     nc   = sub->conn;
-    rply = (const char*) sub->subject;
     subj = jsi->nxtMsgSubj;
     pmc  = (sub->msgList.msgs > 0);
     jsi->inFetch = true;
-    if (req->Heartbeat)
+    jsi->fetchID++;
+    if (nats_asprintf(&reqSubj, "%.*s%" PRIu64, (int) strlen(sub->subject)-1, sub->subject, jsi->fetchID) < 0)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    else
+        rply = (const char*) reqSubj;
+    if ((s == NATS_OK) && req->Heartbeat)
     {
         int64_t hbi = req->Heartbeat / 1000000;
         sub->refs++;
@@ -1882,8 +1894,9 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
         }
         if (s == NATS_OK)
         {
-            // Here we care only about user messages.
-            s = _checkMsg(msg, false, &usrMsg, mhMsg);
+            // Here we care only about user messages. We don't need to pass
+            // the request subject since it is not even checked in this case.
+            s = _checkMsg(msg, false, &usrMsg, mhMsg, NULL);
             if ((s == NATS_OK) && usrMsg)
             {
                 msgs[count++] = msg;
@@ -1928,7 +1941,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
         IFOK(s, natsSub_nextMsg(&msg, sub, timeout, true));
         if (s == NATS_OK)
         {
-            s = _checkMsg(msg, true, &usrMsg, mhMsg);
+            s = _checkMsg(msg, true, &usrMsg, mhMsg, rply);
             if ((s == NATS_OK) && usrMsg)
             {
                 msgs[count++] = msg;
@@ -1977,6 +1990,8 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     if (req->Heartbeat && (jsi->hbTimer != NULL))
         natsTimer_Stop(jsi->hbTimer);
     natsSub_Unlock(sub);
+
+    NATS_FREE(reqSubj);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -2558,10 +2573,19 @@ PROCESS_INFO:
     }
     if (s == NATS_OK)
     {
+        char *pullWCInbox = NULL;
+
         if (isPullMode)
         {
+            // Create a wildcard inbox.
             s = natsConn_newInbox(nc, &inbox);
-            deliver = (const char*) inbox;
+            if (s == NATS_OK)
+            {
+                if (nats_asprintf(&pullWCInbox, "%s.*", (const char*) inbox) < 0)
+                    s = nats_setDefaultError(NATS_NO_MEMORY);
+            }
+            if (s == NATS_OK)
+                deliver = (const char*) pullWCInbox;
         }
         // Create the NATS subscription on given deliver subject. Note that
         // cb/cbClosure will be NULL for sync or pull subscriptions.
@@ -2576,6 +2600,7 @@ PROCESS_INFO:
                 sub->refs--;
             natsSub_Unlock(sub);
         }
+        NATS_FREE(pullWCInbox);
     }
     if ((s == NATS_OK) && create)
     {

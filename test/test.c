@@ -27637,15 +27637,28 @@ _sendToPullSub(void *closure)
 {
     struct threadArg    *args = (struct threadArg*) closure;
     natsMsg             *msg  = NULL;
+    char                *subj = NULL;
+    natsSubscription    *sub  = NULL;
+    uint64_t            id    = 0;
     natsStatus          s;
 
     nats_Sleep(250);
     natsMutex_Lock(args->m);
-    s = natsMsg_create(&msg, args->sub->subject, (int) strlen(args->sub->subject),
-                        NULL, 0, args->string, (int) strlen(args->string), (int) strlen(args->string));
+    sub = args->sub;
+    natsSub_Lock(sub);
+    id = sub->jsi->fetchID;
+    if (args->sum != 0)
+        id = (uint64_t) args->sum;
+    if (nats_asprintf(&subj, "%.*s%" PRIu64, (int) strlen(sub->subject)-1, sub->subject, id) < 0)
+        s = NATS_NO_MEMORY;
+    else
+        s = natsMsg_create(&msg, subj, (int) strlen(subj),
+                           NULL, 0, args->string, (int) strlen(args->string), (int) strlen(args->string));
+    natsSub_Unlock(sub);
     IFOK(s, natsConnection_PublishMsg(args->nc, msg));
     natsMutex_Unlock(args->m);
     natsMsg_Destroy(msg);
+    free(subj);
 }
 
 static void
@@ -27704,6 +27717,18 @@ _dropIdleHBs(natsConnection *nc, natsMsg **msg, void* closure)
         return;
 
     if (ct != jsCtrlHeartbeat)
+        return;
+
+    natsMsg_Destroy(*msg);
+    *msg = NULL;
+}
+
+static void
+_dropTimeoutProto(natsConnection *nc, natsMsg **msg, void* closure)
+{
+    const char *val = NULL;
+
+    if (natsMsgHeader_Get(*msg, STATUS_HDR, &val) != NATS_OK)
         return;
 
     natsMsg_Destroy(*msg);
@@ -28075,6 +28100,37 @@ test_JetStreamSubscribePull(void)
     testCond((s == NATS_OK) && (list.Msgs != NULL) && (list.Count == 1) && (jerr == 0));
 
     natsMsgList_Destroy(&list);
+
+    test("Fetch returns before 408: ");
+    natsConn_setFilter(nc, _dropTimeoutProto);
+    start = nats_Now();
+    s = natsSubscription_Fetch(&list, sub, 1, 1000, NULL);
+    dur = nats_Now() - start;
+    testCond((s == NATS_TIMEOUT) && (list.Count == 0) && (dur >= 600));
+    nats_clearLastError();
+
+    test("Next Fetch waits for proper timeout: ");
+    nats_Sleep(100);
+    natsConn_setFilter(nc, NULL);
+    natsMutex_Lock(args.m);
+    args.nc = nc;
+    args.sub = sub;
+    args.string = "NATS/1.0 408 Request Timeout\r\n\r\n";
+    // Will make the 408 sent to a subject ID with 1 while we are likely at 2 or above.
+    // So this will be considered a "late" 408 timeout and should be ignored.
+    args.sum = 1;
+    natsMutex_Unlock(args.m);
+    s = natsThread_Create(&t, _sendToPullSub, (void*) &args);
+    start = nats_Now();
+    IFOK(s, natsSubscription_Fetch(&list, sub, 1, 1000, NULL));
+    dur = nats_Now() - start;
+    testCond((s == NATS_TIMEOUT) && (list.Count == 0) && (dur >= 600));
+    nats_clearLastError();
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    t = NULL;
+
     natsSubscription_Destroy(sub);
     sub = NULL;
 

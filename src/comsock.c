@@ -366,6 +366,7 @@ natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize)
             // This is a partial, we need to read more data until we get to
             // the end of the line (\r\n).
             p = (char*) (p + len);
+            totalBytes += len;
         }
         else
         {

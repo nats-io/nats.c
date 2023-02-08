@@ -3881,7 +3881,8 @@ natsConnection_GetConnectedUrl(natsConnection *nc, char *buffer, size_t bufferSi
 
     buffer[0] = '\0';
 
-    if ((nc->status == NATS_CONN_STATUS_CONNECTED) && (nc->cur->url->fullUrl != NULL))
+    if (((nc->status == NATS_CONN_STATUS_CONNECTED) || (nc->status == NATS_CONN_STATUS_CONNECTING))
+        && (nc->cur->url->fullUrl != NULL))
     {
         if (strlen(nc->cur->url->fullUrl) >= bufferSize)
             s = nats_setDefaultError(NATS_INSUFFICIENT_BUFFER);
@@ -3907,7 +3908,8 @@ natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t buf
 
     buffer[0] = '\0';
 
-    if ((nc->status == NATS_CONN_STATUS_CONNECTED) && (nc->info.id != NULL))
+    if (((nc->status == NATS_CONN_STATUS_CONNECTED) || (nc->status == NATS_CONN_STATUS_CONNECTING))
+        && (nc->info.id != NULL))
     {
         if (strlen(nc->info.id) >= bufferSize)
             s = nats_setDefaultError(NATS_INSUFFICIENT_BUFFER);

@@ -2617,7 +2617,6 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     bool             sc   = false;
     bool             sm   = false;
     nats_MsgList     *list = NULL;
-    natsMutex        *mu   = NULL;
     natsCondition    *cond = NULL;
     // For JetStream cases
     jsSub            *jsi    = NULL;
@@ -2626,27 +2625,10 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     int              jct     = 0;
     natsMsgFilter    mf      = NULL;
     void             *mfc    = NULL;
-    bool             unlock  = false;
 
-    natsMutex_Lock(nc->subsMu);
-
-    nc->stats.inMsgs  += 1;
-    nc->stats.inBytes += (uint64_t) bufLen;
-
-    sub = natsHash_Get(nc->subs, nc->ps->ma.sid);
-    if (sub != NULL)
-    {
-        mf  = nc->filter;
-        mfc = nc->filterClosure;
-    }
-    natsMutex_Unlock(nc->subsMu);
-
-    if (sub == NULL)
-        return NATS_OK;
-
-    // Do this outside of sub's lock, even if we end-up having to destroy
-    // it because we have reached the maxPendingMsgs count. This reduces
-    // lock contention.
+    // Do this outside of locks, even if we end-up having to destroy
+    // it because we have reached the maxPendingMsgs count or other
+    // conditions. This reduces lock contention.
     s = _createMsg(&msg, nc, buf, bufLen, nc->ps->ma.hdr);
     if (s != NATS_OK)
         return s;
@@ -2654,14 +2636,45 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     // more and more prevalent, it makes sense to count them both toward
     // the subscription's pending limit. So use bufLen for accounting.
 
-    if (mf != NULL)
+    natsMutex_Lock(nc->subsMu);
+
+    nc->stats.inMsgs  += 1;
+    nc->stats.inBytes += (uint64_t) bufLen;
+
+    if ((mf = nc->filter) != NULL)
     {
+        mfc = nc->filterClosure;
+        natsMutex_Unlock(nc->subsMu);
+
         (*mf)(nc, &msg, mfc);
         if (msg == NULL)
             return NATS_OK;
+
+        natsMutex_Lock(nc->subsMu);
     }
 
-    // Pick mutex, condition variable and list based on if the sub is
+    sub = natsHash_Get(nc->subs, nc->ps->ma.sid);
+    if (sub == NULL)
+    {
+        natsMutex_Unlock(nc->subsMu);
+        natsMsg_Destroy(msg);
+        return NATS_OK;
+    }
+    // We need to retain the subscription since as soon as we release the
+    // nc->subsMu lock, the subscription could be destroyed and we would
+    // reference freed memory.
+    natsSubAndLdw_LockAndRetain(sub);
+
+    natsMutex_Unlock(nc->subsMu);
+
+    if (sub->closed || sub->drainSkip)
+    {
+        natsSubAndLdw_UnlockAndRelease(sub);
+        natsMsg_Destroy(msg);
+        return NATS_OK;
+    }
+
+    // Pick condition variable and list based on if the sub is
     // part of a global delivery thread pool or not.
     // Note about `list`: this is used only to link messages, but
     // sub->msgList needs to be used to update/check number of pending
@@ -2669,30 +2682,13 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     // messages from many different subscriptions.
     if ((ldw = sub->libDlvWorker) != NULL)
     {
-        mu   = ldw->lock;
         cond = ldw->cond;
         list = &(ldw->msgList);
-        if (sub->jsi != NULL)
-        {
-            natsSub_Lock(sub);
-            unlock = true;
-        }
     }
     else
     {
-        mu   = sub->mu;
         cond = sub->cond;
         list = &(sub->msgList);
-    }
-
-    natsMutex_Lock(mu);
-    if (sub->closed || sub->drainSkip)
-    {
-        natsMutex_Unlock(mu);
-        if (unlock)
-            natsSub_Unlock(sub);
-        natsMsg_Destroy(msg);
-        return NATS_OK;
     }
 
     jsi = sub->jsi;
@@ -2714,9 +2710,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
             s = jsSub_checkOrderedMsg(sub, msg, &replaced);
             if ((s != NATS_OK) || replaced)
             {
-                natsMutex_Unlock(mu);
-                if (unlock)
-                    natsSub_Unlock(sub);
+                natsSubAndLdw_UnlockAndRelease(sub);
                 natsMsg_Destroy(msg);
                 return s;
             }
@@ -2798,9 +2792,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         }
     }
 
-    natsMutex_Unlock(mu);
-    if (unlock)
-        natsSub_Unlock(sub);
+    natsSubAndLdw_UnlockAndRelease(sub);
 
     if ((s == NATS_OK) && fcReply)
         s = natsConnection_Publish(nc, fcReply, NULL, 0);

@@ -114,10 +114,32 @@ natsSubAndLdw_Lock(natsSubscription *sub)
 }
 
 void
+natsSubAndLdw_LockAndRetain(natsSubscription *sub)
+{
+    natsMutex_Lock(sub->mu);
+    sub->refs++;
+    SUB_DLV_WORKER_LOCK(sub);
+}
+
+void
 natsSubAndLdw_Unlock(natsSubscription *sub)
 {
     SUB_DLV_WORKER_UNLOCK(sub);
     natsMutex_Unlock(sub->mu);
+}
+
+void
+natsSubAndLdw_UnlockAndRelease(natsSubscription *sub)
+{
+    int refs = 0;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
+
+    refs = --(sub->refs);
+    natsMutex_Unlock(sub->mu);
+
+    if (refs == 0)
+        _freeSubscription(sub);
 }
 
 // Runs under the subscription lock but will release it for a JS subscription

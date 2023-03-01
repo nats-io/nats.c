@@ -1159,6 +1159,21 @@ typedef struct jsOptions
 } jsOptions;
 
 /**
+ * The Microservice object. Initialize with #js_AddMicroservice.
+ */
+typedef struct __microservice           jsMicroservice;
+
+/**
+ * The Microservice configuration object. Initialize with #jsMicroserviceConfig_Init.
+ */
+typedef struct jsMicroserviceConfig
+{
+    const char *name;
+    const char *version;
+    const char *description;
+} jsMicroserviceConfig;
+
+/**
  * The KeyValue store object.
  */
 typedef struct __kvStore                kvStore;
@@ -6471,6 +6486,70 @@ natsMsg_GetTime(natsMsg *msg);
  *
  *  @{
  */
+
+/** \defgroup microserviceGroup Microservice support
+ *
+ * A simple JetStream-based microservice implementation framework.
+ *
+ * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
+ * necessarily bumping the major version of the library.
+ *
+ *  @{
+ */
+
+// /** \brief Initializes a Microservice configuration structure.
+//  *
+//  * Use this before setting specific #jsMicroserviceConfig options and passing it
+//  * to #js_AddMicroservice.
+//  *
+//  * @see js_AddMicroservice
+//  *
+//  * @param cfg the pointer to the stack variable #jsMicroserviceConfig to
+//  * initialize.
+//  */
+// NATS_EXTERN natsStatus
+// jsMicroserviceConfig_Init(jsMicroserviceConfig *cfg);
+
+/** \brief Adds a microservice with a given configuration.
+ *
+ * Adds a microservice with a given configuration.
+ *
+ * \note The return #jsMicroservice object needs to be destroyed using
+ * #jsMicroservice_Destroy when no longer needed to free allocated memory.
+ *
+ * @param new_microservice the location where to store the newly created
+ * #jsMicroservice object.
+ * @param js the pointer to the #jsCtx object.
+ * @param cfg the pointer to the #jsMicroserviceConfig configuration information
+ * used to create the #jsMicroservice object.
+ */
+NATS_EXTERN natsStatus
+js_AddMicroservice(jsMicroservice **new_microservice, jsCtx *js, jsMicroserviceConfig *cfg, jsErrCode *errCode);
+
+/** \brief Waits for the microservice to stop.
+ */
+NATS_EXTERN natsStatus
+js_RunMicroservice(jsMicroservice *m, jsErrCode *errCode);
+
+/** \brief Stops a running microservice.
+ */
+NATS_EXTERN natsStatus
+js_StopMicroservice(jsMicroservice *m, jsErrCode *errCode);
+
+/** \brief Checks if a microservice is stopped.
+ */
+NATS_EXTERN bool
+js_IsMicroserviceStopped(jsMicroservice *m);
+
+/** \brief Destroys a microservice object.
+ *
+ * Destroys a microservice object; frees all memory. The service must be stopped
+ * first, this function does not check if it is.
+ */
+NATS_EXTERN void
+jsMicroservice_Destroy(jsMicroservice *m);
+
+/** @} */ // end of microserviceGroup
 
 /** \defgroup kvGroupMgt KeyValue store management
  *

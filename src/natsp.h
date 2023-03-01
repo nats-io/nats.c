@@ -432,6 +432,29 @@ typedef struct __jsSub
 
 } jsSub;
 
+
+struct __microserviceIdentity
+{
+    const char *name;
+    const char *version;
+    char *id;
+};
+
+struct __microservice
+{
+    natsMutex *mu;
+    jsCtx *js;
+    int refs;
+    struct __microserviceIdentity identity;
+    bool stopped;
+    // verbSubs     map[string]*nats.Subscription
+    // started      time.Time
+    // nc           *nats.Conn
+    // natsHandlers handlers
+
+    // asyncDispatcher asyncCallbacksHandler
+};
+
 struct __kvStore
 {
     natsMutex           *mu;

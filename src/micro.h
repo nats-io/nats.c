@@ -14,45 +14,45 @@
 #ifndef MICRO_H_
 #define MICRO_H_
 
-#define jsMicroserviceAPIPrefix "$SRV"
+#define natsMicroserviceAPIPrefix "$SRV"
 
-enum jsMicroserviceVerb
+enum natsMicroserviceVerb
 {
-    jsMicroserviceVerbPing = 0,
-    jsMicroserviceVerbStats,
-    jsMicroserviceVerbInfo,
-    jsMicroserviceVerbSchema,
-    jsMicroserviceVerbMax
+    natsMicroserviceVerbPing = 0,
+    natsMicroserviceVerbStats,
+    natsMicroserviceVerbInfo,
+    natsMicroserviceVerbSchema,
+    natsMicroserviceVerbMax
 };
 
-typedef enum jsMicroserviceVerb jsMicroserviceVerb;
+typedef enum natsMicroserviceVerb natsMicroserviceVerb;
 
-#define jsMicroserviceInfoResponseType "io.nats.micro.v1.info_response"
-#define jsMicroservicePingResponseType "io.nats.micro.v1.ping_response"
-#define jsMicroserviceStatsResponseType "io.nats.micro.v1.stats_response"
-#define jsMicroserviceSchemaResponseType "io.nats.micro.v1.schema_response"
+#define natsMicroserviceInfoResponseType "io.nats.micro.v1.info_response"
+#define natsMicroservicePingResponseType "io.nats.micro.v1.ping_response"
+#define natsMicroserviceStatsResponseType "io.nats.micro.v1.stats_response"
+#define natsMicroserviceSchemaResponseType "io.nats.micro.v1.schema_response"
 
 static natsStatus
-jsMicroserviceVerb_String(const char **new_subject, jsMicroserviceVerb verb)
+natsMicroserviceVerb_String(const char **new_subject, natsMicroserviceVerb verb)
 {
     if (new_subject == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     switch (verb)
     {
-    case jsMicroserviceVerbPing:
+    case natsMicroserviceVerbPing:
         *new_subject = "PING";
         return NATS_OK;
 
-    case jsMicroserviceVerbStats:
+    case natsMicroserviceVerbStats:
         *new_subject = "STATS";
         return NATS_OK;
 
-    case jsMicroserviceVerbInfo:
+    case natsMicroserviceVerbInfo:
         *new_subject = "INFO";
         return NATS_OK;
 
-    case jsMicroserviceVerbSchema:
+    case natsMicroserviceVerbSchema:
         *new_subject = "SCHEMA";
         return NATS_OK;
     default:

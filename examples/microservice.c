@@ -47,14 +47,10 @@ int main(int argc, char **argv)
 {
     natsConnection *conn = NULL;
     natsOptions *opts = NULL;
-    jsMicroservice *m = NULL;
-    jsCtx *js = NULL;
-    jsErrCode jerr = 0;
-    jsOptions jsOpts;
-    jsSubOptions so;
+    natsMicroservice *m = NULL;
     natsStatus s;
     bool delStream = false;
-    jsMicroserviceConfig cfg = {
+    natsMicroserviceConfig cfg = {
         .description = "Example JetStream microservice",
         .name = "example",
         .version = "1.0.0",
@@ -69,29 +65,16 @@ int main(int argc, char **argv)
     }
     if (s == NATS_OK)
     {
-        s = jsOptions_Init(&jsOpts);
+        s = nats_AddMicroservice(&m, conn, &cfg);
     }
     if (s == NATS_OK)
     {
-        s = jsSubOptions_Init(&so);
-    }
-    if (s == NATS_OK)
-    {
-        s = natsConnection_JetStream(&js, conn, &jsOpts);
-    }
-    if (s == NATS_OK)
-    {
-        s = js_AddMicroservice(&m, js, &cfg, &jerr);
-    }
-    if (s == NATS_OK)
-    {
-        s = js_RunMicroservice(m, &jerr);
+        s = natsMicroservice_Run(m);
     }
     if (s == NATS_OK)
     {
         // Destroy all our objects to avoid report of memory leak
-        jsMicroservice_Destroy(m);
-        jsCtx_Destroy(js);
+        natsMicroservice_Destroy(m);
         natsConnection_Destroy(conn);
         natsOptions_Destroy(opts);
 
@@ -101,7 +84,7 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    printf("Error: %u - %s - jerr=%u\n", s, natsStatus_GetText(s), jerr);
+    printf("Error: %u - %s\n", s, natsStatus_GetText(s));
     nats_PrintLastErrorStack(stderr);
     return 1;
 }

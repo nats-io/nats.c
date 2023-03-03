@@ -450,16 +450,10 @@ struct __microserviceIdentity
 struct __microservice
 {
     natsMutex *mu;
-    jsCtx *js;
+    natsConnection *nc;
     int refs;
     struct __microserviceIdentity identity;
     bool stopped;
-    // verbSubs     map[string]*nats.Subscription
-    // started      time.Time
-    // nc           *nats.Conn
-    // natsHandlers handlers
-
-    // asyncDispatcher asyncCallbacksHandler
 };
 
 struct __microserviceRequest {

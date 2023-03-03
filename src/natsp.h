@@ -433,6 +433,13 @@ typedef struct __jsSub
 } jsSub;
 
 
+struct __microserviceConfig
+{
+    const char *name;
+    const char *version;
+    const char *description;
+};
+
 struct __microserviceIdentity
 {
     const char *name;
@@ -454,6 +461,12 @@ struct __microservice
 
     // asyncDispatcher asyncCallbacksHandler
 };
+
+struct __microserviceRequest {
+		natsMsg *msg;
+		// respondError error
+};
+
 
 struct __kvStore
 {

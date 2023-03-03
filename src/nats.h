@@ -1163,6 +1163,9 @@ typedef struct jsOptions
  */
 typedef struct __microservice           jsMicroservice;
 
+typedef struct __microserviceRequest    jsMicroserviceRequest;
+
+
 /**
  * The Microservice configuration object. Initialize with #jsMicroserviceConfig_Init.
  */

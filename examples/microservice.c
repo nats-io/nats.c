@@ -51,8 +51,8 @@ int main(int argc, char **argv)
     natsStatus s;
     bool delStream = false;
     natsMicroserviceConfig cfg = {
-        .description = "Example JetStream microservice",
-        .name = "example",
+        .description = "NATS microservice example in C",
+        .name = "c-example-microservice",
         .version = "1.0.0",
     };
 

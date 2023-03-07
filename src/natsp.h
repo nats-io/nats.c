@@ -432,7 +432,6 @@ typedef struct __jsSub
 
 } jsSub;
 
-
 struct __microserviceConfig
 {
     const char *name;
@@ -453,14 +452,26 @@ struct __microservice
     natsConnection *nc;
     int refs;
     struct __microserviceIdentity identity;
+    struct natsMicroserviceConfig cfg;
     bool stopped;
+    struct __microserviceEndpoint **endpoints;
+    int num_endpoints;
 };
 
-struct __microserviceRequest {
-		natsMsg *msg;
-		// respondError error
+struct __microserviceRequest
+{
+    natsMsg *msg;
+    char *err;
 };
 
+struct __microserviceEndpoint
+{
+    natsMicroservice *m;
+    bool stopped;
+    natsMicroserviceEndpointConfig config;
+    natsMicroserviceEndpointStats stats;
+    natsSubscription *sub;
+};
 
 struct __kvStore
 {

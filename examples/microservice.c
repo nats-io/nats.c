@@ -11,28 +11,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <stdio.h>
+
 #include "examples.h"
 
 static void
-onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+onMsg(natsMicroservice *m, natsMicroserviceRequest *req, void *closure)
 {
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "c-example-microservice: OK: %.*s",
+             natsMicroserviceRequest_GetDataLength(req),
+             natsMicroserviceRequest_GetData(req));
+
     if (print)
-        printf("Received msg: %s - %.*s\n",
-               natsMsg_GetSubject(msg),
-               natsMsg_GetDataLength(msg),
-               natsMsg_GetData(msg));
+        printf("%s\n", buf);
 
-    if (start == 0)
-        start = nats_Now();
-
-    // We should be using a mutex to protect those variables since
-    // they are used from the subscription's delivery and the main
-    // threads. For demo purposes, this is fine.
-    if (++count == total)
-        elapsed = nats_Now() - start;
-
-    // Since this is auto-ack callback, we don't need to ack here.
-    natsMsg_Destroy(msg);
+    natsMicroservice_Respond(m, req, buf, strlen(buf));
 }
 
 static void
@@ -49,11 +43,19 @@ int main(int argc, char **argv)
     natsOptions *opts = NULL;
     natsMicroservice *m = NULL;
     natsStatus s;
-    bool delStream = false;
+    int fakeClosure = 0;
+    natsMicroserviceEndpointConfig default_endpoint_cfg = {
+        .subject = "c-test",
+        .handler = onMsg,
+        .closure = &fakeClosure,
+        .schema = NULL,
+    };
+
     natsMicroserviceConfig cfg = {
         .description = "NATS microservice example in C",
         .name = "c-example-microservice",
         .version = "1.0.0",
+        .endpoint = &default_endpoint_cfg,
     };
 
     opts = parseArgs(argc, argv, "");

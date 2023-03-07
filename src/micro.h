@@ -27,11 +27,6 @@ enum natsMicroserviceVerb
 
 typedef enum natsMicroserviceVerb natsMicroserviceVerb;
 
-#define natsMicroserviceInfoResponseType "io.nats.micro.v1.info_response"
-#define natsMicroservicePingResponseType "io.nats.micro.v1.ping_response"
-#define natsMicroserviceStatsResponseType "io.nats.micro.v1.stats_response"
-#define natsMicroserviceSchemaResponseType "io.nats.micro.v1.schema_response"
-
 static natsStatus
 natsMicroserviceVerb_String(const char **new_subject, natsMicroserviceVerb verb)
 {

@@ -14971,6 +14971,25 @@ _reconnectTokenHandler(void* closure)
     natsMutex_Lock(args->m);
     token = args->tokens[args->tokenCallCount % (sizeof(args->tokens)/sizeof(char*))];
     args->tokenCallCount++;
+    if (args->nc != NULL)
+    {
+        char        buffer[256] = {'\0'};
+        natsStatus  s;
+
+        s = natsConnection_GetConnectedUrl(args->nc, buffer, sizeof(buffer));
+        if (s == NATS_OK)
+        {
+            if (((args->tokenCallCount == 2) && (strcmp(buffer, "nats://127.0.0.1:22223") == 0))
+                || ((args->tokenCallCount == 3) && (strcmp(buffer, "nats://127.0.0.1:22224") == 0)))
+            {
+                args->results[0]++;
+                buffer[0] = '\0';
+                s = natsConnection_GetConnectedServerId(args->nc, buffer, sizeof(buffer));
+                if ((s == NATS_OK) && (strlen(buffer) > 0))
+                    args->results[0]++;
+            }
+        }
+    }
     natsMutex_Unlock(args->m);
 
     return token;
@@ -15031,6 +15050,10 @@ test_ReconnectWithTokenHandler(void)
     s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK);
 
+    natsMutex_Lock(args.m);
+    args.nc = nc;
+    natsMutex_Unlock(args.m);
+
     // Stop the server which will trigger the reconnect
     _stopServer(serverPid1);
     serverPid1 = NATS_INVALID_PID;
@@ -15058,6 +15081,12 @@ test_ReconnectWithTokenHandler(void)
     s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
     testCond((s == NATS_OK) && (buffer[0] != '\0')
              && (strcmp(buffer, servers[2]) == 0));
+
+    test("ConnectedURL and ServerID OKs during reconnect process: ");
+    natsMutex_Lock(args.m);
+    s = ((args.results[0] == 4) ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
 
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);

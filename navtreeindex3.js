@@ -1,7 +1,5 @@
 var NAVTREEINDEX3 =
 {
-"structjs_consumer_config.html#a2f0243899885dc97f304f48ca52b5356":[2,0,18,4],
-"structjs_consumer_config.html#a30d4142bac47ab6dc583c5ee193704e6":[2,0,18,19],
 "structjs_consumer_config.html#a351b388a36ccb7978e6e85a6f4fc0816":[2,0,18,13],
 "structjs_consumer_config.html#a364127e68bf0d3bf13efdc0b416667f4":[2,0,18,3],
 "structjs_consumer_config.html#a36a14d666d99bdade87a5e21a25491d6":[2,0,18,2],
@@ -249,5 +247,7 @@ var NAVTREEINDEX3 =
 "structkv_entry_list.html#a179d4d3e5844d005be1ed9134b969a50":[2,0,39,0],
 "structkv_entry_list.html#a82da55d42e1a6862d3b0034dfc6f321f":[2,0,39,1],
 "structkv_keys_list.html":[2,0,40],
-"structkv_keys_list.html#a625f7b34784e024a538359efd9a97265":[2,0,40,1]
+"structkv_keys_list.html#a625f7b34784e024a538359efd9a97265":[2,0,40,1],
+"structkv_keys_list.html#aa5cb40820a1a927375215e0a94ecfc18":[2,0,40,0],
+"structkv_purge_options.html":[2,0,38]
 };

@@ -1,7 +1,5 @@
 var NAVTREEINDEX4 =
 {
-"structkv_keys_list.html#aa5cb40820a1a927375215e0a94ecfc18":[2,0,40,0],
-"structkv_purge_options.html":[2,0,38],
 "structkv_purge_options.html#a245c2def0f3aabe617219772cf7680a8":[2,0,38,0],
 "structkv_purge_options.html#a47fed1e95073666cbe441aba7c149da6":[2,0,38,1],
 "structkv_watch_options.html":[2,0,37],

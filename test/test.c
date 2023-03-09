@@ -30314,7 +30314,7 @@ test_KeyValueBasics(void)
 
     for (i=0; i<iterMax; i++)
     {
-        sprintf(bucketName, "TEST%d", i);
+        snprintf(bucketName, sizeof(bucketName), "TEST%d", i);
 
         test("Create KV: ");
         kvConfig_Init(&kvc);
@@ -32986,6 +32986,9 @@ test_StanBasicSubscription(void)
     stanSubscription_Destroy(sub);
     stanConnection_Destroy(sc);
 
+    if (valgrind)
+        nats_Sleep(900);
+
     _stopServer(pid);
 }
 
@@ -33083,6 +33086,9 @@ test_StanSubscriptionCloseAndUnsubscribe(void)
     stanConnClose(sc, false);
     stanConnection_Destroy(sc);
     stanConnOptions_Destroy(opts);
+
+    if (valgrind)
+        nats_Sleep(900);
 
     _stopServer(pid);
 }
@@ -33232,6 +33238,9 @@ test_StanBasicQueueSubscription(void)
     stanConnection_Destroy(sc);
 
     _destroyDefaultThreadArgs(&args);
+
+    if (valgrind)
+        nats_Sleep(900);
 
     _stopServer(pid);
 }
@@ -33550,6 +33559,9 @@ test_StanSubscriptionAckMsg(void)
     stanSubOptions_Destroy(opts);
 
     _destroyDefaultThreadArgs(&args);
+
+    if (valgrind)
+        nats_Sleep(900);
 
     _stopServer(pid);
 }
@@ -33942,6 +33954,9 @@ test_StanGetNATSConnection(void)
 
     _destroyDefaultThreadArgs(&args);
 
+    if (valgrind)
+        nats_Sleep(900);
+
     _stopServer(pid);
 }
 
@@ -34229,6 +34244,10 @@ test_StanSubTimeout(void)
     stanSubscription_Destroy(sub);
     stanConnection_ReleaseNATSConnection(sc);
     stanConnection_Destroy(sc);
+
+    if (valgrind)
+        nats_Sleep(900);
+
     _stopServer(pid);
 }
 

@@ -104,7 +104,7 @@ natsConn_publish(natsConnection *nc, natsMsg *msg, const char *reply, bool direc
     // accessing the headers. It should still be considered having headers.
     if ((msg->headers != NULL) || natsMsg_needsLift(msg))
     {
-        if (!nc->info.headers)
+        if (!nc->initc && !nc->info.headers)
         {
             natsConn_Unlock(nc);
 

@@ -32674,6 +32674,9 @@ test_StanBasicPublish(void)
 
     stanConnection_Destroy(sc);
 
+    if (valgrind)
+        nats_Sleep(900);
+
     _stopServer(pid);
 }
 
@@ -32730,6 +32733,9 @@ test_StanBasicPublishAsync(void)
     stanConnection_Destroy(sc);
 
     _destroyDefaultThreadArgs(&args);
+
+    if (valgrind)
+        nats_Sleep(900);
 
     _stopServer(pid);
 }

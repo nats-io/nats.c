@@ -9530,6 +9530,8 @@ test_RetryOnFailedConnect(void)
     int64_t             end   = 0;
     natsThread          *t    = NULL;
     natsSubscription    *sub  = NULL;
+    natsMsg             *msg  = NULL;
+    natsMsg             *rmsg = NULL;
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
@@ -9595,6 +9597,16 @@ test_RetryOnFailedConnect(void)
     IFOK(s, natsConnection_Connect(&nc, opts));
     testCond((s == NATS_NOT_YET_CONNECTED) && (nc != NULL));
     nats_clearLastError();
+
+    // Request with a message with headers does timeout as opposed to returning
+    // the NATS_NO_SERVER_SUPPORT error.
+    test("Request with message with headers: ");
+    s = natsMsg_Create(&msg, "request.headers", NULL, "hello", 5);
+    IFOK(s, natsMsgHeader_Set(msg, "some", "header"));
+    IFOK(s, natsConnection_RequestMsg(&rmsg, nc, msg, 250));
+    testCond(s == NATS_TIMEOUT);
+    nats_clearLastError();
+    natsMsg_Destroy(msg);
 
     test("Subscription ok: ");
     arg.control = 99;
@@ -30314,7 +30326,7 @@ test_KeyValueBasics(void)
 
     for (i=0; i<iterMax; i++)
     {
-        sprintf(bucketName, "TEST%d", i);
+        snprintf(bucketName, sizeof(bucketName), "TEST%d", i);
 
         test("Create KV: ");
         kvConfig_Init(&kvc);
@@ -32662,6 +32674,9 @@ test_StanBasicPublish(void)
 
     stanConnection_Destroy(sc);
 
+    if (valgrind)
+        nats_Sleep(900);
+
     _stopServer(pid);
 }
 
@@ -32718,6 +32733,9 @@ test_StanBasicPublishAsync(void)
     stanConnection_Destroy(sc);
 
     _destroyDefaultThreadArgs(&args);
+
+    if (valgrind)
+        nats_Sleep(900);
 
     _stopServer(pid);
 }
@@ -32986,6 +33004,9 @@ test_StanBasicSubscription(void)
     stanSubscription_Destroy(sub);
     stanConnection_Destroy(sc);
 
+    if (valgrind)
+        nats_Sleep(900);
+
     _stopServer(pid);
 }
 
@@ -33083,6 +33104,9 @@ test_StanSubscriptionCloseAndUnsubscribe(void)
     stanConnClose(sc, false);
     stanConnection_Destroy(sc);
     stanConnOptions_Destroy(opts);
+
+    if (valgrind)
+        nats_Sleep(900);
 
     _stopServer(pid);
 }
@@ -33232,6 +33256,9 @@ test_StanBasicQueueSubscription(void)
     stanConnection_Destroy(sc);
 
     _destroyDefaultThreadArgs(&args);
+
+    if (valgrind)
+        nats_Sleep(900);
 
     _stopServer(pid);
 }
@@ -33550,6 +33577,9 @@ test_StanSubscriptionAckMsg(void)
     stanSubOptions_Destroy(opts);
 
     _destroyDefaultThreadArgs(&args);
+
+    if (valgrind)
+        nats_Sleep(900);
 
     _stopServer(pid);
 }
@@ -33942,6 +33972,9 @@ test_StanGetNATSConnection(void)
 
     _destroyDefaultThreadArgs(&args);
 
+    if (valgrind)
+        nats_Sleep(900);
+
     _stopServer(pid);
 }
 
@@ -34229,6 +34262,10 @@ test_StanSubTimeout(void)
     stanSubscription_Destroy(sub);
     stanConnection_ReleaseNATSConnection(sc);
     stanConnection_Destroy(sc);
+
+    if (valgrind)
+        nats_Sleep(900);
+
     _stopServer(pid);
 }
 

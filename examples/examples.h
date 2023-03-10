@@ -15,6 +15,7 @@
 #define EXAMPLES_H_
 
 #include <nats.h>
+#include <micro.h>
 #include <stdio.h>
 #include <string.h>
 

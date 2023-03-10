@@ -132,6 +132,8 @@
 #endif
 
 #define IFOK(s, c)      if (s == NATS_OK) { s = (c); }
+// TODO <>/<> do I really need it?
+#define IFOK_DO(s, c)   if (s == NATS_OK) { c; }
 
 #define NATS_MILLIS_TO_NANOS(d)     (((int64_t)d)*(int64_t)1E6)
 #define NATS_SECONDS_TO_NANOS(d)    (((int64_t)d)*(int64_t)1E9)
@@ -431,47 +433,6 @@ typedef struct __jsSub
     jsConsumerConfig    *ocCfg;
 
 } jsSub;
-
-struct __microserviceConfig
-{
-    const char *name;
-    const char *version;
-    const char *description;
-};
-
-struct __microserviceIdentity
-{
-    const char *name;
-    const char *version;
-    char *id;
-};
-
-struct __microservice
-{
-    natsMutex *mu;
-    natsConnection *nc;
-    int refs;
-    struct __microserviceIdentity identity;
-    struct natsMicroserviceConfig cfg;
-    bool stopped;
-    struct __microserviceEndpoint **endpoints;
-    int num_endpoints;
-};
-
-struct __microserviceRequest
-{
-    natsMsg *msg;
-    char *err;
-};
-
-struct __microserviceEndpoint
-{
-    natsMicroservice *m;
-    bool stopped;
-    natsMicroserviceEndpointConfig config;
-    natsMicroserviceEndpointStats stats;
-    natsSubscription *sub;
-};
 
 struct __kvStore
 {

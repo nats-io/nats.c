@@ -11,64 +11,57 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TODO review includes
-#include <ctype.h>
-#include <stdarg.h>
-
+// TODO <>/<> review includes
+#include "micro.h"
 #include "microp.h"
-#include "mem.h"
 #include "conn.h"
+#include "mem.h"
 
-static natsStatus
+static natsMicroserviceError *
 _createMicroservice(natsMicroservice **new_microservice, natsConnection *nc, natsMicroserviceConfig *cfg);
 static void
-_freeMicroservice(natsMicroservice *m);
-static void
 _retainMicroservice(natsMicroservice *m);
-static void
+static natsMicroserviceError *
 _releaseMicroservice(natsMicroservice *m);
+static void
+_markMicroserviceStopped(natsMicroservice *m, bool stopped);
 
-//////////////////////////////////////////////////////////////////////////////
-// microservice management APIs
-//////////////////////////////////////////////////////////////////////////////
-
-natsStatus
+natsMicroserviceError *
 nats_AddMicroservice(natsMicroservice **new_m, natsConnection *nc, natsMicroserviceConfig *cfg)
 {
-    natsStatus s;
-
     if ((new_m == NULL) || (nc == NULL) || (cfg == NULL))
-        return nats_setDefaultError(NATS_INVALID_ARG);
+        return natsMicroserviceErrorInvalidArg;
 
-    s = _createMicroservice(new_m, nc, cfg);
-    if (s != NATS_OK)
-        return NATS_UPDATE_ERR_STACK(s);
-
-    return NATS_OK;
+    return _createMicroservice(new_m, nc, cfg);
 }
 
-void natsMicroservice_Destroy(natsMicroservice *m)
+natsMicroserviceError *
+natsMicroservice_Destroy(natsMicroservice *m)
 {
-    _releaseMicroservice(m);
+    return _releaseMicroservice(m);
 }
 
-// TODO update from Go
-natsStatus
+// TODO <>/<> update from Go
+natsMicroserviceError *
 natsMicroservice_Stop(natsMicroservice *m)
 {
-    if ((m == NULL) || (m->mu == NULL))
-        return nats_setDefaultError(NATS_INVALID_ARG);
+    natsStatus s = NATS_OK;
 
-    natsMutex_Lock(m->mu);
+    if (m == NULL)
+        return natsMicroserviceErrorInvalidArg;
+    if (natsMicroservice_IsStopped(m))
+        return NULL;
 
-    if (m->stopped)
-        goto OK;
-
-    m->stopped = true;
-
-OK:
-    natsMutex_Unlock(m->mu);
-    return NATS_OK;
+    s = natsMicroserviceEndpoint_Stop(m->root);
+    if (s == NATS_OK)
+    {
+        _markMicroserviceStopped(m, true);
+        return NULL;
+    }
+    else
+    {
+        return nats_NewMicroserviceError(NATS_UPDATE_ERR_STACK(s), 500, "failed to stop microservice");
+    }
 }
 
 bool natsMicroservice_IsStopped(natsMicroservice *m)
@@ -84,38 +77,71 @@ bool natsMicroservice_IsStopped(natsMicroservice *m)
     return stopped;
 }
 
-// TODO: eliminate sleep
-natsStatus
+// TODO: <>/<> eliminate sleep
+natsMicroserviceError *
 natsMicroservice_Run(natsMicroservice *m)
 {
     if ((m == NULL) || (m->mu == NULL))
-        return nats_setDefaultError(NATS_INVALID_ARG);
+        return natsMicroserviceErrorInvalidArg;
 
     for (; !natsMicroservice_IsStopped(m);)
     {
         nats_Sleep(50);
     }
-    return NATS_OK;
+
+    return NULL;
 }
 
-natsStatus
-natsMicroservice_Respond(natsMicroservice *m, natsMicroserviceRequest *r, const char *data, int len)
+NATS_EXTERN natsConnection *
+natsMicroservice_GetConnection(natsMicroservice *m)
+{
+    if (m == NULL)
+        return NULL;
+    return m->nc;
+}
+
+natsMicroserviceError *
+natsMicroservice_AddEndpoint(natsMicroserviceEndpoint **new_ep, natsMicroservice *m, const char *name, natsMicroserviceEndpointConfig *cfg)
+{
+    natsStatus s = NATS_OK;
+    if ((m == NULL) || (m->root == NULL))
+    {
+        return natsMicroserviceErrorInvalidArg;
+    }
+    s = natsMicroserviceEndpoint_AddEndpoint(new_ep, m->root, name, cfg);
+
+    if (s == NATS_OK)
+        return NULL;
+    else
+        return nats_NewMicroserviceError(NATS_UPDATE_ERR_STACK(s), 500, "failed to add endpoint");
+}
+
+static natsMicroserviceError *
+_destroyMicroservice(natsMicroservice *m)
 {
     natsStatus s = NATS_OK;
 
-    if ((m == NULL) || (m->mu == NULL))
-        return nats_setDefaultError(NATS_INVALID_ARG);
+    if ((m == NULL) || (m->root == NULL))
+        return NULL;
 
-    s = natsConnection_Publish(m->nc, natsMsg_GetReply(r->msg), data, len);
-    return NATS_UPDATE_ERR_STACK(s);
+    s = natsMicroserviceEndpoint_Destroy(m->root);
+    if (s != NATS_OK)
+    {
+        return nats_NewMicroserviceError(NATS_UPDATE_ERR_STACK(s), 500, "failed to destroy microservice");
+    }
+
+    natsConn_release(m->nc);
+    natsMutex_Destroy(m->mu);
+    NATS_FREE(m->identity.id);
+    NATS_FREE(m);
+    return NULL;
 }
 
-// Implementation functions.
-
-static natsStatus
+static natsMicroserviceError *
 _createMicroservice(natsMicroservice **new_microservice, natsConnection *nc, natsMicroserviceConfig *cfg)
 {
     natsStatus s = NATS_OK;
+    natsMicroserviceError *err = NULL;
     natsMicroservice *m = NULL;
     natsMutex *mu = NULL;
     char tmpNUID[NUID_BUFFER_LEN + 1];
@@ -123,9 +149,12 @@ _createMicroservice(natsMicroservice **new_microservice, natsConnection *nc, nat
     // Make a microservice object, with a reference to a natsConnection.
     m = (natsMicroservice *)NATS_CALLOC(1, sizeof(natsMicroservice));
     if (m == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
+        return natsMicroserviceErrorOutOfMemory;
+
+    // TODO: <>/<> separate PR, make a natsConn_retain return a natsConnection*
     natsConn_retain(nc);
     m->nc = nc;
+    m->refs = 1;
 
     // Need a mutex for concurrent operations.
     s = natsMutex_Create(&mu);
@@ -136,56 +165,46 @@ _createMicroservice(natsMicroservice **new_microservice, natsConnection *nc, nat
 
     // Generate a unique ID for this microservice.
     IFOK(s, natsNUID_Next(tmpNUID, NUID_BUFFER_LEN + 1));
-        IF_OK_DUP_STRING(s, m->identity.id, tmpNUID);
+    IF_OK_DUP_STRING(s, m->identity.id, tmpNUID);
 
     // Copy the config data.
     if (s == NATS_OK)
     {
         m->identity.name = cfg->name;
         m->identity.version = cfg->version;
-        m->cfg = *cfg;
+        m->cfg = cfg;
+    }
+
+    // Setup the root endpoint.
+    if (s == NATS_OK)
+    {
+        s = _newMicroserviceEndpoint(&m->root, m, "", NULL);
     }
 
     // Set up the default endpoint.
     if (s == NATS_OK && cfg->endpoint != NULL)
     {
-        s = natsMicroservice_AddEndpoint(m, natsMicroserviceDefaultEndpointName, cfg->endpoint);
+         err = natsMicroservice_AddEndpoint(NULL, m, natsMicroserviceDefaultEndpointName, cfg->endpoint);
+         if (err != NULL)
+         {
+            // status is always set in AddEndpoint errors.
+             s = err->status;
+         }
     }
 
     // Set up monitoring (PING, STATS, etc.) responders.
     IFOK(s, _initMicroserviceMonitoring(m));
 
     if (s == NATS_OK)
+    {
         *new_microservice = m;
+        return NULL;
+    }
     else
     {
-        _freeMicroservice(m);
+        _destroyMicroservice(m);
+        return nats_NewMicroserviceError(NATS_UPDATE_ERR_STACK(s), 500, "failed to create microservice");
     }
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
-static void
-_freeMicroservice(natsMicroservice *m)
-{
-    int i;
-    natsStatus s;
-
-    if (m == NULL)
-        return;
-
-    for (i = 0; i < m->num_endpoints; i++)
-    {
-        s = _stopMicroserviceEndpoint(m->endpoints[i]);
-        
-        if(s == NATS_OK)
-            _freeMicroserviceEndpoint(m->endpoints[i]);
-    }
-    NATS_FREE(m->endpoints);
-
-    natsConn_release(m->nc);
-    natsMutex_Destroy(m->mu);
-    NATS_FREE(m->identity.id);
-    NATS_FREE(m);
 }
 
 static void
@@ -196,19 +215,28 @@ _retainMicroservice(natsMicroservice *m)
     natsMutex_Unlock(m->mu);
 }
 
-static void
+static natsMicroserviceError *
 _releaseMicroservice(natsMicroservice *m)
 {
     bool doFree;
 
     if (m == NULL)
-        return;
+        return NULL;
 
     natsMutex_Lock(m->mu);
     doFree = (--(m->refs) == 0);
     natsMutex_Unlock(m->mu);
 
-    if (doFree)
-        _freeMicroservice(m);
+    if (!doFree)
+        return NULL;
+
+    return _destroyMicroservice(m);
 }
 
+static void
+_markMicroserviceStopped(natsMicroservice *m, bool stopped)
+{
+    natsMutex_Lock(m->mu);
+    m->stopped = stopped;
+    natsMutex_Unlock(m->mu);
+}

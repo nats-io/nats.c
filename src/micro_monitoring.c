@@ -13,9 +13,9 @@
 
 #include <stdarg.h>
 
-#include "natsp.h"
-#include "mem.h"
+#include "micro.h"
 #include "microp.h"
+#include "mem.h"
 
 static void
 _handleMicroservicePing(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
@@ -32,7 +32,37 @@ static natsStatus _newControlSubject(char **newSubject, natsMicroserviceVerb ver
 static natsStatus _newDottedSubject(char **new_subject, int count, ...);
 static bool _isEmpty(const char *s);
 
-natsStatus _initMicroserviceMonitoring(natsMicroservice *m) {
+static natsStatus
+natsMicroserviceVerb_String(const char **new_subject, natsMicroserviceVerb verb)
+{
+    if (new_subject == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    switch (verb)
+    {
+    case natsMicroserviceVerbPing:
+        *new_subject = "PING";
+        return NATS_OK;
+
+    case natsMicroserviceVerbStats:
+        *new_subject = "STATS";
+        return NATS_OK;
+
+    case natsMicroserviceVerbInfo:
+        *new_subject = "INFO";
+        return NATS_OK;
+
+    case natsMicroserviceVerbSchema:
+        *new_subject = "SCHEMA";
+        return NATS_OK;
+    default:
+        return nats_setError(NATS_INVALID_ARG, "Invalid microservice verb %d", verb);
+    }
+}
+
+natsStatus 
+_initMicroserviceMonitoring(natsMicroservice *m)
+{
     natsStatus s = NATS_OK;
 
     IFOK(s, _addVerbHandlers(m, natsMicroserviceVerbPing, _handleMicroservicePing));
@@ -53,12 +83,9 @@ _handleMicroservicePing(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
     s = _marshalPing(&buf, m);
     if (s == NATS_OK)
     {
-        s = natsMicroservice_Respond(m, &req, natsBuf_Data(buf), natsBuf_Len(buf));
+        natsMicroserviceRequest_Respond(&req, natsBuf_Data(buf), natsBuf_Len(buf));
     }
-    if (buf != NULL)
-    {
-        natsBuf_Destroy(buf);
-    }
+    natsBuf_Destroy(buf);
 }
 
 static bool

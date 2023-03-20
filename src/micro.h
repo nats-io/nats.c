@@ -18,46 +18,33 @@
 
 #define natsMicroserviceAPIPrefix "$SRV"
 
+#define natsMicroserviceInfoResponseType "io.nats.micro.v1.info_response"
+#define natsMicroservicePingResponseType "io.nats.micro.v1.ping_response"
+#define natsMicroserviceStatsResponseType "io.nats.micro.v1.stats_response"
+#define natsMicroserviceSchemaResponseType "io.nats.micro.v1.schema_response"
+
+#define natsMicroservicePingVerb "PING"
+#define natsMicroserviceStatsVerb "STATS"
+#define natsMicroserviceInfoVerb "INFO"
+#define natsMicroserviceSchemaVerb "SCHEMA"
+
 #define NATS_MICROSERVICE_STATUS_HDR "Nats-Status"
 #define NATS_MICROSERVICE_ERROR_HDR "Nats-Service-Error"
 #define NATS_MICROSERVICE_ERROR_CODE_HDR "Nats-Service-Error-Code"
 
-enum natsMicroserviceVerb
-{
-    natsMicroserviceVerbPing = 0,
-    natsMicroserviceVerbStats,
-    natsMicroserviceVerbInfo,
-    natsMicroserviceVerbSchema,
-    natsMicroserviceVerbMax
-};
-
-typedef enum natsMicroserviceVerb natsMicroserviceVerb;
-
-/**
- * The Microservice error. Note that code and description do not have a
- * well-defined lifespan and should be copied if needed to be used later.
- */
-typedef struct natsMicroserviceError
-{
-    natsStatus status;
-    int code;
-    const char *description;
-
-    const char *(*String)(struct natsMicroserviceError *err, char *buf, int size);
-} natsMicroserviceError;
-
 /**
  * The Microservice request object.
  */
-typedef struct __microserviceRequest natsMicroserviceRequest;
+typedef struct microservice_request_s natsMicroserviceRequest;
 
 /**
  * The Microservice object. Create and start with #nats_AddMicroservice.
  */
-typedef struct __microservice natsMicroservice;
+typedef struct microservice_s natsMicroservice;
 
 /**
- * The Microservice configuration object.
+ * The Microservice configuration object. The service holds on to it, so it must
+ * be constant for the lifetime of the service.
  */
 typedef struct natsMicroserviceConfig
 {
@@ -67,11 +54,22 @@ typedef struct natsMicroserviceConfig
     struct natsMicroserviceEndpointConfig *endpoint;
 } natsMicroserviceConfig;
 
+typedef struct natsMicroserviceInfo
+{
+    const char *type;
+    const char *name;
+    const char *version;
+    const char *description;
+    const char *id;
+    const char **subjects;
+    int subjects_len;
+} natsMicroserviceInfo;
+
 /**
  * The Microservice endpoint object.
  * TODO document the interface.
  */
-typedef struct __microserviceEndpoint natsMicroserviceEndpoint;
+typedef struct microservice_endpoint_s natsMicroserviceEndpoint;
 
 /** \brief Callback used to deliver messages to a microservice.
  *
@@ -88,9 +86,10 @@ typedef void (*natsMicroserviceRequestHandler)(natsMicroservice *m, natsMicroser
  */
 typedef struct natsMicroserviceEndpointConfig
 {
-    const char *subject;
+    const char *name;
     natsMicroserviceRequestHandler handler;
     void *closure;
+    const char *subject;
     struct natsMicroserviceSchema *schema;
 } natsMicroserviceEndpointConfig;
 
@@ -101,13 +100,27 @@ typedef struct natsMicroserviceEndpointStats
 {
     const char *name;
     const char *subject;
-    int num_requests;
-    int num_errors;
-    char *last_error;
-    int processing_time_ms;
-    int average_processing_time_ms;
-    bool stopped;
+    int64_t num_requests;
+    int64_t num_errors;
+    int64_t processing_time_s;
+    int64_t processing_time_ns;
+    int64_t average_processing_time_ns;
+    char last_error_string[2048];
 } natsMicroserviceEndpointStats;
+
+/**
+ * The Microservice stats struct.
+ */
+typedef struct natsMicroserviceStats
+{
+    const char *type;
+    const char *name;
+    const char *version;
+    const char *id;
+    int64_t started;
+    int endpoints_len;
+    natsMicroserviceEndpointStats *endpoints;
+} natsMicroserviceStats;
 
 /**
  * The Microservice endpoint schema object.
@@ -119,119 +132,38 @@ typedef struct natsMicroserviceSchema
 } natsMicroserviceSchema;
 
 /**
- * Request unmarshaled as "arguments", a space-separated list of numbers and strings.
- * TODO document the interface.
- */
-typedef struct __args_t natsArgs;
-
-/**
  * The Microservice client. Initialize with #nats_NewMicroserviceClient.
  */
-typedef struct __microserviceClient natsMicroserviceClient;
+typedef struct microservice_client_s natsMicroserviceClient;
 
 /**
- * The Microservice configuration object. Initialize with #natsMicroserviceConfig_Init.
+ * The Microservice configuration object.
  */
-typedef struct natsMicroserviceClientConfig
-{
-    // TBD in the future.
-    int dummy;
-} natsMicroserviceClientConfig;
+typedef struct natsMicroserviceClientConfig natsMicroserviceClientConfig;
 
-/** \defgroup microserviceGroup Microservice support
- *
- * A simple NATS-based microservice implementation framework.
- *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
- *
- *  @{
- */
+typedef struct error_s natsError;
 
-/** \brief Makes a new error.
- *
- * @param new_microservice the location where to store the newly created
- * #natsMicroservice object.
- * @param nc the pointer to the #natsCOnnection object on which the service will listen on.
- * @param cfg the pointer to the #natsMicroserviceConfig configuration
- * information used to create the #natsMicroservice object.
- */
-NATS_EXTERN natsMicroserviceError *
-nats_NewMicroserviceError(natsStatus s, int code, const char *desc);
+//
+// natsMicroservice methods.
 
-NATS_EXTERN void
-natsMicroserviceError_Destroy(natsMicroserviceError *err);
+NATS_EXTERN natsError *nats_AddMicroservice(natsMicroservice **new_microservice, natsConnection *nc, natsMicroserviceConfig *cfg);
+NATS_EXTERN natsError *natsMicroservice_AddEndpoint(natsMicroserviceEndpoint **new_endpoint, natsMicroservice *m, natsMicroserviceEndpointConfig *cfg);
+NATS_EXTERN natsConnection *natsMicroservice_GetConnection(natsMicroservice *m);
+NATS_EXTERN bool natsMicroservice_IsStopped(natsMicroservice *m);
+NATS_EXTERN natsError *natsMicroservice_Release(natsMicroservice *m);
+NATS_EXTERN natsError *natsMicroservice_Run(natsMicroservice *m);
+NATS_EXTERN natsError *natsMicroservice_Stop(natsMicroservice *m);
 
-/** \brief Adds a microservice with a given configuration.
- *
- * Adds a microservice with a given configuration.
- *
- * \note The return #natsMicroservice object needs to be destroyed using
- * #natsMicroservice_Destroy when no longer needed to free allocated memory.
- *
- * @param new_microservice the location where to store the newly created
- * #natsMicroservice object.
- * @param nc the pointer to the #natsCOnnection object on which the service will listen on.
- * @param cfg the pointer to the #natsMicroserviceConfig configuration
- * information used to create the #natsMicroservice object.
- */
-NATS_EXTERN natsMicroserviceError *
-nats_AddMicroservice(natsMicroservice **new_microservice, natsConnection *nc, natsMicroserviceConfig *cfg);
+//
+// natsMicroserviceRequest methods.
 
-/** \brief Waits for the microservice to stop.
- */
-NATS_EXTERN natsMicroserviceError *
-natsMicroservice_Run(natsMicroservice *m);
-
-/** \brief Stops a running microservice.
- */
-NATS_EXTERN natsMicroserviceError *
-natsMicroservice_Stop(natsMicroservice *m);
-
-/** \brief Checks if a microservice is stopped.
- */
-NATS_EXTERN bool
-natsMicroservice_IsStopped(natsMicroservice *m);
-
-/** \brief Destroys a microservice object.
- *
- * Destroys a microservice object; frees all memory. The service must be stopped
- * first, this function does not check if it is.
- */
-NATS_EXTERN natsMicroserviceError *
-natsMicroservice_Destroy(natsMicroservice *m);
-
-/** \brief Adds (and starts) a microservice endpoint.
- */
-NATS_EXTERN natsMicroserviceError *
-natsMicroservice_AddEndpoint(natsMicroserviceEndpoint **new_endpoint, natsMicroservice *m, const char *name, natsMicroserviceEndpointConfig *cfg);
-
-/** \brief Returns the microservice's NATS connection.
- */
-NATS_EXTERN natsConnection *
-natsMicroservice_GetConnection(natsMicroservice *m);
-
-/** \brief Responds to a microservice request.
- */
-NATS_EXTERN natsMicroserviceError *
-natsMicroserviceRequest_Respond(natsMicroserviceRequest *req, const char *data, int len);
-
-/** \brief Responds to a microservice request with an error, does NOT free the
- * error.
- */
-NATS_EXTERN natsMicroserviceError *
-natsMicroserviceRequest_RespondError(natsMicroserviceRequest *req, natsMicroserviceError *err, const char *data, int len);
-
-/** \brief A convenience method to respond to a microservice request with a
- * simple error (no data), and free the error.
- */
-NATS_EXTERN void
-natsMicroserviceRequest_Error(natsMicroserviceRequest *req, natsMicroserviceError **err);
-
-/** \brief Returns the original NATS message underlying the request.
- */
-NATS_EXTERN natsMsg *
-natsMicroserviceRequest_GetMsg(natsMicroserviceRequest *req);
+NATS_EXTERN void natsMicroserviceRequest_Error(natsMicroserviceRequest *req, natsError *err);
+NATS_EXTERN natsConnection *natsMicroserviceRequest_GetConnection(natsMicroserviceRequest *req);
+NATS_EXTERN natsMicroserviceEndpoint *natsMicroserviceRequest_GetEndpoint(natsMicroserviceRequest *req);
+NATS_EXTERN natsMicroservice *natsMicroserviceRequest_GetMicroservice(natsMicroserviceRequest *req);
+NATS_EXTERN natsMsg *natsMicroserviceRequest_GetMsg(natsMicroserviceRequest *req);
+NATS_EXTERN natsError *natsMicroserviceRequest_Respond(natsMicroserviceRequest *req, const char *data, int len);
+NATS_EXTERN natsError *natsMicroserviceRequest_RespondError(natsMicroserviceRequest *req, natsError *err, const char *data, int len);
 
 #define natsMicroserviceRequestHeader_Set(req, key, value) \
     natsMsgHeader_Set(natsMicroserviceRequest_GetMsg(req), (key), (value))
@@ -259,44 +191,38 @@ natsMicroserviceRequest_GetMsg(natsMicroserviceRequest *req);
 #define natsMicroserviceRequest_GetTime(req) \
     natsMsg_GetTime(natsMicroserviceRequest_GetMsg(req))
 
-NATS_EXTERN natsMicroserviceEndpoint *
-natsMicroserviceRequest_GetEndpoint(natsMicroserviceRequest *req);
+//
+// natsError methods.
 
-NATS_EXTERN natsMicroservice *
-natsMicroserviceRequest_GetMicroservice(natsMicroserviceRequest *req);
+NATS_EXTERN natsError *nats_Errorf(int code, const char *format, ...);
+NATS_EXTERN natsError *nats_IsErrorResponse(natsStatus s, natsMsg *msg);
+NATS_EXTERN natsError *nats_NewError(int code, const char *desc);
+NATS_EXTERN natsError *nats_NewStatusError(natsStatus s);
+NATS_EXTERN void natsError_Destroy(natsError *err);
+NATS_EXTERN natsStatus natsError_ErrorCode(natsError *err);
+NATS_EXTERN natsStatus natsError_StatusCode(natsError *err);
+NATS_EXTERN const char *natsError_String(natsError *err, char *buf, int len);
+NATS_EXTERN natsError *natsError_Wrapf(natsError *err, const char *format, ...);
 
-NATS_EXTERN natsConnection *
-natsMicroserviceRequest_GetConnection(natsMicroserviceRequest *req);
+//
+// natsClient methods.
 
-NATS_EXTERN natsMicroserviceError *
-nats_MicroserviceErrorFromMsg(natsStatus s, natsMsg *msg);
-
-NATS_EXTERN natsMicroserviceError *
-natsParseAsArgs(natsArgs **args, const char *data, int data_len);
-
-NATS_EXTERN int
-natsArgs_Count(natsArgs *args);
-
-NATS_EXTERN natsMicroserviceError *
-natsArgs_GetInt(int *val, natsArgs *args, int index);
-
-NATS_EXTERN natsMicroserviceError *
-natsArgs_GetFloat(long double *val, natsArgs *args, int index);
-
-NATS_EXTERN natsMicroserviceError *
-natsArgs_GetString(const char **val, natsArgs *args, int index);
-
-NATS_EXTERN void
-natsArgs_Destroy(natsArgs *args);
-
-natsMicroserviceError * 
-nats_NewMicroserviceClient(natsMicroserviceClient **new_client, natsConnection *nc, natsMicroserviceClientConfig *cfg);
-
-void 
-natsMicroserviceClient_Destroy(natsMicroserviceClient *client);
-
-natsMicroserviceError *
+natsError *nats_NewMicroserviceClient(natsMicroserviceClient **new_client, natsConnection *nc, natsMicroserviceClientConfig *cfg);
+void natsMicroserviceClient_Destroy(natsMicroserviceClient *client);
+natsError *
 natsMicroserviceClient_DoRequest(natsMicroserviceClient *client, natsMsg **reply, const char *subject, const char *data, int data_len);
+
+//
+// natsMicroserviceInfo methods.
+
+natsStatus natsMicroservice_Info(natsMicroserviceInfo **new_info, natsMicroservice *m);
+void natsMicroserviceInfo_Destroy(natsMicroserviceInfo *info);
+
+//
+// natsMicroserviceStats methods.
+
+natsStatus natsMicroservice_Stats(natsMicroserviceStats **new_stats, natsMicroservice *m);
+void natsMicroserviceStats_Destroy(natsMicroserviceStats *stats);
 
 /** @} */ // end of microserviceGroup
 

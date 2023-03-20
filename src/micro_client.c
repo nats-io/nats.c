@@ -16,7 +16,7 @@
 #include "mem.h"
 #include "conn.h"
 
-natsMicroserviceError * 
+natsError *
 nats_NewMicroserviceClient(natsMicroserviceClient **new_client, natsConnection *nc, natsMicroserviceClientConfig *cfg)
 {
     natsMicroserviceClient *client = NULL;
@@ -24,7 +24,7 @@ nats_NewMicroserviceClient(natsMicroserviceClient **new_client, natsConnection *
     if (new_client == NULL)
         return natsMicroserviceErrorInvalidArg;
 
-    client = NATS_CALLOC(1, sizeof(struct __microserviceClient));
+    client = NATS_CALLOC(1, sizeof(struct microservice_client_s));
     if (client == NULL)
         return natsMicroserviceErrorOutOfMemory;
 
@@ -34,8 +34,7 @@ nats_NewMicroserviceClient(natsMicroserviceClient **new_client, natsConnection *
     return NULL;
 }
 
-void 
-natsMicroserviceClient_Destroy(natsMicroserviceClient *client)
+void natsMicroserviceClient_Destroy(natsMicroserviceClient *client)
 {
     if (client == NULL)
         return;
@@ -44,21 +43,21 @@ natsMicroserviceClient_Destroy(natsMicroserviceClient *client)
     NATS_FREE(client);
 }
 
-natsMicroserviceError *
+natsError *
 natsMicroserviceClient_DoRequest(natsMicroserviceClient *client, natsMsg **reply, const char *subject, const char *data, int data_len)
 {
     natsStatus s = NATS_OK;
-    natsMicroserviceError *err = NULL;
+    natsError *err = NULL;
     natsMsg *msg = NULL;
 
-    if ((client == NULL ) || (reply == NULL))
+    if ((client == NULL) || (reply == NULL))
         return natsMicroserviceErrorInvalidArg;
 
     s = natsConnection_Request(&msg, client->nc, subject, data, data_len, 5000);
     if (s != NATS_OK)
-        return nats_NewMicroserviceError(s, 500, "request failed");
+        err = natsError_Wrapf(nats_NewStatusError(s), "request failed");
 
-    err = nats_MicroserviceErrorFromMsg(s, msg);
+    err = nats_IsErrorResponse(s, msg);
     if (err == NULL)
     {
         *reply = msg;

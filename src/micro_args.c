@@ -13,26 +13,33 @@
 
 #include "micro.h"
 #include "microp.h"
+#include "micro_args.h"
 #include "mem.h"
 
-static natsMicroserviceError *parse(void **args, int *args_len, int *i, const char *data, int data_len);
-
-natsMicroserviceError *
-natsParseAsArgs(natsArgs **new_args, const char *data, int data_len)
+struct args_s
 {
-    natsMicroserviceError *err = NULL;
+    void **args;
+    int count;
+};
+
+static natsError *parse(void **args, int *args_len, int *i, const char *data, int data_len);
+
+natsError *
+nats_ParseMicroserviceArgs(natsMicroserviceArgs **new_args, const char *data, int data_len)
+{
+    natsError *err = NULL;
     int n;
     int i = 0;
-    natsArgs *args = NULL;
+    natsMicroserviceArgs *args = NULL;
 
     if ((new_args == NULL) || (data == NULL) || (data_len < 0))
-        return nats_NewMicroserviceError(NATS_INVALID_ARG, 500, "Invalid function argument");
+        return nats_NewError(500, "invalid function argument");
 
     // parse the number of arguments without allocating.
     err = parse(NULL, &n, &i, data, data_len);
     if (err == NULL)
     {
-        args = NATS_CALLOC(1, sizeof(natsArgs));
+        args = NATS_CALLOC(1, sizeof(natsMicroserviceArgs));
         if (args == NULL)
             err = natsMicroserviceErrorOutOfMemory;
     }
@@ -56,13 +63,13 @@ natsParseAsArgs(natsArgs **new_args, const char *data, int data_len)
     }
     else
     {
-        natsArgs_Destroy(args);
+        natsMicroserviceArgs_Destroy(args);
     }
 
     return err;
 }
 
-void natsArgs_Destroy(natsArgs *args)
+void natsMicroserviceArgs_Destroy(natsMicroserviceArgs *args)
 {
     int i;
 
@@ -77,7 +84,7 @@ void natsArgs_Destroy(natsArgs *args)
     NATS_FREE(args);
 }
 
-int natsArgs_Count(natsArgs *args)
+int natsMicroserviceArgs_Count(natsMicroserviceArgs *args)
 {
     if (args == NULL)
         return 0;
@@ -85,8 +92,8 @@ int natsArgs_Count(natsArgs *args)
     return args->count;
 }
 
-natsMicroserviceError *
-natsArgs_GetInt(int *val, natsArgs *args, int index)
+natsError *
+natsMicroserviceArgs_GetInt(int *val, natsMicroserviceArgs *args, int index)
 {
     if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
         return natsMicroserviceErrorInvalidArg;
@@ -95,8 +102,8 @@ natsArgs_GetInt(int *val, natsArgs *args, int index)
     return NULL;
 }
 
-natsMicroserviceError *
-natsArgs_GetFloat(long double *val, natsArgs *args, int index)
+natsError *
+natsMicroserviceArgs_GetFloat(long double *val, natsMicroserviceArgs *args, int index)
 {
     if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
         return natsMicroserviceErrorInvalidArg;
@@ -105,8 +112,8 @@ natsArgs_GetFloat(long double *val, natsArgs *args, int index)
     return NULL;
 }
 
-natsMicroserviceError *
-natsArgs_GetString(const char **val, natsArgs *args, int index)
+natsError *
+natsMicroserviceArgs_GetString(const char **val, natsMicroserviceArgs *args, int index)
 {
     if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
         return natsMicroserviceErrorInvalidArg;
@@ -123,7 +130,7 @@ natsArgs_GetString(const char **val, natsArgs *args, int index)
 /// @param data raw message data
 /// @param data_len length of data
 /// @return error in case the string is not properly terminated.
-static natsMicroserviceError *
+static natsError *
 decode_rest_of_string(char *dup, int *decoded_len, int *i, const char *data, int data_len)
 {
     char c;
@@ -183,7 +190,7 @@ decode_rest_of_string(char *dup, int *decoded_len, int *i, const char *data, int
     }
     if (!terminated)
     {
-        nats_NewMicroserviceError(NATS_INVALID_ARG, 400, "a quoted string is not properly terminated");
+        nats_NewError(400, "a quoted string is not properly terminated");
     }
 
     *decoded_len = len;
@@ -196,10 +203,10 @@ decode_rest_of_string(char *dup, int *decoded_len, int *i, const char *data, int
 /// @param data raw message data
 /// @param data_len length of data
 /// @return error.
-static natsMicroserviceError *
+static natsError *
 decode_and_dupe_rest_of_string(char **dup, int *i, const char *data, int data_len)
 {
-    natsMicroserviceError *err = NULL;
+    natsError *err = NULL;
     int start = *i;
     int decoded_len;
 
@@ -235,14 +242,13 @@ typedef enum parserState
     NumberArg,
 } parserState;
 
-static natsMicroserviceError *
+static natsError *
 parse(void **args, int *args_len, int *i, const char *data, int data_len)
 {
-    natsMicroserviceError *err = NULL;
+    natsError *err = NULL;
     char c;
     int n = 0;
     parserState state = NewArg;
-    char errbuf[1024];
     char numbuf[64];
     int num_len = 0;
     bool is_float = false;
@@ -293,8 +299,7 @@ parse(void **args, int *args_len, int *i, const char *data, int data_len)
                 break;
 
             default:
-                snprintf(errbuf, sizeof(errbuf), "unexpected '%c', an argument must be a number or a quoted string", c);
-                return nats_NewMicroserviceError(NATS_ERR, 400, errbuf);
+                return nats_Errorf(400, "unexpected '%c', an argument must be a number or a quoted string", c);
             }
             break;
 
@@ -327,7 +332,7 @@ parse(void **args, int *args_len, int *i, const char *data, int data_len)
             case ' ':
                 if (args != NULL)
                 {
-                        numbuf[num_len] = 0;
+                    numbuf[num_len] = 0;
                     if (is_float)
                     {
                         args[n] = NATS_CALLOC(1, sizeof(long double));
@@ -353,14 +358,12 @@ parse(void **args, int *args_len, int *i, const char *data, int data_len)
                 break;
 
             default:
-                snprintf(errbuf, sizeof(errbuf), "unexpected '%c', a number must be followed by a space", c);
-                return nats_NewMicroserviceError(NATS_ERR, 400, errbuf);
+                return nats_Errorf(400, "unexpected '%c', a number must be followed by a space", c);
             }
             break;
 
         default:
-            snprintf(errbuf, sizeof(errbuf), "unreachable: wrong state for a ' ', expected NewArg or NumberArg, got %d", state);
-            return nats_NewMicroserviceError(NATS_ERR, 500, errbuf);
+            return nats_Errorf(500, "unreachable: wrong state for a ' ', expected NewArg or NumberArg, got %d", state);
         }
     }
 

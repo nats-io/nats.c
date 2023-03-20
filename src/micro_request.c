@@ -39,10 +39,11 @@ natsMicroserviceRequest_GetConnection(natsMicroserviceRequest *req)
     return ((req != NULL) && (req->ep != NULL) && (req->ep->m != NULL)) ? req->ep->m->nc : NULL;
 }
 
-natsMicroserviceError *
+natsError *
 natsMicroserviceRequest_Respond(natsMicroserviceRequest *req, const char *data, int len)
 {
     natsStatus s = NATS_OK;
+    natsError *err = NULL;
 
     if ((req == NULL) || (req->msg == NULL) || (req->msg->sub == NULL) || (req->msg->sub->conn == NULL))
         return natsMicroserviceErrorInvalidArg;
@@ -50,12 +51,14 @@ natsMicroserviceRequest_Respond(natsMicroserviceRequest *req, const char *data, 
     s = natsConnection_Publish(req->msg->sub->conn, natsMsg_GetReply(req->msg), data, len);
     if (s == NATS_OK)
         return NULL;
-    else
-        return nats_NewMicroserviceError(s, 500, "failed to respond to message");
+
+    err = natsError_Wrapf(nats_NewStatusError(s), "failed to respond to a message");
+    natsMicroserviceEndpoint_updateLastError(req->ep, err);
+    return err;
 }
 
-natsMicroserviceError *
-natsMicroserviceRequest_RespondError(natsMicroserviceRequest *req, natsMicroserviceError *err, const char *data, int len)
+natsError *
+natsMicroserviceRequest_RespondError(natsMicroserviceRequest *req, natsError *err, const char *data, int len)
 {
     natsMsg *msg = NULL;
     natsStatus s = NATS_OK;
@@ -72,7 +75,7 @@ natsMicroserviceRequest_RespondError(natsMicroserviceRequest *req, natsMicroserv
     {
         s = natsMsgHeader_Set(msg, NATS_MICROSERVICE_STATUS_HDR, natsStatus_GetText(err->status));
     }
-    if (s == NATS_OK) 
+    if (s == NATS_OK)
     {
         s = natsMsgHeader_Set(msg, NATS_MICROSERVICE_ERROR_HDR, err->description);
     }
@@ -82,32 +85,32 @@ natsMicroserviceRequest_RespondError(natsMicroserviceRequest *req, natsMicroserv
         s = natsMsgHeader_Set(msg, NATS_MICROSERVICE_ERROR_CODE_HDR, buf);
     }
     IFOK(s, natsConnection_PublishMsg(req->msg->sub->conn, msg));
-    
+
     natsMsg_Destroy(msg);
+    natsMicroserviceEndpoint_updateLastError(req->ep, err);
 
     if (s == NATS_OK)
+    {
         return NULL;
+    }
     else
-        return nats_NewMicroserviceError(s, 500, "failed to respond to message");
+    {
+        err = natsError_Wrapf(nats_NewStatusError(s), "failed to respond to a message with an error");
+        return err;
+    }
 }
 
-void
-natsMicroserviceRequest_Error(natsMicroserviceRequest *req, natsMicroserviceError **err)
+void natsMicroserviceRequest_Error(natsMicroserviceRequest *req, natsError *err)
 {
-    if (err == NULL) 
-    return;
-    natsMicroserviceRequest_RespondError(req, *err, NULL, 0);
-    natsMicroserviceError_Destroy(*err);
-    *err = NULL;
-}
+    if (err == NULL)
+        return;
 
+    natsMicroserviceRequest_RespondError(req, err, NULL, 0);
+    natsError_Destroy(err);
+}
 
 void _freeMicroserviceRequest(natsMicroserviceRequest *req)
 {
-    if (req == NULL)
-        return;
-
-    NATS_FREE(req->err);
     NATS_FREE(req);
 }
 

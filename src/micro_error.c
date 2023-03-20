@@ -15,29 +15,54 @@
 #include "microp.h"
 #include "mem.h"
 
-static natsMicroserviceError _errorOutOfMemory = {
+#ifdef DEV_MODE
+// For type safety
+
+static void _retain(natsError *err) { err->refs++; }
+static void _release(natsError *err) { err->refs--; }
+
+void natsError_Lock(natsConnection *nc) { natsMutex_Lock(nc->mu); }
+void natsConn_Unlock(natsConnection *nc) { natsMutex_Unlock(nc->mu); }
+
+#else
+// We know what we are doing :-)
+
+#define _retain(c) ((c)->refs++)
+#define _release(c) ((c)->refs--)
+
+#endif // DEV_MODE
+
+static natsError _errorOutOfMemory = {
     .status = NATS_NO_MEMORY,
     .code = 500,
     .description = "Out of memory",
 };
 
-static natsMicroserviceError _errorInvalidArg = {
-        .status = NATS_INVALID_ARG,
-        .code = 400,
-        .description = "Invalid function argument",
+static natsError _errorInvalidArg = {
+    .status = NATS_INVALID_ARG,
+    .code = 400,
+    .description = "Invalid function argument",
 };
 
-static natsMicroserviceError *knownErrors[] = {
+static natsError _errorInvalidFormat = {
+    .status = NATS_INVALID_ARG,
+    .code = 400,
+    .description = "Invalid error format string",
+};
+
+static natsError *knownErrors[] = {
     &_errorOutOfMemory,
     &_errorInvalidArg,
+    &_errorInvalidFormat,
     NULL,
 };
 
-natsMicroserviceError *natsMicroserviceErrorOutOfMemory = &_errorOutOfMemory;
-natsMicroserviceError *natsMicroserviceErrorInvalidArg = &_errorInvalidArg;
+natsError *natsMicroserviceErrorOutOfMemory = &_errorOutOfMemory;
+natsError *natsMicroserviceErrorInvalidArg = &_errorInvalidArg;
 
-static const char *
-_string(natsMicroserviceError *err, char *buf, int size) {
+const char *
+natsError_String(natsError *err, char *buf, int size)
+{
     if (err == NULL || buf == NULL)
         return "";
     if (err->status == NATS_OK)
@@ -47,26 +72,131 @@ _string(natsMicroserviceError *err, char *buf, int size) {
     return buf;
 }
 
-natsMicroserviceError *
-nats_NewMicroserviceError(natsStatus s, int code, const char *description)
+natsStatus
+natsError_StatusCode(natsError *err)
 {
-    natsMicroserviceError *err = NULL;
+    return (err != NULL) ? err->status : NATS_OK;
+}
 
-    if (s == NATS_OK)
-        return NULL;
+static natsError *
+new_error(natsStatus s, int code, char *description)
+{
+    natsError *err = NULL;
 
-    err = NATS_CALLOC(1, sizeof(natsMicroserviceError));
+    err = NATS_CALLOC(1, sizeof(natsError));
     if (err == NULL)
         return &_errorOutOfMemory;
 
     err->status = s;
     err->code = code;
-    err->description = NATS_STRDUP(description); // it's ok if NULL
-    err->String = _string;
+    err->description = description;
+
     return err;
 }
 
-void natsMicroserviceError_Destroy(natsMicroserviceError *err)
+natsError *
+nats_NewError(int code, const char *description)
+{
+    return nats_Errorf(NATS_ERR, description);
+}
+
+natsError *
+nats_NewStatusError(natsStatus s)
+{
+    char *dup = NULL;
+
+    if (s == NATS_OK)
+        return NULL;
+
+    dup = NATS_STRDUP(natsStatus_GetText(s));
+    if (dup == NULL)
+        return &_errorOutOfMemory;
+
+    return new_error(s, 0, dup);
+}
+
+natsError *
+natsError_Wrapf(natsError *err, const char *format, ...)
+{
+    va_list args;
+    char *buf = NULL;
+    int len1 = 0, len2 = 0;
+    natsStatus s;
+    int code;
+
+    if (err == NULL)
+        return NULL;
+    if (nats_IsStringEmpty(format))
+        return err;
+
+    va_start(args, format);
+    len1 = vsnprintf(NULL, 0, format, args);
+    va_end(args);
+    if (len1 < 0)
+    {
+        return &_errorInvalidFormat;
+    }
+    if (!nats_IsStringEmpty(err->description))
+    {
+        len2 = strlen(err->description) + 2; // ": "
+    }
+    buf = NATS_MALLOC(len1 + len2 + 1);
+    if (buf == NULL)
+    {
+        return &_errorOutOfMemory;
+    }
+
+    va_start(args, format);
+    vsnprintf(buf, len1 + 1, format, args);
+    va_end(args);
+    if (!nats_IsStringEmpty(err->description))
+    {
+        buf[len1] = ':';
+        buf[len1 + 1] = ' ';
+        memcpy(buf + len1 + 2, err->description, len2 - 2);
+    }
+    buf[len1 + len2] = '\0';
+
+    code = err->code;
+    s = err->status;
+    natsError_Destroy(err);
+    return new_error(s, code, buf);
+}
+
+natsError *
+nats_Errorf(int code, const char *format, ...)
+{
+    va_list args1, args2;
+    char *buf = NULL;
+    int len = 0;
+
+    if ((code == 0) && nats_IsStringEmpty(format))
+        return NULL;
+
+    va_start(args1, format);
+    va_copy(args2, args1);
+
+    len = vsnprintf(NULL, 0, format, args1);
+    va_end(args1);
+    if (len < 0)
+    {
+        va_end(args2);
+        return &_errorInvalidFormat;
+    }
+    buf = NATS_MALLOC(len + 1);
+    if (buf == NULL)
+    {
+        va_end(args2);
+        return &_errorOutOfMemory;
+    }
+
+    vsnprintf(buf, len + 1, format, args2);
+    va_end(args2);
+
+    return new_error(NATS_ERR, code, buf);
+}
+
+void natsError_Destroy(natsError *err)
 {
     int i;
 
@@ -85,46 +215,27 @@ void natsMicroserviceError_Destroy(natsMicroserviceError *err)
     NATS_FREE(err);
 }
 
-natsMicroserviceError *
-nats_MicroserviceErrorFromMsg(natsStatus status, natsMsg *msg)
+natsError *
+nats_IsErrorResponse(natsStatus status, natsMsg *msg)
 {
-    natsMicroserviceError *err = NULL;
+    natsError *err = NULL;
     const char *c = NULL, *d = NULL;
     bool is_error;
-    int code = 0;
 
-    if (msg == NULL)
-        return NULL;
-
-    natsMsgHeader_Get(msg, NATS_MICROSERVICE_ERROR_CODE_HDR, &c);
-    natsMsgHeader_Get(msg, NATS_MICROSERVICE_ERROR_HDR, &d);
+    if (msg != NULL)
+    {
+        natsMsgHeader_Get(msg, NATS_MICROSERVICE_ERROR_CODE_HDR, &c);
+        natsMsgHeader_Get(msg, NATS_MICROSERVICE_ERROR_HDR, &d);
+    }
 
     is_error = (status != NATS_OK) || !nats_IsStringEmpty(c) || !nats_IsStringEmpty(d);
     if (!is_error)
         return NULL;
 
-    err = nats_NewMicroserviceError(status, 0, "");
-    if (err == NULL)
+    err = natsError_Wrapf(nats_NewStatusError(status), d);
+    if (!nats_IsStringEmpty(c) && (err != NULL))
     {
-        // This is not 100% correct - returning an OOM error that was not in the
-        // message, but since it is usually a fatal condition, it is ok.
-        return &_errorOutOfMemory;
+        err->code = atoi(c);
     }
-
-    if (nats_IsStringEmpty(d) && (status != NATS_OK))
-    {
-        d = natsStatus_GetText(status);
-        if (d == NULL)
-            d = "";
-    }
-
-    if (!nats_IsStringEmpty(c))
-    {
-        code = atoi(c);
-    }
-    err->status = status;
-    err->code = code;
-    err->description = d;
-
     return err;
 }

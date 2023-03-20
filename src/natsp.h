@@ -132,8 +132,6 @@
 #endif
 
 #define IFOK(s, c)      if (s == NATS_OK) { s = (c); }
-// TODO <>/<> do I really need it?
-#define IFOK_DO(s, c)   if (s == NATS_OK) { c; }
 
 #define NATS_MILLIS_TO_NANOS(d)     (((int64_t)d)*(int64_t)1E6)
 #define NATS_SECONDS_TO_NANOS(d)    (((int64_t)d)*(int64_t)1E9)

@@ -16,131 +16,89 @@
 
 #include "natsp.h"
 
-#define natsMicroserviceInfoResponseType "io.nats.micro.v1.info_response"
-#define natsMicroservicePingResponseType "io.nats.micro.v1.ping_response"
-#define natsMicroserviceStatsResponseType "io.nats.micro.v1.stats_response"
-#define natsMicroserviceSchemaResponseType "io.nats.micro.v1.schema_response"
-
 #define natsMicroserviceQueueGroup "q"
 
 #define natsMicroserviceDefaultEndpointName "default"
 
-struct __microserviceClient
+struct error_s
+{
+    natsStatus status;
+    int code;
+    const char *description;
+};
+
+struct microservice_client_s
 {
     natsConnection *nc;
 };
 
-struct __microserviceConfig
+struct microservice_endpoint_s
 {
-    const char *name;
-    const char *version;
-    const char *description;
-};
-
-struct __microserviceIdentity
-{
-    const char *name;
-    const char *version;
-    char *id;
-};
-
-typedef struct __microserviceEndpointList
-{
-    natsMutex *mu;
-    int len;
-    struct __microserviceEndpoint **endpoints;
-} __microserviceEndpointList;
-
-struct __microserviceEndpoint
-{
-    // The name of the endpoint, uniquely identifies the endpoint. The name ""
-    // is reserved for the top level endpoint of the service.
-    char *name;
-
-    // Indicates if the endpoint is stopped, or is actively subscribed to a
-    // subject.
-    bool stopped;
-
-    // The subject that the endpoint is listening on. The subject is also used
-    // as the prefix for the children endpoints.
+    // The subject that the endpoint is listening on (may be different from
+    // one specified in config).
     char *subject;
-    natsSubscription *sub;
-
-    // Children endpoints. Their subscriptions are prefixed with the parent's
-    // subject. Their stats are summarized in the parent's stats when requested.
-    __microserviceEndpointList *children;
-    int len_children;
-
-    // Endpoint stats. These are initialized only for running endpoints, and are
-    // cleared if the endpoint is stopped.
-    natsMutex *stats_mu;
-    natsMicroserviceEndpointStats *stats;
 
     // References to other entities.
     natsMicroservice *m;
     natsMicroserviceEndpointConfig *config;
-};
 
-struct __microservice
-{
-    natsConnection *nc;
-    int refs;
+    // Mutex for starting/stopping the endpoint, and for updating the stats.
     natsMutex *mu;
-    struct __microserviceIdentity identity;
-    struct natsMicroserviceConfig *cfg;
-    bool stopped;
-    struct __microserviceEndpoint *root;
+
+    // The subscription for the endpoint. If NULL, the endpoint is stopped.
+    natsSubscription *sub;
+
+    // Endpoint stats. These are initialized only for running endpoints, and are
+    // cleared if the endpoint is stopped.
+    natsMicroserviceEndpointStats stats;
 };
 
-struct __microserviceRequest
+struct microservice_s
+{
+    // these are set at initialization time time and do not change.
+    natsConnection *nc;
+    struct natsMicroserviceConfig *cfg;
+    char *id;
+
+    // these are are updated concurrently with access as the service runs, so
+    // need to be protected by mutex.
+    natsMutex *mu;
+
+    struct microservice_endpoint_s **endpoints;
+    int endpoints_len;
+    int endpoints_cap;
+
+    int64_t started; // UTC time expressed as number of nanoseconds since epoch.
+    bool stopped;
+    int refs;
+};
+
+struct microservice_request_s
 {
     natsMsg *msg;
-    struct __microserviceEndpoint *ep;
-    char *err;
+    struct microservice_endpoint_s *ep;
     void *closure;
 };
 
-typedef struct __args_t
-{
-    void **args;
-    int count;
-} __args_t;
-
-extern natsMicroserviceError *natsMicroserviceErrorOutOfMemory;
-extern natsMicroserviceError *natsMicroserviceErrorInvalidArg;
+extern natsError *natsMicroserviceErrorOutOfMemory;
+extern natsError *natsMicroserviceErrorInvalidArg;
 
 natsStatus
-_initMicroserviceMonitoring(natsMicroservice *m);
+micro_monitoring_init(natsMicroservice *m);
+
+natsStatus nats_clone_microservice_config(natsMicroserviceConfig **new_cfg, natsMicroserviceConfig *cfg);
+void nats_free_cloned_microservice_config(natsMicroserviceConfig *cfg);
+
+natsStatus nats_new_endpoint(natsMicroserviceEndpoint **new_endpoint, natsMicroservice *m, natsMicroserviceEndpointConfig *cfg);
+natsStatus nats_clone_endpoint_config(natsMicroserviceEndpointConfig **new_cfg, natsMicroserviceEndpointConfig *cfg);
+natsStatus nats_start_endpoint(natsMicroserviceEndpoint *ep);
+natsStatus nats_stop_endpoint(natsMicroserviceEndpoint *ep);
+void nats_free_cloned_endpoint_config(natsMicroserviceEndpointConfig *cfg);
 
 natsStatus
-_newMicroserviceEndpoint(natsMicroserviceEndpoint **new_endpoint, natsMicroservice *m, const char *name, natsMicroserviceEndpointConfig *cfg);
+nats_stop_and_destroy_endpoint(natsMicroserviceEndpoint *ep);
 
-natsStatus
-natsMicroserviceEndpoint_AddEndpoint(natsMicroserviceEndpoint **new_ep, natsMicroserviceEndpoint *parent, const char *name, natsMicroserviceEndpointConfig *cfg);
-
-natsStatus
-natsMicroserviceEndpoint_Start(natsMicroserviceEndpoint *ep);
-
-natsStatus
-natsMicroserviceEndpoint_Stop(natsMicroserviceEndpoint *ep);
-
-natsStatus
-natsMicroserviceEndpoint_Destroy(natsMicroserviceEndpoint *ep);
-
-natsStatus
-_destroyMicroserviceEndpointList(__microserviceEndpointList *list);
-
-natsStatus
-_newMicroserviceEndpointList(__microserviceEndpointList **new_list);
-
-natsMicroserviceEndpoint *
-_microserviceEndpointList_Find(__microserviceEndpointList *list, const char *name, int *index);
-
-natsStatus
-_microserviceEndpointList_Put(__microserviceEndpointList *list, int index, natsMicroserviceEndpoint *ep);
-
-natsStatus
-_microserviceEndpointList_Remove(__microserviceEndpointList *list, int index);
+void natsMicroserviceEndpoint_updateLastError(natsMicroserviceEndpoint *ep, natsError *err);
 
 natsStatus
 _newMicroserviceRequest(natsMicroserviceRequest **new_request, natsMsg *msg);

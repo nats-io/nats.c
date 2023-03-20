@@ -18,85 +18,143 @@
 #include "mem.h"
 
 static natsStatus
-_newStats(natsMicroserviceEndpointStats **new_stats, const char *name, const char *subject);
-static natsStatus
-_setLastError(natsMicroserviceEndpointStats *stats, const char *error);
-static void
-_freeStats(natsMicroserviceEndpointStats *stats);
-
+free_endpoint(natsMicroserviceEndpoint *ep);
 static bool
-_isValidName(const char *name);
+is_valid_name(const char *name);
 static bool
-_isValidSubject(const char *subject);
-static natsStatus
-_lazyInitChildren(natsMicroserviceEndpoint *ep);
-static natsStatus
-_findAndRemovePreviousChild(int *found_index, natsMicroserviceEndpoint *ep, const char *name);
+is_valid_subject(const char *subject);
 static void
-_handleEndpointRequest(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
+handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 
 natsStatus
-natsMicroserviceEndpoint_AddEndpoint(natsMicroserviceEndpoint **new_ep, natsMicroserviceEndpoint *parent, const char *name, natsMicroserviceEndpointConfig *cfg)
+nats_new_endpoint(natsMicroserviceEndpoint **new_endpoint, natsMicroservice *m, natsMicroserviceEndpointConfig *cfg)
 {
     natsStatus s = NATS_OK;
-    int index = -1;
     natsMicroserviceEndpoint *ep = NULL;
+    natsMicroserviceEndpointConfig *clone_cfg = NULL;
 
-    // TODO <>/<> return more comprehensive errors
-    if (parent == NULL)
+    if (!is_valid_name(cfg->name) || (cfg->handler == NULL))
     {
-        return nats_setDefaultError(NATS_INVALID_ARG);
+        s = NATS_INVALID_ARG;
     }
-    if (cfg != NULL)
+    if ((s == NATS_OK) && (cfg->subject != NULL) && !is_valid_subject(cfg->subject))
     {
-        if ((cfg->subject == NULL) || (!_isValidName(name)) || (!_isValidSubject(cfg->subject)))
-        {
-            return nats_setDefaultError(NATS_INVALID_ARG);
-        }
+        s = NATS_INVALID_ARG;
     }
-
-    IFOK(s, _lazyInitChildren(parent));
-    IFOK(s, _newMicroserviceEndpoint(&ep, parent->m, name, cfg));
-    IFOK(s, _findAndRemovePreviousChild(&index, parent, name));
-    IFOK(s, _microserviceEndpointList_Put(parent->children, index, ep));
-    IFOK(s, natsMicroserviceEndpoint_Start(ep));
-
+    IFOK(s, nats_clone_endpoint_config(&clone_cfg, cfg));
+    IFOK(s, NATS_CALLOCS(&ep, 1, sizeof(natsMicroserviceEndpoint)));
+    IFOK(s, natsMutex_Create(&ep->mu));
     if (s == NATS_OK)
     {
-        if (new_ep != NULL)
-            *new_ep = ep;
+        ep->m = m;
+        ep->subject = NATS_STRDUP(nats_IsStringEmpty(cfg->subject) ? cfg->name : cfg->subject);
+        ep->config = clone_cfg;
+        *new_endpoint = ep;
     }
     else
     {
-        natsMicroserviceEndpoint_Destroy(ep);
+        nats_free_cloned_endpoint_config(clone_cfg);
+        free_endpoint(ep);
     }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
-natsMicroserviceEndpoint_Start(natsMicroserviceEndpoint *ep)
+nats_clone_endpoint_config(natsMicroserviceEndpointConfig **out, natsMicroserviceEndpointConfig *cfg)
+{
+    natsStatus s = NATS_OK;
+    natsMicroserviceEndpointConfig *new_cfg = NULL;
+    natsMicroserviceSchema *new_schema = NULL;
+    char *new_name = NULL;
+    char *new_subject = NULL;
+    char *new_request = NULL;
+    char *new_response = NULL;
+
+    if (out == NULL || cfg == NULL)
+        return NATS_INVALID_ARG;
+
+    s = NATS_CALLOCS(&new_cfg, 1, sizeof(natsMicroserviceEndpointConfig));
+    if (s == NATS_OK && cfg->name != NULL)
+    {
+        DUP_STRING(s, new_name, cfg->name);
+    }
+    if (s == NATS_OK && cfg->subject != NULL)
+    {
+        DUP_STRING(s, new_subject, cfg->subject);
+    }
+    if (s == NATS_OK && cfg->schema != NULL)
+    {
+        s = NATS_CALLOCS(&new_schema, 1, sizeof(natsMicroserviceSchema));
+        if (s == NATS_OK && cfg->schema->request != NULL)
+        {
+            DUP_STRING(s, new_request, cfg->schema->request);
+        }
+        if (s == NATS_OK && cfg->schema->response != NULL)
+        {
+            DUP_STRING(s, new_response, cfg->schema->response);
+        }
+        if (s == NATS_OK)
+        {
+            new_schema->request = new_request;
+            new_schema->response = new_response;
+        }
+    }
+    if (s == NATS_OK)
+    {
+        memcpy(new_cfg, cfg, sizeof(natsMicroserviceEndpointConfig));
+        new_cfg->schema = new_schema;
+        new_cfg->name = new_name;
+        new_cfg->subject = new_subject;
+        *out = new_cfg;
+    }
+    else
+    {
+        NATS_FREE(new_cfg);
+        NATS_FREE(new_schema);
+        NATS_FREE(new_name);
+        NATS_FREE(new_subject);
+        NATS_FREE(new_request);
+        NATS_FREE(new_response);
+    }
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+void nats_free_cloned_endpoint_config(natsMicroserviceEndpointConfig *cfg)
+{
+    if (cfg == NULL)
+        return;
+
+    // the strings are declared const for the public, but in a clone these need
+    // to be freed.
+    NATS_FREE((char *)cfg->name);
+    NATS_FREE((char *)cfg->subject);
+    NATS_FREE((char *)cfg->schema->request);
+    NATS_FREE((char *)cfg->schema->response);
+
+    NATS_FREE(cfg->schema);
+    NATS_FREE(cfg);
+}
+
+natsStatus
+nats_start_endpoint(natsMicroserviceEndpoint *ep)
 {
     if ((ep->subject == NULL) || (ep->config == NULL) || (ep->config->handler == NULL))
         // nothing to do
         return NATS_OK;
 
+    // reset the stats.
+    memset(&ep->stats, 0, sizeof(ep->stats));
+
     return natsConnection_QueueSubscribe(&ep->sub, ep->m->nc, ep->subject,
-                                         natsMicroserviceQueueGroup, _handleEndpointRequest, ep);
+                                         natsMicroserviceQueueGroup, handle_request, ep);
 }
 
 // TODO <>/<> COPY FROM GO
 natsStatus
-natsMicroserviceEndpoint_Stop(natsMicroserviceEndpoint *ep)
+nats_stop_endpoint(natsMicroserviceEndpoint *ep)
 {
     natsStatus s = NATS_OK;
-
-    // TODO <>/<> review locking for modifying endpoints, may not be necessary
-    // or ep may need its own lock (stats).
-
-    // This is a rare call, usually happens at the initialization of the
-    // microservice, so it's ok to lock for the duration of the function, may
-    // not be necessary at all but will not hurt.
-    natsMutex_Lock(ep->m->mu);
 
     if (ep->sub != NULL)
     {
@@ -105,47 +163,48 @@ natsMicroserviceEndpoint_Stop(natsMicroserviceEndpoint *ep)
     if (s == NATS_OK)
     {
         ep->sub = NULL;
-        ep->stopped = true;
-        // TODO <>/<> unsafe
-        ep->stats->stopped = true;
+
+        // reset the stats.
+        memset(&ep->stats, 0, sizeof(ep->stats));
     }
 
-    natsMutex_Unlock(ep->m->mu);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 static natsStatus
-_freeMicroserviceEndpoint(natsMicroserviceEndpoint *ep)
+free_endpoint(natsMicroserviceEndpoint *ep)
 {
-    // ignore ep->children, must be taken care of by the caller.
-    _freeStats(ep->stats);
-    NATS_FREE(ep->name);
     NATS_FREE(ep->subject);
+    natsMutex_Destroy(ep->mu);
+    nats_free_cloned_endpoint_config(ep->config);
     NATS_FREE(ep);
     return NATS_OK;
 }
 
 natsStatus
-natsMicroserviceEndpoint_Destroy(natsMicroserviceEndpoint *ep)
+nats_stop_and_destroy_endpoint(natsMicroserviceEndpoint *ep)
 {
     natsStatus s = NATS_OK;
 
     if (ep == NULL)
         return NATS_OK;
 
-    IFOK(s, _destroyMicroserviceEndpointList(ep->children));
-    IFOK(s, natsMicroserviceEndpoint_Stop(ep));
-    IFOK(s, _freeMicroserviceEndpoint(ep));
+    IFOK(s, nats_stop_endpoint(ep));
+    IFOK(s, free_endpoint(ep));
 
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 static bool
-_isValidName(const char *name)
+is_valid_name(const char *name)
 {
     int i;
-    int len = (int)strlen(name);
+    int len;
 
+    if (name == NULL)
+        return false;
+
+    len = (int)strlen(name);
     if (len == 0)
         return false;
 
@@ -158,11 +217,15 @@ _isValidName(const char *name)
 }
 
 static bool
-_isValidSubject(const char *subject)
+is_valid_subject(const char *subject)
 {
     int i;
-    int len = (int)strlen(subject);
+    int len;
 
+    if (subject == NULL)
+        return false;
+
+    len = (int)strlen(subject);
     if (len == 0)
         return false;
 
@@ -178,69 +241,16 @@ _isValidSubject(const char *subject)
     return true;
 }
 
-static natsStatus
-_lazyInitChildren(natsMicroserviceEndpoint *ep)
-{
-    if (ep->children == NULL)
-    {
-        return _newMicroserviceEndpointList(&ep->children);
-    }
-    return NATS_OK;
-}
-
-static natsStatus
-_findAndRemovePreviousChild(int *found_index, natsMicroserviceEndpoint *ep, const char *name)
-{
-    natsMicroserviceEndpoint *found = _microserviceEndpointList_Find(ep->children, name, found_index);
-    if (found != NULL)
-    {
-        return natsMicroserviceEndpoint_Destroy(found);
-    }
-    return NATS_OK;
-}
-
-natsStatus
-_newMicroserviceEndpoint(natsMicroserviceEndpoint **new_endpoint, natsMicroservice *m, const char *name, natsMicroserviceEndpointConfig *cfg)
-{
-    natsStatus s = NATS_OK;
-    natsMicroserviceEndpoint *ep = NULL;
-    // TODO <>/<> do I really need to duplicate name, subject?
-    char *dup_name = NULL;
-    char *dup_subject = NULL;
-
-    IFOK(s, NATS_CALLOCS(&ep, 1, sizeof(natsMicroserviceEndpoint)));
-    IFOK(s, NATS_STRDUPS(&dup_name, name));
-    if ((cfg != NULL) && (cfg->subject != NULL))
-        IFOK(s, NATS_STRDUPS(&dup_subject, cfg->subject));
-    IFOK(s, _newStats(&ep->stats, dup_name, dup_subject));
-
-    if (s == NATS_OK)
-    {
-        ep->m = m;
-        ep->name = dup_name;
-        ep->subject = dup_subject;
-        ep->config = cfg;
-        *new_endpoint = ep;
-    }
-    else
-    {
-        _freeStats(ep->stats);
-        NATS_FREE(ep);
-        NATS_FREE(dup_name);
-        NATS_FREE(dup_subject);
-    }
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
 static void
-_handleEndpointRequest(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     natsStatus s = NATS_OK;
     natsMicroserviceEndpoint *ep = (natsMicroserviceEndpoint *)closure;
-    // natsMicroserviceEndpointStats *stats = &ep->stats;
+    natsMicroserviceEndpointStats *stats = &ep->stats;
     natsMicroserviceEndpointConfig *cfg = ep->config;
     natsMicroserviceRequest *req = NULL;
     natsMicroserviceRequestHandler handler = cfg->handler;
+    int64_t start, elapsed_ns, full_s;
 
     if (handler == NULL)
     {
@@ -251,70 +261,39 @@ _handleEndpointRequest(natsConnection *nc, natsSubscription *sub, natsMsg *msg, 
     }
 
     s = _newMicroserviceRequest(&req, msg);
-    if (s == NATS_OK)
+    if (s != NATS_OK)
     {
-        req->ep = ep;
-        handler(ep->m, req);
+        natsMsg_Destroy(msg);
+        return;
     }
 
-    // Update stats
-    // natsMutex_Lock(ep->mu);
-    // stats->numRequests++;
-    // natsMutex_Unlock(ep->mu);
+    // handle the request.
+    start = nats_NowInNanoSeconds();
+    req->ep = ep;
+    handler(ep->m, req);
+    elapsed_ns = nats_NowInNanoSeconds() - start;
+
+    // update stats.
+    natsMutex_Lock(ep->mu);
+    stats->num_requests++;
+    stats->processing_time_ns += elapsed_ns;
+    full_s = stats->processing_time_ns / 1000000000;
+    stats->processing_time_s += full_s;
+    stats->processing_time_ns -= full_s * 1000000000;
+
+    natsMutex_Unlock(ep->mu);
 
     _freeMicroserviceRequest(req);
     natsMsg_Destroy(msg);
 }
 
-static natsStatus
-_newStats(natsMicroserviceEndpointStats **new_stats, const char *name, const char *subject)
+void natsMicroserviceEndpoint_updateLastError(natsMicroserviceEndpoint *ep, natsError *err)
 {
-    natsStatus s = NATS_OK;
-    natsMicroserviceEndpointStats *stats = NULL;
-
-    stats = (natsMicroserviceEndpointStats *)NATS_CALLOC(1, sizeof(natsMicroserviceEndpointStats));
-    s = (stats != NULL) ? NATS_OK : nats_setDefaultError(NATS_NO_MEMORY);
-    if (s == NATS_OK)
-    {
-        stats->name = name;
-        stats->subject = subject;
-        *new_stats = stats;
-        return NATS_OK;
-    }
-
-    NATS_FREE(stats);
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
-// All locking is to be done by the caller.
-static natsStatus
-_setLastError(natsMicroserviceEndpointStats *stats, const char *error)
-{
-    natsStatus s = NATS_OK;
-
-    if (stats->last_error != NULL)
-        NATS_FREE(stats->last_error);
-
-    if (nats_IsStringEmpty(error))
-    {
-        stats->last_error = NULL;
-        return NATS_OK;
-    }
-
-    stats->last_error = NATS_STRDUP(error);
-    s = (stats->last_error != NULL) ? NATS_OK : nats_setDefaultError(NATS_NO_MEMORY);
-
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
-static void
-_freeStats(natsMicroserviceEndpointStats *stats)
-{
-    if (stats == NULL)
+    if (err == NULL)
         return;
 
-    if (stats->last_error != NULL)
-        NATS_FREE(stats->last_error);
-
-    NATS_FREE(stats);
+    natsMutex_Lock(ep->mu);
+    ep->stats.num_errors++;
+    natsError_String(err, ep->stats.last_error_string, sizeof(ep->stats.last_error_string));
+    natsMutex_Unlock(ep->mu);
 }

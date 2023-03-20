@@ -16,6 +16,7 @@
 
 #include <nats.h>
 #include <micro.h>
+#include <micro_args.h>
 #include <stdio.h>
 #include <string.h>
 

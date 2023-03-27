@@ -19,24 +19,24 @@
 #include "util.h"
 
 static natsStatus
-marshal_ping(natsBuffer **new_buf, natsMicroservice *m);
+marshal_ping(natsBuffer **new_buf, microService *m);
 static void
 handle_ping(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 
-static natsStatus
-marshal_info(natsBuffer **new_buf, natsMicroserviceInfo *info);
+static microError*
+marshal_info(natsBuffer **new_buf, microServiceInfo *info);
 static void
 handle_info(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 
-static natsStatus
-marshal_stats(natsBuffer **new_buf, natsMicroserviceStats *stats);
+static microError *
+marshal_stats(natsBuffer **new_buf, microServiceStats *stats);
 static void
 handle_stats(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 
 static natsStatus
-add_internal_handler(natsMicroservice *m, const char *verb, const char *kind, const char *id, const char *name, natsMsgHandler handler);
+add_internal_handler(microService *m, const char *verb, const char *kind, const char *id, const char *name, natsMsgHandler handler);
 static natsStatus
-add_verb_handlers(natsMicroservice *m, const char *verb, natsMsgHandler handler);
+add_verb_handlers(microService *m, const char *verb, natsMsgHandler handler);
 static natsStatus
 new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
 static natsStatus
@@ -50,13 +50,13 @@ static int
 fmt_int(char buf[], int w, uint64_t v);
 
 natsStatus
-micro_monitoring_init(natsMicroservice *m)
+micro_init_monitoring(microService *m)
 {
     natsStatus s = NATS_OK;
 
-    IFOK(s, add_verb_handlers(m, natsMicroservicePingVerb, handle_ping));
-    IFOK(s, add_verb_handlers(m, natsMicroserviceStatsVerb, handle_stats));
-    IFOK(s, add_verb_handlers(m, natsMicroserviceInfoVerb, handle_info));
+    IFOK(s, add_verb_handlers(m, MICRO_PING_VERB, handle_ping));
+    IFOK(s, add_verb_handlers(m, MICRO_STATS_VERB, handle_stats));
+    IFOK(s, add_verb_handlers(m, MICRO_INFO_VERB, handle_info));
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -65,8 +65,8 @@ static void
 handle_ping(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     natsStatus s = NATS_OK;
-    natsMicroservice *m = (natsMicroservice *)closure;
-    natsMicroserviceRequest req = {
+    microService *m = (microService *)closure;
+    microRequest req = {
         .msg = msg,
     };
     natsBuffer *buf = NULL;
@@ -74,56 +74,44 @@ handle_ping(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closu
     s = marshal_ping(&buf, m);
     if (s == NATS_OK)
     {
-        natsMicroserviceRequest_Respond(&req, natsBuf_Data(buf), natsBuf_Len(buf));
+        microRequest_Respond(&req, NULL, natsBuf_Data(buf), natsBuf_Len(buf));
     }
     natsBuf_Destroy(buf);
 }
 
 void handle_info(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    natsStatus s = NATS_OK;
-    natsMicroservice *m = (natsMicroservice *)closure;
-    natsMicroserviceRequest req = {
+    microError *err = NULL;
+    microService *m = (microService *)closure;
+    microRequest req = {
         .msg = msg,
     };
-    natsMicroserviceInfo *info = NULL;
+    microServiceInfo *info = NULL;
     natsBuffer *buf = NULL;
 
-    s = natsMicroservice_Info(&info, m);
-    IFOK(s, marshal_info(&buf, info));
-    if (s == NATS_OK)
-    {
-        natsMicroserviceRequest_Respond(&req, natsBuf_Data(buf), natsBuf_Len(buf));
-    }
-    else
-    {
-        natsMicroserviceRequest_Error(&req, nats_NewStatusError(s));
-    }
+    MICRO_CALL(err, microService_GetInfo(&info, m));
+    MICRO_CALL(err, marshal_info(&buf, info));
+
+    microRequest_Respond(&req, &err, natsBuf_Data(buf), natsBuf_Len(buf));
     natsBuf_Destroy(buf);
-    natsMicroserviceInfo_Destroy(info);
+    microServiceInfo_Destroy(info);
 }
 
 static void
 handle_stats(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    natsStatus s = NATS_OK;
-    natsMicroservice *m = (natsMicroservice *)closure;
-    natsMicroserviceRequest req = {
+    microError *err = NULL;
+    microService *m = (microService *)closure;
+    microRequest req = {
         .msg = msg,
     };
-    natsMicroserviceStats *stats = NULL;
+    microServiceStats *stats = NULL;
     natsBuffer *buf = NULL;
 
-    s = natsMicroservice_Stats(&stats, m);
-    IFOK(s, marshal_stats(&buf, stats));
-    if (s == NATS_OK)
-    {
-        natsMicroserviceRequest_Respond(&req, natsBuf_Data(buf), natsBuf_Len(buf));
-    }
-    else
-    {
-        natsMicroserviceRequest_Error(&req, nats_NewStatusError(s));
-    }
+    MICRO_CALL(err, natsMicroservice_GetStats(&stats, m));
+    MICRO_CALL(err, marshal_stats(&buf, stats));
+
+    microRequest_Respond(&req, &err, natsBuf_Data(buf), natsBuf_Len(buf));
     natsBuf_Destroy(buf);
     natsMicroserviceStats_Destroy(stats);
 }
@@ -182,15 +170,15 @@ new_control_subject(char **newSubject, const char *verb, const char *name, const
     }
 
     else if (nats_IsStringEmpty(name) && nats_IsStringEmpty(id))
-        return new_dotted_subject(newSubject, 2, natsMicroserviceAPIPrefix, verb);
+        return new_dotted_subject(newSubject, 2, MICRO_API_PREFIX, verb);
     else if (nats_IsStringEmpty(id))
-        return new_dotted_subject(newSubject, 3, natsMicroserviceAPIPrefix, verb, name);
+        return new_dotted_subject(newSubject, 3, MICRO_API_PREFIX, verb, name);
     else
-        return new_dotted_subject(newSubject, 4, natsMicroserviceAPIPrefix, verb, name, id);
+        return new_dotted_subject(newSubject, 4, MICRO_API_PREFIX, verb, name, id);
 }
 
 static natsStatus
-add_internal_handler(natsMicroservice *m, const char *verb, const char *kind,
+add_internal_handler(microService *m, const char *verb, const char *kind,
                      const char *id, const char *name, natsMsgHandler handler)
 {
 
@@ -210,7 +198,7 @@ add_internal_handler(natsMicroservice *m, const char *verb, const char *kind,
     }
     else
     {
-        natsMicroservice_Stop(m);
+        microService_Stop(m);
         return NATS_UPDATE_ERR_STACK(s);
     }
 }
@@ -220,7 +208,7 @@ add_internal_handler(natsMicroservice *m, const char *verb, const char *kind,
 // written with the framework, one that handles all services of a particular
 // kind, and finally a specific service instance.
 static natsStatus
-add_verb_handlers(natsMicroservice *m, const char *verb, natsMsgHandler handler)
+add_verb_handlers(microService *m, const char *verb, natsMsgHandler handler)
 {
     natsStatus s = NATS_OK;
     char name[1024];
@@ -249,7 +237,7 @@ add_verb_handlers(natsMicroservice *m, const char *verb, natsMsgHandler handler)
     IFOK(s, natsBuf_Append(buf, "\"" _sep, -1));
 
 static natsStatus
-marshal_ping(natsBuffer **new_buf, natsMicroservice *m)
+marshal_ping(natsBuffer **new_buf, microService *m)
 {
     natsBuffer *buf = NULL;
     natsStatus s;
@@ -262,7 +250,7 @@ marshal_ping(natsBuffer **new_buf, natsMicroservice *m)
     IFOK_attr("name", m->cfg->name, ",");
     IFOK_attr("version", m->cfg->version, ",");
     IFOK_attr("id", m->id, ",");
-    IFOK_attr("type", natsMicroservicePingResponseType, "");
+    IFOK_attr("type", MICRO_PING_RESPONSE_TYPE, "");
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
     if (s == NATS_OK)
@@ -277,17 +265,14 @@ marshal_ping(natsBuffer **new_buf, natsMicroservice *m)
     }
 }
 
-static natsStatus
-marshal_info(natsBuffer **new_buf, natsMicroserviceInfo *info)
+static microError*
+marshal_info(natsBuffer **new_buf, microServiceInfo *info)
 {
     natsBuffer *buf = NULL;
     natsStatus s;
 
     s = natsBuf_Create(&buf, 4096);
-    if (s != NATS_OK)
-        return NATS_UPDATE_ERR_STACK(s);
-
-    s = natsBuf_Append(buf, "{", -1);
+    IFOK(s, natsBuf_Append(buf, "{", -1));
     IFOK_attr("description", info->description, ",");
     IFOK_attr("id", info->id, ",");
     IFOK_attr("name", info->name, ",");
@@ -312,29 +297,26 @@ marshal_info(natsBuffer **new_buf, natsMicroserviceInfo *info)
     if (s == NATS_OK)
     {
         *new_buf = buf;
-        return NATS_OK;
+        return NULL;
     }
     else
     {
         natsBuf_Destroy(buf);
-        return NATS_UPDATE_ERR_STACK(s);
+        return microError_Wrapf(microError_FromStatus(s), "failed to marshal service info");
     }
 }
 
-static natsStatus
-marshal_stats(natsBuffer **new_buf, natsMicroserviceStats *stats)
+static microError*
+marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
 {
     natsBuffer *buf = NULL;
     natsStatus s;
     int i;
     char timebuf[128];
-    natsMicroserviceEndpointStats *ep;
+    microEndpointStats *ep;
 
     s = natsBuf_Create(&buf, 8 * 1024);
-    if (s != NATS_OK)
-        return NATS_UPDATE_ERR_STACK(s);
-
-    s = natsBuf_AppendByte(buf, '{');
+    IFOK(s, natsBuf_AppendByte(buf, '{'));
     IFOK_attr("id", stats->id, ",");
     IFOK_attr("name", stats->name, ",");
     IFOK_attr("type", stats->type, ",");
@@ -370,12 +352,12 @@ marshal_stats(natsBuffer **new_buf, natsMicroserviceStats *stats)
     if (s == NATS_OK)
     {
         *new_buf = buf;
-        return NATS_OK;
+        return NULL;
     }
     else
     {
         natsBuf_Destroy(buf);
-        return NATS_UPDATE_ERR_STACK(s);
+        return microError_Wrapf(microError_FromStatus(s), "failed to marshal service info");
     }
 }
 

@@ -18,7 +18,7 @@
 #include "mem.h"
 
 static natsStatus
-free_endpoint(natsMicroserviceEndpoint *ep);
+free_endpoint(microEndpoint *ep);
 static bool
 is_valid_name(const char *name);
 static bool
@@ -27,11 +27,11 @@ static void
 handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 
 natsStatus
-nats_new_endpoint(natsMicroserviceEndpoint **new_endpoint, natsMicroservice *m, natsMicroserviceEndpointConfig *cfg)
+micro_new_endpoint(microEndpoint **new_endpoint, microService *m, microEndpointConfig *cfg)
 {
     natsStatus s = NATS_OK;
-    natsMicroserviceEndpoint *ep = NULL;
-    natsMicroserviceEndpointConfig *clone_cfg = NULL;
+    microEndpoint *ep = NULL;
+    microEndpointConfig *clone_cfg = NULL;
 
     if (!is_valid_name(cfg->name) || (cfg->handler == NULL))
     {
@@ -41,8 +41,8 @@ nats_new_endpoint(natsMicroserviceEndpoint **new_endpoint, natsMicroservice *m, 
     {
         s = NATS_INVALID_ARG;
     }
-    IFOK(s, nats_clone_endpoint_config(&clone_cfg, cfg));
-    IFOK(s, NATS_CALLOCS(&ep, 1, sizeof(natsMicroserviceEndpoint)));
+    IFOK(s, micro_clone_endpoint_config(&clone_cfg, cfg));
+    IFOK(s, NATS_CALLOCS(&ep, 1, sizeof(microEndpoint)));
     IFOK(s, natsMutex_Create(&ep->mu));
     if (s == NATS_OK)
     {
@@ -53,18 +53,18 @@ nats_new_endpoint(natsMicroserviceEndpoint **new_endpoint, natsMicroservice *m, 
     }
     else
     {
-        nats_free_cloned_endpoint_config(clone_cfg);
+        micro_free_cloned_endpoint_config(clone_cfg);
         free_endpoint(ep);
     }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
-nats_clone_endpoint_config(natsMicroserviceEndpointConfig **out, natsMicroserviceEndpointConfig *cfg)
+micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
 {
     natsStatus s = NATS_OK;
-    natsMicroserviceEndpointConfig *new_cfg = NULL;
-    natsMicroserviceSchema *new_schema = NULL;
+    microEndpointConfig *new_cfg = NULL;
+    microSchema *new_schema = NULL;
     char *new_name = NULL;
     char *new_subject = NULL;
     char *new_request = NULL;
@@ -73,7 +73,7 @@ nats_clone_endpoint_config(natsMicroserviceEndpointConfig **out, natsMicroservic
     if (out == NULL || cfg == NULL)
         return NATS_INVALID_ARG;
 
-    s = NATS_CALLOCS(&new_cfg, 1, sizeof(natsMicroserviceEndpointConfig));
+    s = NATS_CALLOCS(&new_cfg, 1, sizeof(microEndpointConfig));
     if (s == NATS_OK && cfg->name != NULL)
     {
         DUP_STRING(s, new_name, cfg->name);
@@ -84,7 +84,7 @@ nats_clone_endpoint_config(natsMicroserviceEndpointConfig **out, natsMicroservic
     }
     if (s == NATS_OK && cfg->schema != NULL)
     {
-        s = NATS_CALLOCS(&new_schema, 1, sizeof(natsMicroserviceSchema));
+        s = NATS_CALLOCS(&new_schema, 1, sizeof(microSchema));
         if (s == NATS_OK && cfg->schema->request != NULL)
         {
             DUP_STRING(s, new_request, cfg->schema->request);
@@ -101,7 +101,7 @@ nats_clone_endpoint_config(natsMicroserviceEndpointConfig **out, natsMicroservic
     }
     if (s == NATS_OK)
     {
-        memcpy(new_cfg, cfg, sizeof(natsMicroserviceEndpointConfig));
+        memcpy(new_cfg, cfg, sizeof(microEndpointConfig));
         new_cfg->schema = new_schema;
         new_cfg->name = new_name;
         new_cfg->subject = new_subject;
@@ -120,7 +120,7 @@ nats_clone_endpoint_config(natsMicroserviceEndpointConfig **out, natsMicroservic
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-void nats_free_cloned_endpoint_config(natsMicroserviceEndpointConfig *cfg)
+void micro_free_cloned_endpoint_config(microEndpointConfig *cfg)
 {
     if (cfg == NULL)
         return;
@@ -137,7 +137,7 @@ void nats_free_cloned_endpoint_config(natsMicroserviceEndpointConfig *cfg)
 }
 
 natsStatus
-nats_start_endpoint(natsMicroserviceEndpoint *ep)
+micro_start_endpoint(microEndpoint *ep)
 {
     if ((ep->subject == NULL) || (ep->config == NULL) || (ep->config->handler == NULL))
         // nothing to do
@@ -147,12 +147,12 @@ nats_start_endpoint(natsMicroserviceEndpoint *ep)
     memset(&ep->stats, 0, sizeof(ep->stats));
 
     return natsConnection_QueueSubscribe(&ep->sub, ep->m->nc, ep->subject,
-                                         natsMicroserviceQueueGroup, handle_request, ep);
+                                         MICRO_QUEUE_GROUP, handle_request, ep);
 }
 
 // TODO <>/<> COPY FROM GO
 natsStatus
-nats_stop_endpoint(natsMicroserviceEndpoint *ep)
+micro_stop_endpoint(microEndpoint *ep)
 {
     natsStatus s = NATS_OK;
 
@@ -172,24 +172,24 @@ nats_stop_endpoint(natsMicroserviceEndpoint *ep)
 }
 
 static natsStatus
-free_endpoint(natsMicroserviceEndpoint *ep)
+free_endpoint(microEndpoint *ep)
 {
     NATS_FREE(ep->subject);
     natsMutex_Destroy(ep->mu);
-    nats_free_cloned_endpoint_config(ep->config);
+    micro_free_cloned_endpoint_config(ep->config);
     NATS_FREE(ep);
     return NATS_OK;
 }
 
 natsStatus
-nats_stop_and_destroy_endpoint(natsMicroserviceEndpoint *ep)
+micro_stop_and_destroy_endpoint(microEndpoint *ep)
 {
     natsStatus s = NATS_OK;
 
     if (ep == NULL)
         return NATS_OK;
 
-    IFOK(s, nats_stop_endpoint(ep));
+    IFOK(s, micro_stop_endpoint(ep));
     IFOK(s, free_endpoint(ep));
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -245,11 +245,11 @@ static void
 handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     natsStatus s = NATS_OK;
-    natsMicroserviceEndpoint *ep = (natsMicroserviceEndpoint *)closure;
-    natsMicroserviceEndpointStats *stats = &ep->stats;
-    natsMicroserviceEndpointConfig *cfg = ep->config;
-    natsMicroserviceRequest *req = NULL;
-    natsMicroserviceRequestHandler handler = cfg->handler;
+    microEndpoint *ep = (microEndpoint *)closure;
+    microEndpointStats *stats = &ep->stats;
+    microEndpointConfig *cfg = ep->config;
+    microRequest *req = NULL;
+    microRequestHandler handler = cfg->handler;
     int64_t start, elapsed_ns, full_s;
 
     if (handler == NULL)
@@ -260,7 +260,7 @@ handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *cl
         return;
     }
 
-    s = _newMicroserviceRequest(&req, msg);
+    s = micro_new_request(&req, msg);
     if (s != NATS_OK)
     {
         natsMsg_Destroy(msg);
@@ -283,17 +283,17 @@ handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *cl
 
     natsMutex_Unlock(ep->mu);
 
-    _freeMicroserviceRequest(req);
+    micro_free_request(req);
     natsMsg_Destroy(msg);
 }
 
-void natsMicroserviceEndpoint_updateLastError(natsMicroserviceEndpoint *ep, natsError *err)
+void micro_update_last_error(microEndpoint *ep, microError *err)
 {
     if (err == NULL)
         return;
 
     natsMutex_Lock(ep->mu);
     ep->stats.num_errors++;
-    natsError_String(err, ep->stats.last_error_string, sizeof(ep->stats.last_error_string));
+    microError_String(err, ep->stats.last_error_string, sizeof(ep->stats.last_error_string));
     natsMutex_Unlock(ep->mu);
 }

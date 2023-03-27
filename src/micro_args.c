@@ -22,40 +22,23 @@ struct args_s
     int count;
 };
 
-static natsError *parse(void **args, int *args_len, int *i, const char *data, int data_len);
+static microError *parse(void **args, int *args_len, const char *data, int data_len);
 
-natsError *
-nats_ParseMicroserviceArgs(natsMicroserviceArgs **new_args, const char *data, int data_len)
+microError *
+micro_ParseArgs(microArgs **new_args, const char *data, int data_len)
 {
-    natsError *err = NULL;
+    microError *err = NULL;
     int n;
-    int i = 0;
-    natsMicroserviceArgs *args = NULL;
+    microArgs *args = NULL;
 
     if ((new_args == NULL) || (data == NULL) || (data_len < 0))
-        return nats_NewError(500, "invalid function argument");
+        return micro_NewErrorf(500, "invalid function argument");
 
-    // parse the number of arguments without allocating.
-    err = parse(NULL, &n, &i, data, data_len);
-    if (err == NULL)
-    {
-        args = NATS_CALLOC(1, sizeof(natsMicroserviceArgs));
-        if (args == NULL)
-            err = natsMicroserviceErrorOutOfMemory;
-    }
-    if (err == NULL)
-    {
-        args->args = NATS_CALLOC(n, sizeof(void *));
-        if (args == NULL)
-            err = natsMicroserviceErrorOutOfMemory;
-        else
-            args->count = n;
-    }
-    if (err == NULL)
-    {
-        i = 0;
-        err = parse(args->args, &n, &i, data, data_len);
-    }
+    MICRO_CALL(err, parse(NULL, &n, data, data_len));
+    MICRO_CALL(err, MICRO_CALLOC(args, 1, sizeof(microArgs)));
+    MICRO_CALL(err, MICRO_CALLOC(args->args, n, sizeof(void *)));
+    MICRO_DO(err, args->count = n);
+    MICRO_CALL(err, parse(args->args, &n, data, data_len));
 
     if (err == NULL)
     {
@@ -63,13 +46,12 @@ nats_ParseMicroserviceArgs(natsMicroserviceArgs **new_args, const char *data, in
     }
     else
     {
-        natsMicroserviceArgs_Destroy(args);
+        microArgs_Destroy(args);
     }
-
     return err;
 }
 
-void natsMicroserviceArgs_Destroy(natsMicroserviceArgs *args)
+void microArgs_Destroy(microArgs *args)
 {
     int i;
 
@@ -84,7 +66,7 @@ void natsMicroserviceArgs_Destroy(natsMicroserviceArgs *args)
     NATS_FREE(args);
 }
 
-int natsMicroserviceArgs_Count(natsMicroserviceArgs *args)
+int microArgs_Count(microArgs *args)
 {
     if (args == NULL)
         return 0;
@@ -92,31 +74,31 @@ int natsMicroserviceArgs_Count(natsMicroserviceArgs *args)
     return args->count;
 }
 
-natsError *
-natsMicroserviceArgs_GetInt(int *val, natsMicroserviceArgs *args, int index)
+microError *
+microArgs_GetInt(int *val, microArgs *args, int index)
 {
     if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
-        return natsMicroserviceErrorInvalidArg;
+        return micro_ErrorInvalidArg;
 
     *val = *((int *)args->args[index]);
     return NULL;
 }
 
-natsError *
-natsMicroserviceArgs_GetFloat(long double *val, natsMicroserviceArgs *args, int index)
+microError *
+microArgs_GetFloat(long double *val, microArgs *args, int index)
 {
     if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
-        return natsMicroserviceErrorInvalidArg;
+        return micro_ErrorInvalidArg;
 
     *val = *((long double *)args->args[index]);
     return NULL;
 }
 
-natsError *
-natsMicroserviceArgs_GetString(const char **val, natsMicroserviceArgs *args, int index)
+microError *
+microArgs_GetString(const char **val, microArgs *args, int index)
 {
     if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
-        return natsMicroserviceErrorInvalidArg;
+        return micro_ErrorInvalidArg;
 
     *val = (const char *)args->args[index];
     return NULL;
@@ -130,7 +112,7 @@ natsMicroserviceArgs_GetString(const char **val, natsMicroserviceArgs *args, int
 /// @param data raw message data
 /// @param data_len length of data
 /// @return error in case the string is not properly terminated.
-static natsError *
+static microError *
 decode_rest_of_string(char *dup, int *decoded_len, int *i, const char *data, int data_len)
 {
     char c;
@@ -190,7 +172,7 @@ decode_rest_of_string(char *dup, int *decoded_len, int *i, const char *data, int
     }
     if (!terminated)
     {
-        nats_NewError(400, "a quoted string is not properly terminated");
+        micro_NewErrorf(400, "a quoted string is not properly terminated");
     }
 
     *decoded_len = len;
@@ -203,10 +185,10 @@ decode_rest_of_string(char *dup, int *decoded_len, int *i, const char *data, int
 /// @param data raw message data
 /// @param data_len length of data
 /// @return error.
-static natsError *
+static microError *
 decode_and_dupe_rest_of_string(char **dup, int *i, const char *data, int data_len)
 {
-    natsError *err = NULL;
+    microError *err = NULL;
     int start = *i;
     int decoded_len;
 
@@ -226,7 +208,7 @@ decode_and_dupe_rest_of_string(char **dup, int *i, const char *data, int data_le
     *dup = NATS_CALLOC(decoded_len + 1, sizeof(char));
     if (*dup == NULL)
     {
-        return natsMicroserviceErrorOutOfMemory;
+        return micro_ErrorOutOfMemory;
     }
 
     // no need to check for error the 2nd time, we already know the string is
@@ -242,10 +224,11 @@ typedef enum parserState
     NumberArg,
 } parserState;
 
-static natsError *
-parse(void **args, int *args_len, int *i, const char *data, int data_len)
+static microError *
+parse(void **args, int *args_len, const char *data, int data_len)
 {
-    natsError *err = NULL;
+    int i = 0;
+    microError *err = NULL;
     char c;
     int n = 0;
     parserState state = NewArg;
@@ -254,9 +237,9 @@ parse(void **args, int *args_len, int *i, const char *data, int data_len)
     bool is_float = false;
 
 #define EOS 0
-    for (; *i < data_len + 1;)
+    for (; i < data_len + 1;)
     {
-        c = (*i < data_len) ? data[*i] : EOS;
+        c = (i < data_len) ? data[i] : EOS;
 
         switch (state)
         {
@@ -265,12 +248,12 @@ parse(void **args, int *args_len, int *i, const char *data, int data_len)
             {
             case EOS:
             case ' ':
-                (*i)++;
+                i++;
                 break;
 
             case '"':
-                (*i)++; // consume the opening quote.
-                err = decode_and_dupe_rest_of_string((char **)(&args[n]), i, data, data_len);
+                i++; // consume the opening quote.
+                err = decode_and_dupe_rest_of_string((char **)(&args[n]), &i, data, data_len);
                 if (err != NULL)
                 {
                     return err;
@@ -295,11 +278,11 @@ parse(void **args, int *args_len, int *i, const char *data, int data_len)
                 num_len = 0;
                 numbuf[num_len++] = c;
                 is_float = (c == '.');
-                (*i)++;
+                i++;
                 break;
 
             default:
-                return nats_Errorf(400, "unexpected '%c', an argument must be a number or a quoted string", c);
+                return micro_NewErrorf(400, "unexpected '%c', an argument must be a number or a quoted string", c);
             }
             break;
 
@@ -325,7 +308,7 @@ parse(void **args, int *args_len, int *i, const char *data, int data_len)
                 numbuf[num_len] = c;
                 num_len++;
                 is_float = is_float || (c == '.') || (c == 'e') || (c == 'E');
-                (*i)++;
+                i++;
                 break;
 
             case EOS:
@@ -338,7 +321,7 @@ parse(void **args, int *args_len, int *i, const char *data, int data_len)
                         args[n] = NATS_CALLOC(1, sizeof(long double));
                         if (args[n] == NULL)
                         {
-                            return natsMicroserviceErrorOutOfMemory;
+                            return micro_ErrorOutOfMemory;
                         }
                         *(long double *)args[n] = strtold(numbuf, NULL);
                     }
@@ -347,23 +330,23 @@ parse(void **args, int *args_len, int *i, const char *data, int data_len)
                         args[n] = NATS_CALLOC(1, sizeof(int));
                         if (args[n] == NULL)
                         {
-                            return natsMicroserviceErrorOutOfMemory;
+                            return micro_ErrorOutOfMemory;
                         }
                         *(int *)args[n] = atoi(numbuf);
                     }
                 }
                 n++;
-                (*i)++;
+                i++;
                 state = NewArg;
                 break;
 
             default:
-                return nats_Errorf(400, "unexpected '%c', a number must be followed by a space", c);
+                return micro_NewErrorf(400, "unexpected '%c', a number must be followed by a space", c);
             }
             break;
 
         default:
-            return nats_Errorf(500, "unreachable: wrong state for a ' ', expected NewArg or NumberArg, got %d", state);
+            return micro_NewErrorf(500, "unreachable: wrong state for a ' ', expected NewArg or NumberArg, got %d", state);
         }
     }
 

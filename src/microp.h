@@ -15,32 +15,33 @@
 #define MICROP_H_
 
 #include "natsp.h"
+#include "mem.h"
 
-#define natsMicroserviceQueueGroup "q"
+#define MICRO_QUEUE_GROUP "q"
 
-#define natsMicroserviceDefaultEndpointName "default"
+#define MICRO_DEFAULT_ENDPOINT_NAME "default"
 
-struct error_s
+struct micro_error_s
 {
     natsStatus status;
     int code;
     const char *description;
 };
 
-struct microservice_client_s
+struct micro_client_s
 {
     natsConnection *nc;
 };
 
-struct microservice_endpoint_s
+struct micro_endpoint_s
 {
     // The subject that the endpoint is listening on (may be different from
     // one specified in config).
     char *subject;
 
     // References to other entities.
-    natsMicroservice *m;
-    natsMicroserviceEndpointConfig *config;
+    microService *m;
+    microEndpointConfig *config;
 
     // Mutex for starting/stopping the endpoint, and for updating the stats.
     natsMutex *mu;
@@ -50,21 +51,21 @@ struct microservice_endpoint_s
 
     // Endpoint stats. These are initialized only for running endpoints, and are
     // cleared if the endpoint is stopped.
-    natsMicroserviceEndpointStats stats;
+    microEndpointStats stats;
 };
 
-struct microservice_s
+struct micro_service_s
 {
     // these are set at initialization time time and do not change.
     natsConnection *nc;
-    struct natsMicroserviceConfig *cfg;
+    struct microServiceConfig *cfg;
     char *id;
 
     // these are are updated concurrently with access as the service runs, so
     // need to be protected by mutex.
     natsMutex *mu;
 
-    struct microservice_endpoint_s **endpoints;
+    struct micro_endpoint_s **endpoints;
     int endpoints_len;
     int endpoints_cap;
 
@@ -73,36 +74,30 @@ struct microservice_s
     int refs;
 };
 
-struct microservice_request_s
+struct micro_request_s
 {
     natsMsg *msg;
-    struct microservice_endpoint_s *ep;
+    struct micro_endpoint_s *ep;
     void *closure;
 };
 
-extern natsError *natsMicroserviceErrorOutOfMemory;
-extern natsError *natsMicroserviceErrorInvalidArg;
+extern microError *micro_ErrorOutOfMemory;
+extern microError *micro_ErrorInvalidArg;
 
-natsStatus
-micro_monitoring_init(natsMicroservice *m);
+#define MICRO_CALLOC(__ptr, __count, __size) \
+    (__ptr = NATS_CALLOC((__count), (__size)), (__ptr) != NULL ? NULL : micro_ErrorOutOfMemory)
 
-natsStatus nats_clone_microservice_config(natsMicroserviceConfig **new_cfg, natsMicroserviceConfig *cfg);
-void nats_free_cloned_microservice_config(natsMicroserviceConfig *cfg);
-
-natsStatus nats_new_endpoint(natsMicroserviceEndpoint **new_endpoint, natsMicroservice *m, natsMicroserviceEndpointConfig *cfg);
-natsStatus nats_clone_endpoint_config(natsMicroserviceEndpointConfig **new_cfg, natsMicroserviceEndpointConfig *cfg);
-natsStatus nats_start_endpoint(natsMicroserviceEndpoint *ep);
-natsStatus nats_stop_endpoint(natsMicroserviceEndpoint *ep);
-void nats_free_cloned_endpoint_config(natsMicroserviceEndpointConfig *cfg);
-
-natsStatus
-nats_stop_and_destroy_endpoint(natsMicroserviceEndpoint *ep);
-
-void natsMicroserviceEndpoint_updateLastError(natsMicroserviceEndpoint *ep, natsError *err);
-
-natsStatus
-_newMicroserviceRequest(natsMicroserviceRequest **new_request, natsMsg *msg);
-
-void _freeMicroserviceRequest(natsMicroserviceRequest *req);
+natsStatus micro_clone_endpoint_config(microEndpointConfig **new_cfg, microEndpointConfig *cfg);
+natsStatus micro_clone_service_config(microServiceConfig **new_cfg, microServiceConfig *cfg);
+void micro_free_cloned_endpoint_config(microEndpointConfig *cfg);
+void micro_free_cloned_service_config(microServiceConfig *cfg);
+void micro_free_request(microRequest *req);
+natsStatus micro_init_monitoring(microService *m);
+natsStatus micro_new_endpoint(microEndpoint **new_endpoint, microService *m, microEndpointConfig *cfg);
+natsStatus micro_new_request(microRequest **new_request, natsMsg *msg);
+natsStatus micro_start_endpoint(microEndpoint *ep);
+natsStatus micro_stop_endpoint(microEndpoint *ep);
+natsStatus micro_stop_and_destroy_endpoint(microEndpoint *ep);
+void micro_update_last_error(microEndpoint *ep, microError *err);
 
 #endif /* MICROP_H_ */

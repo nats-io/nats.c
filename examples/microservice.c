@@ -28,44 +28,44 @@ static void *run_functions(void *closure);
 static void *run_sequence(void *closure);
 
 // a generic service runner, used by the services' "main" functions.
-static void *run_service(natsConnection *conn, natsMicroserviceConfig *svc,
-                         natsMicroserviceEndpointConfig **endpoints, int len_endpoints);
+static void *run_service(natsConnection *conn, microServiceConfig *svc,
+                         microEndpointConfig **endpoints, int len_endpoints);
 
 // Callers and handlers for operations (2 floating point args, and a single int arg).
-static natsError *
+static microError *
 call_arithmetics(long double *result, natsConnection *nc, const char *subject, long double a1, long double a2);
-typedef natsError *(*arithmeticsOP)(
+typedef microError *(*arithmeticsOP)(
     long double *result, natsConnection *conn, long double a1, long double a2);
-static void handle_arithmetics_op(natsMicroserviceRequest *req, arithmeticsOP op);
+static void handle_arithmetics_op(microRequest *req, arithmeticsOP op);
 
-static natsError *
+static microError *
 call_function(long double *result, natsConnection *nc, const char *subject, int n);
-typedef natsError *(*functionOP)(long double *result, natsConnection *conn, int n);
-static void handle_function_op(natsMicroserviceRequest *req, functionOP op);
+typedef microError *(*functionOP)(long double *result, natsConnection *conn, int n);
+static void handle_function_op(microRequest *req, functionOP op);
 
 // Stop handler is the same for all services.
-static void handle_stop(natsMicroservice *m, natsMicroserviceRequest *req);
+static void handle_stop(microService *m, microRequest *req);
 
 // Handler for "sequence",  the main endpoint of the sequence service.
-static void handle_sequence(natsMicroservice *m, natsMicroserviceRequest *req);
+static void handle_sequence(microService *m, microRequest *req);
 
 // Math operations, wrapped as handlers.
-static natsError *add(long double *result, natsConnection *nc, long double a1, long double a2);
-static natsError *divide(long double *result, natsConnection *nc, long double a1, long double a2);
-static natsError *multiply(long double *result, natsConnection *nc, long double a1, long double a2);
+static microError *add(long double *result, natsConnection *nc, long double a1, long double a2);
+static microError *divide(long double *result, natsConnection *nc, long double a1, long double a2);
+static microError *multiply(long double *result, natsConnection *nc, long double a1, long double a2);
 
-static void handle_add(natsMicroservice *m, natsMicroserviceRequest *req) { handle_arithmetics_op(req, add); }
-static void handle_divide(natsMicroservice *m, natsMicroserviceRequest *req) { handle_arithmetics_op(req, divide); }
-static void handle_multiply(natsMicroservice *m, natsMicroserviceRequest *req) { handle_arithmetics_op(req, multiply); }
+static void handle_add(microService *m, microRequest *req) { handle_arithmetics_op(req, add); }
+static void handle_divide(microService *m, microRequest *req) { handle_arithmetics_op(req, divide); }
+static void handle_multiply(microService *m, microRequest *req) { handle_arithmetics_op(req, multiply); }
 
-static natsError *factorial(long double *result, natsConnection *nc, int n);
-static natsError *fibonacci(long double *result, natsConnection *nc, int n);
-static natsError *power2(long double *result, natsConnection *nc, int n);
-static void handle_factorial(natsMicroservice *m, natsMicroserviceRequest *req) { handle_function_op(req, factorial); }
-static void handle_fibonacci(natsMicroservice *m, natsMicroserviceRequest *req) { handle_function_op(req, fibonacci); }
-static void handle_power2(natsMicroservice *m, natsMicroserviceRequest *req) { handle_function_op(req, power2); }
+static microError *factorial(long double *result, natsConnection *nc, int n);
+static microError *fibonacci(long double *result, natsConnection *nc, int n);
+static microError *power2(long double *result, natsConnection *nc, int n);
+static void handle_factorial(microService *m, microRequest *req) { handle_function_op(req, factorial); }
+static void handle_fibonacci(microService *m, microRequest *req) { handle_function_op(req, fibonacci); }
+static void handle_power2(microService *m, microRequest *req) { handle_function_op(req, power2); }
 
-static natsMicroserviceEndpointConfig stop_cfg = {
+static microEndpointConfig stop_cfg = {
     .name = "stop",
     .handler = handle_stop,
     .closure = &fakeClosure,
@@ -75,6 +75,7 @@ static natsMicroserviceEndpointConfig stop_cfg = {
 int main(int argc, char **argv)
 {
     natsStatus s = NATS_OK;
+    microError *err = NULL;
     natsConnection *conn = NULL;
     natsOptions *opts = NULL;
     pthread_t arithmetics_th;
@@ -84,6 +85,7 @@ int main(int argc, char **argv)
     pthread_t sequence_th;
     void *s_val = NULL;
     int errno;
+    char errorbuf[1024];
 
     // Connect and start the services
     opts = parseArgs(argc, argv, "");
@@ -115,48 +117,51 @@ int main(int argc, char **argv)
     // Wait for the services to stop and self-destruct.
     if (s == NATS_OK)
     {
-        pthread_join(arithmetics_th, &a_val);
-        s = (natsStatus)(uintptr_t)a_val;
-    }
-    if (s == NATS_OK)
-    {
-        pthread_join(functions_th, &f_val);
-        s = (natsStatus)(uintptr_t)f_val;
-    }
-    if (s == NATS_OK)
-    {
-        pthread_join(sequence_th, &s_val);
-        s = (natsStatus)(uintptr_t)s_val;
+        MICRO_DO(err,
+                 {
+                     if (pthread_join(arithmetics_th, &a_val) == 0)
+                         err = (microError *)a_val;
+                 });
+        MICRO_DO(err,
+                 {
+                     if (pthread_join(functions_th, &f_val) == 0)
+                         err = (microError *)f_val;
+                 });
+        MICRO_DO(err,
+                 {
+                     if (pthread_join(sequence_th, &s_val) == 0)
+                         err = (microError *)s_val;
+                 });
     }
 
-    if (s == NATS_OK)
+    if (s != NATS_OK)
     {
-        return 0;
+        err = microError_FromStatus(s);
     }
-    else
+    if (err != NULL)
     {
-        printf("Error: %u - %s\n", s, natsStatus_GetText(s));
-        nats_PrintLastErrorStack(stderr);
+        printf("Error: %s\n", microError_String(err, errorbuf, sizeof(errorbuf)));
         return 1;
     }
+    return 0;
 }
 
 static void *run_sequence(void *closure)
 {
     natsConnection *conn = (natsConnection *)closure;
-    natsMicroserviceConfig cfg = {
+    microServiceConfig cfg = {
         .description = "Sequence adder - NATS microservice example in C",
         .name = "c-sequence",
         .version = "1.0.0",
     };
-    natsMicroserviceEndpointConfig sequence_cfg = {
+    microEndpointConfig sequence_cfg = {
         .subject = "sequence",
         .name = "sequence-service",
         .handler = handle_sequence,
         .closure = &fakeClosure,
         .schema = NULL,
     };
-    natsMicroserviceEndpointConfig *endpoints[] = {&sequence_cfg};
+    microEndpointConfig *endpoints[] = {&sequence_cfg};
 
     return run_service(conn, &cfg, endpoints, 1);
 }
@@ -165,11 +170,11 @@ static void *run_sequence(void *closure)
 // (float), f name (string), and N (int). E.g.: '10.0 "power2" 10' will
 // calculate 10/2 + 10/4 + 10/8 + 10/16 + 10/32 + 10/64 + 10/128 + 10/256 +
 // 10/512 + 10/1024 = 20.998046875
-static void handle_sequence(natsMicroservice *m, natsMicroserviceRequest *req)
+static void handle_sequence(microService *m, microRequest *req)
 {
-    natsError *err = NULL;
-    natsConnection *nc = natsMicroservice_GetConnection(m);
-    natsMicroserviceArgs *args = NULL;
+    microError *err = NULL;
+    natsConnection *nc = microService_GetConnection(m);
+    microArgs *args = NULL;
     int n = 0;
     int i;
     const char *function;
@@ -177,87 +182,61 @@ static void handle_sequence(natsMicroservice *m, natsMicroserviceRequest *req)
     long double value = 1.0;
     long double denominator = 0;
     char result[64];
+    int result_len = 0;
 
-    err = nats_ParseMicroserviceArgs(&args, natsMicroserviceRequest_GetData(req), natsMicroserviceRequest_GetDataLength(req));
-    if ((err == NULL) &&
-        (natsMicroserviceArgs_Count(args) != 2))
-    {
-        err = nats_Errorf(400, "Invalid number of arguments, expected 2 got %d", natsMicroserviceArgs_Count(args));
-    }
+    MICRO_CALL(err, micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req)));
+    MICRO_CALL_IF(err, (microArgs_Count(args) != 2),
+                  micro_NewErrorf(400, "Invalid number of arguments, expected 2 got %d", microArgs_Count(args)));
 
-    if (err == NULL)
-    {
-        err = natsMicroserviceArgs_GetString(&function, args, 0);
-    }
-    if (err == NULL)
-    {
-        err = natsMicroserviceArgs_GetInt(&n, args, 1);
-    }
-    if ((err == NULL) &&
-        (strcmp(function, "factorial") != 0) &&
-        (strcmp(function, "power2") != 0) &&
-        (strcmp(function, "fibonacci") != 0))
-    {
-        err = nats_Errorf(400, "Invalid function name '%s', must be 'factorial', 'power2', or 'fibonacci'", function);
-    }
-    if ((err == NULL) &&
-        (n < 1))
-    {
-        err = nats_Errorf(400, "Invalid number of iterations %d, must be at least 1", n);
-    }
+    MICRO_CALL(err, microArgs_GetString(&function, args, 0));
+    MICRO_CALL_IF(err, ((strcmp(function, "factorial") != 0) && (strcmp(function, "power2") != 0) && (strcmp(function, "fibonacci") != 0)),
+                  micro_NewErrorf(400, "Invalid function name '%s', must be 'factorial', 'power2', or 'fibonacci'", function));
+    MICRO_CALL(err, microArgs_GetInt(&n, args, 1));
+    MICRO_CALL_IF(err,
+                  (n < 1),
+                  micro_NewErrorf(400, "Invalid number of iterations %d, must be at least 1", n));
 
     for (i = 1; (err == NULL) && (i <= n); i++)
     {
-        err = call_function(&denominator, nc, function, i);
-        if (err == NULL && denominator == 0)
-        {
-            err = nats_Errorf(500, "division by zero at step %d", i);
-        }
-        if (err == NULL)
-        {
-            value = value + initialValue / denominator;
-        }
+        MICRO_CALL(err, call_function(&denominator, nc, function, i));
+        MICRO_CALL_IF(err, denominator == 0,
+                      micro_NewErrorf(500, "division by zero at step %d", i));
+        MICRO_DO(err, value = value + initialValue / denominator);
     }
+    
+    MICRO_DO(err, result_len = snprintf(result, sizeof(result), "%Lf", value));
 
-    if (err == NULL)
-    {
-        snprintf(result, sizeof(result), "%Lf", value);
-        err = natsMicroserviceRequest_Respond(req, result, strlen(result));
-    } 
-    else
-    {
-        natsMicroserviceRequest_Error(req, err);
-    }
-    natsMicroserviceArgs_Destroy(args);
+    microRequest_Respond(req, &err, result, result_len);
+    microArgs_Destroy(args);
 }
 
 static void *run_arithmetics(void *closure)
 {
     natsConnection *conn = (natsConnection *)closure;
-    natsMicroserviceConfig cfg = {
+    microServiceConfig cfg = {
         .description = "Arithmetic operations - NATS microservice example in C",
         .name = "c-arithmetics",
         .version = "1.0.0",
     };
-    natsMicroserviceEndpointConfig add_cfg = {
+    microEndpointConfig add_cfg = {
         .name = "add",
         .handler = handle_add,
         .closure = &fakeClosure,
         .schema = NULL,
     };
-    natsMicroserviceEndpointConfig divide_cfg = {
+    microEndpointConfig divide_cfg = {
         .name = "divide",
         .handler = handle_divide,
         .closure = &fakeClosure,
         .schema = NULL,
     };
-    natsMicroserviceEndpointConfig multiply_cfg = {
+    microEndpointConfig multiply_cfg = {
         .name = "multiply",
         .handler = handle_multiply,
         .closure = &fakeClosure,
         .schema = NULL,
     };
-    natsMicroserviceEndpointConfig *endpoints[] =
+    microEndpointConfig *endpoints[] =
         {&add_cfg, &divide_cfg, &multiply_cfg};
 
     return run_service(conn, &cfg, endpoints, 3);
@@ -266,254 +245,182 @@ static void *run_arithmetics(void *closure)
 static void *run_functions(void *closure)
 {
     natsConnection *conn = (natsConnection *)closure;
-    natsMicroserviceConfig cfg = {
+    microServiceConfig cfg = {
         .description = "Functions - NATS microservice example in C",
         .name = "c-functions",
         .version = "1.0.0",
     };
-    natsMicroserviceEndpointConfig factorial_cfg = {
+    microEndpointConfig factorial_cfg = {
         .name = "factorial",
         .handler = handle_factorial,
         .closure = &fakeClosure,
         .schema = NULL,
     };
-    natsMicroserviceEndpointConfig fibonacci_cfg = {
+    microEndpointConfig fibonacci_cfg = {
         .name = "fibonacci",
         .handler = handle_fibonacci,
         .closure = &fakeClosure,
         .schema = NULL,
     };
-    natsMicroserviceEndpointConfig power2_cfg = {
+    microEndpointConfig power2_cfg = {
         .name = "power2",
         .handler = handle_power2,
         .closure = &fakeClosure,
         .schema = NULL,
     };
-    natsMicroserviceEndpointConfig *endpoints[] =
+    microEndpointConfig *endpoints[] =
         {&factorial_cfg, &fibonacci_cfg, &power2_cfg};
 
     return run_service(conn, &cfg, endpoints, 3);
 }
 
 static void
-handle_arithmetics_op(natsMicroserviceRequest *req, arithmeticsOP op)
+handle_arithmetics_op(microRequest *req, arithmeticsOP op)
 {
-    natsError *err = NULL;
-    natsMicroserviceArgs *args = NULL;
+    microError *err = NULL;
+    microArgs *args = NULL;
     long double a1, a2, result;
     char buf[1024];
-    int len;
+    int len = 0;
 
-    err = nats_ParseMicroserviceArgs(&args, natsMicroserviceRequest_GetData(req), natsMicroserviceRequest_GetDataLength(req));
-    if ((err == NULL) && (natsMicroserviceArgs_Count(args) != 2))
-    {
-        err = nats_Errorf(400, "Invalid number of arguments, expected 2 got %d", natsMicroserviceArgs_Count(args));
-    }
-    if (err == NULL)
-    {
-        err = natsMicroserviceArgs_GetFloat(&a1, args, 0);
-    }
-    if (err == NULL)
-    {
-        err = natsMicroserviceArgs_GetFloat(&a2, args, 1);
-    }
-    if (err == NULL)
-    {
-        err = op(&result, natsMicroserviceRequest_GetConnection(req), a1, a2);
-    }
-    if (err == NULL)
-    {
-        len = snprintf(buf, sizeof(buf), "%Lf", result);
-        err = natsMicroserviceRequest_Respond(req, buf, len);
-    }
-    else
-    {
-        natsMicroserviceRequest_Error(req, err);
-    }
-    natsMicroserviceArgs_Destroy(args);
+    MICRO_CALL(err, micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req)));
+    MICRO_CALL_IF(err, (microArgs_Count(args) != 2),
+                  micro_NewErrorf(400, "Invalid number of arguments, expected 2 got %d", microArgs_Count(args)));
+    MICRO_CALL(err, microArgs_GetFloat(&a1, args, 0));
+    MICRO_CALL(err, microArgs_GetFloat(&a2, args, 1));
+    MICRO_CALL(err, op(&result, microRequest_GetConnection(req), a1, a2));
+    MICRO_DO(err, len = snprintf(buf, sizeof(buf), "%Lf", result));
+
+    microRequest_Respond(req, &err, buf, len);
+    microArgs_Destroy(args);
 }
 
 static void
-handle_function_op(natsMicroserviceRequest *req, functionOP op)
+handle_function_op(microRequest *req, functionOP op)
 {
-    natsError *err = NULL;
-    natsMicroserviceArgs *args = NULL;
+    microError *err = NULL;
+    microArgs *args = NULL;
     int n;
     long double result;
     char buf[1024];
-    int len;
+    int len = 0;
 
-    err = nats_ParseMicroserviceArgs(&args, natsMicroserviceRequest_GetData(req), natsMicroserviceRequest_GetDataLength(req));
-    if ((err == NULL) && (natsMicroserviceArgs_Count(args) != 1))
-    {
-        err = nats_Errorf(400, "Invalid number of arguments, expected 1 got %d", natsMicroserviceArgs_Count(args));
-    }
-    if (err == NULL)
-    {
-        err = natsMicroserviceArgs_GetInt(&n, args, 0);
-    }
-    if (err == NULL)
-    {
-        err = op(&result, natsMicroserviceRequest_GetConnection(req), n);
-    }
-    if (err == NULL)
-    {
-        len = snprintf(buf, sizeof(buf), "%Lf", result);
-        err = natsMicroserviceRequest_Respond(req, buf, len);
-    }
-    else
-    {
-        natsMicroserviceRequest_Error(req, err);
-    }
-    natsMicroserviceArgs_Destroy(args);
+    MICRO_CALL(err, micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req)));
+    MICRO_CALL_IF(err, (microArgs_Count(args) != 1),
+                  micro_NewErrorf(400, "Invalid number of arguments, expected 1 got %d", microArgs_Count(args)));
+    MICRO_CALL(err, microArgs_GetInt(&n, args, 0));
+    MICRO_CALL(err, op(&result, microRequest_GetConnection(req), n));
+    MICRO_DO(err, len = snprintf(buf, sizeof(buf), "%Lf", result));
+
+    microRequest_Respond(req, &err, buf, len);
+    microArgs_Destroy(args);
 }
 
-static natsError *
+static microError *
 call_arithmetics(long double *result, natsConnection *nc, const char *subject, long double a1, long double a2)
 {
-    natsError *err = NULL;
-    natsMicroserviceClient *client = NULL;
+    microError *err = NULL;
+    microClient *client = NULL;
     natsMsg *response = NULL;
-    natsMicroserviceArgs *args = NULL;
+    microArgs *args = NULL;
     char buf[1024];
     int len;
 
-    err = nats_NewMicroserviceClient(&client, nc, NULL);
-    if (err == NULL)
-    {
-        len = snprintf(buf, sizeof(buf), "%Lf %Lf", a1, a2);
-        err = natsMicroserviceClient_DoRequest(client, &response, subject, buf, len);
-    }
-    if (err == NULL)
-    {
-        err = nats_ParseMicroserviceArgs(&args, natsMsg_GetData(response), natsMsg_GetDataLength(response));
-    }
-    if (err == NULL)
-    {
-        err = natsMicroserviceArgs_GetFloat(result, args, 0);
-    }
+    MICRO_CALL(err, microClient_Create(&client, nc, NULL));
+    MICRO_DO(err, len = snprintf(buf, sizeof(buf), "%Lf %Lf", a1, a2));
+    MICRO_CALL(err, microClient_DoRequest(client, &response, subject, buf, len));
+    MICRO_CALL(err, micro_ParseArgs(&args, natsMsg_GetData(response), natsMsg_GetDataLength(response)));
+    MICRO_CALL(err, microArgs_GetFloat(result, args, 0));
 
-    natsMicroserviceClient_Destroy(client);
+    microClient_Destroy(client);
     natsMsg_Destroy(response);
     return err;
 }
 
-static natsError *
+static microError *
 call_function(long double *result, natsConnection *nc, const char *subject, int n)
 {
-    natsError *err = NULL;
-    natsMicroserviceClient *client = NULL;
+    microError *err = NULL;
+    microClient *client = NULL;
     natsMsg *response = NULL;
-    natsMicroserviceArgs *args = NULL;
+    microArgs *args = NULL;
     char buf[1024];
     int len;
 
-    err = nats_NewMicroserviceClient(&client, nc, NULL);
-    if (err == NULL)
-    {
-        len = snprintf(buf, sizeof(buf), "%d", n);
-        err = natsMicroserviceClient_DoRequest(client, &response, subject, buf, len);
-    }
-    if (err == NULL)
-    {
-        err = nats_ParseMicroserviceArgs(&args, natsMsg_GetData(response), natsMsg_GetDataLength(response));
-    }
-    if (err == NULL)
-    {
-        err = natsMicroserviceArgs_GetFloat(result, args, 0);
-    }
+    MICRO_CALL(err, microClient_Create(&client, nc, NULL));
+    MICRO_DO(err, len = snprintf(buf, sizeof(buf), "%d", n));
+    MICRO_CALL(err, microClient_DoRequest(client, &response, subject, buf, len));
+    MICRO_CALL(err, micro_ParseArgs(&args, natsMsg_GetData(response), natsMsg_GetDataLength(response)));
+    MICRO_CALL(err, microArgs_GetFloat(result, args, 0));
 
-    natsMicroserviceClient_Destroy(client);
+    microClient_Destroy(client);
     natsMsg_Destroy(response);
     return err;
 }
 
-static void handle_stop(natsMicroservice *m, natsMicroserviceRequest *req)
+static void handle_stop(microService *m, microRequest *req)
 {
-    natsError *err;
+    microError *err = NULL;
+    const char *response = "OK";
+    int len = 0;
+    void *ret;
 
-    err = natsMicroservice_Stop(m);
-    if (err == NULL)
-    {
-        err = natsMicroserviceRequest_Respond(req, "OK", 2);
-    }
+    MICRO_CALL(err, microService_Stop(m));
+    MICRO_DO(err, len = strlen(response));
 
-    if (err == NULL)
-    {
-        pthread_exit((void *)(NATS_OK));
-    }
-    else
-    {
-        natsMicroserviceRequest_Error(req, err);
-        pthread_exit((void *)(natsError_StatusCode(err)));
-    }
+    ret = (void *)(microError_Status(err));
+    microRequest_Respond(req, &err, response, len);
+    pthread_exit(ret);
 }
 
-static void *run_service(natsConnection *conn, natsMicroserviceConfig *svc,
-                         natsMicroserviceEndpointConfig **endpoints, int len_endpoints)
+static void *run_service(natsConnection *conn, microServiceConfig *svc,
+                         microEndpointConfig **endpoints, int len_endpoints)
 {
-    natsError *err = NULL;
-    natsMicroservice *m = NULL;
+    microError *err = NULL;
+    microService *m = NULL;
     char errbuf[1024];
     int i;
 
-    err = nats_AddMicroservice(&m, conn, svc);
+    MICRO_CALL(err, microService_Create(&m, conn, svc));
     for (i = 0; (err == NULL) && (i < len_endpoints); i++)
     {
-        err = natsMicroservice_AddEndpoint(NULL, m, endpoints[i]);
-        if (err != NULL)
-        {
-            break;
-        }
+        MICRO_CALL(err, microService_AddEndpoint(NULL, m, endpoints[i]));
     }
-    if (err == NULL)
-    {
-        // TODO <>/<>: add a way to subscribe to broadcast messages, this one is
-        // queued.
-        err = natsMicroservice_AddEndpoint(NULL, m, &stop_cfg);
-    }
-    if (err == NULL)
-    {
-        err = natsMicroservice_Run(m);
-    }
+    MICRO_CALL(err, microService_AddEndpoint(NULL, m, &stop_cfg));
+    MICRO_CALL(err, microService_Run(m));
 
-    natsMicroservice_Release(m);
-    if (err != NULL)
-    {
-        printf("Error: %s\n", natsError_String(err, errbuf, sizeof(errbuf)));
-        return (void *)(natsError_StatusCode(err));
-    }
-    return (void *)NATS_OK;
+    microService_Release(m);
+    return err;
 }
 
-static natsError *
+static microError *
 add(long double *result, natsConnection *nc, long double a1, long double a2)
 {
     *result = a1 + a2;
     return NULL;
 }
 
-static natsError *
+static microError *
 divide(long double *result, natsConnection *nc, long double a1, long double a2)
 {
     *result = a1 / a2;
     return NULL;
 }
 
-static natsError *multiply(long double *result, natsConnection *nc, long double a1, long double a2)
+static microError *multiply(long double *result, natsConnection *nc, long double a1, long double a2)
 {
     *result = a1 * a2;
     return NULL;
 }
 
-static natsError *
+static microError *
 factorial(long double *result, natsConnection *nc, int n)
 {
-    natsError *err = NULL;
+    microError *err = NULL;
     int i;
 
     if (n < 1)
-        err = nats_Errorf(400, "n=%d. must be greater than 0", n);
+        err = micro_NewErrorf(400, "n=%d. must be greater than 0", n);
 
     *result = 1;
     for (i = 1; i <= n; i++)
@@ -525,15 +432,15 @@ factorial(long double *result, natsConnection *nc, int n)
     return NULL;
 }
 
-static natsError *
+static microError *
 fibonacci(long double *result, natsConnection *nc, int n)
 {
-    natsError *err = NULL;
+    microError *err = NULL;
     int i;
     long double n1, n2;
 
     if (n < 0)
-        err = nats_Errorf(400, "n=%d. must be non-negative", n);
+        err = micro_NewErrorf(400, "n=%d. must be non-negative", n);
 
     if (n < 2)
     {
@@ -552,13 +459,13 @@ fibonacci(long double *result, natsConnection *nc, int n)
     return NULL;
 }
 
-static natsError *power2(long double *result, natsConnection *nc, int n)
+static microError *power2(long double *result, natsConnection *nc, int n)
 {
-    natsError *err = NULL;
+    microError *err = NULL;
     int i;
 
     if (n < 1)
-        return nats_Errorf(400, "n=%d. must be greater than 0", n);
+        return micro_NewErrorf(400, "n=%d. must be greater than 0", n);
 
     *result = 1;
     for (i = 1; i <= n; i++)

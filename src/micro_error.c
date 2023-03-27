@@ -32,36 +32,36 @@ void natsConn_Unlock(natsConnection *nc) { natsMutex_Unlock(nc->mu); }
 
 #endif // DEV_MODE
 
-static natsError _errorOutOfMemory = {
+static microError _errorOutOfMemory = {
     .status = NATS_NO_MEMORY,
     .code = 500,
     .description = "Out of memory",
 };
 
-static natsError _errorInvalidArg = {
+static microError _errorInvalidArg = {
     .status = NATS_INVALID_ARG,
     .code = 400,
     .description = "Invalid function argument",
 };
 
-static natsError _errorInvalidFormat = {
+static microError _errorInvalidFormat = {
     .status = NATS_INVALID_ARG,
     .code = 400,
     .description = "Invalid error format string",
 };
 
-static natsError *knownErrors[] = {
+static microError *knownErrors[] = {
     &_errorOutOfMemory,
     &_errorInvalidArg,
     &_errorInvalidFormat,
     NULL,
 };
 
-natsError *natsMicroserviceErrorOutOfMemory = &_errorOutOfMemory;
-natsError *natsMicroserviceErrorInvalidArg = &_errorInvalidArg;
+microError *micro_ErrorOutOfMemory = &_errorOutOfMemory;
+microError *micro_ErrorInvalidArg = &_errorInvalidArg;
 
 const char *
-natsError_String(natsError *err, char *buf, int size)
+microError_String(microError *err, char *buf, int size)
 {
     if (err == NULL || buf == NULL)
         return "";
@@ -73,17 +73,17 @@ natsError_String(natsError *err, char *buf, int size)
 }
 
 natsStatus
-natsError_StatusCode(natsError *err)
+microError_Status(microError *err)
 {
     return (err != NULL) ? err->status : NATS_OK;
 }
 
-static natsError *
+static microError *
 new_error(natsStatus s, int code, char *description)
 {
-    natsError *err = NULL;
+    microError *err = NULL;
 
-    err = NATS_CALLOC(1, sizeof(natsError));
+    err = NATS_CALLOC(1, sizeof(microError));
     if (err == NULL)
         return &_errorOutOfMemory;
 
@@ -94,14 +94,8 @@ new_error(natsStatus s, int code, char *description)
     return err;
 }
 
-natsError *
-nats_NewError(int code, const char *description)
-{
-    return nats_Errorf(NATS_ERR, description);
-}
-
-natsError *
-nats_NewStatusError(natsStatus s)
+microError *
+microError_FromStatus(natsStatus s)
 {
     char *dup = NULL;
 
@@ -115,8 +109,8 @@ nats_NewStatusError(natsStatus s)
     return new_error(s, 0, dup);
 }
 
-natsError *
-natsError_Wrapf(natsError *err, const char *format, ...)
+microError *
+microError_Wrapf(microError *err, const char *format, ...)
 {
     va_list args;
     char *buf = NULL;
@@ -159,12 +153,12 @@ natsError_Wrapf(natsError *err, const char *format, ...)
 
     code = err->code;
     s = err->status;
-    natsError_Destroy(err);
+    microError_Destroy(err);
     return new_error(s, code, buf);
 }
 
-natsError *
-nats_Errorf(int code, const char *format, ...)
+microError *
+micro_NewErrorf(int code, const char *format, ...)
 {
     va_list args1, args2;
     char *buf = NULL;
@@ -196,7 +190,7 @@ nats_Errorf(int code, const char *format, ...)
     return new_error(NATS_ERR, code, buf);
 }
 
-void natsError_Destroy(natsError *err)
+void microError_Destroy(microError *err)
 {
     int i;
 
@@ -215,24 +209,24 @@ void natsError_Destroy(natsError *err)
     NATS_FREE(err);
 }
 
-natsError *
-nats_IsErrorResponse(natsStatus status, natsMsg *msg)
+microError *
+microError_FromResponse(natsStatus status, natsMsg *msg)
 {
-    natsError *err = NULL;
+    microError *err = NULL;
     const char *c = NULL, *d = NULL;
     bool is_error;
 
     if (msg != NULL)
     {
-        natsMsgHeader_Get(msg, NATS_MICROSERVICE_ERROR_CODE_HDR, &c);
-        natsMsgHeader_Get(msg, NATS_MICROSERVICE_ERROR_HDR, &d);
+        natsMsgHeader_Get(msg, MICRO_ERROR_CODE_HDR, &c);
+        natsMsgHeader_Get(msg, MICRO_ERROR_HDR, &d);
     }
 
     is_error = (status != NATS_OK) || !nats_IsStringEmpty(c) || !nats_IsStringEmpty(d);
     if (!is_error)
         return NULL;
 
-    err = natsError_Wrapf(nats_NewStatusError(status), d);
+    err = microError_Wrapf(microError_FromStatus(status), d);
     if (!nats_IsStringEmpty(c) && (err != NULL))
     {
         err->code = atoi(c);

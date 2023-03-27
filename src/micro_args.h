@@ -20,25 +20,25 @@
  * Request unmarshaled as "arguments", a space-separated list of numbers and strings.
  * TODO document the interface.
  */
-typedef struct args_s natsMicroserviceArgs;
+typedef struct args_s microArgs;
 
-NATS_EXTERN natsError *
-nats_ParseMicroserviceArgs(natsMicroserviceArgs **args, const char *data, int data_len);
+NATS_EXTERN microError *
+micro_ParseArgs(microArgs **args, const char *data, int data_len);
 
 NATS_EXTERN int
-natsMicroserviceArgs_Count(natsMicroserviceArgs *args);
+microArgs_Count(microArgs *args);
 
-NATS_EXTERN natsError *
-natsMicroserviceArgs_GetInt(int *val, natsMicroserviceArgs *args, int index);
+NATS_EXTERN microError *
+microArgs_GetInt(int *val, microArgs *args, int index);
 
-NATS_EXTERN natsError *
-natsMicroserviceArgs_GetFloat(long double *val, natsMicroserviceArgs *args, int index);
+NATS_EXTERN microError *
+microArgs_GetFloat(long double *val, microArgs *args, int index);
 
-NATS_EXTERN natsError *
-natsMicroserviceArgs_GetString(const char **val, natsMicroserviceArgs *args, int index);
+NATS_EXTERN microError *
+microArgs_GetString(const char **val, microArgs *args, int index);
 
 NATS_EXTERN void
-natsMicroserviceArgs_Destroy(natsMicroserviceArgs *args);
+microArgs_Destroy(microArgs *args);
 
 /** @} */ // end of microserviceGroup
 

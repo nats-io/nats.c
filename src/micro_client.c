@@ -16,17 +16,17 @@
 #include "mem.h"
 #include "conn.h"
 
-natsError *
-nats_NewMicroserviceClient(natsMicroserviceClient **new_client, natsConnection *nc, natsMicroserviceClientConfig *cfg)
+microError *
+microClient_Create(microClient **new_client, natsConnection *nc, microClientConfig *cfg)
 {
-    natsMicroserviceClient *client = NULL;
+    microClient *client = NULL;
 
     if (new_client == NULL)
-        return natsMicroserviceErrorInvalidArg;
+        return micro_ErrorInvalidArg;
 
-    client = NATS_CALLOC(1, sizeof(struct microservice_client_s));
+    client = NATS_CALLOC(1, sizeof(struct micro_client_s));
     if (client == NULL)
-        return natsMicroserviceErrorOutOfMemory;
+        return micro_ErrorOutOfMemory;
 
     natsConn_retain(nc);
     client->nc = nc;
@@ -34,7 +34,7 @@ nats_NewMicroserviceClient(natsMicroserviceClient **new_client, natsConnection *
     return NULL;
 }
 
-void natsMicroserviceClient_Destroy(natsMicroserviceClient *client)
+void microClient_Destroy(microClient *client)
 {
     if (client == NULL)
         return;
@@ -43,21 +43,21 @@ void natsMicroserviceClient_Destroy(natsMicroserviceClient *client)
     NATS_FREE(client);
 }
 
-natsError *
-natsMicroserviceClient_DoRequest(natsMicroserviceClient *client, natsMsg **reply, const char *subject, const char *data, int data_len)
+microError *
+microClient_DoRequest(microClient *client, natsMsg **reply, const char *subject, const char *data, int data_len)
 {
     natsStatus s = NATS_OK;
-    natsError *err = NULL;
+    microError *err = NULL;
     natsMsg *msg = NULL;
 
     if ((client == NULL) || (reply == NULL))
-        return natsMicroserviceErrorInvalidArg;
+        return micro_ErrorInvalidArg;
 
     s = natsConnection_Request(&msg, client->nc, subject, data, data_len, 5000);
     if (s != NATS_OK)
-        err = natsError_Wrapf(nats_NewStatusError(s), "request failed");
+        return microError_Wrapf(microError_FromStatus(s), "request failed");
 
-    err = nats_IsErrorResponse(s, msg);
+    err = microError_FromResponse(s, msg);
     if (err == NULL)
     {
         *reply = msg;

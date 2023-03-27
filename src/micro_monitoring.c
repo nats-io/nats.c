@@ -15,7 +15,6 @@
 
 #include "micro.h"
 #include "microp.h"
-#include "mem.h"
 #include "util.h"
 
 static natsStatus

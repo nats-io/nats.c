@@ -27,14 +27,6 @@
 #endif
 #define NATS_FREE(p)        free((p))
 
-#define NATS_CALLOCS(dupe, count, size) (   \
-    *(dupe) = NATS_CALLOC((count), (size)), \
-    *(dupe) != NULL ? NATS_OK : nats_setDefaultError(NATS_NO_MEMORY))
-
-#define NATS_STRDUPS(dupe, str) ( \
-    *(dupe) = NATS_STRDUP(str),   \
-    *(dupe) != NULL ? NATS_OK : nats_setDefaultError(NATS_NO_MEMORY))
-
 // GNU C Library version 2.25 or later.
 #if defined(__GLIBC__) && \
     (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25))

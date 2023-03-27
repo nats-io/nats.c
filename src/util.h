@@ -240,6 +240,9 @@ nats_marshalLong(natsBuffer *buf, bool comma, const char *fieldName, int64_t lva
 natsStatus
 nats_marshalULong(natsBuffer *buf, bool comma, const char *fieldName, uint64_t uval);
 
+natsStatus
+nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, int64_t d);
+
 bool
 nats_IsSubjectValid(const char *subject, bool wcAllowed);
 

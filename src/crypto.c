@@ -485,7 +485,7 @@ secure_memzero(void * const pnt, const size_t len)
 }
 
 natsStatus
-natsCrypto_Init()
+natsCrypto_Init(void)
 {
   return NATS_OK;
 }

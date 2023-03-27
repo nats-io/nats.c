@@ -21,6 +21,10 @@
 
 #define MICRO_DEFAULT_ENDPOINT_NAME "default"
 
+// 4 verbs: INFO, STATS, PING, SCHEMA;
+// 3 subjects for each verb.
+#define MICRO_MONITORING_SUBS_CAP (4 * 3)
+
 struct micro_error_s
 {
     natsStatus status;
@@ -59,7 +63,7 @@ struct micro_service_s
     // these are set at initialization time time and do not change.
     natsConnection *nc;
     struct microServiceConfig *cfg;
-    char *id;
+    char id[NUID_BUFFER_LEN + 1];
 
     // these are are updated concurrently with access as the service runs, so
     // need to be protected by mutex.
@@ -69,35 +73,53 @@ struct micro_service_s
     int endpoints_len;
     int endpoints_cap;
 
+    natsSubscription **monitoring_subs;
+    int monitoring_subs_len;
+    
+    natsConnectionHandler prev_on_connection_closed;
+    void * prev_on_connection_closed_closure;
+    natsConnectionHandler prev_on_connection_disconnected;
+    void * prev_on_connection_disconnected_closure;
+    natsErrHandler prev_on_error;
+    void * prev_on_error_closure;
+
     int64_t started; // UTC time expressed as number of nanoseconds since epoch.
     bool stopped;
+    bool is_stopping;
     int refs;
-};
-
-struct micro_request_s
-{
-    natsMsg *msg;
-    struct micro_endpoint_s *ep;
-    void *closure;
 };
 
 extern microError *micro_ErrorOutOfMemory;
 extern microError *micro_ErrorInvalidArg;
 
-#define MICRO_CALLOC(__ptr, __count, __size) \
-    (__ptr = NATS_CALLOC((__count), (__size)), (__ptr) != NULL ? NULL : micro_ErrorOutOfMemory)
-
-natsStatus micro_clone_endpoint_config(microEndpointConfig **new_cfg, microEndpointConfig *cfg);
-natsStatus micro_clone_service_config(microServiceConfig **new_cfg, microServiceConfig *cfg);
-void micro_free_cloned_endpoint_config(microEndpointConfig *cfg);
-void micro_free_cloned_service_config(microServiceConfig *cfg);
-void micro_free_request(microRequest *req);
-natsStatus micro_init_monitoring(microService *m);
-natsStatus micro_new_endpoint(microEndpoint **new_endpoint, microService *m, microEndpointConfig *cfg);
-natsStatus micro_new_request(microRequest **new_request, natsMsg *msg);
-natsStatus micro_start_endpoint(microEndpoint *ep);
-natsStatus micro_stop_endpoint(microEndpoint *ep);
-natsStatus micro_stop_and_destroy_endpoint(microEndpoint *ep);
+microError *micro_clone_endpoint_config(microEndpointConfig **new_cfg, microEndpointConfig *cfg);
+microError *micro_clone_service_config(microServiceConfig **new_cfg, microServiceConfig *cfg);
+void micro_destroy_cloned_endpoint_config(microEndpointConfig *cfg);
+void micro_destroy_cloned_service_config(microServiceConfig *cfg);
+void micro_destroy_request(microRequest *req);
+microError *micro_init_monitoring(microService *m);
+bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_subject);
+microError *micro_new_endpoint(microEndpoint **new_endpoint, microService *m, microEndpointConfig *cfg);
+microError *micro_new_request(microRequest **new_request, microService *m, microEndpoint *ep, natsMsg *msg);
+microError *micro_start_endpoint(microEndpoint *ep);
+microError *micro_stop_endpoint(microEndpoint *ep);
+microError *micro_stop_and_destroy_endpoint(microEndpoint *ep);
 void micro_update_last_error(microEndpoint *ep, microError *err);
+bool micro_service_is_stopping(microService *m);
+
+
+static inline microError *micro_strdup(char **ptr, const char *str)
+{
+    // Make a strdup(NULL) be a no-op, so we don't have to check for NULL
+    // everywhere.
+    if (str == NULL) {
+        *ptr = NULL;
+        return NULL;
+    }
+    *ptr = NATS_STRDUP(str);
+    if (*ptr == NULL)
+        return micro_ErrorOutOfMemory;
+    return NULL;
+}
 
 #endif /* MICROP_H_ */

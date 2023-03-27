@@ -17,7 +17,7 @@
 #include "conn.h"
 
 microError *
-microClient_Create(microClient **new_client, natsConnection *nc, microClientConfig *cfg)
+micro_NewClient(microClient **new_client, natsConnection *nc, microClientConfig *cfg)
 {
     microClient *client = NULL;
 
@@ -44,7 +44,7 @@ void microClient_Destroy(microClient *client)
 }
 
 microError *
-microClient_DoRequest(microClient *client, natsMsg **reply, const char *subject, const char *data, int data_len)
+microClient_DoRequest(natsMsg **reply, microClient *client, const char *subject, const char *data, int data_len)
 {
     natsStatus s = NATS_OK;
     microError *err = NULL;
@@ -55,9 +55,11 @@ microClient_DoRequest(microClient *client, natsMsg **reply, const char *subject,
 
     s = natsConnection_Request(&msg, client->nc, subject, data, data_len, 5000);
     if (s != NATS_OK)
-        return microError_Wrapf(microError_FromStatus(s), "request failed");
+    {
+        return microError_Wrapf(micro_ErrorFromStatus(s), "request failed");
+    }
 
-    err = microError_FromResponse(s, msg);
+    err = micro_ErrorFromResponse(s, msg);
     if (err == NULL)
     {
         *reply = msg;

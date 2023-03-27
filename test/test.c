@@ -38,6 +38,8 @@
 #include "parser.h"
 #include "js.h"
 #include "kv.h"
+#include "micro.h"
+#include "microp.h"
 #if defined(NATS_HAS_STREAMING)
 #include "stan/conn.h"
 #include "stan/pub.h"
@@ -8533,6 +8535,53 @@ test_ConnClosedCB(void)
 }
 
 static void
+test_SetConnClosedCB(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+
+    if ((opts == NULL)
+        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
+    {
+        FAIL("Unable to setup test for SetConnClosedCB!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_Connect(&nc, opts);
+
+    // Set the connection closed handler in-flight
+    IFOK(s, natsConn_setClosedCallback(nc, _closedCb, (void*) &arg));
+    if (s == NATS_OK)
+        natsConnection_Close(nc);
+
+    test("Test connection closed CB invoked: ");
+
+    natsMutex_Lock(arg.m);
+    s = NATS_OK;
+    while ((s != NATS_TIMEOUT) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    natsMutex_Unlock(arg.m);
+
+    testCond((s == NATS_OK) && arg.closed);
+
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_CloseDisconnectedCB(void)
 {
     natsStatus          s;
@@ -14372,6 +14421,79 @@ test_AsyncErrHandler(void)
 
     _stopServer(serverPid);
 }
+
+static void
+test_SetAsyncErrHandler(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    arg.status = NATS_OK;
+    arg.control= 7;
+
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+    IFOK(s, natsOptions_SetMaxPendingMsgs(opts, 10));
+
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test AsyncErrHandler");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "async_test", _recvTestString, (void*) &arg));
+
+    natsMutex_Lock(arg.m);
+    arg.sub = sub;
+    natsMutex_Unlock(arg.m);
+
+    // Start sending messages
+    for (int i=0;
+        (s == NATS_OK) && (i < (opts->maxPendingMsgs)); i++)
+    {
+        s = natsConnection_PublishString(nc, "async_test", "hello");
+    }
+
+    // Set the error handler in-flight
+    IFOK(s, natsConn_setErrorCallback(nc, _asyncErrCb, (void*) &arg));
+
+    for (int i=0;
+        (s == NATS_OK) && (i < 100); i++)
+    {
+        s = natsConnection_PublishString(nc, "async_test", "hello");
+    }
+    IFOK(s, natsConnection_Flush(nc));
+
+    // Wait for async err callback
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+
+    test("Aync fired properly, and all checks are good: ");
+    testCond((s == NATS_OK)
+             && arg.done
+             && arg.closed
+             && (arg.status == NATS_OK));
+
+    natsOptions_Destroy(opts);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
 
 static void
 _responseCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
@@ -32058,6 +32180,241 @@ test_KeyValueMirrorCrossDomains(void)
     remove(lconfFile);
 }
 
+static void
+test_MicroMatchEndpointSubject(void)
+{
+    // endpoint, actual, match
+    const char *test_cases[] = {
+        "foo", "foo", "true",
+        "foo.bar.meh", "foo.bar.meh", "true",
+        "foo.bar.meh", "foo.bar", NULL,
+        "foo.bar", "foo.bar.meh", NULL,
+        "foo.*.meh", "foo.bar.meh", "true",
+        "*.bar.meh", "foo.bar.meh", "true",
+        "foo.bar.*", "foo.bar.meh", "true",
+        "foo.bar.>", "foo.bar.meh", "true",
+        "foo.>", "foo.bar.meh", "true",
+        "foo.b*ar.meh", "foo.bar.meh", NULL,
+    };
+    char buf[1024];
+    int i;
+    const char *ep_subject;
+    const char *actual_subject;
+    bool expected_match;
+
+    for (i=0; i<(int) (sizeof(test_cases)/sizeof(const char*)); i=i+3)
+    {
+        ep_subject = test_cases[i];
+        actual_subject = test_cases[i+1];
+        expected_match = (test_cases[i+2] != NULL);
+        
+        snprintf(buf, sizeof(buf), "endpoint subject '%s', actual subject: '%s': ", ep_subject, actual_subject);
+        test(buf)
+        testCond(micro_match_endpoint_subject(ep_subject, actual_subject) == expected_match);
+    }
+}
+
+static void
+test_MicroServiceStopsOnClosedConn(void)
+{
+    natsStatus s;
+    natsConnection *nc = NULL;
+    natsOptions *opts = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    struct threadArg arg;
+    microService *m = NULL;
+    microServiceConfig cfg = {
+        .name = "test",
+        .version = "1.0.0",
+    };
+    natsMsg *reply = NULL;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+
+    if ((opts == NULL) || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
+    {
+        FAIL("Unable to setup test for MicroConnectionEvents!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect for microservice: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    test("Start microservice: ");
+    testCond(NULL == micro_AddService(&m, nc, &cfg));
+
+    test("Test microservice is running: ");
+    testCond(!microService_IsStopped(m))
+
+    test("Test microservice is responding to PING: ");
+    testCond(NATS_OK == natsConnection_RequestString(&reply, nc, "$SRV.PING.test", "", 500));
+    natsMsg_Destroy(reply);
+    reply = NULL;
+
+    test("Stop microservice: ");
+    testCond(NULL == microService_Stop(m))
+
+    test("Test microservice is not running: ");
+    testCond(microService_IsStopped(m))
+
+    test("Test microservice is not responding to PING: ");
+    testCond(NATS_OK != natsConnection_RequestString(&reply, nc, "$SRV.PING.test", "", 500));
+
+    test("Destroy microservice (cleanup): ");
+    testCond(NULL == microService_Destroy(m))
+
+    test("Start microservice again: ");
+    testCond(NULL == micro_AddService(&m, nc, &cfg));
+
+    // void *p;
+    // natsHashIter iter;
+    // test("Check subs count AFTER START: ");
+    // natsMutex_Lock(nc->subsMu);
+    // printf("<>/<> actual count: %d\n", natsHash_Count(nc->subs));
+    // p = NULL;
+    // natsHashIter_Init(&iter, nc->subs);
+    // while (natsHashIter_Next(&iter, NULL, &p))
+    // {
+    //     printf("<>/<> subject: '%s'\n", ((natsSubscription *)p)->subject);
+    // }
+    // natsHashIter_Done(&iter);
+    // natsMutex_Unlock(nc->subsMu);
+
+    test("Close the connection: ");
+    testCond(NATS_OK == natsConnection_Drain(nc));
+    natsConnection_Close(nc);
+
+    while (micro_service_is_stopping(m))
+    {
+        nats_Sleep(1);
+    }
+    test("Test microservice is stopped: ");
+    testCond(microService_IsStopped(m));
+
+
+    microService_Destroy(m);
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+static void
+test_MicroServiceStopsWhenServerStops(void)
+{
+    natsStatus s;
+    natsConnection *nc = NULL;
+    natsOptions *opts = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    struct threadArg arg;
+    microService *m = NULL;
+    microServiceConfig cfg = {
+        .name = "test",
+        .version = "1.0.0",
+    };
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+
+    if ((opts == NULL) || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
+    {
+        FAIL("Unable to setup test for MicroConnectionEvents!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect for microservice: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    test("Start microservice: ");
+    testCond(NULL == micro_AddService(&m, nc, &cfg));
+
+    test("Test microservice is running: ");
+    testCond(!microService_IsStopped(m))
+
+    test("Stop the server: ");
+    testCond((_stopServer(serverPid), true));
+
+    test("Test microservice is not running: ");
+    testCond(microService_IsStopped(m))
+
+    microService_Destroy(m);
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&arg);
+}
+
+// static void
+// test_AsyncErrHandler(void)
+// {
+//     natsStatus          s;
+//     natsConnection      *nc       = NULL;
+//     natsOptions         *opts     = NULL;
+//     natsSubscription    *sub      = NULL;
+//     natsPid             serverPid = NATS_INVALID_PID;
+//     struct threadArg    arg;
+
+//     s = _createDefaultThreadArgsForCbTests(&arg);
+//     if (s != NATS_OK)
+//         FAIL("Unable to setup test!");
+
+//     arg.status = NATS_OK;
+//     arg.control= 7;
+
+//     s = natsOptions_Create(&opts);
+//     IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+//     IFOK(s, natsOptions_SetMaxPendingMsgs(opts, 10));
+//     IFOK(s, natsOptions_SetErrorHandler(opts, _asyncErrCb, (void*) &arg));
+
+//     if (s != NATS_OK)
+//         FAIL("Unable to create options for test AsyncErrHandler");
+
+//     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+//     CHECK_SERVER_STARTED(serverPid);
+
+//     s = natsConnection_Connect(&nc, opts);
+//     IFOK(s, natsConnection_Subscribe(&sub, nc, "async_test", _recvTestString, (void*) &arg));
+
+//     natsMutex_Lock(arg.m);
+//     arg.sub = sub;
+//     natsMutex_Unlock(arg.m);
+
+//     for (int i=0;
+//         (s == NATS_OK) && (i < (opts->maxPendingMsgs + 100)); i++)
+//     {
+//         s = natsConnection_PublishString(nc, "async_test", "hello");
+//     }
+//     IFOK(s, natsConnection_Flush(nc));
+
+//     // Wait for async err callback
+//     natsMutex_Lock(arg.m);
+//     while ((s != NATS_TIMEOUT) && !arg.done)
+//         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+//     natsMutex_Unlock(arg.m);
+
+//     test("Aync fired properly, and all checks are good: ");
+//     testCond((s == NATS_OK)
+//              && arg.done
+//              && arg.closed
+//              && (arg.status == NATS_OK));
+
+//     natsOptions_Destroy(opts);
+//     natsSubscription_Destroy(sub);
+//     natsConnection_Destroy(nc);
+
+//     _destroyDefaultThreadArgs(&arg);
+
+//     _stopServer(serverPid);
+// }
+
+
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -34358,6 +34715,7 @@ static testInfo allTests[] =
     {"ConnectionToWithNullURLs",        test_ConnectionToWithNullURLs},
     {"ConnectionStatus",                test_ConnectionStatus},
     {"ConnClosedCB",                    test_ConnClosedCB},
+    {"SetConnClosedCB",                 test_SetConnClosedCB},
     {"CloseDisconnectedCB",             test_CloseDisconnectedCB},
     {"ServerStopDisconnectedCB",        test_ServerStopDisconnectedCB},
     {"ClosedConnections",               test_ClosedConnections},
@@ -34440,6 +34798,7 @@ static testInfo allTests[] =
     {"SyncSubscriptionPending",         test_SyncSubscriptionPending},
     {"SyncSubscriptionPendingDrain",    test_SyncSubscriptionPendingDrain},
     {"AsyncErrHandler",                 test_AsyncErrHandler},
+    {"SetAsyncErrHandler",              test_SetAsyncErrHandler},
     {"AsyncSubscriberStarvation",       test_AsyncSubscriberStarvation},
     {"AsyncSubscriberOnClose",          test_AsyncSubscriberOnClose},
     {"NextMsgCallOnAsyncSub",           test_NextMsgCallOnAsyncSub},
@@ -34556,6 +34915,9 @@ static testInfo allTests[] =
     {"KeyValueMirrorDirectGet",         test_KeyValueMirrorDirectGet},
     {"KeyValueMirrorCrossDomains",      test_KeyValueMirrorCrossDomains},
 
+    {"MicroMatchEndpointSubject",       test_MicroMatchEndpointSubject},
+    {"MicroServiceStopsOnClosedConn",   test_MicroServiceStopsOnClosedConn},
+    {"MicroServiceStopsWhenServerStops", test_MicroServiceStopsWhenServerStops},
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},
     {"StanConnOptions",                 test_StanConnOptions},

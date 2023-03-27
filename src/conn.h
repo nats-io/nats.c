@@ -160,4 +160,23 @@ natsConn_close(natsConnection *nc);
 void
 natsConn_destroy(natsConnection *nc, bool fromPublicDestroy);
 
+natsStatus
+natsConn_setErrorCallback(natsConnection *nc, natsErrHandler cb, void *closure);
+
+natsStatus 
+natsConn_getErrorCallback(natsErrHandler *cb, void **closure, natsConnection *nc);
+
+natsStatus
+natsConn_setClosedCallback(natsConnection *nc, natsConnectionHandler cb, void *closure);
+
+natsStatus 
+natsConn_getClosedCallback(natsConnectionHandler *cb, void **closure, natsConnection *nc);
+
+natsStatus
+natsConn_setDisconnectedCallback(natsConnection *nc, natsConnectionHandler cb, void *closure);
+
+natsStatus 
+natsConn_getDisconnectedCallback(natsConnectionHandler *cb, void **closure, natsConnection *nc);
+
+
 #endif /* CONN_H_ */

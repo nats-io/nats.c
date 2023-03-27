@@ -67,6 +67,7 @@ ConnectionWithNULLOptions
 ConnectionToWithNullURLs
 ConnectionStatus
 ConnClosedCB
+SetConnClosedCB
 CloseDisconnectedCB
 ServerStopDisconnectedCB
 ClosedConnections
@@ -147,6 +148,7 @@ AsyncSubscriptionPendingDrain
 SyncSubscriptionPending
 SyncSubscriptionPendingDrain
 AsyncErrHandler
+SetAsyncErrHandler
 AsyncSubscriberStarvation
 AsyncSubscriberOnClose
 NextMsgCallOnAsyncSub
@@ -257,6 +259,9 @@ KeyValueDiscardOldToNew
 KeyValueRePublish
 KeyValueMirrorDirectGet
 KeyValueMirrorCrossDomains
+MicroMatchEndpointSubject
+MicroServiceStopsOnClosedConn
+MicroServiceStopsWhenServerStops
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

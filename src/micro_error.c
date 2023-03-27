@@ -11,26 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <stdarg.h>
+
 #include "micro.h"
 #include "microp.h"
-#include "mem.h"
 
-#ifdef DEV_MODE
-// For type safety
-
-static void _retain(natsError *err) { err->refs++; }
-static void _release(natsError *err) { err->refs--; }
-
-void natsError_Lock(natsConnection *nc) { natsMutex_Lock(nc->mu); }
-void natsConn_Unlock(natsConnection *nc) { natsMutex_Unlock(nc->mu); }
-
-#else
-// We know what we are doing :-)
-
-#define _retain(c) ((c)->refs++)
-#define _release(c) ((c)->refs--)
-
-#endif // DEV_MODE
+static microError *
+new_error(natsStatus s, int code, char *description);
 
 static microError _errorOutOfMemory = {
     .status = NATS_NO_MEMORY,
@@ -60,42 +47,41 @@ static microError *knownErrors[] = {
 microError *micro_ErrorOutOfMemory = &_errorOutOfMemory;
 microError *micro_ErrorInvalidArg = &_errorInvalidArg;
 
-const char *
-microError_String(microError *err, char *buf, int size)
+microError *
+micro_Errorf(int code, const char *format, ...)
 {
-    if (err == NULL || buf == NULL)
-        return "";
-    if (err->status == NATS_OK)
-        snprintf(buf, size, "%d: %s", err->code, err->description);
-    else
-        snprintf(buf, size, "%d:%d: %s", err->status, err->code, err->description);
-    return buf;
-}
+    va_list args1, args2;
+    char *buf = NULL;
+    int len = 0;
 
-natsStatus
-microError_Status(microError *err)
-{
-    return (err != NULL) ? err->status : NATS_OK;
-}
+    if ((code == 0) && nats_IsStringEmpty(format))
+        return NULL;
 
-static microError *
-new_error(natsStatus s, int code, char *description)
-{
-    microError *err = NULL;
+    va_start(args1, format);
+    va_copy(args2, args1);
 
-    err = NATS_CALLOC(1, sizeof(microError));
-    if (err == NULL)
+    len = vsnprintf(NULL, 0, format, args1);
+    va_end(args1);
+    if (len < 0)
+    {
+        va_end(args2);
+        return &_errorInvalidFormat;
+    }
+    buf = NATS_MALLOC(len + 1);
+    if (buf == NULL)
+    {
+        va_end(args2);
         return &_errorOutOfMemory;
+    }
 
-    err->status = s;
-    err->code = code;
-    err->description = description;
+    vsnprintf(buf, len + 1, format, args2);
+    va_end(args2);
 
-    return err;
+    return new_error(NATS_ERR, code, buf);
 }
 
 microError *
-microError_FromStatus(natsStatus s)
+micro_ErrorFromStatus(natsStatus s)
 {
     char *dup = NULL;
 
@@ -107,6 +93,31 @@ microError_FromStatus(natsStatus s)
         return &_errorOutOfMemory;
 
     return new_error(s, 0, dup);
+}
+
+microError *
+micro_ErrorFromResponse(natsStatus status, natsMsg *msg)
+{
+    microError *err = NULL;
+    const char *c = NULL, *d = NULL;
+    bool is_error;
+
+    if (msg != NULL)
+    {
+        natsMsgHeader_Get(msg, MICRO_ERROR_CODE_HDR, &c);
+        natsMsgHeader_Get(msg, MICRO_ERROR_HDR, &d);
+    }
+
+    is_error = (status != NATS_OK) || !nats_IsStringEmpty(c) || !nats_IsStringEmpty(d);
+    if (!is_error)
+        return NULL;
+
+    err = microError_Wrapf(micro_ErrorFromStatus(status), d);
+    if (!nats_IsStringEmpty(c) && (err != NULL))
+    {
+        err->code = atoi(c);
+    }
+    return err;
 }
 
 microError *
@@ -157,37 +168,30 @@ microError_Wrapf(microError *err, const char *format, ...)
     return new_error(s, code, buf);
 }
 
-microError *
-micro_NewErrorf(int code, const char *format, ...)
+const char *
+microError_String(microError *err, char *buf, int size)
 {
-    va_list args1, args2;
-    char *buf = NULL;
-    int len = 0;
-
-    if ((code == 0) && nats_IsStringEmpty(format))
-        return NULL;
-
-    va_start(args1, format);
-    va_copy(args2, args1);
-
-    len = vsnprintf(NULL, 0, format, args1);
-    va_end(args1);
-    if (len < 0)
-    {
-        va_end(args2);
-        return &_errorInvalidFormat;
-    }
-    buf = NATS_MALLOC(len + 1);
     if (buf == NULL)
+        return "";
+    if (err == NULL) 
     {
-        va_end(args2);
-        return &_errorOutOfMemory;
+        snprintf(buf, size, "null");
     }
+    else if (err->status == NATS_OK)
+    {
+        snprintf(buf, size, "%d: %s", err->code, err->description);
+    }
+    else
+    {
+        snprintf(buf, size, "%d:%d: %s", err->status, err->code, err->description);
+    }
+    return buf;
+}
 
-    vsnprintf(buf, len + 1, format, args2);
-    va_end(args2);
-
-    return new_error(NATS_ERR, code, buf);
+natsStatus
+microError_Status(microError *err)
+{
+    return (err != NULL) ? err->status : NATS_OK;
 }
 
 void microError_Destroy(microError *err)
@@ -209,27 +213,19 @@ void microError_Destroy(microError *err)
     NATS_FREE(err);
 }
 
-microError *
-microError_FromResponse(natsStatus status, natsMsg *msg)
+static microError *
+new_error(natsStatus s, int code, char *description)
 {
     microError *err = NULL;
-    const char *c = NULL, *d = NULL;
-    bool is_error;
 
-    if (msg != NULL)
-    {
-        natsMsgHeader_Get(msg, MICRO_ERROR_CODE_HDR, &c);
-        natsMsgHeader_Get(msg, MICRO_ERROR_HDR, &d);
-    }
+    err = NATS_CALLOC(1, sizeof(microError));
+    if (err == NULL)
+        return &_errorOutOfMemory;
 
-    is_error = (status != NATS_OK) || !nats_IsStringEmpty(c) || !nats_IsStringEmpty(d);
-    if (!is_error)
-        return NULL;
+    err->status = s;
+    err->code = code;
+    err->description = description;
 
-    err = microError_Wrapf(microError_FromStatus(status), d);
-    if (!nats_IsStringEmpty(c) && (err != NULL))
-    {
-        err->code = atoi(c);
-    }
     return err;
 }
+

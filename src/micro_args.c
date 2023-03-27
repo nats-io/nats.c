@@ -24,31 +24,44 @@ struct args_s
 
 static microError *parse(void **args, int *args_len, const char *data, int data_len);
 
+static inline microError *new_args(microArgs **ptr, int n)
+{
+    *ptr = NATS_CALLOC(1, sizeof(microArgs));
+    if (*ptr == NULL)
+        return micro_ErrorOutOfMemory;
+
+    (*ptr)->args = NATS_CALLOC(n, sizeof(void *));
+    if ((*ptr)->args == NULL)
+    {
+        NATS_FREE(*ptr);
+        return micro_ErrorOutOfMemory;
+    }
+
+    (*ptr)->count = n;
+    return NULL;
+}
+
 microError *
-micro_ParseArgs(microArgs **new_args, const char *data, int data_len)
+micro_ParseArgs(microArgs **ptr, const char *data, int data_len)
 {
     microError *err = NULL;
-    int n;
     microArgs *args = NULL;
+    int n;
 
-    if ((new_args == NULL) || (data == NULL) || (data_len < 0))
-        return micro_NewErrorf(500, "invalid function argument");
+    if ((ptr == NULL) || (data == NULL) || (data_len < 0))
+        return micro_Errorf(500, "invalid function argument");
 
     MICRO_CALL(err, parse(NULL, &n, data, data_len));
-    MICRO_CALL(err, MICRO_CALLOC(args, 1, sizeof(microArgs)));
-    MICRO_CALL(err, MICRO_CALLOC(args->args, n, sizeof(void *)));
-    MICRO_DO(err, args->count = n);
+    MICRO_CALL(err, new_args(&args, n));
     MICRO_CALL(err, parse(args->args, &n, data, data_len));
 
-    if (err == NULL)
-    {
-        *new_args = args;
-    }
-    else
+    if (err != NULL)
     {
         microArgs_Destroy(args);
+        return err;
     }
-    return err;
+    *ptr = args;
+    return NULL;
 }
 
 void microArgs_Destroy(microArgs *args)
@@ -172,7 +185,7 @@ decode_rest_of_string(char *dup, int *decoded_len, int *i, const char *data, int
     }
     if (!terminated)
     {
-        micro_NewErrorf(400, "a quoted string is not properly terminated");
+        micro_Errorf(400, "a quoted string is not properly terminated");
     }
 
     *decoded_len = len;
@@ -282,7 +295,7 @@ parse(void **args, int *args_len, const char *data, int data_len)
                 break;
 
             default:
-                return micro_NewErrorf(400, "unexpected '%c', an argument must be a number or a quoted string", c);
+                return micro_Errorf(400, "unexpected '%c', an argument must be a number or a quoted string", c);
             }
             break;
 
@@ -341,12 +354,12 @@ parse(void **args, int *args_len, const char *data, int data_len)
                 break;
 
             default:
-                return micro_NewErrorf(400, "unexpected '%c', a number must be followed by a space", c);
+                return micro_Errorf(400, "unexpected '%c', a number must be followed by a space", c);
             }
             break;
 
         default:
-            return micro_NewErrorf(500, "unreachable: wrong state for a ' ', expected NewArg or NumberArg, got %d", state);
+            return micro_Errorf(500, "unreachable: wrong state for a ' ', expected NewArg or NumberArg, got %d", state);
         }
     }
 

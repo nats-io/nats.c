@@ -15,30 +15,6 @@
 #include "microp.h"
 #include "mem.h"
 
-natsMsg *
-microRequest_GetMsg(microRequest *req)
-{
-    return req != NULL ? req->msg : NULL;
-}
-
-microEndpoint *
-microRequest_GetEndpoint(microRequest *req)
-{
-    return (req != NULL) ? req->ep : NULL;
-}
-
-microService *
-microRequest_GetService(microRequest *req)
-{
-    return ((req != NULL) && (req->ep != NULL)) ? req->ep->m : NULL;
-}
-
-natsConnection *
-microRequest_GetConnection(microRequest *req)
-{
-    return ((req != NULL) && (req->ep != NULL) && (req->ep->m != NULL)) ? req->ep->m->nc : NULL;
-}
-
 microError *
 microRequest_Respond(microRequest *req, microError **err_will_free, const char *data, size_t len)
 {
@@ -47,16 +23,16 @@ microRequest_Respond(microRequest *req, microError **err_will_free, const char *
     natsStatus s = NATS_OK;
     char buf[64];
 
-    if ((req == NULL) || (req->msg == NULL) || (req->msg->sub == NULL) || (req->msg->sub->conn == NULL))
+    if ((req == NULL) || (req->message == NULL) || (req->message->sub == NULL) || (req->message->sub->conn == NULL))
     {
         return micro_ErrorInvalidArg;
     }
 
-    IFOK(s, natsMsg_Create(&msg, natsMsg_GetReply(req->msg), NULL, data, len));
-
-    if ((err_will_free != NULL) && (*err_will_free != NULL))
+    IFOK(s, natsMsg_Create(&msg, natsMsg_GetReply(req->message), NULL, data, len));
+    if ((s == NATS_OK) && (err_will_free != NULL) && (*err_will_free != NULL))
     {
         err = *err_will_free;
+        micro_update_last_error(req->endpoint, err);
         if ((s == NATS_OK) && (err->status != NATS_OK))
         {
             s = natsMsgHeader_Set(msg, MICRO_STATUS_HDR, natsStatus_GetText(err->status));
@@ -70,9 +46,8 @@ microRequest_Respond(microRequest *req, microError **err_will_free, const char *
             snprintf(buf, sizeof(buf), "%d", err->code);
             s = natsMsgHeader_Set(msg, MICRO_ERROR_CODE_HDR, buf);
         }
-        micro_update_last_error(req->ep, err);
     }
-    IFOK(s, natsConnection_PublishMsg(req->msg->sub->conn, msg));
+    IFOK(s, natsConnection_PublishMsg(req->message->sub->conn, msg));
 
     natsMsg_Destroy(msg);
     if (err_will_free != NULL)
@@ -81,30 +56,148 @@ microRequest_Respond(microRequest *req, microError **err_will_free, const char *
         *err_will_free = NULL;
     }
     return microError_Wrapf(
-        microError_FromStatus(s),
+        micro_ErrorFromStatus(s),
         "failed to respond to a message with an error");
 }
 
-void micro_free_request(microRequest *req)
+microError *
+microRequest_AddHeader(microRequest *req, const char *key, const char *value)
+{
+    return micro_ErrorFromStatus(
+        natsMsgHeader_Add(microRequest_GetMsg(req), key, value));
+}
+
+microError *
+microRequest_DeleteHeader(microRequest *req, const char *key)
+{
+    return micro_ErrorFromStatus(
+        natsMsgHeader_Delete(microRequest_GetMsg(req), key));
+}
+
+natsConnection *
+microRequest_GetConnection(microRequest *req)
+{
+    return ((req != NULL) && (req->service != NULL)) ? req->service->nc : NULL;
+}
+
+const char *
+microRequest_GetData(microRequest *req)
+{
+    return natsMsg_GetData(microRequest_GetMsg(req));
+}
+
+int microRequest_GetDataLength(microRequest *req)
+{
+    return natsMsg_GetDataLength(microRequest_GetMsg(req));
+}
+
+microEndpoint *
+microRequest_GetEndpoint(microRequest *req)
+{
+    return (req != NULL) ? req->endpoint : NULL;
+}
+
+microError *
+microRequest_GetHeaderKeys(microRequest *req, const char ***keys, int *count)
+{
+    return micro_ErrorFromStatus(
+        natsMsgHeader_Keys(microRequest_GetMsg(req), keys, count));
+}
+
+microError *
+microRequest_GetHeaderValue(microRequest *req, const char *key, const char **value)
+{
+    return micro_ErrorFromStatus(
+        natsMsgHeader_Get(microRequest_GetMsg(req), key, value));
+}
+
+microError *
+microRequest_GetHeaderValues(microRequest *req, const char *key, const char ***values, int *count)
+{
+    return micro_ErrorFromStatus(
+        natsMsgHeader_Values(microRequest_GetMsg(req), key, values, count));
+}
+
+natsMsg *
+microRequest_GetMsg(microRequest *req)
+{
+    return (req != NULL) ? req->message : NULL;
+}
+
+const char *
+microRequest_GetReply(microRequest *req)
+{
+    return natsMsg_GetReply(microRequest_GetMsg(req));
+}
+
+uint64_t microRequest_GetSequence(microRequest *req)
+{
+    return natsMsg_GetSequence(microRequest_GetMsg(req));
+}
+
+const char *microRequest_GetSubject(microRequest *req)
+{
+    return natsMsg_GetSubject(microRequest_GetMsg(req));
+}
+
+void *microRequest_GetServiceState(microRequest *req)
+{
+    if ((req == NULL) || (req->service == NULL) || (req->service->cfg == NULL))
+    {
+        return NULL;
+    }
+    return req->service->cfg->state;
+}
+
+void *microRequest_GetEndpointState(microRequest *req)
+{
+    if ((req == NULL) || (req->endpoint == NULL) || (req->endpoint->config == NULL))
+    {
+        return NULL;
+    }
+    return req->endpoint->config->state;
+}
+
+int64_t microRequest_GetTime(microRequest *req)
+{
+    return natsMsg_GetTime(microRequest_GetMsg(req));
+}
+
+microError *
+microRequest_SetHeader(microRequest *req, const char *key, const char *value)
+{
+    return micro_ErrorFromStatus(
+        natsMsgHeader_Set(microRequest_GetMsg(req), key, value));
+}
+
+microService *
+microRequest_GetService(microRequest *req)
+{
+    return (req != NULL) ? req->service : NULL;
+}
+
+
+void micro_destroy_request(microRequest *req)
 {
     NATS_FREE(req);
 }
 
-natsStatus
-micro_new_request(microRequest **new_request, natsMsg *msg)
+microError *
+micro_new_request(microRequest **new_request, microService *m, microEndpoint *ep, natsMsg *msg)
 {
-    natsStatus s = NATS_OK;
     microRequest *req = NULL;
 
-    req = (microRequest *)NATS_CALLOC(1, sizeof(microRequest));
-    s = (req != NULL) ? NATS_OK : nats_setDefaultError(NATS_NO_MEMORY);
-    if (s == NATS_OK)
-    {
-        req->msg = msg;
-        *new_request = req;
-        return NATS_OK;
-    }
+    // endpoint is optional, service and message references are required.
+    if ((new_request == NULL) || (m == NULL) || (msg == NULL))
+        return micro_ErrorInvalidArg;
 
-    micro_free_request(req);
-    return NATS_UPDATE_ERR_STACK(s);
+    req = (microRequest *)NATS_CALLOC(1, sizeof(microRequest));
+    if (req == NULL)
+        return micro_ErrorOutOfMemory;
+
+    req->message = msg;
+    req->service = m;
+    req->endpoint = ep;
+    *new_request = req;
+    return NULL;
 }

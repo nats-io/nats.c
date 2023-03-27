@@ -17,8 +17,6 @@
 #include "microp.h"
 #include "mem.h"
 
-static natsStatus
-free_endpoint(microEndpoint *ep);
 static bool
 is_valid_name(const char *name);
 static bool
@@ -26,173 +24,135 @@ is_valid_subject(const char *subject);
 static void
 handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 
-natsStatus
-micro_new_endpoint(microEndpoint **new_endpoint, microService *m, microEndpointConfig *cfg)
+static microError *new_endpoint(microEndpoint **ptr);
+
+microError *
+micro_new_endpoint(microEndpoint **new_ep, microService *m, microEndpointConfig *cfg)
 {
-    natsStatus s = NATS_OK;
+    microError *err = NULL;
     microEndpoint *ep = NULL;
-    microEndpointConfig *clone_cfg = NULL;
 
     if (!is_valid_name(cfg->name) || (cfg->handler == NULL))
+        return micro_ErrorInvalidArg;
+
+    if ((cfg->subject != NULL) && !is_valid_subject(cfg->subject))
+        return micro_ErrorInvalidArg;
+
+    MICRO_CALL(err, new_endpoint(&ep));
+    MICRO_CALL(err, micro_ErrorFromStatus(natsMutex_Create(&ep->mu)));
+    MICRO_CALL(err, micro_clone_endpoint_config(&ep->config, cfg));
+    MICRO_CALL(err, micro_strdup(&ep->subject, nats_IsStringEmpty(cfg->subject) ? cfg->name : cfg->subject));
+    if (err != NULL)
     {
-        s = NATS_INVALID_ARG;
+        micro_stop_and_destroy_endpoint(ep);
+        return err;
     }
-    if ((s == NATS_OK) && (cfg->subject != NULL) && !is_valid_subject(cfg->subject))
-    {
-        s = NATS_INVALID_ARG;
-    }
-    IFOK(s, micro_clone_endpoint_config(&clone_cfg, cfg));
-    IFOK(s, NATS_CALLOCS(&ep, 1, sizeof(microEndpoint)));
-    IFOK(s, natsMutex_Create(&ep->mu));
-    if (s == NATS_OK)
-    {
-        ep->m = m;
-        ep->subject = NATS_STRDUP(nats_IsStringEmpty(cfg->subject) ? cfg->name : cfg->subject);
-        ep->config = clone_cfg;
-        *new_endpoint = ep;
-    }
-    else
-    {
-        micro_free_cloned_endpoint_config(clone_cfg);
-        free_endpoint(ep);
-    }
-    return NATS_UPDATE_ERR_STACK(s);
+
+    ep->m = m;
+    *new_ep = ep;
+    return NULL;
 }
 
-natsStatus
-micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
-{
-    natsStatus s = NATS_OK;
-    microEndpointConfig *new_cfg = NULL;
-    microSchema *new_schema = NULL;
-    char *new_name = NULL;
-    char *new_subject = NULL;
-    char *new_request = NULL;
-    char *new_response = NULL;
-
-    if (out == NULL || cfg == NULL)
-        return NATS_INVALID_ARG;
-
-    s = NATS_CALLOCS(&new_cfg, 1, sizeof(microEndpointConfig));
-    if (s == NATS_OK && cfg->name != NULL)
-    {
-        DUP_STRING(s, new_name, cfg->name);
-    }
-    if (s == NATS_OK && cfg->subject != NULL)
-    {
-        DUP_STRING(s, new_subject, cfg->subject);
-    }
-    if (s == NATS_OK && cfg->schema != NULL)
-    {
-        s = NATS_CALLOCS(&new_schema, 1, sizeof(microSchema));
-        if (s == NATS_OK && cfg->schema->request != NULL)
-        {
-            DUP_STRING(s, new_request, cfg->schema->request);
-        }
-        if (s == NATS_OK && cfg->schema->response != NULL)
-        {
-            DUP_STRING(s, new_response, cfg->schema->response);
-        }
-        if (s == NATS_OK)
-        {
-            new_schema->request = new_request;
-            new_schema->response = new_response;
-        }
-    }
-    if (s == NATS_OK)
-    {
-        memcpy(new_cfg, cfg, sizeof(microEndpointConfig));
-        new_cfg->schema = new_schema;
-        new_cfg->name = new_name;
-        new_cfg->subject = new_subject;
-        *out = new_cfg;
-    }
-    else
-    {
-        NATS_FREE(new_cfg);
-        NATS_FREE(new_schema);
-        NATS_FREE(new_name);
-        NATS_FREE(new_subject);
-        NATS_FREE(new_request);
-        NATS_FREE(new_response);
-    }
-
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
-void micro_free_cloned_endpoint_config(microEndpointConfig *cfg)
-{
-    if (cfg == NULL)
-        return;
-
-    // the strings are declared const for the public, but in a clone these need
-    // to be freed.
-    NATS_FREE((char *)cfg->name);
-    NATS_FREE((char *)cfg->subject);
-    NATS_FREE((char *)cfg->schema->request);
-    NATS_FREE((char *)cfg->schema->response);
-
-    NATS_FREE(cfg->schema);
-    NATS_FREE(cfg);
-}
-
-natsStatus
+microError *
 micro_start_endpoint(microEndpoint *ep)
 {
+    natsStatus s = NATS_OK;
     if ((ep->subject == NULL) || (ep->config == NULL) || (ep->config->handler == NULL))
         // nothing to do
-        return NATS_OK;
+        return NULL;
 
     // reset the stats.
     memset(&ep->stats, 0, sizeof(ep->stats));
 
-    return natsConnection_QueueSubscribe(&ep->sub, ep->m->nc, ep->subject,
-                                         MICRO_QUEUE_GROUP, handle_request, ep);
+    s = natsConnection_QueueSubscribe(&ep->sub, ep->m->nc, ep->subject,
+                                      MICRO_QUEUE_GROUP, handle_request, ep);
+    if (s != NATS_OK)
+        return micro_ErrorFromStatus(s);
+
+    return NULL;
 }
 
-// TODO <>/<> COPY FROM GO
-natsStatus
-micro_stop_endpoint(microEndpoint *ep)
-{
-    natsStatus s = NATS_OK;
-
-    if (ep->sub != NULL)
-    {
-        s = natsSubscription_Drain(ep->sub);
-    }
-    if (s == NATS_OK)
-    {
-        ep->sub = NULL;
-
-        // reset the stats.
-        memset(&ep->stats, 0, sizeof(ep->stats));
-    }
-
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
-static natsStatus
-free_endpoint(microEndpoint *ep)
-{
-    NATS_FREE(ep->subject);
-    natsMutex_Destroy(ep->mu);
-    micro_free_cloned_endpoint_config(ep->config);
-    NATS_FREE(ep);
-    return NATS_OK;
-}
-
-natsStatus
+microError *
 micro_stop_and_destroy_endpoint(microEndpoint *ep)
 {
     natsStatus s = NATS_OK;
 
-    if (ep == NULL)
-        return NATS_OK;
+    if ((ep == NULL) || (ep->sub == NULL))
+        return NULL;
 
-    IFOK(s, micro_stop_endpoint(ep));
-    IFOK(s, free_endpoint(ep));
+    if (!natsConnection_IsClosed(ep->m->nc)) 
+    {
+        s = natsSubscription_Drain(ep->sub);
+        if (s != NATS_OK)
+            return micro_ErrorFromStatus(s);
+    }
 
-    return NATS_UPDATE_ERR_STACK(s);
+    NATS_FREE(ep->subject);
+    natsSubscription_Destroy(ep->sub);
+    natsMutex_Destroy(ep->mu);
+    micro_destroy_cloned_endpoint_config(ep->config);
+    NATS_FREE(ep);
+
+    return NULL;
+}
+
+static void
+handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    // natsStatus s = NATS_OK;
+    microError *err = NULL;
+    microEndpoint *ep = (microEndpoint *)closure;
+    microEndpointStats *stats;
+    microRequestHandler handler;
+    microRequest *req = NULL;
+    int64_t start, elapsed_ns, full_s;
+
+    if (ep == NULL || ep->config == NULL || ep->config->handler == NULL)
+    {
+        // This is a bug, we should not have received a message on this
+        // subscription.
+        natsMsg_Destroy(msg);
+        return;
+    }
+    stats = &ep->stats;
+    handler = ep->config->handler;
+
+    err = micro_new_request(&req, ep->m, ep, msg);
+    if (err != NULL)
+    {
+        natsMsg_Destroy(msg);
+        return;
+    }
+    req->endpoint = ep;
+
+    // handle the request.
+    start = nats_NowInNanoSeconds();
+    handler(req);
+    elapsed_ns = nats_NowInNanoSeconds() - start;
+
+    // Update stats. Note that unlike in the go client, the error stats are
+    // handled by req.Respond function.
+    natsMutex_Lock(ep->mu);
+    stats->num_requests++;
+    stats->processing_time_ns += elapsed_ns;
+    full_s = stats->processing_time_ns / 1000000000;
+    stats->processing_time_s += full_s;
+    stats->processing_time_ns -= full_s * 1000000000;
+    natsMutex_Unlock(ep->mu);
+
+    micro_destroy_request(req);
+    natsMsg_Destroy(msg);
+}
+
+void micro_update_last_error(microEndpoint *ep, microError *err)
+{
+    if (err == NULL || ep == NULL)
+        return;
+
+    natsMutex_Lock(ep->mu);
+    ep->stats.num_errors++;
+    microError_String(err, ep->stats.last_error_string, sizeof(ep->stats.last_error_string));
+    natsMutex_Unlock(ep->mu);
 }
 
 static bool
@@ -241,59 +201,159 @@ is_valid_subject(const char *subject)
     return true;
 }
 
-static void
-handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+static inline void
+destroy_schema(microSchema *schema)
 {
-    natsStatus s = NATS_OK;
-    microEndpoint *ep = (microEndpoint *)closure;
-    microEndpointStats *stats = &ep->stats;
-    microEndpointConfig *cfg = ep->config;
-    microRequest *req = NULL;
-    microRequestHandler handler = cfg->handler;
-    int64_t start, elapsed_ns, full_s;
-
-    if (handler == NULL)
-    {
-        // This is a bug, we should not have received a message on this
-        // subscription.
-        natsMsg_Destroy(msg);
+    if (schema == NULL)
         return;
-    }
 
-    s = micro_new_request(&req, msg);
-    if (s != NATS_OK)
-    {
-        natsMsg_Destroy(msg);
-        return;
-    }
-
-    // handle the request.
-    start = nats_NowInNanoSeconds();
-    req->ep = ep;
-    handler(ep->m, req);
-    elapsed_ns = nats_NowInNanoSeconds() - start;
-
-    // update stats.
-    natsMutex_Lock(ep->mu);
-    stats->num_requests++;
-    stats->processing_time_ns += elapsed_ns;
-    full_s = stats->processing_time_ns / 1000000000;
-    stats->processing_time_s += full_s;
-    stats->processing_time_ns -= full_s * 1000000000;
-
-    natsMutex_Unlock(ep->mu);
-
-    micro_free_request(req);
-    natsMsg_Destroy(msg);
+    NATS_FREE((char *)schema->request);
+    NATS_FREE((char *)schema->response);
+    NATS_FREE(schema);
 }
 
-void micro_update_last_error(microEndpoint *ep, microError *err)
+static microError *
+clone_schema(microSchema **to, const microSchema *from)
 {
+    microError *err = NULL;
+    if (from == NULL)
+    {
+        *to = NULL;
+        return NULL;
+    }
+
+    *to = NATS_CALLOC(1, sizeof(microSchema));
+    if (*to == NULL)
+        return micro_ErrorOutOfMemory;
+
+    MICRO_CALL(err, micro_strdup((char **)&((*to)->request), from->request));
+    MICRO_CALL(err, micro_strdup((char **)&((*to)->response), from->response));
+
+    if (err != NULL)
+    {
+        destroy_schema(*to);
+        *to = NULL;
+        return err;
+    }
+
+    return NULL;
+}
+
+static microError *
+new_endpoint(microEndpoint **ptr)
+{
+    *ptr = NATS_CALLOC(1, sizeof(microEndpoint));
+    return (*ptr == NULL) ? micro_ErrorOutOfMemory : NULL;
+}
+
+static inline microError *
+new_endpoint_config(microEndpointConfig **ptr)
+{
+    *ptr = NATS_CALLOC(1, sizeof(microEndpointConfig));
+    return (*ptr == NULL) ? micro_ErrorOutOfMemory : NULL;
+}
+
+microError *
+micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
+{
+    microError *err = NULL;
+    microEndpointConfig *new_cfg = NULL;
+
+    if (out == NULL)
+        return micro_ErrorInvalidArg;
+
+    if (cfg == NULL)
+    {
+        *out = NULL;
+        return NULL;
+    }
+
+    err = new_endpoint_config(&new_cfg);
     if (err == NULL)
+    {
+        memcpy(new_cfg, cfg, sizeof(microEndpointConfig));
+    }
+
+    MICRO_CALL(err, micro_strdup((char **)&new_cfg->name, cfg->name));
+    MICRO_CALL(err, micro_strdup((char **)&new_cfg->subject, cfg->subject));
+    MICRO_CALL(err, clone_schema(&new_cfg->schema, cfg->schema));
+
+    if (err != NULL)
+    {
+        micro_destroy_cloned_endpoint_config(new_cfg);
+        return err;
+    }
+
+    *out = new_cfg;
+    return NULL;
+}
+
+void micro_destroy_cloned_endpoint_config(microEndpointConfig *cfg)
+{
+    if (cfg == NULL)
         return;
 
-    natsMutex_Lock(ep->mu);
-    ep->stats.num_errors++;
-    microError_String(err, ep->stats.last_error_string, sizeof(ep->stats.last_error_string));
-    natsMutex_Unlock(ep->mu);
+    // the strings are declared const for the public, but in a clone these need
+    // to be freed.
+    NATS_FREE((char *)cfg->name);
+    NATS_FREE((char *)cfg->subject);
+
+    destroy_schema(cfg->schema);
+    NATS_FREE(cfg);
+}
+
+bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_subject)
+{
+    const char *e = ep_subject;
+    const char *a = actual_subject;
+    const char *etok, *enext;
+    int etok_len;
+    bool last_etok = false;
+    const char *atok, *anext;
+    int atok_len;
+    bool last_atok = false;
+
+    if (e == NULL || a == NULL)
+        return false;
+
+    while (true)
+    {
+        enext = strchr(e, '.');
+        if (enext == NULL)
+        {
+            enext = e + strlen(e);
+            last_etok = true;
+        }
+        etok = e;
+        etok_len = (int)(enext - e);
+        e = enext + 1;
+
+        anext = strchr(a, '.');
+        if (anext == NULL)
+        {
+            anext = a + strlen(a);
+            last_atok = true;
+        }
+        atok = a;
+        atok_len = (int)(anext - a);
+        a = anext + 1;
+
+        if (last_etok)
+        {
+            if (etok_len == 1 && etok[0] == '>')
+                return true;
+
+            if (!last_atok)
+                return false;
+        }
+        if (!(etok_len == 1 && etok[0] == '*') &&
+            !(etok_len == atok_len && strncmp(etok, atok, etok_len) == 0))
+        {
+            return false;
+        }
+        if (last_atok)
+        {
+            return last_etok;
+        }
+    }
 }

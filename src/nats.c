@@ -726,11 +726,14 @@ _timerThread(void *arg)
 static void
 _asyncCbsThread(void *arg)
 {
-    natsLibAsyncCbs *asyncCbs = &(gLib.asyncCbs);
-    natsAsyncCbInfo *cb       = NULL;
-    natsConnection  *nc       = NULL;
+    natsLibAsyncCbs         *asyncCbs   = &(gLib.asyncCbs);
+    natsAsyncCbInfo         *cb         = NULL;
+    natsConnection          *nc         = NULL;
+    natsConnectionHandler   cbHandler   = NULL;
+    natsErrHandler          errHandler  = NULL;
+    void                    *cbClosure  = NULL;
 #if defined(NATS_HAS_STREAMING)
-    stanConnection  *sc       = NULL;
+    stanConnection          *sc         = NULL;
 #endif
 
     WAIT_LIB_INITIALIZED;
@@ -760,41 +763,62 @@ _asyncCbsThread(void *arg)
         sc = cb->sc;
 #endif
 
+        // callback handlers can be updated on a live connection, so we need to
+        // lock.
+        natsMutex_Lock(nc->mu);
         switch (cb->type)
         {
             case ASYNC_CLOSED:
-               (*(nc->opts->closedCb))(nc, nc->opts->closedCbClosure);
+               cbHandler = nc->opts->closedCb;
+               cbClosure = nc->opts->closedCbClosure;
                break;
             case ASYNC_DISCONNECTED:
-                (*(nc->opts->disconnectedCb))(nc, nc->opts->disconnectedCbClosure);
+                cbHandler = nc->opts->disconnectedCb;
+                cbClosure = nc->opts->disconnectedCbClosure;
                 break;
             case ASYNC_RECONNECTED:
-                (*(nc->opts->reconnectedCb))(nc, nc->opts->reconnectedCbClosure);
+                cbHandler = nc->opts->reconnectedCb;
+                cbClosure = nc->opts->reconnectedCbClosure;
                 break;
             case ASYNC_CONNECTED:
-                (*(nc->opts->connectedCb))(nc, nc->opts->connectedCbClosure);
+                cbHandler = nc->opts->connectedCb;
+                cbClosure = nc->opts->connectedCbClosure;
                 break;
             case ASYNC_DISCOVERED_SERVERS:
-                (*(nc->opts->discoveredServersCb))(nc, nc->opts->discoveredServersClosure);
+                cbHandler = nc->opts->discoveredServersCb;
+                cbClosure = nc->opts->discoveredServersClosure;
                 break;
             case ASYNC_LAME_DUCK_MODE:
-                (*(nc->opts->lameDuckCb))(nc, nc->opts->lameDuckClosure);
+                cbHandler = nc->opts->lameDuckCb;
+                cbClosure = nc->opts->lameDuckClosure;
                 break;
             case ASYNC_ERROR:
-            {
-                if (cb->errTxt != NULL)
-                    nats_setErrStatusAndTxt(cb->err, cb->errTxt);
-                (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
+                errHandler = nc->opts->asyncErrCb;
+                cbClosure =  nc->opts->asyncErrCbClosure;
                 break;
-            }
-#if defined(NATS_HAS_STREAMING)
-            case ASYNC_STAN_CONN_LOST:
-                (*(sc->opts->connectionLostCB))(sc, sc->connLostErrTxt, sc->opts->connectionLostCBClosure);
-                break;
-#endif
             default:
                 break;
         }
+        natsMutex_Unlock(nc->mu);
+
+        // Invoke the callback
+        if (cbHandler != NULL)
+        {
+            (*(cbHandler))(nc,  cbClosure);
+        }
+        else if (errHandler != NULL)
+        {
+            if (cb->errTxt != NULL)
+                nats_setErrStatusAndTxt(cb->err, cb->errTxt);
+            (*(errHandler))(nc, cb->sub, cb->err, cbClosure);
+            break;
+        }
+#if defined(NATS_HAS_STREAMING)
+        else if (cb->type == ASYNC_STAN_CONN_LOST)
+        {
+                (*(sc->opts->connectionLostCB))(sc, sc->connLostErrTxt, sc->opts->connectionLostCBClosure);
+        }
+#endif
 
         natsAsyncCb_Destroy(cb);
         nats_clearLastError();

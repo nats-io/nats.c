@@ -4432,3 +4432,59 @@ natsConn_defaultErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus
     }
     fflush(stderr);
 }
+
+natsStatus
+natsConn_getErrorCallback(natsErrHandler *cb, void **closure, natsConnection *nc)
+{
+    if ((nc == NULL) || (cb == NULL) || (closure == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+    *cb = nc->opts->asyncErrCb;
+    *closure = nc->opts->asyncErrCbClosure;
+    natsConn_Unlock(nc);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsConn_setErrorCallback(natsConnection *nc, natsErrHandler cb, void *closure)
+{
+    if ((nc == NULL) || (cb == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+    nc->opts->asyncErrCb = cb;
+    nc->opts->asyncErrCbClosure = closure;
+    natsConn_Unlock(nc);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsConn_getClosedCallback(natsConnectionHandler *cb, void **closure, natsConnection *nc)
+{
+    if ((nc == NULL) || (cb == NULL) || (closure == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+    *cb = nc->opts->closedCb;
+    *closure = nc->opts->closedCbClosure;
+    natsConn_Unlock(nc);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsConn_setClosedCallback(natsConnection *nc, natsConnectionHandler cb, void *closure)
+{
+    if ((nc == NULL) || (cb == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+    nc->opts->closedCb = cb;
+    nc->opts->closedCbClosure = closure;
+    natsConn_Unlock(nc);
+
+    return NATS_OK;
+}

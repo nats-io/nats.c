@@ -14374,6 +14374,79 @@ test_AsyncErrHandler(void)
 }
 
 static void
+test_AsyncSetErrHandler(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    arg.status = NATS_OK;
+    arg.control= 7;
+
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+    IFOK(s, natsOptions_SetMaxPendingMsgs(opts, 10));
+
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test AsyncErrHandler");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "async_test", _recvTestString, (void*) &arg));
+
+    natsMutex_Lock(arg.m);
+    arg.sub = sub;
+    natsMutex_Unlock(arg.m);
+
+    // Start sending messages
+    for (int i=0;
+        (s == NATS_OK) && (i < (opts->maxPendingMsgs)); i++)
+    {
+        s = natsConnection_PublishString(nc, "async_test", "hello");
+    }
+
+    // Set the error handler in-flight
+    IFOK(s, natsConn_setErrorCallback(nc, _asyncErrCb, (void*) &arg));
+
+    for (int i=0;
+        (s == NATS_OK) && (i < 100); i++)
+    {
+        s = natsConnection_PublishString(nc, "async_test", "hello");
+    }
+    IFOK(s, natsConnection_Flush(nc));
+
+    // Wait for async err callback
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+
+    test("Aync fired properly, and all checks are good: ");
+    testCond((s == NATS_OK)
+             && arg.done
+             && arg.closed
+             && (arg.status == NATS_OK));
+
+    natsOptions_Destroy(opts);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
+
+static void
 _responseCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     struct threadArg    *arg = (struct threadArg*) closure;
@@ -34440,6 +34513,7 @@ static testInfo allTests[] =
     {"SyncSubscriptionPending",         test_SyncSubscriptionPending},
     {"SyncSubscriptionPendingDrain",    test_SyncSubscriptionPendingDrain},
     {"AsyncErrHandler",                 test_AsyncErrHandler},
+    {"AsyncSetErrHandler",              test_AsyncSetErrHandler},
     {"AsyncSubscriberStarvation",       test_AsyncSubscriberStarvation},
     {"AsyncSubscriberOnClose",          test_AsyncSubscriberOnClose},
     {"NextMsgCallOnAsyncSub",           test_NextMsgCallOnAsyncSub},

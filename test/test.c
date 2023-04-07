@@ -8533,6 +8533,53 @@ test_ConnClosedCB(void)
 }
 
 static void
+test_SetConnClosedCB(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+
+    if ((opts == NULL)
+        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
+    {
+        FAIL("Unable to setup test for SetConnClosedCB!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_Connect(&nc, opts);
+
+    // Set the connection closed handler in-flight
+    IFOK(s, natsConn_setClosedCallback(nc, _closedCb, (void*) &arg));
+    if (s == NATS_OK)
+        natsConnection_Close(nc);
+
+    test("Test connection closed CB invoked: ");
+
+    natsMutex_Lock(arg.m);
+    s = NATS_OK;
+    while ((s != NATS_TIMEOUT) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    natsMutex_Unlock(arg.m);
+
+    testCond((s == NATS_OK) && arg.closed);
+
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_CloseDisconnectedCB(void)
 {
     natsStatus          s;
@@ -14374,7 +14421,7 @@ test_AsyncErrHandler(void)
 }
 
 static void
-test_AsyncSetErrHandler(void)
+test_SetAsyncErrHandler(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -34431,6 +34478,7 @@ static testInfo allTests[] =
     {"ConnectionToWithNullURLs",        test_ConnectionToWithNullURLs},
     {"ConnectionStatus",                test_ConnectionStatus},
     {"ConnClosedCB",                    test_ConnClosedCB},
+    {"SetConnClosedCB",                 test_SetConnClosedCB},
     {"CloseDisconnectedCB",             test_CloseDisconnectedCB},
     {"ServerStopDisconnectedCB",        test_ServerStopDisconnectedCB},
     {"ClosedConnections",               test_ClosedConnections},
@@ -34513,7 +34561,7 @@ static testInfo allTests[] =
     {"SyncSubscriptionPending",         test_SyncSubscriptionPending},
     {"SyncSubscriptionPendingDrain",    test_SyncSubscriptionPendingDrain},
     {"AsyncErrHandler",                 test_AsyncErrHandler},
-    {"AsyncSetErrHandler",              test_AsyncSetErrHandler},
+    {"SetAsyncErrHandler",              test_SetAsyncErrHandler},
     {"AsyncSubscriberStarvation",       test_AsyncSubscriberStarvation},
     {"AsyncSubscriberOnClose",          test_AsyncSubscriberOnClose},
     {"NextMsgCallOnAsyncSub",           test_NextMsgCallOnAsyncSub},

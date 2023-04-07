@@ -768,41 +768,41 @@ _asyncCbsThread(void *arg)
         cbHandler = NULL;
         errHandler = NULL;
         cbClosure = NULL;
-        natsMutex_Lock(nc->mu);
+
+#define __set_handler(_h, _cb, _cl) \
+        { \
+            natsMutex_Lock(nc->mu); \
+            _h = nc->opts->_cb; \
+            cbClosure = nc->opts->_cl; \
+            natsMutex_Unlock(nc->mu); \
+        }
+
         switch (cb->type)
         {
             case ASYNC_CLOSED:
-               cbHandler = nc->opts->closedCb;
-               cbClosure = nc->opts->closedCbClosure;
-               break;
+                __set_handler(cbHandler, closedCb, closedCbClosure);
+                break;
             case ASYNC_DISCONNECTED:
-                cbHandler = nc->opts->disconnectedCb;
-                cbClosure = nc->opts->disconnectedCbClosure;
+                __set_handler(cbHandler, disconnectedCb, disconnectedCbClosure);
                 break;
             case ASYNC_RECONNECTED:
-                cbHandler = nc->opts->reconnectedCb;
-                cbClosure = nc->opts->reconnectedCbClosure;
+                __set_handler(cbHandler, reconnectedCb, reconnectedCbClosure);
                 break;
             case ASYNC_CONNECTED:
-                cbHandler = nc->opts->connectedCb;
-                cbClosure = nc->opts->connectedCbClosure;
+                __set_handler(cbHandler, connectedCb, connectedCbClosure);
                 break;
             case ASYNC_DISCOVERED_SERVERS:
-                cbHandler = nc->opts->discoveredServersCb;
-                cbClosure = nc->opts->discoveredServersClosure;
+                __set_handler(cbHandler, discoveredServersCb, discoveredServersClosure);
                 break;
             case ASYNC_LAME_DUCK_MODE:
-                cbHandler = nc->opts->lameDuckCb;
-                cbClosure = nc->opts->lameDuckClosure;
+                __set_handler(cbHandler, lameDuckCb, lameDuckClosure);
                 break;
             case ASYNC_ERROR:
-                errHandler = nc->opts->asyncErrCb;
-                cbClosure =  nc->opts->asyncErrCbClosure;
+                __set_handler(errHandler, asyncErrCb, asyncErrCbClosure);
                 break;
             default:
                 break;
         }
-        natsMutex_Unlock(nc->mu);
 
         // Invoke the callback
         if (cbHandler != NULL)

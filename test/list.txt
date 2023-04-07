@@ -147,6 +147,7 @@ AsyncSubscriptionPendingDrain
 SyncSubscriptionPending
 SyncSubscriptionPendingDrain
 AsyncErrHandler
+AsyncSetErrHandler
 AsyncSubscriberStarvation
 AsyncSubscriberOnClose
 NextMsgCallOnAsyncSub

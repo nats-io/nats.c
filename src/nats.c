@@ -765,6 +765,9 @@ _asyncCbsThread(void *arg)
 
         // callback handlers can be updated on a live connection, so we need to
         // lock.
+        cbHandler = NULL;
+        errHandler = NULL;
+        cbClosure = NULL;
         natsMutex_Lock(nc->mu);
         switch (cb->type)
         {
@@ -811,7 +814,6 @@ _asyncCbsThread(void *arg)
             if (cb->errTxt != NULL)
                 nats_setErrStatusAndTxt(cb->err, cb->errTxt);
             (*(errHandler))(nc, cb->sub, cb->err, cbClosure);
-            break;
         }
 #if defined(NATS_HAS_STREAMING)
         else if (cb->type == ASYNC_STAN_CONN_LOST)

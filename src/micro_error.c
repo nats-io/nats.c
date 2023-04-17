@@ -67,7 +67,7 @@ micro_Errorf(int code, const char *format, ...)
         va_end(args2);
         return &_errorInvalidFormat;
     }
-    buf = NATS_MALLOC(len + 1);
+    buf = NATS_CALLOC(1, len + 1);
     if (buf == NULL)
     {
         va_end(args2);
@@ -145,7 +145,7 @@ microError_Wrapf(microError *err, const char *format, ...)
     {
         len2 = strlen(err->description) + 2; // ": "
     }
-    buf = NATS_MALLOC(len1 + len2 + 1);
+    buf = NATS_CALLOC(1, len1 + len2 + 1);
     if (buf == NULL)
     {
         return &_errorOutOfMemory;

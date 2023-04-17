@@ -46,7 +46,7 @@ micro_init_monitoring(microService *m)
 {
     microError *err = NULL;
 
-    m->monitoring_subs = NATS_CALLOC(MICRO_MONITORING_SUBS_CAP, sizeof(natsSubscription*));
+    m->monitoring_subs = NATS_CALLOC(MICRO_MONITORING_SUBS_CAP, sizeof(natsSubscription *));
     if (m->monitoring_subs == NULL)
         return micro_ErrorOutOfMemory;
     m->monitoring_subs_len = 0;
@@ -75,6 +75,7 @@ handle_ping(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closu
     microRequest_Respond(req, &err, natsBuf_Data(buf), natsBuf_Len(buf));
 
     micro_destroy_request(req);
+    natsMsg_Destroy(msg);
     natsBuf_Destroy(buf);
 }
 
@@ -98,6 +99,7 @@ handle_info(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closu
     microRequest_Respond(req, &err, natsBuf_Data(buf), natsBuf_Len(buf));
 
     natsBuf_Destroy(buf);
+    natsMsg_Destroy(msg);
     microServiceInfo_Destroy(info);
 }
 
@@ -138,6 +140,7 @@ handle_stats(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clos
     MICRO_CALL(err, micro_new_request(&req, m, NULL, msg));
     MICRO_DO(err, h(req));
     MICRO_DO(err, micro_destroy_request(req));
+    natsMsg_Destroy(msg);
 }
 
 static microError *
@@ -159,7 +162,7 @@ new_dotted_subject(char **new_subject, int count, ...)
     }
     va_end(args);
 
-    result = NATS_MALLOC(len + 1);
+    result = NATS_CALLOC(len + 1, 1);
     if (result == NULL)
     {
         return micro_ErrorInvalidArg;
@@ -217,6 +220,7 @@ add_internal_handler(microService *m, const char *verb, const char *kind,
         return err;
 
     s = natsConnection_Subscribe(&sub, m->nc, subj, handler, m);
+    NATS_FREE(subj);
     if (s != NATS_OK)
     {
         microService_Stop(m);
@@ -377,4 +381,3 @@ marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
         return microError_Wrapf(micro_ErrorFromStatus(s), "failed to marshal service info");
     }
 }
-

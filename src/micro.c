@@ -151,20 +151,6 @@ bool microService_IsStopped(microService *m)
     return stopped;
 }
 
-bool micro_service_is_stopping(microService *m)
-{
-    bool stopping;
-
-    if ((m == NULL) || (m->mu == NULL))
-        return true;
-
-    natsMutex_Lock(m->mu);
-    stopping = m->is_stopping;
-    natsMutex_Unlock(m->mu);
-
-    return stopping;
-}
-
 microError *
 microService_Run(microService *m)
 {

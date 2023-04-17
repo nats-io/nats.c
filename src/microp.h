@@ -105,8 +105,6 @@ microError *micro_start_endpoint(microEndpoint *ep);
 microError *micro_stop_endpoint(microEndpoint *ep);
 microError *micro_stop_and_destroy_endpoint(microEndpoint *ep);
 void micro_update_last_error(microEndpoint *ep, microError *err);
-bool micro_service_is_stopping(microService *m);
-
 
 static inline microError *micro_strdup(char **ptr, const char *str)
 {

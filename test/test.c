@@ -32288,13 +32288,11 @@ test_MicroServiceStopsOnClosedConn(void)
     testCond(NATS_OK == natsConnection_Drain(nc));
     natsConnection_Close(nc);
 
-    while (micro_service_is_stopping(m))
-    {
-        nats_Sleep(1);
-    }
+    test("<>/<> Wait for the service to stop: ");
+    testCond((nats_Sleep(100), true));
+
     test("Test microservice is stopped: ");
     testCond(microService_IsStopped(m));
-
 
     microService_Destroy(m);
     natsOptions_Destroy(opts);
@@ -32340,6 +32338,9 @@ test_MicroServiceStopsWhenServerStops(void)
 
     test("Stop the server: ");
     testCond((_stopServer(serverPid), true));
+
+    test("<>/<> Wait for the service to stop: ");
+    testCond((nats_Sleep(100), true));
 
     test("Test microservice is not running: ");
     testCond(microService_IsStopped(m))

@@ -38,12 +38,6 @@
         __err = (__call);         \
     }
 
-#define MICRO_CALL_IF(__err, __cond, __call) \
-    if (((__err) == NULL) && (__cond))       \
-    {                                        \
-        __err = (__call);                    \
-    }
-
 #define MICRO_DO(__err, __block) \
     if ((__err) == NULL)         \
         __block;

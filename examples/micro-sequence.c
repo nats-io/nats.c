@@ -16,7 +16,7 @@
 // Sequence NATS microservice example.
 //
 // This example illustrated multiple NATS microservices communicating with each
-// other. 
+// other.
 //
 // The main service (c-sequence) calculates the sum of 1/f(1) + 1/f(2)... up to
 // N (included).  It exposes one (default) endpoint, "sequence". The inputs are
@@ -46,7 +46,7 @@
 //   nats request -r 'sequence' '"factorial" 10'
 //   nats request -r 'sequence' '"power2" 10'
 //   nats request -r 'sequence' '"fibonacci" 10'
-//   kill $sequence_pid $func_pid $arithmetics_pid $nats_pid 
+//   kill $sequence_pid $func_pid $arithmetics_pid $nats_pid
 //   ```
 //
 // OUTPUT:
@@ -63,12 +63,14 @@ call_function(long double *result, natsConnection *nc, const char *subject, int 
     microClient *client = NULL;
     natsMsg *response = NULL;
     microArgs *args = NULL;
-    char buf[1024];
+    char buf[256];
+    char sbuf[256];
     int len;
 
+    len = snprintf(buf, sizeof(buf), "%d", n);
+    snprintf(sbuf, sizeof(sbuf), "f.%s", subject);
     MICRO_CALL(err, micro_NewClient(&client, nc, NULL));
-    MICRO_DO(err, len = snprintf(buf, sizeof(buf), "%d", n));
-    MICRO_CALL(err, microClient_DoRequest(&response, client, subject, buf, len));
+    MICRO_CALL(err, microClient_DoRequest(&response, client, sbuf, buf, len));
     MICRO_CALL(err, micro_ParseArgs(&args, natsMsg_GetData(response), natsMsg_GetDataLength(response)));
     MICRO_CALL(err, microArgs_GetFloat(result, args, 0));
 

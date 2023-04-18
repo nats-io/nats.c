@@ -61,7 +61,7 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
     MICRO_CALL(err, wrap_connection_event_callbacks(m))
 
     // Add the endpoints and monitoring subscriptions.
-    MICRO_CALL(err, microService_AddEndpoint(NULL, m, cfg->endpoint));
+    MICRO_CALL(err, microService_AddEndpoint(m, cfg->endpoint));
     MICRO_CALL(err, micro_init_monitoring(m));
 
     if (err != NULL)
@@ -74,7 +74,6 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
     return NULL;
 }
 
-// TODO <>/<> update from Go
 microError *
 microService_Stop(microService *m)
 {
@@ -87,7 +86,7 @@ microService_Stop(microService *m)
         return micro_ErrorInvalidArg;
 
     natsMutex_Lock(m->mu);
-    if (m->is_stopping || m->stopped)
+    if (m->is_stopping || m->is_stopped)
     {
         natsMutex_Unlock(m->mu);
         return NULL;
@@ -122,7 +121,7 @@ microService_Stop(microService *m)
     free_subs = m->monitoring_subs;
 
     natsMutex_Lock(m->mu);
-    m->stopped = true;
+    m->is_stopped = true;
     m->is_stopping = false;
     m->started = 0;
     m->monitoring_subs_len = 0;
@@ -139,16 +138,16 @@ microService_Stop(microService *m)
 
 bool microService_IsStopped(microService *m)
 {
-    bool stopped;
+    bool is_stopped;
 
     if ((m == NULL) || (m->mu == NULL))
         return true;
 
     natsMutex_Lock(m->mu);
-    stopped = m->stopped;
+    is_stopped = m->is_stopped;
     natsMutex_Unlock(m->mu);
 
-    return stopped;
+    return is_stopped;
 }
 
 microError *
@@ -173,8 +172,8 @@ microService_GetConnection(microService *m)
     return m->nc;
 }
 
-microError *
-microService_AddEndpoint(microEndpoint **new_ep, microService *m, microEndpointConfig *cfg)
+static microError *
+add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg)
 {
     microError *err = NULL;
     int index = -1;
@@ -186,7 +185,7 @@ microService_AddEndpoint(microEndpoint **new_ep, microService *m, microEndpointC
     if (cfg == NULL)
         return NULL;
 
-    err = micro_new_endpoint(&ep, m, cfg);
+    err = micro_new_endpoint(&ep, m, prefix, cfg);
     if (err != NULL)
         return microError_Wrapf(err, "failed to create endpoint");
 
@@ -238,6 +237,12 @@ microService_AddEndpoint(microEndpoint **new_ep, microService *m, microEndpointC
     if (new_ep != NULL)
         *new_ep = ep;
     return NULL;
+}
+
+microError *
+microService_AddEndpoint(microService *m, microEndpointConfig *cfg)
+{
+    return add_endpoint(NULL, m, NULL, cfg);
 }
 
 microError *
@@ -362,6 +367,7 @@ microError *
 microService_Destroy(microService *m)
 {
     microError *err = NULL;
+    microGroup *next = NULL;
 
     if (m == NULL)
         return NULL;
@@ -369,6 +375,18 @@ microService_Destroy(microService *m)
     err = microService_Stop(m);
     if (err != NULL)
         return err;
+
+    // destroy all groups.
+    if (m->groups != NULL)
+    {
+        microGroup *g = m->groups;
+        while (g != NULL)
+        {
+            next = g->next;
+            NATS_FREE(g);
+            g = next;
+        }
+    }
 
     micro_destroy_cloned_service_config(m->cfg);
     natsConn_release(m->nc);
@@ -548,4 +566,63 @@ unwrap_connection_event_callbacks(microService *m)
     IFOK(s, natsConn_setErrorCallback(m->nc, m->prev_on_error, m->prev_on_error_closure));
 
     return microError_Wrapf(micro_ErrorFromStatus(s), "failed to unwrap connection event callbacks");
+}
+
+microError *
+microService_AddGroup(microGroup **new_group, microService *m, const char *prefix)
+{
+    if ((m == NULL) || (new_group == NULL) || (prefix == NULL))
+        return micro_ErrorInvalidArg;
+
+    *new_group = NATS_CALLOC(1, sizeof(microGroup) + strlen(prefix) + 1);
+    if (new_group == NULL)
+    {
+        return micro_ErrorOutOfMemory;
+    }
+
+    memcpy((*new_group)->prefix, prefix, strlen(prefix) + 1);
+    (*new_group)->m = m;
+    (*new_group)->next = m->groups;
+    m->groups = *new_group;
+
+    return NULL;
+}
+
+microError *
+microGroup_AddGroup(microGroup **new_group, microGroup *parent, const char *prefix)
+{
+    char *p;
+    int len;
+
+    if ((parent == NULL) || (new_group == NULL) || (prefix == NULL))
+        return micro_ErrorInvalidArg;
+
+    *new_group = NATS_CALLOC(1, sizeof(microGroup) +
+                                    strlen(parent->prefix) + 1 + // "parent_prefix."
+                                    strlen(prefix) + 1);         // "prefix\0"
+    if (new_group == NULL)
+    {
+        return micro_ErrorOutOfMemory;
+    }
+
+    p = (*new_group)->prefix;
+    len = strlen(parent->prefix);
+    memcpy(p, parent->prefix, len);
+    p[len] = '.';
+    p += len + 1;
+    memcpy(p, prefix, strlen(prefix) + 1);
+    (*new_group)->m = parent->m;
+    (*new_group)->next = parent->m->groups;
+    parent->m->groups = *new_group;
+
+    return NULL;
+}
+
+microError *
+microGroup_AddEndpoint(microGroup *g, microEndpointConfig *cfg)
+{
+    if (g == NULL)
+        return micro_ErrorInvalidArg;
+
+    return add_endpoint(NULL, g->m, g->prefix, cfg);
 }

@@ -53,6 +53,8 @@ typedef struct micro_service_s microService;
  */
 typedef struct micro_endpoint_s microEndpoint;
 
+typedef struct micro_group_s microGroup;
+
 /**
  * The Microservice request object.
  */
@@ -76,7 +78,6 @@ typedef struct microRequest
  * @see microService_AddEndpoint()
  */
 typedef void (*microRequestHandler)(microRequest *req);
-
 
 typedef void (*microErrorHandler)(microService *m, microEndpoint *ep, natsStatus s);
 
@@ -172,12 +173,19 @@ typedef struct micro_error_s microError;
 // microService methods.
 
 NATS_EXTERN microError *micro_AddService(microService **new_microservice, natsConnection *nc, microServiceConfig *cfg);
-NATS_EXTERN microError *microService_AddEndpoint(microEndpoint **new_endpoint, microService *m, microEndpointConfig *cfg);
+NATS_EXTERN microError *microService_AddEndpoint(microService *m, microEndpointConfig *cfg);
+NATS_EXTERN microError *microService_AddGroup(microGroup **new_group, microService *m, const char *prefix);
 NATS_EXTERN microError *microService_Destroy(microService *m);
 NATS_EXTERN natsConnection *microService_GetConnection(microService *m);
 NATS_EXTERN bool microService_IsStopped(microService *m);
 NATS_EXTERN microError *microService_Run(microService *m);
 NATS_EXTERN microError *microService_Stop(microService *m);
+
+//
+// microGroup methods.
+
+NATS_EXTERN microError *microGroup_AddGroup(microGroup **new_group, microGroup *parent, const char *prefix);
+NATS_EXTERN microError *microGroup_AddEndpoint(microGroup *g, microEndpointConfig *cfg);
 
 //
 // microRequest methods.
@@ -191,7 +199,7 @@ NATS_EXTERN microEndpoint *microRequest_GetEndpoint(microRequest *req);
 NATS_EXTERN void *microRequest_GetEndpointState(microRequest *req);
 NATS_EXTERN microError *microRequest_GetHeaderKeys(microRequest *req, const char ***keys, int *count);
 NATS_EXTERN microError *microRequest_GetHeaderValue(microRequest *req, const char *key, const char **value);
-NATS_EXTERN microError *microRequest_GetHeaderValues(microRequest *req,const char *key, const char ***values, int *count);
+NATS_EXTERN microError *microRequest_GetHeaderValues(microRequest *req, const char *key, const char ***values, int *count);
 NATS_EXTERN natsMsg *microRequest_GetMsg(microRequest *req);
 NATS_EXTERN const char *microRequest_GetReply(microRequest *req);
 NATS_EXTERN microService *microRequest_GetService(microRequest *req);

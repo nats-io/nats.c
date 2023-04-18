@@ -27,7 +27,7 @@
 //   hello_pid=$!
 //   sleep 2 # wait for microservice to start
 //   nats request 'hello' ''
-//   kill $hello_pid $nats_pid 
+//   kill $hello_pid $nats_pid
 //   ```
 //
 // OUTPUT:
@@ -86,4 +86,3 @@ int main(int argc, char **argv)
     }
     return 0;
 }
-

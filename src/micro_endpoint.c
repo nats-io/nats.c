@@ -27,10 +27,14 @@ handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *cl
 static microError *new_endpoint(microEndpoint **ptr);
 
 microError *
-micro_new_endpoint(microEndpoint **new_ep, microService *m, microEndpointConfig *cfg)
+micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg)
 {
     microError *err = NULL;
     microEndpoint *ep = NULL;
+    const char *subj;
+    char *effective_subj;
+    char *p;
+    int len;
 
     if (!is_valid_name(cfg->name) || (cfg->handler == NULL))
         return micro_ErrorInvalidArg;
@@ -41,7 +45,33 @@ micro_new_endpoint(microEndpoint **new_ep, microService *m, microEndpointConfig 
     MICRO_CALL(err, new_endpoint(&ep));
     MICRO_CALL(err, micro_ErrorFromStatus(natsMutex_Create(&ep->mu)));
     MICRO_CALL(err, micro_clone_endpoint_config(&ep->config, cfg));
-    MICRO_CALL(err, micro_strdup(&ep->subject, nats_IsStringEmpty(cfg->subject) ? cfg->name : cfg->subject));
+
+    if (err == NULL)
+    {
+        subj = nats_IsStringEmpty(cfg->subject) ? cfg->name : cfg->subject;
+        len = (int)strlen(subj) + 1;
+        if (prefix != NULL)
+            len += (int)strlen(prefix) + 1;
+        effective_subj = NATS_CALLOC(1, len);
+        if (effective_subj != NULL)
+        {
+            p = effective_subj;
+            if (prefix != NULL)
+            {
+                len = strlen(prefix);
+                memcpy(p, prefix, len);
+                p[len] = '.';
+                p += len + 1;
+            }
+            memcpy(p, subj, strlen(subj) + 1);
+            ep->subject = effective_subj;
+        }
+        else
+        {
+            err = micro_ErrorOutOfMemory;
+        }
+    }
+
     if (err != NULL)
     {
         micro_stop_and_destroy_endpoint(ep);
@@ -80,7 +110,7 @@ micro_stop_and_destroy_endpoint(microEndpoint *ep)
     if ((ep == NULL) || (ep->sub == NULL))
         return NULL;
 
-    if (!natsConnection_IsClosed(ep->m->nc)) 
+    if (!natsConnection_IsClosed(ep->m->nc))
     {
         s = natsSubscription_Drain(ep->sub);
         if (s != NATS_OK)

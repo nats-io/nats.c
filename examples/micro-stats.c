@@ -108,13 +108,13 @@ run_example(natsConnection *conn, microRequestHandler stats_handler, char *buf, 
     if (err == NULL)
     {
         len = natsMsg_GetDataLength(stats_resp);
-        if (len > buf_cap-1)
+        if (len > buf_cap - 1)
         {
-            len = buf_cap-1;
+            len = buf_cap - 1;
         }
         memcpy(buf, natsMsg_GetData(stats_resp), len);
         buf[len] = '\0';
-        
+
         natsMsg_Destroy(stats_resp);
     }
 
@@ -134,10 +134,10 @@ int main(int argc, char **argv)
 
     MICRO_CALL(err, run_example(conn, NULL, buf, sizeof(buf)));
     MICRO_DO(err, printf("Default stats response:\n----\n%s\n----\n\n", buf));
-    
+
     MICRO_CALL(err, run_example(conn, handle_stats, buf, sizeof(buf)));
     MICRO_DO(err, printf("Custom stats response:\n----\n%s\n----\n\n", buf));
-    
+
     if (err != NULL)
     {
         fprintf(stderr, "Error: %s\n", microError_String(err, buf, sizeof(buf)));
@@ -146,4 +146,3 @@ int main(int argc, char **argv)
     microError_Destroy(err);
     return err == NULL ? 0 : 1;
 }
-

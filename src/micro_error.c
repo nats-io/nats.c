@@ -173,7 +173,7 @@ microError_String(microError *err, char *buf, int size)
 {
     if (buf == NULL)
         return "";
-    if (err == NULL) 
+    if (err == NULL)
     {
         snprintf(buf, size, "null");
     }
@@ -228,4 +228,3 @@ new_error(natsStatus s, int code, char *description)
 
     return err;
 }
-

@@ -58,6 +58,13 @@ struct micro_endpoint_s
     microEndpointStats stats;
 };
 
+struct micro_group_s
+{
+    struct micro_service_s *m;
+    struct micro_group_s *next;
+    char prefix[];
+};
+
 struct micro_service_s
 {
     // these are set at initialization time time and do not change.
@@ -65,9 +72,15 @@ struct micro_service_s
     struct microServiceConfig *cfg;
     char id[NUID_BUFFER_LEN + 1];
 
+    // groups are just convenient wrappers to make "prefixed" endpoints with
+    // AddEndpoint. They are added at initializaton time, so no need to lock.
+    struct micro_group_s *groups;
+
     // these are are updated concurrently with access as the service runs, so
     // need to be protected by mutex.
     natsMutex *mu;
+
+    int refs;
 
     struct micro_endpoint_s **endpoints;
     int endpoints_len;
@@ -75,18 +88,17 @@ struct micro_service_s
 
     natsSubscription **monitoring_subs;
     int monitoring_subs_len;
-    
+
     natsConnectionHandler prev_on_connection_closed;
-    void * prev_on_connection_closed_closure;
+    void *prev_on_connection_closed_closure;
     natsConnectionHandler prev_on_connection_disconnected;
-    void * prev_on_connection_disconnected_closure;
+    void *prev_on_connection_disconnected_closure;
     natsErrHandler prev_on_error;
-    void * prev_on_error_closure;
+    void *prev_on_error_closure;
 
     int64_t started; // UTC time expressed as number of nanoseconds since epoch.
-    bool stopped;
+    bool is_stopped;
     bool is_stopping;
-    int refs;
 };
 
 extern microError *micro_ErrorOutOfMemory;
@@ -99,7 +111,7 @@ void micro_destroy_cloned_service_config(microServiceConfig *cfg);
 void micro_destroy_request(microRequest *req);
 microError *micro_init_monitoring(microService *m);
 bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_subject);
-microError *micro_new_endpoint(microEndpoint **new_endpoint, microService *m, microEndpointConfig *cfg);
+microError *micro_new_endpoint(microEndpoint **new_endpoint, microService *m, const char *prefix, microEndpointConfig *cfg);
 microError *micro_new_request(microRequest **new_request, microService *m, microEndpoint *ep, natsMsg *msg);
 microError *micro_start_endpoint(microEndpoint *ep);
 microError *micro_stop_endpoint(microEndpoint *ep);
@@ -110,7 +122,8 @@ static inline microError *micro_strdup(char **ptr, const char *str)
 {
     // Make a strdup(NULL) be a no-op, so we don't have to check for NULL
     // everywhere.
-    if (str == NULL) {
+    if (str == NULL)
+    {
         *ptr = NULL;
         return NULL;
     }

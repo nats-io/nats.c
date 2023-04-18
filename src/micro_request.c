@@ -176,7 +176,6 @@ microRequest_GetService(microRequest *req)
     return (req != NULL) ? req->service : NULL;
 }
 
-
 void micro_destroy_request(microRequest *req)
 {
     NATS_FREE(req);

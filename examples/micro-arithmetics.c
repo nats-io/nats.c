@@ -84,6 +84,7 @@ int main(int argc, char **argv)
     natsConnection *conn = NULL;
     natsOptions *opts = NULL;
     microService *m = NULL;
+    microGroup *g = NULL;
     char errorbuf[1024];
 
     microServiceConfig cfg = {
@@ -114,13 +115,14 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // Create the Microservice that listens on nc. 
+    // Create the Microservice that listens on nc.
     MICRO_CALL(err, micro_AddService(&m, conn, &cfg));
 
     // Add the endpoints for the functions.
-    MICRO_CALL(err, microService_AddEndpoint(NULL, m, &add_cfg));
-    MICRO_CALL(err, microService_AddEndpoint(NULL, m, &multiply_cfg));
-    MICRO_CALL(err, microService_AddEndpoint(NULL, m, &divide_cfg));
+    MICRO_CALL(err, microService_AddGroup(&g, m, "op"));
+    MICRO_CALL(err, microGroup_AddEndpoint(g, &add_cfg));
+    MICRO_CALL(err, microGroup_AddEndpoint(g, &multiply_cfg));
+    MICRO_CALL(err, microGroup_AddEndpoint(g, &divide_cfg));
 
     // Run the service, until stopped.
     MICRO_CALL(err, microService_Run(m));
@@ -135,4 +137,3 @@ int main(int argc, char **argv)
     }
     return 0;
 }
-

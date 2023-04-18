@@ -63,7 +63,7 @@ factorial(long double *result, natsConnection *nc, int n)
     *result = 1;
     for (i = 1; i <= n; i++)
     {
-        err = call_arithmetics(result, nc, "multiply", *result, i);
+        err = call_arithmetics(result, nc, "op.multiply", *result, i);
         if (err != NULL)
             return err;
     }
@@ -90,7 +90,7 @@ fibonacci(long double *result, natsConnection *nc, int n)
 
     for (i = 1, n1 = 0, n2 = 1; i <= n; i++)
     {
-        err = call_arithmetics(result, nc, "add", n1, n2);
+        err = call_arithmetics(result, nc, "op.add", n1, n2);
         if (err != NULL)
             return err;
         n1 = n2;
@@ -112,7 +112,7 @@ static microError *power2(long double *result, natsConnection *nc, int n)
     *result = 1;
     for (i = 1; i <= n; i++)
     {
-        err = call_arithmetics(result, nc, "multiply", *result, 2);
+        err = call_arithmetics(result, nc, "op.multiply", *result, 2);
         if (err != NULL)
             return err;
     }
@@ -155,9 +155,10 @@ int main(int argc, char **argv)
 {
     natsStatus s = NATS_OK;
     microError *err = NULL;
+    natsOptions *opts = NULL;
     natsConnection *conn = NULL;
     microService *m = NULL;
-    natsOptions *opts = NULL;
+    microGroup *g = NULL;
     char errorbuf[1024];
 
     microServiceConfig cfg = {
@@ -188,14 +189,15 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // Create the Microservice that listens on nc. 
+    // Create the Microservice that listens on nc.
     MICRO_CALL(err, micro_AddService(&m, conn, &cfg));
 
     // Add the endpoints for the functions.
-    MICRO_CALL(err, microService_AddEndpoint(NULL, m, &factorial_cfg));
-    MICRO_CALL(err, microService_AddEndpoint(NULL, m, &fibonacci_cfg));
-    MICRO_CALL(err, microService_AddEndpoint(NULL, m, &power2_cfg));
-    
+    MICRO_CALL(err, microService_AddGroup(&g, m, "f"));
+    MICRO_CALL(err, microGroup_AddEndpoint(g, &factorial_cfg));
+    MICRO_CALL(err, microGroup_AddEndpoint(g, &fibonacci_cfg));
+    MICRO_CALL(err, microGroup_AddEndpoint(g, &power2_cfg));
+
     // Run the service, until stopped.
     MICRO_CALL(err, microService_Run(m));
 

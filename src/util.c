@@ -2372,7 +2372,7 @@ nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, in
     IFOK(s, natsBuf_Append(out_buf, field_name, -1));
     IFOK(s, natsBuf_Append(out_buf, "\":\"", -1));
     IFOK(s, natsBuf_Append(out_buf, buf + w, sizeof(buf) - w));
-    IFOK(s, natsBuf_Append(out_buf, "\":\"", -1));
+    IFOK(s, natsBuf_Append(out_buf, "\"", -1));
     return NATS_UPDATE_ERR_STACK(s);
 }
 

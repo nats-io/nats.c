@@ -4436,13 +4436,13 @@ natsConn_defaultErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus
 natsStatus
 natsConn_getErrorCallback(natsErrHandler *cb, void **closure, natsConnection *nc)
 {
-    if ((nc == NULL) || (cb == NULL) || (closure == NULL))
+    if ((nc == NULL) || (nc->opts == NULL) || (nc->opts->mu == NULL) || (cb == NULL) || (closure == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    natsConn_Lock(nc);
+    natsMutex_Lock(nc->opts->mu);
     *cb = nc->opts->asyncErrCb;
     *closure = nc->opts->asyncErrCbClosure;
-    natsConn_Unlock(nc);
+    natsMutex_Unlock(nc->opts->mu);
 
     return NATS_OK;
 }
@@ -4451,13 +4451,13 @@ natsStatus
 natsConn_setErrorCallback(natsConnection *nc, natsErrHandler cb, void *closure)
 {
     // The error callback must not be NULL, other code may rely on it.
-    if ((nc == NULL) || (cb == NULL))
+    if ((nc == NULL) || (nc->opts == NULL) || (nc->opts->mu == NULL) || (cb == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    natsConn_Lock(nc);
+    natsMutex_Lock(nc->opts->mu);
     nc->opts->asyncErrCb = cb;
     nc->opts->asyncErrCbClosure = closure;
-    natsConn_Unlock(nc);
+    natsMutex_Unlock(nc->opts->mu);
 
     return NATS_OK;
 }
@@ -4465,13 +4465,13 @@ natsConn_setErrorCallback(natsConnection *nc, natsErrHandler cb, void *closure)
 natsStatus
 natsConn_getClosedCallback(natsConnectionHandler *cb, void **closure, natsConnection *nc)
 {
-    if ((nc == NULL) || (cb == NULL) || (closure == NULL))
+    if ((nc == NULL) || (nc->opts == NULL) || (nc->opts->mu == NULL) || (cb == NULL) || (closure == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    natsConn_Lock(nc);
+    natsMutex_Lock(nc->opts->mu);
     *cb = nc->opts->closedCb;
     *closure = nc->opts->closedCbClosure;
-    natsConn_Unlock(nc);
+    natsMutex_Unlock(nc->opts->mu);
 
     return NATS_OK;
 }
@@ -4479,13 +4479,13 @@ natsConn_getClosedCallback(natsConnectionHandler *cb, void **closure, natsConnec
 natsStatus
 natsConn_setClosedCallback(natsConnection *nc, natsConnectionHandler cb, void *closure)
 {
-    if (nc == NULL)
+    if (nc == NULL || (nc->opts == NULL) || (nc->opts->mu == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    natsConn_Lock(nc);
+    natsMutex_Lock(nc->opts->mu);
     nc->opts->closedCb = cb;
     nc->opts->closedCbClosure = closure;
-    natsConn_Unlock(nc);
+    natsMutex_Unlock(nc->opts->mu);
 
     return NATS_OK;
 }
@@ -4493,13 +4493,13 @@ natsConn_setClosedCallback(natsConnection *nc, natsConnectionHandler cb, void *c
 natsStatus
 natsConn_getDisconnectedCallback(natsConnectionHandler *cb, void **closure, natsConnection *nc)
 {
-    if ((nc == NULL) || (cb == NULL) || (closure == NULL))
+    if ((nc == NULL) || (nc->opts == NULL) || (nc->opts->mu == NULL) || (cb == NULL) || (closure == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    natsConn_Lock(nc);
+    natsMutex_Lock(nc->opts->mu);
     *cb = nc->opts->disconnectedCb;
     *closure = nc->opts->disconnectedCbClosure;
-    natsConn_Unlock(nc);
+    natsMutex_Unlock(nc->opts->mu);
 
     return NATS_OK;
 }
@@ -4507,13 +4507,13 @@ natsConn_getDisconnectedCallback(natsConnectionHandler *cb, void **closure, nats
 natsStatus
 natsConn_setDisconnectedCallback(natsConnection *nc, natsConnectionHandler cb, void *closure)
 {
-    if (nc == NULL)
+    if (nc == NULL || (nc->opts == NULL) || (nc->opts->mu == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    natsConn_Lock(nc);
+    natsMutex_Lock(nc->opts->mu);
     nc->opts->disconnectedCb = cb;
     nc->opts->disconnectedCbClosure = closure;
-    natsConn_Unlock(nc);
+    natsMutex_Unlock(nc->opts->mu);
 
     return NATS_OK;
 }

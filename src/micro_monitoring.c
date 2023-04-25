@@ -37,8 +37,6 @@ add_internal_handler(microService *m, const char *verb, const char *kind, const 
 static microError *
 add_verb_handlers(microService *m, const char *verb, natsMsgHandler handler);
 static microError *
-new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
-static microError *
 new_dotted_subject(char **new_subject, int count, ...);
 
 microError *
@@ -187,8 +185,8 @@ new_dotted_subject(char **new_subject, int count, ...)
     return NULL;
 }
 
-static microError *
-new_control_subject(char **newSubject, const char *verb, const char *name, const char *id)
+microError *
+micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id)
 {
     if (nats_IsStringEmpty(name) && !nats_IsStringEmpty(id))
     {
@@ -215,7 +213,7 @@ add_internal_handler(microService *m, const char *verb, const char *kind,
     if (m->monitoring_subs_len >= MICRO_MONITORING_SUBS_CAP)
         return micro_Errorf(500, "too many monitoring subscriptions (max: %d)", MICRO_MONITORING_SUBS_CAP);
 
-    err = new_control_subject(&subj, verb, kind, id);
+    err = micro_new_control_subject(&subj, verb, kind, id);
     if (err != NULL)
         return err;
 

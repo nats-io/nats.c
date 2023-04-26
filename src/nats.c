@@ -771,10 +771,10 @@ _asyncCbsThread(void *arg)
 
 #define __set_handler(_h, _cb, _cl) \
         { \
-            natsMutex_Lock(nc->mu); \
+            natsMutex_Lock(nc->opts->mu); \
             _h = nc->opts->_cb; \
             cbClosure = nc->opts->_cl; \
-            natsMutex_Unlock(nc->mu); \
+            natsMutex_Unlock(nc->opts->mu); \
         }
 
         switch (cb->type)

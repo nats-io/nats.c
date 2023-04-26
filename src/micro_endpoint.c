@@ -17,14 +17,34 @@
 #include "microp.h"
 #include "mem.h"
 
-static bool
-is_valid_name(const char *name);
-static bool
-is_valid_subject(const char *subject);
 static void
 handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 
 static microError *new_endpoint(microEndpoint **ptr);
+
+static microError *dup_with_prefix(char **dst, const char *prefix, const char *src)
+{
+    int len = (int)strlen(src) + 1;
+    char *p;
+
+    if (!nats_IsStringEmpty(prefix))
+        len += (int)strlen(prefix) + 1;
+
+    *dst = NATS_CALLOC(1, len);
+    if (*dst == NULL)
+        return micro_ErrorOutOfMemory;
+
+    p = *dst;
+    if (prefix != NULL)
+    {
+        len = strlen(prefix);
+        memcpy(p, prefix, len);
+        p[len] = '.';
+        p += len + 1;
+    }
+    memcpy(p, src, strlen(src) + 1);
+    return NULL;
+}
 
 microError *
 micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg)
@@ -32,46 +52,20 @@ micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
     microError *err = NULL;
     microEndpoint *ep = NULL;
     const char *subj;
-    char *effective_subj;
-    char *p;
-    int len;
 
-    if (!is_valid_name(cfg->name) || (cfg->handler == NULL))
+    if (!micro_is_valid_name(cfg->name) || (cfg->handler == NULL))
         return micro_ErrorInvalidArg;
 
-    if ((cfg->subject != NULL) && !is_valid_subject(cfg->subject))
+    if ((cfg->subject != NULL) && !micro_is_valid_subject(cfg->subject))
         return micro_ErrorInvalidArg;
+
+    subj = nats_IsStringEmpty(cfg->subject) ? cfg->name : cfg->subject;
 
     MICRO_CALL(err, new_endpoint(&ep));
     MICRO_CALL(err, micro_ErrorFromStatus(natsMutex_Create(&ep->mu)));
     MICRO_CALL(err, micro_clone_endpoint_config(&ep->config, cfg));
-
-    if (err == NULL)
-    {
-        subj = nats_IsStringEmpty(cfg->subject) ? cfg->name : cfg->subject;
-        len = (int)strlen(subj) + 1;
-        if (prefix != NULL)
-            len += (int)strlen(prefix) + 1;
-        effective_subj = NATS_CALLOC(1, len);
-        if (effective_subj != NULL)
-        {
-            p = effective_subj;
-            if (prefix != NULL)
-            {
-                len = strlen(prefix);
-                memcpy(p, prefix, len);
-                p[len] = '.';
-                p += len + 1;
-            }
-            memcpy(p, subj, strlen(subj) + 1);
-            ep->subject = effective_subj;
-        }
-        else
-        {
-            err = micro_ErrorOutOfMemory;
-        }
-    }
-
+    MICRO_CALL(err, dup_with_prefix(&ep->name, prefix, cfg->name));
+    MICRO_CALL(err, dup_with_prefix(&ep->subject, prefix, subj));
     if (err != NULL)
     {
         micro_stop_and_destroy_endpoint(ep);
@@ -117,6 +111,7 @@ micro_stop_and_destroy_endpoint(microEndpoint *ep)
             return micro_ErrorFromStatus(s);
     }
 
+    NATS_FREE(ep->name);
     NATS_FREE(ep->subject);
     natsSubscription_Destroy(ep->sub);
     natsMutex_Destroy(ep->mu);
@@ -185,8 +180,7 @@ void micro_update_last_error(microEndpoint *ep, microError *err)
     natsMutex_Unlock(ep->mu);
 }
 
-static bool
-is_valid_name(const char *name)
+bool micro_is_valid_name(const char *name)
 {
     int i;
     int len;
@@ -206,8 +200,7 @@ is_valid_name(const char *name)
     return true;
 }
 
-static bool
-is_valid_subject(const char *subject)
+bool micro_is_valid_subject(const char *subject)
 {
     int i;
     int len;

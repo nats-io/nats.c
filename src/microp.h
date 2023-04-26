@@ -39,8 +39,9 @@ struct micro_client_s
 
 struct micro_endpoint_s
 {
-    // The subject that the endpoint is listening on (may be different from
-    // one specified in config).
+    // The name and subject that the endpoint is listening on (may be different
+    // from one specified in config).
+    char *name;
     char *subject;
 
     // References to other entities.
@@ -118,6 +119,8 @@ microError *micro_stop_endpoint(microEndpoint *ep);
 microError *micro_stop_and_destroy_endpoint(microEndpoint *ep);
 void micro_update_last_error(microEndpoint *ep, microError *err);
 microError *micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
+bool micro_is_valid_name(const char *name);
+bool micro_is_valid_subject(const char *subject);
 
 
 static inline microError *micro_strdup(char **ptr, const char *str)

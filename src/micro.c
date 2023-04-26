@@ -11,7 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TODO <>/<> review includes
 #include "micro.h"
 #include "microp.h"
 #include "conn.h"
@@ -38,7 +37,7 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
     microError *err = NULL;
     microService *m = NULL;
 
-    if ((new_m == NULL) || (nc == NULL) || (cfg == NULL))
+    if ((new_m == NULL) || (nc == NULL) || (cfg == NULL) || !micro_is_valid_name(cfg->name) || nats_IsStringEmpty(cfg->version))
         return micro_ErrorInvalidArg;
 
     // Make a microservice object, with a reference to a natsConnection.
@@ -192,7 +191,7 @@ add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microE
     // see if we already have an endpoint with this name
     for (int i = 0; i < m->endpoints_len; i++)
     {
-        if (strcmp(m->endpoints[i]->config->name, cfg->name) == 0)
+        if (strcmp(m->endpoints[i]->name, ep->name) == 0)
         {
             index = i;
             break;
@@ -338,7 +337,7 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
             // copy the entire struct, including the last error buffer.
             stats->endpoints[len] = ep->stats;
 
-            stats->endpoints[len].name = ep->config->name;
+            stats->endpoints[len].name = ep->name;
             stats->endpoints[len].subject = ep->subject;
             avg = (long double)ep->stats.processing_time_s * 1000000000.0 + (long double)ep->stats.processing_time_ns;
             avg = avg / (long double)ep->stats.num_requests;

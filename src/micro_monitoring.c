@@ -96,6 +96,7 @@ handle_info(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closu
     // respond for both success and error cases.
     microRequest_Respond(req, &err, natsBuf_Data(buf), natsBuf_Len(buf));
 
+    micro_destroy_request(req);
     natsBuf_Destroy(buf);
     natsMsg_Destroy(msg);
     microServiceInfo_Destroy(info);

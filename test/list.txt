@@ -260,6 +260,8 @@ KeyValueRePublish
 KeyValueMirrorDirectGet
 KeyValueMirrorCrossDomains
 MicroMatchEndpointSubject
+MicroAddService
+MicroGroups
 MicroBasics
 MicroServiceStopsOnClosedConn
 MicroServiceStopsWhenServerStops

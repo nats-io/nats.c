@@ -1486,6 +1486,7 @@ nats_JSONArrayAsStrings(nats_JSONArray *arr, char ***array, int *arraySize)
     if (values == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
+    printf("<>/<> nats_JSONArrayAsStrings: allocated %d %d-byte values=%p\n", arr->size, arr->eltSize, values);
     for (i=0; i<arr->size; i++)
     {
         values[i] = NATS_STRDUP((char*)(arr->values[i]));
@@ -1494,6 +1495,7 @@ nats_JSONArrayAsStrings(nats_JSONArray *arr, char ***array, int *arraySize)
             s = nats_setDefaultError(NATS_NO_MEMORY);
             break;
         }
+        printf("<>/<> nats_JSONArrayAsStrings: allocated value %d values=%p\n", i, values[i]);
     }
     if (s != NATS_OK)
     {

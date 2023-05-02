@@ -3811,7 +3811,7 @@ natsConnection_Buffered(natsConnection *nc)
     int buffered = -1;
 
     if (nc == NULL)
-        return nats_setDefaultError(NATS_INVALID_ARG);
+        return buffered;
 
     natsConn_Lock(nc);
 

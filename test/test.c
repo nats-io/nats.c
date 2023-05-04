@@ -38,7 +38,6 @@
 #include "parser.h"
 #include "js.h"
 #include "kv.h"
-#include "micro.h"
 #include "microp.h"
 #if defined(NATS_HAS_STREAMING)
 #include "stan/conn.h"
@@ -32270,43 +32269,43 @@ test_MicroAddService(void)
     const char *str;
 
     microEndpointConfig default_ep_cfg = {
-        .name = "default",
-        .handler = micro_basics_handle_request,
+        .Name = "default",
+        .Handler = micro_basics_handle_request,
     };
     microEndpointConfig ep1_cfg = {
-        .name = "ep1",
-        .handler = micro_basics_handle_request,
+        .Name = "ep1",
+        .Handler = micro_basics_handle_request,
     };
     microEndpointConfig ep2_cfg = {
-        .name = "ep2",
-        .subject = "different-from-name",
-        .handler = micro_basics_handle_request,
+        .Name = "ep2",
+        .Subject = "different-from-name",
+        .Handler = micro_basics_handle_request,
     };
     microEndpointConfig ep3_cfg = {
-        .name = "ep3",
-        .handler = micro_basics_handle_request,
+        .Name = "ep3",
+        .Handler = micro_basics_handle_request,
     };
     microEndpointConfig *all_ep_cfgs[] = {&ep1_cfg, &ep2_cfg, &ep3_cfg};
 
     microServiceConfig minimal_cfg = {
-        .version = "1.0.0",
-        .name = "minimal",
+        .Version = "1.0.0",
+        .Name = "minimal",
     };
     microServiceConfig full_cfg = {
-        .version = "1.0.0",
-        .name = "full",
-        .endpoint = &default_ep_cfg,
-        .description = "fully declared microservice",
+        .Version = "1.0.0",
+        .Name = "full",
+        .Endpoint = &default_ep_cfg,
+        .Description = "fully declared microservice",
     };
     microServiceConfig err_no_name_cfg = {
-        .version = "1.0.0",
+        .Version = "1.0.0",
     };
     microServiceConfig err_no_version_cfg = {
-        .name = "minimal",
+        .Name = "minimal",
     };
     microServiceConfig err_invalid_version_cfg = {
-        .version = "BLAH42",
-        .name = "minimal",
+        .Version = "BLAH42",
+        .Name = "minimal",
     };
 
     add_service_test_case_t tcs[] = {
@@ -32401,7 +32400,7 @@ test_MicroAddService(void)
 
         for (i = 0; i < tc.num_endpoints; i++)
         {
-            snprintf(buf, sizeof(buf), "%s: AddEndpoint '%s': ", tc.name, tc.endpoints[i]->name);
+            snprintf(buf, sizeof(buf), "%s: AddEndpoint '%s': ", tc.name, tc.endpoints[i]->Name);
             test(buf);
             testCond(NULL == microService_AddEndpoint(m, tc.endpoints[i]));
         }
@@ -32414,8 +32413,8 @@ test_MicroAddService(void)
         for (j = 0; j < 3; j++)
         {
             err = micro_new_control_subject(&subject, MICRO_PING_VERB,
-                                            (j > 0 ? tc.cfg->name : NULL),
-                                            (j > 1 ? info->id : NULL));
+                                            (j > 0 ? tc.cfg->Name : NULL),
+                                            (j > 1 ? info->Id : NULL));
             if (err != NULL)
                 FAIL("failed to generate PING subject!");
 
@@ -32424,11 +32423,11 @@ test_MicroAddService(void)
             s = natsConnection_Request(&reply, nc, subject, NULL, 0, 1000);
             IFOK(s, nats_JSONParse(&js, natsMsg_GetData(reply), natsMsg_GetDataLength(reply)));
             IFOK(s, nats_JSONGetStrPtr(js, "id", &str));
-            IFOK(s, (strcmp(str, info->id) == 0) ? NATS_OK : NATS_ERR);
+            IFOK(s, (strcmp(str, info->Id) == 0) ? NATS_OK : NATS_ERR);
             IFOK(s, nats_JSONGetStrPtr(js, "name", &str));
-            IFOK(s, (strcmp(str, tc.cfg->name) == 0) ? NATS_OK : NATS_ERR);
+            IFOK(s, (strcmp(str, tc.cfg->Name) == 0) ? NATS_OK : NATS_ERR);
             IFOK(s, nats_JSONGetStrPtr(js, "version", &str));
-            IFOK(s, (strcmp(str, tc.cfg->version) == 0) ? NATS_OK : NATS_ERR);
+            IFOK(s, (strcmp(str, tc.cfg->Version) == 0) ? NATS_OK : NATS_ERR);
             IFOK(s, nats_JSONGetStrPtr(js, "type", &str));
             IFOK(s, (strcmp(str, MICRO_PING_RESPONSE_TYPE) == 0) ? NATS_OK : NATS_ERR);
             testCond(s == NATS_OK);
@@ -32437,8 +32436,8 @@ test_MicroAddService(void)
             NATS_FREE(subject);
 
             err = micro_new_control_subject(&subject, MICRO_INFO_VERB,
-                                            (j > 0 ? tc.cfg->name : NULL),
-                                            (j > 1 ? info->id : NULL));
+                                            (j > 0 ? tc.cfg->Name : NULL),
+                                            (j > 1 ? info->Id : NULL));
             if (err != NULL)
                 FAIL("failed to generate INFO subject!");
 
@@ -32448,11 +32447,11 @@ test_MicroAddService(void)
 
             IFOK(s, nats_JSONParse(&js, natsMsg_GetData(reply), natsMsg_GetDataLength(reply)));
             IFOK(s, nats_JSONGetStrPtr(js, "id", &str));
-            IFOK(s, (strcmp(str, info->id) == 0) ? NATS_OK : NATS_ERR);
+            IFOK(s, (strcmp(str, info->Id) == 0) ? NATS_OK : NATS_ERR);
             IFOK(s, nats_JSONGetStrPtr(js, "name", &str));
-            IFOK(s, (strcmp(str, tc.cfg->name) == 0) ? NATS_OK : NATS_ERR);
+            IFOK(s, (strcmp(str, tc.cfg->Name) == 0) ? NATS_OK : NATS_ERR);
             IFOK(s, nats_JSONGetStrPtr(js, "description", &str));
-            IFOK(s, (!tc.cfg->description || strcmp(str, tc.cfg->description) == 0) ? NATS_OK : NATS_ERR);
+            IFOK(s, (!tc.cfg->Description || strcmp(str, tc.cfg->Description) == 0) ? NATS_OK : NATS_ERR);
             IFOK(s, nats_JSONGetStrPtr(js, "type", &str));
             IFOK(s, (strcmp(str, MICRO_INFO_RESPONSE_TYPE) == 0) ? NATS_OK : NATS_ERR);
             array = NULL;
@@ -32493,16 +32492,16 @@ test_MicroGroups(void)
     int i;
 
     microEndpointConfig ep1_cfg = {
-        .name = "ep1",
-        .handler = micro_basics_handle_request,
+        .Name = "ep1",
+        .Handler = micro_basics_handle_request,
     };
     microEndpointConfig ep2_cfg = {
-        .name = "ep2",
-        .handler = micro_basics_handle_request,
+        .Name = "ep2",
+        .Handler = micro_basics_handle_request,
     };
     microServiceConfig cfg = {
-        .version = "1.0.0",
-        .name = "with-groups",
+        .Version = "1.0.0",
+        .Name = "with-groups",
     };
 
     const char* expected_subjects[] = {
@@ -32557,14 +32556,14 @@ test_MicroGroups(void)
         FAIL("failed to get service info!")
 
     test("Verify number of subjects: ");
-    testCond(info->subjects_len == expected_num_subjects);
+    testCond(info->SubjectsLen == expected_num_subjects);
 
     test("Verify subjects: ");
-    for (i = 0; i < info->subjects_len; i++)
+    for (i = 0; i < info->SubjectsLen; i++)
     {
-        if (strcmp(info->subjects[i], expected_subjects[i]) != 0) {
+        if (strcmp(info->Subjects[i], expected_subjects[i]) != 0) {
             char buf[1024];
-            snprintf(buf, sizeof(buf), "expected %s, got %s", expected_subjects[i], info->subjects[i]);
+            snprintf(buf, sizeof(buf), "expected %s, got %s", expected_subjects[i], info->Subjects[i]);
             FAIL(buf);
         }
     }
@@ -32591,15 +32590,15 @@ test_MicroBasics(void)
     natsPid serverPid = NATS_INVALID_PID;
     microService **svcs = NATS_CALLOC(NUM_BASIC_MICRO_SERVICES, sizeof(microService *));
     microEndpointConfig ep_cfg = {
-        .name = "do",
-        .subject = "svc.do",
-        .handler = micro_basics_handle_request,
+        .Name = "do",
+        .Subject = "svc.do",
+        .Handler = micro_basics_handle_request,
     };
     microServiceConfig cfg = {
-        .version = "1.0.0",
-        .name = "CoolService",
-        .description = "returns 42",
-        .endpoint = &ep_cfg,
+        .Version = "1.0.0",
+        .Name = "CoolService",
+        .Description = "returns 42",
+        .Endpoint = &ep_cfg,
     };
     natsMsg *reply = NULL;
     microServiceInfo *info = NULL;
@@ -32658,13 +32657,13 @@ test_MicroBasics(void)
         test(buf);
         err = microService_GetInfo(&info, svcs[i]);
         testCond((err == NULL) &&
-                 (strcmp(info->name, "CoolService") == 0) &&
-                 (strlen(info->description) > 0) &&
-                 (strlen(info->version) > 0));
+                 (strcmp(info->Name, "CoolService") == 0) &&
+                 (strlen(info->Description) > 0) &&
+                 (strlen(info->Version) > 0));
         microServiceInfo_Destroy(info);
     }
 
-    // Make sure we can request valid info with $SVC.INFO request.
+    // Make sure we can request valid info with $SRV.INFO request.
     test("Create INFO inbox: ");
     testCond(NATS_OK == natsInbox_Create(&inbox));
     micro_new_control_subject(&subject, MICRO_INFO_VERB, "CoolService", NULL);
@@ -32695,7 +32694,7 @@ test_MicroBasics(void)
     natsInbox_Destroy(inbox);
     NATS_FREE(subject);
 
-    // Make sure we can request SVC.PING.
+    // Make sure we can request SRV.PING.
     test("Create PING inbox: ");
     testCond(NATS_OK == natsInbox_Create(&inbox));
     micro_new_control_subject(&subject, MICRO_PING_VERB, "CoolService", NULL);
@@ -32726,7 +32725,7 @@ test_MicroBasics(void)
     natsInbox_Destroy(inbox);
     NATS_FREE(subject);
 
-    // Get and validate $SVC.STATS from all service instances.
+    // Get and validate $SRV.STATS from all service instances.
     test("Create STATS inbox: ");
     testCond(NATS_OK == natsInbox_Create(&inbox));
     micro_new_control_subject(&subject, MICRO_STATS_VERB, "CoolService", NULL);
@@ -32807,8 +32806,8 @@ test_MicroServiceStopsOnClosedConn(void)
     struct threadArg arg;
     microService *m = NULL;
     microServiceConfig cfg = {
-        .name = "test",
-        .version = "1.0.0",
+        .Name = "test",
+        .Version = "1.0.0",
     };
     natsMsg *reply = NULL;
 
@@ -32880,8 +32879,8 @@ test_MicroServiceStopsWhenServerStops(void)
     struct threadArg arg;
     microService *m = NULL;
     microServiceConfig cfg = {
-        .name = "test",
-        .version = "1.0.0",
+        .Name = "test",
+        .Version = "1.0.0",
     };
 
     s = _createDefaultThreadArgsForCbTests(&arg);

@@ -13,7 +13,6 @@
 
 #include <ctype.h>
 
-#include "micro.h"
 #include "microp.h"
 #include "mem.h"
 
@@ -53,18 +52,18 @@ micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
     microEndpoint *ep = NULL;
     const char *subj;
 
-    if (!micro_is_valid_name(cfg->name) || (cfg->handler == NULL))
+    if (!micro_is_valid_name(cfg->Name) || (cfg->Handler == NULL))
         return micro_ErrorInvalidArg;
 
-    if ((cfg->subject != NULL) && !micro_is_valid_subject(cfg->subject))
+    if ((cfg->Subject != NULL) && !micro_is_valid_subject(cfg->Subject))
         return micro_ErrorInvalidArg;
 
-    subj = nats_IsStringEmpty(cfg->subject) ? cfg->name : cfg->subject;
+    subj = nats_IsStringEmpty(cfg->Subject) ? cfg->Name : cfg->Subject;
 
     MICRO_CALL(err, new_endpoint(&ep));
     MICRO_CALL(err, micro_ErrorFromStatus(natsMutex_Create(&ep->mu)));
     MICRO_CALL(err, micro_clone_endpoint_config(&ep->config, cfg));
-    MICRO_CALL(err, dup_with_prefix(&ep->name, prefix, cfg->name));
+    MICRO_CALL(err, dup_with_prefix(&ep->name, prefix, cfg->Name));
     MICRO_CALL(err, dup_with_prefix(&ep->subject, prefix, subj));
     if (err != NULL)
     {
@@ -81,7 +80,7 @@ microError *
 micro_start_endpoint(microEndpoint *ep)
 {
     natsStatus s = NATS_OK;
-    if ((ep->subject == NULL) || (ep->config == NULL) || (ep->config->handler == NULL))
+    if ((ep->subject == NULL) || (ep->config == NULL) || (ep->config->Handler == NULL))
         // nothing to do
         return NULL;
 
@@ -132,7 +131,7 @@ handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *cl
     microRequest *req = NULL;
     int64_t start, elapsed_ns, full_s;
 
-    if (ep == NULL || ep->config == NULL || ep->config->handler == NULL)
+    if (ep == NULL || ep->config == NULL || ep->config->Handler == NULL)
     {
         // This is a bug, we should not have received a message on this
         // subscription.
@@ -140,7 +139,7 @@ handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *cl
         return;
     }
     stats = &ep->stats;
-    handler = ep->config->handler;
+    handler = ep->config->Handler;
 
     err = micro_new_request(&req, ep->m, ep, msg);
     if (err != NULL)
@@ -148,7 +147,7 @@ handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *cl
         natsMsg_Destroy(msg);
         return;
     }
-    req->endpoint = ep;
+    req->Endpoint = ep;
 
     // handle the request.
     start = nats_NowInNanoSeconds();
@@ -230,8 +229,8 @@ destroy_schema(microSchema *schema)
     if (schema == NULL)
         return;
 
-    NATS_FREE((char *)schema->request);
-    NATS_FREE((char *)schema->response);
+    NATS_FREE((char *)schema->Request);
+    NATS_FREE((char *)schema->Response);
     NATS_FREE(schema);
 }
 
@@ -249,8 +248,8 @@ clone_schema(microSchema **to, const microSchema *from)
     if (*to == NULL)
         return micro_ErrorOutOfMemory;
 
-    MICRO_CALL(err, micro_strdup((char **)&((*to)->request), from->request));
-    MICRO_CALL(err, micro_strdup((char **)&((*to)->response), from->response));
+    MICRO_CALL(err, micro_strdup((char **)&((*to)->Request), from->Request));
+    MICRO_CALL(err, micro_strdup((char **)&((*to)->Response), from->Response));
 
     if (err != NULL)
     {
@@ -297,9 +296,9 @@ micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
         memcpy(new_cfg, cfg, sizeof(microEndpointConfig));
     }
 
-    MICRO_CALL(err, micro_strdup((char **)&new_cfg->name, cfg->name));
-    MICRO_CALL(err, micro_strdup((char **)&new_cfg->subject, cfg->subject));
-    MICRO_CALL(err, clone_schema(&new_cfg->schema, cfg->schema));
+    MICRO_CALL(err, micro_strdup((char **)&new_cfg->Name, cfg->Name));
+    MICRO_CALL(err, micro_strdup((char **)&new_cfg->Subject, cfg->Subject));
+    MICRO_CALL(err, clone_schema(&new_cfg->Schema, cfg->Schema));
 
     if (err != NULL)
     {
@@ -318,10 +317,10 @@ void micro_destroy_cloned_endpoint_config(microEndpointConfig *cfg)
 
     // the strings are declared const for the public, but in a clone these need
     // to be freed.
-    NATS_FREE((char *)cfg->name);
-    NATS_FREE((char *)cfg->subject);
+    NATS_FREE((char *)cfg->Name);
+    NATS_FREE((char *)cfg->Subject);
 
-    destroy_schema(cfg->schema);
+    destroy_schema(cfg->Schema);
     NATS_FREE(cfg);
 }
 

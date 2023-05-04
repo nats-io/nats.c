@@ -7104,6 +7104,1152 @@ kvStatus_Destroy(kvStatus *sts);
 
 /** @} */ // end of funcGroup
 
+//
+// Microservices.
+//
+
+/** \defgroup microGroup EXPERIMENTAL - Microservices
+ *
+ * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
+ * necessarily bumping the major version of the library.
+ * 
+ * ### NATS Microservices.
+ *
+ * Microservices can expose one or more request-response endpoints that process
+ * incoming NATS messages. 
+ *
+ * Microservices are created by calling micro_AddService, and configured by
+ * passing a microServiceConfig to it. Many microservices can share a single
+ * connection to a NATS server. 
+ *
+ * Once created, a microservice will subscribe to all endpoints' subjects and
+ * associate them with the configured handlers. It will also subscribe to and
+ * service monitoring subjects for service-specific pings, metadata, and
+ * statistics requests. The endpoint subscriptions are created with a queue
+ * group, so that incoming requests are automatically load-balanced across all
+ * running instances of a microservice. The monitoring subscriptions are not
+ * groupped, each service instance receives and responds to all monitoring
+ * requests.
+ *
+ * Once created, the microservice is asyncronous, message handlers and other
+ * callbacks will be invoked in separate threads. No further action is needed.
+ * Your program can use microService_Stop, microService_IsStopped to control the
+ * execution of the service.
+ *
+ *  @{
+ */
+
+/** \defgroup microTypes Types
+ *
+ * Microservice types.
+ *
+ *  @{
+ */
+
+/**
+ * @brief The Microservice client.
+ *
+ * Initialize with #micro_NewClient and destroy with #microClient_Destroy.
+ *
+ * @see micro_NewClient, microClient_Destroy
+ */
+typedef struct micro_client_s microClient;
+
+/**
+ * @brief The Microservice configuration object. For forward compatibility only.
+ */
+typedef struct __for_forward_compatibility_only microClientConfig;
+
+/**
+ * @brief `microEndpoint` represents a microservice endpoint.
+ *
+ * The only place where this struct is used by the user is in callbacks, to
+ * identify which endpoint was called, or caused an error.
+ *
+ * @see microRequestHandler, microErrorHandler, microServiceConfig,
+ * microEndpointConfig
+ */
+typedef struct micro_endpoint_s microEndpoint;
+
+/**
+ * @brief The Microservice endpoint configuration object.
+ *
+ * @see micro_endpoint_config_s for descriptions of the fields,
+ * micro_service_config_s, microServiceConfig, microService_AddEndpoint,
+ * microGroup_AddEndpoint
+ */
+typedef struct micro_endpoint_config_s microEndpointConfig;
+
+/**
+ * @brief The Microservice endpoint-level stats struct.
+ *
+ * Returned as part of microEndpointStats. See micro_endpoint_stats_s for
+ * descriptions of the fields.
+ *
+ * @see micro_endpoint_stats_s, microServiceStats, microService_GetStats
+ */
+typedef struct micro_endpoint_stats_s microEndpointStats;
+
+/**
+ * @brief the Microservice error object.
+ *
+ * This error type is returned by most microservice functions. You can create
+ * your own custom errors by using #micro_Errorf, extract errors from response
+ * messages using #micro_ErrorFromResponse, and wrap existing errors using
+ * #microError_Wrapf. Errors are heap-allocated and must be freed with either
+ * #microError_Destroy or by passing it into #microRequest_Respond. 
+ *
+ * There are no public fields in this struct, use #microError_Code,
+ * #microError_Status, and #microError_String to get more information about the
+ * error.
+ */
+typedef struct micro_error_s microError;
+
+/**
+ * @brief a collection of endpoints and other groups, with a
+ * common prefix to their subjects and names.
+ * 
+ * It has no other purpose than
+ * convenience, for organizing endpoint subject space.
+ */
+typedef struct micro_group_s microGroup;
+
+/**
+ * @brief a request received by a microservice endpoint.
+ *
+ * @see micro_request_s for descriptions of the fields.
+ */
+typedef struct micro_request_s microRequest;
+
+/**
+ * The Microservice endpoint schema object.
+ */
+typedef struct micro_schema_s microSchema;
+
+/** 
+ * @brief the main object for a configured microservice.
+ *
+ * It can be created with #micro_AddService, and configured by passing a
+ * microServiceConfig to it. Once no longer needed, a microservice should be
+ * destroyed with microService_Destroy.
+ *
+ * @see micro_AddService, microServiceConfig, microEndpointConfig,
+ * microService_Destroy, microService_Stop, microService_IsStopped,
+ * microService_Run
+ */
+typedef struct micro_service_s microService;
+
+/**
+ * @brief The microservice configuration object.
+ *
+ * The service is created with a clone of the config and all of its values, so
+ * the original can be freed or modified after calling #micro_AddService. See
+ * micro_service_config_s for descriptions of the fields.
+ *
+ * @see micro_service_config_s
+ */
+typedef struct micro_service_config_s microServiceConfig;
+
+/**
+ * @brief information about a running microservice.
+ *
+ * microServiceInfo is the struct returned by microService_GetInfo function. It
+ * is also accessible by sending a `$SRV.INFO.<service-name>[.<id>]` request to
+ * the service. See micro_service_info_s for descriptions of the fields.
+ *
+ * @see micro_service_info_s, microService_GetInfo
+ */
+typedef struct micro_service_info_s microServiceInfo;
+
+/**
+ * @brief The Microservice service-level stats struct. 
+ *
+ * @see micro_service_stats_s for descriptions of the fields,
+ * microService_GetStats
+ */
+typedef struct micro_service_stats_s microServiceStats;
+
+/** @} */ // end of microTypes
+
+/** \defgroup microCallbacks Callbacks
+ *
+ *  Microservice callbacks.
+ *  @{
+ */
+
+/** 
+ * @brief Callback type for request processing.
+ *
+ * This is the callback that one provides when creating a microservice endpoint.
+ * The library will invoke this callback for each message arriving to the
+ * specified subject.
+ *
+ * @param req The request object, containing the message and other relevant
+ * references.
+ *
+ * @see microEndpointConfig, micro_endpoint_config_s.
+ */
+typedef void (*microRequestHandler)(microRequest *req);
+
+/** 
+ * @brief Callback type for async error notifications.
+ *
+ * If specified in microServiceConfig, this callback is invoked for internal
+ * errors (e.g. message delivery failures) related to a microservice. If the
+ * error is associated with an endpoint, the ep parameter points at the
+ * endpoint. However, this handler may be invoked for errors happening in
+ * monitoring subjects, in which case ep is NULL.
+ *
+ * The error handler is invoked asynchronously, in a separate theread.
+ *
+ * The error handler is not invoked for microservice-level errors that are sent
+ * back to the client as responses. Note that the error counts in
+ * microEndpointStats include both internal and service-level errors.
+ *
+ * @param m The microservice object.
+ * @param ep The endpoint object, or NULL if the error is not associated with an
+ * endpoint.
+ * @param s The NATS status for the error.
+ *
+ * @see microServiceConfig, micro_service_config_s.
+ */
+typedef void (*microErrorHandler)(microService *m, microEndpoint *ep, natsStatus s);
+
+/** @} */ // end of microCallbacks
+
+/** \defgroup microStructs Public structs
+ *
+ *  Microservice public structs.
+ * 
+ *  @{
+ */
+
+/**
+ * The Microservice endpoint configuration object.
+ */
+struct micro_endpoint_config_s
+{
+    /**
+     * @brief The name of the endpoint.
+     *
+     * Used in the service stats to list endpoints by name. Must not be empty.
+     */
+    const char *Name;
+
+    /**
+     * @brief The NATS subject the endpoint will listen on.
+     *
+     * Wildcards are allowed. If `Subject` is empty, it attempts to default to
+     * `Name`, provided it is a valid subject.
+     *
+     * For endpoints added to a group, the subject is automatically prefixed
+     * with the group's prefix.
+     */
+    const char *Subject;
+
+    /**
+     * @brief The endpoint schema.
+     */
+    microSchema *Schema;
+
+    /**
+     * @brief The request handler for the endpoint.
+     */
+    microRequestHandler Handler;
+
+    /**
+     * @brief A user-provided pointer to store with the endpoint
+     * (state/closure).
+     */
+    void *State;
+};
+
+/**
+ * The Microservice endpoint stats struct.
+ */
+struct micro_endpoint_stats_s
+{
+    const char *Name;
+    const char *Subject;
+    
+    /**
+     * @brief The number of requests received by the endpoint.
+     */
+    int64_t num_requests;
+
+    /**
+     * @brief The number of errors, service-level and internal, associated with
+     * the endpoint.
+     */
+    int64_t num_errors;
+
+    /**
+     * @brief total request processing time (the seconds part).
+     */
+    int64_t processing_time_s;
+
+    /**
+     * @brief total request processing time (the nanoseconds part).
+     */
+    int64_t processing_time_ns;
+
+    /**
+     * @brief average request processing time, in ns.
+     */
+    int64_t average_processing_time_ns;
+
+    /**
+     * @brief a copy of the last error message.
+     */
+    char last_error_string[2048];
+};
+
+/**
+ * A microservice request.
+ *
+ * microRequest represents a request received by a microservice endpoint.
+ */
+struct micro_request_s
+{
+    /**
+     * @brief The NATS message underlying the request.
+     */
+    natsMsg *Message;
+
+    /**
+     * @brief A reference to the service that received the request.
+     */
+    microService *Service;
+
+     /**
+     * @brief A reference to the service that received the request.
+     */
+    microEndpoint *Endpoint;
+};
+
+/**
+ * @brief The Microservice endpoint schema object.
+ */
+struct micro_schema_s
+{
+    const char *Request;
+    const char *Response;
+};
+
+/**
+ * @brief The Microservice top-level configuration object.
+ *
+ * The service is created with a clone of the config and all of its values, so
+ * the original can be freed or modified after calling micro_AddService.
+ */
+struct micro_service_config_s
+{
+    /**
+     * @brief The name of the service.
+     *
+     * It can be used to compose monitoring messages specific to this service.
+     */
+    const char *Name;
+
+    /**
+     * @brief The (semantic) version of the service.
+     */
+    const char *Version;
+
+    /**
+     * @brief The description of the service.
+     */
+    const char *Description;
+
+    /**
+     * @brief The "main" (aka default) endpoint configuration. 
+     *
+     * It is the default in that it does not require calling
+     * microService_AddEndpoint, it is added automatically when creating the
+     * service.
+     */
+    microEndpointConfig *Endpoint;
+
+    /**
+     * @brief A custom stats handler.
+     *
+     * It will be called to output the service's stats. It replaces the default
+     * stats handler but can pull the service stats using microService_GetStats
+     * function, then marshal them itself, as appropriate.
+     */
+    microRequestHandler StatsHandler;
+
+    /**
+     * @brief An error notification handler.
+     *
+     * It will be called asynchonously upon internal errors. It does not get
+     * called for application-level errors, successfully sent out by the
+     * microservice.
+     */
+    microErrorHandler ErrHandler;
+
+    /**
+     * @brief A user-provided pointer to state data.
+     *
+     * A closure that is accessible from the request, stats, and internal event
+     * handlers. Please note that handlers are invoked on separate threads,
+     * consider thread-safe mechanisms of accessing the data.
+     */
+    void *State;
+};
+
+/**
+ * microServiceInfo is the struct returned by microService_GetInfo function. It
+ * is also accessible by sending a `$SRV.INFO.<service-name>[.<id>]` request to
+ * the service.
+ */
+struct micro_service_info_s
+{
+    /**
+     * @brief Response type. Always `"io.nats.micro.v1.info_response"`.
+     */
+    const char *Type;
+    
+    /**
+     * @brief The name of the service.
+     */
+    const char *Name;
+
+    /**
+     * @brief The semantic version of the service.
+     */
+    const char *Version;
+
+    /**
+     * @brief The description of the service.
+     */
+    const char *Description;
+    
+    /**
+     * @brief The ID of the service instance responding to the request.
+     */
+    const char *Id;
+
+    /**
+     * @brief All endpoint subjects the service is listening on.
+     */
+    const char **Subjects;
+
+    /**
+     * @brief The number of subjects in the `subjects` array.
+     */
+    int SubjectsLen;
+};
+
+/**
+ * The Microservice stats struct.
+ */
+struct micro_service_stats_s
+{
+    /**
+     * @brief Response type. Always `"io.nats.micro.v1.stats_response"`.
+     */
+    const char *Type;
+
+    /**
+     * @brief The name of the service.
+     */
+    const char *Name;
+
+    /**
+     * @brief The semantic version of the service.
+     */
+    const char *Version;
+
+    /**
+     * @brief The ID of the service instance responding to the request.
+     */
+    const char *Id;
+
+    /**
+     * @brief The timestamp of when the service was started.
+     */
+    int64_t Started;
+
+    /**
+     * @brief The stats for each endpoint of the service.
+     */
+    microEndpointStats *Endpoints;
+    
+    /**
+     * @brief The number of endpoints in the `endpoints` array.
+     */
+    int EndpointsLen;
+};
+
+/** @} */ // end of microStructs
+
+/** \defgroup microConstants Public constants
+ *
+ *  Microservice public constants.
+ *  @{
+ */
+
+/**
+ * @brief The prefix for all microservice monitoring subjects.
+ * 
+ * For example, `"$SRV.PING"`.
+ */
+#define MICRO_API_PREFIX "$SRV"
+
+/**
+ * @brief The `type` set in the `$SRV.INFO` responses.
+ */
+#define MICRO_INFO_RESPONSE_TYPE "io.nats.micro.v1.info_response"
+
+/**
+ * @brief For `$SRV.INFO.*` subjects.
+ */
+#define MICRO_INFO_VERB "INFO"
+
+/**
+ * @brief The `type` set in the `$SRV.PING` response.
+ */
+#define MICRO_PING_RESPONSE_TYPE "io.nats.micro.v1.ping_response"
+
+/**
+ * @brief For `$SRV.PING` subjects.
+ */
+#define MICRO_PING_VERB "PING"
+
+/**
+ * @brief The `type` set in the `$SRV.SCHEMA` response.
+ */
+#define MICRO_STATS_SCHEMA_TYPE "io.nats.micro.v1.schema_response"
+
+/**
+ * @brief For `$SRV.SCHEMA` subjects.
+ */
+#define MICRO_SCHEMA_VERB "SCHEMA"
+
+/**
+ * @brief The `type` set in the `STATS` response.
+ */
+#define MICRO_STATS_RESPONSE_TYPE "io.nats.micro.v1.stats_response"
+
+/**
+ * @brief The "verb" used in `$SRV.STATS` subjects.
+ */
+#define MICRO_STATS_VERB "STATS"
+
+/**
+ * @brief The response message header used to communicate an erroneous NATS
+ * status back to the requestor.
+ */
+#define MICRO_STATUS_HDR "Nats-Status"
+
+/**
+ * @brief The response message header used to communicate an error message back
+ * to the requestor.
+ */
+#define MICRO_ERROR_HDR "Nats-Service-Error"
+
+/**
+ * @brief The response message header used to communicate an integer error code
+ * back to the requestor.
+ */
+#define MICRO_ERROR_CODE_HDR "Nats-Service-Error-Code"
+
+/** @} */ // end of microConstants
+
+/** \defgroup microFunctions Functions
+ *
+ *  Microservice functions.
+ *  @{
+ */
+
+/** \defgroup microServiceFunctions microService
+ *
+ *  Functions that operate with #microService.
+ *  @{
+ */
+
+/** @brief Creates and starts a new microservice.
+ *
+ * @note The microservice should be destroyed to clean up using
+ * #microService_Destroy.
+ *
+ * @param new_microservice the location where to store the pointer to the new
+ * #microService object.
+ * @param nc the #natsConnection the service will use to receive and respond to
+ * requests.
+ * @param config a #microServiceConfig object with the configuration of the
+ * service. See #micro_service_config_s for descriptions of the fields.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microService_Destroy, #microService_AddEndpoint, #microServiceConfig,
+ * #microEndpointConfig
+ */
+NATS_EXTERN microError *
+micro_AddService(microService **new_microservice, natsConnection *nc, microServiceConfig *config);
+
+/** @brief Adds an endpoint to a microservice and starts listening for messages.
+ *
+ * Endpoints are currently destroyed when the service is stopped, there is no
+ * present way to remove or stop individual endpoints.
+ *
+ * @param m the #microService that the endpoint will be added to.
+ * @param config a #microEndpointConfig object with the configuration of the
+ * endpoint. See #micro_endpoint_config_s for descriptions of the fields.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microService_Destroy, #microEndpointConfig
+ */
+NATS_EXTERN microError *
+microService_AddEndpoint(microService *m, microEndpointConfig *config);
+
+/** @brief Adds an group (prefix) to a microservice.
+ *
+ * Groups are associated with a service, and are destroyed when the service is
+ * destroyed.
+ *
+ * @param new_group the location where to store the pointer to the new
+ * #microGroup object.
+ * @param m the #microService that the group will be added to.
+ * @param prefix a prefix to use on names and subjects of all endpoints in the
+ * group.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microGroup_AddGroup, #microGroup_AddEndpoint
+ */
+NATS_EXTERN microError *
+microService_AddGroup(microGroup **new_group, microService *m, const char *prefix);
+
+/** @brief Destroys a microservice, stopping it first if needed.
+ *
+ * @note This function may fail while stopping the service, do not assume
+ * unconditional success if clean up is important.
+ * 
+ * @param m the #microService to stop and destroy.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microService_Stop, #microService_Run
+ */
+NATS_EXTERN microError *
+microService_Destroy(microService *m);
+
+/** @brief Returns the connection associated with the service. If the service
+ * was successfully started, it is safe to assume it's not NULL, however it may
+ * already have been disconnected or closed.
+ *
+ * @param m the #microService.
+ *
+ * @return a #natsConnection associated with the service.
+ */
+NATS_EXTERN natsConnection *
+microService_GetConnection(microService *m);
+
+/** @brief Returns a #microServiceInfo for a microservice.
+ *
+ * @note the #microServiceInfo struct returned by this call should be freed with
+ * #microServiceInfo_Destroy.
+ *
+ * @param new_info receives the pointer to the #microServiceInfo.
+ * @param m the #microService to query.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microServiceInfo, #micro_service_info_s
+ */
+NATS_EXTERN microError *
+microService_GetInfo(microServiceInfo **new_info, microService *m);
+
+/** @brief Returns run-time statistics for a microservice.
+ *
+ * @note the #microServiceStats struct returned by this call should be freed
+ * with #microServiceStats_Destroy.
+ *
+ * @param new_stats receives the pointer to the #microServiceStats.
+ * @param m the #microService to query.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microServiceStats, #micro_service_stats_s
+ */
+NATS_EXTERN microError *
+microService_GetStats(microServiceStats **new_stats, microService *m);
+
+/** @brief Checks if the service is stopped.
+ *
+ * @param m the #microService.
+ *
+ * @return `true` if stopped, otherwise `false`.
+ *
+ * @see #micro_AddService, #microService_Stop, #microService_Run
+ */
+NATS_EXTERN bool
+microService_IsStopped(microService *m);
+
+/** @brief Waits for a microservice to stop.
+ *
+ * #micro_AddService starts the service with async subscriptions.
+ * #microService_Run waits for the service to stop.
+ *
+ * @param m the #microService.
+ *
+ * @return a #microError for invalid arguments, otherwise always succeeds.
+ *
+ * @see #micro_AddService, #microService_Stop
+ */
+NATS_EXTERN microError *
+microService_Run(microService *m);
+
+/** @brief Stops a running microservice.
+ *
+ * Drains and closes the all subscriptions (endpoints and monitoring), resets
+ * the stats, and posts the async `Done` callback for the service, so it can do
+ * its own clean up if needed.
+ * 
+ * @param m the #microService.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #micro_AddService, #microService_Run
+ */
+NATS_EXTERN microError *microService_Stop(microService *m);
+
+/** @} */ // end of microServiceFunctions
+
+/** \defgroup microGroupFunctions microGroup
+ *
+ *  Functions that operate with #microGroup.
+ *  @{
+ */
+
+/** @brief Adds a sub-group to #microGroup.
+ *
+ * The new subgroup will be prefixed as "parent_prefix.prefix.". Groups are
+ * associated with a service, and are destroyed when the service is destroyed.
+ *
+ * @param new_group the location where to store the pointer to the new
+ * #microGroup object.
+ * @param parent the #microGroup that the new group will be added to.
+ * @param prefix a prefix to use on names and subjects of all endpoints in the
+ * group.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microGroup_AddGroup, #microGroup_AddEndpoint
+ */
+NATS_EXTERN microError *
+microGroup_AddGroup(microGroup **new_group, microGroup *parent, const char *prefix);
+
+/** @brief Adds an endpoint to a #microGroup and starts listening for messages.
+ *
+ * This is a convenience method to add an endpoint with its `Subject` and `Name`
+ * prefixed with the group's prefix.
+ *
+ * @param g the #microGroup that the endpoint will be added to.
+ * @param config a #microEndpointConfig object with the configuration of the
+ * endpoint. See #micro_endpoint_config_s for descriptions of the fields.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microService_Destroy, #microService_AddEndpoint, #microEndpointConfig
+ */
+NATS_EXTERN microError *
+microGroup_AddEndpoint(microGroup *g, microEndpointConfig *config);
+
+/** @} */ // end of microGroupFunctions
+
+/** \defgroup microRequestFunctions microRequest
+ *
+ *  Functions that operate with #microRequest.
+ *  @{
+ */
+
+/** @brief Adds a header to the underlying NATS request message.
+ *
+ * @param req the request.
+ * @param key the key under which the `value` will be stored. It can't ne `NULL`
+ * or empty.
+ * @param value the string to add to the values associated with the given `key`.
+ * The value can be `NULL` or empty string.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Add, #microRequest_DeleteHeader, #microRequest_GetHeaderKeys,
+ * #microRequest_GetHeaderValue, #microRequest_GetHeaderValues
+ */
+NATS_EXTERN microError *
+microRequest_AddHeader(microRequest *req, const char *key, const char *value);
+
+/** @brief Deletes a header from the underlying NATS request message.
+ *
+ * @param req the request.
+ * @param key the key to delete from the headers map.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Delete, #microRequest_AddHeader
+ */
+NATS_EXTERN microError *
+microRequest_DeleteHeader(microRequest *req, const char *key);
+
+/** @brief Returns the connection associated with the request. 
+ *
+ * @param req the request.
+ *
+ * @return a #natsConnection associated with the request. In fact, it's the
+ * connection associated with the service, so by the time the request handler is
+ * invoked the connection state may be different from when it was received.
+ */
+NATS_EXTERN natsConnection *
+microRequest_GetConnection(microRequest *req);
+
+/** @brief Returns the data in the the request, as a byte array. 
+ *
+ * @note The request owns the data, so it should not be freed other than with
+ * `microRequest_Destroy`.
+ * @note The data is not `NULL` terminated. Use `microRequest_GetDataLength` to
+ * obtain the number of bytes.
+ *
+ * @param req the request.
+ *
+ * @return a pointer to the request's data.
+ * 
+ * @see #natsMsg_GetData, #microRequest_GetDataLength
+ */
+NATS_EXTERN const char *
+microRequest_GetData(microRequest *req);
+
+/** @brief Returns the number of data bytes in the the request. 
+ *
+ * @param req the request.
+ *
+ * @return the number of data bytes in the request.
+ * 
+ * @see #natsMsg_GetDataLength, #microRequest_GetData
+ */
+NATS_EXTERN int
+microRequest_GetDataLength(microRequest *req);
+
+/** \brief Returns the pointer to the user-provided endpoint state, if
+ * the request is associated with an endpoint. 
+ *
+ * @param req the request.
+ *
+ * @return the `state` pointer provided in microEndpointConfig.
+ *
+ * @see #microEndpointConfig, #micro_endpoint_config_s
+ */
+NATS_EXTERN void *
+microRequest_GetEndpointState(microRequest *req);
+
+/** @brief Gets the list of all header keys in the NATS message underlying the
+ * request.
+ *
+ * The returned strings are own by the library and MUST not be freed or altered.
+ * However, the returned array `keys` MUST be freed by the user.
+ *
+ * @param req the request.
+ * @param keys the memory location where the library will store the pointer to
+ * the array of keys.
+ * @param count the memory location where the library will store the number of
+ * keys returned.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Keys, #microRequest_GetHeaderValue, #microRequest_GetHeaderValues
+ */
+NATS_EXTERN microError *
+microRequest_GetHeaderKeys(microRequest *req, const char ***keys, int *count);
+
+/** @brief Get the header entry associated with `key` from the NATS message underlying the request.
+ *
+ * @param req the request.
+ * @param key the key for which the value is requested.
+ * @param value the memory location where the library will store the pointer to the first
+ * value (if more than one is found) associated with the `key`.
+ * 
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Get, #microRequest_GetHeaderValue, #microRequest_GetHeaderValues
+ */
+NATS_EXTERN microError *
+microRequest_GetHeaderValue(microRequest *req, const char *key, const char **value);
+
+/** @brief Get all header values associated with `key` from the NATS message
+ * underlying the request.
+ *
+ * @param req the request.
+ * @param key the key for which the values are requested.
+ * @param values the memory location where the library will store the pointer to
+ * the array value (if more than one is found) associated with the `key`.
+ * @param count the memory location where the library will store the number of
+ * values returned.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Values, #microRequest_GetHeaderValue,
+ * #microRequest_GetHeaderKeys
+ */
+NATS_EXTERN microError *
+microRequest_GetHeaderValues(microRequest *req, const char *key, const char ***values, int *count);
+
+/** @brief Get the NATS message underlying the request.
+ *
+ * @param req the request.
+ *
+ * @return the pointer to #natsMsg.
+ */
+NATS_EXTERN natsMsg *
+microRequest_GetMsg(microRequest *req);
+
+/** @brief Returns the reply subject set in this message.
+ *
+ * Returns the reply, possibly `NULL`.
+ *
+ * @warning The string belongs to the message and must not be freed.
+ * Copy it if needed.
+ *
+ * @param req the request.
+ */
+NATS_EXTERN const char *
+microRequest_GetReply(microRequest *req);
+
+/** @brief Returns the pointer to the microservice associated with the request. 
+ *
+ * @param req the request.
+ *
+ * @return the microservice pointer.
+ */
+NATS_EXTERN microService *
+microRequest_GetService(microRequest *req);
+
+/** @brief Returns the pointer to the user-provided service state.
+ *
+ * @param req the request.
+ *
+ * @return the `state` pointer provided in microServiceConfig.
+ *
+ * @see #microServiceConfig, #micro_service_config_s
+ */
+NATS_EXTERN void *
+microRequest_GetServiceState(microRequest *req);
+
+/** @brief Returns the subject of the request message.
+ *
+ * @warning The string belongs to the message and must not be freed.
+ * Copy it if needed.
+ *
+ * @param req the request.
+ */
+NATS_EXTERN const char *
+microRequest_GetSubject(microRequest *req);
+
+/**
+ * @brief Respond to a request, on the same NATS connection.
+ * 
+ * @param req the request.
+ * @param data the response data.
+ * @param len the length of the response data.
+ * 
+ * @return an error, if any. 
+ */
+NATS_EXTERN microError *
+microRequest_Respond(microRequest *req, microError **err_will_free, const char *data, size_t len);
+
+/** @brief Add `value` to the header associated with `key` in the NATS message
+ * underlying the request.
+ *
+ * @param req the request.
+ * @param key the key under which the `value` will be stored. It can't ne `NULL`
+ * or empty.
+ * @param value the string to store under the given `key`. The value can be
+ * `NULL` or empty string.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Set
+ */
+NATS_EXTERN microError *
+microRequest_SetHeader(microRequest *req, const char *key, const char *value);
+
+/** @} */ // end of microRequestFunctions
+
+/** \defgroup microErrorFunctions microError
+ *
+ *  Functions that create and manipulate #microError.
+ *  @{
+ */
+
+/** @brief creates a new #microError, with a printf-like formatted message.
+ *
+ * @note Errors must be freed with #microError_Destroy, but often they are
+ * simply returned up the call stack.
+ *
+ * @param code an `int` code, loosely modeled after the HTTP status code.
+ * @param format printf-like format.
+ *
+ * @return a new #microError or micro_ErrorOutOfMemory.
+ */
+NATS_EXTERN microError *
+micro_Errorf(int code, const char *format, ...);
+
+/** @brief Checks if microservice response is an error.
+ *
+ * @note <>/<> TODO does this need to be public?
+ * 
+ * If the response is an error, the function returns a #microError composed of
+ * the code and error message contained in the response header. It also accepts
+ * a NATS status code, usually one that came from #natsConnection_Request, and
+ * makes it into a #microError if it is not a NATS_OK.
+ *
+ * @param s NATS status of receiving the response.
+ * @param msg NATS message to check the header of.
+ *
+ * @return a new #microError or `NULL` if no error if found.
+ */
+NATS_EXTERN microError *
+micro_ErrorFromResponse(natsStatus s, natsMsg *msg);
+
+/** @brief Wraps a NATS status into a #microError, if not a NATS_OK.
+ *
+ * @param s NATS status of receiving the response.
+ *
+ * @return a new #microError or `NULL` if no error if found.
+ */
+NATS_EXTERN microError *
+micro_ErrorFromStatus(natsStatus s);
+
+/** @brief returns the int code of the error.
+ *
+ * @param err the error.
+ *
+ * @return the int code.
+ */
+NATS_EXTERN int
+microError_Code(microError *err);
+
+/** @brief destroys a #microError.
+ *
+ * @param err the error.
+ */
+NATS_EXTERN void
+microError_Destroy(microError *err);
+
+/**
+ * @brief Returns the NATS status associated with the error.
+ * 
+ * @param err 
+ * 
+ * @return the status 
+ */
+NATS_EXTERN natsStatus
+microError_Status(microError *err);
+
+/**
+ * @brief Returns a printable string with the error message.
+ *
+ * This function outputs into a user-provided buffer, and returns a "`%s`-able"
+ * pointer to it.
+ *
+ * @param err the error.
+ * @param buf the output buffer.
+ * @param len the capacity of the output buffer.
+ * @return `buf` 
+ */
+NATS_EXTERN const char *
+microError_String(microError *err, char *buf, int len);
+
+/**
+ * @brief Wraps an exising #microError with a higher printf-like formatted
+ * message.
+ *
+ * @warning The original error may be freed and should not be refered to after
+ * having been wrapped.
+ *
+ * @param err the original error
+ * @param format the new message to prepend to the original error message.
+ * @param ... 
+ *
+ * @return a new, wrapped, error.
+ */
+NATS_EXTERN microError *
+microError_Wrapf(microError *err, const char *format, ...);
+
+/** @} */ // end of microErrorFunctions
+
+/** \defgroup microClientFunctions microClient
+ *
+ *  @{
+ */
+
+/**
+ * @brief Creates a new microservice client.
+ * 
+ * @param new_client received the pointer to the new client.
+ * @param nc a NATS connection.
+ * @param cfg for future use, use NULL for now.
+ * 
+ * @return a #microError if an error occurred. 
+ */
+NATS_EXTERN microError *
+micro_NewClient(microClient **new_client, natsConnection *nc, microClientConfig *cfg);
+
+/**
+ * @brief Destroys a microservice client.
+ * 
+ * @param client the client to destroy.
+ */
+NATS_EXTERN void
+microClient_Destroy(microClient *client);
+
+/**
+ * @brief Sends a request to a microservice and receives the response.
+ *
+ * @param reply receives the pointer to the response NATS message. `reply` must
+ * be freed with #natsMsg_Destroy.
+ * @param client the client to use.
+ * @param subject the subject to send the request on.
+ * @param data the request data.
+ * @param data_len the request data length.
+ * 
+ * @return a #microError if an error occurred.
+ */
+NATS_EXTERN microError *
+microClient_DoRequest(natsMsg **reply, microClient *client, const char *subject, const char *data, int data_len);
+
+/** @} */ // end of microClientFunctions
+
+/** \defgroup microCleanupFunctions Miscellaneous
+ *
+ *  Functions to destroy miscellaneous objects.
+ *  @{
+ */
+
+/**
+ * @brief Destroys a #microServiceInfo object.
+ * 
+ * @param info the object to destroy.
+ */
+NATS_EXTERN void
+microServiceInfo_Destroy(microServiceInfo *info);
+
+/**
+ * @brief Destroys a #microServiceStats object.
+ * 
+ * @param stats the object to destroy.
+ */
+NATS_EXTERN void
+microServiceStats_Destroy(microServiceStats *stats);
+
+/** @} */ // end of microCleanupFunctions
+
+/** @} */ // end of microFunctions
+
+/** @} */ // end of microGroup
+
 /**  \defgroup wildcardsGroup Wildcards
  *  @{
  *  Use of wildcards. There are two type of wildcards: `*` for partial,

@@ -11,7 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "micro.h"
 #include "microp.h"
 #include "micro_args.h"
 #include "mem.h"

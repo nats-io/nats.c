@@ -36,16 +36,19 @@ handle_arithmetics_op(microRequest *req, arithmeticsOP op)
     char buf[1024];
     int len = 0;
 
-    MICRO_CALL(err, micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req)));
+    err = micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req));
     if ((err == NULL) && (microArgs_Count(args) != 2))
     {
         err = micro_Errorf(400, "Invalid number of arguments, expected 2 got %d", microArgs_Count(args));
     }
-
-    MICRO_CALL(err, microArgs_GetFloat(&a1, args, 0));
-    MICRO_CALL(err, microArgs_GetFloat(&a2, args, 1));
-    MICRO_CALL(err, op(&result, a1, a2));
-    MICRO_DO(err, len = snprintf(buf, sizeof(buf), "%Lf", result));
+    if (err == NULL)
+        err = microArgs_GetFloat(&a1, args, 0);
+    if (err == NULL)
+        err = microArgs_GetFloat(&a2, args, 1);
+    if (err == NULL)
+        err = op(&result, a1, a2);
+    if (err == NULL)
+        len = snprintf(buf, sizeof(buf), "%Lf", result);
 
     microRequest_Respond(req, &err, buf, len);
     microArgs_Destroy(args);
@@ -88,21 +91,21 @@ int main(int argc, char **argv)
     char errorbuf[1024];
 
     microServiceConfig cfg = {
-        .description = "Arithmetic operations - NATS microservice example in C",
-        .name = "c-arithmetics",
-        .version = "1.0.0",
+        .Description = "Arithmetic operations - NATS microservice example in C",
+        .Name = "c-arithmetics",
+        .Version = "1.0.0",
     };
     microEndpointConfig add_cfg = {
-        .name = "add",
-        .handler = handle_add,
+        .Name = "add",
+        .Handler = handle_add,
     };
     microEndpointConfig divide_cfg = {
-        .name = "divide",
-        .handler = handle_divide,
+        .Name = "divide",
+        .Handler = handle_divide,
     };
     microEndpointConfig multiply_cfg = {
-        .name = "multiply",
-        .handler = handle_multiply,
+        .Name = "multiply",
+        .Handler = handle_multiply,
     };
 
     // Connect to NATS server
@@ -116,16 +119,21 @@ int main(int argc, char **argv)
     }
 
     // Create the Microservice that listens on nc.
-    MICRO_CALL(err, micro_AddService(&m, conn, &cfg));
+    err = micro_AddService(&m, conn, &cfg);
 
     // Add the endpoints for the functions.
-    MICRO_CALL(err, microService_AddGroup(&g, m, "op"));
-    MICRO_CALL(err, microGroup_AddEndpoint(g, &add_cfg));
-    MICRO_CALL(err, microGroup_AddEndpoint(g, &multiply_cfg));
-    MICRO_CALL(err, microGroup_AddEndpoint(g, &divide_cfg));
+    if (err == NULL)
+        microService_AddGroup(&g, m, "op");
+    if (err == NULL)
+        err = microGroup_AddEndpoint(g, &add_cfg);
+    if (err == NULL)
+        err = microGroup_AddEndpoint(g, &multiply_cfg);
+    if (err == NULL)
+        err = microGroup_AddEndpoint(g, &divide_cfg);
 
     // Run the service, until stopped.
-    MICRO_CALL(err, microService_Run(m));
+    if (err == NULL)
+        err = microService_Run(m);
 
     // Cleanup.
     microService_Destroy(m);

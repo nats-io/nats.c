@@ -14,8 +14,6 @@
 #ifndef MICRO_ARGS_H_
 #define MICRO_ARGS_H_
 
-#include "micro.h"
-
 /**
  * Request unmarshaled as "arguments", a space-separated list of numbers and strings.
  * TODO document the interface.

@@ -11,7 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "micro.h"
 #include "microp.h"
 #include "mem.h"
 
@@ -23,16 +22,16 @@ microRequest_Respond(microRequest *req, microError **err_will_free, const char *
     natsStatus s = NATS_OK;
     char buf[64];
 
-    if ((req == NULL) || (req->message == NULL) || (req->message->sub == NULL) || (req->message->sub->conn == NULL))
+    if ((req == NULL) || (req->Message == NULL) || (req->Message->sub == NULL) || (req->Message->sub->conn == NULL))
     {
         return micro_ErrorInvalidArg;
     }
 
-    IFOK(s, natsMsg_Create(&msg, natsMsg_GetReply(req->message), NULL, data, len));
+    IFOK(s, natsMsg_Create(&msg, natsMsg_GetReply(req->Message), NULL, data, len));
     if ((s == NATS_OK) && (err_will_free != NULL) && (*err_will_free != NULL))
     {
         err = *err_will_free;
-        micro_update_last_error(req->endpoint, err);
+        micro_update_last_error(req->Endpoint, err);
         if ((s == NATS_OK) && (err->status != NATS_OK))
         {
             s = natsMsgHeader_Set(msg, MICRO_STATUS_HDR, natsStatus_GetText(err->status));
@@ -47,7 +46,7 @@ microRequest_Respond(microRequest *req, microError **err_will_free, const char *
             s = natsMsgHeader_Set(msg, MICRO_ERROR_CODE_HDR, buf);
         }
     }
-    IFOK(s, natsConnection_PublishMsg(req->message->sub->conn, msg));
+    IFOK(s, natsConnection_PublishMsg(req->Message->sub->conn, msg));
 
     natsMsg_Destroy(msg);
     if (err_will_free != NULL)
@@ -77,7 +76,7 @@ microRequest_DeleteHeader(microRequest *req, const char *key)
 natsConnection *
 microRequest_GetConnection(microRequest *req)
 {
-    return ((req != NULL) && (req->service != NULL)) ? req->service->nc : NULL;
+    return ((req != NULL) && (req->Service != NULL)) ? req->Service->nc : NULL;
 }
 
 const char *
@@ -94,7 +93,7 @@ int microRequest_GetDataLength(microRequest *req)
 microEndpoint *
 microRequest_GetEndpoint(microRequest *req)
 {
-    return (req != NULL) ? req->endpoint : NULL;
+    return (req != NULL) ? req->Endpoint : NULL;
 }
 
 microError *
@@ -121,18 +120,13 @@ microRequest_GetHeaderValues(microRequest *req, const char *key, const char ***v
 natsMsg *
 microRequest_GetMsg(microRequest *req)
 {
-    return (req != NULL) ? req->message : NULL;
+    return (req != NULL) ? req->Message : NULL;
 }
 
 const char *
 microRequest_GetReply(microRequest *req)
 {
     return natsMsg_GetReply(microRequest_GetMsg(req));
-}
-
-uint64_t microRequest_GetSequence(microRequest *req)
-{
-    return natsMsg_GetSequence(microRequest_GetMsg(req));
 }
 
 const char *microRequest_GetSubject(microRequest *req)
@@ -142,25 +136,20 @@ const char *microRequest_GetSubject(microRequest *req)
 
 void *microRequest_GetServiceState(microRequest *req)
 {
-    if ((req == NULL) || (req->service == NULL) || (req->service->cfg == NULL))
+    if ((req == NULL) || (req->Service == NULL) || (req->Service->cfg == NULL))
     {
         return NULL;
     }
-    return req->service->cfg->state;
+    return req->Service->cfg->State;
 }
 
 void *microRequest_GetEndpointState(microRequest *req)
 {
-    if ((req == NULL) || (req->endpoint == NULL) || (req->endpoint->config == NULL))
+    if ((req == NULL) || (req->Endpoint == NULL) || (req->Endpoint->config == NULL))
     {
         return NULL;
     }
-    return req->endpoint->config->state;
-}
-
-int64_t microRequest_GetTime(microRequest *req)
-{
-    return natsMsg_GetTime(microRequest_GetMsg(req));
+    return req->Endpoint->config->State;
 }
 
 microError *
@@ -173,7 +162,7 @@ microRequest_SetHeader(microRequest *req, const char *key, const char *value)
 microService *
 microRequest_GetService(microRequest *req)
 {
-    return (req != NULL) ? req->service : NULL;
+    return (req != NULL) ? req->Service : NULL;
 }
 
 void micro_destroy_request(microRequest *req)
@@ -194,9 +183,9 @@ micro_new_request(microRequest **new_request, microService *m, microEndpoint *ep
     if (req == NULL)
         return micro_ErrorOutOfMemory;
 
-    req->message = msg;
-    req->service = m;
-    req->endpoint = ep;
+    req->Message = msg;
+    req->Service = m;
+    req->Endpoint = ep;
     *new_request = req;
     return NULL;
 }

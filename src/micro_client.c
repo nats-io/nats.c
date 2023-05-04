@@ -11,7 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "micro.h"
 #include "microp.h"
 #include "mem.h"
 #include "conn.h"
@@ -24,7 +23,7 @@ micro_NewClient(microClient **new_client, natsConnection *nc, microClientConfig 
     if (new_client == NULL)
         return micro_ErrorInvalidArg;
 
-    client = NATS_CALLOC(1, sizeof(struct micro_client_s));
+    client = NATS_CALLOC(1, sizeof(microClient));
     if (client == NULL)
         return micro_ErrorOutOfMemory;
 

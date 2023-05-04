@@ -69,10 +69,13 @@ call_function(long double *result, natsConnection *nc, const char *subject, int 
 
     len = snprintf(buf, sizeof(buf), "%d", n);
     snprintf(sbuf, sizeof(sbuf), "f.%s", subject);
-    MICRO_CALL(err, micro_NewClient(&client, nc, NULL));
-    MICRO_CALL(err, microClient_DoRequest(&response, client, sbuf, buf, len));
-    MICRO_CALL(err, micro_ParseArgs(&args, natsMsg_GetData(response), natsMsg_GetDataLength(response)));
-    MICRO_CALL(err, microArgs_GetFloat(result, args, 0));
+    err = micro_NewClient(&client, nc, NULL);
+    if (err == NULL)
+        err = microClient_DoRequest(&response, client, sbuf, buf, len);
+    if (err == NULL)
+        err = micro_ParseArgs(&args, natsMsg_GetData(response), natsMsg_GetDataLength(response));
+    if (err == NULL)
+        err = microArgs_GetFloat(result, args, 0);
 
     microClient_Destroy(client);
     natsMsg_Destroy(response);
@@ -97,13 +100,14 @@ static void handle_sequence(microRequest *req)
     char result[64];
     int result_len = 0;
 
-    MICRO_CALL(err, micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req)));
+    err = micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req));
     if ((err == NULL) && (microArgs_Count(args) != 2))
     {
         err = micro_Errorf(400, "Invalid number of arguments, expected 2 got %d", microArgs_Count(args));
     }
 
-    MICRO_CALL(err, microArgs_GetString(&function, args, 0));
+    if (err == NULL)
+        err = microArgs_GetString(&function, args, 0);
     if ((err == NULL) &&
         (strcmp(function, "factorial") != 0) &&
         (strcmp(function, "power2") != 0) &&
@@ -111,8 +115,8 @@ static void handle_sequence(microRequest *req)
     {
         err = micro_Errorf(400, "Invalid function name '%s', must be 'factorial', 'power2', or 'fibonacci'", function);
     }
-
-    MICRO_CALL(err, microArgs_GetInt(&n, args, 1));
+    if (err == NULL)
+        err = microArgs_GetInt(&n, args, 1);
     if ((err == NULL) && (n < 1))
     {
         err = micro_Errorf(400, "Invalid number of iterations %d, must be at least 1", n);
@@ -120,15 +124,18 @@ static void handle_sequence(microRequest *req)
 
     for (i = 1; (err == NULL) && (i <= n); i++)
     {
-        MICRO_CALL(err, call_function(&denominator, nc, function, i));
+        if (err == NULL)
+            err = call_function(&denominator, nc, function, i);
         if ((err == NULL) && (denominator == 0))
         {
             err = micro_Errorf(500, "division by zero at step %d", i);
         }
-        MICRO_DO(err, value = value + initialValue / denominator);
+        if (err == NULL)
+            value = value + initialValue / denominator;
     }
 
-    MICRO_DO(err, result_len = snprintf(result, sizeof(result), "%Lf", value));
+    if (err == NULL)
+        result_len = snprintf(result, sizeof(result), "%Lf", value);
 
     microRequest_Respond(req, &err, result, result_len);
     microArgs_Destroy(args);
@@ -144,16 +151,16 @@ int main(int argc, char **argv)
     char errorbuf[1024];
 
     microEndpointConfig sequence_cfg = {
-        .subject = "sequence",
-        .name = "sequence-service",
-        .handler = handle_sequence,
-        .schema = NULL,
+        .Subject = "sequence",
+        .Name = "sequence-service",
+        .Handler = handle_sequence,
+        .Schema = NULL,
     };
     microServiceConfig cfg = {
-        .description = "Sequence adder - NATS microservice example in C",
-        .name = "c-sequence",
-        .version = "1.0.0",
-        .endpoint = &sequence_cfg,
+        .Description = "Sequence adder - NATS microservice example in C",
+        .Name = "c-sequence",
+        .Version = "1.0.0",
+        .Endpoint = &sequence_cfg,
     };
 
     opts = parseArgs(argc, argv, "");
@@ -165,8 +172,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    MICRO_CALL(err, micro_AddService(&m, conn, &cfg));
-    MICRO_CALL(err, microService_Run(m));
+    err = micro_AddService(&m, conn, &cfg);
+    if (err == NULL)
+        err = microService_Run(m);
 
     microService_Destroy(m);
     if (err != NULL)

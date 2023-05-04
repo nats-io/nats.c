@@ -51,14 +51,14 @@ static void handle_stats(microRequest *req)
     service_state_t *service_state = microRequest_GetServiceState(req);
     int total, custom, len;
 
-    err = microService_GetStats(&stats, req->service);
+    err = microService_GetStats(&stats, req->Service);
     if (err != NULL)
     {
         microRequest_Respond(req, &err, NULL, 0);
         return;
     }
 
-    total = stats->endpoints[0].num_requests;
+    total = stats->Endpoints[0].num_requests;
     custom = service_state->odd_count;
     len = snprintf(buf, sizeof(buf),
                    "{\"total\":%d,\"odd\":%d}", total, custom);
@@ -75,36 +75,36 @@ run_example(natsConnection *conn, microRequestHandler stats_handler, char *buf, 
         .odd_count = 0,
     };
     microEndpointConfig default_cfg = {
-        .name = "default",
-        .handler = handle_default,
+        .Name = "default",
+        .Handler = handle_default,
     };
     microServiceConfig cfg = {
-        .name = "c-stats",
-        .description = "NATS microservice in C with a custom stats handler",
-        .version = "1.0.0",
-        .endpoint = &default_cfg,
-        .stats_handler = stats_handler,
-        .state = &service_state,
+        .Name = "c-stats",
+        .Description = "NATS microservice in C with a custom stats handler",
+        .Version = "1.0.0",
+        .Endpoint = &default_cfg,
+        .StatsHandler = stats_handler,
+        .State = &service_state,
     };
     int i;
     int len;
     natsMsg *resp = NULL;
     natsMsg *stats_resp = NULL;
 
-    MICRO_CALL(err, micro_AddService(&m, conn, &cfg));
-    MICRO_CALL(err, micro_NewClient(&c, conn, NULL));
-
+    err = micro_AddService(&m, conn, &cfg);
     if (err == NULL)
+        err = micro_NewClient(&c, conn, NULL);
+    for (i = 0; (err == NULL) && (i < 10); i++)
     {
-        for (i = 0; i < 10; i++)
-        {
-            len = snprintf(buf, buf_cap, "%d", i);
-            MICRO_CALL(err, microClient_DoRequest(&resp, c, "default", buf, len));
-            MICRO_DO(err, natsMsg_Destroy(resp));
-        }
+        len = snprintf(buf, buf_cap, "%d", i);
+        if (err == NULL)
+            err = microClient_DoRequest(&resp, c, "default", buf, len);
+        if (err == NULL)
+            natsMsg_Destroy(resp);
     }
 
-    MICRO_CALL(err, microClient_DoRequest(&stats_resp, c, "$SRV.STATS.c-stats", "", 0));
+    if (err == NULL)
+        err = microClient_DoRequest(&stats_resp, c, "$SRV.STATS.c-stats", "", 0);
     if (err == NULL)
     {
         len = natsMsg_GetDataLength(stats_resp);
@@ -130,13 +130,17 @@ int main(int argc, char **argv)
     natsConnection *conn = NULL;
     char buf[2048];
 
-    MICRO_CALL(err, micro_ErrorFromStatus(natsConnection_Connect(&conn, opts)));
+    err = micro_ErrorFromStatus(natsConnection_Connect(&conn, opts));
 
-    MICRO_CALL(err, run_example(conn, NULL, buf, sizeof(buf)));
-    MICRO_DO(err, printf("Default stats response:\n----\n%s\n----\n\n", buf));
+    if (err == NULL)
+        err = run_example(conn, NULL, buf, sizeof(buf));
+    if (err == NULL)
+        printf("Default stats response:\n----\n%s\n----\n\n", buf);
 
-    MICRO_CALL(err, run_example(conn, handle_stats, buf, sizeof(buf)));
-    MICRO_DO(err, printf("Custom stats response:\n----\n%s\n----\n\n", buf));
+    if (err == NULL)
+        err = run_example(conn, handle_stats, buf, sizeof(buf));
+    if (err == NULL)
+        printf("Custom stats response:\n----\n%s\n----\n\n", buf);
 
     if (err != NULL)
     {

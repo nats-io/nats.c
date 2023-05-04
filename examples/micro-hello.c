@@ -55,14 +55,14 @@ int main(int argc, char **argv)
     char errorbuf[1024];
 
     microEndpointConfig hello_cfg = {
-        .name = "hello",
-        .handler = handle,
+        .Name = "hello",
+        .Handler = handle,
     };
     microServiceConfig cfg = {
-        .description = "Hello World! - NATS microservice example in C",
-        .name = "c-hello",
-        .version = "1.0.0",
-        .endpoint = &hello_cfg,
+        .Description = "Hello World! - NATS microservice example in C",
+        .Name = "c-hello",
+        .Version = "1.0.0",
+        .Endpoint = &hello_cfg,
     };
 
     // Connect and start the services
@@ -74,8 +74,9 @@ int main(int argc, char **argv)
         nats_PrintLastErrorStack(stderr);
         return 1;
     }
-    MICRO_CALL(err, micro_AddService(&m, conn, &cfg));
-    MICRO_CALL(err, microService_Run(m));
+    err = micro_AddService(&m, conn, &cfg);
+    if (err == NULL)
+        err = microService_Run(m);
 
     microService_Destroy(m);
     if (err != NULL)

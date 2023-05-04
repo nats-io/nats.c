@@ -17,6 +17,17 @@
 #include "natsp.h"
 #include "mem.h"
 
+#define MICRO_CALL(__err, __call) \
+    if ((__err) == NULL)          \
+    {                             \
+        __err = (__call);         \
+    }
+
+#define MICRO_DO(__err, __block) \
+    if ((__err) == NULL)         \
+        __block;
+
+
 #define MICRO_QUEUE_GROUP "q"
 
 #define MICRO_DEFAULT_ENDPOINT_NAME "default"
@@ -70,7 +81,7 @@ struct micro_service_s
 {
     // these are set at initialization time time and do not change.
     natsConnection *nc;
-    struct microServiceConfig *cfg;
+    microServiceConfig *cfg;
     char id[NUID_BUFFER_LEN + 1];
 
     // groups are just convenient wrappers to make "prefixed" endpoints with

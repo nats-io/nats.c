@@ -11,7 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "micro.h"
 #include "microp.h"
 #include "conn.h"
 #include "mem.h"
@@ -37,7 +36,7 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
     microError *err = NULL;
     microService *m = NULL;
 
-    if ((new_m == NULL) || (nc == NULL) || (cfg == NULL) || !micro_is_valid_name(cfg->name) || nats_IsStringEmpty(cfg->version))
+    if ((new_m == NULL) || (nc == NULL) || (cfg == NULL) || !micro_is_valid_name(cfg->Name) || nats_IsStringEmpty(cfg->Version))
         return micro_ErrorInvalidArg;
 
     // Make a microservice object, with a reference to a natsConnection.
@@ -60,7 +59,7 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
     MICRO_CALL(err, wrap_connection_event_callbacks(m))
 
     // Add the endpoints and monitoring subscriptions.
-    MICRO_CALL(err, microService_AddEndpoint(m, cfg->endpoint));
+    MICRO_CALL(err, microService_AddEndpoint(m, cfg->Endpoint));
     MICRO_CALL(err, micro_init_monitoring(m));
 
     if (err != NULL)
@@ -258,14 +257,14 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
     if (info == NULL)
         return micro_ErrorOutOfMemory;
 
-    info->name = m->cfg->name;
-    info->version = m->cfg->version;
-    info->description = m->cfg->description;
-    info->id = m->id;
-    info->type = MICRO_INFO_RESPONSE_TYPE;
+    info->Name = m->cfg->Name;
+    info->Version = m->cfg->Version;
+    info->Description = m->cfg->Description;
+    info->Id = m->id;
+    info->Type = MICRO_INFO_RESPONSE_TYPE;
 
-    info->subjects = NATS_CALLOC(m->endpoints_len, sizeof(char *));
-    if (info->subjects == NULL)
+    info->Subjects = NATS_CALLOC(m->endpoints_len, sizeof(char *));
+    if (info->Subjects == NULL)
     {
         NATS_FREE(info);
         return micro_ErrorOutOfMemory;
@@ -277,11 +276,11 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
         microEndpoint *ep = m->endpoints[i];
         if ((ep != NULL) && (ep->subject != NULL))
         {
-            info->subjects[len] = ep->subject;
+            info->Subjects[len] = ep->subject;
             len++;
         }
     }
-    info->subjects_len = len;
+    info->SubjectsLen = len;
     natsMutex_Unlock(m->mu);
 
     *new_info = info;
@@ -294,7 +293,7 @@ void microServiceInfo_Destroy(microServiceInfo *info)
         return;
 
     // subjects themselves must not be freed, just the collection.
-    NATS_FREE(info->subjects);
+    NATS_FREE(info->Subjects);
     NATS_FREE(info);
 }
 
@@ -313,15 +312,15 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
     if (stats == NULL)
         return micro_ErrorOutOfMemory;
 
-    stats->name = m->cfg->name;
-    stats->version = m->cfg->version;
-    stats->id = m->id;
-    stats->started = m->started;
-    stats->type = MICRO_STATS_RESPONSE_TYPE;
+    stats->Name = m->cfg->Name;
+    stats->Version = m->cfg->Version;
+    stats->Id = m->id;
+    stats->Started = m->started;
+    stats->Type = MICRO_STATS_RESPONSE_TYPE;
 
     // allocate the actual structs, not pointers.
-    stats->endpoints = NATS_CALLOC(m->endpoints_len, sizeof(microEndpointStats));
-    if (stats->endpoints == NULL)
+    stats->Endpoints = NATS_CALLOC(m->endpoints_len, sizeof(microEndpointStats));
+    if (stats->Endpoints == NULL)
     {
         NATS_FREE(stats);
         return micro_ErrorOutOfMemory;
@@ -335,30 +334,30 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
         {
             natsMutex_Lock(ep->mu);
             // copy the entire struct, including the last error buffer.
-            stats->endpoints[len] = ep->stats;
+            stats->Endpoints[len] = ep->stats;
 
-            stats->endpoints[len].name = ep->name;
-            stats->endpoints[len].subject = ep->subject;
+            stats->Endpoints[len].Name = ep->name;
+            stats->Endpoints[len].Subject = ep->subject;
             avg = (long double)ep->stats.processing_time_s * 1000000000.0 + (long double)ep->stats.processing_time_ns;
             avg = avg / (long double)ep->stats.num_requests;
-            stats->endpoints[len].average_processing_time_ns = (int64_t)avg;
+            stats->Endpoints[len].average_processing_time_ns = (int64_t)avg;
             len++;
             natsMutex_Unlock(ep->mu);
         }
     }
     natsMutex_Unlock(m->mu);
-    stats->endpoints_len = len;
+    stats->EndpointsLen = len;
 
     *new_stats = stats;
     return NULL;
 }
 
-void natsMicroserviceStats_Destroy(microServiceStats *stats)
+void microServiceStats_Destroy(microServiceStats *stats)
 {
     if (stats == NULL)
         return;
 
-    NATS_FREE(stats->endpoints);
+    NATS_FREE(stats->Endpoints);
     NATS_FREE(stats);
 }
 
@@ -418,10 +417,10 @@ micro_clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
     }
     // the strings are declared const for the public, but in a clone these need
     // to be duplicated.
-    MICRO_CALL(err, micro_strdup((char **)&new_cfg->name, cfg->name));
-    MICRO_CALL(err, micro_strdup((char **)&new_cfg->version, cfg->version));
-    MICRO_CALL(err, micro_strdup((char **)&new_cfg->description, cfg->description));
-    MICRO_CALL(err, micro_clone_endpoint_config(&new_cfg->endpoint, cfg->endpoint));
+    MICRO_CALL(err, micro_strdup((char **)&new_cfg->Name, cfg->Name));
+    MICRO_CALL(err, micro_strdup((char **)&new_cfg->Version, cfg->Version));
+    MICRO_CALL(err, micro_strdup((char **)&new_cfg->Description, cfg->Description));
+    MICRO_CALL(err, micro_clone_endpoint_config(&new_cfg->Endpoint, cfg->Endpoint));
     if (err != NULL)
     {
         micro_destroy_cloned_service_config(new_cfg);
@@ -439,10 +438,10 @@ void micro_destroy_cloned_service_config(microServiceConfig *cfg)
 
     // the strings are declared const for the public, but in a clone these need
     // to be freed.
-    NATS_FREE((char *)cfg->name);
-    NATS_FREE((char *)cfg->version);
-    NATS_FREE((char *)cfg->description);
-    micro_destroy_cloned_endpoint_config(cfg->endpoint);
+    NATS_FREE((char *)cfg->Name);
+    NATS_FREE((char *)cfg->Version);
+    NATS_FREE((char *)cfg->Description);
+    micro_destroy_cloned_endpoint_config(cfg->Endpoint);
     NATS_FREE(cfg);
 }
 
@@ -511,9 +510,9 @@ on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure)
 
     if (our_subject)
     {
-        if (m->cfg->err_handler != NULL)
+        if (m->cfg->ErrHandler != NULL)
         {
-            (*m->cfg->err_handler)(m, ep, s);
+            (*m->cfg->ErrHandler)(m, ep, s);
         }
 
         if (ep != NULL)
@@ -573,7 +572,8 @@ microService_AddGroup(microGroup **new_group, microService *m, const char *prefi
     if ((m == NULL) || (new_group == NULL) || (prefix == NULL))
         return micro_ErrorInvalidArg;
 
-    *new_group = NATS_CALLOC(1, sizeof(microGroup) + strlen(prefix) + 1);
+    *new_group = NATS_CALLOC(1, sizeof(microGroup) +
+                                    strlen(prefix) + 1); // "prefix.""
     if (new_group == NULL)
     {
         return micro_ErrorOutOfMemory;

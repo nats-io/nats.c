@@ -13,7 +13,6 @@
 
 #include <stdarg.h>
 
-#include "micro.h"
 #include "microp.h"
 
 static microError *

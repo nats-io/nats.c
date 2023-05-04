@@ -13,7 +13,6 @@
 
 #include <stdarg.h>
 
-#include "micro.h"
 #include "microp.h"
 #include "util.h"
 
@@ -109,17 +108,17 @@ handle_stats_internal(microRequest *req)
     microServiceStats *stats = NULL;
     natsBuffer *buf = NULL;
 
-    if ((req == NULL) || (req->service == NULL) || (req->service->cfg == NULL))
+    if ((req == NULL) || (req->Service == NULL) || (req->Service->cfg == NULL))
         return; // Should not happen
 
-    MICRO_CALL(err, microService_GetStats(&stats, req->service));
+    MICRO_CALL(err, microService_GetStats(&stats, req->Service));
     MICRO_CALL(err, marshal_stats(&buf, stats));
 
     // respond for both success and error cases.
     microRequest_Respond(req, &err, natsBuf_Data(buf), natsBuf_Len(buf));
 
     natsBuf_Destroy(buf);
-    natsMicroserviceStats_Destroy(stats);
+    microServiceStats_Destroy(stats);
 }
 
 static void
@@ -133,8 +132,8 @@ handle_stats(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clos
     if ((m == NULL) || (m->cfg == NULL))
         return; // Should not happen
 
-    if (m->cfg->stats_handler != NULL)
-        h = m->cfg->stats_handler;
+    if (m->cfg->StatsHandler != NULL)
+        h = m->cfg->StatsHandler;
 
     MICRO_CALL(err, micro_new_request(&req, m, NULL, msg));
     MICRO_DO(err, h(req));
@@ -247,11 +246,11 @@ add_verb_handlers(microService *m, const char *verb, natsMsgHandler handler)
     if (err == NULL)
     {
         snprintf(name, sizeof(name), "%s-kind", verb);
-        err = add_internal_handler(m, verb, m->cfg->name, "", name, handler);
+        err = add_internal_handler(m, verb, m->cfg->Name, "", name, handler);
     }
     if (err == NULL)
     {
-        err = add_internal_handler(m, verb, m->cfg->name, m->id, verb, handler);
+        err = add_internal_handler(m, verb, m->cfg->Name, m->id, verb, handler);
     }
     return err;
 }
@@ -272,8 +271,8 @@ marshal_ping(natsBuffer **new_buf, microService *m)
     if (s == NATS_OK)
     {
         s = natsBuf_Append(buf, "{", -1);
-        IFOK_attr("name", m->cfg->name, ",");
-        IFOK_attr("version", m->cfg->version, ",");
+        IFOK_attr("name", m->cfg->Name, ",");
+        IFOK_attr("version", m->cfg->Version, ",");
         IFOK_attr("id", m->id, ",");
         IFOK_attr("type", MICRO_PING_RESPONSE_TYPE, "");
         IFOK(s, natsBuf_AppendByte(buf, '}'));
@@ -297,25 +296,25 @@ marshal_info(natsBuffer **new_buf, microServiceInfo *info)
 
     s = natsBuf_Create(&buf, 4096);
     IFOK(s, natsBuf_Append(buf, "{", -1));
-    IFOK_attr("description", info->description, ",");
-    IFOK_attr("id", info->id, ",");
-    IFOK_attr("name", info->name, ",");
-    IFOK_attr("type", info->type, ",");
-    if ((s == NATS_OK) && (info->subjects_len > 0))
+    IFOK_attr("description", info->Description, ",");
+    IFOK_attr("id", info->Id, ",");
+    IFOK_attr("name", info->Name, ",");
+    IFOK_attr("type", info->Type, ",");
+    if ((s == NATS_OK) && (info->SubjectsLen > 0))
     {
         int i;
         IFOK(s, natsBuf_Append(buf, "\"subjects\":[", -1));
-        for (i = 0; i < info->subjects_len; i++)
+        for (i = 0; i < info->SubjectsLen; i++)
         {
             IFOK(s, natsBuf_Append(buf, "\"", -1));
-            IFOK(s, natsBuf_Append(buf, info->subjects[i], -1));
+            IFOK(s, natsBuf_Append(buf, info->Subjects[i], -1));
             IFOK(s, natsBuf_Append(buf, "\"", -1));
-            if (i < (info->subjects_len - 1))
+            if (i < (info->SubjectsLen - 1))
                 IFOK(s, natsBuf_Append(buf, ",", -1));
         }
         IFOK(s, natsBuf_Append(buf, "],", -1));
     }
-    IFOK_attr("version", info->version, "");
+    IFOK_attr("version", info->Version, "");
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
     if (s != NATS_OK)
@@ -338,21 +337,21 @@ marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
 
     s = natsBuf_Create(&buf, 8 * 1024);
     IFOK(s, natsBuf_AppendByte(buf, '{'));
-    IFOK_attr("id", stats->id, ",");
-    IFOK_attr("name", stats->name, ",");
-    IFOK_attr("type", stats->type, ",");
-    IFOK(s, nats_EncodeTimeUTC(timebuf, sizeof(timebuf), stats->started));
+    IFOK_attr("id", stats->Id, ",");
+    IFOK_attr("name", stats->Name, ",");
+    IFOK_attr("type", stats->Type, ",");
+    IFOK(s, nats_EncodeTimeUTC(timebuf, sizeof(timebuf), stats->Started));
     IFOK_attr("started", timebuf, ",");
 
-    if ((s == NATS_OK) && (stats->endpoints_len > 0))
+    if ((s == NATS_OK) && (stats->EndpointsLen > 0))
     {
         IFOK(s, natsBuf_Append(buf, "\"endpoints\":[", -1));
-        for (i = 0; i < stats->endpoints_len; i++)
+        for (i = 0; i < stats->EndpointsLen; i++)
         {
-            ep = &stats->endpoints[i];
+            ep = &stats->Endpoints[i];
             IFOK(s, natsBuf_AppendByte(buf, '{'));
-            IFOK_attr("name", ep->name, ",");
-            IFOK_attr("subject", ep->subject, ",");
+            IFOK_attr("name", ep->Name, ",");
+            IFOK_attr("subject", ep->Subject, ",");
             IFOK(s, nats_marshalLong(buf, false, "num_requests", ep->num_requests));
             IFOK(s, nats_marshalLong(buf, true, "num_errors", ep->num_errors));
             IFOK(s, nats_marshalDuration(buf, true, "average_processing_time", ep->average_processing_time_ns));
@@ -360,13 +359,13 @@ marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
             IFOK_attr("last_error", ep->last_error_string, "");
             IFOK(s, natsBuf_Append(buf, "}", -1));
 
-            if (i < (stats->endpoints_len - 1))
+            if (i < (stats->EndpointsLen - 1))
                 IFOK(s, natsBuf_Append(buf, ",", -1));
         }
         IFOK(s, natsBuf_Append(buf, "],", -1));
     }
 
-    IFOK_attr("version", stats->version, "");
+    IFOK_attr("version", stats->Version, "");
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
     if (s == NATS_OK)

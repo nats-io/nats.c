@@ -38,11 +38,15 @@ call_arithmetics(long double *result, natsConnection *nc, const char *subject, l
     char buf[1024];
     int len;
 
-    MICRO_CALL(err, micro_NewClient(&client, nc, NULL));
-    MICRO_DO(err, len = snprintf(buf, sizeof(buf), "%Lf %Lf", a1, a2));
-    MICRO_CALL(err, microClient_DoRequest(&response, client, subject, buf, len));
-    MICRO_CALL(err, micro_ParseArgs(&args, natsMsg_GetData(response), natsMsg_GetDataLength(response)));
-    MICRO_CALL(err, microArgs_GetFloat(result, args, 0));
+    err = micro_NewClient(&client, nc, NULL);
+    if (err == NULL)
+        len = snprintf(buf, sizeof(buf), "%Lf %Lf", a1, a2);
+    if (err == NULL)
+        err = microClient_DoRequest(&response, client, subject, buf, len);
+    if (err == NULL)
+        err = micro_ParseArgs(&args, natsMsg_GetData(response), natsMsg_GetDataLength(response));
+    if (err == NULL)
+        err = microArgs_GetFloat(result, args, 0);
 
     microClient_Destroy(client);
     natsMsg_Destroy(response);
@@ -131,15 +135,18 @@ handle_function_op(microRequest *req, functionHandler op)
     char buf[1024];
     int len = 0;
 
-    MICRO_CALL(err, micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req)));
+    err = micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req));
     if ((err == NULL) && (microArgs_Count(args) != 1))
     {
         err = micro_Errorf(400, "Invalid number of arguments, expected 1 got %d", microArgs_Count(args));
     }
 
-    MICRO_CALL(err, microArgs_GetInt(&n, args, 0));
-    MICRO_CALL(err, op(&result, microRequest_GetConnection(req), n));
-    MICRO_DO(err, len = snprintf(buf, sizeof(buf), "%Lf", result));
+    if (err == NULL)
+        microArgs_GetInt(&n, args, 0);
+    if (err == NULL)
+        err = op(&result, microRequest_GetConnection(req), n);
+    if (err == NULL)
+        len = snprintf(buf, sizeof(buf), "%Lf", result);
 
     microRequest_Respond(req, &err, buf, len);
     microArgs_Destroy(args);
@@ -162,21 +169,21 @@ int main(int argc, char **argv)
     char errorbuf[1024];
 
     microServiceConfig cfg = {
-        .description = "Functions - NATS microservice example in C",
-        .name = "c-functions",
-        .version = "1.0.0",
+        .Description = "Functions - NATS microservice example in C",
+        .Name = "c-functions",
+        .Version = "1.0.0",
     };
     microEndpointConfig factorial_cfg = {
-        .name = "factorial",
-        .handler = handle_factorial,
+        .Name = "factorial",
+        .Handler = handle_factorial,
     };
     microEndpointConfig fibonacci_cfg = {
-        .name = "fibonacci",
-        .handler = handle_fibonacci,
+        .Name = "fibonacci",
+        .Handler = handle_fibonacci,
     };
     microEndpointConfig power2_cfg = {
-        .name = "power2",
-        .handler = handle_power2,
+        .Name = "power2",
+        .Handler = handle_power2,
     };
 
     // Connect to NATS server
@@ -190,16 +197,21 @@ int main(int argc, char **argv)
     }
 
     // Create the Microservice that listens on nc.
-    MICRO_CALL(err, micro_AddService(&m, conn, &cfg));
+    err = micro_AddService(&m, conn, &cfg);
 
     // Add the endpoints for the functions.
-    MICRO_CALL(err, microService_AddGroup(&g, m, "f"));
-    MICRO_CALL(err, microGroup_AddEndpoint(g, &factorial_cfg));
-    MICRO_CALL(err, microGroup_AddEndpoint(g, &fibonacci_cfg));
-    MICRO_CALL(err, microGroup_AddEndpoint(g, &power2_cfg));
+    if (err == NULL)
+        err = microService_AddGroup(&g, m, "f");
+    if (err == NULL)
+        err = microGroup_AddEndpoint(g, &factorial_cfg);
+    if (err == NULL)
+        err = microGroup_AddEndpoint(g, &fibonacci_cfg);
+    if (err == NULL)
+        err = microGroup_AddEndpoint(g, &power2_cfg);
 
     // Run the service, until stopped.
-    MICRO_CALL(err, microService_Run(m));
+    if (err == NULL)
+        err = microService_Run(m);
 
     // Cleanup.
     microService_Destroy(m);

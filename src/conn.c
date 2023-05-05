@@ -1552,7 +1552,6 @@ _doReconnect(void *arg)
         // TODO: since we sleep only after the whole list has been tried, we can't
         // rely on individual *natsSrv to know if it is a TLS or non-TLS url.
         // We have to pick which type of jitter to use, for now, we use these hints:
-        jitter = nc->opts->reconnectJitter;
         if (nc->opts->secure || (nc->opts->sslCtx != NULL))
             jitter = nc->opts->reconnectJitterTLS;
     }

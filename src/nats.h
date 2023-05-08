@@ -7194,8 +7194,7 @@ typedef struct micro_endpoint_stats_s microEndpointStats;
  * @brief the Microservice error object.
  *
  * This error type is returned by most microservice functions. You can create
- * your own custom errors by using #micro_Errorf, extract errors from response
- * messages using #micro_ErrorFromResponse, and wrap existing errors using
+ * your own custom errors by using #micro_Errorf and wrap existing errors using
  * #microError_Wrapf. Errors are heap-allocated and must be freed with either
  * #microError_Destroy or by passing it into #microRequest_Respond. 
  *
@@ -7289,7 +7288,7 @@ typedef struct micro_service_stats_s microServiceStats;
  *
  * @see microEndpointConfig, micro_endpoint_config_s.
  */
-typedef void (*microRequestHandler)(microRequest *req);
+typedef microError *(*microRequestHandler)(microRequest *req);
 
 /** 
  * @brief Callback type for async error notifications.
@@ -7402,29 +7401,6 @@ struct micro_endpoint_stats_s
      * @brief a copy of the last error message.
      */
     char last_error_string[2048];
-};
-
-/**
- * A microservice request.
- *
- * microRequest represents a request received by a microservice endpoint.
- */
-struct micro_request_s
-{
-    /**
-     * @brief The NATS message underlying the request.
-     */
-    natsMsg *Message;
-
-    /**
-     * @brief A reference to the service that received the request.
-     */
-    microService *Service;
-
-     /**
-     * @brief A reference to the service that received the request.
-     */
-    microEndpoint *Endpoint;
 };
 
 /**
@@ -8049,15 +8025,78 @@ microRequest_GetSubject(microRequest *req);
 
 /**
  * @brief Respond to a request, on the same NATS connection.
- * 
+ *
  * @param req the request.
  * @param data the response data.
  * @param len the length of the response data.
- * 
+ *
  * @return an error, if any. 
  */
 NATS_EXTERN microError *
-microRequest_Respond(microRequest *req, microError **err_will_free, const char *data, size_t len);
+microRequest_Respond(microRequest *req, const char *data, size_t len);
+
+/**
+ * @brief Respond to a request with a simple error.
+ *
+ * If err is NULL, `RespondError` does nothing.
+ * 
+ * @note microRequest_RespondError is called automatially if the handler returns
+ * an error. Usually, there is no need for a handler to use this function
+ * directly. If the request
+ *
+ * @param req the request.
+ * @param err the error to include in the response header. If `NULL`, no error.
+ *
+ * @return an error, if any. 
+ */
+NATS_EXTERN microError *
+microRequest_RespondError(microRequest *req, microError *err);
+
+/**
+ * @brief Respond to a message, with an OK or an error.
+ *
+ * If err is NULL, `RespondErrorWithData` is equivalent to `Respond`. If err is
+ * not NULL, the response will include the error in the response header, and err
+ * will be freed. 
+ *
+ * The following example illustrates idiomatic usage in a request handler. Since
+ * this handler handles its own error responses, the only error it might return
+ * would be a failure to send the response.
+ *
+ * \code{.c}
+ * err = somefunc();
+ * if (err != NULL) {
+ *     return microRequest_RespondCustom(req, err, error_data, data_len);
+ * }
+ * ...
+ * \endcode
+ *
+ * Or, if the request handler has its own cleanup logic:
+ * 
+ * \code{.c}
+ * if (err = somefunc(), err != NULL)
+ *     goto CLEANUP;
+ * ...
+ *
+ * CLEANUP:
+ * if (err != NULL) {
+ *     return microRequest_RespondCustom(req, err, error_data, data_len);
+ * }
+ * return NULL;
+ * \endcode
+ *
+ * @param req the request.
+ * @param err the error to include in the response header. If `NULL`, no error.
+ * @param data the response data.
+ * @param len the length of the response data.
+ *
+ * @note 
+ *
+ *
+ * @return an error, if any. 
+ */
+NATS_EXTERN microError *
+microRequest_RespondCustom(microRequest *req, microError *err, const char *data, size_t len);
 
 /** @brief Add `value` to the header associated with `key` in the NATS message
  * underlying the request.
@@ -8088,30 +8127,26 @@ microRequest_SetHeader(microRequest *req, const char *key, const char *value);
  * @note Errors must be freed with #microError_Destroy, but often they are
  * simply returned up the call stack.
  *
+ * @param format printf-like format.
+ *
+ * @return a new #microError or micro_ErrorOutOfMemory.
+ */
+NATS_EXTERN microError *
+micro_Errorf(const char *format, ...);
+
+/** @brief creates a new #microError, with a code and a printf-like formatted
+ * message.
+ *
+ * @note Errors must be freed with #microError_Destroy, but often they are
+ * simply returned up the call stack.
+ *
  * @param code an `int` code, loosely modeled after the HTTP status code.
  * @param format printf-like format.
  *
  * @return a new #microError or micro_ErrorOutOfMemory.
  */
 NATS_EXTERN microError *
-micro_Errorf(int code, const char *format, ...);
-
-/** @brief Checks if microservice response is an error.
- *
- * @note <>/<> TODO does this need to be public?
- * 
- * If the response is an error, the function returns a #microError composed of
- * the code and error message contained in the response header. It also accepts
- * a NATS status code, usually one that came from #natsConnection_Request, and
- * makes it into a #microError if it is not a NATS_OK.
- *
- * @param s NATS status of receiving the response.
- * @param msg NATS message to check the header of.
- *
- * @return a new #microError or `NULL` if no error if found.
- */
-NATS_EXTERN microError *
-micro_ErrorFromResponse(natsStatus s, natsMsg *msg);
+micro_ErrorfCode(int code, const char *format, ...);
 
 /** @brief Wraps a NATS status into a #microError, if not a NATS_OK.
  *

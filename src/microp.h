@@ -38,9 +38,10 @@
 
 struct micro_error_s
 {
+    struct micro_error_s *cause;
     natsStatus status;
     int code;
-    const char *description;
+    char *message;
 };
 
 struct micro_client_s
@@ -113,6 +114,29 @@ struct micro_service_s
     bool is_stopping;
 };
 
+/**
+ * A microservice request.
+ *
+ * microRequest represents a request received by a microservice endpoint.
+ */
+struct micro_request_s
+{
+    /**
+     * @brief The NATS message underlying the request.
+     */
+    natsMsg *Message;
+
+    /**
+     * @brief A reference to the service that received the request.
+     */
+    microService *Service;
+
+     /**
+     * @brief A reference to the service that received the request.
+     */
+    microEndpoint *Endpoint;
+};
+
 extern microError *micro_ErrorOutOfMemory;
 extern microError *micro_ErrorInvalidArg;
 
@@ -132,6 +156,9 @@ void micro_update_last_error(microEndpoint *ep, microError *err);
 microError *micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
 bool micro_is_valid_name(const char *name);
 bool micro_is_valid_subject(const char *subject);
+
+microError *micro_is_error_message(natsStatus s, natsMsg *msg);
+
 
 
 static inline microError *micro_strdup(char **ptr, const char *str)

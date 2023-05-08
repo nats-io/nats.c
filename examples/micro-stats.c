@@ -23,7 +23,8 @@ typedef struct service_state_s
     int odd_count;
 } service_state_t;
 
-static void handle_default(microRequest *req)
+static microError *
+handle_default(microRequest *req)
 {
     char buf[64];
     const char *response = "odd";
@@ -39,11 +40,11 @@ static void handle_default(microRequest *req)
 
         response = "even";
     }
-    microRequest_Respond(req, NULL, response, strlen(response));
-    return;
+    return microRequest_Respond(req, response, strlen(response));
 }
 
-static void handle_stats(microRequest *req)
+static microError *
+handle_stats(microRequest *req)
 {
     microError *err = NULL;
     microServiceStats *stats = NULL;
@@ -51,18 +52,15 @@ static void handle_stats(microRequest *req)
     service_state_t *service_state = microRequest_GetServiceState(req);
     int total, custom, len;
 
-    err = microService_GetStats(&stats, req->Service);
+    err = microService_GetStats(&stats, microRequest_GetService(req));
     if (err != NULL)
-    {
-        microRequest_Respond(req, &err, NULL, 0);
-        return;
-    }
+        return err;
 
     total = stats->Endpoints[0].num_requests;
     custom = service_state->odd_count;
     len = snprintf(buf, sizeof(buf),
                    "{\"total\":%d,\"odd\":%d}", total, custom);
-    microRequest_Respond(req, NULL, buf, len);
+    return microRequest_Respond(req, buf, len);
 }
 
 static microError *

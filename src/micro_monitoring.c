@@ -68,8 +68,10 @@ handle_ping(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closu
     MICRO_CALL(err, marshal_ping(&buf, m));
     MICRO_CALL(err, micro_new_request(&req, m, NULL, msg));
 
-    // respond for both success and error cases.
-    microRequest_Respond(req, &err, natsBuf_Data(buf), natsBuf_Len(buf));
+    if (err == NULL)
+        microRequest_Respond(req, natsBuf_Data(buf), natsBuf_Len(buf));
+    else
+        microRequest_RespondError(req, err); // will destroy err
 
     micro_destroy_request(req);
     natsMsg_Destroy(msg);
@@ -92,8 +94,10 @@ handle_info(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closu
     MICRO_CALL(err, marshal_info(&buf, info));
     MICRO_CALL(err, micro_new_request(&req, m, NULL, msg));
 
-    // respond for both success and error cases.
-    microRequest_Respond(req, &err, natsBuf_Data(buf), natsBuf_Len(buf));
+    if (err == NULL)
+        microRequest_Respond(req, natsBuf_Data(buf), natsBuf_Len(buf));
+    else
+        microRequest_RespondError(req, err); // will destroy err
 
     micro_destroy_request(req);
     natsBuf_Destroy(buf);
@@ -101,7 +105,7 @@ handle_info(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closu
     microServiceInfo_Destroy(info);
 }
 
-static void
+static microError *
 handle_stats_internal(microRequest *req)
 {
     microError *err = NULL;
@@ -109,16 +113,17 @@ handle_stats_internal(microRequest *req)
     natsBuffer *buf = NULL;
 
     if ((req == NULL) || (req->Service == NULL) || (req->Service->cfg == NULL))
-        return; // Should not happen
+        return micro_ErrorInvalidArg; // Should not happen
 
     MICRO_CALL(err, microService_GetStats(&stats, req->Service));
     MICRO_CALL(err, marshal_stats(&buf, stats));
 
-    // respond for both success and error cases.
-    microRequest_Respond(req, &err, natsBuf_Data(buf), natsBuf_Len(buf));
+    if (err == NULL)
+        microRequest_Respond(req, natsBuf_Data(buf), natsBuf_Len(buf));
 
     natsBuf_Destroy(buf);
     microServiceStats_Destroy(stats);
+    return err;
 }
 
 static void
@@ -137,7 +142,9 @@ handle_stats(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clos
 
     MICRO_CALL(err, micro_new_request(&req, m, NULL, msg));
     MICRO_DO(err, h(req));
-    MICRO_DO(err, micro_destroy_request(req));
+
+    micro_destroy_request(req);
+    microError_Destroy(err);
     natsMsg_Destroy(msg);
 }
 
@@ -190,7 +197,7 @@ micro_new_control_subject(char **newSubject, const char *verb, const char *name,
 {
     if (nats_IsStringEmpty(name) && !nats_IsStringEmpty(id))
     {
-        return micro_Errorf(400, "service name is required when id is provided: %s", id);
+        return micro_Errorf("service name is required when id is provided: %s", id);
     }
 
     else if (nats_IsStringEmpty(name) && nats_IsStringEmpty(id))
@@ -211,7 +218,7 @@ add_internal_handler(microService *m, const char *verb, const char *kind,
     char *subj = NULL;
 
     if (m->monitoring_subs_len >= MICRO_MONITORING_SUBS_CAP)
-        return micro_Errorf(500, "too many monitoring subscriptions (max: %d)", MICRO_MONITORING_SUBS_CAP);
+        return micro_Errorf("too many monitoring subscriptions (max: %d)", MICRO_MONITORING_SUBS_CAP);
 
     err = micro_new_control_subject(&subj, verb, kind, id);
     if (err != NULL)

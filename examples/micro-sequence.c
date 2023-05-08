@@ -86,7 +86,7 @@ call_function(long double *result, natsConnection *nc, const char *subject, int 
 // (float), f name (string), and N (int). E.g.: '10.0 "power2" 10' will
 // calculate 10/2 + 10/4 + 10/8 + 10/16 + 10/32 + 10/64 + 10/128 + 10/256 +
 // 10/512 + 10/1024 = 20.998046875
-static void handle_sequence(microRequest *req)
+static microError *handle_sequence(microRequest *req)
 {
     microError *err = NULL;
     natsConnection *nc = microRequest_GetConnection(req);
@@ -103,7 +103,7 @@ static void handle_sequence(microRequest *req)
     err = micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req));
     if ((err == NULL) && (microArgs_Count(args) != 2))
     {
-        err = micro_Errorf(400, "Invalid number of arguments, expected 2 got %d", microArgs_Count(args));
+        err = micro_Errorf("Invalid number of arguments, expected 2 got %d", microArgs_Count(args));
     }
 
     if (err == NULL)
@@ -113,13 +113,13 @@ static void handle_sequence(microRequest *req)
         (strcmp(function, "power2") != 0) &&
         (strcmp(function, "fibonacci") != 0))
     {
-        err = micro_Errorf(400, "Invalid function name '%s', must be 'factorial', 'power2', or 'fibonacci'", function);
+        err = micro_Errorf("Invalid function name '%s', must be 'factorial', 'power2', or 'fibonacci'", function);
     }
     if (err == NULL)
         err = microArgs_GetInt(&n, args, 1);
     if ((err == NULL) && (n < 1))
     {
-        err = micro_Errorf(400, "Invalid number of iterations %d, must be at least 1", n);
+        err = micro_Errorf("Invalid number of iterations %d, must be at least 1", n);
     }
 
     for (i = 1; (err == NULL) && (i <= n); i++)
@@ -128,7 +128,7 @@ static void handle_sequence(microRequest *req)
             err = call_function(&denominator, nc, function, i);
         if ((err == NULL) && (denominator == 0))
         {
-            err = micro_Errorf(500, "division by zero at step %d", i);
+            err = micro_Errorf("division by zero at step %d", i);
         }
         if (err == NULL)
             value = value + initialValue / denominator;
@@ -136,9 +136,11 @@ static void handle_sequence(microRequest *req)
 
     if (err == NULL)
         result_len = snprintf(result, sizeof(result), "%Lf", value);
-
-    microRequest_Respond(req, &err, result, result_len);
+    if (err == NULL)
+        err = microRequest_Respond(req, result, result_len);
+    
     microArgs_Destroy(args);
+    return err;
 }
 
 int main(int argc, char **argv)

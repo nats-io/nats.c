@@ -23,11 +23,11 @@
 
 // arithmeticsOp is a type for a C function that implements am operation: add,
 // multiply, divide.
-typedef microError *(*arithmeticsOP)(long double *result, long double a1, long double a2);
+typedef void (*arithmeticsOP)(long double *result, long double a1, long double a2);
 
 // handle_arithmetics_op is a helper function that wraps an implementation of an
 // operation into a request handler.
-static void
+static microError *
 handle_arithmetics_op(microRequest *req, arithmeticsOP op)
 {
     microError *err = NULL;
@@ -39,45 +39,42 @@ handle_arithmetics_op(microRequest *req, arithmeticsOP op)
     err = micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req));
     if ((err == NULL) && (microArgs_Count(args) != 2))
     {
-        err = micro_Errorf(400, "Invalid number of arguments, expected 2 got %d", microArgs_Count(args));
+        err = micro_Errorf("invalid number of arguments, expected 2 got %d", microArgs_Count(args));
     }
     if (err == NULL)
         err = microArgs_GetFloat(&a1, args, 0);
     if (err == NULL)
         err = microArgs_GetFloat(&a2, args, 1);
     if (err == NULL)
-        err = op(&result, a1, a2);
+        op(&result, a1, a2);
     if (err == NULL)
         len = snprintf(buf, sizeof(buf), "%Lf", result);
+    if (err == NULL)
+        err = microRequest_Respond(req, buf, len);
 
-    microRequest_Respond(req, &err, buf, len);
     microArgs_Destroy(args);
+    return microError_Wrapf(err, "failed to handle arithmetics operation");
 }
 
-static microError *
-add(long double *result, long double a1, long double a2)
+static void add(long double *result, long double a1, long double a2)
 {
     *result = a1 + a2;
-    return NULL;
 }
 
-static microError *
-divide(long double *result, long double a1, long double a2)
+static void divide(long double *result, long double a1, long double a2)
 {
     *result = a1 / a2;
-    return NULL;
 }
 
-static microError *multiply(long double *result, long double a1, long double a2)
+static void multiply(long double *result, long double a1, long double a2)
 {
     *result = a1 * a2;
-    return NULL;
 }
 
 // request handlers for each operation.
-static void handle_add(microRequest *req) { handle_arithmetics_op(req, add); }
-static void handle_divide(microRequest *req) { handle_arithmetics_op(req, divide); }
-static void handle_multiply(microRequest *req) { handle_arithmetics_op(req, multiply); }
+static microError *handle_add(microRequest *req) { return handle_arithmetics_op(req, add); }
+static microError *handle_divide(microRequest *req) { return handle_arithmetics_op(req, divide); }
+static microError *handle_multiply(microRequest *req) { return handle_arithmetics_op(req, multiply); }
 
 // main is the main entry point for the microservice.
 int main(int argc, char **argv)

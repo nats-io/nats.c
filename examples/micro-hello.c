@@ -39,10 +39,10 @@
 
 #define HELLO "Hello, World!"
 
-static void
+static microError *
 handle(microRequest *req)
 {
-    microRequest_Respond(req, NULL, HELLO, sizeof(HELLO));
+    return microRequest_Respond(req, HELLO, sizeof(HELLO));
 }
 
 int main(int argc, char **argv)

@@ -48,7 +48,7 @@ micro_ParseArgs(microArgs **ptr, const char *data, int data_len)
     int n;
 
     if ((ptr == NULL) || (data == NULL) || (data_len < 0))
-        return micro_Errorf(500, "invalid function argument");
+        return microError_Wrapf(micro_ErrorInvalidArg, "failed to parse args");
 
     MICRO_CALL(err, parse(NULL, &n, data, data_len));
     MICRO_CALL(err, new_args(&args, n));
@@ -57,7 +57,7 @@ micro_ParseArgs(microArgs **ptr, const char *data, int data_len)
     if (err != NULL)
     {
         microArgs_Destroy(args);
-        return err;
+        return microError_Wrapf(err, "failed to parse args");
     }
     *ptr = args;
     return NULL;
@@ -116,14 +116,9 @@ microArgs_GetString(const char **val, microArgs *args, int index)
     return NULL;
 }
 
-/// @brief decodes the rest of a string into a pre-allocated buffer of
-/// sufficient length, or just calculates the needed buffer size. The opening
-/// quote must have been already processed by the caller (parse).
-///
-/// @param dup receives the parsed string, must be freed by the caller. pass NULL to just get the length.
-/// @param data raw message data
-/// @param data_len length of data
-/// @return error in case the string is not properly terminated.
+// decodes the rest of a string into a pre-allocated buffer of sufficient
+// length, or just calculates the needed buffer size. The opening quote must
+// have been already processed by the caller (parse).
 static microError *
 decode_rest_of_string(char *dup, int *decoded_len, int *i, const char *data, int data_len)
 {
@@ -184,19 +179,13 @@ decode_rest_of_string(char *dup, int *decoded_len, int *i, const char *data, int
     }
     if (!terminated)
     {
-        micro_Errorf(400, "a quoted string is not properly terminated");
+        return micro_Errorf("a quoted string is not properly terminated");
     }
 
     *decoded_len = len;
     return NULL;
 }
 
-/// @brief decodes and duplicates the rest of a string, as the name says.
-/// @param dup receives the parsed string, must be freed by the caller. pass
-/// NULL to just get the length.
-/// @param data raw message data
-/// @param data_len length of data
-/// @return error.
 static microError *
 decode_and_dupe_rest_of_string(char **dup, int *i, const char *data, int data_len)
 {
@@ -294,7 +283,7 @@ parse(void **args, int *args_len, const char *data, int data_len)
                 break;
 
             default:
-                return micro_Errorf(400, "unexpected '%c', an argument must be a number or a quoted string", c);
+                return micro_Errorf("unexpected '%c', an argument must be a number or a quoted string", c);
             }
             break;
 
@@ -353,12 +342,12 @@ parse(void **args, int *args_len, const char *data, int data_len)
                 break;
 
             default:
-                return micro_Errorf(400, "unexpected '%c', a number must be followed by a space", c);
+                return micro_Errorf("unexpected '%c', a number must be followed by a space", c);
             }
             break;
 
         default:
-            return micro_Errorf(500, "unreachable: wrong state for a ' ', expected NewArg or NumberArg, got %d", state);
+            return micro_Errorf("unreachable: wrong state for a ' ', expected NewArg or NumberArg, got %d", state);
         }
     }
 

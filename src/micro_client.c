@@ -58,7 +58,7 @@ microClient_DoRequest(natsMsg **reply, microClient *client, const char *subject,
         return microError_Wrapf(micro_ErrorFromStatus(s), "request failed");
     }
 
-    err = micro_ErrorFromResponse(s, msg);
+    err = micro_is_error_message(s, msg);
     if (err == NULL)
     {
         *reply = msg;

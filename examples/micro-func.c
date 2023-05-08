@@ -62,7 +62,7 @@ factorial(long double *result, natsConnection *nc, int n)
     int i;
 
     if (n < 1)
-        err = micro_Errorf(400, "n=%d. must be greater than 0", n);
+        err = micro_Errorf("n=%d. must be greater than 0", n);
 
     *result = 1;
     for (i = 1; i <= n; i++)
@@ -84,7 +84,7 @@ fibonacci(long double *result, natsConnection *nc, int n)
     long double n1, n2;
 
     if (n < 0)
-        err = micro_Errorf(400, "n=%d. must be non-negative", n);
+        err = micro_Errorf("n=%d. must be non-negative", n);
 
     if (n < 2)
     {
@@ -111,7 +111,7 @@ static microError *power2(long double *result, natsConnection *nc, int n)
     int i;
 
     if (n < 1)
-        return micro_Errorf(400, "n=%d. must be greater than 0", n);
+        return micro_Errorf("n=%d. must be greater than 0", n);
 
     *result = 1;
     for (i = 1; i <= n; i++)
@@ -125,7 +125,7 @@ static microError *power2(long double *result, natsConnection *nc, int n)
 
 // handle_function_op is a helper function that wraps an implementation function
 // like factorial, fibonacci, etc. into a request handler.
-static void
+static microError *
 handle_function_op(microRequest *req, functionHandler op)
 {
     microError *err = NULL;
@@ -138,24 +138,25 @@ handle_function_op(microRequest *req, functionHandler op)
     err = micro_ParseArgs(&args, microRequest_GetData(req), microRequest_GetDataLength(req));
     if ((err == NULL) && (microArgs_Count(args) != 1))
     {
-        err = micro_Errorf(400, "Invalid number of arguments, expected 1 got %d", microArgs_Count(args));
+        err = micro_Errorf("Invalid number of arguments, expected 1 got %d", microArgs_Count(args));
     }
-
     if (err == NULL)
         microArgs_GetInt(&n, args, 0);
     if (err == NULL)
         err = op(&result, microRequest_GetConnection(req), n);
     if (err == NULL)
         len = snprintf(buf, sizeof(buf), "%Lf", result);
+    if (err == NULL)
+        err = microRequest_Respond(req, buf, len);
 
-    microRequest_Respond(req, &err, buf, len);
     microArgs_Destroy(args);
+    return err;
 }
 
 // handle_... are the request handlers for each function.
-static void handle_factorial(microRequest *req) { handle_function_op(req, factorial); }
-static void handle_fibonacci(microRequest *req) { handle_function_op(req, fibonacci); }
-static void handle_power2(microRequest *req) { handle_function_op(req, power2); }
+static microError *handle_factorial(microRequest *req) { return handle_function_op(req, factorial); }
+static microError *handle_fibonacci(microRequest *req) { return handle_function_op(req, fibonacci); }
+static microError *handle_power2(microRequest *req) { return handle_function_op(req, power2); }
 
 // main is the main entry point for the microservice.
 int main(int argc, char **argv)

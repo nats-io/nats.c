@@ -15,48 +15,59 @@
 #include "mem.h"
 
 microError *
-microRequest_Respond(microRequest *req, microError **err_will_free, const char *data, size_t len)
+microRequest_Respond(microRequest *req, const char *data, size_t len)
+{
+    return microRequest_RespondCustom(req, NULL, data, len);
+}
+
+microError *
+microRequest_RespondError(microRequest *req, microError *err)
+{
+    return microRequest_RespondCustom(req, err, NULL, 0);
+}
+
+microError *
+microRequest_RespondCustom(microRequest *req, microError *service_error, const char *data, size_t len)
 {
     natsMsg *msg = NULL;
-    microError *err = NULL;
     natsStatus s = NATS_OK;
     char buf[64];
 
     if ((req == NULL) || (req->Message == NULL) || (req->Message->sub == NULL) || (req->Message->sub->conn == NULL))
     {
-        return micro_ErrorInvalidArg;
+        s = NATS_INVALID_ARG;
     }
-
-    IFOK(s, natsMsg_Create(&msg, natsMsg_GetReply(req->Message), NULL, data, len));
-    if ((s == NATS_OK) && (err_will_free != NULL) && (*err_will_free != NULL))
+    if (s == NATS_OK)
     {
-        err = *err_will_free;
-        micro_update_last_error(req->Endpoint, err);
-        if ((s == NATS_OK) && (err->status != NATS_OK))
+        s = natsMsg_Create(&msg, natsMsg_GetReply(req->Message), NULL, data, len);
+    }
+    if ((s == NATS_OK) && (service_error != NULL))
+    {
+        micro_update_last_error(req->Endpoint, service_error);
+        if (service_error->status != NATS_OK)
         {
-            s = natsMsgHeader_Set(msg, MICRO_STATUS_HDR, natsStatus_GetText(err->status));
+            s = natsMsgHeader_Set(msg, MICRO_STATUS_HDR, natsStatus_GetText(service_error->status));
         }
         if (s == NATS_OK)
         {
-            s = natsMsgHeader_Set(msg, MICRO_ERROR_HDR, err->description);
+            s = natsMsgHeader_Set(msg, MICRO_ERROR_HDR, service_error->message);
         }
         if (s == NATS_OK)
         {
-            snprintf(buf, sizeof(buf), "%d", err->code);
+            snprintf(buf, sizeof(buf), "%d", service_error->code);
             s = natsMsgHeader_Set(msg, MICRO_ERROR_CODE_HDR, buf);
         }
     }
-    IFOK(s, natsConnection_PublishMsg(req->Message->sub->conn, msg));
-
-    natsMsg_Destroy(msg);
-    if (err_will_free != NULL)
+    if (s == NATS_OK) 
     {
-        microError_Destroy(*err_will_free);
-        *err_will_free = NULL;
+        s = natsConnection_PublishMsg(req->Message->sub->conn, msg);
     }
+
+    microError_Destroy(service_error);
+    natsMsg_Destroy(msg);
     return microError_Wrapf(
         micro_ErrorFromStatus(s),
-        "failed to respond to a message with an error");
+        "microRequest_RespondErrorWithData failed");
 }
 
 microError *

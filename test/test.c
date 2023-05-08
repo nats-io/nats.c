@@ -32213,27 +32213,17 @@ test_MicroMatchEndpointSubject(void)
     }
 }
 
-static void
+static microError *
 micro_basics_handle_request(microRequest *req)
 {
-    microError *err = NULL;
     if ((rand() % 10) == 0)
-    {
-        err = micro_Errorf(500, "Unexpected error!");
-        microRequest_Respond(req, &err, NULL, 0);
-        return;
-    }
+        return micro_Errorf("Unexpected error!");
 
     // Happy Path.
     // Random delay between 5-10ms
     nats_Sleep(5 + (rand() % 5));
 
-    if ((err = microRequest_Respond(req, NULL, "42", 2)) != NULL)
-    {
-        microRequest_Respond(req, &err, NULL, 0);
-        FAIL("failed to respond, then failed to respond with error!")
-        return;
-    }
+    return microRequest_Respond(req, "42", 2);
 }
 
 typedef struct
@@ -32329,23 +32319,23 @@ test_MicroAddService(void)
             .name = "Err-null-connection",
             .cfg = &minimal_cfg,
             .null_nc = true,
-            .expected_err = "16:400: Invalid function argument",
+            .expected_err = "status 16: invalid function argument",
         },
         {
             .name = "Err-null-receiver",
             .cfg = &minimal_cfg,
             .null_receiver = true,
-            .expected_err = "16:400: Invalid function argument",
+            .expected_err = "status 16: invalid function argument",
         },
         {
             .name = "Err-no-name",
             .cfg = &err_no_name_cfg,
-            .expected_err = "16:400: Invalid function argument",
+            .expected_err = "status 16: invalid function argument",
         },
         {
             .name = "Err-no-version",
             .cfg = &err_no_version_cfg,
-            .expected_err = "16:400: Invalid function argument",
+            .expected_err = "status 16: invalid function argument",
         },
         {
             .name = "Err-invalid-version",
@@ -32832,7 +32822,7 @@ test_MicroServiceStopsOnClosedConn(void)
     test("Test microservice is running: ");
     testCond(!microService_IsStopped(m))
 
-        test("Test microservice is responding to PING: ");
+    test("Test microservice is responding to PING: ");
     testCond(NATS_OK == natsConnection_RequestString(&reply, nc, "$SRV.PING.test", "", 500));
     natsMsg_Destroy(reply);
     reply = NULL;
@@ -32840,16 +32830,16 @@ test_MicroServiceStopsOnClosedConn(void)
     test("Stop microservice: ");
     testCond(NULL == microService_Stop(m))
 
-        test("Test microservice is not running: ");
+    test("Test microservice is not running: ");
     testCond(microService_IsStopped(m))
 
-        test("Test microservice is not responding to PING: ");
+    test("Test microservice is not responding to PING: ");
     testCond(NATS_OK != natsConnection_RequestString(&reply, nc, "$SRV.PING.test", "", 500));
 
     test("Destroy microservice (cleanup): ");
     testCond(NULL == microService_Destroy(m))
 
-        test("Start microservice again: ");
+    test("Start microservice again: ");
     testCond(NULL == micro_AddService(&m, nc, &cfg));
 
     test("Close the connection: ");
@@ -32904,7 +32894,7 @@ test_MicroServiceStopsWhenServerStops(void)
     test("Test microservice is running: ");
     testCond(!microService_IsStopped(m))
 
-        test("Stop the server: ");
+    test("Stop the server: ");
     testCond((_stopServer(serverPid), true));
 
     test("Wait for the service to stop: ");
@@ -32913,7 +32903,7 @@ test_MicroServiceStopsWhenServerStops(void)
     test("Test microservice is not running: ");
     testCond(microService_IsStopped(m))
 
-        microService_Destroy(m);
+    microService_Destroy(m);
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
     _destroyDefaultThreadArgs(&arg);

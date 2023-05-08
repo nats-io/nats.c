@@ -120,50 +120,67 @@ micro_stop_and_destroy_endpoint(microEndpoint *ep)
     return NULL;
 }
 
+static void update_last_error(microEndpoint *ep, microError *err)
+{
+    ep->stats.num_errors++;
+    microError_String(err, ep->stats.last_error_string, sizeof(ep->stats.last_error_string));
+}
+
 static void
 handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     // natsStatus s = NATS_OK;
     microError *err = NULL;
+    microError *service_err = NULL;
     microEndpoint *ep = (microEndpoint *)closure;
-    microEndpointStats *stats;
+    microEndpointStats *stats = NULL;
     microRequestHandler handler;
     microRequest *req = NULL;
-    int64_t start, elapsed_ns, full_s;
+    int64_t start, elapsed_ns = 0, full_s;
 
-    if (ep == NULL || ep->config == NULL || ep->config->Handler == NULL)
+    if ((ep == NULL) || (ep->mu == NULL) || (ep->config == NULL) || (ep->config->Handler == NULL))
     {
-        // This is a bug, we should not have received a message on this
+        // This would be a bug, we should not have received a message on this
         // subscription.
-        natsMsg_Destroy(msg);
         return;
     }
+
     stats = &ep->stats;
     handler = ep->config->Handler;
 
     err = micro_new_request(&req, ep->m, ep, msg);
-    if (err != NULL)
+    if (err == NULL)
     {
-        natsMsg_Destroy(msg);
-        return;
+        // handle the request.
+        start = nats_NowInNanoSeconds();
+
+        service_err = handler(req);
+        if (service_err != NULL)
+        {
+            // if the handler returned an error, we attempt to respond with it.
+            // Note that if the handler chose to do its own RespondError which
+            // fails, and then the handler returns its error - we'll try to
+            // RespondError again, double-counting the error.
+            err = microRequest_RespondError(req, service_err);
+        }
+
+        elapsed_ns = nats_NowInNanoSeconds() - start;
     }
-    req->Endpoint = ep;
 
-    // handle the request.
-    start = nats_NowInNanoSeconds();
-    handler(req);
-    elapsed_ns = nats_NowInNanoSeconds() - start;
-
-    // Update stats. Note that unlike in the go client, the error stats are
-    // handled by req.Respond function.
+    // Update stats.
     natsMutex_Lock(ep->mu);
+
     stats->num_requests++;
     stats->processing_time_ns += elapsed_ns;
     full_s = stats->processing_time_ns / 1000000000;
     stats->processing_time_s += full_s;
     stats->processing_time_ns -= full_s * 1000000000;
+
+    update_last_error(ep, err);
+
     natsMutex_Unlock(ep->mu);
 
+    microError_Destroy(err);
     micro_destroy_request(req);
     natsMsg_Destroy(msg);
 }
@@ -174,8 +191,7 @@ void micro_update_last_error(microEndpoint *ep, microError *err)
         return;
 
     natsMutex_Lock(ep->mu);
-    ep->stats.num_errors++;
-    microError_String(err, ep->stats.last_error_string, sizeof(ep->stats.last_error_string));
+    update_last_error(ep, err);
     natsMutex_Unlock(ep->mu);
 }
 

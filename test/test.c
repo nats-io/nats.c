@@ -32593,7 +32593,7 @@ test_MicroBasics(void)
     natsMsg *reply = NULL;
     microServiceInfo *info = NULL;
     int i;
-    char buf[256];
+    char buf[1024];
     char *subject = NULL;
     natsInbox *inbox = NULL;
     natsSubscription *sub = NULL;
@@ -32665,6 +32665,7 @@ test_MicroBasics(void)
     {
         snprintf(buf, sizeof(buf), "Receive INFO response #%d: ", i);
         test(buf);
+        reply = NULL;
         s = natsSubscription_NextMsg(&reply, sub, 250);
         if (s == NATS_TIMEOUT)
         {
@@ -32674,6 +32675,7 @@ test_MicroBasics(void)
         testCond(NATS_OK == s);
         snprintf(buf, sizeof(buf), "Validate INFO response #%d: ", i);
         test(buf);
+        js = NULL;
         testCond((NATS_OK == nats_JSONParse(&js, reply->data, reply->dataLen)) &&
                  (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) &&
                  (strcmp(str, "CoolService") == 0));
@@ -32696,6 +32698,7 @@ test_MicroBasics(void)
     {
         snprintf(buf, sizeof(buf), "Receive PING response #%d: ", i);
         test(buf);
+        reply = NULL;
         s = natsSubscription_NextMsg(&reply, sub, 250);
         if (s == NATS_TIMEOUT)
         {
@@ -32705,6 +32708,7 @@ test_MicroBasics(void)
         testCond(NATS_OK == s);
         snprintf(buf, sizeof(buf), "Validate PING response #%d: ", i);
         test(buf);
+        js = NULL;
         testCond((NATS_OK == nats_JSONParse(&js, reply->data, reply->dataLen)) &&
                  (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) &&
                  (strcmp(str, "CoolService") == 0));
@@ -32728,6 +32732,7 @@ test_MicroBasics(void)
     {
         snprintf(buf, sizeof(buf), "Receive STATS response #%d: ", i);
         test(buf);
+        reply = NULL;
         s = natsSubscription_NextMsg(&reply, sub, 250);
         if (s == NATS_TIMEOUT)
         {
@@ -32735,27 +32740,28 @@ test_MicroBasics(void)
             break;
         }
         testCond(NATS_OK == s);
-        test("Parse STATS response: ");
-        s = nats_JSONParse(&js, reply->data, reply->dataLen);
-        if ((NATS_OK != s) || (js == NULL))
-            FAIL("Unable to parse JSON response");
 
+        test("Parse STATS response: ");
+        js = NULL;
+        s = nats_JSONParse(&js, reply->data, reply->dataLen);
+        testCond((NATS_OK == s) && (js != NULL));
+
+        test("Ensure STATS has one endpoint: ");
         array = NULL;
         array_len = 0;
         s = nats_JSONGetArrayObject(js, "endpoints", &array, &array_len);
-        if ((NATS_OK != s) || (array == NULL) || (array_len != 1))
-            FAIL("Invalid 'endpoints', expected exactly 1");
+        testCond((NATS_OK == s) && (array != NULL) && (array_len == 1))
 
+        test("Ensure endpoint has num_requests: ");
         n = 0;
         s = nats_JSONGetInt(array[0], "num_requests", &n);
-        if (NATS_OK != s)
-            FAIL("no 'num_requests' in endpoint stats");
+        testCond(NATS_OK == s);
         num_requests += n;
 
+        test("Ensure endpoint has num_errors: ");
         n = 0;
         s = nats_JSONGetInt(array[0], "num_errors", &n);
-        if (NATS_OK != s)
-            FAIL("no 'num_errors' in endpoint stats");
+        testCond(NATS_OK == s);
         num_errors += n;
 
         NATS_FREE(array);
@@ -32776,6 +32782,81 @@ test_MicroBasics(void)
     // exclude themselves from a chain, rather than setting previous, etc.
     for (i = NUM_BASIC_MICRO_SERVICES - 1; i >= 0; i--)
     {
+        microService_Destroy(svcs[i]);
+    }
+    NATS_FREE(svcs);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+static void
+test_MicroStartStop(void)
+{
+    natsStatus s = NATS_OK;
+    struct threadArg arg;
+    natsOptions *opts = NULL;
+    natsConnection *nc = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    microService **svcs = NATS_CALLOC(NUM_BASIC_MICRO_SERVICES, sizeof(microService *));
+    microEndpointConfig ep_cfg = {
+        .Name = "do",
+        .Subject = "svc.do",
+        .Handler = micro_basics_handle_request,
+    };
+    microServiceConfig cfg = {
+        .Version = "1.0.0",
+        .Name = "CoolService",
+        .Description = "returns 42",
+        .Endpoint = &ep_cfg,
+    };
+    natsMsg *reply = NULL;
+    int i;
+    char buf[256];
+
+    srand((unsigned int)nats_NowInNanoSeconds());
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if ((opts == NULL) || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
+    {
+        FAIL("Unable to setup test for MicroConnectionEvents!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to server: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    // start 5 instances of the basic service.
+    for (i = 0; i < NUM_BASIC_MICRO_SERVICES; i++)
+    {
+        snprintf(buf, sizeof(buf), "Start microservice #%d: ", i);
+        test(buf);
+        testCond(NULL == micro_AddService(&svcs[i], nc, &cfg));
+    }
+
+    // Now send 50 requests.
+    test("Send 50 requests: ");
+    for (i = 0; i < 50; i++)
+    {
+        s = natsConnection_Request(&reply, nc, "svc.do", NULL, 0, 1000);
+        if (NATS_OK != s)
+            FAIL("Unable to send request");
+        natsMsg_Destroy(reply);
+    }
+    testCond(NATS_OK == s);
+   
+    // Destroy the services in the reverse order to properly unwind the
+    // callbacks. At some point this needs to be fixed so that the services
+    // exclude themselves from a chain, rather than setting previous, etc.
+    for (i = NUM_BASIC_MICRO_SERVICES - 1; i >= 0; i--)
+    {
+
         microService_Destroy(svcs[i]);
     }
     NATS_FREE(svcs);
@@ -35478,6 +35559,7 @@ static testInfo allTests[] =
     {"MicroAddService",                 test_MicroAddService},
     {"MicroGroups",                     test_MicroGroups},
     {"MicroBasics",                     test_MicroBasics},
+    {"MicroStartStop",                  test_MicroStartStop},
     {"MicroServiceStopsOnClosedConn",   test_MicroServiceStopsOnClosedConn},
     {"MicroServiceStopsWhenServerStops", test_MicroServiceStopsWhenServerStops},
 

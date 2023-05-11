@@ -16,25 +16,17 @@
 #include "microp.h"
 #include "util.h"
 
-static microError *
-marshal_ping(natsBuffer **new_buf, microService *m);
-static void
-handle_ping(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
+static microError *marshal_ping(natsBuffer **new_buf, microService *m);
+static microError *handle_ping(microRequest *req);
+static microError *marshal_info(natsBuffer **new_buf, microServiceInfo *info);
+static microError *handle_info(microRequest *req);
+static microError * marshal_stats(natsBuffer **new_buf, microServiceStats *stats);
+static microError * handle_stats(microRequest *req);
 
 static microError *
-marshal_info(natsBuffer **new_buf, microServiceInfo *info);
-static void
-handle_info(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
-
+add_internal_handler(microService *m, const char *verb, const char *kind, const char *id, const char *name, microRequestHandler handler);
 static microError *
-marshal_stats(natsBuffer **new_buf, microServiceStats *stats);
-static void
-handle_stats(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
-
-static microError *
-add_internal_handler(microService *m, const char *verb, const char *kind, const char *id, const char *name, natsMsgHandler handler);
-static microError *
-add_verb_handlers(microService *m, const char *verb, natsMsgHandler handler);
+add_verb_handlers(microService *m, const char *verb, microRequestHandler handler);
 static microError *
 new_dotted_subject(char **new_subject, int count, ...);
 
@@ -42,110 +34,81 @@ microError *
 micro_init_monitoring(microService *m)
 {
     microError *err = NULL;
-
-    m->monitoring_subs = NATS_CALLOC(MICRO_MONITORING_SUBS_CAP, sizeof(natsSubscription *));
-    if (m->monitoring_subs == NULL)
-        return micro_ErrorOutOfMemory;
-    m->monitoring_subs_len = 0;
-
     MICRO_CALL(err, add_verb_handlers(m, MICRO_PING_VERB, handle_ping));
     MICRO_CALL(err, add_verb_handlers(m, MICRO_STATS_VERB, handle_stats));
     MICRO_CALL(err, add_verb_handlers(m, MICRO_INFO_VERB, handle_info));
     return err;
 }
 
-static void
-handle_ping(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+static microError *
+handle_ping(microRequest *req)
 {
     microError *err = NULL;
-    microService *m = (microService *)closure;
-    microRequest *req = NULL;
+    microService *m = microRequest_GetService(req);
     natsBuffer *buf = NULL;
 
     if ((m == NULL) || (m->cfg == NULL))
-        return; // Should not happen
+        return micro_ErrorInvalidArg; // Should not happen
 
     MICRO_CALL(err, marshal_ping(&buf, m));
-    MICRO_CALL(err, micro_new_request(&req, m, NULL, msg));
+    MICRO_CALL(err, microRequest_Respond(req, natsBuf_Data(buf), natsBuf_Len(buf)));
 
-    if (err == NULL)
-        microRequest_Respond(req, natsBuf_Data(buf), natsBuf_Len(buf));
-    else
-        microRequest_RespondError(req, err); // will destroy err
-
-    micro_destroy_request(req);
-    natsMsg_Destroy(msg);
     natsBuf_Destroy(buf);
+    return err;
 }
 
-static void
-handle_info(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+static microError *
+handle_info(microRequest *req)
 {
     microError *err = NULL;
-    microService *m = (microService *)closure;
-    microRequest *req = NULL;
+    microService *m = microRequest_GetService(req);
     microServiceInfo *info = NULL;
     natsBuffer *buf = NULL;
 
     if ((m == NULL) || (m->cfg == NULL))
-        return; // Should not happen
+        return micro_ErrorInvalidArg; // Should not happen
 
     MICRO_CALL(err, microService_GetInfo(&info, m));
     MICRO_CALL(err, marshal_info(&buf, info));
-    MICRO_CALL(err, micro_new_request(&req, m, NULL, msg));
+    MICRO_CALL(err, microRequest_Respond(req, natsBuf_Data(buf), natsBuf_Len(buf)));
 
-    if (err == NULL)
-        microRequest_Respond(req, natsBuf_Data(buf), natsBuf_Len(buf));
-    else
-        microRequest_RespondError(req, err); // will destroy err
-
-    micro_destroy_request(req);
     natsBuf_Destroy(buf);
-    natsMsg_Destroy(msg);
     microServiceInfo_Destroy(info);
+    return err;
 }
 
 static microError *
 handle_stats_internal(microRequest *req)
 {
     microError *err = NULL;
+    microService *m = microRequest_GetService(req);
     microServiceStats *stats = NULL;
     natsBuffer *buf = NULL;
 
-    if ((req == NULL) || (req->Service == NULL) || (req->Service->cfg == NULL))
+    if ((m == NULL) || (m == NULL))
         return micro_ErrorInvalidArg; // Should not happen
 
     MICRO_CALL(err, microService_GetStats(&stats, req->Service));
     MICRO_CALL(err, marshal_stats(&buf, stats));
-
-    if (err == NULL)
-        microRequest_Respond(req, natsBuf_Data(buf), natsBuf_Len(buf));
+    MICRO_CALL(err, microRequest_Respond(req, natsBuf_Data(buf), natsBuf_Len(buf)));
 
     natsBuf_Destroy(buf);
     microServiceStats_Destroy(stats);
     return err;
 }
 
-static void
-handle_stats(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+static microError *
+handle_stats(microRequest *req)
 {
-    microError *err = NULL;
-    microService *m = (microService *)closure;
-    microRequest *req = NULL;
-    microRequestHandler h = handle_stats_internal;
+    microService *m = microRequest_GetService(req);
 
     if ((m == NULL) || (m->cfg == NULL))
-        return; // Should not happen
+        return micro_ErrorInvalidArg; // Should not happen
 
-    if (m->cfg->StatsHandler != NULL)
-        h = m->cfg->StatsHandler;
-
-    MICRO_CALL(err, micro_new_request(&req, m, NULL, msg));
-    MICRO_DO(err, h(req));
-
-    micro_destroy_request(req);
-    microError_Destroy(err);
-    natsMsg_Destroy(msg);
+    if (m->cfg->StatsHandler != NULL) 
+        return m->cfg->StatsHandler(req);
+    else
+        return handle_stats_internal(req);
 }
 
 static microError *
@@ -210,32 +173,23 @@ micro_new_control_subject(char **newSubject, const char *verb, const char *name,
 
 static microError *
 add_internal_handler(microService *m, const char *verb, const char *kind,
-                     const char *id, const char *name, natsMsgHandler handler)
+                     const char *id, const char *name, microRequestHandler handler)
 {
     microError *err = NULL;
-    natsStatus s = NATS_OK;
-    natsSubscription *sub = NULL;
     char *subj = NULL;
-
-    if (m->monitoring_subs_len >= MICRO_MONITORING_SUBS_CAP)
-        return micro_Errorf("too many monitoring subscriptions (max: %d)", MICRO_MONITORING_SUBS_CAP);
 
     err = micro_new_control_subject(&subj, verb, kind, id);
     if (err != NULL)
         return err;
 
-    s = natsConnection_Subscribe(&sub, m->nc, subj, handler, m);
+    microEndpointConfig cfg = {
+        .Subject = subj,
+        .Name = name,
+        .Handler = handler,
+    };
+    err = micro_add_endpoint(NULL, m, "", &cfg, true);
     NATS_FREE(subj);
-    if (s != NATS_OK)
-    {
-        microService_Stop(m);
-        return micro_ErrorFromStatus(s);
-    }
-
-    m->monitoring_subs[m->monitoring_subs_len] = sub;
-    m->monitoring_subs_len++;
-
-    return NULL;
+    return err;
 }
 
 // __verbHandlers generates control handlers for a specific verb. Each request
@@ -243,7 +197,7 @@ add_internal_handler(microService *m, const char *verb, const char *kind,
 // written with the framework, one that handles all services of a particular
 // kind, and finally a specific service instance.
 static microError *
-add_verb_handlers(microService *m, const char *verb, natsMsgHandler handler)
+add_verb_handlers(microService *m, const char *verb, microRequestHandler handler)
 {
     microError *err = NULL;
     char name[1024];

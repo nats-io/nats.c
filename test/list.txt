@@ -263,6 +263,7 @@ MicroMatchEndpointSubject
 MicroAddService
 MicroGroups
 MicroBasics
+MicroStartStop
 MicroServiceStopsOnClosedConn
 MicroServiceStopsWhenServerStops
 StanPBufAllocator

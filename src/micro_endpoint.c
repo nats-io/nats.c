@@ -16,37 +16,16 @@
 #include "microp.h"
 #include "mem.h"
 
-static void
-handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
-
-static microError *new_endpoint(microEndpoint **ptr);
-
-static microError *dup_with_prefix(char **dst, const char *prefix, const char *src)
-{
-    int len = (int)strlen(src) + 1;
-    char *p;
-
-    if (!nats_IsStringEmpty(prefix))
-        len += (int)strlen(prefix) + 1;
-
-    *dst = NATS_CALLOC(1, len);
-    if (*dst == NULL)
-        return micro_ErrorOutOfMemory;
-
-    p = *dst;
-    if (prefix != NULL)
-    {
-        len = strlen(prefix);
-        memcpy(p, prefix, len);
-        p[len] = '.';
-        p += len + 1;
-    }
-    memcpy(p, src, strlen(src) + 1);
-    return NULL;
-}
+static microError *dup_with_prefix(char **dst, const char *prefix, const char *src);
+static void free_endpoint(microEndpoint *ep);
+static void handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
+static microError *new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
+static void on_drain_complete(void *closure);
+static void release_endpoint(microEndpoint *ep);
+static microEndpoint *retain_endpoint(microEndpoint *ep);
 
 microError *
-micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg)
+micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal)
 {
     microError *err = NULL;
     microEndpoint *ep = NULL;
@@ -60,18 +39,23 @@ micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
 
     subj = nats_IsStringEmpty(cfg->Subject) ? cfg->Name : cfg->Subject;
 
-    MICRO_CALL(err, new_endpoint(&ep));
-    MICRO_CALL(err, micro_ErrorFromStatus(natsMutex_Create(&ep->mu)));
+    ep = NATS_CALLOC(1, sizeof(microEndpoint));
+    if (ep == NULL)
+        return micro_ErrorOutOfMemory;
+    ep->refs = 1;
+    ep->is_monitoring_endpoint = is_internal;
+    ep->m = micro_retain_service(m);
+
+    MICRO_CALL(err, micro_ErrorFromStatus(natsMutex_Create(&ep->endpoint_mu)));
     MICRO_CALL(err, micro_clone_endpoint_config(&ep->config, cfg));
     MICRO_CALL(err, dup_with_prefix(&ep->name, prefix, cfg->Name));
     MICRO_CALL(err, dup_with_prefix(&ep->subject, prefix, subj));
     if (err != NULL)
     {
-        micro_stop_and_destroy_endpoint(ep);
+        free_endpoint(ep);
         return err;
     }
 
-    ep->m = m;
     *new_ep = ep;
     return NULL;
 }
@@ -87,37 +71,111 @@ micro_start_endpoint(microEndpoint *ep)
     // reset the stats.
     memset(&ep->stats, 0, sizeof(ep->stats));
 
-    s = natsConnection_QueueSubscribe(&ep->sub, ep->m->nc, ep->subject,
-                                      MICRO_QUEUE_GROUP, handle_request, ep);
-    if (s != NATS_OK)
-        return micro_ErrorFromStatus(s);
+    if (ep->is_monitoring_endpoint)
+        s = natsConnection_Subscribe(&ep->sub, ep->m->nc, ep->subject, handle_request, ep);
+    else
+        s = natsConnection_QueueSubscribe(&ep->sub, ep->m->nc, ep->subject, MICRO_QUEUE_GROUP, handle_request, ep);
 
-    return NULL;
+    IFOK(s, natsSubscription_SetOnCompleteCB(ep->sub, on_drain_complete, ep));
+
+    return micro_ErrorFromStatus(s);
 }
 
 microError *
-micro_stop_and_destroy_endpoint(microEndpoint *ep)
+micro_stop_endpoint(microEndpoint *ep)
 {
     natsStatus s = NATS_OK;
 
     if ((ep == NULL) || (ep->sub == NULL))
         return NULL;
 
-    if (!natsConnection_IsClosed(ep->m->nc))
+    if (natsConnection_IsClosed(ep->m->nc) || !natsSubscription_IsValid(ep->sub))
     {
-        s = natsSubscription_Drain(ep->sub);
-        if (s != NATS_OK)
-            return micro_ErrorFromStatus(s);
+        // <>/<> does the subscription need to be closed? It will be Destroy-ed
+        // when the endpoint is destroyed.
+        return NULL;
     }
 
+    // Initiate draining the subscription. Do not release the endpoint until
+    // the on_drain_complete.
+    retain_endpoint(ep);
+    s = natsSubscription_Drain(ep->sub);
+    if (s != NATS_OK)
+    {
+        release_endpoint(ep);
+        return microError_Wrapf(micro_ErrorFromStatus(s),
+                                "failed to stop endpoint %s: failed to drain subscription", ep->name);
+    }
+    return NULL;
+}
+
+microError *
+micro_destroy_endpoint(microEndpoint *ep)
+{
+    microError *err = NULL;
+    err = micro_stop_endpoint(ep);
+    if (err != NULL)
+        return err;
+
+    release_endpoint(ep);
+    return NULL;
+}
+
+static void on_drain_complete(void *closure)
+{
+    if (closure == NULL)
+        return;
+
+    microEndpoint *ep =(microEndpoint *)closure;
+
+    micro_unlink_endpoint_from_service(ep->m, ep);
+    release_endpoint((microEndpoint *)closure);
+}
+
+microEndpoint *
+retain_endpoint(microEndpoint *ep)
+{
+    if (ep == NULL)
+        return ep;
+
+    micro_lock_endpoint(ep);
+
+    ep->refs++;
+
+    micro_unlock_endpoint(ep);
+
+    return ep;
+}
+
+void release_endpoint(microEndpoint *ep)
+{
+    int refs = 0;
+
+    if (ep == NULL)
+        return;
+
+    micro_lock_endpoint(ep);
+
+    refs = --(ep->refs);
+
+    micro_unlock_endpoint(ep);
+
+    if (refs == 0)
+        free_endpoint(ep);
+}
+
+void free_endpoint(microEndpoint *ep)
+{
+    if (ep == NULL)
+        return;
+
+    micro_release_service(ep->m);
     NATS_FREE(ep->name);
     NATS_FREE(ep->subject);
     natsSubscription_Destroy(ep->sub);
-    natsMutex_Destroy(ep->mu);
-    micro_destroy_cloned_endpoint_config(ep->config);
+    natsMutex_Destroy(ep->endpoint_mu);
+    micro_free_cloned_endpoint_config(ep->config);
     NATS_FREE(ep);
-
-    return NULL;
 }
 
 static void update_last_error(microEndpoint *ep, microError *err)
@@ -138,7 +196,7 @@ handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *cl
     microRequest *req = NULL;
     int64_t start, elapsed_ns = 0, full_s;
 
-    if ((ep == NULL) || (ep->mu == NULL) || (ep->config == NULL) || (ep->config->Handler == NULL))
+    if ((ep == NULL) || (ep->endpoint_mu == NULL) || (ep->config == NULL) || (ep->config->Handler == NULL))
     {
         // This would be a bug, we should not have received a message on this
         // subscription.
@@ -168,20 +226,19 @@ handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *cl
     }
 
     // Update stats.
-    natsMutex_Lock(ep->mu);
+    micro_lock_endpoint(ep);
 
     stats->num_requests++;
     stats->processing_time_ns += elapsed_ns;
     full_s = stats->processing_time_ns / 1000000000;
     stats->processing_time_s += full_s;
     stats->processing_time_ns -= full_s * 1000000000;
-
     update_last_error(ep, err);
 
-    natsMutex_Unlock(ep->mu);
+    micro_unlock_endpoint(ep);
 
     microError_Destroy(err);
-    micro_destroy_request(req);
+    micro_free_request(req);
     natsMsg_Destroy(msg);
 }
 
@@ -190,9 +247,9 @@ void micro_update_last_error(microEndpoint *ep, microError *err)
     if (err == NULL || ep == NULL)
         return;
 
-    natsMutex_Lock(ep->mu);
+    micro_lock_endpoint(ep);
     update_last_error(ep, err);
-    natsMutex_Unlock(ep->mu);
+    micro_unlock_endpoint(ep);
 }
 
 bool micro_is_valid_name(const char *name)
@@ -277,13 +334,6 @@ clone_schema(microSchema **to, const microSchema *from)
     return NULL;
 }
 
-static microError *
-new_endpoint(microEndpoint **ptr)
-{
-    *ptr = NATS_CALLOC(1, sizeof(microEndpoint));
-    return (*ptr == NULL) ? micro_ErrorOutOfMemory : NULL;
-}
-
 static inline microError *
 new_endpoint_config(microEndpointConfig **ptr)
 {
@@ -318,7 +368,7 @@ micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
 
     if (err != NULL)
     {
-        micro_destroy_cloned_endpoint_config(new_cfg);
+        micro_free_cloned_endpoint_config(new_cfg);
         return err;
     }
 
@@ -326,7 +376,7 @@ micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
     return NULL;
 }
 
-void micro_destroy_cloned_endpoint_config(microEndpointConfig *cfg)
+void micro_free_cloned_endpoint_config(microEndpointConfig *cfg)
 {
     if (cfg == NULL)
         return;
@@ -394,4 +444,28 @@ bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_sub
             return last_etok;
         }
     }
+}
+
+static microError *dup_with_prefix(char **dst, const char *prefix, const char *src)
+{
+    int len = (int)strlen(src) + 1;
+    char *p;
+
+    if (!nats_IsStringEmpty(prefix))
+        len += (int)strlen(prefix) + 1;
+
+    *dst = NATS_CALLOC(1, len);
+    if (*dst == NULL)
+        return micro_ErrorOutOfMemory;
+
+    p = *dst;
+    if (!nats_IsStringEmpty(prefix))
+    {
+        len = strlen(prefix);
+        memcpy(p, prefix, len);
+        p[len] = '.';
+        p += len + 1;
+    }
+    memcpy(p, src, strlen(src) + 1);
+    return NULL;
 }

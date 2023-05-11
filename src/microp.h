@@ -27,7 +27,6 @@
     if ((__err) == NULL)         \
         __block;
 
-
 #define MICRO_QUEUE_GROUP "q"
 
 #define MICRO_DEFAULT_ENDPOINT_NAME "default"
@@ -60,8 +59,21 @@ struct micro_endpoint_s
     microService *m;
     microEndpointConfig *config;
 
+    // Monitoring endpoints are different in a few ways. For now, express it as
+    // a single flag but consider unbundling:
+    //   - use_queue_group: Service endpoints use a queue group, monitoring
+    //     endpoints don't.
+    //   - forward_response_errors_to_async_handler: Service endpoints handle
+    //     respond errors themselves, standard monitoring endpoints don't, so
+    //     send the errors to the service async handler, if exists.
+    //   - gather_stats: Monitoring endpoints don't need stats.
+    //   - include_in_info: Monitoring endpoints are not listed in INFO
+    //     responses.
+    bool is_monitoring_endpoint;
+
     // Mutex for starting/stopping the endpoint, and for updating the stats.
-    natsMutex *mu;
+    natsMutex *endpoint_mu;
+    int refs;
 
     // The subscription for the endpoint. If NULL, the endpoint is stopped.
     natsSubscription *sub;
@@ -69,6 +81,8 @@ struct micro_endpoint_s
     // Endpoint stats. These are initialized only for running endpoints, and are
     // cleared if the endpoint is stopped.
     microEndpointStats stats;
+
+    microEndpoint *next;
 };
 
 struct micro_group_s
@@ -91,16 +105,11 @@ struct micro_service_s
 
     // these are are updated concurrently with access as the service runs, so
     // need to be protected by mutex.
-    natsMutex *mu;
-
+    natsMutex *service_mu;
     int refs;
 
-    struct micro_endpoint_s **endpoints;
-    int endpoints_len;
-    int endpoints_cap;
-
-    natsSubscription **monitoring_subs;
-    int monitoring_subs_len;
+    struct micro_endpoint_s *first_ep;
+    int num_eps;
 
     natsConnectionHandler prev_on_connection_closed;
     void *prev_on_connection_closed_closure;
@@ -111,7 +120,6 @@ struct micro_service_s
 
     int64_t started; // UTC time expressed as number of nanoseconds since epoch.
     bool is_stopped;
-    bool is_stopping;
 };
 
 /**
@@ -131,7 +139,7 @@ struct micro_request_s
      */
     microService *Service;
 
-     /**
+    /**
      * @brief A reference to the service that received the request.
      */
     microEndpoint *Endpoint;
@@ -140,26 +148,32 @@ struct micro_request_s
 extern microError *micro_ErrorOutOfMemory;
 extern microError *micro_ErrorInvalidArg;
 
+microError *micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
 microError *micro_clone_endpoint_config(microEndpointConfig **new_cfg, microEndpointConfig *cfg);
 microError *micro_clone_service_config(microServiceConfig **new_cfg, microServiceConfig *cfg);
-void micro_destroy_cloned_endpoint_config(microEndpointConfig *cfg);
-void micro_destroy_cloned_service_config(microServiceConfig *cfg);
-void micro_destroy_request(microRequest *req);
+void micro_free_cloned_endpoint_config(microEndpointConfig *cfg);
+void micro_free_cloned_service_config(microServiceConfig *cfg);
+void micro_free_request(microRequest *req);
 microError *micro_init_monitoring(microService *m);
-bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_subject);
-microError *micro_new_endpoint(microEndpoint **new_endpoint, microService *m, const char *prefix, microEndpointConfig *cfg);
-microError *micro_new_request(microRequest **new_request, microService *m, microEndpoint *ep, natsMsg *msg);
-microError *micro_start_endpoint(microEndpoint *ep);
-microError *micro_stop_endpoint(microEndpoint *ep);
-microError *micro_stop_and_destroy_endpoint(microEndpoint *ep);
-void micro_update_last_error(microEndpoint *ep, microError *err);
-microError *micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
+microError *micro_is_error_message(natsStatus s, natsMsg *msg);
 bool micro_is_valid_name(const char *name);
 bool micro_is_valid_subject(const char *subject);
+bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_subject);
+microError *micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
+microError *micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
+microError *micro_new_request(microRequest **new_request, microService *m, microEndpoint *ep, natsMsg *msg);
+void micro_release_service(microService *m);
+microService *micro_retain_service(microService *m);
+microError *micro_start_endpoint(microEndpoint *ep);
+microError *micro_destroy_endpoint(microEndpoint *ep);
+microError *micro_stop_endpoint(microEndpoint *ep);
+void micro_unlink_endpoint_from_service(microService *m, microEndpoint *to_remove);
+void micro_update_last_error(microEndpoint *ep, microError *err);
 
-microError *micro_is_error_message(natsStatus s, natsMsg *msg);
-
-
+static inline void micro_lock_service(microService *m)  { natsMutex_Lock(m->service_mu); }
+static inline void micro_unlock_service(microService *m)  { natsMutex_Unlock(m->service_mu); }
+static inline void micro_lock_endpoint(microEndpoint *ep)  { natsMutex_Lock(ep->endpoint_mu); }
+static inline void micro_unlock_endpoint(microEndpoint *ep)  { natsMutex_Unlock(ep->endpoint_mu); }
 
 static inline microError *micro_strdup(char **ptr, const char *str)
 {

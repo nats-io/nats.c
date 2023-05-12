@@ -5680,7 +5680,6 @@ _stopServer(natsPid pid)
     }
 
     waitpid(pid, &status, 0);
-    printf("<>/<> SERVER KILLED\n");
 
     natsMutex_Lock(slMu);
     if (slMap != NULL)

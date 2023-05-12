@@ -412,7 +412,6 @@ on_connection_disconnected(natsConnection *nc, void *closure)
 {
     microService *m = (microService *)closure;
 
-    // printf("<>/<> on_connection_disconnected\n");
     if (m == NULL)
         return;
 
@@ -435,7 +434,6 @@ on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure)
     bool our_subject = false;
     const char *subject = NULL;
 
-    // printf("<>/<> on_error\n");
     if ((m == NULL) || (sub == NULL))
         return;
 

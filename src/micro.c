@@ -195,7 +195,6 @@ microService_Stop(microService *m)
     microError *err = NULL;
     microEndpoint *ep = NULL;
 
-    // printf("<>/<> microService_Stop:\n");
     if (m == NULL)
         return micro_ErrorInvalidArg;
 
@@ -208,7 +207,6 @@ microService_Stop(microService *m)
         return NULL;
     }
 
-    // printf("<>/<> microService_Stop: need to stop\n");
     err = unwrap_connection_event_callbacks(m);
     for (ep = m->first_ep; (err == NULL) && (ep != NULL); ep = m->first_ep)
     {
@@ -223,7 +221,6 @@ microService_Stop(microService *m)
 
     if (err == NULL)
     {
-        // printf("<>/<> microService_Stop: stopped\n");
         m->is_stopped = true;
         m->started = 0;
         m->num_eps = 0;
@@ -324,9 +321,6 @@ static void free_service(microService *m)
 {
     microGroup *next = NULL;
 
-    // printf("<>/<> free_service\n");
-
-
     if (m == NULL)
         return;
 
@@ -402,7 +396,6 @@ static void
 on_connection_closed(natsConnection *nc, void *closure)
 {
     microService *m = (microService *)closure;
-    // printf("<>/<> on_connection_closed\n");
     if (m == NULL)
         return;
 

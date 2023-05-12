@@ -90,8 +90,7 @@ micro_stop_endpoint(microEndpoint *ep)
 
     if (natsConnection_IsClosed(ep->m->nc) || !natsSubscription_IsValid(ep->sub))
     {
-        // <>/<> does the subscription need to be closed? It will be Destroy-ed
-        // when the endpoint is destroyed.
+        // The subscription will be Destroy-ed when the endpoint is destroyed.
         return NULL;
     }
 
@@ -111,7 +110,6 @@ micro_stop_endpoint(microEndpoint *ep)
 microError *
 micro_destroy_endpoint(microEndpoint *ep)
 {
-    // printf("<>/<> micro_destroy_endpoint %s\n", ep->name);
     microError *err = NULL;
     err = micro_stop_endpoint(ep);
     if (err != NULL)

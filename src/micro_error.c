@@ -103,7 +103,7 @@ micro_ErrorFromStatus(natsStatus s)
 {
     microError *err = NULL;
     const char *message = natsStatus_GetText(s);
-    int message_len = strlen(message);
+    size_t message_len = strlen(message);
 
     if (s == NATS_OK)
         return NULL;
@@ -176,7 +176,7 @@ microError_Wrapf(microError *err, const char *format, ...)
 const char *
 microError_String(microError *err, char *buf, int size)
 {
-    int used = 0;
+    size_t used = 0;
     const char *caused;
 
     if (buf == NULL)

@@ -186,7 +186,6 @@ static void update_last_error(microEndpoint *ep, microError *err)
 static void
 handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    // natsStatus s = NATS_OK;
     microError *err = NULL;
     microError *service_err = NULL;
     microEndpoint *ep = (microEndpoint *)closure;
@@ -447,11 +446,11 @@ bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_sub
 
 static microError *dup_with_prefix(char **dst, const char *prefix, const char *src)
 {
-    int len = (int)strlen(src) + 1;
+    size_t len = strlen(src) + 1;
     char *p;
 
     if (!nats_IsStringEmpty(prefix))
-        len += (int)strlen(prefix) + 1;
+        len += strlen(prefix) + 1;
 
     *dst = NATS_CALLOC(1, len);
     if (*dst == NULL)

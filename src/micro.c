@@ -432,14 +432,17 @@ on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure)
     microEndpoint *ep = NULL;
     microError *err = NULL;
     bool our_subject = false;
+    const char *subject = NULL;
 
     if ((m == NULL) || (sub == NULL))
         return;
 
+    subject = natsSubscription_GetSubject(sub);
+    
     micro_lock_service(m);
     for (ep = m->first_ep; (!our_subject) && (ep != NULL); ep = ep->next)
     {
-        if (micro_match_endpoint_subject(ep->subject, sub->subject))
+        if (micro_match_endpoint_subject(ep->subject, subject))
         {
             break;
         }
@@ -509,7 +512,7 @@ microService_AddGroup(microGroup **new_group, microService *m, const char *prefi
         return micro_ErrorInvalidArg;
 
     *new_group = NATS_CALLOC(1, sizeof(microGroup) +
-                                    strlen(prefix) + 1); // "prefix.""
+                                    strlen(prefix) + 1); // "prefix\0"
     if (new_group == NULL)
     {
         return micro_ErrorOutOfMemory;
@@ -527,7 +530,7 @@ microError *
 microGroup_AddGroup(microGroup **new_group, microGroup *parent, const char *prefix)
 {
     char *p;
-    int len;
+    size_t len;
 
     if ((parent == NULL) || (new_group == NULL) || (prefix == NULL))
         return micro_ErrorInvalidArg;

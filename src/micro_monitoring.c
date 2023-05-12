@@ -115,7 +115,8 @@ static microError *
 new_dotted_subject(char **new_subject, int count, ...)
 {
     va_list args;
-    int i, len, n;
+    int i;
+    size_t len, n;
     char *result, *p;
 
     va_start(args, count);

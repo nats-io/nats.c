@@ -15,7 +15,7 @@
 
 // Sequence NATS microservice example.
 //
-// This example illustrated multiple NATS microservices communicating with each
+// This example illustrates multiple NATS microservices communicating with each
 // other. Please see the main microservice, micro-sequence.c for a more detailed
 // explanation.
 //
@@ -112,6 +112,7 @@ int main(int argc, char **argv)
     {
         printf("Error: %u - %s\n", s, natsStatus_GetText(s));
         nats_PrintLastErrorStack(stderr);
+        natsOptions_Destroy(opts);
         return 1;
     }
 
@@ -134,6 +135,8 @@ int main(int argc, char **argv)
 
     // Cleanup.
     microService_Destroy(m);
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(conn);
     if (err != NULL)
     {
         printf("Error: %s\n", microError_String(err, errorbuf, sizeof(errorbuf)));

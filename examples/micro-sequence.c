@@ -15,7 +15,7 @@
 
 // Sequence NATS microservice example.
 //
-// This example illustrated multiple NATS microservices communicating with each
+// This example illustrates multiple NATS microservices communicating with each
 // other.
 //
 // The main service (c-sequence) calculates the sum of 1/f(1) + 1/f(2)... up to
@@ -171,6 +171,7 @@ int main(int argc, char **argv)
     {
         printf("Error: %u - %s\n", s, natsStatus_GetText(s));
         nats_PrintLastErrorStack(stderr);
+        natsOptions_Destroy(opts);
         return 1;
     }
 
@@ -179,6 +180,8 @@ int main(int argc, char **argv)
         err = microService_Run(m);
 
     microService_Destroy(m);
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(conn);
     if (err != NULL)
     {
         printf("Error: %s\n", microError_String(err, errorbuf, sizeof(errorbuf)));

@@ -72,13 +72,17 @@ int main(int argc, char **argv)
     {
         printf("Error: %u - %s\n", s, natsStatus_GetText(s));
         nats_PrintLastErrorStack(stderr);
+        natsOptions_Destroy(opts);
         return 1;
     }
+
     err = micro_AddService(&m, conn, &cfg);
     if (err == NULL)
         err = microService_Run(m);
 
     microService_Destroy(m);
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(conn);
     if (err != NULL)
     {
         printf("Error: %s\n", microError_String(err, errorbuf, sizeof(errorbuf)));

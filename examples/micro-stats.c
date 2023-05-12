@@ -128,8 +128,8 @@ int main(int argc, char **argv)
     natsConnection *conn = NULL;
     char buf[2048];
 
-    err = micro_ErrorFromStatus(natsConnection_Connect(&conn, opts));
-
+    err = micro_ErrorFromStatus(
+        natsConnection_Connect(&conn, opts));
     if (err == NULL)
         err = run_example(conn, NULL, buf, sizeof(buf));
     if (err == NULL)
@@ -145,6 +145,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error: %s\n", microError_String(err, buf, sizeof(buf)));
     }
 
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(conn);
     microError_Destroy(err);
     return err == NULL ? 0 : 1;
 }

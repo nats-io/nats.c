@@ -15,7 +15,7 @@
 
 // Sequence NATS microservice example.
 //
-// This example illustrated multiple NATS microservices communicating with each
+// This example illustrates multiple NATS microservices communicating with each
 // other. Please see the main microservice, micro-sequence.c for a more detailed
 // explanation.
 //
@@ -62,7 +62,7 @@ factorial(long double *result, natsConnection *nc, int n)
     int i;
 
     if (n < 1)
-        err = micro_Errorf("n=%d. must be greater than 0", n);
+        return micro_Errorf("n=%d. must be greater than 0", n);
 
     *result = 1;
     for (i = 1; i <= n; i++)
@@ -84,7 +84,7 @@ fibonacci(long double *result, natsConnection *nc, int n)
     long double n1, n2;
 
     if (n < 0)
-        err = micro_Errorf("n=%d. must be non-negative", n);
+        return micro_Errorf("n=%d. must be non-negative", n);
 
     if (n < 2)
     {
@@ -141,7 +141,7 @@ handle_function_op(microRequest *req, functionHandler op)
         err = micro_Errorf("Invalid number of arguments, expected 1 got %d", microArgs_Count(args));
     }
     if (err == NULL)
-        microArgs_GetInt(&n, args, 0);
+        err = microArgs_GetInt(&n, args, 0);
     if (err == NULL)
         err = op(&result, microRequest_GetConnection(req), n);
     if (err == NULL)
@@ -194,6 +194,7 @@ int main(int argc, char **argv)
     {
         printf("Error: %u - %s\n", s, natsStatus_GetText(s));
         nats_PrintLastErrorStack(stderr);
+        natsOptions_Destroy(opts);
         return 1;
     }
 
@@ -216,6 +217,8 @@ int main(int argc, char **argv)
 
     // Cleanup.
     microService_Destroy(m);
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(conn);
     if (err != NULL)
     {
         printf("Error: %s\n", microError_String(err, errorbuf, sizeof(errorbuf)));

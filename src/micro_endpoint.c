@@ -14,7 +14,6 @@
 #include <ctype.h>
 
 #include "microp.h"
-#include "mem.h"
 
 static microError *dup_with_prefix(char **dst, const char *prefix, const char *src);
 static void free_endpoint(microEndpoint *ep);

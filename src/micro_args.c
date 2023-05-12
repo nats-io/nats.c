@@ -13,7 +13,6 @@
 
 #include "microp.h"
 #include "micro_args.h"
-#include "mem.h"
 
 struct args_s
 {

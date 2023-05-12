@@ -12,7 +12,6 @@
 // limitations under the License.
 
 #include "microp.h"
-#include "mem.h"
 
 microError *
 microRequest_Respond(microRequest *req, const char *data, size_t len)

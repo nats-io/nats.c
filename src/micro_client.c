@@ -12,7 +12,6 @@
 // limitations under the License.
 
 #include "microp.h"
-#include "mem.h"
 #include "conn.h"
 
 microError *

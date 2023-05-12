@@ -32976,6 +32976,7 @@ test_MicroServiceStopsWhenServerStops(void)
     testCond(!microService_IsStopped(m))
 
     test("Stop the server: ");
+    _destroyDefaultThreadArgs(&arg);
     testCond((_stopServer(serverPid), true));
 
     test("Wait for the service to stop: ");
@@ -32987,7 +32988,6 @@ test_MicroServiceStopsWhenServerStops(void)
     microService_Destroy(m);
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
-    _destroyDefaultThreadArgs(&arg);
 }
 
 // static void

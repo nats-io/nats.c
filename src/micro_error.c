@@ -113,7 +113,6 @@ micro_ErrorFromStatus(natsStatus s)
         return &_errorOutOfMemory;
 
     err->status = s;
-    err->message = (char *)(err + 1);
     memcpy(err->message, message, message_len + 1);
     return err;
 }

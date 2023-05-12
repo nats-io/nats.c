@@ -32979,15 +32979,15 @@ test_MicroServiceStopsWhenServerStops(void)
     testCond((_stopServer(serverPid), true));
 
     test("Wait for the service to stop: ");
-    testCond((nats_Sleep(2000), true));
+    testCond((nats_Sleep(1000), true));
 
     test("Test microservice is not running: ");
     testCond(microService_IsStopped(m))
 
-    _destroyDefaultThreadArgs(&arg);
     microService_Destroy(m);
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&arg);
 }
 
 // static void

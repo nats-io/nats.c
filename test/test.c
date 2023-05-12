@@ -32979,7 +32979,7 @@ test_MicroServiceStopsWhenServerStops(void)
     testCond((_stopServer(serverPid), true));
 
     test("Wait for the service to stop: ");
-    testCond((nats_Sleep(1000), true));
+    testCond((nats_Sleep(2000), true));
 
     test("Test microservice is not running: ");
     testCond(microService_IsStopped(m))

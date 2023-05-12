@@ -38,7 +38,7 @@ microRequest_RespondCustom(microRequest *req, microError *service_error, const c
     }
     if (s == NATS_OK)
     {
-        s = natsMsg_Create(&msg, natsMsg_GetReply(req->Message), NULL, data, len);
+        s = natsMsg_Create(&msg, natsMsg_GetReply(req->Message), NULL, data, (int)len);
     }
     if ((s == NATS_OK) && (service_error != NULL))
     {

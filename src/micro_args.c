@@ -190,7 +190,7 @@ decode_and_dupe_rest_of_string(char **dup, int *i, const char *data, int data_le
 {
     microError *err = NULL;
     int start = *i;
-    int decoded_len;
+    int decoded_len = 0;
 
     err = decode_rest_of_string(NULL, &decoded_len, i, data, data_len);
     if (err != NULL)

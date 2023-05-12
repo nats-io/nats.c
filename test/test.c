@@ -5680,6 +5680,7 @@ _stopServer(natsPid pid)
     }
 
     waitpid(pid, &status, 0);
+    printf("<>/<> SERVER KILLED\n");
 
     natsMutex_Lock(slMu);
     if (slMap != NULL)
@@ -32984,10 +32985,10 @@ test_MicroServiceStopsWhenServerStops(void)
     test("Test microservice is not running: ");
     testCond(microService_IsStopped(m))
 
+    _destroyDefaultThreadArgs(&arg);
     microService_Destroy(m);
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
-    _destroyDefaultThreadArgs(&arg);
 }
 
 // static void

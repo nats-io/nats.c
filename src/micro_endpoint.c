@@ -111,6 +111,7 @@ micro_stop_endpoint(microEndpoint *ep)
 microError *
 micro_destroy_endpoint(microEndpoint *ep)
 {
+    printf("<>/<> micro_destroy_endpoint %s\n", ep->name);
     microError *err = NULL;
     err = micro_stop_endpoint(ep);
     if (err != NULL)

@@ -9557,6 +9557,7 @@ test_RetryOnFailedConnect(void)
     s = natsConnection_Connect(&nc, opts);
     end = nats_Now();
     testCond(s == NATS_NO_SERVER);
+    nats_clearLastError();
 
     test("Retried: ")
 #ifdef _WIN32
@@ -9672,9 +9673,32 @@ test_RetryOnFailedConnect(void)
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
+    nc = NULL;
     natsOptions_Destroy(opts);
+    opts = NULL;
 
     _destroyDefaultThreadArgs(&arg);
+
+    // Make sure that closing the connection while not connected returns fast
+    test("Create opts: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetRetryOnFailedConnect(opts, true, _connectedCb, NULL));
+    IFOK(s, natsOptions_SetURL(opts, "nats://localhost:54321"));
+    testCond(s == NATS_OK);
+
+    test("Start connect: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_NOT_YET_CONNECTED);
+    nats_clearLastError();
+    s = NATS_OK;
+
+    test("Close does not take too long: ");
+    start = nats_Now();
+    natsConnection_Close(nc);
+    testCond(nats_Now()-start <1500);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
 }
 
 static void

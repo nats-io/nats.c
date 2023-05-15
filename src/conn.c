@@ -1581,8 +1581,6 @@ _doReconnect(void *arg)
                 natsConn_Unlock(nc);
                 sleepTime = crd(nc, wlf, crdClosure);
                 natsConn_Lock(nc);
-                if (natsConn_isClosed(nc))
-                    break;
             }
             else
             {
@@ -1590,6 +1588,8 @@ _doReconnect(void *arg)
                 if (jitter > 0)
                     sleepTime += rand() % jitter;
             }
+            if (natsConn_isClosed(nc))
+                break;
             natsCondition_TimedWait(nc->reconnectCond, nc->mu, sleepTime);
         }
         else

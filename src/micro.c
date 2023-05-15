@@ -41,6 +41,11 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
 
     MICRO_CALL(err, micro_clone_service_config(&m->cfg, cfg));
 
+    if (err == NULL)
+    {
+        m->is_running = true;
+    }
+
     // Wrap the connection callbacks before we subscribe to anything.
     MICRO_CALL(err, wrap_connection_event_callbacks(m))
     MICRO_CALL(err, micro_init_monitoring(m));
@@ -138,42 +143,6 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
     return NULL;
 }
 
-static void
-_remove_endpoint(microService *m, microEndpoint *to_remove)
-{
-    microEndpoint *ptr = NULL;
-    microEndpoint *prev_ptr = NULL;
-
-    if (m->first_ep == NULL)
-        return;
-
-    if (m->first_ep == to_remove)
-    {
-        m->first_ep = m->first_ep->next;
-        return;
-    }
-
-    prev_ptr = m->first_ep;
-    for (ptr = m->first_ep->next; ptr != NULL; ptr = ptr->next)
-    {
-        if (ptr == to_remove)
-        {
-            prev_ptr->next = ptr->next;
-            return;
-        }
-    }
-}
-
-void micro_unlink_endpoint_from_service(microService *m, microEndpoint *to_remove)
-{
-    if ((m == NULL) || to_remove == NULL)
-        return;
-
-    micro_lock_service(m);
-    _remove_endpoint(m, to_remove);
-    micro_unlock_service(m);
-}
-
 microError *
 microService_AddEndpoint(microService *m, microEndpointConfig *cfg)
 {
@@ -195,24 +164,32 @@ microService_Stop(microService *m)
     microError *err = NULL;
     microEndpoint *ep = NULL;
 
+    bool is_running = false;
+    microEndpoint *first_ep = NULL;
+
     if (m == NULL)
         return micro_ErrorInvalidArg;
 
-    // Stop is a rare call, it's ok to lock the service for the duration.
     micro_lock_service(m);
+    is_running = m->is_running;
+    first_ep = m->first_ep;
+    micro_unlock_service(m);
 
-    if (m->is_stopped)
-    {
-        micro_unlock_service(m);
+    if (!is_running)
         return NULL;
-    }
 
     err = unwrap_connection_event_callbacks(m);
-    for (ep = m->first_ep; (err == NULL) && (ep != NULL); ep = m->first_ep)
-    {
-        m->first_ep = ep->next;
-        m->num_eps--;
 
+    for (ep = first_ep; (err == NULL) && (ep != NULL); ep = first_ep)
+    {
+        micro_lock_service(m);
+        first_ep = ep->next;
+        m->first_ep = first_ep;
+        m->num_eps--;
+        micro_unlock_service(m);
+
+        // micro_destroy_endpoint may release the service, locking it in the
+        // process, so we need to avoid a race.
         if (err = micro_destroy_endpoint(ep), err != NULL)
         {
             err = microError_Wrapf(err, "failed to stop endpoint %s", ep->name);
@@ -221,12 +198,14 @@ microService_Stop(microService *m)
 
     if (err == NULL)
     {
-        m->is_stopped = true;
+        micro_lock_service(m);
+        m->is_running = false;
         m->started = 0;
         m->num_eps = 0;
+        m->first_ep = NULL;
+        micro_unlock_service(m);
     }
 
-    micro_unlock_service(m);
     return err;
 }
 
@@ -238,7 +217,7 @@ bool microService_IsStopped(microService *m)
         return true;
 
     micro_lock_service(m);
-    is_stopped = m->is_stopped;
+    is_stopped = !m->is_running;
     micro_unlock_service(m);
 
     return is_stopped;
@@ -408,24 +387,6 @@ on_connection_closed(natsConnection *nc, void *closure)
 }
 
 static void
-on_connection_disconnected(natsConnection *nc, void *closure)
-{
-    microService *m = (microService *)closure;
-
-    if (m == NULL)
-        return;
-
-    // <>/<> TODO: Should we stop the service? Not 100% how the Go client does
-    // it.
-    microService_Stop(m);
-
-    if (m->prev_on_connection_disconnected != NULL)
-    {
-        (*m->prev_on_connection_closed)(nc, m->prev_on_connection_disconnected_closure);
-    }
-}
-
-static void
 on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure)
 {
     microService *m = (microService *)closure;
@@ -438,7 +399,7 @@ on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure)
         return;
 
     subject = natsSubscription_GetSubject(sub);
-    
+
     micro_lock_service(m);
     for (ep = m->first_ep; (!our_subject) && (ep != NULL); ep = ep->next)
     {
@@ -480,9 +441,6 @@ wrap_connection_event_callbacks(microService *m)
 
     IFOK(s, natsConn_getClosedCallback(&m->prev_on_connection_closed, &m->prev_on_connection_closed_closure, m->nc));
     IFOK(s, natsConn_setClosedCallback(m->nc, on_connection_closed, m));
-
-    IFOK(s, natsConn_getDisconnectedCallback(&m->prev_on_connection_disconnected, &m->prev_on_connection_disconnected_closure, m->nc));
-    IFOK(s, natsConn_setDisconnectedCallback(m->nc, on_connection_disconnected, m));
 
     IFOK(s, natsConn_getErrorCallback(&m->prev_on_error, &m->prev_on_error_closure, m->nc));
     IFOK(s, natsConn_setErrorCallback(m->nc, on_error, m));

@@ -74,6 +74,7 @@ struct micro_endpoint_s
     // Mutex for starting/stopping the endpoint, and for updating the stats.
     natsMutex *endpoint_mu;
     int refs;
+    bool is_running;
 
     // The subscription for the endpoint. If NULL, the endpoint is stopped.
     natsSubscription *sub;
@@ -119,7 +120,7 @@ struct micro_service_s
     void *prev_on_error_closure;
 
     int64_t started; // UTC time expressed as number of nanoseconds since epoch.
-    bool is_stopped;
+    bool is_running;
 };
 
 /**
@@ -151,6 +152,7 @@ extern microError *micro_ErrorInvalidArg;
 microError *micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
 microError *micro_clone_endpoint_config(microEndpointConfig **new_cfg, microEndpointConfig *cfg);
 microError *micro_clone_service_config(microServiceConfig **new_cfg, microServiceConfig *cfg);
+microError *micro_destroy_endpoint(microEndpoint *ep);
 void micro_free_cloned_endpoint_config(microEndpointConfig *cfg);
 void micro_free_cloned_service_config(microServiceConfig *cfg);
 void micro_free_request(microRequest *req);
@@ -165,9 +167,6 @@ microError *micro_new_request(microRequest **new_request, microService *m, micro
 void micro_release_service(microService *m);
 microService *micro_retain_service(microService *m);
 microError *micro_start_endpoint(microEndpoint *ep);
-microError *micro_destroy_endpoint(microEndpoint *ep);
-microError *micro_stop_endpoint(microEndpoint *ep);
-void micro_unlink_endpoint_from_service(microService *m, microEndpoint *to_remove);
 void micro_update_last_error(microEndpoint *ep, microError *err);
 
 static inline void micro_lock_service(microService *m)  { natsMutex_Lock(m->service_mu); }

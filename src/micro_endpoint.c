@@ -19,7 +19,6 @@ static microError *dup_with_prefix(char **dst, const char *prefix, const char *s
 static void free_endpoint(microEndpoint *ep);
 static void handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 static microError *new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
-static void on_drain_complete(void *closure);
 static void release_endpoint(microEndpoint *ep);
 static microEndpoint *retain_endpoint(microEndpoint *ep);
 
@@ -59,10 +58,17 @@ micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
     return NULL;
 }
 
+static void _release_on_complete(void *closure)
+{
+    release_endpoint((microEndpoint *)closure);
+}
+
 microError *
 micro_start_endpoint(microEndpoint *ep)
 {
     natsStatus s = NATS_OK;
+    natsSubscription *sub = NULL;
+
     if ((ep->subject == NULL) || (ep->config == NULL) || (ep->config->Handler == NULL))
         // nothing to do
         return NULL;
@@ -70,65 +76,66 @@ micro_start_endpoint(microEndpoint *ep)
     // reset the stats.
     memset(&ep->stats, 0, sizeof(ep->stats));
 
-    if (ep->is_monitoring_endpoint)
-        s = natsConnection_Subscribe(&ep->sub, ep->m->nc, ep->subject, handle_request, ep);
-    else
-        s = natsConnection_QueueSubscribe(&ep->sub, ep->m->nc, ep->subject, MICRO_QUEUE_GROUP, handle_request, ep);
+    // extra retain before subscribing since we'll need to hold it until
+    // on_complete on the subscription.
+    retain_endpoint(ep);
 
-    IFOK(s, natsSubscription_SetOnCompleteCB(ep->sub, on_drain_complete, ep));
+    if (ep->is_monitoring_endpoint)
+        s = natsConnection_Subscribe(&sub, ep->m->nc, ep->subject, handle_request, ep);
+    else
+        s = natsConnection_QueueSubscribe(&sub, ep->m->nc, ep->subject, MICRO_QUEUE_GROUP, handle_request, ep);
+
+    if (s == NATS_OK)
+    {
+        natsSubscription_SetOnCompleteCB(sub, _release_on_complete, ep);
+
+        micro_lock_endpoint(ep);
+        ep->sub = sub;
+        ep->is_running = true;
+        micro_unlock_endpoint(ep);
+    }
+    else
+    {
+        natsSubscription_Destroy(sub); // likely always a no-op.
+        release_endpoint(ep);    // to compensate for the extra retain above.
+    }
 
     return micro_ErrorFromStatus(s);
 }
 
 microError *
-micro_stop_endpoint(microEndpoint *ep)
-{
-    natsStatus s = NATS_OK;
-
-    if ((ep == NULL) || (ep->sub == NULL))
-        return NULL;
-
-    if (natsConnection_IsClosed(ep->m->nc) || !natsSubscription_IsValid(ep->sub))
-    {
-        // <>/<> does the subscription need to be closed? It will be Destroy-ed
-        // when the endpoint is destroyed.
-        return NULL;
-    }
-
-    // Initiate draining the subscription. Do not release the endpoint until
-    // the on_drain_complete.
-    retain_endpoint(ep);
-    s = natsSubscription_Drain(ep->sub);
-    if (s != NATS_OK)
-    {
-        release_endpoint(ep);
-        return microError_Wrapf(micro_ErrorFromStatus(s),
-                                "failed to stop endpoint %s: failed to drain subscription", ep->name);
-    }
-    return NULL;
-}
-
-microError *
 micro_destroy_endpoint(microEndpoint *ep)
 {
-    microError *err = NULL;
-    err = micro_stop_endpoint(ep);
-    if (err != NULL)
-        return err;
+    natsStatus s = NATS_OK;
+    natsSubscription *sub = NULL;
+    bool is_running = false;
 
+    if (ep == NULL)
+        return NULL;
+
+    micro_lock_endpoint(ep);
+    sub = ep->sub;
+    is_running = ep->is_running;
+    micro_unlock_endpoint(ep);
+
+    if (!is_running)
+        return NULL;
+
+    if (!natsConnection_IsClosed(ep->m->nc) && natsSubscription_IsValid(sub))
+    {
+        // When the drain is complete, will release the final ref on ep.
+        s = natsSubscription_Drain(sub);
+        if (s != NATS_OK)
+        {
+            return microError_Wrapf(micro_ErrorFromStatus(s),
+                                    "failed to stop endpoint %s: failed to drain subscription", ep->name);
+        }
+    }
+
+    // Release ep since it's no longer running (to compensate for the retain in
+    // micro_start_endpoint).
     release_endpoint(ep);
     return NULL;
-}
-
-static void on_drain_complete(void *closure)
-{
-    if (closure == NULL)
-        return;
-
-    microEndpoint *ep =(microEndpoint *)closure;
-
-    micro_unlink_endpoint_from_service(ep->m, ep);
-    release_endpoint((microEndpoint *)closure);
 }
 
 microEndpoint *

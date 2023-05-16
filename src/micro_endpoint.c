@@ -29,8 +29,12 @@ micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
     microEndpoint *ep = NULL;
     const char *subj;
 
-    if (!micro_is_valid_name(cfg->Name) || (cfg->Handler == NULL))
-        return micro_ErrorInvalidArg;
+    if (cfg == NULL)
+        return microError_Wrapf(micro_ErrorInvalidArg, "NULL endpoint config");
+    if (!micro_is_valid_name(cfg->Name))
+        return microError_Wrapf(micro_ErrorInvalidArg, "invalid endpoint name %s", cfg->Name);
+    if (cfg->Handler == NULL)
+        return microError_Wrapf(micro_ErrorInvalidArg, "NULL endpoint request handler for %s", cfg->Name);
 
     if ((cfg->Subject != NULL) && !micro_is_valid_subject(cfg->Subject))
         return micro_ErrorInvalidArg;

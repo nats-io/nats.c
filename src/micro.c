@@ -548,6 +548,7 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
     info->Subjects = NATS_CALLOC(m->num_eps, sizeof(char *));
     if (info->Subjects == NULL)
     {
+        micro_unlock_service(m);
         NATS_FREE(info);
         return micro_ErrorOutOfMemory;
     }
@@ -612,6 +613,7 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
     stats->Endpoints = NATS_CALLOC(m->num_eps, sizeof(microEndpointStats));
     if (stats->Endpoints == NULL)
     {
+        micro_unlock_service(m);
         NATS_FREE(stats);
         return micro_ErrorOutOfMemory;
     }

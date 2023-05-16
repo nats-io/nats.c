@@ -536,10 +536,10 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
     if (info == NULL)
         return micro_ErrorOutOfMemory;
 
-    info->Name = NATS_STRDUP(m->cfg->Name);
-    info->Version = NATS_STRDUP(m->cfg->Version);
-    info->Description = NATS_STRDUP(m->cfg->Description);
-    info->Id = NATS_STRDUP(m->id);
+    micro_strdup((char **)&info->Name, m->cfg->Name);
+    micro_strdup((char **)&info->Version, m->cfg->Version);
+    micro_strdup((char **)&info->Description, m->cfg->Description);
+    micro_strdup((char **)&info->Id, m->id);
     info->Type = MICRO_INFO_RESPONSE_TYPE;
 
     micro_lock_service(m);
@@ -556,7 +556,7 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
     {
         if ((!ep->is_monitoring_endpoint) && (ep->subject != NULL))
         {
-            info->Subjects[len] = NATS_STRDUP(ep->subject);
+            micro_strdup((char **)&info->Subjects[len], ep->subject);
             len++;
         }
     }
@@ -599,9 +599,9 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
     if (stats == NULL)
         return micro_ErrorOutOfMemory;
 
-    stats->Name = NATS_STRDUP(m->cfg->Name);
-    stats->Version = NATS_STRDUP(m->cfg->Version);
-    stats->Id = NATS_STRDUP(m->id);
+    micro_strdup((char **)&stats->Name, m->cfg->Name);
+    micro_strdup((char **)&stats->Version, m->cfg->Version);
+    micro_strdup((char **)&stats->Id, m->id);
     stats->Started = m->started;
     stats->Type = MICRO_STATS_RESPONSE_TYPE;
 
@@ -624,8 +624,8 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
             // copy the entire struct, including the last error buffer.
             stats->Endpoints[len] = ep->stats;
 
-            stats->Endpoints[len].Name = NATS_STRDUP(ep->name);
-            stats->Endpoints[len].Subject = NATS_STRDUP(ep->subject);
+            micro_strdup((char **)&stats->Endpoints[len].Name, ep->name);
+            micro_strdup((char **)&stats->Endpoints[len].Subject, ep->subject);
             avg = (long double)ep->stats.processing_time_s * 1000000000.0 + (long double)ep->stats.processing_time_ns;
             avg = avg / (long double)ep->stats.num_requests;
             stats->Endpoints[len].average_processing_time_ns = (int64_t)avg;

@@ -536,11 +536,13 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
     if (info == NULL)
         return micro_ErrorOutOfMemory;
 
-    info->Name = m->cfg->Name;
-    info->Version = m->cfg->Version;
-    info->Description = m->cfg->Description;
-    info->Id = m->id;
+    info->Name = NATS_STRDUP(m->cfg->Name);
+    info->Version = NATS_STRDUP(m->cfg->Version);
+    info->Description = NATS_STRDUP(m->cfg->Description);
+    info->Id = NATS_STRDUP(m->id);
     info->Type = MICRO_INFO_RESPONSE_TYPE;
+
+    micro_lock_service(m);
 
     // Overallocate subjects, will filter out internal ones.
     info->Subjects = NATS_CALLOC(m->num_eps, sizeof(char *));
@@ -550,12 +552,11 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
         return micro_ErrorOutOfMemory;
     }
 
-    micro_lock_service(m);
     for (ep = m->first_ep; ep != NULL; ep = ep->next)
     {
         if ((!ep->is_monitoring_endpoint) && (ep->subject != NULL))
         {
-            info->Subjects[len] = ep->subject;
+            info->Subjects[len] = NATS_STRDUP(ep->subject);
             len++;
         }
     }
@@ -568,11 +569,18 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
 
 void microServiceInfo_Destroy(microServiceInfo *info)
 {
+    int i;
+
     if (info == NULL)
         return;
 
-    // subjects themselves must not be freed, just the collection.
+    for(i = 0; i < info->SubjectsLen; i++)
+        NATS_FREE((char *)info->Subjects[i]);
     NATS_FREE(info->Subjects);
+    NATS_FREE((char *)info->Name);
+    NATS_FREE((char *)info->Version);
+    NATS_FREE((char *)info->Description);
+    NATS_FREE((char *)info->Id);
     NATS_FREE(info);
 }
 
@@ -591,11 +599,13 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
     if (stats == NULL)
         return micro_ErrorOutOfMemory;
 
-    stats->Name = m->cfg->Name;
-    stats->Version = m->cfg->Version;
-    stats->Id = m->id;
+    stats->Name = NATS_STRDUP(m->cfg->Name);
+    stats->Version = NATS_STRDUP(m->cfg->Version);
+    stats->Id = NATS_STRDUP(m->id);
     stats->Started = m->started;
     stats->Type = MICRO_STATS_RESPONSE_TYPE;
+
+    micro_lock_service(m);
 
     // Allocate the actual structs, not pointers. Overallocate for the internal
     // endpoints even though they are filtered out.
@@ -606,7 +616,6 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
         return micro_ErrorOutOfMemory;
     }
 
-    micro_lock_service(m);
     for (ep = m->first_ep; ep != NULL; ep = ep->next)
     {
         if ((ep != NULL) && (!ep->is_monitoring_endpoint) && (ep->endpoint_mu != NULL))
@@ -615,8 +624,8 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
             // copy the entire struct, including the last error buffer.
             stats->Endpoints[len] = ep->stats;
 
-            stats->Endpoints[len].Name = ep->name;
-            stats->Endpoints[len].Subject = ep->subject;
+            stats->Endpoints[len].Name = NATS_STRDUP(ep->name);
+            stats->Endpoints[len].Subject = NATS_STRDUP(ep->subject);
             avg = (long double)ep->stats.processing_time_s * 1000000000.0 + (long double)ep->stats.processing_time_ns;
             avg = avg / (long double)ep->stats.num_requests;
             stats->Endpoints[len].average_processing_time_ns = (int64_t)avg;
@@ -624,6 +633,7 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
             micro_unlock_endpoint(ep);
         }
     }
+    
     micro_unlock_service(m);
     stats->EndpointsLen = len;
 
@@ -633,9 +643,19 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
 
 void microServiceStats_Destroy(microServiceStats *stats)
 {
+    int i;
+
     if (stats == NULL)
         return;
 
+    for (i=0; i < stats->EndpointsLen; i++)
+    {
+        NATS_FREE((char *)stats->Endpoints[i].Name);
+        NATS_FREE((char *)stats->Endpoints[i].Subject);
+    }
     NATS_FREE(stats->Endpoints);
+    NATS_FREE((char *)stats->Name);
+    NATS_FREE((char *)stats->Version);
+    NATS_FREE((char *)stats->Id);
     NATS_FREE(stats);
 }

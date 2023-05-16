@@ -232,7 +232,7 @@ marshal_ping(natsBuffer **new_buf, microService *m)
     s = natsBuf_Create(&buf, 1024);
     if (s == NATS_OK)
     {
-        s = natsBuf_Append(buf, "{", -1);
+        s = natsBuf_AppendByte(buf, '{');
         IFOK_attr("name", m->cfg->Name, ",");
         IFOK_attr("version", m->cfg->Version, ",");
         IFOK_attr("id", m->id, ",");
@@ -257,7 +257,7 @@ marshal_info(natsBuffer **new_buf, microServiceInfo *info)
     natsStatus s;
 
     s = natsBuf_Create(&buf, 4096);
-    IFOK(s, natsBuf_Append(buf, "{", -1));
+    IFOK(s, natsBuf_AppendByte(buf, '{'));
     IFOK_attr("description", info->Description, ",");
     IFOK_attr("id", info->Id, ",");
     IFOK_attr("name", info->Name, ",");
@@ -268,13 +268,13 @@ marshal_info(natsBuffer **new_buf, microServiceInfo *info)
         IFOK(s, natsBuf_Append(buf, "\"subjects\":[", -1));
         for (i = 0; i < info->SubjectsLen; i++)
         {
-            IFOK(s, natsBuf_Append(buf, "\"", -1));
+            IFOK(s, natsBuf_AppendByte(buf, '"'));
             IFOK(s, natsBuf_Append(buf, info->Subjects[i], -1));
-            IFOK(s, natsBuf_Append(buf, "\"", -1));
+            IFOK(s, natsBuf_AppendByte(buf, '"'));
             if (i < (info->SubjectsLen - 1))
-                IFOK(s, natsBuf_Append(buf, ",", -1));
+                IFOK(s, natsBuf_AppendByte(buf, ','));
         }
-        IFOK(s, natsBuf_Append(buf, "],", -1));
+        IFOK(s, natsBuf_Append(buf, "],", 2));
     }
     IFOK_attr("version", info->Version, "");
     IFOK(s, natsBuf_AppendByte(buf, '}'));
@@ -319,12 +319,12 @@ marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
             IFOK(s, nats_marshalDuration(buf, true, "average_processing_time", ep->average_processing_time_ns));
             IFOK(s, natsBuf_AppendByte(buf, ','));
             IFOK_attr("last_error", ep->last_error_string, "");
-            IFOK(s, natsBuf_Append(buf, "}", -1));
+            IFOK(s, natsBuf_AppendByte(buf, '}'));
 
             if (i < (stats->EndpointsLen - 1))
-                IFOK(s, natsBuf_Append(buf, ",", -1));
+                IFOK(s, natsBuf_AppendByte(buf, ','));
         }
-        IFOK(s, natsBuf_Append(buf, "],", -1));
+        IFOK(s, natsBuf_Append(buf, "],", 2));
     }
 
     IFOK_attr("version", stats->Version, "");

@@ -101,7 +101,7 @@ micro_start_endpoint(microEndpoint *ep)
     else
     {
         natsSubscription_Destroy(sub); // likely always a no-op.
-        release_endpoint(ep);    // to compensate for the extra retain above.
+        release_endpoint(ep);          // to compensate for the extra retain above.
     }
 
     return micro_ErrorFromStatus(s);
@@ -190,8 +190,8 @@ void free_endpoint(microEndpoint *ep)
 
 static void update_last_error(microEndpoint *ep, microError *err)
 {
-    ep->stats.num_errors++;
-    microError_String(err, ep->stats.last_error_string, sizeof(ep->stats.last_error_string));
+    ep->stats.NumErrors++;
+    microError_String(err, ep->stats.LastErrorString, sizeof(ep->stats.LastErrorString));
 }
 
 static void
@@ -237,11 +237,11 @@ handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *cl
     // Update stats.
     micro_lock_endpoint(ep);
 
-    stats->num_requests++;
-    stats->processing_time_ns += elapsed_ns;
-    full_s = stats->processing_time_ns / 1000000000;
-    stats->processing_time_s += full_s;
-    stats->processing_time_ns -= full_s * 1000000000;
+    stats->NumRequests++;
+    stats->ProcessingTimeNanoseconds += elapsed_ns;
+    full_s = stats->ProcessingTimeNanoseconds / 1000000000;
+    stats->ProcessingTimeSeconds += full_s;
+    stats->ProcessingTimeNanoseconds -= full_s * 1000000000;
     update_last_error(ep, err);
 
     micro_unlock_endpoint(ep);

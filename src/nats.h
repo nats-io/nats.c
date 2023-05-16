@@ -7374,33 +7374,33 @@ struct micro_endpoint_stats_s
     /**
      * @brief The number of requests received by the endpoint.
      */
-    int64_t num_requests;
+    int64_t NumRequests;
 
     /**
      * @brief The number of errors, service-level and internal, associated with
      * the endpoint.
      */
-    int64_t num_errors;
+    int64_t NumErrors;
 
     /**
      * @brief total request processing time (the seconds part).
      */
-    int64_t processing_time_s;
+    int64_t ProcessingTimeSeconds;
 
     /**
      * @brief total request processing time (the nanoseconds part).
      */
-    int64_t processing_time_ns;
+    int64_t ProcessingTimeNanoseconds;
 
     /**
      * @brief average request processing time, in ns.
      */
-    int64_t average_processing_time_ns;
+    int64_t AverageProcessingTimeNanoseconds;
 
     /**
      * @brief a copy of the last error message.
      */
-    char last_error_string[2048];
+    char LastErrorString[2048];
 };
 
 /**

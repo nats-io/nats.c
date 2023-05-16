@@ -20,8 +20,8 @@ static microError *marshal_ping(natsBuffer **new_buf, microService *m);
 static microError *handle_ping(microRequest *req);
 static microError *marshal_info(natsBuffer **new_buf, microServiceInfo *info);
 static microError *handle_info(microRequest *req);
-static microError * marshal_stats(natsBuffer **new_buf, microServiceStats *stats);
-static microError * handle_stats(microRequest *req);
+static microError *marshal_stats(natsBuffer **new_buf, microServiceStats *stats);
+static microError *handle_stats(microRequest *req);
 
 static microError *
 add_internal_handler(microService *m, const char *verb, const char *kind, const char *id, const char *name, microRequestHandler handler);
@@ -105,7 +105,7 @@ handle_stats(microRequest *req)
     if ((m == NULL) || (m->cfg == NULL))
         return micro_ErrorInvalidArg; // Should not happen
 
-    if (m->cfg->StatsHandler != NULL) 
+    if (m->cfg->StatsHandler != NULL)
         return m->cfg->StatsHandler(req);
     else
         return handle_stats_internal(req);
@@ -314,11 +314,11 @@ marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
             IFOK(s, natsBuf_AppendByte(buf, '{'));
             IFOK_attr("name", ep->Name, ",");
             IFOK_attr("subject", ep->Subject, ",");
-            IFOK(s, nats_marshalLong(buf, false, "num_requests", ep->num_requests));
-            IFOK(s, nats_marshalLong(buf, true, "num_errors", ep->num_errors));
-            IFOK(s, nats_marshalDuration(buf, true, "average_processing_time", ep->average_processing_time_ns));
+            IFOK(s, nats_marshalLong(buf, false, "num_requests", ep->NumRequests));
+            IFOK(s, nats_marshalLong(buf, true, "num_errors", ep->NumErrors));
+            IFOK(s, nats_marshalDuration(buf, true, "average_processing_time", ep->AverageProcessingTimeNanoseconds));
             IFOK(s, natsBuf_AppendByte(buf, ','));
-            IFOK_attr("last_error", ep->last_error_string, "");
+            IFOK_attr("last_error", ep->LastErrorString, "");
             IFOK(s, natsBuf_AppendByte(buf, '}'));
 
             if (i < (stats->EndpointsLen - 1))

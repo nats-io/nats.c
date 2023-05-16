@@ -575,7 +575,7 @@ void microServiceInfo_Destroy(microServiceInfo *info)
     if (info == NULL)
         return;
 
-    for(i = 0; i < info->SubjectsLen; i++)
+    for (i = 0; i < info->SubjectsLen; i++)
         NATS_FREE((char *)info->Subjects[i]);
     NATS_FREE(info->Subjects);
     NATS_FREE((char *)info->Name);
@@ -628,14 +628,14 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
 
             micro_strdup((char **)&stats->Endpoints[len].Name, ep->name);
             micro_strdup((char **)&stats->Endpoints[len].Subject, ep->subject);
-            avg = (long double)ep->stats.processing_time_s * 1000000000.0 + (long double)ep->stats.processing_time_ns;
-            avg = avg / (long double)ep->stats.num_requests;
-            stats->Endpoints[len].average_processing_time_ns = (int64_t)avg;
+            avg = (long double)ep->stats.ProcessingTimeSeconds * 1000000000.0 + (long double)ep->stats.ProcessingTimeNanoseconds;
+            avg = avg / (long double)ep->stats.NumRequests;
+            stats->Endpoints[len].AverageProcessingTimeNanoseconds = (int64_t)avg;
             len++;
             micro_unlock_endpoint(ep);
         }
     }
-    
+
     micro_unlock_service(m);
     stats->EndpointsLen = len;
 
@@ -650,7 +650,7 @@ void microServiceStats_Destroy(microServiceStats *stats)
     if (stats == NULL)
         return;
 
-    for (i=0; i < stats->EndpointsLen; i++)
+    for (i = 0; i < stats->EndpointsLen; i++)
     {
         NATS_FREE((char *)stats->Endpoints[i].Name);
         NATS_FREE((char *)stats->Endpoints[i].Subject);

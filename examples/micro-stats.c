@@ -56,7 +56,7 @@ handle_stats(microRequest *req)
     if (err != NULL)
         return err;
 
-    total = stats->Endpoints[0].num_requests;
+    total = stats->Endpoints[0].NumRequests;
     custom = service_state->odd_count;
     len = snprintf(buf, sizeof(buf),
                    "{\"total\":%d,\"odd\":%d}", total, custom);

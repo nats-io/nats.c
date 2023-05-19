@@ -31,6 +31,7 @@
 #include "sub.h"
 #include "nkeys.h"
 #include "crypto.h"
+#include "opts.h"
 
 #define WAIT_LIB_INITIALIZED \
         natsMutex_Lock(gLib.lock); \
@@ -723,15 +724,42 @@ _timerThread(void *arg)
     natsLib_Release();
 }
 
+// _dup_callback_list clones cb. However, for a single callback it avoids an
+// allocation by copying it into a pre-allocated `single`. In this case `clone`
+// is set to NULL and single is returned. If cb is a list, then the entire list
+// is cloned, placed into `clone`, and returned.
+static nats_CallbackList*
+_dup_callback_list(nats_CallbackList *single, nats_CallbackList **clone, nats_CallbackList *cb)
+{
+    static nats_CallbackList empty = {.next = NULL};
+    
+    *single = empty;
+    *clone = NULL;
+
+    if (cb == NULL)
+        return NULL;
+    
+    if (cb->next == NULL)
+    {
+        *single = *cb;
+        return single;
+    }
+
+    // Ignore the status, return NULL on errors.
+    natsOptions_cloneCallbackList(clone, cb);
+    return *clone;
+}
+
+
 static void
 _asyncCbsThread(void *arg)
 {
     natsLibAsyncCbs         *asyncCbs   = &(gLib.asyncCbs);
     natsAsyncCbInfo         *cb         = NULL;
     natsConnection          *nc         = NULL;
-    natsConnectionHandler   cbHandler   = NULL;
-    natsErrHandler          errHandler  = NULL;
-    void                    *cbClosure  = NULL;
+    nats_CallbackList       *call       = NULL;
+    nats_CallbackList       *clone      = NULL;
+    nats_CallbackList       single      = {.next=NULL};
 #if defined(NATS_HAS_STREAMING)
     stanConnection          *sc         = NULL;
 #endif
@@ -759,66 +787,87 @@ _asyncCbsThread(void *arg)
         natsMutex_Unlock(asyncCbs->lock);
 
         nc = cb->nc;
+
 #if defined(NATS_HAS_STREAMING)
         sc = cb->sc;
+
+        // handle streaming connection callbacks
+        if (cb->type == ASYNC_STAN_CONN_LOST)
+        {
+            (*(sc->opts->connectionLostCB))(sc, sc->connLostErrTxt, sc->opts->connectionLostCBClosure);
+        }
+        else
+        {
+            // handle all other callbacks
 #endif
 
-        // callback handlers can be updated on a live connection, so we need to
+        // Default to a single natsConnectionHandler callback. Duplicated
+        // callbacks (closed, error) will update the type.
+        call = &single;
+        single.type = CALLBACK_TYPE_CONN;
+
+        // Callback handlers can be updated on a live connection, so we need to
         // lock.
-        cbHandler = NULL;
-        errHandler = NULL;
-        cbClosure = NULL;
-
-#define __set_handler(_h, _cb, _cl) \
-        { \
-            natsMutex_Lock(nc->opts->mu); \
-            _h = nc->opts->_cb; \
-            cbClosure = nc->opts->_cl; \
-            natsMutex_Unlock(nc->opts->mu); \
-        }
-
+        natsMutex_Lock(nc->opts->mu);
         switch (cb->type)
         {
-            case ASYNC_CLOSED:
-                __set_handler(cbHandler, closedCb, closedCbClosure);
+        case ASYNC_CLOSED:
+            call = _dup_callback_list(&single, &clone, nc->opts->closedCb);
+            break;
+        case ASYNC_DISCONNECTED:
+            call->f.conn = nc->opts->disconnectedCb;
+            call->closure = nc->opts->disconnectedCbClosure;
+            break;
+        case ASYNC_RECONNECTED:
+            call->f.conn = nc->opts->reconnectedCb;
+            call->closure = nc->opts->reconnectedCbClosure;
+            break;
+        case ASYNC_CONNECTED:
+            call->f.conn = nc->opts->connectedCb;
+            call->closure = nc->opts->connectedCbClosure;
+            break;
+        case ASYNC_DISCOVERED_SERVERS:
+            call->f.conn = nc->opts->discoveredServersCb;
+            call->closure = nc->opts->discoveredServersClosure;
+            break;
+        case ASYNC_LAME_DUCK_MODE:
+            call->f.conn = nc->opts->lameDuckCb;
+            call->closure = nc->opts->lameDuckClosure;
+            break;
+        case ASYNC_ERROR:
+            call = _dup_callback_list(&single, &clone, nc->opts->asyncErrCb);
+            break;
+        default:
+            call = NULL;
+            break;
+        }
+        natsMutex_Unlock(nc->opts->mu);
+
+        // Invoke the callbacks
+        for (; call != NULL; call = call->next)
+        {
+            switch (call->type)
+            {
+            case CALLBACK_TYPE_ERROR:
+                if (cb->errTxt != NULL)
+                    nats_setErrStatusAndTxt(cb->err, cb->errTxt);
+                (*call->f.err)(nc, cb->sub, cb->err, call->closure);
                 break;
-            case ASYNC_DISCONNECTED:
-                __set_handler(cbHandler, disconnectedCb, disconnectedCbClosure);
+
+            case CALLBACK_TYPE_CONN:
+                (*call->f.conn)(nc, call->closure);
                 break;
-            case ASYNC_RECONNECTED:
-                __set_handler(cbHandler, reconnectedCb, reconnectedCbClosure);
-                break;
-            case ASYNC_CONNECTED:
-                __set_handler(cbHandler, connectedCb, connectedCbClosure);
-                break;
-            case ASYNC_DISCOVERED_SERVERS:
-                __set_handler(cbHandler, discoveredServersCb, discoveredServersClosure);
-                break;
-            case ASYNC_LAME_DUCK_MODE:
-                __set_handler(cbHandler, lameDuckCb, lameDuckClosure);
-                break;
-            case ASYNC_ERROR:
-                __set_handler(errHandler, asyncErrCb, asyncErrCbClosure);
-                break;
+
             default:
                 break;
+            }
         }
 
-        // Invoke the callback
-        if (cbHandler != NULL)
-        {
-            (*(cbHandler))(nc,  cbClosure);
-        }
-        else if (errHandler != NULL)
-        {
-            if (cb->errTxt != NULL)
-                nats_setErrStatusAndTxt(cb->err, cb->errTxt);
-            (*(errHandler))(nc, cb->sub, cb->err, cbClosure);
-        }
+        // Free anything that might have been cloned.
+        natsOptions_freeCallbackList(clone);
+        clone = NULL;
+
 #if defined(NATS_HAS_STREAMING)
-        else if (cb->type == ASYNC_STAN_CONN_LOST)
-        {
-                (*(sc->opts->connectionLostCB))(sc, sc->connLostErrTxt, sc->opts->connectionLostCBClosure);
         }
 #endif
 

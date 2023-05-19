@@ -19,6 +19,7 @@ natsHash
 natsHashing
 natsStrHash
 natsInbox
+natsOptionsUnlinkCallback
 natsOptions
 natsSock_ConnectTcp
 natsSock_ShuffleIPs
@@ -67,7 +68,7 @@ ConnectionWithNULLOptions
 ConnectionToWithNullURLs
 ConnectionStatus
 ConnClosedCB
-SetConnClosedCB
+AddConnClosedCB
 CloseDisconnectedCB
 ServerStopDisconnectedCB
 ClosedConnections
@@ -148,7 +149,7 @@ AsyncSubscriptionPendingDrain
 SyncSubscriptionPending
 SyncSubscriptionPendingDrain
 AsyncErrHandler
-SetAsyncErrHandler
+AddAsyncErrHandler
 AsyncSubscriberStarvation
 AsyncSubscriberOnClose
 NextMsgCallOnAsyncSub

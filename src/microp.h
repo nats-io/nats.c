@@ -37,6 +37,7 @@
 
 struct micro_error_s
 {
+    bool is_internal;
     struct micro_error_s *cause;
     natsStatus status;
     int code;

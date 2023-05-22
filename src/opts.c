@@ -1011,6 +1011,7 @@ natsOptions_addErrorCallback(natsOptions *opts, natsErrHandler f, void *closure)
 
     UNLOCK_OPTS(opts);
 
+    NATS_FREE(replaced);
     return s;
 }
 

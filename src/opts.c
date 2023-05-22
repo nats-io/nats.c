@@ -1132,7 +1132,7 @@ natsOptions_SetReconnectedCB(natsOptions *opts,
                              natsConnectionHandler reconnectedCb,
                              void *closure)
 {
-LOCK_AND_CHECK_OPTIONS(opts, 0);
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
 
     opts->reconnectedCb = reconnectedCb;
     opts->reconnectedCbClosure = closure;
@@ -1275,7 +1275,7 @@ natsOptions_SetRetryOnFailedConnect(natsOptions *opts, bool retry,
     {
         opts->connectedCb = connectedCb;
         opts->connectedCbClosure = closure;
-    }    
+    }
     UNLOCK_OPTS(opts);
 
     return NATS_OK;

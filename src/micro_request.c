@@ -53,7 +53,7 @@ microRequest_RespondCustom(microRequest *req, microError *service_error, const c
         }
         if (s == NATS_OK)
         {
-            snprintf(buf, sizeof(buf), "%d", service_error->code);
+            snprintf(buf, sizeof(buf), "%u", service_error->code);
             s = natsMsgHeader_Set(msg, MICRO_ERROR_CODE_HDR, buf);
         }
     }

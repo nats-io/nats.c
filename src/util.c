@@ -2295,7 +2295,7 @@ nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, in
     const char *start = (comma ? ",\"" : "\"");
 
     if (neg)
-        u = -u;
+        u = (uint64_t) -u;
 
     if (u < 1000000000)
     {

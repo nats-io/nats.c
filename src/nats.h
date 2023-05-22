@@ -8166,7 +8166,7 @@ microError_Status(microError *err);
  * @return `buf` 
  */
 NATS_EXTERN const char *
-microError_String(microError *err, char *buf, size_t len);
+microError_String(microError *err, char *buf, int len);
 
 /**
  * @brief Wraps an exising #microError with a higher printf-like formatted

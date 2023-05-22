@@ -169,7 +169,7 @@ microError_Wrapf(microError *err, const char *format, ...)
 }
 
 const char *
-microError_String(microError *err, char *buf, size_t size)
+microError_String(microError *err, char *buf, int size)
 {
     size_t used = 0;
     const char *caused;
@@ -184,7 +184,7 @@ microError_String(microError *err, char *buf, size_t size)
 
     if (err->status != NATS_OK)
     {
-        used += snprintf(buf + used, size - used, "status %u: ", err->status);
+        used += snprintf(buf + used, size - used, "status %d: ", err->status);
     }
     if (err->code != 0)
     {

@@ -532,10 +532,10 @@ _processInfo(natsConnection *nc, char *info, int len)
     if (info == NULL)
         return NATS_OK;
 
-    natsMutex_Lock(nc->opts->mu);
+    natsOptions_lock(nc->opts);
     postDiscoveredServersCb = (nc->opts->discoveredServersCb != NULL);
     postLameDuckCb = (nc->opts->lameDuckCb != NULL);
-    natsMutex_Unlock(nc->opts->mu);
+    natsOptions_unlock(nc->opts);
 
     _clearServerInfo(&(nc->info));
 
@@ -1534,11 +1534,11 @@ _doReconnect(void *arg)
     bool                            postReconnectedCb = false;
     bool                            postConnectedCb = false;
 
-    natsMutex_Lock(nc->opts->mu);
+    natsOptions_lock(nc->opts);
     postDisconnectedCb = (nc->opts->disconnectedCb != NULL);
     postReconnectedCb = (nc->opts->reconnectedCb != NULL);
     postConnectedCb = (nc->opts->connectedCb != NULL);
-    natsMutex_Unlock(nc->opts->mu);
+    natsOptions_unlock(nc->opts);
 
     natsConn_Lock(nc);
 
@@ -2017,10 +2017,10 @@ _connect(natsConnection *nc)
     bool        retryOnFailedConnect = false;
     bool        hasConnectedCb = false;
     
-    natsMutex_Lock(nc->opts->mu);
+    natsOptions_lock(nc->opts);
     hasConnectedCb = (nc->opts->connectedCb != NULL);
     retryOnFailedConnect = nc->opts->retryOnFailedConnect;
-    natsMutex_Unlock(nc->opts->mu);
+    natsOptions_unlock(nc->opts);
 
     natsConn_Lock(nc);
     nc->initc = true;
@@ -2500,10 +2500,10 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     bool                    postDisconnectedCb = false;
     natsSubscription        *sub = NULL;
 
-    natsMutex_Lock(nc->opts->mu);
+    natsOptions_lock(nc->opts);
     postClosedCb = (nc->opts->closedCb != NULL);
     postDisconnectedCb = (nc->opts->disconnectedCb != NULL);
-    natsMutex_Unlock(nc->opts->mu);
+    natsOptions_unlock(nc->opts);
 
     natsConn_lockAndRetain(nc);
 

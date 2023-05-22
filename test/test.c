@@ -16545,10 +16545,10 @@ test_ReconnectJitter(void)
         FAIL("Unable to setup test");
 
     test("Default jitter values: ");
-    natsMutex_Lock(opts->mu);
+    natsOptions_lock(opts);
     s = (((opts->reconnectJitter == NATS_OPTS_DEFAULT_RECONNECT_JITTER)
             && (opts->reconnectJitterTLS == NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS)) ? NATS_OK : NATS_ERR);
-    natsMutex_Unlock(opts->mu);
+    natsOptions_unlock(opts);
     testCond(s == NATS_OK);
 
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");

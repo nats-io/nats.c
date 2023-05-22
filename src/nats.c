@@ -808,7 +808,7 @@ _asyncCbsThread(void *arg)
 
         // Callback handlers can be updated on a live connection, so we need to
         // lock.
-        natsMutex_Lock(nc->opts->mu);
+        natsOptions_lock(nc->opts);
         switch (cb->type)
         {
         case ASYNC_CLOSED:
@@ -841,7 +841,7 @@ _asyncCbsThread(void *arg)
             call = NULL;
             break;
         }
-        natsMutex_Unlock(nc->opts->mu);
+        natsOptions_unlock(nc->opts);
 
         // Invoke the callbacks
         for (; call != NULL; call = call->next)

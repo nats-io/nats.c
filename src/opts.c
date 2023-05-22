@@ -1019,11 +1019,11 @@ void natsOptions_removeConnectionClosedCallback(natsOptions *opts, natsConnectio
 {
     nats_CallbackList *removed = NULL;
 
-    natsMutex_Lock(opts->mu);
+    natsOptions_lock(opts);
 
     natsOptions_unlinkCallback(&removed, &opts->closedCb, (void(*)(void))f, closure);
 
-    UNLOCK_OPTS(opts);
+    natsOptions_unlock(opts);
 
     NATS_FREE(removed);
 }
@@ -1032,11 +1032,11 @@ void natsOptions_removeErrorCallback(natsOptions *opts, natsErrHandler f, void *
 {
     nats_CallbackList *removed = NULL;
 
-    natsMutex_Lock(opts->mu);
+    natsOptions_lock(opts);
 
     natsOptions_unlinkCallback(&removed, &opts->asyncErrCb, (void(*)(void))f, closure);
 
-    UNLOCK_OPTS(opts);
+    natsOptions_unlock(opts);
 
     NATS_FREE(removed);
 }
@@ -1752,7 +1752,7 @@ natsOptions_clone(natsOptions *opts)
         return NULL;
     }
 
-    natsMutex_Lock(opts->mu);
+    natsOptions_lock(opts);
 
     muSize = sizeof(cloned->mu);
 
@@ -1834,7 +1834,7 @@ natsOptions_clone(natsOptions *opts)
         NATS_UPDATE_ERR_STACK(s);
     }
 
-    natsMutex_Unlock(opts->mu);
+    natsOptions_unlock(opts);
 
     return cloned;
 }

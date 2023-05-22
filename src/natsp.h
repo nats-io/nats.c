@@ -196,6 +196,24 @@ typedef struct __userCreds
 
 } userCreds;
 
+typedef enum
+{
+    CALLBACK_TYPE_CONN = 0,
+    CALLBACK_TYPE_ERROR,
+} nats_CallbackType;
+
+typedef struct __nats_CallbackList
+{
+    nats_CallbackType           type;
+    union
+    {
+        natsConnectionHandler   conn;
+        natsErrHandler          err;
+    } f;
+    void                        *closure;
+    struct __nats_CallbackList  *next;
+} nats_CallbackList;
+
 struct __natsOptions
 {
     // This field must be the first (see natsOptions_clone, same if you add
@@ -225,8 +243,8 @@ struct __natsOptions
     natsTokenHandler        tokenCb;
     void                    *tokenCbClosure;
 
-    natsConnectionHandler   closedCb;
-    void                    *closedCbClosure;
+    nats_CallbackList       *closedCb; 
+    nats_CallbackList       *asyncErrCb;
 
     natsConnectionHandler   disconnectedCb;
     void                    *disconnectedCbClosure;
@@ -243,9 +261,6 @@ struct __natsOptions
 
     natsConnectionHandler   lameDuckCb;
     void                    *lameDuckClosure;
-
-    natsErrHandler          asyncErrCb;
-    void                    *asyncErrCbClosure;
 
     int64_t                 pingInterval;
     int                     maxPingsOut;

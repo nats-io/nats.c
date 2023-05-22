@@ -2555,6 +2555,55 @@ _dummySigCb(char **customErrTxt, unsigned char **psig, int *sigLen, const char* 
 }
 
 static void
+test_natsOptionsUnlinkCallback(void)
+{
+    nats_CallbackList cb1 = {
+        .f.conn = _dummyConnHandler,
+        .closure = (void*)1,
+    };
+    nats_CallbackList cb2 = {
+        .f.err = _dummyErrHandler,
+        .closure = (void*)2,
+    };
+    nats_CallbackList cb3 = {
+        .f.conn = _dummyConnHandler,
+        .closure = (void*)3,
+    };
+
+    test("the first only one: ");
+    nats_CallbackList test1[3] = {cb1};
+    nats_CallbackList *head = &test1[0];
+    nats_CallbackList *to_remove = NULL;
+    natsOptions_unlinkCallback(&to_remove, &head, (void(*)(void))cb1.f.conn, cb1.closure);
+    testCond((to_remove == &test1[0]) 
+        && (head == NULL));
+
+    test("Unlink the first out of 3: ");
+    nats_CallbackList test2[3] = {cb1, cb2, cb3};
+    head = &test2[0];
+    to_remove = NULL;
+    test2[0].next = &test2[1];
+    test2[1].next = &test2[2];
+    natsOptions_unlinkCallback(&to_remove, &head, (void(*)(void))cb1.f.err, cb1.closure);
+    testCond((to_remove == &test2[0]) 
+        && (head == &test2[1]) 
+        && (test2[1].next == &test2[2]) 
+        && (test2[2].next == NULL));
+
+    test("Unlink the middle out of 3: ");
+    nats_CallbackList testMiddle[3] = {cb1, cb2, cb3};
+    head = &testMiddle[0];
+    to_remove = NULL;
+    testMiddle[0].next = &testMiddle[1];
+    testMiddle[1].next = &testMiddle[2];
+    natsOptions_unlinkCallback(&to_remove, &head, (void(*)(void))cb2.f.err, cb2.closure);
+    testCond((to_remove == &testMiddle[1]) 
+        && (head == &testMiddle[0]) 
+        && (testMiddle[1].next == &testMiddle[2]) 
+        && (testMiddle[2].next == NULL));
+}
+
+static void
 test_natsOptions(void)
 {
     natsStatus  s;
@@ -2717,8 +2766,7 @@ test_natsOptions(void)
     s = natsOptions_SetRetryOnFailedConnect(opts, false, _dummyConnHandler, (void*)1);
     testCond((s == NATS_OK)
             && (opts->retryOnFailedConnect == false)
-            && (opts->connectedCb == NULL)
-            && (opts->connectedCbClosure == NULL));
+            && (opts->connectedCb == NULL));
 
     test("Set Secure: ");
     s = natsOptions_SetSecure(opts, true);
@@ -2811,15 +2859,23 @@ test_natsOptions(void)
 
     test("Set Error Handler: ");
     s = natsOptions_SetErrorHandler(opts, _dummyErrHandler, NULL);
-    testCond((s == NATS_OK) && (opts->asyncErrCb == _dummyErrHandler));
+    testCond((s == NATS_OK) && (opts->asyncErrCb != NULL)&& (opts->asyncErrCb->f.err == _dummyErrHandler));
+
+    test("Set Error Handler 2nd time: ");
+    s = natsOptions_SetErrorHandler(opts, _dummyErrHandler, NULL);
+    testCond((s == NATS_OK) && (opts->asyncErrCb != NULL)&& (opts->asyncErrCb->f.err == _dummyErrHandler));
 
     test("Remove Error Handler: ");
     s = natsOptions_SetErrorHandler(opts, NULL, NULL);
-    testCond((s == NATS_OK) && (opts->asyncErrCb == natsConn_defaultErrHandler));
+    testCond((s == NATS_OK) && (opts->asyncErrCb != NULL)&& (opts->asyncErrCb->f.err == natsConn_defaultErrHandler));
 
     test("Set ClosedCB: ");
     s = natsOptions_SetClosedCB(opts, _dummyConnHandler, NULL);
-    testCond((s == NATS_OK) && (opts->closedCb == _dummyConnHandler));
+    testCond((s == NATS_OK) && (opts->closedCb != NULL)&& (opts->closedCb->f.conn == _dummyConnHandler));
+
+    test("Set ClosedCB 2nd time: ");
+    s = natsOptions_SetClosedCB(opts, _dummyConnHandler, NULL);
+    testCond((s == NATS_OK) && (opts->closedCb != NULL)&& (opts->closedCb->f.conn == _dummyConnHandler));
 
     test("Remove ClosedCB: ");
     s = natsOptions_SetClosedCB(opts, NULL, NULL);
@@ -3055,7 +3111,8 @@ test_natsOptions(void)
     if (cloned == NULL)
         s = NATS_NO_MEMORY;
     else if ((cloned->pingInterval != 3000)
-             || (cloned->asyncErrCb != _dummyErrHandler)
+             || (cloned->asyncErrCb == NULL)
+             || (cloned->asyncErrCb->f.err != _dummyErrHandler)
              || (cloned->name == NULL)
              || (strcmp(cloned->name, "name") != 0)
              || (cloned->url == NULL)
@@ -3099,9 +3156,11 @@ test_natsOptions(void)
     s = natsOptions_Create(&opts);
     if (s == NATS_OK)
         cloned = natsOptions_clone(opts);
-    testCond((s == NATS_OK) && (cloned != NULL)
-                && (cloned->asyncErrCb == natsConn_defaultErrHandler)
-                && (cloned->asyncErrCbClosure == NULL));
+    testCond((s == NATS_OK) 
+        && (cloned != NULL)
+        && (cloned->asyncErrCb != NULL)
+        && (cloned->asyncErrCb->f.err == natsConn_defaultErrHandler)
+        && (cloned->asyncErrCb->closure == NULL));
     natsOptions_Destroy(cloned);
     natsOptions_Destroy(opts);
 }
@@ -8534,7 +8593,7 @@ test_ConnClosedCB(void)
 }
 
 static void
-test_SetConnClosedCB(void)
+test_AddConnClosedCB(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -8549,20 +8608,22 @@ test_SetConnClosedCB(void)
     if ((opts == NULL)
         || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
     {
-        FAIL("Unable to setup test for SetConnClosedCB!");
+        FAIL("Unable to setup test for AddConnClosedCB!");
     }
 
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("connect to server: ");
     s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
 
-    // Set the connection closed handler in-flight
-    IFOK(s, natsConn_setClosedCallback(nc, _closedCb, (void*) &arg));
-    if (s == NATS_OK)
-        natsConnection_Close(nc);
-
+    test("set the connection closed handler in-flight");
+    s = natsOptions_addConnectionClosedCallback(nc->opts, _closedCb, (void*)&arg);
+    testCond(s == NATS_OK);
+   
     test("Test connection closed CB invoked: ");
+    natsConnection_Close(nc);
 
     natsMutex_Lock(arg.m);
     s = NATS_OK;
@@ -8576,7 +8637,6 @@ test_SetConnClosedCB(void)
     natsConnection_Destroy(nc);
 
     _destroyDefaultThreadArgs(&arg);
-
     _stopServer(serverPid);
 }
 
@@ -14422,7 +14482,7 @@ test_AsyncErrHandler(void)
 }
 
 static void
-test_SetAsyncErrHandler(void)
+test_AddAsyncErrHandler(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14448,22 +14508,28 @@ test_SetAsyncErrHandler(void)
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("connect: ");
     s = natsConnection_Connect(&nc, opts);
-    IFOK(s, natsConnection_Subscribe(&sub, nc, "async_test", _recvTestString, (void*) &arg));
+    testCond(s == NATS_OK);
+
+    test("subscribe: ");
+    s = natsConnection_Subscribe(&sub, nc, "async_test", _recvTestString, (void*) &arg);
+    testCond(s == NATS_OK);
 
     natsMutex_Lock(arg.m);
     arg.sub = sub;
     natsMutex_Unlock(arg.m);
 
-    // Start sending messages
+    test("send messages: ");
     for (int i=0;
         (s == NATS_OK) && (i < (opts->maxPendingMsgs)); i++)
     {
         s = natsConnection_PublishString(nc, "async_test", "hello");
     }
+    testCond(s == NATS_OK);
 
-    // Set the error handler in-flight
-    IFOK(s, natsConn_setErrorCallback(nc, _asyncErrCb, (void*) &arg));
+    test("add the error handler in-flight: ")
+    s = natsOptions_addErrorCallback(nc->opts, _asyncErrCb, (void*)&arg);
 
     for (int i=0;
         (s == NATS_OK) && (i < 100); i++)
@@ -14471,6 +14537,7 @@ test_SetAsyncErrHandler(void)
         s = natsConnection_PublishString(nc, "async_test", "hello");
     }
     IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
 
     // Wait for async err callback
     natsMutex_Lock(arg.m);
@@ -16478,10 +16545,10 @@ test_ReconnectJitter(void)
         FAIL("Unable to setup test");
 
     test("Default jitter values: ");
-    natsMutex_Lock(opts->mu);
+    natsOptions_lock(opts);
     s = (((opts->reconnectJitter == NATS_OPTS_DEFAULT_RECONNECT_JITTER)
             && (opts->reconnectJitterTLS == NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS)) ? NATS_OK : NATS_ERR);
-    natsMutex_Unlock(opts->mu);
+    natsOptions_unlock(opts);
     testCond(s == NATS_OK);
 
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");
@@ -32777,10 +32844,7 @@ test_MicroBasics(void)
     natsInbox_Destroy(inbox);
     NATS_FREE(subject);
 
-    // Destroy the services in the reverse order to properly unwind the
-    // callbacks. At some point this needs to be fixed so that the services
-    // exclude themselves from a chain, rather than setting previous, etc.
-    for (i = NUM_BASIC_MICRO_SERVICES - 1; i >= 0; i--)
+    for (i = 0; i < NUM_BASIC_MICRO_SERVICES; i++)
     {
         microService_Destroy(svcs[i]);
     }
@@ -32853,10 +32917,7 @@ test_MicroStartStop(void)
     }
     testCond(NATS_OK == s);
    
-    // Destroy the services in the reverse order to properly unwind the
-    // callbacks. At some point this needs to be fixed so that the services
-    // exclude themselves from a chain, rather than setting previous, etc.
-    for (i = NUM_BASIC_MICRO_SERVICES - 1; i >= 0; i--)
+    for (i = 0; i < NUM_BASIC_MICRO_SERVICES; i++)
     {
         microService_Destroy(svcs[i]);
     }
@@ -35295,6 +35356,7 @@ static testInfo allTests[] =
     {"natsHashing",                     test_natsHashing},
     {"natsStrHash",                     test_natsStrHash},
     {"natsInbox",                       test_natsInbox},
+    {"natsOptionsUnlinkCallback",       test_natsOptionsUnlinkCallback},
     {"natsOptions",                     test_natsOptions},
     {"natsSock_ConnectTcp",             test_natsSock_ConnectTcp},
     {"natsSock_ShuffleIPs",             test_natsSock_ShuffleIPs},
@@ -35349,7 +35411,7 @@ static testInfo allTests[] =
     {"ConnectionToWithNullURLs",        test_ConnectionToWithNullURLs},
     {"ConnectionStatus",                test_ConnectionStatus},
     {"ConnClosedCB",                    test_ConnClosedCB},
-    {"SetConnClosedCB",                 test_SetConnClosedCB},
+    {"AddConnClosedCB",                 test_AddConnClosedCB},
     {"CloseDisconnectedCB",             test_CloseDisconnectedCB},
     {"ServerStopDisconnectedCB",        test_ServerStopDisconnectedCB},
     {"ClosedConnections",               test_ClosedConnections},
@@ -35432,7 +35494,7 @@ static testInfo allTests[] =
     {"SyncSubscriptionPending",         test_SyncSubscriptionPending},
     {"SyncSubscriptionPendingDrain",    test_SyncSubscriptionPendingDrain},
     {"AsyncErrHandler",                 test_AsyncErrHandler},
-    {"SetAsyncErrHandler",              test_SetAsyncErrHandler},
+    {"AddAsyncErrHandler",              test_AddAsyncErrHandler},
     {"AsyncSubscriberStarvation",       test_AsyncSubscriberStarvation},
     {"AsyncSubscriberOnClose",          test_AsyncSubscriberOnClose},
     {"NextMsgCallOnAsyncSub",           test_NextMsgCallOnAsyncSub},

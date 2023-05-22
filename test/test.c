@@ -2861,11 +2861,19 @@ test_natsOptions(void)
     s = natsOptions_SetErrorHandler(opts, _dummyErrHandler, NULL);
     testCond((s == NATS_OK) && (opts->asyncErrCb != NULL)&& (opts->asyncErrCb->f.err == _dummyErrHandler));
 
+    test("Set Error Handler 2nd time: ");
+    s = natsOptions_SetErrorHandler(opts, _dummyErrHandler, NULL);
+    testCond((s == NATS_OK) && (opts->asyncErrCb != NULL)&& (opts->asyncErrCb->f.err == _dummyErrHandler));
+
     test("Remove Error Handler: ");
     s = natsOptions_SetErrorHandler(opts, NULL, NULL);
     testCond((s == NATS_OK) && (opts->asyncErrCb != NULL)&& (opts->asyncErrCb->f.err == natsConn_defaultErrHandler));
 
     test("Set ClosedCB: ");
+    s = natsOptions_SetClosedCB(opts, _dummyConnHandler, NULL);
+    testCond((s == NATS_OK) && (opts->closedCb != NULL)&& (opts->closedCb->f.conn == _dummyConnHandler));
+
+    test("Set ClosedCB 2nd time: ");
     s = natsOptions_SetClosedCB(opts, _dummyConnHandler, NULL);
     testCond((s == NATS_OK) && (opts->closedCb != NULL)&& (opts->closedCb->f.conn == _dummyConnHandler));
 

@@ -1045,6 +1045,8 @@ natsStatus
 natsOptions_SetErrorHandler(natsOptions *opts, natsErrHandler errHandler,
                             void *closure)
 {
+    nats_CallbackList *replaced = NULL;
+
     if (errHandler == NULL)
     {
         errHandler = natsConn_defaultErrHandler;
@@ -1058,6 +1060,8 @@ natsOptions_SetErrorHandler(natsOptions *opts, natsErrHandler errHandler,
         UNLOCK_OPTS(opts);
         return natsOptions_addErrorCallback(opts, errHandler, closure);
     }
+    
+    replaced = opts->asyncErrCb;
     if (opts->asyncErrCb->next != NULL)
     {
         // can't allow overriding a list of callbacks with a single one.
@@ -1071,6 +1075,7 @@ natsOptions_SetErrorHandler(natsOptions *opts, natsErrHandler errHandler,
 
     UNLOCK_OPTS(opts);
 
+    NATS_FREE(replaced);
     return NATS_OK;
 }
 
@@ -1101,6 +1106,7 @@ natsOptions_SetClosedCB(natsOptions *opts, natsConnectionHandler closedCb,
             UNLOCK_OPTS(opts);
             return natsOptions_addConnectionClosedCallback(opts, closedCb, closure);
         }
+        to_free = opts->closedCb;
         opts->closedCb->type = CALLBACK_TYPE_CONN;
         opts->closedCb->f.conn = closedCb;
         opts->closedCb->closure = closure;

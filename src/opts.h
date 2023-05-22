@@ -29,9 +29,9 @@ static inline void natsOptions_unlock(natsOptions *opts)
 #define LOCK_AND_CHECK_OPTIONS(o, c) \
     if (((o) == NULL) || ((c))) \
         return nats_setDefaultError(NATS_INVALID_ARG); \
-    natsOptions_lock(o);
+    natsMutex_Lock((o)->mu);
 
-#define UNLOCK_OPTS(o) natsOptions_unlock(o);
+#define UNLOCK_OPTS(o) natsMutex_Unlock((o)->mu)
 
 
 #define NATS_OPTS_DEFAULT_MAX_RECONNECT         (60)

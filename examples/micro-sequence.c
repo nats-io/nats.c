@@ -156,7 +156,6 @@ int main(int argc, char **argv)
         .Subject = "sequence",
         .Name = "sequence-service",
         .Handler = handle_sequence,
-        .Schema = NULL,
     };
     microServiceConfig cfg = {
         .Description = "Sequence adder - NATS microservice example in C",

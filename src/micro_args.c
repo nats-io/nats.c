@@ -44,7 +44,7 @@ micro_ParseArgs(microArgs **ptr, const char *data, int data_len)
 {
     microError *err = NULL;
     microArgs *args = NULL;
-    int n;
+    int n = 0;
 
     if ((ptr == NULL) || (data == NULL) || (data_len < 0))
         return microError_Wrapf(micro_ErrorInvalidArg, "failed to parse args");

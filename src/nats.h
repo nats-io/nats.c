@@ -7220,11 +7220,6 @@ typedef struct micro_group_s microGroup;
  */
 typedef struct micro_request_s microRequest;
 
-/**
- * The Microservice endpoint schema object.
- */
-typedef struct micro_schema_s microSchema;
-
 /** 
  * @brief the main object for a configured microservice.
  *
@@ -7347,11 +7342,6 @@ struct micro_endpoint_config_s
     const char *Subject;
 
     /**
-     * @brief The endpoint schema.
-     */
-    microSchema *Schema;
-
-    /**
      * @brief The request handler for the endpoint.
      */
     microRequestHandler Handler;
@@ -7401,15 +7391,6 @@ struct micro_endpoint_stats_s
      * @brief a copy of the last error message.
      */
     char LastErrorString[2048];
-};
-
-/**
- * @brief The Microservice endpoint schema object.
- */
-struct micro_schema_s
-{
-    const char *Request;
-    const char *Response;
 };
 
 /**
@@ -7592,16 +7573,6 @@ struct micro_service_stats_s
  * @brief For `$SRV.PING` subjects.
  */
 #define MICRO_PING_VERB "PING"
-
-/**
- * @brief The `type` set in the `$SRV.SCHEMA` response.
- */
-#define MICRO_STATS_SCHEMA_TYPE "io.nats.micro.v1.schema_response"
-
-/**
- * @brief For `$SRV.SCHEMA` subjects.
- */
-#define MICRO_SCHEMA_VERB "SCHEMA"
 
 /**
  * @brief The `type` set in the `STATS` response.

@@ -16,25 +16,21 @@
 #include "microp.h"
 
 static microError _errorOutOfMemory = {
+    .is_internal = true,
     .status = NATS_NO_MEMORY,
     .message = (char *)"out of memory",
 };
 
 static microError _errorInvalidArg = {
+    .is_internal = true,
     .status = NATS_INVALID_ARG,
     .message = (char *)"invalid function argument",
 };
 
 static microError _errorInvalidFormat = {
+    .is_internal = true,
     .status = NATS_INVALID_ARG,
     .message = (char *)"invalid format string",
-};
-
-static microError *knownErrors[] = {
-    &_errorOutOfMemory,
-    &_errorInvalidArg,
-    &_errorInvalidFormat,
-    NULL,
 };
 
 microError *micro_ErrorOutOfMemory = &_errorOutOfMemory;
@@ -219,16 +215,8 @@ microError_Status(microError *err)
 
 void microError_Destroy(microError *err)
 {
-    int i;
-
-    if (err == NULL)
+    if ((err == NULL) || err->is_internal)
         return;
-
-    for (i = 0; knownErrors[i] != NULL; i++)
-    {
-        if (err == knownErrors[i])
-            return;
-    }
 
     microError_Destroy(err->cause);
     NATS_FREE(err);

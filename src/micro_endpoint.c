@@ -305,44 +305,6 @@ bool micro_is_valid_subject(const char *subject)
     return true;
 }
 
-static inline void
-destroy_schema(microSchema *schema)
-{
-    if (schema == NULL)
-        return;
-
-    NATS_FREE((char *)schema->Request);
-    NATS_FREE((char *)schema->Response);
-    NATS_FREE(schema);
-}
-
-static microError *
-clone_schema(microSchema **to, const microSchema *from)
-{
-    microError *err = NULL;
-    if (from == NULL)
-    {
-        *to = NULL;
-        return NULL;
-    }
-
-    *to = NATS_CALLOC(1, sizeof(microSchema));
-    if (*to == NULL)
-        return micro_ErrorOutOfMemory;
-
-    MICRO_CALL(err, micro_strdup((char **)&((*to)->Request), from->Request));
-    MICRO_CALL(err, micro_strdup((char **)&((*to)->Response), from->Response));
-
-    if (err != NULL)
-    {
-        destroy_schema(*to);
-        *to = NULL;
-        return err;
-    }
-
-    return NULL;
-}
-
 static inline microError *
 new_endpoint_config(microEndpointConfig **ptr)
 {
@@ -373,7 +335,6 @@ micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
 
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Name, cfg->Name));
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Subject, cfg->Subject));
-    MICRO_CALL(err, clone_schema(&new_cfg->Schema, cfg->Schema));
 
     if (err != NULL)
     {
@@ -395,7 +356,6 @@ void micro_free_cloned_endpoint_config(microEndpointConfig *cfg)
     NATS_FREE((char *)cfg->Name);
     NATS_FREE((char *)cfg->Subject);
 
-    destroy_schema(cfg->Schema);
     NATS_FREE(cfg);
 }
 

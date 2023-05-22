@@ -31,12 +31,9 @@
 
 #define MICRO_DEFAULT_ENDPOINT_NAME "default"
 
-// 4 verbs: INFO, STATS, PING, SCHEMA;
-// 3 subjects for each verb.
-#define MICRO_MONITORING_SUBS_CAP (4 * 3)
-
 struct micro_error_s
 {
+    bool is_internal;
     struct micro_error_s *cause;
     natsStatus status;
     int code;

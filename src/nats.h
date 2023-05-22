@@ -7271,7 +7271,7 @@ typedef struct micro_service_stats_s microServiceStats;
  *  @{
  */
 
-/** 
+/**
  * @brief Callback type for request processing.
  *
  * This is the callback that one provides when creating a microservice endpoint.
@@ -7285,7 +7285,7 @@ typedef struct micro_service_stats_s microServiceStats;
  */
 typedef microError *(*microRequestHandler)(microRequest *req);
 
-/** 
+/**
  * @brief Callback type for async error notifications.
  *
  * If specified in microServiceConfig, this callback is invoked for internal
@@ -7308,6 +7308,19 @@ typedef microError *(*microRequestHandler)(microRequest *req);
  * @see microServiceConfig, micro_service_config_s.
  */
 typedef void (*microErrorHandler)(microService *m, microEndpoint *ep, natsStatus s);
+
+/**
+ * @brief Callback type for `Done` (service stopped) notifications.
+ *
+ * If specified in microServiceConfig, this callback is invoked right after the
+ * service stops. In the C client, this callback is invoked directly from the
+ * microService_Stop function, in whatever thread is executing it.
+ *
+ * @param m The microservice object.
+ *
+ * @see microServiceConfig, micro_service_config_s.
+ */
+typedef void (*microDoneHandler)(microService *m);
 
 /** @} */ // end of microCallbacks
 
@@ -7444,6 +7457,16 @@ struct micro_service_config_s
      * microservice.
      */
     microErrorHandler ErrHandler;
+
+    /**
+     * @brief A callback handler for handling the final cleanup `Done` event,
+     * right before the service is destroyed.
+     *
+     * It will be called directly from #microService_Stop method, so it may be
+     * executed in any of the user threads or in the async callback thread if
+     * the service stops itself on connection closed or an error event.
+     */
+    microDoneHandler DoneHandler;
 
     /**
      * @brief A user-provided pointer to state data.
@@ -7710,6 +7733,18 @@ microService_GetConnection(microService *m);
 NATS_EXTERN microError *
 microService_GetInfo(microServiceInfo **new_info, microService *m);
 
+/** @brief Returns the pointer to state data (closure). It is originally
+ * provided in #microServiceConfig.State.
+ *
+ * @param m the #microService.
+ *
+ * @return the state pointer.
+ *
+ * @see #microServiceConfig
+ */
+NATS_EXTERN void *
+microService_GetState(microService *m);
+
 /** @brief Returns run-time statistics for a microservice.
  *
  * @note the #microServiceStats struct returned by this call should be freed
@@ -7753,9 +7788,13 @@ microService_Run(microService *m);
 /** @brief Stops a running microservice.
  *
  * Drains and closes the all subscriptions (endpoints and monitoring), resets
- * the stats, and posts the async `Done` callback for the service, so it can do
- * its own clean up if needed.
- * 
+ * the stats, and calls the `Done` callback for the service, so it can do its
+ * own clean up if needed.
+ *
+ * It is possible that this call encounters an error while stopping the service,
+ * in which case it aborts and returns the error. The service then may be in a
+ * partially stopped state, and the `Done` callback will not have been called.
+ *
  * @param m the #microService.
  *
  * @return a #microError if an error occurred.

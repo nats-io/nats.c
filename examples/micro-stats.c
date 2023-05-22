@@ -51,7 +51,7 @@ handle_stats(microRequest *req)
     char buf[2048];
     service_state_t *service_state = microRequest_GetServiceState(req);
     int64_t total;
-    int  custom, len;
+    int custom, len;
 
     err = microService_GetStats(&stats, microRequest_GetService(req));
     if (err != NULL)
@@ -60,7 +60,7 @@ handle_stats(microRequest *req)
     total = stats->Endpoints[0].NumRequests;
     custom = service_state->odd_count;
     len = snprintf(buf, sizeof(buf),
-                   "{\"total\":" PRId64 ",\"odd\":%d}", total, custom);
+                   "{\"total\":%lld,\"odd\":%d}", total, custom);
     return microRequest_Respond(req, buf, len);
 }
 

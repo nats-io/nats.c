@@ -204,6 +204,9 @@ microService_Stop(microService *m)
         m->num_eps = 0;
         m->first_ep = NULL;
         micro_unlock_service(m);
+
+        if (m->cfg->DoneHandler != NULL)
+            m->cfg->DoneHandler(m);
     }
 
     return err;
@@ -248,6 +251,15 @@ microService_Run(microService *m)
     }
 
     return NULL;
+}
+
+void *
+microService_GetState(microService *m)
+{
+    if (m == NULL)
+        return NULL;
+
+    return m->cfg->State;
 }
 
 static microError *

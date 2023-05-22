@@ -32868,6 +32868,17 @@ test_MicroStartStop(void)
     _stopServer(serverPid);
 }
 
+void micro_service_done_handler(microService *s)
+{
+    struct threadArg *arg = (struct threadArg*) microService_GetState(s);
+
+    natsMutex_Lock(arg->m);
+    arg->done = true;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+
+}
+
 static void
 test_MicroServiceStopsOnClosedConn(void)
 {
@@ -32880,6 +32891,8 @@ test_MicroServiceStopsOnClosedConn(void)
     microServiceConfig cfg = {
         .Name = "test",
         .Version = "1.0.0",
+        .DoneHandler = micro_service_done_handler,
+        .State = &arg,
     };
     natsMsg *reply = NULL;
 
@@ -32918,7 +32931,11 @@ test_MicroServiceStopsOnClosedConn(void)
     testCond(natsConnection_IsClosed(nc));
 
     test("Wait for the service to stop: ");
-    testCond((nats_Sleep(100), true));
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 10000);
+    natsMutex_Unlock(arg.m);
+    testCond(arg.done);
 
     test("Test microservice is stopped: ");
     testCond(microService_IsStopped(m));
@@ -32944,6 +32961,8 @@ test_MicroServiceStopsWhenServerStops(void)
     microServiceConfig cfg = {
         .Name = "test",
         .Version = "1.0.0",
+        .DoneHandler = micro_service_done_handler,
+        .State = &arg,
     };
 
     s = _createDefaultThreadArgsForCbTests(&arg);
@@ -32973,7 +32992,11 @@ test_MicroServiceStopsWhenServerStops(void)
     testCond((_stopServer(serverPid), true));
 
     test("Wait for the service to stop: ");
-    testCond((nats_Sleep(100), true));
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 10000);
+    natsMutex_Unlock(arg.m);
+    testCond(arg.done);
 
     test("Test microservice is not running: ");
     testCond(microService_IsStopped(m))

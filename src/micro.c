@@ -41,11 +41,6 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
 
     MICRO_CALL(err, micro_clone_service_config(&m->cfg, cfg));
 
-    if (err == NULL)
-    {
-        m->is_running = true;
-    }
-
     // Wrap the connection callbacks before we subscribe to anything.
     MICRO_CALL(err, wrap_connection_event_callbacks(m))
     MICRO_CALL(err, micro_init_monitoring(m));
@@ -80,6 +75,12 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
         return microError_Wrapf(err, "failed to create endpoint %s", cfg->Name);
 
     micro_lock_service(m);
+
+    if (m->stopping || m->stopped)
+    {
+        micro_unlock_service(m);
+        return micro_Errorf("can't add an endpoint %s to service %s: the service is stopped", cfg->Name, m->cfg->Name);
+    }
 
     if (m->first_ep != NULL)
     {
@@ -158,82 +159,121 @@ microGroup_AddEndpoint(microGroup *g, microEndpointConfig *cfg)
     return micro_add_endpoint(NULL, g->m, g->prefix, cfg, false);
 }
 
+static void micro_finalize_stopping_service(microService *m)
+{
+    microDoneHandler invoke_done = NULL;
+    bool on_connection_closed_called = false;
+
+    if (m == NULL)
+        return;
+
+    micro_lock_service(m);
+    if (m->stopped || (m->num_eps_to_stop > 0))
+    {
+        micro_unlock_service(m);
+        return;
+    }
+
+    on_connection_closed_called = m->connection_closed_called;
+    m->stopped = true;
+    m->stopping = false;
+    if (m->cfg->DoneHandler != NULL)
+        invoke_done = m->cfg->DoneHandler;
+    micro_unlock_service(m);
+
+    unwrap_connection_event_callbacks(m);
+
+    // If the connection closed callback has not been called yet, it will not be
+    // since we just removed it, so compensate for it by releaseing the service.
+    if (!on_connection_closed_called)
+    {
+        micro_release_service(m);
+    }
+
+    if (invoke_done != NULL)
+        invoke_done(m);
+}
+
 microError *
 microService_Stop(microService *m)
 {
     microError *err = NULL;
     microEndpoint *ep = NULL;
-
-    bool is_running = false;
-    microEndpoint *first_ep = NULL;
+    bool drain_endpoints = false;
 
     if (m == NULL)
         return micro_ErrorInvalidArg;
 
     micro_lock_service(m);
-    is_running = m->is_running;
-    first_ep = m->first_ep;
+    if (m->stopped)
+    {
+        micro_unlock_service(m);
+        return NULL;
+    }
+    drain_endpoints = !m->stopping;
+    m->stopping = true;
+    ep = m->first_ep;
     micro_unlock_service(m);
 
-    if (!is_running)
-        return NULL;
-
-    unwrap_connection_event_callbacks(m);
-
-    for (ep = first_ep; (err == NULL) && (ep != NULL); ep = first_ep)
+    // Endpoints are never removed from the list (except when the service is
+    // destroyed, but that is after Stop's already been called), so we can iterate
+    // safely outside the lock.
+    if (drain_endpoints)
     {
-        micro_lock_service(m);
-        first_ep = ep->next;
-        m->first_ep = first_ep;
-        m->num_eps--;
-        micro_unlock_service(m);
-
-        // micro_destroy_endpoint may release the service, locking it in the
-        // process, so we need to avoid a race.
-        if (err = micro_destroy_endpoint(ep), err != NULL)
+        for (; ep != NULL; ep = ep->next)
         {
-            err = microError_Wrapf(err, "failed to stop endpoint %s", ep->name);
+            if (err = micro_stop_endpoint(ep), err != NULL)
+                return microError_Wrapf(err, "failed to stop service %s", ep->config->Name);
         }
     }
 
-    if (err == NULL)
-    {
-        micro_lock_service(m);
-        m->is_running = false;
-        m->started = 0;
-        m->num_eps = 0;
-        m->first_ep = NULL;
-        micro_unlock_service(m);
-
-        if (m->cfg->DoneHandler != NULL)
-            m->cfg->DoneHandler(m);
-    }
-
-    return err;
+    micro_finalize_stopping_service(m);
+    return NULL;
 }
 
 bool microService_IsStopped(microService *m)
 {
-    bool is_stopped;
+    bool stopped;
 
     if ((m == NULL) || (m->service_mu == NULL))
         return true;
 
     micro_lock_service(m);
-    is_stopped = !m->is_running;
+    stopped = m->stopped;
     micro_unlock_service(m);
 
-    return is_stopped;
+    return stopped;
 }
 
 microError *
 microService_Destroy(microService *m)
 {
     microError *err = NULL;
+    microEndpoint *ep = NULL;
 
     err = microService_Stop(m);
     if (err != NULL)
         return err;
+
+    // Unlink all endpoints from the service, they will self-destruct by their
+    // onComplete handler.
+    while (true)
+    {
+        micro_lock_service(m);
+
+        ep = m->first_ep;
+        if (ep == NULL)
+        {
+            micro_unlock_service(m);
+            break;
+        }
+        m->first_ep = ep->next;
+        micro_unlock_service(m);
+
+        err = micro_destroy_endpoint(ep);
+        if (err != NULL)
+            return err;
+    }
 
     micro_release_service(m);
     return NULL;
@@ -276,19 +316,16 @@ new_service(microService **ptr, natsConnection *nc)
     return NULL;
 }
 
-microService *
-micro_retain_service(microService *m)
+void micro_retain_service(microService *m)
 {
     if (m == NULL)
-        return NULL;
+        return;
 
     micro_lock_service(m);
 
     m->refs++;
 
     micro_unlock_service(m);
-
-    return m;
 }
 
 void micro_release_service(microService *m)
@@ -306,6 +343,39 @@ void micro_release_service(microService *m)
 
     if (refs == 0)
         free_service(m);
+}
+
+void micro_increment_endpoints_to_stop(microService *m)
+{
+    if (m == NULL)
+        return;
+
+    micro_lock_service(m);
+
+    m->num_eps_to_stop++;
+
+    micro_unlock_service(m);
+}
+
+void micro_decrement_endpoints_to_stop(microService *m)
+{
+    if (m == NULL)
+        return;
+
+    micro_lock_service(m);
+
+    if (m->num_eps_to_stop == 0)
+    {
+        micro_unlock_service(m);
+        fprintf(stderr, "FATAL ERROR: should be unreachable: unbalanced stopping refs on a microservice %s\n", m->cfg->Name);
+        return;
+    }
+
+    m->num_eps_to_stop--;
+
+    micro_unlock_service(m);
+
+    micro_finalize_stopping_service(m);
 }
 
 static void free_service(microService *m)
@@ -390,6 +460,12 @@ on_connection_closed(natsConnection *nc, void *closure)
     if (m == NULL)
         return;
 
+    micro_lock_service(m);
+    m->connection_closed_called = true;
+    micro_unlock_service(m);
+
+    micro_release_service(m);
+
     microService_Stop(m);
 }
 
@@ -412,12 +488,12 @@ on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure)
     {
         if (micro_match_endpoint_subject(ep->subject, subject))
         {
-            break;
+            our_subject = true;
         }
     }
     micro_unlock_service(m);
 
-    if (m->cfg->ErrHandler != NULL)
+    if (m->cfg->ErrHandler != NULL && our_subject)
     {
         (*m->cfg->ErrHandler)(m, ep, s);
     }
@@ -441,7 +517,9 @@ wrap_connection_event_callbacks(microService *m)
     if ((m == NULL) || (m->nc == NULL) || (m->nc->opts == NULL))
         return micro_ErrorInvalidArg;
 
-    IFOK(s, natsOptions_addConnectionClosedCallback(m->nc->opts,on_connection_closed, m));
+    // add an extra reference to the service for the callbacks.
+    micro_retain_service(m);
+    IFOK(s, natsOptions_addConnectionClosedCallback(m->nc->opts, on_connection_closed, m));
     IFOK(s, natsOptions_addErrorCallback(m->nc->opts, on_error, m));
 
     return microError_Wrapf(micro_ErrorFromStatus(s), "failed to wrap connection event callbacks");
@@ -572,7 +650,7 @@ void microServiceInfo_Destroy(microServiceInfo *info)
     // casts to quiet the compiler.
     for (i = 0; i < info->SubjectsLen; i++)
         NATS_FREE((char *)info->Subjects[i]);
-    NATS_FREE((char *)info->Subjects); 
+    NATS_FREE((char *)info->Subjects);
     NATS_FREE((char *)info->Name);
     NATS_FREE((char *)info->Version);
     NATS_FREE((char *)info->Description);

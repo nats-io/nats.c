@@ -107,7 +107,7 @@ micro_ErrorFromStatus(natsStatus s)
     err = NATS_CALLOC(1, sizeof(microError) + message_len + 1);
     if (err == NULL)
         return &_errorOutOfMemory;
-
+    err->message = (char *)(err + 1);
     err->status = s;
     memcpy(err->message, message, message_len + 1);
     return err;

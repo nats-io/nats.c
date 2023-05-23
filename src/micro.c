@@ -569,9 +569,10 @@ void microServiceInfo_Destroy(microServiceInfo *info)
     if (info == NULL)
         return;
 
+    // casts to quiet the compiler.
     for (i = 0; i < info->SubjectsLen; i++)
         NATS_FREE((char *)info->Subjects[i]);
-    NATS_FREE(info->Subjects);
+    NATS_FREE((char *)info->Subjects); 
     NATS_FREE((char *)info->Name);
     NATS_FREE((char *)info->Version);
     NATS_FREE((char *)info->Description);

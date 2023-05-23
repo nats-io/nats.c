@@ -2288,14 +2288,11 @@ nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, in
     // Largest time is 2540400h10m10.000000000s
     char buf[32];
     int w = 32;
-    uint64_t u = d;
     bool neg = d < 0;
+    uint64_t u = (uint64_t) (neg ? -d : d);
     int prec;
     natsStatus s = NATS_OK;
     const char *start = (comma ? ",\"" : "\"");
-
-    if (neg)
-        u = (uint64_t) -u;
 
     if (u < 1000000000)
     {

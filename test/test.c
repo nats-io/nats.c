@@ -33078,7 +33078,6 @@ void micro_async_error_handler(microService *m, microEndpoint *ep, natsStatus s)
     arg->closed = true;
 
     // set the data to verify
-    arg->done = true;
     arg->status = s;
     natsCondition_Broadcast(arg->c);
     natsMutex_Unlock(arg->m);
@@ -33097,6 +33096,7 @@ test_MicroAsyncErrorHandler(void)
     microServiceConfig cfg = {
         .Name = "test",
         .Version = "1.0.0",
+        .DoneHandler = micro_service_done_handler,
         .ErrHandler = micro_async_error_handler,
         .State = &arg,
     };
@@ -33147,8 +33147,14 @@ test_MicroAsyncErrorHandler(void)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) 
-        && (arg.status == NATS_SLOW_CONSUMER)
-        && arg.done);
+        && (arg.status == NATS_SLOW_CONSUMER));
+
+    test("Wait for the service to stop: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && arg.done);
 
     test("Test microservice is not running: \n\n");
     testCond(microService_IsStopped(m))

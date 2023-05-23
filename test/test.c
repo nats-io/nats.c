@@ -32994,7 +32994,7 @@ test_MicroServiceStopsOnClosedConn(void)
     test("Wait for the service to stop: ");
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.done)
-        s = natsCondition_TimedWait(arg.c, arg.m, 10000);
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
     testCond(arg.done);
 
@@ -33055,7 +33055,7 @@ test_MicroServiceStopsWhenServerStops(void)
     test("Wait for the service to stop: ");
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.done)
-        s = natsCondition_TimedWait(arg.c, arg.m, 10000);
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
     testCond(arg.done);
 
@@ -33073,6 +33073,12 @@ void micro_async_error_handler(microService *m, microEndpoint *ep, natsStatus s)
     struct threadArg *arg = (struct threadArg*) microService_GetState(m);
 
     natsMutex_Lock(arg->m);
+    
+    // unblock the blocked sub
+    arg->closed = true;
+
+    // set the data to verify
+    arg->done = true;
     arg->status = s;
     natsCondition_Broadcast(arg->c);
     natsMutex_Unlock(arg->m);
@@ -33091,7 +33097,6 @@ test_MicroAsyncErrorHandler(void)
     microServiceConfig cfg = {
         .Name = "test",
         .Version = "1.0.0",
-        .DoneHandler = micro_service_done_handler,
         .ErrHandler = micro_async_error_handler,
         .State = &arg,
     };
@@ -33099,9 +33104,6 @@ test_MicroAsyncErrorHandler(void)
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
         FAIL("Unable to setup test!");
-
-    arg.status = NATS_OK;
-    arg.control= 7;
 
     s = natsOptions_Create(&opts);
     IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
@@ -33126,8 +33128,8 @@ test_MicroAsyncErrorHandler(void)
     testCond(NATS_OK ==  natsConnection_Subscribe(&sub, nc, "async_test", _recvTestString, (void*) &arg));
 
     natsMutex_Lock(arg.m);
-    arg.sub = sub;
     arg.status = NATS_OK;
+    arg.control= 7;
     natsMutex_Unlock(arg.m);
 
     test("Cause an error by sending too many messages: ");
@@ -33136,18 +33138,19 @@ test_MicroAsyncErrorHandler(void)
     {
         s = natsConnection_PublishString(nc, "async_test", "hello");
     }
-    testCond(NATS_OK == natsConnection_Flush(nc));
+    testCond((NATS_OK == s) 
+        && (NATS_OK == natsConnection_Flush(nc)));
 
-    // Wait for async err callback
+    test("Wait for async err callback: ");
     natsMutex_Lock(arg.m);
-    while ((s != NATS_TIMEOUT) && (arg.status == NATS_OK || !arg.done))
-        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    while ((s != NATS_TIMEOUT) && (arg.status != NATS_SLOW_CONSUMER))
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) 
+        && (arg.status == NATS_SLOW_CONSUMER)
+        && arg.done);
 
-    test("Aync error fired properly, with correct status, and done: ");
-    testCond((s == NATS_OK) && (arg.status == NATS_SLOW_CONSUMER) && arg.done);
-
-    test("Test microservice is not running: ");
+    test("Test microservice is not running: \n\n");
     testCond(microService_IsStopped(m))
 
     microService_Destroy(m);

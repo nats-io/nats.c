@@ -32929,9 +32929,9 @@ test_MicroStartStop(void)
     _stopServer(serverPid);
 }
 
-void micro_service_done_handler(microService *s)
+void micro_service_done_handler(microService *m)
 {
-    struct threadArg *arg = (struct threadArg*) microService_GetState(s);
+    struct threadArg *arg = (struct threadArg*) microService_GetState(m);
 
     natsMutex_Lock(arg->m);
     arg->done = true;
@@ -33068,70 +33068,97 @@ test_MicroServiceStopsWhenServerStops(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-// static void
-// test_AsyncErrHandler(void)
-// {
-//     natsStatus          s;
-//     natsConnection      *nc       = NULL;
-//     natsOptions         *opts     = NULL;
-//     natsSubscription    *sub      = NULL;
-//     natsPid             serverPid = NATS_INVALID_PID;
-//     struct threadArg    arg;
+void micro_async_error_handler(microService *m, microEndpoint *ep, natsStatus s)
+{
+    struct threadArg *arg = (struct threadArg*) microService_GetState(m);
 
-//     s = _createDefaultThreadArgsForCbTests(&arg);
-//     if (s != NATS_OK)
-//         FAIL("Unable to setup test!");
+    natsMutex_Lock(arg->m);
+    arg->status = s;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+}
 
-//     arg.status = NATS_OK;
-//     arg.control= 7;
+static void
+test_MicroAsyncErrorHandler(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+    microService *m = NULL;
+    microServiceConfig cfg = {
+        .Name = "test",
+        .Version = "1.0.0",
+        .DoneHandler = micro_service_done_handler,
+        .ErrHandler = micro_async_error_handler,
+        .State = &arg,
+    };
 
-//     s = natsOptions_Create(&opts);
-//     IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
-//     IFOK(s, natsOptions_SetMaxPendingMsgs(opts, 10));
-//     IFOK(s, natsOptions_SetErrorHandler(opts, _asyncErrCb, (void*) &arg));
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
 
-//     if (s != NATS_OK)
-//         FAIL("Unable to create options for test AsyncErrHandler");
+    arg.status = NATS_OK;
+    arg.control= 7;
 
-//     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
-//     CHECK_SERVER_STARTED(serverPid);
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+    IFOK(s, natsOptions_SetMaxPendingMsgs(opts, 10));
 
-//     s = natsConnection_Connect(&nc, opts);
-//     IFOK(s, natsConnection_Subscribe(&sub, nc, "async_test", _recvTestString, (void*) &arg));
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test AsyncErrHandler");
 
-//     natsMutex_Lock(arg.m);
-//     arg.sub = sub;
-//     natsMutex_Unlock(arg.m);
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
 
-//     for (int i=0;
-//         (s == NATS_OK) && (i < (opts->maxPendingMsgs + 100)); i++)
-//     {
-//         s = natsConnection_PublishString(nc, "async_test", "hello");
-//     }
-//     IFOK(s, natsConnection_Flush(nc));
+    test("Connect to NATS: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
 
-//     // Wait for async err callback
-//     natsMutex_Lock(arg.m);
-//     while ((s != NATS_TIMEOUT) && !arg.done)
-//         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
-//     natsMutex_Unlock(arg.m);
+    test("Start microservice: ");
+    testCond(NULL == micro_AddService(&m, nc, &cfg));
 
-//     test("Aync fired properly, and all checks are good: ");
-//     testCond((s == NATS_OK)
-//              && arg.done
-//              && arg.closed
-//              && (arg.status == NATS_OK));
+    test("Test microservice is running: ");
+    testCond(!microService_IsStopped(m))
 
-//     natsOptions_Destroy(opts);
-//     natsSubscription_Destroy(sub);
-//     natsConnection_Destroy(nc);
+    test("Subscribe to async_test: ");
+    testCond(NATS_OK ==  natsConnection_Subscribe(&sub, nc, "async_test", _recvTestString, (void*) &arg));
 
-//     _destroyDefaultThreadArgs(&arg);
+    natsMutex_Lock(arg.m);
+    arg.sub = sub;
+    arg.status = NATS_OK;
+    natsMutex_Unlock(arg.m);
 
-//     _stopServer(serverPid);
-// }
+    test("Cause an error by sending too many messages: ");
+    for (int i=0;
+        (s == NATS_OK) && (i < (opts->maxPendingMsgs + 100)); i++)
+    {
+        s = natsConnection_PublishString(nc, "async_test", "hello");
+    }
+    testCond(NATS_OK == natsConnection_Flush(nc));
 
+    // Wait for async err callback
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && (arg.status == NATS_OK || !arg.done))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
 
+    test("Aync error fired properly, with correct status, and done: ");
+    testCond((s == NATS_OK) && (arg.status == NATS_SLOW_CONSUMER) && arg.done);
+
+    test("Test microservice is not running: ");
+    testCond(microService_IsStopped(m))
+
+    microService_Destroy(m);
+    natsOptions_Destroy(opts);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
 
 #if defined(NATS_HAS_STREAMING)
 
@@ -35641,6 +35668,7 @@ static testInfo allTests[] =
     {"MicroStartStop",                  test_MicroStartStop},
     {"MicroServiceStopsOnClosedConn",   test_MicroServiceStopsOnClosedConn},
     {"MicroServiceStopsWhenServerStops", test_MicroServiceStopsWhenServerStops},
+    {"MicroAsyncErrorHandler",          test_MicroAsyncErrorHandler},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

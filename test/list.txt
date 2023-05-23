@@ -267,6 +267,7 @@ MicroBasics
 MicroStartStop
 MicroServiceStopsOnClosedConn
 MicroServiceStopsWhenServerStops
+MicroAsyncErrorHandler
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

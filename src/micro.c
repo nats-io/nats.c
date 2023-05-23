@@ -429,7 +429,7 @@ on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure)
         microError_Destroy(err);
     }
 
-    // <>/<> TODO: Should we stop the service? The Go client does.
+    // TODO: Should we stop the service? The Go client does.
     microService_Stop(m);
 }
 

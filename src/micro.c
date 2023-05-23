@@ -13,12 +13,12 @@
 
 #include "microp.h"
 #include "conn.h"
-#include "mem.h"
+#include "opts.h"
 
 static microError *new_service(microService **ptr, natsConnection *nc);
 static void free_service(microService *m);
 static microError *wrap_connection_event_callbacks(microService *m);
-static microError *unwrap_connection_event_callbacks(microService *m);
+static void unwrap_connection_event_callbacks(microService *m);
 
 microError *
 micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *cfg)
@@ -178,7 +178,7 @@ microService_Stop(microService *m)
     if (!is_running)
         return NULL;
 
-    err = unwrap_connection_event_callbacks(m);
+    unwrap_connection_event_callbacks(m);
 
     for (ep = first_ep; (err == NULL) && (ep != NULL); ep = first_ep)
     {
@@ -391,11 +391,6 @@ on_connection_closed(natsConnection *nc, void *closure)
         return;
 
     microService_Stop(m);
-
-    if (m->prev_on_connection_closed != NULL)
-    {
-        (*m->prev_on_connection_closed)(nc, m->prev_on_connection_closed_closure);
-    }
 }
 
 static void
@@ -436,11 +431,6 @@ on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure)
 
     // <>/<> TODO: Should we stop the service? The Go client does.
     microService_Stop(m);
-
-    if (m->prev_on_error != NULL)
-    {
-        (*m->prev_on_error)(nc, sub, s, m->prev_on_error_closure);
-    }
 }
 
 static microError *
@@ -448,31 +438,23 @@ wrap_connection_event_callbacks(microService *m)
 {
     natsStatus s = NATS_OK;
 
-    if (m == NULL)
+    if ((m == NULL) || (m->nc == NULL) || (m->nc->opts == NULL))
         return micro_ErrorInvalidArg;
 
-    IFOK(s, natsConn_getClosedCallback(&m->prev_on_connection_closed, &m->prev_on_connection_closed_closure, m->nc));
-    IFOK(s, natsConn_setClosedCallback(m->nc, on_connection_closed, m));
-
-    IFOK(s, natsConn_getErrorCallback(&m->prev_on_error, &m->prev_on_error_closure, m->nc));
-    IFOK(s, natsConn_setErrorCallback(m->nc, on_error, m));
+    IFOK(s, natsOptions_addConnectionClosedCallback(m->nc->opts,on_connection_closed, m));
+    IFOK(s, natsOptions_addErrorCallback(m->nc->opts, on_error, m));
 
     return microError_Wrapf(micro_ErrorFromStatus(s), "failed to wrap connection event callbacks");
 }
 
-static microError *
+static void
 unwrap_connection_event_callbacks(microService *m)
 {
-    natsStatus s = NATS_OK;
+    if ((m == NULL) || (m->nc == NULL) || (m->nc->opts == NULL))
+        return;
 
-    if (m == NULL)
-        return micro_ErrorInvalidArg;
-
-    IFOK(s, natsConn_setClosedCallback(m->nc, m->prev_on_connection_closed, m->prev_on_connection_closed_closure));
-    IFOK(s, natsConn_setDisconnectedCallback(m->nc, m->prev_on_connection_disconnected, m->prev_on_connection_disconnected_closure));
-    IFOK(s, natsConn_setErrorCallback(m->nc, m->prev_on_error, m->prev_on_error_closure));
-
-    return microError_Wrapf(micro_ErrorFromStatus(s), "failed to unwrap connection event callbacks");
+    natsOptions_removeConnectionClosedCallback(m->nc->opts, on_connection_closed, m);
+    natsOptions_removeErrorCallback(m->nc->opts, on_error, m);
 }
 
 microError *

@@ -16,6 +16,16 @@
 
 #include "natsp.h"
 
+static inline void natsOptions_lock(natsOptions *opts)
+{
+    natsMutex_Lock(opts->mu);
+}
+
+static inline void natsOptions_unlock(natsOptions *opts)
+{
+    natsMutex_Unlock(opts->mu);
+}
+
 #define LOCK_AND_CHECK_OPTIONS(o, c) \
     if (((o) == NULL) || ((c))) \
         return nats_setDefaultError(NATS_INVALID_ARG); \
@@ -37,5 +47,27 @@
 
 natsOptions*
 natsOptions_clone(natsOptions *opts);
+
+natsStatus
+natsOptions_addConnectionClosedCallback(natsOptions *opts, natsConnectionHandler f, void *closure);
+
+void
+natsOptions_removeConnectionClosedCallback(natsOptions *opts, natsConnectionHandler f, void *closure);
+
+natsStatus
+natsOptions_addErrorCallback(natsOptions *opts, natsErrHandler f, void *closure);
+
+void
+natsOptions_removeErrorCallback(natsOptions *opts, natsErrHandler f, void *closure);
+
+void
+natsOptions_freeCallbackList(nats_CallbackList *cb);
+
+natsStatus
+natsOptions_cloneCallbackList(nats_CallbackList **clone, nats_CallbackList *this);
+
+// for testing
+void
+natsOptions_unlinkCallback(nats_CallbackList **prior_cb_removed, nats_CallbackList **headptr, void (*f)(void), void *closure);
 
 #endif /* OPTS_H_ */

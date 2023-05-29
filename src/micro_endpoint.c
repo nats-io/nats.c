@@ -206,7 +206,7 @@ release_endpoint(microEndpoint *ep)
 
     refs = --(ep->refs);
 
-    printf("<>/<> release_endpoint--: %s: %d\n", ep->name, refs);
+    printf("<>/<> release_endpoint--: %s: %d\n", ep->name, refs);fflush(stdout);
 
     micro_unlock_endpoint(ep);
 
@@ -219,7 +219,7 @@ void free_endpoint(microEndpoint *ep)
     if (ep == NULL)
         return;
 
-    printf("<>/<> free_endpoint: %s\n", ep->name);
+    printf("<>/<> free_endpoint: %s\n", ep->name);fflush(stdout);
 
     micro_release_service(ep->m);
     NATS_FREE(ep->name);

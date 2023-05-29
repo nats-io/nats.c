@@ -32760,6 +32760,9 @@ test_MicroStartStop(void)
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
     _stopServer(serverPid);
+
+    nats_Sleep(100);
+    FAIL("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
 void micro_service_done_handler(microService *m)

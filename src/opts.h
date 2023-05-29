@@ -49,25 +49,6 @@ natsOptions*
 natsOptions_clone(natsOptions *opts);
 
 natsStatus
-natsOptions_addConnectionClosedCallback(natsOptions *opts, natsConnectionHandler f, void *closure);
-
-void
-natsOptions_removeConnectionClosedCallback(natsOptions *opts, natsConnectionHandler f, void *closure);
-
-natsStatus
-natsOptions_addErrorCallback(natsOptions *opts, natsErrHandler f, void *closure);
-
-void
-natsOptions_removeErrorCallback(natsOptions *opts, natsErrHandler f, void *closure);
-
-void
-natsOptions_freeCallbackList(nats_CallbackList *cb);
-
-natsStatus
-natsOptions_cloneCallbackList(nats_CallbackList **clone, nats_CallbackList *this);
-
-// for testing
-void
-natsOptions_unlinkCallback(nats_CallbackList **prior_cb_removed, nats_CallbackList **headptr, void (*f)(void), void *closure);
+natsOptions_setMicroCallbacks(natsOptions *opts, natsConnectionHandler closedCb, natsErrHandler errCb);
 
 #endif /* OPTS_H_ */

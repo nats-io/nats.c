@@ -883,191 +883,17 @@ natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending)
     return NATS_OK;
 }
 
-void
-natsOptions_unlinkCallback(nats_CallbackList **prior_cb_removed, nats_CallbackList **headptr, void(*f)(void), void *closure)
-{
-    nats_CallbackList *this, *prev;
-
-    if (f == NULL)
-        return;
-
-    for (this = *headptr, prev = NULL; this != NULL; prev = this, this = this->next)
-    {
-        if (((void(*)(void))(this->f.conn) == f) && (this->closure == closure))
-        {
-            *prior_cb_removed = this;
-            if (prev == NULL) 
-            {
-                *headptr = this->next;
-            }
-            else
-            {
-                prev->next = this->next;
-            }
-            
-            return;
-        }
-    }
-}
-
-void
-natsOptions_freeCallbackList(nats_CallbackList *cb)
-{
-    nats_CallbackList *next = NULL;
-
-    while (cb != NULL)
-    {
-        next = cb->next;
-        NATS_FREE(cb);
-        cb = next;
-    }
-}
-
-natsStatus
-natsOptions_cloneCallbackList(nats_CallbackList **clone, nats_CallbackList *this)
-{
-    nats_CallbackList *prev = NULL;
-    nats_CallbackList *head = NULL;
-    nats_CallbackList *tail = NULL;
-
-    for (; this != NULL; this = this->next)
-    {
-        tail = NATS_CALLOC(1, sizeof(nats_CallbackList));
-        if (tail == NULL)
-        {
-            natsOptions_freeCallbackList(head);
-            return nats_setDefaultError(NATS_NO_MEMORY);
-        }
-        *tail = *this;
-        tail->next = NULL;
-
-        if (prev == NULL)
-        {
-            head = tail;
-        }
-        else
-        {
-            prev->next = tail;
-        }
-        prev = tail;
-    }
-
-    *clone = head;
-    return NATS_OK;
-}
-
-natsStatus
-natsOptions_addConnectionClosedCallback(natsOptions *opts, natsConnectionHandler f, void *closure)
-{
-    natsStatus          s           = NATS_OK;
-    nats_CallbackList   *cb         = NULL;
-    nats_CallbackList   *replaced   = NULL;
-
-    cb = NATS_CALLOC(1, sizeof(nats_CallbackList));
-    if (cb == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
-    cb->type = CALLBACK_TYPE_CONN;
-    cb->f.conn = f;
-    cb->closure = closure;
-
-    LOCK_AND_CHECK_OPTIONS(opts, 0);
-
-    // unlink if already in the list.
-    natsOptions_unlinkCallback(&replaced, &opts->closedCb, (void(*)(void))f, closure);
-
-    // add at the head.
-    cb->next = opts->closedCb;
-    opts->closedCb = cb;
-
-    UNLOCK_OPTS(opts);
-
-    NATS_FREE(replaced);
-
-    return s;
-}
-
-natsStatus
-natsOptions_addErrorCallback(natsOptions *opts, natsErrHandler f, void *closure)
-{
-    natsStatus          s           = NATS_OK;
-    nats_CallbackList   *cb         = NULL;
-    nats_CallbackList   *replaced   = NULL;
-
-    cb = NATS_CALLOC(1, sizeof(nats_CallbackList));
-    if (cb == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
-    cb->type = CALLBACK_TYPE_ERROR;
-    cb->f.err = f;
-    cb->closure = closure;
-
-    LOCK_AND_CHECK_OPTIONS(opts, 0);
-
-    // unlink if already in the list.
-    natsOptions_unlinkCallback(&replaced, &opts->asyncErrCb, (void(*)(void))f, closure);
-
-    // add at the head.
-    cb->next = opts->asyncErrCb;
-    opts->asyncErrCb = cb;
-
-    UNLOCK_OPTS(opts);
-
-    NATS_FREE(replaced);
-    return s;
-}
-
-void natsOptions_removeConnectionClosedCallback(natsOptions *opts, natsConnectionHandler f, void *closure)
-{
-    nats_CallbackList *removed = NULL;
-
-    natsOptions_lock(opts);
-
-    natsOptions_unlinkCallback(&removed, &opts->closedCb, (void(*)(void))f, closure);
-
-    natsOptions_unlock(opts);
-
-    NATS_FREE(removed);
-}
-
-void natsOptions_removeErrorCallback(natsOptions *opts, natsErrHandler f, void *closure)
-{
-    nats_CallbackList *removed = NULL;
-
-    natsOptions_lock(opts);
-
-    natsOptions_unlinkCallback(&removed, &opts->asyncErrCb, (void(*)(void))f, closure);
-
-    natsOptions_unlock(opts);
-
-    NATS_FREE(removed);
-}
-
 natsStatus
 natsOptions_SetErrorHandler(natsOptions *opts, natsErrHandler errHandler,
                             void *closure)
 {
-    if (errHandler == NULL)
-    {
-        errHandler = natsConn_defaultErrHandler;
-        closure = NULL;
-    }
-
     LOCK_AND_CHECK_OPTIONS(opts, 0);
 
-    if (opts->asyncErrCb == NULL)
-    {
-        UNLOCK_OPTS(opts);
-        return natsOptions_addErrorCallback(opts, errHandler, closure);
-    }
-    if (opts->asyncErrCb->next != NULL)
-    {
-        // can't allow overriding a list of callbacks with a single one.
-        UNLOCK_OPTS(opts);
-        return nats_setDefaultError(NATS_ILLEGAL_STATE);
-    }
+    opts->asyncErrCb = errHandler;
+    opts->asyncErrCbClosure = closure;
 
-    opts->asyncErrCb->type = CALLBACK_TYPE_ERROR;
-    opts->asyncErrCb->f.err = errHandler;
-    opts->asyncErrCb->closure = closure;
+    if (opts->asyncErrCb == NULL)
+        opts->asyncErrCb = natsConn_defaultErrHandler;
 
     UNLOCK_OPTS(opts);
 
@@ -1078,37 +904,26 @@ natsStatus
 natsOptions_SetClosedCB(natsOptions *opts, natsConnectionHandler closedCb,
                         void *closure)
 {
-    nats_CallbackList *to_free = NULL;
-
     LOCK_AND_CHECK_OPTIONS(opts, 0);
 
-    if ((opts->closedCb != NULL) && (opts->closedCb->next != NULL))
-    {
-        // can't allow overriding a list of callbacks with a single one.
-        UNLOCK_OPTS(opts);
-        return nats_setDefaultError(NATS_ILLEGAL_STATE);
-    }
-
-    if (closedCb == NULL)
-    {
-        to_free = opts->closedCb;
-        opts->closedCb = NULL;
-    }
-    else
-    {
-        if (opts->closedCb == NULL)
-        {
-            UNLOCK_OPTS(opts);
-            return natsOptions_addConnectionClosedCallback(opts, closedCb, closure);
-        }
-        opts->closedCb->type = CALLBACK_TYPE_CONN;
-        opts->closedCb->f.conn = closedCb;
-        opts->closedCb->closure = closure;
-    }
+    opts->closedCb = closedCb;
+    opts->closedCbClosure = closure;
 
     UNLOCK_OPTS(opts);
 
-    NATS_FREE(to_free);
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_setMicroCallbacks(natsOptions *opts, natsConnectionHandler closed, natsErrHandler errHandler)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->microClosedCb = closed;
+    opts->microAsyncErrCb = errHandler;
+
+    UNLOCK_OPTS(opts);
+
     return NATS_OK;
 }
 
@@ -1659,9 +1474,6 @@ _freeOptions(natsOptions *opts)
     if (opts == NULL)
         return;
 
-    natsOptions_freeCallbackList(opts->closedCb);
-    natsOptions_freeCallbackList(opts->asyncErrCb);
-
     NATS_FREE(opts->url);
     NATS_FREE(opts->name);
     _freeServers(opts);
@@ -1676,11 +1488,11 @@ _freeOptions(natsOptions *opts)
     NATS_FREE(opts);
 }
 
-static natsStatus
-_create_options(natsOptions **newOpts)
+natsStatus
+natsOptions_Create(natsOptions **newOpts)
 {
-    natsStatus  s       = NATS_OK;
-    natsOptions *opts   = NULL;
+    natsStatus  s;
+    natsOptions *opts = NULL;
 
     // Ensure the library is loaded
     s = nats_Open(-1);
@@ -1697,27 +1509,6 @@ _create_options(natsOptions **newOpts)
         return NATS_UPDATE_ERR_STACK(NATS_NO_MEMORY);
     }
 
-    *newOpts = opts;
-    return NATS_OK;
-}
-
-natsStatus
-natsOptions_Create(natsOptions **newOpts)
-{
-    natsStatus          s               = NATS_OK;
-    natsOptions         *opts           = NULL;
-    nats_CallbackList   *defaultErrorCb = NULL;
-    
-    defaultErrorCb = (nats_CallbackList*) NATS_CALLOC(1, sizeof(nats_CallbackList));
-    if (defaultErrorCb == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
-    defaultErrorCb->type = CALLBACK_TYPE_ERROR;
-    defaultErrorCb->f.err = natsConn_defaultErrHandler;
-    
-    s = _create_options(&opts);
-    if (s != NATS_OK)
-        return s;
-
     opts->allowReconnect        = true;
     opts->secure                = false;
     opts->maxReconnect          = NATS_OPTS_DEFAULT_MAX_RECONNECT;
@@ -1732,7 +1523,7 @@ natsOptions_Create(natsOptions **newOpts)
     opts->reconnectBufSize      = NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE;
     opts->reconnectJitter       = NATS_OPTS_DEFAULT_RECONNECT_JITTER;
     opts->reconnectJitterTLS    = NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS;
-    opts->asyncErrCb            = defaultErrorCb;
+    opts->asyncErrCb            = natsConn_defaultErrHandler;
 
     *newOpts = opts;
 
@@ -1746,13 +1537,13 @@ natsOptions_clone(natsOptions *opts)
     natsOptions *cloned = NULL;
     int         muSize;
 
-    if ((s = _create_options(&cloned)) != NATS_OK)
+    if ((s = natsOptions_Create(&cloned)) != NATS_OK)
     {
         NATS_UPDATE_ERR_STACK(s);
         return NULL;
     }
 
-    natsOptions_lock(opts);
+    natsMutex_Lock(opts->mu);
 
     muSize = sizeof(cloned->mu);
 
@@ -1773,17 +1564,12 @@ natsOptions_clone(natsOptions *opts)
     cloned->nkey    = NULL;
     cloned->userCreds = NULL;
     cloned->inboxPfx  = NULL;
-    cloned->closedCb = NULL;
-    cloned->asyncErrCb = NULL;
-
-    IFOK(s, natsOptions_cloneCallbackList(&(cloned->closedCb), opts->closedCb));
-    IFOK(s, natsOptions_cloneCallbackList(&(cloned->asyncErrCb), opts->asyncErrCb));
 
     // Also, set the number of servers count to 0, until we update
     // it (if necessary) when calling SetServers.
     cloned->serversCount = 0;
 
-    if ((s == NATS_OK) && (opts->name != NULL))
+    if (opts->name != NULL)
         s = natsOptions_SetName(cloned, opts->name);
 
     if ((s == NATS_OK) && (opts->url != NULL))
@@ -1834,7 +1620,7 @@ natsOptions_clone(natsOptions *opts)
         NATS_UPDATE_ERR_STACK(s);
     }
 
-    natsOptions_unlock(opts);
+    natsMutex_Unlock(opts->mu);
 
     return cloned;
 }

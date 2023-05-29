@@ -170,6 +170,8 @@ micro_destroy_endpoint(microEndpoint *ep)
     if (ep == NULL)
         return NULL;
 
+    printf("<>/<> micro_destroy_endpoint: %s\n", ep->name);
+
     if (err = micro_stop_endpoint(ep), err != NULL)
         return err;
 
@@ -204,6 +206,8 @@ release_endpoint(microEndpoint *ep)
 
     refs = --(ep->refs);
 
+    printf("<>/<> release_endpoint--: %s: %d\n", ep->name, refs);
+
     micro_unlock_endpoint(ep);
 
     if (refs == 0)
@@ -214,6 +218,8 @@ void free_endpoint(microEndpoint *ep)
 {
     if (ep == NULL)
         return;
+
+    printf("<>/<> free_endpoint: %s\n", ep->name);
 
     micro_release_service(ep->m);
     NATS_FREE(ep->name);

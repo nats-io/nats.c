@@ -377,6 +377,7 @@ void micro_release_service(microService *m)
     micro_lock_service(m);
 
     refs = --(m->refs);
+    printf("<>/<> release_service--:  %d\n", refs);
 
     micro_unlock_service(m);
 
@@ -553,6 +554,8 @@ on_connection_closed(natsConnection *nc, void *ignored)
         return;
     }
 
+    printf("<>/<> on_connection_closed: %d services to call\n", n);
+
     for (i = 0; i < n; i++)
     {
         m = to_call[i];
@@ -581,8 +584,9 @@ on_service_error(microService *m, const char *subject, natsStatus s)
         ;
     micro_unlock_service(m);
 
-    if (m->cfg->ErrHandler != NULL)
+    if ((ep != NULL) && (m->cfg->ErrHandler != NULL))
     {
+        printf("<>/<> on_service_error: calling for %s\n", ep->name);
         (*m->cfg->ErrHandler)(m, ep, s);
     }
 
@@ -617,6 +621,8 @@ on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *not_used
         microError_Ignore(err);
         return;
     }
+
+    printf("<>/<> on_error: %d services to call\n", n);
 
     for (i = 0; i < n; i++)
     {

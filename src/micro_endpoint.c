@@ -19,8 +19,6 @@ static microError *dup_with_prefix(char **dst, const char *prefix, const char *s
 static void free_endpoint(microEndpoint *ep);
 static void handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 static microError *new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
-static void release_endpoint(microEndpoint *ep);
-static void retain_endpoint(microEndpoint *ep);
 
 microError *
 micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal)
@@ -106,7 +104,7 @@ micro_start_endpoint(microEndpoint *ep)
     {
         // extra retain before subscribing since we'll need to hold it until
         // on_complete on the subscription.
-        retain_endpoint(ep);
+        micro_retain_endpoint(ep);
 
         // Make sure the service is not stopped until this subscription has been closed.
         micro_increment_endpoints_to_stop(ep->m);
@@ -177,12 +175,12 @@ micro_destroy_endpoint(microEndpoint *ep)
 
     // Release ep since it's no longer running (to compensate for the retain in
     // micro_start_endpoint).
-    release_endpoint(ep);
+    micro_release_endpoint(ep);
     return NULL;
 }
 
-static void
-retain_endpoint(microEndpoint *ep)
+void
+micro_retain_endpoint(microEndpoint *ep)
 {
     if (ep == NULL)
         return;
@@ -194,8 +192,8 @@ retain_endpoint(microEndpoint *ep)
     micro_unlock_endpoint(ep);
 }
 
-static void
-release_endpoint(microEndpoint *ep)
+void
+micro_release_endpoint(microEndpoint *ep)
 {
     int refs = 0;
 

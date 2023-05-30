@@ -161,11 +161,15 @@ bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_sub
 microError *micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
 microError *micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
 microError *micro_new_request(microRequest **new_request, microService *m, microEndpoint *ep, natsMsg *msg);
+void micro_release_endpoint(microEndpoint *ep);
 void micro_release_service(microService *m);
+void micro_retain_endpoint(microEndpoint *ep);
 void micro_retain_service(microService *m);
 microError *micro_start_endpoint(microEndpoint *ep);
 microError *micro_stop_endpoint(microEndpoint *ep);
 void micro_update_last_error(microEndpoint *ep, microError *err);
+
+
 
 static inline void micro_lock_service(microService *m) { natsMutex_Lock(m->service_mu); }
 static inline void micro_unlock_service(microService *m) { natsMutex_Unlock(m->service_mu); }

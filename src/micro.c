@@ -582,13 +582,14 @@ on_service_error(microService *m, const char *subject, natsStatus s)
          (ep != NULL) && !micro_match_endpoint_subject(ep->subject, subject);
          ep = ep->next)
         ;
+    micro_retain_endpoint(ep);
     micro_unlock_service(m);
 
     if ((ep != NULL) && (m->cfg->ErrHandler != NULL))
     {
-        printf("<>/<> on_service_error: calling for %s\n", ep->name);
         (*m->cfg->ErrHandler)(m, ep, s);
     }
+    micro_release_endpoint(ep);
 
     if (ep != NULL)
     {

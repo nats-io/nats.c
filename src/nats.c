@@ -763,10 +763,14 @@ _asyncCbsThread(void *arg)
         switch (cb->type)
         {
             case ASYNC_CLOSED:
-               (*(nc->opts->closedCb))(nc, nc->opts->closedCbClosure);
-               if (nc->opts->microClosedCb != NULL)
-                (*(nc->opts->microClosedCb))(nc, nc->opts->closedCbClosure);
+            {
+                (*(nc->opts->closedCb))(nc, nc->opts->closedCbClosure);
+
+                if (nc->opts->microClosedCb != NULL)
+                    (*(nc->opts->microClosedCb))(nc, nc->opts->closedCbClosure);
                break;
+            }
+
             case ASYNC_DISCONNECTED:
                 (*(nc->opts->disconnectedCb))(nc, nc->opts->disconnectedCbClosure);
                 break;
@@ -786,10 +790,12 @@ _asyncCbsThread(void *arg)
             {
                 if (cb->errTxt != NULL)
                     nats_setErrStatusAndTxt(cb->err, cb->errTxt);
-                (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
 
                 if (nc->opts->microAsyncErrCb != NULL)
                     (*(nc->opts->microAsyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
+
+                (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
+
                 break;
             }
 #if defined(NATS_HAS_STREAMING)

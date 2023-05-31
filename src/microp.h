@@ -53,7 +53,6 @@ struct micro_endpoint_s
     char *subject;
 
     // References to other entities.
-    microService *m;
     microEndpointConfig *config;
 
     // Monitoring endpoints are different in a few ways. For now, express it as
@@ -72,6 +71,10 @@ struct micro_endpoint_s
     natsMutex *endpoint_mu;
     int refs;
     bool is_draining;
+
+    // Not retained by the endpoint, retained before passing to the
+    // service-level callbacks.
+    microService *service_ptr_for_on_complete;
 
     // The subscription for the endpoint. If NULL, the endpoint is stopped.
     natsSubscription *sub;
@@ -105,10 +108,8 @@ struct micro_service_s
     // need to be protected by mutex.
     natsMutex *service_mu;
     int refs;
-    int num_eps_to_stop;
 
     struct micro_endpoint_s *first_ep;
-    int num_eps;
 
     int64_t started; // UTC time expressed as number of nanoseconds since epoch.
     // true once the stopping of the service, i.e. draining of endpoints'
@@ -145,50 +146,16 @@ extern microError *micro_ErrorOutOfMemory;
 extern microError *micro_ErrorInvalidArg;
 
 microError *micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
-microError *micro_clone_endpoint_config(microEndpointConfig **new_cfg, microEndpointConfig *cfg);
-microError *micro_clone_service_config(microServiceConfig **new_cfg, microServiceConfig *cfg);
-void micro_decrement_endpoints_to_stop(microService *m);
-microError *micro_destroy_endpoint(microEndpoint *ep);
-void micro_free_cloned_endpoint_config(microEndpointConfig *cfg);
-void micro_free_cloned_service_config(microServiceConfig *cfg);
-void micro_free_request(microRequest *req);
-void micro_increment_endpoints_to_stop(microService *m);
 microError *micro_init_monitoring(microService *m);
 microError *micro_is_error_message(natsStatus s, natsMsg *msg);
-bool micro_is_valid_name(const char *name);
-bool micro_is_valid_subject(const char *subject);
-bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_subject);
-microError *micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
-microError *micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
 microError *micro_new_request(microRequest **new_request, microService *m, microEndpoint *ep, natsMsg *msg);
-void micro_release_endpoint(microEndpoint *ep);
-void micro_release_service(microService *m);
-void micro_retain_endpoint(microEndpoint *ep);
-void micro_retain_service(microService *m);
-microError *micro_start_endpoint(microEndpoint *ep);
-microError *micro_stop_endpoint(microEndpoint *ep);
+
+void micro_free_request(microRequest *req);
 void micro_update_last_error(microEndpoint *ep, microError *err);
 
-
-
-static inline void micro_lock_service(microService *m) { natsMutex_Lock(m->service_mu); }
-static inline void micro_unlock_service(microService *m) { natsMutex_Unlock(m->service_mu); }
-static inline void micro_lock_endpoint(microEndpoint *ep) { natsMutex_Lock(ep->endpoint_mu); }
-static inline void micro_unlock_endpoint(microEndpoint *ep) { natsMutex_Unlock(ep->endpoint_mu); }
-
-static inline microError *micro_strdup(char **ptr, const char *str)
-{
-    // Make a strdup(NULL) be a no-op, so we don't have to check for NULL
-    // everywhere.
-    if (str == NULL)
-    {
-        *ptr = NULL;
-        return NULL;
-    }
-    *ptr = NATS_STRDUP(str);
-    if (*ptr == NULL)
-        return micro_ErrorOutOfMemory;
-    return NULL;
-}
+//
+// Exposed only for testing.
+bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_subject);
+microError *micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
 
 #endif /* MICROP_H_ */

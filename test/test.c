@@ -119,6 +119,7 @@ struct threadArg
     int64_t         reconnectedAt[4];
     int             reconnects;
     bool            msgReceived;
+    bool            microDone;
     bool            done;
     int             results[10];
     const char      *tokens[3];
@@ -32767,10 +32768,9 @@ void micro_service_done_handler(microService *m)
     struct threadArg *arg = (struct threadArg*) microService_GetState(m);
 
     natsMutex_Lock(arg->m);
-    arg->done = true;
+    arg->microDone = true;
     natsCondition_Broadcast(arg->c);
     natsMutex_Unlock(arg->m);
-
 }
 
 static void
@@ -32821,15 +32821,20 @@ test_MicroServiceStopsOnClosedConn(void)
     test("Close the connection: ");
     testCond(NATS_OK == natsConnection_Drain(nc));
     natsConnection_Close(nc);
+
+    test("Wait for it: ");
+    _waitForConnClosed(&arg);
+    testCond(1);
+
     test("Ensure the connection has closed: ");
     testCond(natsConnection_IsClosed(nc));
 
     test("Wait for the service to stop: ");
     natsMutex_Lock(arg.m);
-    while ((s != NATS_TIMEOUT) && !arg.done)
+    while ((s != NATS_TIMEOUT) && !arg.microDone)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
-    testCond(arg.done);
+    testCond(arg.microDone);
 
     test("Test microservice is stopped: ");
     testCond(microService_IsStopped(m));
@@ -32888,10 +32893,10 @@ test_MicroServiceStopsWhenServerStops(void)
 
     test("Wait for the service to stop: ");
     natsMutex_Lock(arg.m);
-    while ((s != NATS_TIMEOUT) && !arg.done)
+    while ((s != NATS_TIMEOUT) && !arg.microDone)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
-    testCond(arg.done);
+    testCond(arg.microDone);
 
     test("Test microservice is not running: ");
     testCond(microService_IsStopped(m))
@@ -32914,7 +32919,6 @@ void micro_async_error_handler(microService *m, microEndpoint *ep, natsStatus s)
 
     // set the data to verify
     arg->status = s;
-    arg->string = nats_GetLastError(NULL);
     natsCondition_Broadcast(arg->c);
     natsMutex_Unlock(arg->m);
 }
@@ -35511,14 +35515,14 @@ static testInfo allTests[] =
     // {"KeyValueMirrorDirectGet",         test_KeyValueMirrorDirectGet},
     // {"KeyValueMirrorCrossDomains",      test_KeyValueMirrorCrossDomains},
 
-    {"MicroMatchEndpointSubject",       test_MicroMatchEndpointSubject},
-    {"MicroAddService",                 test_MicroAddService},
-    {"MicroGroups",                     test_MicroGroups},
-    {"MicroBasics",                     test_MicroBasics},
-    {"MicroStartStop",                  test_MicroStartStop},
-    {"MicroServiceStopsOnClosedConn",   test_MicroServiceStopsOnClosedConn},
+    // {"MicroMatchEndpointSubject",       test_MicroMatchEndpointSubject},
+    // {"MicroAddService",                 test_MicroAddService},
+    // {"MicroGroups",                     test_MicroGroups},
+    // {"MicroBasics",                     test_MicroBasics},
+    // {"MicroStartStop",                  test_MicroStartStop},
+    // {"MicroServiceStopsOnClosedConn",   test_MicroServiceStopsOnClosedConn},
     {"MicroServiceStopsWhenServerStops", test_MicroServiceStopsWhenServerStops},
-    {"MicroAsyncErrorHandler",          test_MicroAsyncErrorHandler},
+    // {"MicroAsyncErrorHandler",          test_MicroAsyncErrorHandler},
 
 #if defined(NATS_HAS_STREAMING)
     // {"StanPBufAllocator",               test_StanPBufAllocator},

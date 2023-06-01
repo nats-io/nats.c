@@ -313,7 +313,10 @@ _free_endpoint(microEndpoint *ep)
     natsSubscription_Destroy(ep->sub);
     natsMutex_Destroy(ep->endpoint_mu);
     _free_cloned_endpoint_config(ep->config);
-    NATS_FREE(ep);
+    
+    
+    
+    // NATS_FREE(ep);
 }
 
 static bool

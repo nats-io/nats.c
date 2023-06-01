@@ -367,6 +367,7 @@ _find_endpoint(microEndpoint **prevp, microService *m, microEndpoint *to_find)
             *prevp = prev_ep;
             return true;
         }
+        prev_ep = ep;
     }
 
     return false;
@@ -380,6 +381,8 @@ _retain_endpoint(microEndpoint *ep, bool lock, const char *caller, const char *c
 
     if (lock)
         _lock_endpoint(ep);
+
+    // nats_Sleep(500);
 
     ep->refs++;
     printf("<>/<> _retain_endpoint++: %s by %s (%s), refs: %d\n", ep->subject, caller ? caller : "NULL", comment ? comment : "NULL", ep->refs);
@@ -398,6 +401,8 @@ _release_endpoint(microEndpoint *ep, bool lock, const char *caller, const char *
 
     if (lock)
         _lock_endpoint(ep);
+
+    // nats_Sleep(500);
 
     refs = --(ep->refs);
     printf("<>/<> _release_endpoint--: %s by %s (%s), refs: %d\n", ep->subject, caller ? caller : "NULL", comment ? comment : "NULL", ep->refs);
@@ -463,6 +468,8 @@ _retain_service(microService *m, bool lock, const char *caller, const char *comm
     if (lock)
         _lock_service(m);
 
+    // nats_Sleep(500);
+
     int refs = ++(m->refs);
     printf("<>/<> _retain_service++: %s by %s (%s), refs: %d\n", m->cfg->Name, caller ? caller : "NULL", comment ? comment : "NULL", refs);
 
@@ -508,6 +515,8 @@ _release_service(microService *m, bool lock, const char *caller, const char *com
 
     if (lock)
         _lock_service(m);
+
+    // nats_Sleep(500);
 
     refs = --(m->refs);
     printf("<>/<> _release_service--: %s by %s (%s), refs: %d\n", m->cfg->Name, caller ? caller : "NULL", comment ? comment : "NULL", refs);
@@ -978,6 +987,8 @@ _handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *c
 static void
 _finalize_stopping_service_l(microService *m)
 {
+    microDoneHandler doneHandler = NULL;
+
     if (m == NULL)
         return;
 
@@ -993,16 +1004,17 @@ _finalize_stopping_service_l(microService *m)
         return;
     }
     m->stopped = true;
+    doneHandler = m->cfg->DoneHandler;
     _unlock_service(m);
 
     printf("<>/<> _finalize_stopping_service_l: stop service callbacks: not yet stopped, and nothing draining\n");
     // Disable any subsequent async callbacks.
     _stop_service_callbacks(m);
 
-    if (m->cfg->DoneHandler != NULL)
+    if (doneHandler != NULL)
     {
         RETAIN_SERVICE(m, "For DONE handler");
-        m->cfg->DoneHandler(m);
+        doneHandler(m);
         RELEASE_SERVICE(m, "After DONE handler");
     }
 }

@@ -32913,6 +32913,8 @@ void micro_async_error_handler(microService *m, microEndpoint *ep, natsStatus s)
 {
     struct threadArg *arg = (struct threadArg*) microService_GetState(m);
 
+    printf("<>/<> micro_async_error_handler: %d\n", s);
+
     natsMutex_Lock(arg->m);
     // release the pending test request that caused the error
     arg->closed = true;

@@ -795,10 +795,13 @@ _asyncCbsThread(void *arg)
                 // would then crash the default (logger). If there was a custom
                 // error handler already set on the connection, pray that it
                 // does not destroy the subscription.
-                (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
+
+                // natsSub_retain(cb->sub);
                 if (nc->opts->microAsyncErrCb != NULL)
                     (*(nc->opts->microAsyncErrCb))(nc, cb->sub, cb->err, NULL);
-
+                else
+                    (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
+                // natsSub_release(cb->sub);
                 break;
             }
 #if defined(NATS_HAS_STREAMING)

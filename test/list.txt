@@ -1,1 +1,8 @@
+MicroMatchEndpointSubject
+MicroAddService
+MicroGroups
+MicroBasics
+MicroStartStop
+MicroServiceStopsOnClosedConn
 MicroServiceStopsWhenServerStops
+MicroAsyncErrorHandler

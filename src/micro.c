@@ -35,10 +35,43 @@ static microError *_wrap_connection_event_callbacks(microService *m);
 static bool _is_valid_name(const char *name);
 
 static void _finalize_stopping_service_l(microService *m);
-static void _release_endpoint(microEndpoint *ep);
-static void _release_endpoint_l(microEndpoint *ep);
-static void _release_service(microService *m);
-static void _retain_service_l(microService *m);
+static void _retain_endpoint(microEndpoint *ep, bool lock, const char *caller, const char *comment);
+static void _release_endpoint(microEndpoint *ep, bool lock, const char *caller, const char *comment);
+static void _release_service(microService *m, bool lock, const char *caller, const char *comment);
+static void _retain_service(microService *m, bool lock, const char *caller, const char *comment);
+
+#define RETAIN_EP(__ep, __comment) _retain_endpoint(__ep, true, __comment, __func__)
+#define RETAIN_EP_INLINE(__ep, __comment) _retain_endpoint(__ep, false, __comment, __func__)
+#define RELEASE_EP(__ep, __comment) _release_endpoint(__ep, true, __comment, __func__)
+#define RELEASE_EP_INLINE(__ep, __comment) _release_endpoint(__ep, false, __comment, __func__)
+#define RETAIN_SERVICE(__m, __comment) _retain_service(__m, true, __comment, __func__)
+#define RETAIN_SERVICE_INLINE(__m, __comment) _retain_service(__m, false, __comment, __func__)
+#define RELEASE_SERVICE(__m, __comment) _release_service(__m, true, __comment, __func__)
+#define RELEASE_SERVICE_INLINE(__m, __comment) _release_service(__m, false, __comment, __func__)
+
+static inline int _endpoint_count(microService *m)
+{
+    int n = 0;
+    for (microEndpoint *ep = m->first_ep; ep != NULL; ep = ep->next)
+    {
+        n++;
+    }
+    return n;
+}
+
+static inline void _dump_endpoints(microService *m)
+{
+    const char *sep = NULL;
+    for (microEndpoint *ep = m->first_ep; ep != NULL; ep = ep->next)
+    {
+        if (sep == NULL)
+            sep = ",";
+        else
+            printf("%s", sep);
+        printf("%s", ep->subject);
+    }
+    printf("\n");
+}
 
 microError *
 micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *cfg)
@@ -159,8 +192,7 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
         // list, not started. A retry with the same name will clean it up.
         if (err = _stop_endpoint_l(m, prev_ep), err != NULL)
             return err;
-
-        _release_endpoint_l(prev_ep);
+        RELEASE_EP(prev_ep, "replaced ep");
     }
 
     if (err = _start_endpoint_l(m, ep), err != NULL)
@@ -313,10 +345,7 @@ _free_endpoint(microEndpoint *ep)
     natsSubscription_Destroy(ep->sub);
     natsMutex_Destroy(ep->endpoint_mu);
     _free_cloned_endpoint_config(ep->config);
-    
-    
-    
-    // NATS_FREE(ep);
+    NATS_FREE(ep);
 }
 
 static bool
@@ -328,10 +357,13 @@ _find_endpoint(microEndpoint **prevp, microService *m, microEndpoint *to_find)
     if ((m == NULL) || (to_find == NULL))
         return false;
 
+    printf("<>/<> _find_endpoint: looking for %s\n", to_find->subject);
     for (ep = m->first_ep; ep != NULL; ep = ep->next)
     {
+        printf("<>/<> _find_endpoint: ...scanning %s\n", ep->subject);
         if (ep == to_find)
         {
+            printf("<>/<> _find_endpoint: found! prev: %s\n", prev_ep? prev_ep->subject : "NULL");
             *prevp = prev_ep;
             return true;
         }
@@ -341,51 +373,37 @@ _find_endpoint(microEndpoint **prevp, microService *m, microEndpoint *to_find)
 }
 
 static void
-_retain_endpoint(microEndpoint *ep)
+_retain_endpoint(microEndpoint *ep, bool lock, const char *caller, const char *comment)
 {
+    if (ep == NULL)
+        return;
+
+    if (lock)
+        _lock_endpoint(ep);
+
     ep->refs++;
-    printf("<>/<> _retain_endpoint++: %s, refs: %d\n", ep->subject, ep->refs);
+    printf("<>/<> _retain_endpoint++: %s by %s (%s), refs: %d\n", ep->subject, caller ? caller : "NULL", comment ? comment : "NULL", ep->refs);
+
+    if (lock)
+        _unlock_endpoint(ep);
 }
 
 static void
-_retain_endpoint_l(microEndpoint *ep)
-{
-    if (ep == NULL)
-        return;
-
-    _lock_endpoint(ep);
-    ++(ep->refs);
-    printf("<>/<> _retain_endpoint_l++: %s, refs: %d\n", ep->subject, ep->refs);
-    _unlock_endpoint(ep);
-}
-
-static void
-_release_endpoint(microEndpoint *ep)
+_release_endpoint(microEndpoint *ep, bool lock, const char *caller, const char *comment)
 {
     int refs;
 
     if (ep == NULL)
         return;
 
+    if (lock)
+        _lock_endpoint(ep);
+
     refs = --(ep->refs);
-    printf("<>/<> _release_endpoint--: %s, refs: %d\n", ep->subject, ep->refs);
+    printf("<>/<> _release_endpoint--: %s by %s (%s), refs: %d\n", ep->subject, caller ? caller : "NULL", comment ? comment : "NULL", ep->refs);
 
-    if (refs == 0)
-        _free_endpoint(ep);
-}
-
-static void
-_release_endpoint_l(microEndpoint *ep)
-{
-    int refs;
-
-    if (ep == NULL)
-        return;
-
-    _lock_endpoint(ep);
-    refs = --(ep->refs);
-    printf("<>/<> _release_endpoint_l--: %s, refs: %d\n", ep->subject, ep->refs);
-    _unlock_endpoint(ep);
+    if (lock)
+        _unlock_endpoint(ep);
 
     if (refs == 0)
         _free_endpoint(ep);
@@ -437,17 +455,19 @@ _clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
 }
 
 static void
-_retain_service_l(microService *m)
+_retain_service(microService *m, bool lock, const char *caller, const char *comment)
 {
     if (m == NULL)
         return;
 
-    _lock_service(m);
+    if (lock)
+        _lock_service(m);
 
     int refs = ++(m->refs);
-    printf("<>/<> _retain_service_l++: %s, refs: %d\n", m->cfg->Name, refs);
+    printf("<>/<> _retain_service++: %s by %s (%s), refs: %d\n", m->cfg->Name, caller ? caller : "NULL", comment ? comment : "NULL", refs);
 
-    _unlock_service(m);
+    if (lock)
+        _unlock_service(m);
 }
 
 static void
@@ -479,34 +499,21 @@ _free_service(microService *m)
 }
 
 static void
-_release_service(microService *m)
+_release_service(microService *m, bool lock, const char *caller, const char *comment)
 {
     int refs = 0;
 
     if (m == NULL)
         return;
 
-    refs = --(m->refs);
-    printf("<>/<> _release_service--: %s, refs: %d\n", m->cfg->Name, refs);
-
-    if (refs == 0)
-        _free_service(m);
-}
-
-static void
-_release_service_l(microService *m)
-{
-    int refs = 0;
-
-    if (m == NULL)
-        return;
-
-    _lock_service(m);
+    if (lock)
+        _lock_service(m);
 
     refs = --(m->refs);
-    printf("<>/<> _release_service_l--: %s, refs: %d\n", m->cfg->Name, refs);
+    printf("<>/<> _release_service--: %s by %s (%s), refs: %d\n", m->cfg->Name, caller ? caller : "NULL", comment ? comment : "NULL", refs);
 
-    _unlock_service(m);
+    if (lock)
+        _unlock_service(m);
 
     if (refs == 0)
         _free_service(m);
@@ -568,40 +575,6 @@ bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_sub
     }
 }
 
-static void
-_on_service_error_l(microService *m, const char *subject, natsStatus s)
-{
-    microEndpoint *ep = NULL;
-    microError *err = NULL;
-
-    if (m == NULL)
-        return;
-
-    _lock_service(m);
-    for (ep = m->first_ep;
-         (ep != NULL) && !micro_match_endpoint_subject(ep->subject, subject);
-         ep = ep->next)
-        ;
-    _retain_endpoint_l(ep);
-    _unlock_service(m);
-
-    if ((ep != NULL) && (m->cfg->ErrHandler != NULL))
-    {
-        (*m->cfg->ErrHandler)(m, ep, s);
-    }
-    _release_endpoint_l(ep);
-
-    if (ep != NULL)
-    {
-        err = microError_Wrapf(micro_ErrorFromStatus(s), "NATS error on endpoint %s", ep->subject);
-        micro_update_last_error(ep, err);
-        microError_Destroy(err);
-    }
-
-    // TODO: Should we stop the service? The Go client does.
-    microError_Ignore(microService_Stop(m));
-}
-
 static microError *
 _start_service_callbacks(microService *m)
 {
@@ -625,15 +598,14 @@ _start_service_callbacks(microService *m)
     }
 
     // Extra reference to the service as long as its callbacks are registered.
-    printf("<>/<> _start_service_callbacks: %s: retaining service\n", m->cfg->Name);
-    _retain_service_l(m);
+    RETAIN_SERVICE(m, "Started service callbacks");
 
     natsMutex_Lock(service_callback_mu);
     IFOK(s, natsHash_Set(all_services_to_callback, (int64_t)m, (void *)m, NULL));
     natsMutex_Unlock(service_callback_mu);
     if (s != NATS_OK)
     {
-        _release_service_l(m);
+        RELEASE_SERVICE(m, "in error");
     }
 
     return micro_ErrorFromStatus(s);
@@ -649,8 +621,7 @@ _stop_service_callbacks(microService *m)
     natsHash_Remove(all_services_to_callback, (int64_t)m);
     natsMutex_Unlock(service_callback_mu);
 
-    printf("<>/<> _stop_service_callbacks: %s: releasing service\n", m->cfg->Name);
-    _release_service_l(m);
+    RELEASE_SERVICE(m, "");
 }
 
 static microError *
@@ -684,7 +655,7 @@ _services_for_connection(microService ***to_call, int *num_microservices, natsCo
         {
             if (m->nc == nc)
             {
-                _retain_service_l(m); // for the callback
+                RETAIN_SERVICE(m, "For the specific connection closed/error callback"); // for the callback
                 p[i++] = m;
             }
         }
@@ -707,6 +678,8 @@ _on_connection_closed(natsConnection *nc, void *ignored)
     int n = 0;
     int i;
 
+    printf("<>/<> on_connection_closed: CALLED\n");
+
     err = _services_for_connection(&to_call, &n, nc);
     if (err != NULL)
     {
@@ -722,10 +695,44 @@ _on_connection_closed(natsConnection *nc, void *ignored)
         microError_Ignore(
             microService_Stop(m));
 
-        _release_service_l(m);
+        RELEASE_SERVICE(m, "After connection closed callback");
     }
 
     NATS_FREE(to_call);
+}
+
+static void
+_on_service_error_l(microService *m, const char *subject, natsStatus s)
+{
+    microEndpoint *ep = NULL;
+    microError *err = NULL;
+
+    if (m == NULL)
+        return;
+
+    _lock_service(m);
+    for (ep = m->first_ep;
+         (ep != NULL) && !micro_match_endpoint_subject(ep->subject, subject);
+         ep = ep->next)
+        ;
+    RETAIN_EP(ep, "For error callback"); // for the callback
+    _unlock_service(m);
+
+    if ((ep != NULL) && (m->cfg->ErrHandler != NULL))
+    {
+        (*m->cfg->ErrHandler)(m, ep, s);
+    }
+    RELEASE_EP(ep, "After error callback"); // after the callback
+
+    if (ep != NULL)
+    {
+        err = microError_Wrapf(micro_ErrorFromStatus(s), "NATS error on endpoint %s", ep->subject);
+        micro_update_last_error(ep, err);
+        microError_Destroy(err);
+    }
+
+    // TODO: Should we stop the service? The Go client does.
+    microError_Ignore(microService_Stop(m));
 }
 
 static void
@@ -738,11 +745,11 @@ _on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *not_use
     int n = 0;
     int i;
 
-    printf("<>/<> on_error: %d\n", s);
+    printf("<>/<> on_error: CALLED: %d\n", s);
 
     if (sub == NULL)
     {
-            printf("<>/<> on_error: no sub, nothing to do\n");
+        printf("<>/<> on_error: no sub, nothing to do\n");
         return;
     }
     subject = natsSubscription_GetSubject(sub);
@@ -761,7 +768,7 @@ _on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *not_use
     {
         m = to_call[i];
         _on_service_error_l(m, subject, s);
-        _release_service_l(m); // release the extra ref in `to_call`.
+        RELEASE_SERVICE(m, "After on_error callback"); // release the extra ref in `to_call`.
     }
 
     NATS_FREE(to_call);
@@ -808,8 +815,7 @@ microService_Destroy(microService *m)
     if (err != NULL)
         return err;
 
-    printf("<>/<> microService_Destroy: %s: called stop, releasing\n", m->cfg->Name);
-    _release_service_l(m);
+    RELEASE_SERVICE(m, "Destroy");
     return NULL;
 }
 
@@ -977,33 +983,27 @@ _finalize_stopping_service_l(microService *m)
 
     _lock_service(m);
 
-    int n = 0;
-    for (microEndpoint *ep = m->first_ep; ep != NULL; ep = ep->next)
-    {
-        n++;
-    }
-
     // If the service is already stopped there is nothing to do. Also, if this
     // function is called while the endpoints are still linked to the service,
     // it means they are draining and we should wait for them to complete.
     if (m->stopped || m->first_ep != NULL)
     {
+        printf("<>/<> finalize_stopping_service_l: already stopped or draining %d\n", _endpoint_count(m));
         _unlock_service(m);
-        printf("<>/<> finalize_stopping_service_l: already stopped or draining %d\n", n);
         return;
     }
     m->stopped = true;
     _unlock_service(m);
 
-    printf("<>/<> _finalize_stopping_service_l: stop service callbacks: %d draining\n", n);
+    printf("<>/<> _finalize_stopping_service_l: stop service callbacks: not yet stopped, and nothing draining\n");
     // Disable any subsequent async callbacks.
     _stop_service_callbacks(m);
 
     if (m->cfg->DoneHandler != NULL)
     {
-        _retain_service_l(m);
+        RETAIN_SERVICE(m, "For DONE handler");
         m->cfg->DoneHandler(m);
-        _release_service_l(m);
+        RELEASE_SERVICE(m, "After DONE handler");
     }
 }
 
@@ -1024,10 +1024,13 @@ _release_on_endpoint_complete(void *closure)
 
     _lock_endpoint(ep);
     ep->is_draining = false;
-    _release_endpoint(ep);
     _unlock_endpoint(ep);
 
     _lock_service(m);
+
+    printf("<>/<> _release_on_endpoint_complete: %s: endpoints before removal:", ep->subject);
+    _dump_endpoints(m);
+
     if (_find_endpoint(&prev_ep, m, ep))
     {
         if (prev_ep != NULL)
@@ -1035,8 +1038,14 @@ _release_on_endpoint_complete(void *closure)
         else
             m->first_ep = ep->next;
     }
-    _release_service(m);
+    RELEASE_SERVICE(m, "after removing EP");
+
+    printf("<>/<> _release_on_endpoint_complete: %s: endpoints after removal:", ep->subject);
+    _dump_endpoints(m);
+    RELEASE_EP(ep, "drained or closed endpoint");
+
     _unlock_service(m);
+
 
     // If this is the last shutting down endpoint, finalize the service
     // shutdown.
@@ -1066,7 +1075,7 @@ _start_endpoint_l(microService *m, microEndpoint *ep)
         // extra retain before subscribing since we'll need to hold it until
         // on_complete on the subscription.
         _lock_endpoint(ep);
-        _retain_endpoint(ep);
+        RETAIN_EP_INLINE(ep, "Started endpoint");
         ep->sub = sub;
         ep->is_draining = false;
         _unlock_endpoint(ep);
@@ -1104,6 +1113,7 @@ _stop_endpoint_l(microService *m, microEndpoint *ep)
     }
 
     ep->is_draining = true;
+    // RELEASE_EP_INLINE(ep, "stopped (counter to initial ref=1), draining endpoint");
     _unlock_endpoint(ep);
 
     // When the drain is complete, will release the final ref on ep.
@@ -1192,7 +1202,7 @@ _new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, micro
     ep->is_monitoring_endpoint = is_internal;
 
     // retain `m` before storing it for callbacks.
-    _retain_service_l(m);
+    RETAIN_SERVICE(m, "in endpoint for callbacks");
     ep->service_ptr_for_on_complete = m;
 
     MICRO_CALL(err, micro_ErrorFromStatus(natsMutex_Create(&ep->endpoint_mu)));

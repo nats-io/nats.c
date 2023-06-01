@@ -35515,14 +35515,14 @@ static testInfo allTests[] =
     // {"KeyValueMirrorDirectGet",         test_KeyValueMirrorDirectGet},
     // {"KeyValueMirrorCrossDomains",      test_KeyValueMirrorCrossDomains},
 
-    // {"MicroMatchEndpointSubject",       test_MicroMatchEndpointSubject},
-    // {"MicroAddService",                 test_MicroAddService},
-    // {"MicroGroups",                     test_MicroGroups},
-    // {"MicroBasics",                     test_MicroBasics},
-    // {"MicroStartStop",                  test_MicroStartStop},
-    // {"MicroServiceStopsOnClosedConn",   test_MicroServiceStopsOnClosedConn},
+    {"MicroMatchEndpointSubject",       test_MicroMatchEndpointSubject},
+    {"MicroAddService",                 test_MicroAddService},
+    {"MicroGroups",                     test_MicroGroups},
+    {"MicroBasics",                     test_MicroBasics},
+    {"MicroStartStop",                  test_MicroStartStop},
+    {"MicroServiceStopsOnClosedConn",   test_MicroServiceStopsOnClosedConn},
     {"MicroServiceStopsWhenServerStops", test_MicroServiceStopsWhenServerStops},
-    // {"MicroAsyncErrorHandler",          test_MicroAsyncErrorHandler},
+    {"MicroAsyncErrorHandler",          test_MicroAsyncErrorHandler},
 
 #if defined(NATS_HAS_STREAMING)
     // {"StanPBufAllocator",               test_StanPBufAllocator},

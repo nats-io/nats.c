@@ -35,8 +35,8 @@ micro_init_monitoring(microService *m)
 {
     microError *err = NULL;
     MICRO_CALL(err, add_verb_handlers(m, MICRO_PING_VERB, handle_ping));
-    // MICRO_CALL(err, add_verb_handlers(m, MICRO_STATS_VERB, handle_stats));
-    // MICRO_CALL(err, add_verb_handlers(m, MICRO_INFO_VERB, handle_info));
+    MICRO_CALL(err, add_verb_handlers(m, MICRO_STATS_VERB, handle_stats));
+    MICRO_CALL(err, add_verb_handlers(m, MICRO_INFO_VERB, handle_info));
     return err;
 }
 
@@ -205,15 +205,15 @@ add_verb_handlers(microService *m, const char *verb, microRequestHandler handler
 
     snprintf(name, sizeof(name), "%s-all", verb);
     err = add_internal_handler(m, verb, "", "", name, handler);
-    // if (err == NULL)
-    // {
-    //     snprintf(name, sizeof(name), "%s-kind", verb);
-    //     err = add_internal_handler(m, verb, m->cfg->Name, "", name, handler);
-    // }
-    // if (err == NULL)
-    // {
-    //     err = add_internal_handler(m, verb, m->cfg->Name, m->id, verb, handler);
-    // }
+    if (err == NULL)
+    {
+        snprintf(name, sizeof(name), "%s-kind", verb);
+        err = add_internal_handler(m, verb, m->cfg->Name, "", name, handler);
+    }
+    if (err == NULL)
+    {
+        err = add_internal_handler(m, verb, m->cfg->Name, m->id, verb, handler);
+    }
     return err;
 }
 

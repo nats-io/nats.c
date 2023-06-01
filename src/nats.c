@@ -765,9 +765,8 @@ _asyncCbsThread(void *arg)
             case ASYNC_CLOSED:
             {
                 (*(nc->opts->closedCb))(nc, nc->opts->closedCbClosure);
-
                 if (nc->opts->microClosedCb != NULL)
-                    (*(nc->opts->microClosedCb))(nc, nc->opts->closedCbClosure);
+                    (*(nc->opts->microClosedCb))(nc, NULL);
                break;
             }
 
@@ -791,10 +790,14 @@ _asyncCbsThread(void *arg)
                 if (cb->errTxt != NULL)
                     nats_setErrStatusAndTxt(cb->err, cb->errTxt);
 
-                if (nc->opts->microAsyncErrCb != NULL)
-                    (*(nc->opts->microAsyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
-
+                // Call the connection's own handler first. The microservice
+                // callback may result in destroying the subscription, which
+                // would then crash the default (logger). If there was a custom
+                // error handler already set on the connection, pray that it
+                // does not destroy the subscription.
                 (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
+                if (nc->opts->microAsyncErrCb != NULL)
+                    (*(nc->opts->microAsyncErrCb))(nc, cb->sub, cb->err, NULL);
 
                 break;
             }

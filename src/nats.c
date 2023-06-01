@@ -1969,13 +1969,13 @@ natsLib_msgDeliveryAssignWorker(natsSubscription *sub)
 }
 
 bool
-natsLib_isLibHandlingMsgDeliveryByDefault()
+natsLib_isLibHandlingMsgDeliveryByDefault(void)
 {
     return gLib.libHandlingMsgDeliveryByDefault;
 }
 
 int64_t
-natsLib_defaultWriteDeadline()
+natsLib_defaultWriteDeadline(void)
 {
     return gLib.libDefaultWriteDeadline;
 }

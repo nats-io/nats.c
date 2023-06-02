@@ -2792,7 +2792,11 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         }
     }
 
-    natsSubAndLdw_UnlockAndRelease(sub);
+    // If we are going to post to the error handler, do not release yet.
+    if (sc || sm)
+        natsSubAndLdw_Unlock(sub);
+    else
+        natsSubAndLdw_UnlockAndRelease(sub);
 
     if ((s == NATS_OK) && fcReply)
         s = natsConnection_Publish(nc, fcReply, NULL, 0);
@@ -2806,6 +2810,10 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
         nc->err = (sc ? NATS_SLOW_CONSUMER : NATS_MISMATCH);
         natsAsyncCb_PostErrHandler(nc, sub, nc->err, NULL);
+
+        // Now release the subscription (it has been retained in
+        // natsAsyncCb_PostErrHandler function).
+        natsSub_release(sub);
 
         natsConn_Unlock(nc);
     }

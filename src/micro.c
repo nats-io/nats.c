@@ -59,19 +59,19 @@ static inline int _endpoint_count(microService *m)
     return n;
 }
 
-// static inline void _dump_endpoints(microService *m)
-// {
-//     const char *sep = NULL;
-//     for (microEndpoint *ep = m->first_ep; ep != NULL; ep = ep->next)
-//     {
-//         if (sep == NULL)
-//             sep = ",";
-//         else
-//             printf("%s", sep);
-//         printf("%s", ep->subject);
-//     }
-//     printf("\n");
-// }
+static inline void _dump_endpoints(microService *m)
+{
+    // const char *sep = NULL;
+    for (microEndpoint *ep = m->first_ep; ep != NULL; ep = ep->next)
+    {
+        // if (sep == NULL)
+        //     sep = "\n";
+        // else
+        //     printf("%s", sep);
+        printf("\t%s\n", ep->subject);
+    }
+    printf("\n");
+}
 
 microError *
 micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *cfg)
@@ -208,7 +208,7 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
 }
 
 microError *
-microService_Stop(microService *m)
+microService_Stop(microService *m, const char *comment)
 {
     microError *err = NULL;
     microEndpoint *ep = NULL;
@@ -220,22 +220,22 @@ microService_Stop(microService *m)
     if (m->stopped)
     {
         _unlock_service(m);
-        printf("<>/<> microService_Stop: already stopped\n");
+        printf("<>/<> microService_Stop: %s: already stopped\n", comment);
         return NULL;
     }
     ep = m->first_ep;
 
     for (; ep != NULL; ep = ep->next)
     {
-        printf("<>/<> microService_Stop: stopping endpoint %s\n", ep->config->Name);
+        printf("<>/<> microService_Stop: %s: stopping endpoint %s\n", comment, ep->config->Name);
 
         if (err = _stop_endpoint_l(m, ep), err != NULL)
             return microError_Wrapf(err, "failed to stop service %s", ep->config->Name);
     }
     _unlock_service(m);
 
-    printf("<>/<> microService_Stop: finalize\n");
-    _finalize_stopping_service_l(m, "STOP");
+    printf("<>/<> microService_Stop: %s: finalize\n", comment);
+    _finalize_stopping_service_l(m, comment);
     return NULL;
 }
 
@@ -699,7 +699,7 @@ _on_connection_closed(natsConnection *nc, void *ignored)
     {
         m = to_call[i];
         microError_Ignore(
-            microService_Stop(m));
+            microService_Stop(m, "STOP from connection closed callback"));
 
         RELEASE_SERVICE(m, "After connection closed callback");
     }
@@ -738,7 +738,7 @@ _on_service_error_l(microService *m, const char *subject, natsStatus s)
     }
 
     // TODO: Should we stop the service? The Go client does.
-    // microError_Ignore(microService_Stop(m));
+    microError_Ignore(microService_Stop(m, "STOP from error callback"));
 }
 
 static void
@@ -817,7 +817,7 @@ microService_Destroy(microService *m)
 
     printf("<>/<> microService_Destroy: %s\n", m->cfg->Name);
 
-    err = microService_Stop(m);
+    err = microService_Stop(m, "STOP from Destroy");
     if (err != NULL)
         return err;
 
@@ -1044,10 +1044,23 @@ _release_on_endpoint_complete(void *closure)
     _lock_service(m);
     if (_find_endpoint(&prev_ep, m, ep))
     {
+        printf("<>/<> ------- still draining endpoints:\n");
+        _dump_endpoints(m);
+
         if (prev_ep != NULL)
+        {
+            // printf("<>/<> ======= removed %s, prev_ep %s now points to %s\n", ep->subject, prev_ep->subject, ep->next ? ep->next->subject : "NULL");
             prev_ep->next = ep->next;
+            
+        }
         else
+        {
+            // printf("<>/<> ======= removed %s, HEAD now points to %s, was %s\n", ep->subject, ep->next ? ep->next->subject : "NULL");
             m->first_ep = ep->next;
+        }
+
+        printf("<>/<> ------- after removing %s:\n", ep->subject);
+        _dump_endpoints(m);
     }
     RELEASE_SERVICE(m, "EP DONE");
     _unlock_service(m);

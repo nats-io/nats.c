@@ -35,8 +35,8 @@ micro_init_monitoring(microService *m)
 {
     microError *err = NULL;
     MICRO_CALL(err, add_verb_handlers(m, MICRO_PING_VERB, handle_ping));
-    MICRO_CALL(err, add_verb_handlers(m, MICRO_STATS_VERB, handle_stats));
-    MICRO_CALL(err, add_verb_handlers(m, MICRO_INFO_VERB, handle_info));
+    // MICRO_CALL(err, add_verb_handlers(m, MICRO_STATS_VERB, handle_stats));
+    // MICRO_CALL(err, add_verb_handlers(m, MICRO_INFO_VERB, handle_info));
     return err;
 }
 

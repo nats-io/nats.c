@@ -7801,7 +7801,7 @@ microService_Run(microService *m);
  *
  * @see #micro_AddService, #microService_Run
  */
-NATS_EXTERN microError *microService_Stop(microService *m);
+NATS_EXTERN microError *microService_Stop(microService *m, const char *comment);
 
 /** @} */ // end of microServiceFunctions
 

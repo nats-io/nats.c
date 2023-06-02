@@ -17,7 +17,7 @@
 #include <sodium.h>
 
 natsStatus
-natsCrypto_Init()
+natsCrypto_Init(void)
 {
     return ((sodium_init() == -1) ? NATS_ERR : NATS_OK);
 }

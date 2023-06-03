@@ -9665,6 +9665,7 @@ test_RetryOnFailedConnect(void)
     s = natsConnection_Connect(&nc, opts);
     end = nats_Now();
     testCond(s == NATS_NO_SERVER);
+    nats_clearLastError();
 
     test("Retried: ")
 #ifdef _WIN32
@@ -9780,9 +9781,32 @@ test_RetryOnFailedConnect(void)
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
+    nc = NULL;
     natsOptions_Destroy(opts);
+    opts = NULL;
 
     _destroyDefaultThreadArgs(&arg);
+
+    // Make sure that closing the connection while not connected returns fast
+    test("Create opts: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetRetryOnFailedConnect(opts, true, _connectedCb, NULL));
+    IFOK(s, natsOptions_SetURL(opts, "nats://localhost:54321"));
+    testCond(s == NATS_OK);
+
+    test("Start connect: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_NOT_YET_CONNECTED);
+    nats_clearLastError();
+    s = NATS_OK;
+
+    test("Close does not take too long: ");
+    start = nats_Now();
+    natsConnection_Close(nc);
+    testCond(nats_Now()-start <1500);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
 }
 
 static void
@@ -14482,6 +14506,130 @@ test_AsyncErrHandler(void)
 }
 
 static void
+_asyncErrBlockingCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void* closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+
+    arg->sum++;
+
+    while ((arg->sum == 1) && !arg->closed)
+        natsCondition_Wait(arg->c, arg->m);
+
+    if (sub != arg->sub)
+        arg->status = NATS_ERR;
+
+    if ((arg->status == NATS_OK) && (err != NATS_SLOW_CONSUMER))
+        arg->status = NATS_ERR;
+
+    if (arg->status == NATS_OK)
+    {
+        // Call some subscription API to make sure that the pointer has not been freed.
+        arg->current = natsSubscription_IsValid(sub);
+    }
+
+    arg->done = true;
+    natsCondition_Signal(arg->c);
+
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+test_AsyncErrHandlerSubDestroyed(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsSubscription    *sub      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsMsg             *msg      = NULL;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+    IFOK(s, natsOptions_SetMaxPendingMsgs(opts, 1));
+    IFOK(s, natsOptions_SetErrorHandler(opts, _asyncErrBlockingCb, (void*) &arg));
+
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test AsyncErrHandler");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Create sync sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    testCond(s == NATS_OK);
+
+    natsMutex_Lock(arg.m);
+    arg.sub = sub;
+    arg.current = true;
+    natsMutex_Unlock(arg.m);
+
+    test("Cause error: ");
+    s = natsConnection_PublishString(nc, "foo", "msg1");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "msg2"));
+    testCond(s == NATS_OK);
+
+    // Wait a bit to make sure that we have a slow consumer.
+    nats_Sleep(250);
+
+    test("Next should be error: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_SLOW_CONSUMER) && (msg == NULL));
+    nats_clearLastError();
+    s = NATS_OK;
+
+    test("Consume 1: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Cause error again: ");
+    s = natsConnection_PublishString(nc, "foo", "msg3");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "msg4"));
+    testCond(s == NATS_OK);
+
+    test("Wait a bit for async error to be posted: ");
+    nats_Sleep(200);
+    testCond(true);
+
+    test("Destroy subscription: ");
+    natsSubscription_Destroy(sub);
+
+    test("Wait for async error callback to return: ");
+    natsMutex_Lock(arg.m);
+    // First unblock the first instance
+    arg.closed = true;
+    natsCondition_Signal(arg.c);
+    // Now wait for the callback to have processed both and be done.
+    while ((s != NATS_TIMEOUT) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    // If ok, arg.current should be false since the subscription should
+    // not be valid (closed) at the second callback iteration.
+    if ((s == NATS_OK) && arg.current)
+        s = NATS_ERR;
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
+
+static void
 test_AddAsyncErrHandler(void)
 {
     natsStatus          s;
@@ -14559,7 +14707,6 @@ test_AddAsyncErrHandler(void)
 
     _stopServer(serverPid);
 }
-
 
 static void
 _responseCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
@@ -35553,6 +35700,7 @@ static testInfo allTests[] =
     {"SyncSubscriptionPending",         test_SyncSubscriptionPending},
     {"SyncSubscriptionPendingDrain",    test_SyncSubscriptionPendingDrain},
     {"AsyncErrHandler",                 test_AsyncErrHandler},
+    {"AsyncErrHandlerSubDestroyed",     test_AsyncErrHandlerSubDestroyed},
     {"AddAsyncErrHandler",              test_AddAsyncErrHandler},
     {"AsyncSubscriberStarvation",       test_AsyncSubscriberStarvation},
     {"AsyncSubscriberOnClose",          test_AsyncSubscriberOnClose},

@@ -149,6 +149,7 @@ AsyncSubscriptionPendingDrain
 SyncSubscriptionPending
 SyncSubscriptionPendingDrain
 AsyncErrHandler
+AsyncErrHandlerSubDestroyed
 AddAsyncErrHandler
 AsyncSubscriberStarvation
 AsyncSubscriberOnClose

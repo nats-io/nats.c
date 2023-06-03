@@ -14,6 +14,7 @@
 #include "natsp.h"
 #include "mem.h"
 #include "conn.h"
+#include "sub.h"
 #if defined(NATS_HAS_STREAMING)
 #include "stan/conn.h"
 #endif
@@ -46,6 +47,8 @@ _createAndPostCb(natsAsyncCbType type, natsConnection *nc, natsSubscription *sub
     cb->type = type;
     cb->nc   = nc;
     cb->sub  = sub;
+    if (sub != NULL)
+        natsSub_retain(sub);
     cb->err     = err;
     cb->errTxt  = errTxt;
 #if defined(NATS_HAS_STREAMING)
@@ -85,20 +88,23 @@ natsAsyncCb_PostStanConnLostHandler(stanConnection *sc)
 void
 natsAsyncCb_Destroy(natsAsyncCbInfo *info)
 {
-    natsConnection *nc = NULL;
+    natsConnection      *nc  = NULL;
+    natsSubscription    *sub = NULL;
 #if defined(NATS_HAS_STREAMING)
-    stanConnection *sc = NULL;
+    stanConnection      *sc  = NULL;
 #endif
 
     if (info == NULL)
         return;
 
-    nc = info->nc;
+    nc  = info->nc;
+    sub = info->sub;
 #if defined(NATS_HAS_STREAMING)
-    sc = info->sc;
+    sc  = info->sc;
 #endif
 
     _freeAsyncCbInfo(info);
+    natsSub_release(sub);
     natsConn_release(nc);
 #if defined(NATS_HAS_STREAMING)
     stanConn_release(sc);

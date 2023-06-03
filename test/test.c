@@ -32260,8 +32260,6 @@ _microHandleRequestNoisy42(microRequest *req)
     // Random delay between 5-10ms
     nats_Sleep(5 + (rand() % 5));
 
-    printf("<>/<> Responding with 42!!!!\n");
-
     return microRequest_Respond(req, "42", 2);
 }
 
@@ -32272,7 +32270,6 @@ _microServiceDoneHandler(microService *m)
 
     natsMutex_Lock(arg->m);
     arg->microRunningServiceCount--;
-    printf("<>/<> ========= SERVICE DONE, %d remain\n", arg->microRunningServiceCount);
     if (arg->microRunningServiceCount == 0)
     {
         arg->microAllDone = true;
@@ -32991,12 +32988,10 @@ test_MicroStartStop(void)
     test("Send requests: ");
     for (i = 0; i < 20; i++)
     {
-        // printf("<>/<> sending %d\n", i);
         reply = NULL;
         s = natsConnection_Request(&reply, nc, "svc.do", NULL, 0, 2000);
         if (NATS_OK != s)
             FAIL("Unable to send request");
-        // printf("<>/<> received %d: '%.*s'\n", i, reply->dataLen, reply->data);
         if (reply == NULL || reply->dataLen != 2 || memcmp(reply->data, "42", 2) != 0)
             FAIL("Unexpected reply");
         natsMsg_Destroy(reply);
@@ -33154,8 +33149,6 @@ test_MicroServiceStopsWhenServerStops(void)
 void _microAsyncErrorHandler(microService *m, microEndpoint *ep, natsStatus s)
 {
     struct threadArg *arg = (struct threadArg*) microService_GetState(m);
-
-    printf("<>/<> _microAsyncErrorHandler: %d\n", s);
 
     natsMutex_Lock(arg->m);
     // release the pending test request that caused the error

@@ -112,11 +112,7 @@ struct micro_service_s
     struct micro_endpoint_s *first_ep;
 
     int64_t started; // UTC time expressed as number of nanoseconds since epoch.
-    // true once the stopping of the service, i.e. draining of endpoints'
-    // subsriptions has started.
     bool stopped;
-    bool connection_closed_called;
-    bool stopping;
 };
 
 /**

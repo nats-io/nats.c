@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2023 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -792,18 +792,9 @@ _asyncCbsThread(void *arg)
                 if (cb->errTxt != NULL)
                     nats_setErrStatusAndTxt(cb->err, cb->errTxt);
 
-                // Call the connection's own handler first. The microservice
-                // callback may result in destroying the subscription, which
-                // would then crash the default (logger). If there was a custom
-                // error handler already set on the connection, pray that it
-                // does not destroy the subscription.
-
-                // natsSub_retain(cb->sub);
+                (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
                 if (nc->opts->microAsyncErrCb != NULL)
                     (*(nc->opts->microAsyncErrCb))(nc, cb->sub, cb->err, NULL);
-                else
-                    (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
-                // natsSub_release(cb->sub);
                 break;
             }
 #if defined(NATS_HAS_STREAMING)

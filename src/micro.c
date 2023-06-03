@@ -143,7 +143,7 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
 
     _lock_service(m);
 
-    if (m->stopping || m->stopped)
+    if (m->stopped)
     {
         _unlock_service(m);
         return micro_Errorf("can't add an endpoint %s to service %s: the service is stopped", cfg->Name, m->cfg->Name);

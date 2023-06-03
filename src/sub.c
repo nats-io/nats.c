@@ -81,9 +81,6 @@ _freeSubscription(natsSubscription *sub)
 void
 natsSub_retain(natsSubscription *sub)
 {
-    if (sub == NULL)
-        return;
-
     natsSub_Lock(sub);
 
     sub->refs++;

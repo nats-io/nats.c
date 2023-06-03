@@ -32246,10 +32246,9 @@ _microServiceDoneHandler(microService *m)
 {
     struct threadArg *arg = (struct threadArg*) microService_GetState(m);
 
-    printf("<>/<> ========= SERVICE DONE\n");
-
     natsMutex_Lock(arg->m);
     arg->microRunningServiceCount--;
+    printf("<>/<> ========= SERVICE DONE, %d remain\n", arg->microRunningServiceCount);
     if (arg->microRunningServiceCount == 0)
     {
         arg->microAllDone = true;
@@ -32258,25 +32257,43 @@ _microServiceDoneHandler(microService *m)
     natsMutex_Unlock(arg->m);
 }
 
-static void
+static microError *
 _startMicroservice(microService** new_m, natsConnection *nc, microServiceConfig *cfg, struct threadArg *arg)
 {
-    char buf[64];
+    microError *err = NULL;
+    bool prev_done;
 
     cfg->DoneHandler = _microServiceDoneHandler;
     cfg->State = arg;
 
+    natsMutex_Lock(arg->m);
+
+    arg->microRunningServiceCount++;
+    prev_done = arg->microAllDone;
+    arg->microAllDone = false;
+
+    err = micro_AddService(new_m, nc, cfg);
+    if (err != NULL) 
+    {
+        arg->microRunningServiceCount--;
+        arg->microAllDone = prev_done;
+    }
+    
+    natsMutex_Unlock(arg->m);
+    
+    return err;
+}
+
+static void
+_startMicroserviceOK(microService** new_m, natsConnection *nc, microServiceConfig *cfg, struct threadArg *arg)
+{
+    char buf[64];
+
     snprintf(buf, sizeof(buf), "Start microservice %s: ", cfg->Name);
     test(buf);
 
-    natsMutex_Lock(arg->m);
-    arg->microRunningServiceCount++;
-    arg->microAllDone = false;
-    natsMutex_Unlock(arg->m);
-
-    testCond (NULL == micro_AddService(new_m, nc, cfg));
+    testCond (NULL == _startMicroservice(new_m, nc, cfg, arg));
 }
-
 
 static void
 _startManyMicroservices(microService** svcs, int n, natsConnection *nc, microServiceConfig *cfg, struct threadArg *arg)
@@ -32285,7 +32302,7 @@ _startManyMicroservices(microService** svcs, int n, natsConnection *nc, microSer
 
     for (i = 0; i < n; i++)
     {
-        _startMicroservice(&(svcs[i]), nc, cfg, arg);
+        _startMicroserviceOK(&(svcs[i]), nc, cfg, arg);
     }
     
     testCond(true);
@@ -32380,29 +32397,22 @@ test_MicroAddService(void)
         .Version = "1.0.0",
         .Name = "minimal",
 
-        // for the test to work
-        .DoneHandler = _microServiceDoneHandler,
-        .State = &arg,
     };
     microServiceConfig full_cfg = {
         .Version = "1.0.0",
         .Name = "full",
         .Endpoint = &default_ep_cfg,
         .Description = "fully declared microservice",
-
-        // for the test to work
-        .DoneHandler = _microServiceDoneHandler,
-        .State = &arg,
     };
     microServiceConfig err_no_name_cfg = {
         .Version = "1.0.0",
     };
     microServiceConfig err_no_version_cfg = {
-        .Name = "minimal",
+        .Name = "no-version",
     };
     microServiceConfig err_invalid_version_cfg = {
         .Version = "BLAH42",
-        .Name = "minimal",
+        .Name = "invalid-version",
     };
 
     add_service_test_case_t tcs[] = {
@@ -32422,33 +32432,33 @@ test_MicroAddService(void)
             .num_endpoints = sizeof(all_ep_cfgs) / sizeof(all_ep_cfgs[0]),
             .expected_num_subjects = 4,
         },
-        // {
-        //     .name = "Err-null-connection",
-        //     .cfg = &minimal_cfg,
-        //     .null_nc = true,
-        //     .expected_err = "status 16: invalid function argument",
-        // },
-        // {
-        //     .name = "Err-null-receiver",
-        //     .cfg = &minimal_cfg,
-        //     .null_receiver = true,
-        //     .expected_err = "status 16: invalid function argument",
-        // },
-        // {
-        //     .name = "Err-no-name",
-        //     .cfg = &err_no_name_cfg,
-        //     .expected_err = "status 16: invalid function argument",
-        // },
-        // {
-        //     .name = "Err-no-version",
-        //     .cfg = &err_no_version_cfg,
-        //     .expected_err = "status 16: invalid function argument",
-        // },
-        // {
-        //     .name = "Err-invalid-version",
-        //     .cfg = &err_invalid_version_cfg,
-        //     // TODO: validate the version format.
-        // },
+        {
+            .name = "Err-null-connection",
+            .cfg = &minimal_cfg,
+            .null_nc = true,
+            .expected_err = "status 16: invalid function argument",
+        },
+        {
+            .name = "Err-null-receiver",
+            .cfg = &minimal_cfg,
+            .null_receiver = true,
+            .expected_err = "status 16: invalid function argument",
+        },
+        {
+            .name = "Err-no-name",
+            .cfg = &err_no_name_cfg,
+            .expected_err = "status 16: invalid function argument",
+        },
+        {
+            .name = "Err-no-version",
+            .cfg = &err_no_version_cfg,
+            .expected_err = "status 16: invalid function argument",
+        },
+        {
+            .name = "Err-invalid-version",
+            .cfg = &err_invalid_version_cfg,
+            // TODO: validate the version format.
+        },
     };
     add_service_test_case_t tc;
 
@@ -32474,18 +32484,13 @@ test_MicroAddService(void)
     {
         tc = tcs[n];
 
-        natsMutex_Lock(arg.m);
-        arg.microRunningServiceCount = 1;
-        arg.microAllDone = false;
-        natsMutex_Unlock(arg.m);
-
         snprintf(buf, sizeof(buf), "%s: AddService: ", tc.name);
         test(buf);
         m = NULL;
-        err = micro_AddService(
+        err = _startMicroservice(
             tc.null_receiver ? NULL : &m,
             tc.null_nc ? NULL : nc,
-            tc.cfg);
+            tc.cfg, &arg);
         if (nats_IsStringEmpty(tc.expected_err))
         {
             testCond(err == NULL);
@@ -32576,7 +32581,7 @@ test_MicroAddService(void)
         
         if (m != NULL)
         {
-            snprintf(buf, sizeof(buf), "%s: Destroy service: ", m->cfg->Name);
+            snprintf(buf, sizeof(buf), "%s: Destroy service: %d", m->cfg->Name, m->refs);
             test(buf);
             testCond(NULL == microService_Destroy(m));
             _waitForMicroservicesAllDone(&arg);

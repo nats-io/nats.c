@@ -999,7 +999,6 @@ _release_on_endpoint_complete(void *closure)
         return;
 
     _lock_endpoint(ep);
-    printf("<>/<> EP DONE: remove EP %s and finalize\n", ep->subject);
     ep->is_draining = false;
     sub = ep->sub;
     ep->sub = NULL;
@@ -1015,6 +1014,7 @@ _release_on_endpoint_complete(void *closure)
     // Release the service reference for the completed endpoint. It can not be
     // the last reference, so no need to free m.
     m->refs--;
+    printf("<>/<> EP DONE: remove EP %s and finalize: m->refs:%d, ep->refs:%d\n", ep->subject, m->refs, ep->refs);
 
     // Unlink the endpoint from the service.
     if (_find_endpoint(&prev_ep, m, ep))
@@ -1045,10 +1045,15 @@ _release_on_endpoint_complete(void *closure)
     
     if (finalize)
     {
+        printf("<>/<> EP DONE: final!!!\n");
         if (doneHandler != NULL)
             doneHandler(m);
 
         RELEASE_SERVICE(m, "After callbacks removed, final");
+    }
+    else
+    {
+        printf("<>/<> EP DONE: already stopped or not final yet.\n");
     }
 }
 

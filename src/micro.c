@@ -28,8 +28,8 @@ static inline void _unlock_endpoint(microEndpoint *ep) { natsMutex_Unlock(ep->en
 static microError *_clone_service_config(microServiceConfig **out, microServiceConfig *cfg);
 static microError *_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
 static microError *_new_service(microService **ptr, natsConnection *nc);
-static microError *_start_endpoint_l(microService *m, microEndpoint *ep);
-static microError *_stop_endpoint_l(microService *m, microEndpoint *ep);
+static microError *_start_endpoint(microService *m, microEndpoint *ep);
+static microError *_stop_endpoint(microService *m, microEndpoint *ep);
 static microError *_wrap_connection_event_callbacks(microService *m);
 
 static bool _is_valid_name(const char *name);
@@ -39,30 +39,6 @@ static void _release_endpoint(microEndpoint *ep);
 static void _release_service(microService *m);
 static void _retain_service(microService *m, bool lock);
 static void _stop_service_callbacks(microService *m);
-
-static inline int _endpoint_count(microService *m)
-{
-    int n = 0;
-    for (microEndpoint *ep = m->first_ep; ep != NULL; ep = ep->next)
-    {
-        n++;
-    }
-    return n;
-}
-
-static inline void _dump_endpoints(microService *m)
-{
-    // const char *sep = NULL;
-    for (microEndpoint *ep = m->first_ep; ep != NULL; ep = ep->next)
-    {
-        // if (sep == NULL)
-        //     sep = "\n";
-        // else
-        //     printf("%s", sep);
-        printf("\t%s\n", ep->subject);
-    }
-    printf("\n");
-}
 
 microError *
 micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *cfg)
@@ -181,12 +157,12 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
         // Rid of the previous endpoint with the same name, if any. If this
         // fails we can return the error, leave the newly added endpoint in the
         // list, not started. A retry with the same name will clean it up.
-        if (err = _stop_endpoint_l(m, prev_ep), err != NULL)
+        if (err = _stop_endpoint(m, prev_ep), err != NULL)
             return err;
         _release_endpoint(prev_ep);
     }
 
-    if (err = _start_endpoint_l(m, ep), err != NULL)
+    if (err = _start_endpoint(m, ep), err != NULL)
     {
         // Best effort, leave the new endpoint in the list, as is. A retry with
         // the same name will clean it up.
@@ -220,7 +196,7 @@ microService_Stop(microService *m)
 
     for (; ep != NULL; ep = ep->next)
     {
-        if (err = _stop_endpoint_l(m, ep), err != NULL)
+        if (err = _stop_endpoint(m, ep), err != NULL)
             return microError_Wrapf(err, "failed to stop service '%s', stopping endpoint '%s'", m->cfg->Name, ep->name);
     }
 
@@ -686,7 +662,7 @@ _on_connection_closed(natsConnection *nc, void *ignored)
 }
 
 static void
-_on_service_error_l(microService *m, const char *subject, natsStatus s)
+_on_service_error(microService *m, const char *subject, natsStatus s)
 {
     microEndpoint *ep = NULL;
     microError *err = NULL;
@@ -744,7 +720,7 @@ _on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *not_use
     for (i = 0; i < n; i++)
     {
         m = to_call[i];
-        _on_service_error_l(m, subject, s);
+        _on_service_error(m, subject, s);
         _release_service(m); // release the extra ref in `to_call`.
     }
 
@@ -990,7 +966,6 @@ _release_on_endpoint_complete(void *closure)
         if (prev_ep != NULL)
         {
             prev_ep->next = ep->next;
-            
         }
         else
         {
@@ -1007,10 +982,10 @@ _release_on_endpoint_complete(void *closure)
     }
 
     _unlock_service(m);
-    
+
     if (free_ep)
         _free_endpoint(ep);
-    
+
     if (finalize)
     {
         if (doneHandler != NULL)
@@ -1021,7 +996,7 @@ _release_on_endpoint_complete(void *closure)
 }
 
 static microError *
-_start_endpoint_l(microService *m, microEndpoint *ep)
+_start_endpoint(microService *m, microEndpoint *ep)
 {
     natsStatus s = NATS_OK;
     natsSubscription *sub = NULL;
@@ -1048,7 +1023,7 @@ _start_endpoint_l(microService *m, microEndpoint *ep)
         ep->is_draining = false;
         _unlock_endpoint(ep);
 
-        // The service needs to be retained 
+        // The service needs to be retained
 
         natsSubscription_SetOnCompleteCB(sub, _release_on_endpoint_complete, ep);
     }
@@ -1061,7 +1036,7 @@ _start_endpoint_l(microService *m, microEndpoint *ep)
 }
 
 static microError *
-_stop_endpoint_l(microService *m, microEndpoint *ep)
+_stop_endpoint(microService *m, microEndpoint *ep)
 {
     natsStatus s = NATS_OK;
     natsSubscription *sub = NULL;

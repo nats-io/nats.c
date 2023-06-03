@@ -132,7 +132,7 @@ micro_is_error_message(natsStatus status, natsMsg *msg)
         code = atoi(c);
     }
     is_service_error = (code != 0) || !nats_IsStringEmpty(d);
-    
+
     if (is_service_error && !is_nats_error)
     {
         return micro_ErrorfCode(code, d);

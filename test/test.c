@@ -33196,8 +33196,7 @@ test_MicroAsyncErrorHandler(void)
     test("Connect to NATS: ");
     testCond(NATS_OK == natsConnection_Connect(&nc, opts));
 
-    test("Start microservice: ");
-    testCond(NULL == micro_AddService(&m, nc, &cfg));
+    _startMicroservice(&m, nc, &cfg, &arg);
 
     test("Test microservice is running: ");
     testCond(!microService_IsStopped(m))
@@ -33225,10 +33224,15 @@ test_MicroAsyncErrorHandler(void)
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.closed && (arg.status == NATS_SLOW_CONSUMER));
 
-    microService_Destroy(m);
-    natsOptions_Destroy(opts);
     natsSubscription_Destroy(sub);
+
+    microService_Destroy(m);
+    _waitForMicroservicesAllDone(&arg);
+
     natsConnection_Destroy(nc);
+    _waitForConnClosed(&arg);
+
+    natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
     _stopServer(serverPid);
 }

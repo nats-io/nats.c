@@ -760,6 +760,8 @@ _asyncCbsThread(void *arg)
         sc = cb->sc;
 #endif
 
+        printf("<>/<> ====> async cb type=%d status:%d\n", cb->type, cb->err);
+
         switch (cb->type)
         {
             case ASYNC_CLOSED:

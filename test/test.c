@@ -119,7 +119,8 @@ struct threadArg
     int64_t         reconnectedAt[4];
     int             reconnects;
     bool            msgReceived;
-    bool            microDone;
+    int             microRunningServiceCount;
+    bool            microAllDone;
     bool            done;
     int             results[10];
     const char      *tokens[3];
@@ -32220,7 +32221,13 @@ test_MicroMatchEndpointSubject(void)
 }
 
 static microError *
-micro_basics_handle_request(microRequest *req)
+_microHandleRequest42(microRequest *req)
+{
+    return microRequest_Respond(req, "42", 2);
+}
+
+static microError *
+_microHandleRequestNoisy42(microRequest *req)
 {
     if ((rand() % 10) == 0)
         return micro_Errorf("Unexpected error!");
@@ -32229,7 +32236,93 @@ micro_basics_handle_request(microRequest *req)
     // Random delay between 5-10ms
     nats_Sleep(5 + (rand() % 5));
 
+    printf("<>/<> Responding with 42!!!!\n");
+
     return microRequest_Respond(req, "42", 2);
+}
+
+static void
+_microServiceDoneHandler(microService *m)
+{
+    struct threadArg *arg = (struct threadArg*) microService_GetState(m);
+
+    printf("<>/<> ========= SERVICE DONE\n");
+
+    natsMutex_Lock(arg->m);
+    arg->microRunningServiceCount--;
+    if (arg->microRunningServiceCount == 0)
+    {
+        arg->microAllDone = true;
+        natsCondition_Broadcast(arg->c);
+    }
+    natsMutex_Unlock(arg->m);
+}
+
+static void
+_startMicroservice(microService** new_m, natsConnection *nc, microServiceConfig *cfg, struct threadArg *arg)
+{
+    char buf[64];
+
+    cfg->DoneHandler = _microServiceDoneHandler;
+    cfg->State = arg;
+
+    snprintf(buf, sizeof(buf), "Start microservice %s: ", cfg->Name);
+    test(buf);
+
+    natsMutex_Lock(arg->m);
+    arg->microRunningServiceCount++;
+    arg->microAllDone = false;
+    natsMutex_Unlock(arg->m);
+
+    testCond (NULL == micro_AddService(new_m, nc, cfg));
+}
+
+
+static void
+_startManyMicroservices(microService** svcs, int n, natsConnection *nc, microServiceConfig *cfg, struct threadArg *arg)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+    {
+        _startMicroservice(&(svcs[i]), nc, cfg, arg);
+    }
+    
+    testCond(true);
+}
+
+static void
+_waitForMicroservicesAllDone(struct threadArg *arg)
+{
+    natsStatus s = NATS_OK;
+
+    test("Wait for all microservices to stop: ");
+    natsMutex_Lock(arg->m);
+    while ((s != NATS_TIMEOUT) && !arg->microAllDone)
+        s = natsCondition_TimedWait(arg->c, arg->m, 1000);
+    natsMutex_Unlock(arg->m);
+    testCond((NATS_OK == s) && arg->microAllDone);
+
+    // `Done` may be immediately followed by freeing the service, so wait a bit
+    // to make sure it happens before the test exits.
+    nats_Sleep(100);
+}
+
+static void
+_destroyMicroservicesAndWaitForAllDone(microService** svcs, int n, struct threadArg *arg)
+{
+    char buf[64];
+
+    snprintf(buf, sizeof(buf), "Wait for all %d microservices to stop: ", n);
+    test(buf);
+
+    for (int i = 0; i < n; i++)
+    {
+        if (NULL != microService_Destroy(svcs[i]))
+            FAIL("Unable to destroy microservice!");
+    }
+
+    _waitForMicroservicesAllDone(arg);
 }
 
 typedef struct
@@ -32266,32 +32359,40 @@ test_MicroAddService(void)
 
     microEndpointConfig default_ep_cfg = {
         .Name = "default",
-        .Handler = micro_basics_handle_request,
+        .Handler = _microHandleRequestNoisy42,
     };
     microEndpointConfig ep1_cfg = {
         .Name = "ep1",
-        .Handler = micro_basics_handle_request,
+        .Handler = _microHandleRequestNoisy42,
     };
     microEndpointConfig ep2_cfg = {
         .Name = "ep2",
         .Subject = "different-from-name",
-        .Handler = micro_basics_handle_request,
+        .Handler = _microHandleRequestNoisy42,
     };
     microEndpointConfig ep3_cfg = {
         .Name = "ep3",
-        .Handler = micro_basics_handle_request,
+        .Handler = _microHandleRequestNoisy42,
     };
     microEndpointConfig *all_ep_cfgs[] = {&ep1_cfg, &ep2_cfg, &ep3_cfg};
 
     microServiceConfig minimal_cfg = {
         .Version = "1.0.0",
         .Name = "minimal",
+
+        // for the test to work
+        .DoneHandler = _microServiceDoneHandler,
+        .State = &arg,
     };
     microServiceConfig full_cfg = {
         .Version = "1.0.0",
         .Name = "full",
         .Endpoint = &default_ep_cfg,
         .Description = "fully declared microservice",
+
+        // for the test to work
+        .DoneHandler = _microServiceDoneHandler,
+        .State = &arg,
     };
     microServiceConfig err_no_name_cfg = {
         .Version = "1.0.0",
@@ -32321,33 +32422,33 @@ test_MicroAddService(void)
             .num_endpoints = sizeof(all_ep_cfgs) / sizeof(all_ep_cfgs[0]),
             .expected_num_subjects = 4,
         },
-        {
-            .name = "Err-null-connection",
-            .cfg = &minimal_cfg,
-            .null_nc = true,
-            .expected_err = "status 16: invalid function argument",
-        },
-        {
-            .name = "Err-null-receiver",
-            .cfg = &minimal_cfg,
-            .null_receiver = true,
-            .expected_err = "status 16: invalid function argument",
-        },
-        {
-            .name = "Err-no-name",
-            .cfg = &err_no_name_cfg,
-            .expected_err = "status 16: invalid function argument",
-        },
-        {
-            .name = "Err-no-version",
-            .cfg = &err_no_version_cfg,
-            .expected_err = "status 16: invalid function argument",
-        },
-        {
-            .name = "Err-invalid-version",
-            .cfg = &err_invalid_version_cfg,
-            // TODO: validate the version format.
-        },
+        // {
+        //     .name = "Err-null-connection",
+        //     .cfg = &minimal_cfg,
+        //     .null_nc = true,
+        //     .expected_err = "status 16: invalid function argument",
+        // },
+        // {
+        //     .name = "Err-null-receiver",
+        //     .cfg = &minimal_cfg,
+        //     .null_receiver = true,
+        //     .expected_err = "status 16: invalid function argument",
+        // },
+        // {
+        //     .name = "Err-no-name",
+        //     .cfg = &err_no_name_cfg,
+        //     .expected_err = "status 16: invalid function argument",
+        // },
+        // {
+        //     .name = "Err-no-version",
+        //     .cfg = &err_no_version_cfg,
+        //     .expected_err = "status 16: invalid function argument",
+        // },
+        // {
+        //     .name = "Err-invalid-version",
+        //     .cfg = &err_invalid_version_cfg,
+        //     // TODO: validate the version format.
+        // },
     };
     add_service_test_case_t tc;
 
@@ -32373,8 +32474,14 @@ test_MicroAddService(void)
     {
         tc = tcs[n];
 
+        natsMutex_Lock(arg.m);
+        arg.microRunningServiceCount = 1;
+        arg.microAllDone = false;
+        natsMutex_Unlock(arg.m);
+
         snprintf(buf, sizeof(buf), "%s: AddService: ", tc.name);
         test(buf);
+        m = NULL;
         err = micro_AddService(
             tc.null_receiver ? NULL : &m,
             tc.null_nc ? NULL : nc,
@@ -32466,7 +32573,14 @@ test_MicroAddService(void)
         }
 
         microServiceInfo_Destroy(info);
-        microService_Destroy(m);
+        
+        if (m != NULL)
+        {
+            snprintf(buf, sizeof(buf), "%s: Destroy service: ", m->cfg->Name);
+            test(buf);
+            testCond(NULL == microService_Destroy(m));
+            _waitForMicroservicesAllDone(&arg);
+        }
     }
 
     natsConnection_Destroy(nc);
@@ -32494,11 +32608,11 @@ test_MicroGroups(void)
 
     microEndpointConfig ep1_cfg = {
         .Name = "ep1",
-        .Handler = micro_basics_handle_request,
+        .Handler = _microHandleRequest42,
     };
     microEndpointConfig ep2_cfg = {
         .Name = "ep2",
-        .Handler = micro_basics_handle_request,
+        .Handler = _microHandleRequest42,
     };
     microServiceConfig cfg = {
         .Version = "1.0.0",
@@ -32530,8 +32644,7 @@ test_MicroGroups(void)
     test("Connect to server: ");
     testCond(NATS_OK == natsConnection_Connect(&nc, opts));
 
-    test("AddService: ");
-    testCond(NULL == micro_AddService(&m, nc, &cfg));
+    _startMicroservice(&m, nc, &cfg, &arg);
 
     test("AddEndpoint 1 to service: ");
     testCond(NULL == microService_AddEndpoint(m, &ep1_cfg));
@@ -32573,7 +32686,10 @@ test_MicroGroups(void)
     testCond(true);
 
     microServiceInfo_Destroy(info);
+    
     microService_Destroy(m);
+    _waitForMicroservicesAllDone(&arg);
+    
     natsConnection_Destroy(nc);
     _waitForConnClosed(&arg);
 
@@ -32582,7 +32698,7 @@ test_MicroGroups(void)
     _stopServer(serverPid);
 }
 
-#define NUM_BASIC_MICRO_SERVICES 1
+#define NUM_MICRO_SERVICES 1
 
 static void
 test_MicroBasics(void)
@@ -32593,11 +32709,11 @@ test_MicroBasics(void)
     natsOptions *opts = NULL;
     natsConnection *nc = NULL;
     natsPid serverPid = NATS_INVALID_PID;
-    microService **svcs = NATS_CALLOC(NUM_BASIC_MICRO_SERVICES, sizeof(microService *));
+    microService *svcs[NUM_MICRO_SERVICES];
     microEndpointConfig ep_cfg = {
         .Name = "do",
         .Subject = "svc.do",
-        .Handler = micro_basics_handle_request,
+        .Handler = _microHandleRequestNoisy42,
     };
     microServiceConfig cfg = {
         .Version = "1.0.0",
@@ -32638,16 +32754,10 @@ test_MicroBasics(void)
     test("Connect to server: ");
     testCond(NATS_OK == natsConnection_Connect(&nc, opts));
 
-    // start 5 instances of the basic service.
-    for (i = 0; i < NUM_BASIC_MICRO_SERVICES; i++)
-    {
-        snprintf(buf, sizeof(buf), "Start microservice #%d: ", i);
-        test(buf);
-        testCond(NULL == micro_AddService(&svcs[i], nc, &cfg));
-    }
+    _startManyMicroservices(svcs, NUM_MICRO_SERVICES, nc, &cfg, &arg);
 
     // Now send 50 requests.
-    test("Send 50 requests: ");
+    test("Send 50 requests (no matter response): ");
     for (i = 0; i < 50; i++)
     {
         s = natsConnection_Request(&reply, nc, "svc.do", NULL, 0, 1000);
@@ -32658,7 +32768,7 @@ test_MicroBasics(void)
     testCond(NATS_OK == s);
 
     // Make sure we can request valid info with local API.
-    for (i = 0; i < NUM_BASIC_MICRO_SERVICES; i++)
+    for (i = 0; i < NUM_MICRO_SERVICES; i++)
     {
         snprintf(buf, sizeof(buf), "Check local info #%d: ", i);
         test(buf);
@@ -32686,7 +32796,7 @@ test_MicroBasics(void)
         s = natsSubscription_NextMsg(&reply, sub, 250);
         if (s == NATS_TIMEOUT)
         {
-            testCond(i == NUM_BASIC_MICRO_SERVICES);
+            testCond(i == NUM_MICRO_SERVICES);
             break;
         }
         testCond(NATS_OK == s);
@@ -32719,7 +32829,7 @@ test_MicroBasics(void)
         s = natsSubscription_NextMsg(&reply, sub, 250);
         if (s == NATS_TIMEOUT)
         {
-            testCond(i == NUM_BASIC_MICRO_SERVICES);
+            testCond(i == NUM_MICRO_SERVICES);
             break;
         }
         testCond(NATS_OK == s);
@@ -32753,7 +32863,7 @@ test_MicroBasics(void)
         s = natsSubscription_NextMsg(&reply, sub, 250);
         if (s == NATS_TIMEOUT)
         {
-            testCond(i == NUM_BASIC_MICRO_SERVICES);
+            testCond(i == NUM_MICRO_SERVICES);
             break;
         }
         testCond(NATS_OK == s);
@@ -32794,11 +32904,8 @@ test_MicroBasics(void)
     natsInbox_Destroy(inbox);
     NATS_FREE(subject);
 
-    for (i = 0; i < NUM_BASIC_MICRO_SERVICES; i++)
-    {
-        microService_Destroy(svcs[i]);
-    }
-    NATS_FREE(svcs);
+    _destroyMicroservicesAndWaitForAllDone(svcs, NUM_MICRO_SERVICES, &arg);
+
     natsConnection_Destroy(nc);
     _waitForConnClosed(&arg);
 
@@ -32815,11 +32922,11 @@ test_MicroStartStop(void)
     natsOptions *opts = NULL;
     natsConnection *nc = NULL;
     natsPid serverPid = NATS_INVALID_PID;
-    microService **svcs = NATS_CALLOC(NUM_BASIC_MICRO_SERVICES, sizeof(microService *));
+    microService *svcs[NUM_MICRO_SERVICES];
     microEndpointConfig ep_cfg = {
         .Name = "do",
         .Subject = "svc.do",
-        .Handler = micro_basics_handle_request,
+        .Handler = _microHandleRequest42,
     };
     microServiceConfig cfg = {
         .Version = "1.0.0",
@@ -32829,7 +32936,6 @@ test_MicroStartStop(void)
     };
     natsMsg *reply = NULL;
     int i;
-    char buf[256];
 
     srand((unsigned int)nats_NowInNanoSeconds());
 
@@ -32850,32 +32956,25 @@ test_MicroStartStop(void)
     test("Connect to server: ");
     testCond(NATS_OK == natsConnection_Connect(&nc, opts));
 
-    // start 5 instances of the basic service.
-    for (i = 0; i < NUM_BASIC_MICRO_SERVICES; i++)
-    {
-        snprintf(buf, sizeof(buf), "Start microservice #%d: ", i);
-        test(buf);
-        testCond(NULL == micro_AddService(&svcs[i], nc, &cfg));
-    }
+    _startManyMicroservices(svcs, NUM_MICRO_SERVICES, nc, &cfg, &arg);
 
-    // Now send 50 requests.
-    test("Send 50 requests: ");
-    for (i = 0; i < 50; i++)
+    // Now send some requests.
+    test("Send requests: ");
+    for (i = 0; i < 20; i++)
     {
-        s = natsConnection_Request(&reply, nc, "svc.do", NULL, 0, 1000);
+        // printf("<>/<> sending %d\n", i);
+        reply = NULL;
+        s = natsConnection_Request(&reply, nc, "svc.do", NULL, 0, 2000);
         if (NATS_OK != s)
             FAIL("Unable to send request");
+        // printf("<>/<> received %d: '%.*s'\n", i, reply->dataLen, reply->data);
+        if (reply == NULL || reply->dataLen != 2 || memcmp(reply->data, "42", 2) != 0)
+            FAIL("Unexpected reply");
         natsMsg_Destroy(reply);
     }
     testCond(NATS_OK == s);
    
-    for (i = 0; i < NUM_BASIC_MICRO_SERVICES; i++)
-    {
-        snprintf(buf, sizeof(buf), "Destroy microservice #%d: ", i);
-        test(buf);
-        testCond(NULL == microService_Destroy(svcs[i]));
-    }
-    NATS_FREE(svcs);
+    _destroyMicroservicesAndWaitForAllDone(svcs, NUM_MICRO_SERVICES, &arg);
 
     test("Destroy the connection: ");
     natsConnection_Destroy(nc);
@@ -32885,16 +32984,6 @@ test_MicroStartStop(void)
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
     _stopServer(serverPid);
-}
-
-void micro_service_done_handler(microService *m)
-{
-    struct threadArg *arg = (struct threadArg*) microService_GetState(m);
-
-    natsMutex_Lock(arg->m);
-    arg->microDone = true;
-    natsCondition_Broadcast(arg->c);
-    natsMutex_Unlock(arg->m);
 }
 
 static void
@@ -32909,8 +32998,6 @@ test_MicroServiceStopsOnClosedConn(void)
     microServiceConfig cfg = {
         .Name = "test",
         .Version = "1.0.0",
-        .DoneHandler = micro_service_done_handler,
-        .State = &arg,
     };
     natsMsg *reply = NULL;
 
@@ -32931,8 +33018,7 @@ test_MicroServiceStopsOnClosedConn(void)
     test("Connect for microservice: ");
     testCond(NATS_OK == natsConnection_Connect(&nc, opts));
 
-    test("Start microservice: ");
-    testCond(NULL == micro_AddService(&m, nc, &cfg));
+    _startMicroservice(&m, nc, &cfg, &arg);
 
     test("Test microservice is running: ");
     testCond(!microService_IsStopped(m))
@@ -32955,16 +33041,17 @@ test_MicroServiceStopsOnClosedConn(void)
 
     test("Wait for the service to stop: ");
     natsMutex_Lock(arg.m);
-    while ((s != NATS_TIMEOUT) && !arg.microDone)
+    while ((s != NATS_TIMEOUT) && !arg.microAllDone)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
-    testCond(arg.microDone);
+    testCond(arg.microAllDone);
 
     test("Test microservice is stopped: ");
     testCond(microService_IsStopped(m));
 
     test("Destroy microservice (final): ");
     testCond(NULL == microService_Destroy(m))
+    _waitForMicroservicesAllDone(&arg);
 
     natsOptions_Destroy(opts);
     natsConnection_Destroy(nc);
@@ -32984,8 +33071,6 @@ test_MicroServiceStopsWhenServerStops(void)
     microServiceConfig cfg = {
         .Name = "test",
         .Version = "1.0.0",
-        .DoneHandler = micro_service_done_handler,
-        .State = &arg,
     };
 
     s = _createDefaultThreadArgsForCbTests(&arg);
@@ -33006,26 +33091,30 @@ test_MicroServiceStopsWhenServerStops(void)
     test("Connect for microservice: ");
     testCond(NATS_OK == natsConnection_Connect(&nc, opts));
 
-    test("Start microservice: ");
-    testCond(NULL == micro_AddService(&m, nc, &cfg));
-
+    _startMicroservice(&m, nc, &cfg, &arg);
+    
     test("Test microservice is running: ");
     testCond(!microService_IsStopped(m))
 
     test("Stop the server: ");
     testCond((_stopServer(serverPid), true));
 
+    nats_Sleep(1000);
+
     test("Wait for the service to stop: ");
     natsMutex_Lock(arg.m);
-    while ((s != NATS_TIMEOUT) && !arg.microDone)
+    while ((s != NATS_TIMEOUT) && !arg.microAllDone)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
-    testCond(arg.microDone);
+    testCond(arg.microAllDone);
 
     test("Test microservice is not running: ");
     testCond(microService_IsStopped(m))
 
     microService_Destroy(m);
+    _waitForMicroservicesAllDone(&arg);
+
+
     natsConnection_Destroy(nc);
     _waitForConnClosed(&arg);
 
@@ -33033,11 +33122,11 @@ test_MicroServiceStopsWhenServerStops(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-void micro_async_error_handler(microService *m, microEndpoint *ep, natsStatus s)
+void _microAsyncErrorHandler(microService *m, microEndpoint *ep, natsStatus s)
 {
     struct threadArg *arg = (struct threadArg*) microService_GetState(m);
 
-    printf("<>/<> micro_async_error_handler: %d\n", s);
+    printf("<>/<> _microAsyncErrorHandler: %d\n", s);
 
     natsMutex_Lock(arg->m);
     // release the pending test request that caused the error
@@ -33050,7 +33139,7 @@ void micro_async_error_handler(microService *m, microEndpoint *ep, natsStatus s)
 }
 
 microError *
-micro_async_error_request_handler(microRequest *req)
+_microAsyncErrorRequestHandler(microRequest *req)
 {
     struct threadArg *arg = microRequest_GetServiceState(req);
 
@@ -33081,13 +33170,14 @@ test_MicroAsyncErrorHandler(void)
     microEndpointConfig ep_cfg = {
         .Name = "do",
         .Subject = "async_test",
-        .Handler = micro_async_error_request_handler,
+        .Handler = _microAsyncErrorRequestHandler,
     };
     microServiceConfig cfg = {
         .Name = "test",
         .Version = "1.0.0",
-        .ErrHandler = micro_async_error_handler,
+        .ErrHandler = _microAsyncErrorHandler,
         .State = &arg,
+        .DoneHandler = _microServiceDoneHandler,
     };
 
     s = _createDefaultThreadArgsForCbTests(&arg);

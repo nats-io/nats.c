@@ -27,9 +27,8 @@ static microError *_clone_service_config(microServiceConfig **out, microServiceC
 static microError *_new_service(microService **ptr, natsConnection *nc);
 static microError *_wrap_connection_event_callbacks(microService *m);
 
-static bool _find_endpoint(microEndpoint **prevp, microService *m, microEndpoint *to_find);
-
 static void _free_cloned_service_config(microServiceConfig *cfg);
+static void _free_service(microService *m);
 static void _release_service(microService *m);
 static void _retain_service(microService *m);
 static void _stop_service_callbacks(microService *m);
@@ -69,21 +68,6 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
 
     *new_m = m;
     return NULL;
-}
-
-microError *
-microService_AddEndpoint(microService *m, microEndpointConfig *cfg)
-{
-    return micro_add_endpoint(NULL, m, NULL, cfg, false);
-}
-
-microError *
-microGroup_AddEndpoint(microGroup *g, microEndpointConfig *cfg)
-{
-    if (g == NULL)
-        return micro_ErrorInvalidArg;
-
-    return micro_add_endpoint(NULL, g->m, g->prefix, cfg, false);
 }
 
 microError *
@@ -172,6 +156,21 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
 }
 
 microError *
+microService_AddEndpoint(microService *m, microEndpointConfig *cfg)
+{
+    return micro_add_endpoint(NULL, m, NULL, cfg, false);
+}
+
+microError *
+microGroup_AddEndpoint(microGroup *g, microEndpointConfig *cfg)
+{
+    if (g == NULL)
+        return micro_ErrorInvalidArg;
+
+    return micro_add_endpoint(NULL, g->m, g->prefix, cfg, false);
+}
+
+microError *
 microService_Stop(microService *m)
 {
     microError *err = NULL;
@@ -216,6 +215,28 @@ microService_Stop(microService *m)
     }
 
     return NULL;
+}
+
+static bool
+_find_endpoint(microEndpoint **prevp, microService *m, microEndpoint *to_find)
+{
+    microEndpoint *ep = NULL;
+    microEndpoint *prev_ep = NULL;
+
+    if ((m == NULL) || (to_find == NULL))
+        return false;
+
+    for (ep = m->first_ep; ep != NULL; ep = ep->next)
+    {
+        if (ep == to_find)
+        {
+            *prevp = prev_ep;
+            return true;
+        }
+        prev_ep = ep;
+    }
+
+    return false;
 }
 
 void micro_release_on_endpoint_complete(void *closure)
@@ -287,6 +308,56 @@ void micro_release_on_endpoint_complete(void *closure)
     }
 }
 
+bool microService_IsStopped(microService *m)
+{
+    bool stopped;
+
+    if ((m == NULL) || (m->service_mu == NULL))
+        return true;
+
+    _lock_service(m);
+    stopped = m->stopped;
+    _unlock_service(m);
+
+    return stopped;
+}
+
+microError *
+microService_Destroy(microService *m)
+{
+    microError *err = NULL;
+
+    err = microService_Stop(m);
+    if (err != NULL)
+        return err;
+
+    _release_service(m);
+    return NULL;
+}
+
+microError *
+microService_Run(microService *m)
+{
+    if ((m == NULL) || (m->service_mu == NULL))
+        return micro_ErrorInvalidArg;
+
+    while (!microService_IsStopped(m))
+    {
+        nats_Sleep(50);
+    }
+
+    return NULL;
+}
+
+void *
+microService_GetState(microService *m)
+{
+    if (m == NULL)
+        return NULL;
+
+    return m->cfg->State;
+}
+
 static microError *
 _new_service(microService **ptr, natsConnection *nc)
 {
@@ -301,33 +372,68 @@ _new_service(microService **ptr, natsConnection *nc)
     return NULL;
 }
 
+static void
+_retain_service(microService *m)
+{
+    if (m == NULL)
+        return;
+
+    _lock_service(m);
+
+    ++(m->refs);
+
+    _unlock_service(m);
+}
+
+static void
+_release_service(microService *m)
+{
+    int refs = 0;
+
+    if (m == NULL)
+        return;
+
+    _lock_service(m);
+
+    refs = --(m->refs);
+
+    _unlock_service(m);
+
+    if (refs == 0)
+        _free_service(m);
+}
+
+static void
+_free_service(microService *m)
+{
+    microGroup *next = NULL;
+
+    if (m == NULL)
+        return;
+
+    // destroy all groups.
+    if (m->groups != NULL)
+    {
+        microGroup *g = m->groups;
+        while (g != NULL)
+        {
+            next = g->next;
+            NATS_FREE(g);
+            g = next;
+        }
+    }
+
+    _free_cloned_service_config(m->cfg);
+    natsConn_release(m->nc);
+    natsMutex_Destroy(m->service_mu);
+    NATS_FREE(m);
+}
+
 static inline microError *
-new_service_config(microServiceConfig **ptr)
+_new_service_config(microServiceConfig **ptr)
 {
     *ptr = NATS_CALLOC(1, sizeof(microServiceConfig));
     return (*ptr == NULL) ? micro_ErrorOutOfMemory : NULL;
-}
-
-static bool
-_find_endpoint(microEndpoint **prevp, microService *m, microEndpoint *to_find)
-{
-    microEndpoint *ep = NULL;
-    microEndpoint *prev_ep = NULL;
-
-    if ((m == NULL) || (to_find == NULL))
-        return false;
-
-    for (ep = m->first_ep; ep != NULL; ep = ep->next)
-    {
-        if (ep == to_find)
-        {
-            *prevp = prev_ep;
-            return true;
-        }
-        prev_ep = ep;
-    }
-
-    return false;
 }
 
 static microError *
@@ -339,7 +445,7 @@ _clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
     if (out == NULL || cfg == NULL)
         return micro_ErrorInvalidArg;
 
-    err = new_service_config(&new_cfg);
+    err = _new_service_config(&new_cfg);
     if (err == NULL)
     {
         memcpy(new_cfg, cfg, sizeof(microServiceConfig));
@@ -373,63 +479,6 @@ _free_cloned_service_config(microServiceConfig *cfg)
     NATS_FREE((char *)cfg->Description);
     micro_free_cloned_endpoint_config(cfg->Endpoint);
     NATS_FREE(cfg);
-}
-
-static void
-_retain_service(microService *m)
-{
-    if (m == NULL)
-        return;
-
-    _lock_service(m);
-
-    ++(m->refs);
-
-    _unlock_service(m);
-}
-
-static void
-_free_service(microService *m)
-{
-    microGroup *next = NULL;
-
-    if (m == NULL)
-        return;
-
-    // destroy all groups.
-    if (m->groups != NULL)
-    {
-        microGroup *g = m->groups;
-        while (g != NULL)
-        {
-            next = g->next;
-            NATS_FREE(g);
-            g = next;
-        }
-    }
-
-    _free_cloned_service_config(m->cfg);
-    natsConn_release(m->nc);
-    natsMutex_Destroy(m->service_mu);
-    NATS_FREE(m);
-}
-
-static void
-_release_service(microService *m)
-{
-    int refs = 0;
-
-    if (m == NULL)
-        return;
-
-    _lock_service(m);
-
-    refs = --(m->refs);
-
-    _unlock_service(m);
-
-    if (refs == 0)
-        _free_service(m);
 }
 
 static microError *
@@ -631,56 +680,6 @@ _wrap_connection_event_callbacks(microService *m)
                         natsOptions_setMicroCallbacks(m->nc->opts, _on_connection_closed, _on_error)));
 
     return microError_Wrapf(err, "failed to wrap connection event callbacks");
-}
-
-bool microService_IsStopped(microService *m)
-{
-    bool stopped;
-
-    if ((m == NULL) || (m->service_mu == NULL))
-        return true;
-
-    _lock_service(m);
-    stopped = m->stopped;
-    _unlock_service(m);
-
-    return stopped;
-}
-
-microError *
-microService_Destroy(microService *m)
-{
-    microError *err = NULL;
-
-    err = microService_Stop(m);
-    if (err != NULL)
-        return err;
-
-    _release_service(m);
-    return NULL;
-}
-
-microError *
-microService_Run(microService *m)
-{
-    if ((m == NULL) || (m->service_mu == NULL))
-        return micro_ErrorInvalidArg;
-
-    while (!microService_IsStopped(m))
-    {
-        nats_Sleep(50);
-    }
-
-    return NULL;
-}
-
-void *
-microService_GetState(microService *m)
-{
-    if (m == NULL)
-        return NULL;
-
-    return m->cfg->State;
 }
 
 microError *

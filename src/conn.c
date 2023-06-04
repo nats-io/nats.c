@@ -1580,8 +1580,6 @@ _doReconnect(void *arg)
                 natsConn_Unlock(nc);
                 sleepTime = crd(nc, wlf, crdClosure);
                 natsConn_Lock(nc);
-                if (natsConn_isClosed(nc))
-                    break;
             }
             else
             {
@@ -1589,6 +1587,8 @@ _doReconnect(void *arg)
                 if (jitter > 0)
                     sleepTime += rand() % jitter;
             }
+            if (natsConn_isClosed(nc))
+                break;
             natsCondition_TimedWait(nc->reconnectCond, nc->mu, sleepTime);
         }
         else
@@ -2791,7 +2791,11 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         }
     }
 
-    natsSubAndLdw_UnlockAndRelease(sub);
+    // If we are going to post to the error handler, do not release yet.
+    if (sc || sm)
+        natsSubAndLdw_Unlock(sub);
+    else
+        natsSubAndLdw_UnlockAndRelease(sub);
 
     if ((s == NATS_OK) && fcReply)
         s = natsConnection_Publish(nc, fcReply, NULL, 0);
@@ -2805,6 +2809,10 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
         nc->err = (sc ? NATS_SLOW_CONSUMER : NATS_MISMATCH);
         natsAsyncCb_PostErrHandler(nc, sub, nc->err, NULL);
+
+        // Now release the subscription (it has been retained in
+        // natsAsyncCb_PostErrHandler function).
+        natsSub_release(sub);
 
         natsConn_Unlock(nc);
     }
@@ -3810,7 +3818,7 @@ natsConnection_Buffered(natsConnection *nc)
     int buffered = -1;
 
     if (nc == NULL)
-        return nats_setDefaultError(NATS_INVALID_ARG);
+        return buffered;
 
     natsConn_Lock(nc);
 

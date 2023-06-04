@@ -89,8 +89,6 @@ micro_start_endpoint(microEndpoint *ep)
         ep->is_draining = false;
         micro_unlock_endpoint(ep);
 
-        // The service needs to be retained
-
         natsSubscription_SetOnCompleteCB(sub, micro_release_on_endpoint_complete, ep);
     }
     else
@@ -405,8 +403,7 @@ bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_sub
     }
 }
 
-static microError *
-_dup_with_prefix(char **dst, const char *prefix, const char *src)
+static microError *_dup_with_prefix(char **dst, const char *prefix, const char *src)
 {
     size_t len = strlen(src) + 1;
     char *p;

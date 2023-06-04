@@ -52,8 +52,12 @@ struct micro_endpoint_s
     char *name;
     char *subject;
 
-    // References to other entities.
+    // A copy of the config provided to add_endpoint.
     microEndpointConfig *config;
+    
+    // Retained/released by the service that owns the endpoint to avoid race
+    // conditions.
+    microService *m;
 
     // Monitoring endpoints are different in a few ways. For now, express it as
     // a single flag but consider unbundling:
@@ -71,10 +75,6 @@ struct micro_endpoint_s
     natsMutex *endpoint_mu;
     int refs;
     bool is_draining;
-
-    // Not retained by the endpoint, retained before passing to the
-    // service-level callbacks.
-    microService *service_ptr_for_on_complete;
 
     // The subscription for the endpoint. If NULL, the endpoint is stopped.
     natsSubscription *sub;
@@ -142,16 +142,44 @@ extern microError *micro_ErrorOutOfMemory;
 extern microError *micro_ErrorInvalidArg;
 
 microError *micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
+microError *micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg);
 microError *micro_init_monitoring(microService *m);
 microError *micro_is_error_message(natsStatus s, natsMsg *msg);
+microError *micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
+microError *micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
 microError *micro_new_request(microRequest **new_request, microService *m, microEndpoint *ep, natsMsg *msg);
+microError *micro_start_endpoint(microEndpoint *ep);
+microError *micro_stop_endpoint(microEndpoint *ep);
 
+void micro_free_cloned_endpoint_config(microEndpointConfig *cfg);
+void micro_free_endpoint(microEndpoint *ep);
 void micro_free_request(microRequest *req);
+void micro_release_endpoint(microEndpoint *ep);
+void micro_release_on_endpoint_complete(void *closure);
+void micro_retain_endpoint(microEndpoint *ep);
 void micro_update_last_error(microEndpoint *ep, microError *err);
 
-//
-// Exposed only for testing.
+bool micro_is_valid_name(const char *name);
+bool micro_is_valid_subject(const char *subject);
 bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_subject);
-microError *micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
+
+static inline void micro_lock_endpoint(microEndpoint *ep) { natsMutex_Lock(ep->endpoint_mu); }
+static inline void micro_unlock_endpoint(microEndpoint *ep) { natsMutex_Unlock(ep->endpoint_mu); }
+
+static inline microError *
+micro_strdup(char **ptr, const char *str)
+{
+    // Make a strdup(NULL) be a no-op, so we don't have to check for NULL
+    // everywhere.
+    if (str == NULL)
+    {
+        *ptr = NULL;
+        return NULL;
+    }
+    *ptr = NATS_STRDUP(str);
+    if (*ptr == NULL)
+        return micro_ErrorOutOfMemory;
+    return NULL;
+}
 
 #endif /* MICROP_H_ */

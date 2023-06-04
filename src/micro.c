@@ -29,8 +29,9 @@ static microError *_wrap_connection_event_callbacks(microService *m);
 
 static bool _find_endpoint(microEndpoint **prevp, microService *m, microEndpoint *to_find);
 
+static void _free_cloned_service_config(microServiceConfig *cfg);
 static void _release_service(microService *m);
-static void _retain_service(microService *m, bool lock);
+static void _retain_service(microService *m);
 static void _stop_service_callbacks(microService *m);
 
 microError *
@@ -100,7 +101,7 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
         return NULL;
 
     // retain `m` before the endpoint uses it for its on_complete callback.
-    _retain_service(m, true);
+    _retain_service(m);
 
     err = micro_new_endpoint(&ep, m, prefix, cfg, is_internal);
     if (err != NULL)
@@ -329,21 +330,6 @@ _find_endpoint(microEndpoint **prevp, microService *m, microEndpoint *to_find)
     return false;
 }
 
-static void
-_free_cloned_service_config(microServiceConfig *cfg)
-{
-    if (cfg == NULL)
-        return;
-
-    // the strings are declared const for the public, but in a clone these need
-    // to be freed.
-    NATS_FREE((char *)cfg->Name);
-    NATS_FREE((char *)cfg->Version);
-    NATS_FREE((char *)cfg->Description);
-    micro_free_cloned_endpoint_config(cfg->Endpoint);
-    NATS_FREE(cfg);
-}
-
 static microError *
 _clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
 {
@@ -375,18 +361,31 @@ _clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
 }
 
 static void
-_retain_service(microService *m, bool lock)
+_free_cloned_service_config(microServiceConfig *cfg)
+{
+    if (cfg == NULL)
+        return;
+
+    // the strings are declared const for the public, but in a clone these need
+    // to be freed.
+    NATS_FREE((char *)cfg->Name);
+    NATS_FREE((char *)cfg->Version);
+    NATS_FREE((char *)cfg->Description);
+    micro_free_cloned_endpoint_config(cfg->Endpoint);
+    NATS_FREE(cfg);
+}
+
+static void
+_retain_service(microService *m)
 {
     if (m == NULL)
         return;
 
-    if (lock)
-        _lock_service(m);
+    _lock_service(m);
 
     ++(m->refs);
 
-    if (lock)
-        _unlock_service(m);
+    _unlock_service(m);
 }
 
 static void
@@ -456,7 +455,7 @@ _start_service_callbacks(microService *m)
     }
 
     // Extra reference to the service as long as its callbacks are registered.
-    _retain_service(m, true);
+    _retain_service(m);
 
     natsMutex_Lock(service_callback_mu);
     IFOK(s, natsHash_Set(all_services_to_callback, (int64_t)m, (void *)m, NULL));
@@ -511,7 +510,7 @@ _services_for_connection(microService ***to_call, int *num_microservices, natsCo
         {
             if (m->nc == nc)
             {
-                _retain_service(m, true); // for the callback
+                _retain_service(m); // for the callback
                 p[i++] = m;
             }
         }

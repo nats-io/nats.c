@@ -123,6 +123,11 @@ typedef struct __natsLib
 
     natsGCList      gc;
 
+    // For micro services code
+    natsMutex *service_callback_mu;
+    // uses `microService*` as the key and the value.
+    natsHash *all_services_to_callback;
+
 } natsLib;
 
 int64_t gLockSpinCount = 2000;
@@ -332,6 +337,8 @@ _freeLib(void)
     _freeGC();
     _freeDlvWorkers();
     natsNUID_free();
+    natsMutex_Destroy(gLib.service_callback_mu);
+    natsHash_Destroy(gLib.all_services_to_callback);
 
     natsCondition_Destroy(gLib.cond);
 
@@ -1056,6 +1063,10 @@ nats_Open(int64_t lockSpinCount)
         if (gLib.dlvWorkers.workers == NULL)
             s = NATS_NO_MEMORY;
     }
+    if (s == NATS_OK)
+        s = natsMutex_Create(&gLib.service_callback_mu);
+    if (s == NATS_OK)
+        s = natsHash_Create(&gLib.all_services_to_callback, 8);
 
     if (s == NATS_OK)
         gLib.initialized = true;
@@ -1999,4 +2010,39 @@ natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWork
     *idx = workers->idx;
     *workersArray = workers->workers;
     natsMutex_Unlock(workers->lock);
+}
+
+natsStatus
+natsLib_startServiceCallbacks(microService *m)
+{
+    natsStatus s;
+
+    natsMutex_Lock(gLib.service_callback_mu);
+    s = natsHash_Set(gLib.all_services_to_callback, (int64_t)m, (void *)m, NULL);
+    natsMutex_Unlock(gLib.service_callback_mu);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+natsLib_stopServiceCallbacks(microService *m)
+{
+    if (m == NULL)
+        return;
+
+    natsMutex_Lock(gLib.service_callback_mu);
+    natsHash_Remove(gLib.all_services_to_callback, (int64_t)m);
+    natsMutex_Unlock(gLib.service_callback_mu);
+}
+
+natsMutex*
+natsLib_getServiceCallbackMutex(void)
+{
+    return gLib.service_callback_mu;
+}
+
+natsHash*
+natsLib_getAllServicesToCallback(void)
+{
+    return gLib.all_services_to_callback;
 }

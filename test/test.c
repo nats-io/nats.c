@@ -32294,14 +32294,14 @@ _startMicroservice(microService** new_m, natsConnection *nc, microServiceConfig 
     arg->microAllDone = false;
 
     err = micro_AddService(new_m, nc, cfg);
-    if (err != NULL) 
+    if (err != NULL)
     {
         arg->microRunningServiceCount--;
         arg->microAllDone = prev_done;
     }
-    
+
     natsMutex_Unlock(arg->m);
-    
+
     return err;
 }
 
@@ -32325,7 +32325,7 @@ _startManyMicroservices(microService** svcs, int n, natsConnection *nc, microSer
     {
         _startMicroserviceOK(&(svcs[i]), nc, cfg, arg);
     }
-    
+
     testCond(true);
 }
 
@@ -32488,7 +32488,7 @@ test_MicroAddService(void)
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s == NATS_OK)
         opts = _createReconnectOptions();
-    if ((opts == NULL) 
+    if ((opts == NULL)
         || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK)
         || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
     {
@@ -32599,7 +32599,7 @@ test_MicroAddService(void)
         }
 
         microServiceInfo_Destroy(info);
-        
+
         if (m != NULL)
         {
             snprintf(buf, sizeof(buf), "%s: Destroy service: %d", m->cfg->Name, m->refs);
@@ -32712,10 +32712,10 @@ test_MicroGroups(void)
     testCond(true);
 
     microServiceInfo_Destroy(info);
-    
+
     microService_Destroy(m);
     _waitForMicroservicesAllDone(&arg);
-    
+
     natsConnection_Destroy(nc);
     _waitForConnClosed(&arg);
 
@@ -32997,7 +32997,7 @@ test_MicroStartStop(void)
         natsMsg_Destroy(reply);
     }
     testCond(NATS_OK == s);
-   
+
     _destroyMicroservicesAndWaitForAllDone(svcs, NUM_MICRO_SERVICES, &arg);
 
     test("Destroy the connection: ");
@@ -33029,8 +33029,9 @@ test_MicroServiceStopsOnClosedConn(void)
     if (s == NATS_OK)
         opts = _createReconnectOptions();
 
-    if ((opts == NULL) || 
+    if ((opts == NULL) ||
         (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK) ||
+        (natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg)) ||
         (natsOptions_SetAllowReconnect(opts, false) != NATS_OK))
     {
         FAIL("Unable to setup test for MicroConnectionEvents!");
@@ -33057,8 +33058,7 @@ test_MicroServiceStopsOnClosedConn(void)
     natsConnection_Close(nc);
 
     test("Wait for it: ");
-    _waitForConnClosed(&arg);
-    testCond(1);
+    testCond(_waitForConnClosed(&arg) == NATS_OK);
 
     test("Ensure the connection has closed: ");
     testCond(natsConnection_IsClosed(nc));
@@ -33102,7 +33102,7 @@ test_MicroServiceStopsWhenServerStops(void)
         opts = _createReconnectOptions();
 
     if ((opts == NULL)
-        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK) 
+        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK)
         || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK)
         || (natsOptions_SetAllowReconnect(opts, false) != NATS_OK))
     {
@@ -33116,14 +33116,12 @@ test_MicroServiceStopsWhenServerStops(void)
     testCond(NATS_OK == natsConnection_Connect(&nc, opts));
 
     _startMicroservice(&m, nc, &cfg, &arg);
-    
+
     test("Test microservice is running: ");
     testCond(!microService_IsStopped(m))
 
     test("Stop the server: ");
     testCond((_stopServer(serverPid), true));
-
-    nats_Sleep(1000);
 
     test("Wait for the service to stop: ");
     natsMutex_Lock(arg.m);
@@ -33236,7 +33234,7 @@ test_MicroAsyncErrorHandler(void)
     {
         s = natsConnection_PublishString(nc, "async_test", "hello");
     }
-    testCond((NATS_OK == s) 
+    testCond((NATS_OK == s)
         && (NATS_OK == natsConnection_Flush(nc)));
 
     test("Wait for async err callback: ");

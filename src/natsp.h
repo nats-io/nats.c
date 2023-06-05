@@ -796,6 +796,18 @@ natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWork
 void
 nats_setNATSThreadKey(void);
 
+natsStatus
+natsLib_startServiceCallbacks(microService *m);
+
+void
+natsLib_stopServiceCallbacks(microService *m);
+
+natsMutex*
+natsLib_getServiceCallbackMutex(void);
+
+natsHash*
+natsLib_getAllServicesToCallback(void);
+
 //
 // Threads
 //

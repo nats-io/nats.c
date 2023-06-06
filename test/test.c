@@ -32716,7 +32716,7 @@ test_MicroGroups(void)
 
     microService_Destroy(m);
     _waitForMicroservicesAllDone(&arg);
-    
+
     test("Destroy the test connection: ");
     natsConnection_Destroy(nc);
     testCond(NATS_OK == _waitForConnClosed(&arg));
@@ -32726,7 +32726,7 @@ test_MicroGroups(void)
     _stopServer(serverPid);
 }
 
-#define NUM_MICRO_SERVICES 1
+#define NUM_MICRO_SERVICES 5
 
 static void
 test_MicroBasics(void)

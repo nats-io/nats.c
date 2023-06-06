@@ -84,9 +84,6 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
     if (cfg == NULL)
         return NULL;
 
-    // retain `m` before the endpoint uses it for its on_complete callback.
-    _retain_service(m);
-
     err = micro_new_endpoint(&ep, m, prefix, cfg, is_internal);
     if (err != NULL)
         return microError_Wrapf(err, "failed to create endpoint %s", cfg->Name);
@@ -143,10 +140,14 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
         micro_release_endpoint(prev_ep);
     }
 
+    // retain `m` before the endpoint uses it for its on_complete callback.
+    _retain_service(m);
+
     if (err = micro_start_endpoint(ep), err != NULL)
     {
         // Best effort, leave the new endpoint in the list, as is. A retry with
         // the same name will clean it up.
+        _release_service(m);
         return microError_Wrapf(err, "failed to start endpoint %s", ep->name);
     }
 
@@ -193,7 +194,10 @@ microService_Stop(microService *m)
     for (; ep != NULL; ep = ep->next)
     {
         if (err = micro_stop_endpoint(ep), err != NULL)
+        {
+            _unlock_service(m);
             return microError_Wrapf(err, "failed to stop service '%s', stopping endpoint '%s'", m->cfg->Name, ep->name);
+        }
     }
 
     finalize = (m->first_ep == NULL);
@@ -211,6 +215,7 @@ microService_Stop(microService *m)
         if (doneHandler != NULL)
             doneHandler(m);
 
+        // Relase the endpoint's server reference from `micro_add_endpoint`.
         _release_service(m);
     }
 
@@ -304,6 +309,7 @@ void micro_release_on_endpoint_complete(void *closure)
         if (doneHandler != NULL)
             doneHandler(m);
 
+        // Relase the endpoint's server reference from `micro_add_endpoint`.
         _release_service(m);
     }
 }

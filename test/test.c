@@ -20556,7 +20556,7 @@ test_EventLoop(void)
 
     test("Close and wait for close cb: ");
     natsConnection_Close(nc);
-    _waitForConnClosed(&arg);
+    s = _waitForConnClosed(&arg);
     testCond(s == NATS_OK);
 
     natsMutex_Lock(arg.m);
@@ -32343,7 +32343,7 @@ _waitForMicroservicesAllDone(struct threadArg *arg)
 
     // `Done` may be immediately followed by freeing the service, so wait a bit
     // to make sure it happens before the test exits.
-    nats_Sleep(100);
+    nats_Sleep(20);
 }
 
 static void
@@ -32609,8 +32609,9 @@ test_MicroAddService(void)
         }
     }
 
+    test("Destroy the test connection: ");
     natsConnection_Destroy(nc);
-    _waitForConnClosed(&arg);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
 
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
@@ -32716,8 +32717,9 @@ test_MicroGroups(void)
     microService_Destroy(m);
     _waitForMicroservicesAllDone(&arg);
     
+    test("Destroy the test connection: ");
     natsConnection_Destroy(nc);
-    _waitForConnClosed(&arg);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
 
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
@@ -32932,8 +32934,9 @@ test_MicroBasics(void)
 
     _destroyMicroservicesAndWaitForAllDone(svcs, NUM_MICRO_SERVICES, &arg);
 
+    test("Destroy the test connection: ");
     natsConnection_Destroy(nc);
-    _waitForConnClosed(&arg);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
 
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
@@ -33000,10 +33003,9 @@ test_MicroStartStop(void)
    
     _destroyMicroservicesAndWaitForAllDone(svcs, NUM_MICRO_SERVICES, &arg);
 
-    test("Destroy the connection: ");
+    test("Destroy the test connection: ");
     natsConnection_Destroy(nc);
-    _waitForConnClosed(&arg);
-    testCond(1);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
 
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
@@ -33029,9 +33031,10 @@ test_MicroServiceStopsOnClosedConn(void)
     if (s == NATS_OK)
         opts = _createReconnectOptions();
 
-    if ((opts == NULL) || 
-        (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK) ||
-        (natsOptions_SetAllowReconnect(opts, false) != NATS_OK))
+    if ((opts == NULL)
+        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK)
+        || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK)
+        || (natsOptions_SetAllowReconnect(opts, false) != NATS_OK))
     {
         FAIL("Unable to setup test for MicroConnectionEvents!");
     }
@@ -33057,8 +33060,7 @@ test_MicroServiceStopsOnClosedConn(void)
     natsConnection_Close(nc);
 
     test("Wait for it: ");
-    _waitForConnClosed(&arg);
-    testCond(1);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
 
     test("Ensure the connection has closed: ");
     testCond(natsConnection_IsClosed(nc));
@@ -33123,8 +33125,6 @@ test_MicroServiceStopsWhenServerStops(void)
     test("Stop the server: ");
     testCond((_stopServer(serverPid), true));
 
-    nats_Sleep(1000);
-
     test("Wait for the service to stop: ");
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.microAllDone)
@@ -33138,9 +33138,9 @@ test_MicroServiceStopsWhenServerStops(void)
     microService_Destroy(m);
     _waitForMicroservicesAllDone(&arg);
 
-
+    test("Destroy the test connection: ");
     natsConnection_Destroy(nc);
-    _waitForConnClosed(&arg);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
 
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
@@ -33251,8 +33251,9 @@ test_MicroAsyncErrorHandler(void)
     microService_Destroy(m);
     _waitForMicroservicesAllDone(&arg);
 
+    test("Destroy the test connection: ");
     natsConnection_Destroy(nc);
-    _waitForConnClosed(&arg);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
 
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);

@@ -2015,7 +2015,7 @@ _connect(natsConnection *nc)
     bool        retry = false;
     bool        retryOnFailedConnect = false;
     bool        hasConnectedCb = false;
-    
+
     natsOptions_lock(nc->opts);
     hasConnectedCb = (nc->opts->connectedCb != NULL);
     retryOnFailedConnect = nc->opts->retryOnFailedConnect;

@@ -17,9 +17,6 @@
 #include "conn.h"
 #include "opts.h"
 
-static natsMutex *service_callback_mu;
-static natsHash *all_services_to_callback; // uses `microService*` as the key and the value.
-
 static inline void _lock_service(microService *m) { natsMutex_Lock(m->service_mu); }
 static inline void _unlock_service(microService *m) { natsMutex_Unlock(m->service_mu); }
 
@@ -31,7 +28,6 @@ static void _free_cloned_service_config(microServiceConfig *cfg);
 static void _free_service(microService *m);
 static void _release_service(microService *m);
 static void _retain_service(microService *m);
-static void _stop_service_callbacks(microService *m);
 
 microError *
 micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *cfg)
@@ -203,7 +199,7 @@ microService_Stop(microService *m)
     finalize = (m->first_ep == NULL);
     if (finalize)
     {
-        _stop_service_callbacks(m);
+        natsLib_stopServiceCallbacks(m);
         m->stopped = true;
         doneHandler = m->cfg->DoneHandler;
     }
@@ -294,7 +290,7 @@ void micro_release_on_endpoint_complete(void *closure)
     finalize = (!m->stopped) && (m->first_ep == NULL);
     if (finalize)
     {
-        _stop_service_callbacks(m);
+        natsLib_stopServiceCallbacks(m);
         m->stopped = true;
         doneHandler = m->cfg->DoneHandler;
     }
@@ -495,26 +491,10 @@ _start_service_callbacks(microService *m)
     if (m == NULL)
         return micro_ErrorInvalidArg;
 
-    if (service_callback_mu == NULL)
-    {
-        IFOK(s, natsMutex_Create(&service_callback_mu));
-        if (s != NATS_OK)
-            return micro_ErrorFromStatus(s);
-    }
-
-    if (all_services_to_callback == NULL)
-    {
-        IFOK(s, natsHash_Create(&all_services_to_callback, 8));
-        if (s != NATS_OK)
-            return micro_ErrorFromStatus(s);
-    }
-
     // Extra reference to the service as long as its callbacks are registered.
     _retain_service(m);
 
-    natsMutex_Lock(service_callback_mu);
-    IFOK(s, natsHash_Set(all_services_to_callback, (int64_t)m, (void *)m, NULL));
-    natsMutex_Unlock(service_callback_mu);
+    s = natsLib_startServiceCallbacks(m);
     if (s != NATS_OK)
     {
         _release_service(m);
@@ -523,29 +503,20 @@ _start_service_callbacks(microService *m)
     return micro_ErrorFromStatus(s);
 }
 
-static void
-_stop_service_callbacks(microService *m)
-{
-    if ((m == NULL) || (all_services_to_callback == NULL) || (service_callback_mu == NULL))
-        return;
-
-    natsMutex_Lock(service_callback_mu);
-    natsHash_Remove(all_services_to_callback, (int64_t)m);
-    natsMutex_Unlock(service_callback_mu);
-}
-
 static microError *
 _services_for_connection(microService ***to_call, int *num_microservices, natsConnection *nc)
 {
+    natsMutex *mu = natsLib_getServiceCallbackMutex();
+    natsHash  *h  = natsLib_getAllServicesToCallback();
     microService *m = NULL;
     microService **p = NULL;
     natsHashIter iter;
     int n = 0;
     int i;
 
-    natsMutex_Lock(service_callback_mu);
+    natsMutex_Lock(mu);
 
-    natsHashIter_Init(&iter, all_services_to_callback);
+    natsHashIter_Init(&iter, h);
     while (natsHashIter_Next(&iter, NULL, (void **)&m))
         if (m->nc == nc)
             n++;
@@ -555,11 +526,11 @@ _services_for_connection(microService ***to_call, int *num_microservices, natsCo
         p = NATS_CALLOC(n, sizeof(microService *));
         if (p == NULL)
         {
-            natsMutex_Unlock(service_callback_mu);
+            natsMutex_Unlock(mu);
             return micro_ErrorOutOfMemory;
         }
 
-        natsHashIter_Init(&iter, all_services_to_callback);
+        natsHashIter_Init(&iter, h);
         i = 0;
         while (natsHashIter_Next(&iter, NULL, (void **)&m))
         {
@@ -572,7 +543,7 @@ _services_for_connection(microService ***to_call, int *num_microservices, natsCo
         natsHashIter_Done(&iter);
     }
 
-    natsMutex_Unlock(service_callback_mu);
+    natsMutex_Unlock(mu);
 
     *to_call = p;
     *num_microservices = n;

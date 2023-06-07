@@ -49,7 +49,7 @@ verrorf(natsStatus s, int code, const char *format, va_list args)
     if (format == NULL)
         format = "";
 
-    message_len = vsnprintf(NULL, 0, format, args);
+    message_len = nats_vsnprintf(NULL, 0, format, args);
     if (message_len < 0)
     {
         va_end(args2);
@@ -64,7 +64,7 @@ verrorf(natsStatus s, int code, const char *format, va_list args)
     }
 
     ptr = (char *)(err) + sizeof(microError);
-    vsnprintf(ptr, message_len + 1, format, args2);
+    nats_vsnprintf(ptr, message_len + 1, format, args2);
     va_end(args2);
     err->message = (const char *)ptr;
 

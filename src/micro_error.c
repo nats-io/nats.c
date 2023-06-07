@@ -18,19 +18,19 @@
 static microError _errorOutOfMemory = {
     .is_internal = true,
     .status = NATS_NO_MEMORY,
-    .message = (char *)"out of memory",
+    .message = "out of memory",
 };
 
 static microError _errorInvalidArg = {
     .is_internal = true,
     .status = NATS_INVALID_ARG,
-    .message = (char *)"invalid function argument",
+    .message = "invalid function argument",
 };
 
 static microError _errorInvalidFormat = {
     .is_internal = true,
     .status = NATS_INVALID_ARG,
-    .message = (char *)"invalid format string",
+    .message = "invalid format string",
 };
 
 microError *micro_ErrorOutOfMemory = &_errorOutOfMemory;
@@ -40,6 +40,7 @@ static microError *
 verrorf(natsStatus s, int code, const char *format, va_list args)
 {
     microError *err = NULL;
+    char *ptr;
     int message_len = 0;
 
     va_list args2;
@@ -62,11 +63,14 @@ verrorf(natsStatus s, int code, const char *format, va_list args)
         return &_errorOutOfMemory;
     }
 
+    ptr = (char *)(err) + sizeof(microError);
+    vsnprintf(ptr, message_len + 1, format, args2);
+    va_end(args2);
+    err->message = (const char *)ptr;
+
     err->code = code;
     err->status = s;
-    err->message = (char *)(err + 1);
-    vsnprintf(err->message, message_len + 1, format, args2);
-    va_end(args2);
+
     return err;
 }
 
@@ -100,6 +104,7 @@ micro_ErrorFromStatus(natsStatus s)
     microError *err = NULL;
     const char *message = natsStatus_GetText(s);
     size_t message_len = strlen(message);
+    char *ptr;
 
     if (s == NATS_OK)
         return NULL;
@@ -107,9 +112,11 @@ micro_ErrorFromStatus(natsStatus s)
     err = NATS_CALLOC(1, sizeof(microError) + message_len + 1);
     if (err == NULL)
         return &_errorOutOfMemory;
-    err->message = (char *)(err + 1);
+
+    ptr = (char *)(err) + sizeof(microError);
+    memcpy(ptr, message, message_len + 1);
+    err->message = ptr;
     err->status = s;
-    memcpy(err->message, message, message_len + 1);
     return err;
 }
 

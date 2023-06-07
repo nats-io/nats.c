@@ -37,7 +37,7 @@ struct micro_error_s
     struct micro_error_s *cause;
     natsStatus status;
     int code;
-    char *message;
+    const char *message;
 };
 
 struct micro_client_s

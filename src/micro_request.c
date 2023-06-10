@@ -57,7 +57,7 @@ microRequest_RespondCustom(microRequest *req, microError *service_error, const c
             s = natsMsgHeader_Set(msg, MICRO_ERROR_CODE_HDR, buf);
         }
     }
-    if (s == NATS_OK) 
+    if (s == NATS_OK)
     {
         s = natsConnection_PublishMsg(req->Message->sub->conn, msg);
     }

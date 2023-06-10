@@ -18,19 +18,19 @@
 static microError _errorOutOfMemory = {
     .is_internal = true,
     .status = NATS_NO_MEMORY,
-    .message = (char *)"out of memory",
+    .message = "out of memory",
 };
 
 static microError _errorInvalidArg = {
     .is_internal = true,
     .status = NATS_INVALID_ARG,
-    .message = (char *)"invalid function argument",
+    .message = "invalid function argument",
 };
 
 static microError _errorInvalidFormat = {
     .is_internal = true,
     .status = NATS_INVALID_ARG,
-    .message = (char *)"invalid format string",
+    .message = "invalid format string",
 };
 
 microError *micro_ErrorOutOfMemory = &_errorOutOfMemory;
@@ -40,6 +40,7 @@ static microError *
 verrorf(natsStatus s, int code, const char *format, va_list args)
 {
     microError *err = NULL;
+    char *ptr;
     int message_len = 0;
 
     va_list args2;
@@ -48,7 +49,7 @@ verrorf(natsStatus s, int code, const char *format, va_list args)
     if (format == NULL)
         format = "";
 
-    message_len = vsnprintf(NULL, 0, format, args);
+    message_len = nats_vsnprintf(NULL, 0, format, args);
     if (message_len < 0)
     {
         va_end(args2);
@@ -62,11 +63,14 @@ verrorf(natsStatus s, int code, const char *format, va_list args)
         return &_errorOutOfMemory;
     }
 
+    ptr = (char *)(err) + sizeof(microError);
+    nats_vsnprintf(ptr, message_len + 1, format, args2);
+    va_end(args2);
+    err->message = (const char *)ptr;
+
     err->code = code;
     err->status = s;
-    err->message = (char *)(err + 1);
-    vsnprintf(err->message, message_len + 1, format, args2);
-    va_end(args2);
+
     return err;
 }
 
@@ -100,6 +104,7 @@ micro_ErrorFromStatus(natsStatus s)
     microError *err = NULL;
     const char *message = natsStatus_GetText(s);
     size_t message_len = strlen(message);
+    char *ptr;
 
     if (s == NATS_OK)
         return NULL;
@@ -108,8 +113,10 @@ micro_ErrorFromStatus(natsStatus s)
     if (err == NULL)
         return &_errorOutOfMemory;
 
+    ptr = (char *)(err) + sizeof(microError);
+    memcpy(ptr, message, message_len + 1);
+    err->message = ptr;
     err->status = s;
-    memcpy(err->message, message, message_len + 1);
     return err;
 }
 
@@ -132,7 +139,7 @@ micro_is_error_message(natsStatus status, natsMsg *msg)
         code = atoi(c);
     }
     is_service_error = (code != 0) || !nats_IsStringEmpty(d);
-    
+
     if (is_service_error && !is_nats_error)
     {
         return micro_ErrorfCode(code, d);

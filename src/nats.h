@@ -8183,6 +8183,8 @@ microError_Code(microError *err);
 NATS_EXTERN void
 microError_Destroy(microError *err);
 
+#define microError_Ignore(__err) microError_Destroy(__err)
+
 /**
  * @brief Returns the NATS status associated with the error.
  * 

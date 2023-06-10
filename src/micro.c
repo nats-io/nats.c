@@ -11,14 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <ctype.h>
+
 #include "microp.h"
 #include "conn.h"
 #include "opts.h"
 
-static microError *new_service(microService **ptr, natsConnection *nc);
-static void free_service(microService *m);
-static microError *wrap_connection_event_callbacks(microService *m);
-static void unwrap_connection_event_callbacks(microService *m);
+static inline void _lock_service(microService *m) { natsMutex_Lock(m->service_mu); }
+static inline void _unlock_service(microService *m) { natsMutex_Unlock(m->service_mu); }
+
+static microError *_clone_service_config(microServiceConfig **out, microServiceConfig *cfg);
+static microError *_new_service(microService **ptr, natsConnection *nc);
+static microError *_wrap_connection_event_callbacks(microService *m);
+
+static void _free_cloned_service_config(microServiceConfig *cfg);
+static void _free_service(microService *m);
+static void _release_service(microService *m);
+static void _retain_service(microService *m);
 
 microError *
 micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *cfg)
@@ -31,7 +40,7 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
         return micro_ErrorInvalidArg;
 
     // Make a microservice object, with a reference to a natsConnection.
-    err = new_service(&m, nc);
+    err = _new_service(&m, nc);
     if (err != NULL)
         return err;
 
@@ -39,21 +48,17 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
     IFOK(s, natsNUID_Next(m->id, sizeof(m->id)));
     err = micro_ErrorFromStatus(s);
 
-    MICRO_CALL(err, micro_clone_service_config(&m->cfg, cfg));
-
-    if (err == NULL)
-    {
-        m->is_running = true;
-    }
+    MICRO_CALL(err, _clone_service_config(&m->cfg, cfg));
 
     // Wrap the connection callbacks before we subscribe to anything.
-    MICRO_CALL(err, wrap_connection_event_callbacks(m))
+    MICRO_CALL(err, _wrap_connection_event_callbacks(m));
+
     MICRO_CALL(err, micro_init_monitoring(m));
     MICRO_CALL(err, microService_AddEndpoint(m, cfg->Endpoint));
 
     if (err != NULL)
     {
-        micro_release_service(m);
+        microError_Ignore(microService_Destroy(m));
         return microError_Wrapf(err, "failed to add microservice %s", cfg->Name);
     }
 
@@ -79,7 +84,13 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
     if (err != NULL)
         return microError_Wrapf(err, "failed to create endpoint %s", cfg->Name);
 
-    micro_lock_service(m);
+    _lock_service(m);
+
+    if (m->stopped)
+    {
+        _unlock_service(m);
+        return micro_Errorf("can't add an endpoint %s to service %s: the service is stopped", cfg->Name, m->cfg->Name);
+    }
 
     if (m->first_ep != NULL)
     {
@@ -113,28 +124,26 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
         m->first_ep = ep;
     }
 
-    // Increment the number of endpoints, unless we are replacing an existing
-    // one.
-    if (prev_ep == NULL)
-    {
-        m->num_eps++;
-    }
-
-    micro_unlock_service(m);
+    _unlock_service(m);
 
     if (prev_ep != NULL)
     {
         // Rid of the previous endpoint with the same name, if any. If this
         // fails we can return the error, leave the newly added endpoint in the
         // list, not started. A retry with the same name will clean it up.
-        if (err = micro_destroy_endpoint(prev_ep), err != NULL)
+        if (err = micro_stop_endpoint(prev_ep), err != NULL)
             return err;
+        micro_release_endpoint(prev_ep);
     }
+
+    // retain `m` before the endpoint uses it for its on_complete callback.
+    _retain_service(m);
 
     if (err = micro_start_endpoint(ep), err != NULL)
     {
         // Best effort, leave the new endpoint in the list, as is. A retry with
         // the same name will clean it up.
+        _release_service(m);
         return microError_Wrapf(err, "failed to start endpoint %s", ep->name);
     }
 
@@ -163,67 +172,156 @@ microService_Stop(microService *m)
 {
     microError *err = NULL;
     microEndpoint *ep = NULL;
-
-    bool is_running = false;
-    microEndpoint *first_ep = NULL;
+    bool finalize = false;
+    microDoneHandler doneHandler = NULL;
 
     if (m == NULL)
         return micro_ErrorInvalidArg;
 
-    micro_lock_service(m);
-    is_running = m->is_running;
-    first_ep = m->first_ep;
-    micro_unlock_service(m);
+    _lock_service(m);
 
-    if (!is_running)
-        return NULL;
-
-    unwrap_connection_event_callbacks(m);
-
-    for (ep = first_ep; (err == NULL) && (ep != NULL); ep = first_ep)
+    if (m->stopped)
     {
-        micro_lock_service(m);
-        first_ep = ep->next;
-        m->first_ep = first_ep;
-        m->num_eps--;
-        micro_unlock_service(m);
+        _unlock_service(m);
+        return NULL;
+    }
+    ep = m->first_ep;
 
-        // micro_destroy_endpoint may release the service, locking it in the
-        // process, so we need to avoid a race.
-        if (err = micro_destroy_endpoint(ep), err != NULL)
+    for (; ep != NULL; ep = ep->next)
+    {
+        if (err = micro_stop_endpoint(ep), err != NULL)
         {
-            err = microError_Wrapf(err, "failed to stop endpoint %s", ep->name);
+            _unlock_service(m);
+            return microError_Wrapf(err, "failed to stop service '%s', stopping endpoint '%s'", m->cfg->Name, ep->name);
         }
     }
 
-    if (err == NULL)
+    finalize = (m->first_ep == NULL);
+    if (finalize)
     {
-        micro_lock_service(m);
-        m->is_running = false;
-        m->started = 0;
-        m->num_eps = 0;
-        m->first_ep = NULL;
-        micro_unlock_service(m);
-
-        if (m->cfg->DoneHandler != NULL)
-            m->cfg->DoneHandler(m);
+        natsLib_stopServiceCallbacks(m);
+        m->stopped = true;
+        doneHandler = m->cfg->DoneHandler;
     }
 
-    return err;
+    _unlock_service(m);
+
+    if (finalize)
+    {
+        if (doneHandler != NULL)
+            doneHandler(m);
+
+        // Relase the endpoint's server reference from `micro_add_endpoint`.
+        _release_service(m);
+    }
+
+    return NULL;
+}
+
+static bool
+_find_endpoint(microEndpoint **prevp, microService *m, microEndpoint *to_find)
+{
+    microEndpoint *ep = NULL;
+    microEndpoint *prev_ep = NULL;
+
+    if ((m == NULL) || (to_find == NULL))
+        return false;
+
+    for (ep = m->first_ep; ep != NULL; ep = ep->next)
+    {
+        if (ep == to_find)
+        {
+            *prevp = prev_ep;
+            return true;
+        }
+        prev_ep = ep;
+    }
+
+    return false;
+}
+
+void micro_release_on_endpoint_complete(void *closure)
+{
+    microEndpoint *ep = (microEndpoint *)closure;
+    microEndpoint *prev_ep = NULL;
+    microService *m = NULL;
+    natsSubscription *sub = NULL;
+    microDoneHandler doneHandler = NULL;
+    bool free_ep = false;
+    bool finalize = false;
+
+    if (ep == NULL)
+        return;
+
+    m = ep->m;
+    if ((m == NULL) || (m->service_mu == NULL))
+        return;
+
+    micro_lock_endpoint(ep);
+    ep->is_draining = false;
+    sub = ep->sub;
+    ep->sub = NULL;
+    ep->refs--;
+    free_ep = (ep->refs == 0);
+    micro_unlock_endpoint(ep);
+
+    // Force the subscription to be destroyed now.
+    natsSubscription_Destroy(sub);
+
+    _lock_service(m);
+
+    // Release the service reference for the completed endpoint. It can not be
+    // the last reference, so no need to free m.
+    m->refs--;
+
+    // Unlink the endpoint from the service.
+    if (_find_endpoint(&prev_ep, m, ep))
+    {
+        if (prev_ep != NULL)
+        {
+            prev_ep->next = ep->next;
+        }
+        else
+        {
+            m->first_ep = ep->next;
+        }
+    }
+
+    finalize = (!m->stopped) && (m->first_ep == NULL);
+    if (finalize)
+    {
+        natsLib_stopServiceCallbacks(m);
+        m->stopped = true;
+        doneHandler = m->cfg->DoneHandler;
+    }
+
+    _unlock_service(m);
+
+    if (free_ep)
+        micro_free_endpoint(ep);
+
+    if (finalize)
+    {
+        if (doneHandler != NULL)
+            doneHandler(m);
+
+        // Relase the endpoint's server reference from `micro_add_endpoint`.
+        _release_service(m);
+    }
 }
 
 bool microService_IsStopped(microService *m)
 {
-    bool is_stopped;
+    bool stopped;
 
     if ((m == NULL) || (m->service_mu == NULL))
         return true;
 
-    micro_lock_service(m);
-    is_stopped = !m->is_running;
-    micro_unlock_service(m);
+    _lock_service(m);
+    stopped = m->stopped;
+    _unlock_service(m);
 
-    return is_stopped;
+    return stopped;
 }
 
 microError *
@@ -235,7 +333,7 @@ microService_Destroy(microService *m)
     if (err != NULL)
         return err;
 
-    micro_release_service(m);
+    _release_service(m);
     return NULL;
 }
 
@@ -263,7 +361,7 @@ microService_GetState(microService *m)
 }
 
 static microError *
-new_service(microService **ptr, natsConnection *nc)
+_new_service(microService **ptr, natsConnection *nc)
 {
     *ptr = NATS_CALLOC(1, sizeof(microService));
     if (*ptr == NULL)
@@ -276,39 +374,39 @@ new_service(microService **ptr, natsConnection *nc)
     return NULL;
 }
 
-microService *
-micro_retain_service(microService *m)
+static void
+_retain_service(microService *m)
 {
     if (m == NULL)
-        return NULL;
+        return;
 
-    micro_lock_service(m);
+    _lock_service(m);
 
-    m->refs++;
+    ++(m->refs);
 
-    micro_unlock_service(m);
-
-    return m;
+    _unlock_service(m);
 }
 
-void micro_release_service(microService *m)
+static void
+_release_service(microService *m)
 {
     int refs = 0;
 
     if (m == NULL)
         return;
 
-    micro_lock_service(m);
+    _lock_service(m);
 
     refs = --(m->refs);
 
-    micro_unlock_service(m);
+    _unlock_service(m);
 
     if (refs == 0)
-        free_service(m);
+        _free_service(m);
 }
 
-static void free_service(microService *m)
+static void
+_free_service(microService *m)
 {
     microGroup *next = NULL;
 
@@ -327,20 +425,21 @@ static void free_service(microService *m)
         }
     }
 
-    micro_free_cloned_service_config(m->cfg);
+    _free_cloned_service_config(m->cfg);
     natsConn_release(m->nc);
     natsMutex_Destroy(m->service_mu);
     NATS_FREE(m);
 }
 
-static inline microError *new_service_config(microServiceConfig **ptr)
+static inline microError *
+_new_service_config(microServiceConfig **ptr)
 {
     *ptr = NATS_CALLOC(1, sizeof(microServiceConfig));
     return (*ptr == NULL) ? micro_ErrorOutOfMemory : NULL;
 }
 
-microError *
-micro_clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
+static microError *
+_clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
 {
     microError *err = NULL;
     microServiceConfig *new_cfg = NULL;
@@ -348,7 +447,7 @@ micro_clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
     if (out == NULL || cfg == NULL)
         return micro_ErrorInvalidArg;
 
-    err = new_service_config(&new_cfg);
+    err = _new_service_config(&new_cfg);
     if (err == NULL)
     {
         memcpy(new_cfg, cfg, sizeof(microServiceConfig));
@@ -361,7 +460,7 @@ micro_clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
     MICRO_CALL(err, micro_clone_endpoint_config(&new_cfg->Endpoint, cfg->Endpoint));
     if (err != NULL)
     {
-        micro_free_cloned_service_config(new_cfg);
+        _free_cloned_service_config(new_cfg);
         return err;
     }
 
@@ -369,7 +468,8 @@ micro_clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
     return NULL;
 }
 
-void micro_free_cloned_service_config(microServiceConfig *cfg)
+static void
+_free_cloned_service_config(microServiceConfig *cfg)
 {
     if (cfg == NULL)
         return;
@@ -383,78 +483,180 @@ void micro_free_cloned_service_config(microServiceConfig *cfg)
     NATS_FREE(cfg);
 }
 
-static void
-on_connection_closed(natsConnection *nc, void *closure)
+static microError *
+_start_service_callbacks(microService *m)
 {
-    microService *m = (microService *)closure;
+    natsStatus s = NATS_OK;
+
     if (m == NULL)
-        return;
+        return micro_ErrorInvalidArg;
 
-    microService_Stop(m);
-}
+    // Extra reference to the service as long as its callbacks are registered.
+    _retain_service(m);
 
-static void
-on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure)
-{
-    microService *m = (microService *)closure;
-    microEndpoint *ep = NULL;
-    microError *err = NULL;
-    bool our_subject = false;
-    const char *subject = NULL;
-
-    if ((m == NULL) || (sub == NULL))
-        return;
-
-    subject = natsSubscription_GetSubject(sub);
-
-    micro_lock_service(m);
-    for (ep = m->first_ep; (!our_subject) && (ep != NULL); ep = ep->next)
+    s = natsLib_startServiceCallbacks(m);
+    if (s != NATS_OK)
     {
-        if (micro_match_endpoint_subject(ep->subject, subject))
-        {
-            break;
-        }
-    }
-    micro_unlock_service(m);
-
-    if (m->cfg->ErrHandler != NULL)
-    {
-        (*m->cfg->ErrHandler)(m, ep, s);
+        _release_service(m);
     }
 
-    if (ep != NULL)
-    {
-        err = microError_Wrapf(micro_ErrorFromStatus(s), "NATS error on endpoint %s", ep->name);
-        micro_update_last_error(ep, err);
-        microError_Destroy(err);
-    }
-
-    // TODO: Should we stop the service? The Go client does.
-    microService_Stop(m);
+    return micro_ErrorFromStatus(s);
 }
 
 static microError *
-wrap_connection_event_callbacks(microService *m)
+_services_for_connection(microService ***to_call, int *num_microservices, natsConnection *nc)
 {
-    natsStatus s = NATS_OK;
+    natsMutex *mu = natsLib_getServiceCallbackMutex();
+    natsHash  *h  = natsLib_getAllServicesToCallback();
+    microService *m = NULL;
+    microService **p = NULL;
+    natsHashIter iter;
+    int n = 0;
+    int i;
+
+    natsMutex_Lock(mu);
+
+    natsHashIter_Init(&iter, h);
+    while (natsHashIter_Next(&iter, NULL, (void **)&m))
+        if (m->nc == nc)
+            n++;
+    natsHashIter_Done(&iter);
+    if (n > 0)
+    {
+        p = NATS_CALLOC(n, sizeof(microService *));
+        if (p == NULL)
+        {
+            natsMutex_Unlock(mu);
+            return micro_ErrorOutOfMemory;
+        }
+
+        natsHashIter_Init(&iter, h);
+        i = 0;
+        while (natsHashIter_Next(&iter, NULL, (void **)&m))
+        {
+            if (m->nc == nc)
+            {
+                _retain_service(m); // for the callback
+                p[i++] = m;
+            }
+        }
+        natsHashIter_Done(&iter);
+    }
+
+    natsMutex_Unlock(mu);
+
+    *to_call = p;
+    *num_microservices = n;
+    return NULL;
+}
+
+static void
+_on_connection_closed(natsConnection *nc, void *ignored)
+{
+    microService *m = NULL;
+    microService **to_call = NULL;
+    microError *err = NULL;
+    int n = 0;
+    int i;
+
+    err = _services_for_connection(&to_call, &n, nc);
+    if (err != NULL)
+    {
+        microError_Ignore(err);
+        return;
+    }
+
+    for (i = 0; i < n; i++)
+    {
+        m = to_call[i];
+        microError_Ignore(microService_Stop(m));
+
+        _release_service(m);
+    }
+
+    NATS_FREE(to_call);
+}
+
+static void
+_on_service_error(microService *m, const char *subject, natsStatus s)
+{
+    microEndpoint *ep = NULL;
+    microError *err = NULL;
+
+    if (m == NULL)
+        return;
+
+    _lock_service(m);
+    for (ep = m->first_ep;
+         (ep != NULL) && !micro_match_endpoint_subject(ep->subject, subject);
+         ep = ep->next)
+        ;
+    micro_retain_endpoint(ep); // for the callback
+    _unlock_service(m);
+
+    if (ep != NULL)
+    {
+        if (m->cfg->ErrHandler != NULL)
+            (*m->cfg->ErrHandler)(m, ep, s);
+
+        err = microError_Wrapf(micro_ErrorFromStatus(s), "NATS error on endpoint %s", ep->subject);
+        micro_update_last_error(ep, err);
+        microError_Destroy(err);
+    }
+    micro_release_endpoint(ep); // after the callback
+
+    // TODO: Should we stop the service? The Go client does.
+    microError_Ignore(microService_Stop(m));
+}
+
+static void
+_on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *not_used)
+{
+    microService *m = NULL;
+    microService **to_call = NULL;
+    microError *err = NULL;
+    const char *subject = NULL;
+    int n = 0;
+    int i;
+
+    if (sub == NULL)
+    {
+        return;
+    }
+    subject = natsSubscription_GetSubject(sub);
+
+    // `to_call` will have a list of retained service pointers.
+    err = _services_for_connection(&to_call, &n, nc);
+    if (err != NULL)
+    {
+        microError_Ignore(err);
+        return;
+    }
+
+    for (i = 0; i < n; i++)
+    {
+        m = to_call[i];
+        _on_service_error(m, subject, s);
+        _release_service(m); // release the extra ref in `to_call`.
+    }
+
+    NATS_FREE(to_call);
+}
+
+static microError *
+_wrap_connection_event_callbacks(microService *m)
+{
+    microError *err = NULL;
 
     if ((m == NULL) || (m->nc == NULL) || (m->nc->opts == NULL))
         return micro_ErrorInvalidArg;
 
-    IFOK(s, natsOptions_addConnectionClosedCallback(m->nc->opts,on_connection_closed, m));
-    IFOK(s, natsOptions_addErrorCallback(m->nc->opts, on_error, m));
+    // The new service must be in the list for this to work.
+    MICRO_CALL(err, _start_service_callbacks(m));
+    MICRO_CALL(err, micro_ErrorFromStatus(
+                        natsOptions_setMicroCallbacks(m->nc->opts, _on_connection_closed, _on_error)));
 
-    return microError_Wrapf(micro_ErrorFromStatus(s), "failed to wrap connection event callbacks");
-}
-
-static void
-unwrap_connection_event_callbacks(microService *m)
-{
-    if ((m == NULL) || (m->nc == NULL) || (m->nc->opts == NULL))
-        return;
-
-    natsOptions_removeConnectionClosedCallback(m->nc->opts, on_connection_closed, m);
-    natsOptions_removeErrorCallback(m->nc->opts, on_error, m);
+    return microError_Wrapf(err, "failed to wrap connection event callbacks");
 }
 
 microError *
@@ -521,7 +723,7 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
 {
     microServiceInfo *info = NULL;
     microEndpoint *ep = NULL;
-    int len = 0;
+    int len;
 
     if ((new_info == NULL) || (m == NULL) || (m->service_mu == NULL))
         return micro_ErrorInvalidArg;
@@ -536,17 +738,25 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
     micro_strdup((char **)&info->Id, m->id);
     info->Type = MICRO_INFO_RESPONSE_TYPE;
 
-    micro_lock_service(m);
+    _lock_service(m);
+
+    len = 0;
+    for (ep = m->first_ep; ep != NULL; ep = ep->next)
+    {
+        if ((!ep->is_monitoring_endpoint) && (ep->subject != NULL))
+            len++;
+    }
 
     // Overallocate subjects, will filter out internal ones.
-    info->Subjects = NATS_CALLOC(m->num_eps, sizeof(char *));
+    info->Subjects = NATS_CALLOC(len, sizeof(char *));
     if (info->Subjects == NULL)
     {
-        micro_unlock_service(m);
+        _unlock_service(m);
         NATS_FREE(info);
         return micro_ErrorOutOfMemory;
     }
 
+    len = 0;
     for (ep = m->first_ep; ep != NULL; ep = ep->next)
     {
         if ((!ep->is_monitoring_endpoint) && (ep->subject != NULL))
@@ -556,7 +766,7 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
         }
     }
     info->SubjectsLen = len;
-    micro_unlock_service(m);
+    _unlock_service(m);
 
     *new_info = info;
     return NULL;
@@ -572,7 +782,7 @@ void microServiceInfo_Destroy(microServiceInfo *info)
     // casts to quiet the compiler.
     for (i = 0; i < info->SubjectsLen; i++)
         NATS_FREE((char *)info->Subjects[i]);
-    NATS_FREE((char *)info->Subjects); 
+    NATS_FREE((char *)info->Subjects);
     NATS_FREE((char *)info->Name);
     NATS_FREE((char *)info->Version);
     NATS_FREE((char *)info->Description);
@@ -585,7 +795,7 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
 {
     microServiceStats *stats = NULL;
     microEndpoint *ep = NULL;
-    int len = 0;
+    int len;
     long double avg = 0.0;
 
     if ((new_stats == NULL) || (m == NULL) || (m->service_mu == NULL))
@@ -601,18 +811,25 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
     stats->Started = m->started;
     stats->Type = MICRO_STATS_RESPONSE_TYPE;
 
-    micro_lock_service(m);
+    _lock_service(m);
 
-    // Allocate the actual structs, not pointers. Overallocate for the internal
-    // endpoints even though they are filtered out.
-    stats->Endpoints = NATS_CALLOC(m->num_eps, sizeof(microEndpointStats));
+    len = 0;
+    for (ep = m->first_ep; ep != NULL; ep = ep->next)
+    {
+        if ((ep != NULL) && (!ep->is_monitoring_endpoint))
+            len++;
+    }
+
+    // Allocate the actual structs, not pointers.
+    stats->Endpoints = NATS_CALLOC(len, sizeof(microEndpointStats));
     if (stats->Endpoints == NULL)
     {
-        micro_unlock_service(m);
+        _unlock_service(m);
         NATS_FREE(stats);
         return micro_ErrorOutOfMemory;
     }
 
+    len = 0;
     for (ep = m->first_ep; ep != NULL; ep = ep->next)
     {
         if ((ep != NULL) && (!ep->is_monitoring_endpoint) && (ep->endpoint_mu != NULL))
@@ -631,7 +848,7 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
         }
     }
 
-    micro_unlock_service(m);
+    _unlock_service(m);
     stats->EndpointsLen = len;
 
     *new_stats = stats;

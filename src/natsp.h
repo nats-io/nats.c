@@ -196,24 +196,6 @@ typedef struct __userCreds
 
 } userCreds;
 
-typedef enum
-{
-    CALLBACK_TYPE_CONN = 0,
-    CALLBACK_TYPE_ERROR,
-} nats_CallbackType;
-
-typedef struct __nats_CallbackList
-{
-    nats_CallbackType           type;
-    union
-    {
-        natsConnectionHandler   conn;
-        natsErrHandler          err;
-    } f;
-    void                        *closure;
-    struct __nats_CallbackList  *next;
-} nats_CallbackList;
-
 struct __natsOptions
 {
     // This field must be the first (see natsOptions_clone, same if you add
@@ -243,8 +225,8 @@ struct __natsOptions
     natsTokenHandler        tokenCb;
     void                    *tokenCbClosure;
 
-    nats_CallbackList       *closedCb; 
-    nats_CallbackList       *asyncErrCb;
+    natsConnectionHandler   closedCb;
+    void                    *closedCbClosure;
 
     natsConnectionHandler   disconnectedCb;
     void                    *disconnectedCbClosure;
@@ -261,6 +243,12 @@ struct __natsOptions
 
     natsConnectionHandler   lameDuckCb;
     void                    *lameDuckClosure;
+
+    natsErrHandler          asyncErrCb;
+    void                    *asyncErrCbClosure;
+
+    natsConnectionHandler   microClosedCb;
+    natsErrHandler          microAsyncErrCb;
 
     int64_t                 pingInterval;
     int                     maxPingsOut;
@@ -807,6 +795,18 @@ natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWork
 
 void
 nats_setNATSThreadKey(void);
+
+natsStatus
+natsLib_startServiceCallbacks(microService *m);
+
+void
+natsLib_stopServiceCallbacks(microService *m);
+
+natsMutex*
+natsLib_getServiceCallbackMutex(void);
+
+natsHash*
+natsLib_getAllServicesToCallback(void);
 
 //
 // Threads

@@ -32911,6 +32911,7 @@ test_MicroBasics(void)
 
         nats_JSONDestroy(js);
         natsMsg_Destroy(reply);
+        NATS_FREE(array);
     }
     natsSubscription_Destroy(sub);
     natsInbox_Destroy(inbox);

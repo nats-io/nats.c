@@ -14501,6 +14501,7 @@ test_AsyncErrHandlerSubDestroyed(void)
 
     test("Destroy subscription: ");
     natsSubscription_Destroy(sub);
+    testCond(true);
 
     test("Wait for async error callback to return: ");
     natsMutex_Lock(arg.m);

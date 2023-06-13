@@ -49,7 +49,10 @@ verrorf(natsStatus s, int code, const char *format, va_list args)
     if (format == NULL)
         format = "";
 
-    message_len = nats_vsnprintf(NULL, 0, format, args);
+    // Do not use nats_vsnprintf here since we want to calculate the size of
+    // the resulting formatted string. On Windows, that would fail. Use
+    // that instead.
+    message_len = nats_vscprintf(format, args);
     if (message_len < 0)
     {
         va_end(args2);

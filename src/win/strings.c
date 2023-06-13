@@ -29,7 +29,7 @@ nats_asprintf(char **newStr, const char *fmt, ...)
     do
     {
         va_start(ap, fmt);
-        n = nats_vsnprintf(str, size, fmt, ap);
+        n = vsnprintf(str, size, fmt, ap);
         va_end(ap);
 
         if ((n < 0) || (n >= size))
@@ -128,7 +128,7 @@ nats_snprintf(char *buffer, size_t countszt, char *format, ...)
     memset(buffer, 0, count);
 
     va_start(ap, format);
-    len = (int) nats_vsnprintf(buffer, count, format, ap);
+    len = (int) vsnprintf(buffer, count, format, ap);
     va_end(ap);
     if ((len == count) || (len < 0))
     {

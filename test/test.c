@@ -33261,7 +33261,6 @@ test_MicroAsyncErrorHandler(void)
     struct threadArg    arg;
     natsConnection      *nc       = NULL;
     natsOptions         *opts     = NULL;
-    natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     microService        *m        = NULL;
     microEndpoint       *ep       = NULL;
@@ -33321,8 +33320,6 @@ test_MicroAsyncErrorHandler(void)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
     natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.closed && (arg.status == NATS_SLOW_CONSUMER));
-
-    natsSubscription_Destroy(sub);
 
     microService_Destroy(m);
     _waitForMicroservicesAllDone(&arg);

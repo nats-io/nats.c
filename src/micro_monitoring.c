@@ -250,32 +250,63 @@ marshal_ping(natsBuffer **new_buf, microService *m)
     return NULL;
 }
 
+natsStatus
+_marshal_metadata(natsBuffer *buf, const char **metadata, int len)
+{
+    natsStatus s = NATS_OK;
+    int i;
+
+    if (len > 0)
+    {
+        IFOK(s, natsBuf_Append(buf, "\"metadata\":{", -1));
+        for (i = 0; ((s == NATS_OK) && (i < len)); i++)
+        {
+            IFOK(s, natsBuf_AppendByte(buf, '"'));
+            IFOK(s, natsBuf_Append(buf, metadata[i * 2], -1));
+            IFOK(s, natsBuf_Append(buf, "\":\"", 3));
+            IFOK(s, natsBuf_Append(buf, metadata[i * 2 + 1], -1));
+            IFOK(s, natsBuf_AppendByte(buf, '"'));
+            if (i != len - 1)
+                IFOK(s, natsBuf_AppendByte(buf, ','));
+        }
+        IFOK(s, natsBuf_Append(buf, "},", 2));
+    }
+    return NATS_OK;
+}
+
 static microError *
 marshal_info(natsBuffer **new_buf, microServiceInfo *info)
 {
     natsBuffer *buf = NULL;
     natsStatus s;
+    int i;
 
     s = natsBuf_Create(&buf, 4096);
     IFOK(s, natsBuf_AppendByte(buf, '{'));
+
     IFOK_attr("description", info->Description, ",");
-    IFOK_attr("id", info->Id, ",");
-    IFOK_attr("name", info->Name, ",");
-    IFOK_attr("type", info->Type, ",");
-    if ((s == NATS_OK) && (info->SubjectsLen > 0))
+
+    // "endpoints":{...}
+    if ((s == NATS_OK) && (info->EndpointsLen > 0))
     {
-        int i;
-        IFOK(s, natsBuf_Append(buf, "\"subjects\":[", -1));
-        for (i = 0; i < info->SubjectsLen; i++)
+        IFOK(s, natsBuf_Append(buf, "\"endpoints\":[", -1));
+        for (i = 0; ((s == NATS_OK) && (i < info->EndpointsLen)); i++)
         {
-            IFOK(s, natsBuf_AppendByte(buf, '"'));
-            IFOK(s, natsBuf_Append(buf, info->Subjects[i], -1));
-            IFOK(s, natsBuf_AppendByte(buf, '"'));
-            if (i < (info->SubjectsLen - 1))
+            IFOK(s, natsBuf_AppendByte(buf, '{'));
+            IFOK_attr("name", info->Endpoints[i].Name, ",");
+            IFOK(s, _marshal_metadata(buf, info->Endpoints[i].Metadata, info->Endpoints[i].MetadataLen));
+            IFOK_attr("subject", info->Endpoints[i].Subject, "");
+            IFOK(s, natsBuf_AppendByte(buf, '}')); // end endpoint
+            if (i != info->EndpointsLen - 1)
                 IFOK(s, natsBuf_AppendByte(buf, ','));
         }
         IFOK(s, natsBuf_Append(buf, "],", 2));
     }
+
+    IFOK_attr("id", info->Id, ",");
+    IFOK(s, _marshal_metadata(buf, info->Metadata, info->MetadataLen));
+    IFOK_attr("name", info->Name, ",");
+    IFOK_attr("type", info->Type, ",");
     IFOK_attr("version", info->Version, "");
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 

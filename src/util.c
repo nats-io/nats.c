@@ -2303,7 +2303,10 @@ nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, in
         w--;
         if (u == 0)
         {
-            return natsBuf_Append(out_buf, "0s", 2);
+            s = natsBuf_Append(out_buf, start, -1);
+            IFOK(s, natsBuf_Append(out_buf, field_name, -1));
+            IFOK(s, natsBuf_Append(out_buf, "\":\"0s\"", -1));
+            return NATS_UPDATE_ERR_STACK(s);
         }
         else if (u < 1000)
         {

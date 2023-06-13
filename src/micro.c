@@ -457,6 +457,7 @@ _clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Name, cfg->Name));
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Version, cfg->Version));
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Description, cfg->Description));
+    MICRO_CALL(err, micro_clone_metadata(&new_cfg->Metadata, &new_cfg->MetadataLen, cfg->Metadata, cfg->MetadataLen));
     MICRO_CALL(err, micro_clone_endpoint_config(&new_cfg->Endpoint, cfg->Endpoint));
     if (err != NULL)
     {
@@ -479,6 +480,7 @@ _free_cloned_service_config(microServiceConfig *cfg)
     NATS_FREE((char *)cfg->Name);
     NATS_FREE((char *)cfg->Version);
     NATS_FREE((char *)cfg->Description);
+    micro_free_cloned_metadata(cfg->Metadata, cfg->MetadataLen);
     micro_free_cloned_endpoint_config(cfg->Endpoint);
     NATS_FREE(cfg);
 }
@@ -507,7 +509,7 @@ static microError *
 _services_for_connection(microService ***to_call, int *num_microservices, natsConnection *nc)
 {
     natsMutex *mu = natsLib_getServiceCallbackMutex();
-    natsHash  *h  = natsLib_getAllServicesToCallback();
+    natsHash *h = natsLib_getAllServicesToCallback();
     microService *m = NULL;
     microService **p = NULL;
     natsHashIter iter;
@@ -721,6 +723,7 @@ microService_GetConnection(microService *m)
 microError *
 microService_GetInfo(microServiceInfo **new_info, microService *m)
 {
+    microError *err = NULL;
     microServiceInfo *info = NULL;
     microEndpoint *ep = NULL;
     int len;
@@ -732,41 +735,55 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
     if (info == NULL)
         return micro_ErrorOutOfMemory;
 
-    micro_strdup((char **)&info->Name, m->cfg->Name);
-    micro_strdup((char **)&info->Version, m->cfg->Version);
-    micro_strdup((char **)&info->Description, m->cfg->Description);
-    micro_strdup((char **)&info->Id, m->id);
-    info->Type = MICRO_INFO_RESPONSE_TYPE;
+    MICRO_CALL(err, micro_strdup((char **)&info->Name, m->cfg->Name));
+    MICRO_CALL(err, micro_strdup((char **)&info->Version, m->cfg->Version));
+    MICRO_CALL(err, micro_strdup((char **)&info->Description, m->cfg->Description));
+    MICRO_CALL(err, micro_strdup((char **)&info->Id, m->id));
+    MICRO_CALL(err, micro_clone_metadata(&info->Metadata, &info->MetadataLen, m->cfg->Metadata, m->cfg->MetadataLen));
 
-    _lock_service(m);
-
-    len = 0;
-    for (ep = m->first_ep; ep != NULL; ep = ep->next)
+    if (err == NULL)
     {
-        if ((!ep->is_monitoring_endpoint) && (ep->subject != NULL))
-            len++;
-    }
+        info->Type = MICRO_INFO_RESPONSE_TYPE;
 
-    // Overallocate subjects, will filter out internal ones.
-    info->Subjects = NATS_CALLOC(len, sizeof(char *));
-    if (info->Subjects == NULL)
-    {
-        _unlock_service(m);
-        NATS_FREE(info);
-        return micro_ErrorOutOfMemory;
-    }
+        _lock_service(m);
 
-    len = 0;
-    for (ep = m->first_ep; ep != NULL; ep = ep->next)
-    {
-        if ((!ep->is_monitoring_endpoint) && (ep->subject != NULL))
+        len = 0;
+        for (ep = m->first_ep; ep != NULL; ep = ep->next)
         {
-            micro_strdup((char **)&info->Subjects[len], ep->subject);
-            len++;
+            if ((!ep->is_monitoring_endpoint) && (ep->subject != NULL))
+                len++;
         }
+
+        // Overallocate subjects, will filter out internal ones.
+        info->Endpoints = NATS_CALLOC(len, sizeof(microEndpointInfo));
+        if (info->Endpoints == NULL)
+        {
+            err = micro_ErrorOutOfMemory;
+        }
+
+        len = 0;
+        for (ep = m->first_ep; (err == NULL) && (ep != NULL); ep = ep->next)
+        {
+            if ((!ep->is_monitoring_endpoint) && (ep->subject != NULL))
+            {
+                MICRO_CALL(err, micro_strdup((char **)&info->Endpoints[len].Name, ep->name));
+                MICRO_CALL(err, micro_strdup((char **)&info->Endpoints[len].Subject, ep->subject));
+                MICRO_CALL(err, micro_clone_metadata(&(info->Endpoints[len].Metadata), &info->Endpoints[len].MetadataLen, ep->config->Metadata, ep->config->MetadataLen));
+                if (err == NULL)
+                {
+                    len++;
+                    info->EndpointsLen = len;
+                }
+            }
+        }
+        _unlock_service(m);
     }
-    info->SubjectsLen = len;
-    _unlock_service(m);
+
+    if (err != NULL)
+    {
+        microServiceInfo_Destroy(info);
+        return err;
+    }
 
     *new_info = info;
     return NULL;
@@ -780,19 +797,25 @@ void microServiceInfo_Destroy(microServiceInfo *info)
         return;
 
     // casts to quiet the compiler.
-    for (i = 0; i < info->SubjectsLen; i++)
-        NATS_FREE((char *)info->Subjects[i]);
-    NATS_FREE((char *)info->Subjects);
+    for (i = 0; i < info->EndpointsLen; i++)
+    {
+        NATS_FREE((char *)info->Endpoints[i].Name);
+        NATS_FREE((char *)info->Endpoints[i].Subject);
+        micro_free_cloned_metadata(info->Endpoints[i].Metadata, info->Endpoints[i].MetadataLen);
+    }
+    NATS_FREE((char *)info->Endpoints);
     NATS_FREE((char *)info->Name);
     NATS_FREE((char *)info->Version);
     NATS_FREE((char *)info->Description);
     NATS_FREE((char *)info->Id);
+    micro_free_cloned_metadata(info->Metadata, info->MetadataLen);
     NATS_FREE(info);
 }
 
 microError *
 microService_GetStats(microServiceStats **new_stats, microService *m)
 {
+    microError *err = NULL;
     microServiceStats *stats = NULL;
     microEndpoint *ep = NULL;
     int len;
@@ -805,52 +828,62 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
     if (stats == NULL)
         return micro_ErrorOutOfMemory;
 
-    micro_strdup((char **)&stats->Name, m->cfg->Name);
-    micro_strdup((char **)&stats->Version, m->cfg->Version);
-    micro_strdup((char **)&stats->Id, m->id);
-    stats->Started = m->started;
-    stats->Type = MICRO_STATS_RESPONSE_TYPE;
+    MICRO_CALL(err, micro_strdup((char **)&stats->Name, m->cfg->Name));
+    MICRO_CALL(err, micro_strdup((char **)&stats->Version, m->cfg->Version));
+    MICRO_CALL(err, micro_strdup((char **)&stats->Id, m->id));
 
-    _lock_service(m);
-
-    len = 0;
-    for (ep = m->first_ep; ep != NULL; ep = ep->next)
+    if (err == NULL)
     {
-        if ((ep != NULL) && (!ep->is_monitoring_endpoint))
-            len++;
-    }
+        stats->Started = m->started;
+        stats->Type = MICRO_STATS_RESPONSE_TYPE;
 
-    // Allocate the actual structs, not pointers.
-    stats->Endpoints = NATS_CALLOC(len, sizeof(microEndpointStats));
-    if (stats->Endpoints == NULL)
-    {
-        _unlock_service(m);
-        NATS_FREE(stats);
-        return micro_ErrorOutOfMemory;
-    }
+        _lock_service(m);
 
-    len = 0;
-    for (ep = m->first_ep; ep != NULL; ep = ep->next)
-    {
-        if ((ep != NULL) && (!ep->is_monitoring_endpoint) && (ep->endpoint_mu != NULL))
+        len = 0;
+        for (ep = m->first_ep; ep != NULL; ep = ep->next)
         {
-            micro_lock_endpoint(ep);
-            // copy the entire struct, including the last error buffer.
-            stats->Endpoints[len] = ep->stats;
-
-            micro_strdup((char **)&stats->Endpoints[len].Name, ep->name);
-            micro_strdup((char **)&stats->Endpoints[len].Subject, ep->subject);
-            avg = (long double)ep->stats.ProcessingTimeSeconds * 1000000000.0 + (long double)ep->stats.ProcessingTimeNanoseconds;
-            avg = avg / (long double)ep->stats.NumRequests;
-            stats->Endpoints[len].AverageProcessingTimeNanoseconds = (int64_t)avg;
-            len++;
-            micro_unlock_endpoint(ep);
+            if ((ep != NULL) && (!ep->is_monitoring_endpoint))
+                len++;
         }
+
+        // Allocate the actual structs, not pointers.
+        stats->Endpoints = NATS_CALLOC(len, sizeof(microEndpointStats));
+        if (stats->Endpoints == NULL)
+        {
+            err = micro_ErrorOutOfMemory;
+        }
+
+        len = 0;
+        for (ep = m->first_ep; ((err == NULL) && (ep != NULL)); ep = ep->next)
+        {
+            if ((ep != NULL) && (!ep->is_monitoring_endpoint) && (ep->endpoint_mu != NULL))
+            {
+                micro_lock_endpoint(ep);
+                // copy the entire struct, including the last error buffer.
+                stats->Endpoints[len] = ep->stats;
+
+                MICRO_CALL(err, micro_strdup((char **)&stats->Endpoints[len].Name, ep->name));
+                MICRO_CALL(err, micro_strdup((char **)&stats->Endpoints[len].Subject, ep->subject));
+                if (err == NULL)
+                {
+                    avg = (long double)ep->stats.ProcessingTimeSeconds * 1000000000.0 + (long double)ep->stats.ProcessingTimeNanoseconds;
+                    avg = avg / (long double)ep->stats.NumRequests;
+                    stats->Endpoints[len].AverageProcessingTimeNanoseconds = (int64_t)avg;
+                    len++;
+                    stats->EndpointsLen = len;
+                }
+                micro_unlock_endpoint(ep);
+            }
+        }
+
+        _unlock_service(m);
     }
 
-    _unlock_service(m);
-    stats->EndpointsLen = len;
-
+    if (err != NULL)
+    {
+        microServiceStats_Destroy(stats);
+        return err;
+    }
     *new_stats = stats;
     return NULL;
 }
@@ -872,4 +905,49 @@ void microServiceStats_Destroy(microServiceStats *stats)
     NATS_FREE((char *)stats->Version);
     NATS_FREE((char *)stats->Id);
     NATS_FREE(stats);
+}
+
+void micro_free_cloned_metadata(const char **metadata, int len)
+{
+    int i;
+
+    if (metadata == NULL)
+        return;
+
+    for (i = 0; i < len*2; i++)
+    {
+        NATS_FREE((char *)metadata[i]);
+    }
+    NATS_FREE((char **)metadata);
+}
+
+microError *micro_clone_metadata(const char ***new_metadata, int *new_len, const char **metadata, int len)
+{
+    char **dup = NULL;
+    int i;
+
+    if (new_metadata == NULL)
+        return micro_ErrorInvalidArg;
+    *new_metadata = NULL;
+
+    if (len == 0)
+        return NULL;
+
+    dup = NATS_CALLOC(len * 2, sizeof(char *));
+    if (dup == NULL)
+        return micro_ErrorOutOfMemory;
+
+    for (i = 0; i < len*2; i++)
+    {
+        micro_strdup(&dup[i], metadata[i]);
+        if (dup[i] == NULL)
+        {
+            micro_free_cloned_metadata((const char **)dup, i);
+            return micro_ErrorOutOfMemory;
+        }
+    }
+
+    *new_metadata = (const char **)dup;
+    *new_len = len;
+    return NULL;
 }

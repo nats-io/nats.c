@@ -143,6 +143,7 @@ extern microError *micro_ErrorInvalidArg;
 
 microError *micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
 microError *micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg);
+microError *micro_clone_metadata(const char ***new_metadata, int *new_len, const char **metadata, int len);
 microError *micro_init_monitoring(microService *m);
 microError *micro_is_error_message(natsStatus s, natsMsg *msg);
 microError *micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
@@ -152,6 +153,7 @@ microError *micro_start_endpoint(microEndpoint *ep);
 microError *micro_stop_endpoint(microEndpoint *ep);
 
 void micro_free_cloned_endpoint_config(microEndpointConfig *cfg);
+void micro_free_cloned_metadata(const char **metadata, int len);
 void micro_free_endpoint(microEndpoint *ep);
 void micro_free_request(microRequest *req);
 void micro_release_endpoint(microEndpoint *ep);

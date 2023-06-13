@@ -7181,6 +7181,17 @@ typedef struct micro_endpoint_s microEndpoint;
 typedef struct micro_endpoint_config_s microEndpointConfig;
 
 /**
+ * @brief static information about an endpoint.
+ *
+ * microEndpointInfo is returned by microService_GetInfo function, as part of microServiceInfo. It
+ * is also accessible by sending a `$SRV.INFO.<service-name>[.<id>]` request to
+ * the service. See micro_endpoint_info_s for descriptions of the fields.
+ *
+ * @see micro_endpoint_info_s, micro_service_info_s, microService_GetInfo
+ */
+typedef struct micro_endpoint_info_s microEndpointInfo;
+
+/**
  * @brief The Microservice endpoint-level stats struct.
  *
  * Returned as part of microEndpointStats. See micro_endpoint_stats_s for
@@ -7245,7 +7256,7 @@ typedef struct micro_service_s microService;
 typedef struct micro_service_config_s microServiceConfig;
 
 /**
- * @brief information about a running microservice.
+ * @brief Information about a running microservice.
  *
  * microServiceInfo is the struct returned by microService_GetInfo function. It
  * is also accessible by sending a `$SRV.INFO.<service-name>[.<id>]` request to
@@ -7355,6 +7366,14 @@ struct micro_endpoint_config_s
     const char *Subject;
 
     /**
+     * @brief Metadata for the endpoint in the form of a string array [n1, v1,
+     * n2, v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}.
+     * MetadataLen contains the number of **pairs** in Metadata.
+     */
+    const char **Metadata;
+    int MetadataLen;
+
+    /**
      * @brief The request handler for the endpoint.
      */
     microRequestHandler Handler;
@@ -7364,6 +7383,30 @@ struct micro_endpoint_config_s
      * (state/closure).
      */
     void *State;
+};
+
+/**
+ * microEndpointInfo is the struct for the endpoint's static metadata.
+ */
+struct micro_endpoint_info_s
+{
+    /**
+     * @brief The name of the service.
+     */
+    const char *Name;
+
+    /**
+     * @brief The semantic version of the service.
+     */
+    const char *Subject;
+
+    /**
+     * @brief The metadata for the endpoint in the form of a string array [n1,
+     * v1, n2, v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}.
+     * MetadataLen contains the number of **pairs** in Metadata.
+     */
+    const char **Metadata;
+    int MetadataLen;
 };
 
 /**
@@ -7430,6 +7473,14 @@ struct micro_service_config_s
      * @brief The description of the service.
      */
     const char *Description;
+
+    /**
+     * @brief Metadata for the service in the form of a string array [n1, v1,
+     * n2, v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}.
+     * MetadataLen contains the number of **pairs** in Metadata.
+     */
+    const char **Metadata;
+    int MetadataLen;
 
     /**
      * @brief The "main" (aka default) endpoint configuration. 
@@ -7511,14 +7562,22 @@ struct micro_service_info_s
     const char *Id;
 
     /**
-     * @brief All endpoint subjects the service is listening on.
+     * @brief The service metadata in the form of a string array [n1, v1, n2,
+     * v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}. MetadataLen
+     * contains the number of **pairs** in Metadata.
      */
-    const char **Subjects;
+    const char **Metadata;
+    int MetadataLen;
 
     /**
-     * @brief The number of subjects in the `subjects` array.
+     * @brief Endpoints.
      */
-    int SubjectsLen;
+    microEndpointInfo *Endpoints;
+
+    /**
+     * @brief The number of endpoints in the `Endpoints` array.
+     */
+    int EndpointsLen;
 };
 
 /**

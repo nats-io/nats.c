@@ -1,4 +1,4 @@
-// Copyright 2015-2022 The NATS Authors
+// Copyright 2015-2023 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -38,6 +38,7 @@
 #include "parser.h"
 #include "js.h"
 #include "kv.h"
+#include "microp.h"
 #if defined(NATS_HAS_STREAMING)
 #include "stan/conn.h"
 #include "stan/pub.h"
@@ -118,6 +119,8 @@ struct threadArg
     int64_t         reconnectedAt[4];
     int             reconnects;
     bool            msgReceived;
+    int             microRunningServiceCount;
+    bool            microAllDone;
     bool            done;
     int             results[10];
     const char      *tokens[3];
@@ -14397,6 +14400,7 @@ test_AsyncErrHandler(void)
     _stopServer(serverPid);
 }
 
+
 static void
 _asyncErrBlockingCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void* closure)
 {
@@ -14497,6 +14501,7 @@ test_AsyncErrHandlerSubDestroyed(void)
 
     test("Destroy subscription: ");
     natsSubscription_Destroy(sub);
+    testCond(true);
 
     test("Wait for async error callback to return: ");
     natsMutex_Lock(arg.m);
@@ -16505,10 +16510,10 @@ test_ReconnectJitter(void)
         FAIL("Unable to setup test");
 
     test("Default jitter values: ");
-    natsMutex_Lock(opts->mu);
+    natsOptions_lock(opts);
     s = (((opts->reconnectJitter == NATS_OPTS_DEFAULT_RECONNECT_JITTER)
             && (opts->reconnectJitterTLS == NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS)) ? NATS_OK : NATS_ERR);
-    natsMutex_Unlock(opts->mu);
+    natsOptions_unlock(opts);
     testCond(s == NATS_OK);
 
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4222");
@@ -20552,7 +20557,7 @@ test_EventLoop(void)
 
     test("Close and wait for close cb: ");
     natsConnection_Close(nc);
-    _waitForConnClosed(&arg);
+    s = _waitForConnClosed(&arg);
     testCond(s == NATS_OK);
 
     natsMutex_Lock(arg.m);
@@ -32206,6 +32211,1129 @@ test_KeyValueMirrorCrossDomains(void)
     remove(lconfFile);
 }
 
+static void
+test_MicroMatchEndpointSubject(void)
+{
+    // endpoint, actual, match
+    const char *test_cases[] = {
+        "foo", "foo", "true",
+        "foo.bar.meh", "foo.bar.meh", "true",
+        "foo.bar.meh", "foo.bar", NULL,
+        "foo.bar", "foo.bar.meh", NULL,
+        "foo.*.meh", "foo.bar.meh", "true",
+        "*.bar.meh", "foo.bar.meh", "true",
+        "foo.bar.*", "foo.bar.meh", "true",
+        "foo.bar.>", "foo.bar.meh", "true",
+        "foo.>", "foo.bar.meh", "true",
+        "foo.b*ar.meh", "foo.bar.meh", NULL,
+    };
+    char buf[1024];
+    int i;
+    const char *ep_subject;
+    const char *actual_subject;
+    bool expected_match;
+
+    for (i = 0; i < (int)(sizeof(test_cases) / sizeof(const char *)); i = i + 3)
+    {
+        ep_subject = test_cases[i];
+        actual_subject = test_cases[i + 1];
+        expected_match = (test_cases[i + 2] != NULL);
+
+        snprintf(buf, sizeof(buf), "endpoint subject '%s', actual subject: '%s': ", ep_subject, actual_subject);
+        test(buf);
+        testCond(micro_match_endpoint_subject(ep_subject, actual_subject) == expected_match);
+    }
+}
+
+static microError *
+_microHandleRequest42(microRequest *req)
+{
+    return microRequest_Respond(req, "42", 2);
+}
+
+static microError *
+_microHandleRequestNoisy42(microRequest *req)
+{
+    if ((rand() % 10) == 0)
+        return micro_Errorf("Unexpected error!");
+
+    // Happy Path.
+    // Random delay between 5-10ms
+    nats_Sleep(5 + (rand() % 5));
+
+    return microRequest_Respond(req, "42", 2);
+}
+
+static void
+_microServiceDoneHandler(microService *m)
+{
+    struct threadArg *arg = (struct threadArg*) microService_GetState(m);
+
+    natsMutex_Lock(arg->m);
+    arg->microRunningServiceCount--;
+    if (arg->microRunningServiceCount == 0)
+    {
+        arg->microAllDone = true;
+        natsCondition_Broadcast(arg->c);
+    }
+    natsMutex_Unlock(arg->m);
+}
+
+static microError *
+_startMicroservice(microService** new_m, natsConnection *nc, microServiceConfig *cfg, microEndpointConfig **eps, int num_eps, struct threadArg *arg)
+{
+    microError *err = NULL;
+    bool prev_done;
+    int i;
+
+    cfg->DoneHandler = _microServiceDoneHandler;
+    cfg->State = arg;
+
+    natsMutex_Lock(arg->m);
+
+    arg->microRunningServiceCount++;
+    prev_done = arg->microAllDone;
+    arg->microAllDone = false;
+
+    err = micro_AddService(new_m, nc, cfg);
+    if (err != NULL)
+    {
+        arg->microRunningServiceCount--;
+        arg->microAllDone = prev_done;
+    }
+
+    natsMutex_Unlock(arg->m);
+
+    if (err != NULL)
+        return err;
+
+    for (i=0; i < num_eps; i++)
+    {
+        err = microService_AddEndpoint(*new_m, eps[i]);
+        if (err != NULL)
+        {
+            microService_Destroy(*new_m);
+            *new_m = NULL;
+            return err;
+        }
+    }
+
+    return NULL;
+}
+
+static void
+_startMicroserviceOK(microService** new_m, natsConnection *nc, microServiceConfig *cfg, microEndpointConfig **eps, int num_eps, struct threadArg *arg)
+{
+    char buf[64];
+
+    snprintf(buf, sizeof(buf), "Start microservice %s: ", cfg->Name);
+    test(buf);
+
+    testCond (NULL == _startMicroservice(new_m, nc, cfg, eps, num_eps, arg));
+}
+
+static void
+_startManyMicroservices(microService** svcs, int n, natsConnection *nc, microServiceConfig *cfg, microEndpointConfig **eps, int num_eps, struct threadArg *arg)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+    {
+        _startMicroserviceOK(&(svcs[i]), nc, cfg, eps, num_eps, arg);
+    }
+
+    testCond(true);
+}
+
+static void
+_waitForMicroservicesAllDone(struct threadArg *arg)
+{
+    natsStatus s = NATS_OK;
+
+    test("Wait for all microservices to stop: ");
+    natsMutex_Lock(arg->m);
+    while ((s != NATS_TIMEOUT) && !arg->microAllDone)
+        s = natsCondition_TimedWait(arg->c, arg->m, 1000);
+    natsMutex_Unlock(arg->m);
+    testCond((NATS_OK == s) && arg->microAllDone);
+
+    // `Done` may be immediately followed by freeing the service, so wait a bit
+    // to make sure it happens before the test exits.
+    nats_Sleep(20);
+}
+
+static void
+_destroyMicroservicesAndWaitForAllDone(microService** svcs, int n, struct threadArg *arg)
+{
+    char buf[64];
+
+    snprintf(buf, sizeof(buf), "Wait for all %d microservices to stop: ", n);
+    test(buf);
+
+    for (int i = 0; i < n; i++)
+    {
+        if (NULL != microService_Destroy(svcs[i]))
+            FAIL("Unable to destroy microservice!");
+    }
+
+    _waitForMicroservicesAllDone(arg);
+}
+
+typedef struct
+{
+    const char *name;
+    microServiceConfig *cfg;
+    microEndpointConfig **endpoints;
+    int num_endpoints;
+    bool null_nc;
+    bool null_receiver;
+    const char *expected_err;
+    int expected_num_subjects;
+} add_service_test_case_t;
+
+static void
+test_MicroAddService(void)
+{
+    natsStatus s = NATS_OK;
+    microError *err = NULL;
+    struct threadArg arg;
+    natsOptions *opts = NULL;
+    natsConnection *nc = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    microService *m = NULL;
+    microServiceInfo *info = NULL;
+    natsMsg *reply = NULL;
+    int i, j, n;
+    char buf[1024];
+    char *subject = NULL;
+    nats_JSON *js = NULL;
+    nats_JSON **array = NULL;
+    int array_len;
+    const char *str;
+
+    microEndpointConfig default_ep_cfg = {
+        .Name = "default",
+        .Handler = _microHandleRequestNoisy42,
+    };
+    microEndpointConfig ep1_cfg = {
+        .Name = "ep1",
+        .Handler = _microHandleRequestNoisy42,
+    };
+    microEndpointConfig ep2_cfg = {
+        .Name = "ep2",
+        .Subject = "different-from-name",
+        .Handler = _microHandleRequestNoisy42,
+    };
+    microEndpointConfig ep3_cfg = {
+        .Name = "ep3",
+        .Handler = _microHandleRequestNoisy42,
+    };
+    microEndpointConfig *all_ep_cfgs[] = {&ep1_cfg, &ep2_cfg, &ep3_cfg};
+
+    microServiceConfig minimal_cfg = {
+        .Version = "1.0.0",
+        .Name = "minimal",
+
+    };
+    microServiceConfig full_cfg = {
+        .Version = "1.0.0",
+        .Name = "full",
+        .Endpoint = &default_ep_cfg,
+        .Description = "fully declared microservice",
+    };
+    microServiceConfig err_no_name_cfg = {
+        .Version = "1.0.0",
+    };
+    microServiceConfig err_no_version_cfg = {
+        .Name = "no-version",
+    };
+    microServiceConfig err_invalid_version_cfg = {
+        .Version = "BLAH42",
+        .Name = "invalid-version",
+    };
+
+    add_service_test_case_t tcs[] = {
+        {
+            .name = "Minimal",
+            .cfg = &minimal_cfg,
+        },
+        {
+            .name = "Full",
+            .cfg = &full_cfg,
+            .expected_num_subjects = 1,
+        },
+        {
+            .name = "Full-with-endpoints",
+            .cfg = &full_cfg,
+            .endpoints = all_ep_cfgs,
+            .num_endpoints = sizeof(all_ep_cfgs) / sizeof(all_ep_cfgs[0]),
+            .expected_num_subjects = 4,
+        },
+        {
+            .name = "Err-null-connection",
+            .cfg = &minimal_cfg,
+            .null_nc = true,
+            .expected_err = "status 16: invalid function argument",
+        },
+        {
+            .name = "Err-null-receiver",
+            .cfg = &minimal_cfg,
+            .null_receiver = true,
+            .expected_err = "status 16: invalid function argument",
+        },
+        {
+            .name = "Err-no-name",
+            .cfg = &err_no_name_cfg,
+            .expected_err = "status 16: invalid function argument",
+        },
+        {
+            .name = "Err-no-version",
+            .cfg = &err_no_version_cfg,
+            .expected_err = "status 16: invalid function argument",
+        },
+        {
+            .name = "Err-invalid-version",
+            .cfg = &err_invalid_version_cfg,
+            // TODO: validate the version format.
+        },
+    };
+    add_service_test_case_t tc;
+
+    srand((unsigned int)nats_NowInNanoSeconds());
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if ((opts == NULL)
+        || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK)
+        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
+    {
+        FAIL("Unable to setup test for MicroConnectionEvents!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to server: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    for (n = 0; n < (int)(sizeof(tcs) / sizeof(tcs[0])); n++)
+    {
+        tc = tcs[n];
+
+        snprintf(buf, sizeof(buf), "%s: AddService: ", tc.name);
+        test(buf);
+        m = NULL;
+        err = _startMicroservice(
+            tc.null_receiver ? NULL : &m,
+            tc.null_nc ? NULL : nc,
+            tc.cfg, NULL, 0, &arg);
+        if (nats_IsStringEmpty(tc.expected_err))
+        {
+            testCond(err == NULL);
+        }
+        else
+        {
+            if (strcmp(tc.expected_err, microError_String(err, buf, sizeof(buf))) != 0)
+            {
+                char buf2[2*1024];
+                snprintf(buf2, sizeof(buf2), "Expected error '%s', got '%s'", tc.expected_err, buf);
+                FAIL(buf2);
+            }
+            testCond(true);
+            microError_Destroy(err);
+            continue;
+        }
+
+        for (i = 0; i < tc.num_endpoints; i++)
+        {
+            snprintf(buf, sizeof(buf), "%s: AddEndpoint '%s': ", tc.name, tc.endpoints[i]->Name);
+            test(buf);
+            testCond(NULL == microService_AddEndpoint(m, tc.endpoints[i]));
+        }
+
+        err = microService_GetInfo(&info, m);
+        if (err != NULL)
+            FAIL("failed to get service info!")
+
+        // run through PING and INFO subject variations: 0: all, 1: .name, 2: .name.id
+        for (j = 0; j < 3; j++)
+        {
+            err = micro_new_control_subject(&subject, MICRO_PING_VERB,
+                                            (j > 0 ? tc.cfg->Name : NULL),
+                                            (j > 1 ? info->Id : NULL));
+            if (err != NULL)
+                FAIL("failed to generate PING subject!");
+
+            snprintf(buf, sizeof(buf), "%s: Verify PING subject %s: ", tc.name, subject);
+            test(buf);
+            s = natsConnection_Request(&reply, nc, subject, NULL, 0, 1000);
+            IFOK(s, nats_JSONParse(&js, natsMsg_GetData(reply), natsMsg_GetDataLength(reply)));
+            IFOK(s, nats_JSONGetStrPtr(js, "id", &str));
+            IFOK(s, (strcmp(str, info->Id) == 0) ? NATS_OK : NATS_ERR);
+            IFOK(s, nats_JSONGetStrPtr(js, "name", &str));
+            IFOK(s, (strcmp(str, tc.cfg->Name) == 0) ? NATS_OK : NATS_ERR);
+            IFOK(s, nats_JSONGetStrPtr(js, "version", &str));
+            IFOK(s, (strcmp(str, tc.cfg->Version) == 0) ? NATS_OK : NATS_ERR);
+            IFOK(s, nats_JSONGetStrPtr(js, "type", &str));
+            IFOK(s, (strcmp(str, MICRO_PING_RESPONSE_TYPE) == 0) ? NATS_OK : NATS_ERR);
+            testCond(s == NATS_OK);
+            nats_JSONDestroy(js);
+            natsMsg_Destroy(reply);
+            NATS_FREE(subject);
+
+            err = micro_new_control_subject(&subject, MICRO_INFO_VERB,
+                                            (j > 0 ? tc.cfg->Name : NULL),
+                                            (j > 1 ? info->Id : NULL));
+            if (err != NULL)
+                FAIL("failed to generate INFO subject!");
+
+            snprintf(buf, sizeof(buf), "%s: Verify INFO subject %s: ", tc.name, subject);
+            test(buf);
+            s = natsConnection_Request(&reply, nc, subject, NULL, 0, 1000);
+            array = NULL;
+            array_len = 0;
+            testCond((NATS_OK == s)
+                && (NATS_OK == nats_JSONParse(&js, natsMsg_GetData(reply), natsMsg_GetDataLength(reply)))
+                && (NATS_OK == nats_JSONGetStrPtr(js, "id", &str)) && (strcmp(str, info->Id) == 0)
+                && (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) && (strcmp(str, tc.cfg->Name) == 0)
+                && (NATS_OK == nats_JSONGetStrPtr(js, "type", &str)) && (strcmp(str, MICRO_INFO_RESPONSE_TYPE) == 0)
+                && (NATS_OK == nats_JSONGetArrayObject(js, "endpoints", &array, &array_len)) && (array_len == tc.expected_num_subjects)
+            );
+
+            NATS_FREE(array);
+            nats_JSONDestroy(js);
+            natsMsg_Destroy(reply);
+            NATS_FREE(subject);
+        }
+
+        microServiceInfo_Destroy(info);
+
+        if (m != NULL)
+        {
+            snprintf(buf, sizeof(buf), "%s: Destroy service: %d", m->cfg->Name, m->refs);
+            test(buf);
+            testCond(NULL == microService_Destroy(m));
+            _waitForMicroservicesAllDone(&arg);
+        }
+    }
+
+    test("Destroy the test connection: ");
+    natsConnection_Destroy(nc);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+static void
+test_MicroGroups(void)
+{
+    natsStatus s = NATS_OK;
+    microError *err = NULL;
+    struct threadArg arg;
+    natsOptions *opts = NULL;
+    natsConnection *nc = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    microService *m = NULL;
+    microGroup *g1 = NULL;
+    microGroup *g2 = NULL;
+    microServiceInfo *info = NULL;
+    int i;
+
+    microEndpointConfig ep1_cfg = {
+        .Name = "ep1",
+        .Handler = _microHandleRequest42,
+    };
+    microEndpointConfig ep2_cfg = {
+        .Name = "ep2",
+        .Handler = _microHandleRequest42,
+    };
+    microServiceConfig cfg = {
+        .Version = "1.0.0",
+        .Name = "with-groups",
+    };
+
+    const char* expected_subjects[] = {
+        "ep1",
+        "g1.ep1",
+        "g1.g2.ep1",
+        "g1.g2.ep2",
+        "g1.ep2",
+    };
+    int expected_num_endpoints = sizeof(expected_subjects) / sizeof(expected_subjects[0]);
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if ((opts == NULL)
+        || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK)
+        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
+    {
+        FAIL("Unable to setup test for MicroConnectionEvents!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to server: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    _startMicroservice(&m, nc, &cfg, NULL, 0, &arg);
+
+    test("AddEndpoint 1 to service: ");
+    testCond(NULL == microService_AddEndpoint(m, &ep1_cfg));
+
+    test("AddGroup g1: ");
+    testCond(NULL == microService_AddGroup(&g1, m, "g1"));
+
+    test("AddEndpoint 1 to g1: ");
+    testCond(NULL == microGroup_AddEndpoint(g1, &ep1_cfg));
+
+    test("Add sub-Group g2: ");
+    testCond(NULL == microGroup_AddGroup(&g2, g1, "g2"));
+
+    test("AddEndpoint 1 to g2: ");
+    testCond(NULL == microGroup_AddEndpoint(g2, &ep1_cfg));
+
+    test("AddEndpoint 2 to g2: ");
+    testCond(NULL == microGroup_AddEndpoint(g2, &ep2_cfg));
+
+    test("AddEndpoint 2 to g1: ");
+    testCond(NULL == microGroup_AddEndpoint(g1, &ep2_cfg));
+
+    err = microService_GetInfo(&info, m);
+    if (err != NULL)
+        FAIL("failed to get service info!")
+
+    test("Verify number of endpoints: ");
+    testCond(info->EndpointsLen == expected_num_endpoints);
+
+    test("Verify endpoint subjects: ");
+    for (i = 0; i < info->EndpointsLen; i++)
+    {
+        if (strcmp(info->Endpoints[i].Subject, expected_subjects[i]) != 0) {
+            char buf[1024];
+            snprintf(buf, sizeof(buf), "expected %s, got %s", expected_subjects[i], info->Endpoints[i].Subject);
+            FAIL(buf);
+        }
+    }
+    testCond(true);
+
+    microServiceInfo_Destroy(info);
+
+    microService_Destroy(m);
+    _waitForMicroservicesAllDone(&arg);
+
+    test("Destroy the test connection: ");
+    natsConnection_Destroy(nc);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+#define NUM_MICRO_SERVICES 5
+
+static void
+test_MicroBasics(void)
+{
+    natsStatus s = NATS_OK;
+    microError *err = NULL;
+    struct threadArg arg;
+    natsOptions *opts = NULL;
+    natsConnection *nc = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    microService *svcs[NUM_MICRO_SERVICES];
+    microEndpointConfig ep1_cfg = {
+        .Name = "do",
+        .Subject = "svc.do",
+        .Handler = _microHandleRequestNoisy42,
+    };
+    const char *ep_md[] = {
+        "key1", "value1",
+        "key2", "value2",
+        "key3", "value3",
+    };
+    const char *service_md[] = {
+        "skey1", "svalue1",
+        "skey2", "svalue2",
+    };
+    microEndpointConfig ep2_cfg = {
+        .Name = "unused",
+        .Subject = "svc.unused",
+        .Handler = _microHandleRequestNoisy42,
+        .MetadataLen = 3,
+        .Metadata = ep_md,
+    };
+    microEndpointConfig *eps[] = {
+        &ep1_cfg,
+        &ep2_cfg,
+    };
+    microServiceConfig cfg = {
+        .Version = "1.0.0",
+        .Name = "CoolService",
+        .Description = "returns 42",
+        .MetadataLen = 2,
+        .Metadata = service_md,
+    };
+    natsMsg *reply = NULL;
+    microServiceInfo *info = NULL;
+    int i;
+    char buf[1024];
+    char *subject = NULL;
+    natsInbox *inbox = NULL;
+    natsSubscription *sub = NULL;
+    nats_JSON *js = NULL;
+    nats_JSON *md = NULL;
+    int num_requests = 0;
+    int num_errors = 0;
+    int n;
+    nats_JSON **array;
+    int array_len;
+    const char *str;
+
+    srand((unsigned int)nats_NowInNanoSeconds());
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if ((opts == NULL)
+        || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK)
+        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
+    {
+        FAIL("Unable to setup test for MicroConnectionEvents!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to server: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    _startManyMicroservices(svcs, NUM_MICRO_SERVICES, nc, &cfg, eps, sizeof(eps)/sizeof(eps[0]), &arg);
+
+    // Now send 50 requests.
+    test("Send 50 requests (no matter response): ");
+    for (i = 0; i < 50; i++)
+    {
+        s = natsConnection_Request(&reply, nc, "svc.do", NULL, 0, 1000);
+        if (NATS_OK != s)
+            FAIL("Unable to send request");
+        natsMsg_Destroy(reply);
+    }
+    testCond(NATS_OK == s);
+
+    // Make sure we can request valid info with local API.
+    for (i = 0; i < NUM_MICRO_SERVICES; i++)
+    {
+        snprintf(buf, sizeof(buf), "Check local info #%d: ", i);
+        test(buf);
+        err = microService_GetInfo(&info, svcs[i]);
+        testCond((err == NULL) &&
+                 (strcmp(info->Name, "CoolService") == 0) &&
+                 (strlen(info->Id) > 0) &&
+                 (strcmp(info->Description, "returns 42") == 0) &&
+                 (strcmp(info->Version, "1.0.0") == 0) &&
+                 (info->MetadataLen == 2));
+        microServiceInfo_Destroy(info);
+    }
+
+    // Make sure we can request valid info with $SRV.INFO request.
+    test("Create INFO inbox: ");
+    testCond(NATS_OK == natsInbox_Create(&inbox));
+    micro_new_control_subject(&subject, MICRO_INFO_VERB, "CoolService", NULL);
+    test("Subscribe to INFO inbox: ");
+    testCond(NATS_OK == natsConnection_SubscribeSync(&sub, nc, inbox));
+    test("Publish INFO request: ");
+    testCond(NATS_OK == natsConnection_PublishRequest(nc, subject, inbox, NULL, 0));
+    for (i = 0;; i++)
+    {
+        snprintf(buf, sizeof(buf), "Receive INFO response #%d: ", i);
+        test(buf);
+        reply = NULL;
+        s = natsSubscription_NextMsg(&reply, sub, 250);
+        if (s == NATS_TIMEOUT)
+        {
+            testCond(i == NUM_MICRO_SERVICES);
+            break;
+        }
+        testCond(NATS_OK == s);
+
+        snprintf(buf, sizeof(buf), "Parse INFO response#%d: ", i);
+        test(buf);
+        js = NULL;
+        testCond(NATS_OK == nats_JSONParse(&js, reply->data, reply->dataLen)) ;
+
+        snprintf(buf, sizeof(buf), "Validate INFO response strings#%d: ", i);
+        test(buf);
+        testCond(
+            (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) && (strcmp(str, "CoolService") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(js, "description", &str)) && (strcmp(str, "returns 42") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(js, "version", &str)) && (strcmp(str, "1.0.0") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(js, "id", &str)) && (strlen(str) > 0)
+        );
+
+        snprintf(buf, sizeof(buf), "Validate INFO service metadata#%d: ", i);
+        test(buf);
+        md =  NULL;
+        testCond(
+            (NATS_OK == nats_JSONGetObject(js, "metadata", &md))
+            && (NATS_OK == nats_JSONGetStrPtr(md, "skey1", &str)) && (strcmp(str, "svalue1") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(md, "skey2", &str)) && (strcmp(str, "svalue2") == 0)
+        );
+
+        test("Validate INFO has 2 endpoints: ");
+        array = NULL;
+        array_len = 0;
+        s = nats_JSONGetArrayObject(js, "endpoints", &array, &array_len);
+        testCond((NATS_OK == s) && (array != NULL) && (array_len == 2));
+
+        test("Validate INFO svc.do endpoint: ");
+        md =  NULL;
+        testCond(
+            (NATS_OK == nats_JSONGetStrPtr(array[0], "name", &str)) && (strcmp(str, "do") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(array[0], "subject", &str)) && (strcmp(str, "svc.do") == 0)
+            && (NATS_OK == nats_JSONGetObject(array[0], "metadata", &md)) && (md == NULL)
+        );
+
+        test("Validate INFO unused endpoint with metadata: ");
+        md =  NULL;
+        testCond(
+            (NATS_OK == nats_JSONGetStrPtr(array[1], "name", &str)) && (strcmp(str, "unused") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(array[1], "subject", &str)) && (strcmp(str, "svc.unused") == 0)
+            && (NATS_OK == nats_JSONGetObject(array[1], "metadata", &md))
+            && (NATS_OK == nats_JSONGetStrPtr(md, "key1", &str)) && (strcmp(str, "value1") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(md, "key2", &str)) && (strcmp(str, "value2") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(md, "key3", &str)) && (strcmp(str, "value3") == 0)
+        );
+
+        nats_JSONDestroy(js);
+        natsMsg_Destroy(reply);
+        NATS_FREE(array);
+    }
+    natsSubscription_Destroy(sub);
+    natsInbox_Destroy(inbox);
+    NATS_FREE(subject);
+
+    // Make sure we can request SRV.PING.
+    test("Create PING inbox: ");
+    testCond(NATS_OK == natsInbox_Create(&inbox));
+    micro_new_control_subject(&subject, MICRO_PING_VERB, "CoolService", NULL);
+    test("Subscribe to PING inbox: ");
+    testCond(NATS_OK == natsConnection_SubscribeSync(&sub, nc, inbox));
+    test("Publish PING request: ");
+    testCond(NATS_OK == natsConnection_PublishRequest(nc, subject, inbox, NULL, 0));
+    for (i = 0;; i++)
+    {
+        snprintf(buf, sizeof(buf), "Receive PING response #%d: ", i);
+        test(buf);
+        reply = NULL;
+        s = natsSubscription_NextMsg(&reply, sub, 250);
+        if (s == NATS_TIMEOUT)
+        {
+            testCond(i == NUM_MICRO_SERVICES);
+            break;
+        }
+        testCond(NATS_OK == s);
+        snprintf(buf, sizeof(buf), "Validate PING response #%d: ", i);
+        test(buf);
+        js = NULL;
+        testCond((NATS_OK == nats_JSONParse(&js, reply->data, reply->dataLen)) &&
+                 (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) &&
+                 (strcmp(str, "CoolService") == 0));
+        nats_JSONDestroy(js);
+        natsMsg_Destroy(reply);
+    }
+    natsSubscription_Destroy(sub);
+    natsInbox_Destroy(inbox);
+    NATS_FREE(subject);
+
+    // Get and validate $SRV.STATS from all service instances.
+    test("Create STATS inbox: ");
+    testCond(NATS_OK == natsInbox_Create(&inbox));
+    micro_new_control_subject(&subject, MICRO_STATS_VERB, "CoolService", NULL);
+    test("Subscribe to STATS inbox: ");
+    testCond(NATS_OK == natsConnection_SubscribeSync(&sub, nc, inbox));
+    test("Publish STATS request: ");
+    testCond(NATS_OK == natsConnection_PublishRequest(nc, subject, inbox, NULL, 0));
+
+    for (i = 0;; i++)
+    {
+        snprintf(buf, sizeof(buf), "Receive STATS response #%d: ", i);
+        test(buf);
+        reply = NULL;
+        s = natsSubscription_NextMsg(&reply, sub, 250);
+        if (s == NATS_TIMEOUT)
+        {
+            testCond(i == NUM_MICRO_SERVICES);
+            break;
+        }
+        testCond(NATS_OK == s);
+
+        test("Parse STATS response: ");
+        js = NULL;
+        s = nats_JSONParse(&js, reply->data, reply->dataLen);
+        testCond((NATS_OK == s) && (js != NULL));
+
+        test("Ensure STATS has 2 endpoints: ");
+        array = NULL;
+        array_len = 0;
+        s = nats_JSONGetArrayObject(js, "endpoints", &array, &array_len);
+        testCond((NATS_OK == s) && (array != NULL) && (array_len == 2))
+
+        test("Ensure endpoint 0 has num_requests: ");
+        n = 0;
+        s = nats_JSONGetInt(array[0], "num_requests", &n);
+        testCond(NATS_OK == s);
+        num_requests += n;
+
+        test("Ensure endpoint 0 has num_errors: ");
+        n = 0;
+        s = nats_JSONGetInt(array[0], "num_errors", &n);
+        testCond(NATS_OK == s);
+        num_errors += n;
+
+        NATS_FREE(array);
+        nats_JSONDestroy(js);
+        natsMsg_Destroy(reply);
+    }
+    test("Check that STATS total request counts add up (50): ");
+    testCond(num_requests == 50);
+    test("Check that STATS total error count is positive, depends on how many instances: ");
+    testCond(num_errors > 0);
+
+    natsSubscription_Destroy(sub);
+    natsInbox_Destroy(inbox);
+    NATS_FREE(subject);
+
+    _destroyMicroservicesAndWaitForAllDone(svcs, NUM_MICRO_SERVICES, &arg);
+
+    test("Destroy the test connection: ");
+    natsConnection_Destroy(nc);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+static void
+test_MicroStartStop(void)
+{
+    natsStatus s = NATS_OK;
+    struct threadArg arg;
+    natsOptions *opts = NULL;
+    natsConnection *nc = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    microService *svcs[NUM_MICRO_SERVICES];
+    microEndpointConfig ep_cfg = {
+        .Name = "do",
+        .Subject = "svc.do",
+        .Handler = _microHandleRequest42,
+    };
+    microServiceConfig cfg = {
+        .Version = "1.0.0",
+        .Name = "CoolService",
+        .Description = "returns 42",
+        .Endpoint = &ep_cfg,
+    };
+    natsMsg *reply = NULL;
+    int i;
+
+    srand((unsigned int)nats_NowInNanoSeconds());
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if ((opts == NULL)
+        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK)
+        || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK)
+        || (natsOptions_SetAllowReconnect(opts, false) != NATS_OK))
+    {
+        FAIL("Unable to setup test for MicroConnectionEvents!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to server: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    _startManyMicroservices(svcs, NUM_MICRO_SERVICES, nc, &cfg, NULL, 0, &arg);
+
+    // Now send some requests.
+    test("Send requests: ");
+    for (i = 0; i < 20; i++)
+    {
+        reply = NULL;
+        s = natsConnection_Request(&reply, nc, "svc.do", NULL, 0, 2000);
+        if (NATS_OK != s)
+            FAIL("Unable to send request");
+        if (reply == NULL || reply->dataLen != 2 || memcmp(reply->data, "42", 2) != 0)
+            FAIL("Unexpected reply");
+        natsMsg_Destroy(reply);
+    }
+    testCond(NATS_OK == s);
+
+    _destroyMicroservicesAndWaitForAllDone(svcs, NUM_MICRO_SERVICES, &arg);
+
+    test("Destroy the test connection: ");
+    natsConnection_Destroy(nc);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+static void
+test_MicroServiceStopsOnClosedConn(void)
+{
+    natsStatus s;
+    natsConnection *nc = NULL;
+    natsOptions *opts = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    struct threadArg arg;
+    microService *m = NULL;
+    microServiceConfig cfg = {
+        .Name = "test",
+        .Version = "1.0.0",
+    };
+    natsMsg *reply = NULL;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+
+    if ((opts == NULL) ||
+        (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK) ||
+        (natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg)) ||
+        (natsOptions_SetAllowReconnect(opts, false) != NATS_OK))
+    {
+        FAIL("Unable to setup test for MicroConnectionEvents!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect for microservice: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    _startMicroservice(&m, nc, &cfg, NULL, 0, &arg);
+
+    test("Test microservice is running: ");
+    testCond(!microService_IsStopped(m))
+
+    test("Test microservice is responding to PING: ");
+    testCond(NATS_OK == natsConnection_RequestString(&reply, nc, "$SRV.PING.test", "", 500));
+    natsMsg_Destroy(reply);
+    reply = NULL;
+
+    test("Close the connection: ");
+    testCond(NATS_OK == natsConnection_Drain(nc));
+    natsConnection_Close(nc);
+
+    test("Wait for it: ");
+    testCond(_waitForConnClosed(&arg) == NATS_OK);
+
+    test("Ensure the connection has closed: ");
+    testCond(natsConnection_IsClosed(nc));
+
+    test("Wait for the service to stop: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.microAllDone)
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    natsMutex_Unlock(arg.m);
+    testCond(arg.microAllDone);
+
+    test("Test microservice is stopped: ");
+    testCond(microService_IsStopped(m));
+
+    test("Destroy microservice (final): ");
+    testCond(NULL == microService_Destroy(m))
+    _waitForMicroservicesAllDone(&arg);
+
+    natsOptions_Destroy(opts);
+    natsConnection_Destroy(nc);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+static void
+test_MicroServiceStopsWhenServerStops(void)
+{
+    natsStatus s;
+    natsConnection *nc = NULL;
+    natsOptions *opts = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    struct threadArg arg;
+    microService *m = NULL;
+    microServiceConfig cfg = {
+        .Name = "test",
+        .Version = "1.0.0",
+    };
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+
+    if ((opts == NULL)
+        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK)
+        || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK)
+        || (natsOptions_SetAllowReconnect(opts, false) != NATS_OK))
+    {
+        FAIL("Unable to setup test for MicroConnectionEvents!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect for microservice: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    _startMicroservice(&m, nc, &cfg, NULL, 0, &arg);
+
+    test("Test microservice is running: ");
+    testCond(!microService_IsStopped(m))
+
+    test("Stop the server: ");
+    testCond((_stopServer(serverPid), true));
+
+    test("Wait for the service to stop: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.microAllDone)
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    natsMutex_Unlock(arg.m);
+    testCond(arg.microAllDone);
+
+    test("Test microservice is not running: ");
+    testCond(microService_IsStopped(m))
+
+    microService_Destroy(m);
+    _waitForMicroservicesAllDone(&arg);
+
+    test("Destroy the test connection: ");
+    natsConnection_Destroy(nc);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+}
+
+void _microAsyncErrorHandler(microService *m, microEndpoint *ep, natsStatus s)
+{
+    struct threadArg *arg = (struct threadArg*) microService_GetState(m);
+
+    natsMutex_Lock(arg->m);
+    // release the pending test request that caused the error
+    arg->closed = true;
+
+    // set the data to verify
+    arg->status = s;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+microError *
+_microAsyncErrorRequestHandler(microRequest *req)
+{
+    struct threadArg *arg = microRequest_GetServiceState(req);
+
+    natsMutex_Lock(arg->m);
+
+    arg->msgReceived = true;
+    natsCondition_Signal(arg->c);
+
+    while (!arg->closed)
+        natsCondition_Wait(arg->c, arg->m);
+
+    natsMutex_Unlock(arg->m);
+
+    return NULL;
+}
+
+static void
+test_MicroAsyncErrorHandler(void)
+{
+    natsStatus          s;
+    struct threadArg    arg;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    microService        *m        = NULL;
+    microEndpoint       *ep       = NULL;
+    microEndpointConfig ep_cfg = {
+        .Name = "do",
+        .Subject = "async_test",
+        .Handler = _microAsyncErrorRequestHandler,
+    };
+    microServiceConfig cfg = {
+        .Name = "test",
+        .Version = "1.0.0",
+        .ErrHandler = _microAsyncErrorHandler,
+        .State = &arg,
+        .DoneHandler = _microServiceDoneHandler,
+    };
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+    IFOK(s, natsOptions_SetMaxPendingMsgs(opts, 10));
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test AsyncErrHandler");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to NATS: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    _startMicroservice(&m, nc, &cfg, NULL, 0, &arg);
+
+    test("Test microservice is running: ");
+    testCond(!microService_IsStopped(m))
+
+    test("Add test endpoint: ");
+    testCond(NULL == micro_add_endpoint(&ep, m, NULL, &ep_cfg, true));
+
+    natsMutex_Lock(arg.m);
+    arg.status = NATS_OK;
+    natsMutex_Unlock(arg.m);
+
+    test("Cause an error by sending too many messages: ");
+    for (int i=0;
+        (s == NATS_OK) && (i < (opts->maxPendingMsgs + 100)); i++)
+    {
+        s = natsConnection_PublishString(nc, "async_test", "hello");
+    }
+    testCond((NATS_OK == s)
+        && (NATS_OK == natsConnection_Flush(nc)));
+
+    test("Wait for async err callback: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && arg.closed && (arg.status == NATS_SLOW_CONSUMER));
+
+    microService_Destroy(m);
+    _waitForMicroservicesAllDone(&arg);
+
+    test("Destroy the test connection: ");
+    natsConnection_Destroy(nc);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -34704,6 +35832,15 @@ static testInfo allTests[] =
     {"KeyValueRePublish",               test_KeyValueRePublish},
     {"KeyValueMirrorDirectGet",         test_KeyValueMirrorDirectGet},
     {"KeyValueMirrorCrossDomains",      test_KeyValueMirrorCrossDomains},
+
+    {"MicroMatchEndpointSubject",       test_MicroMatchEndpointSubject},
+    {"MicroAddService",                 test_MicroAddService},
+    {"MicroGroups",                     test_MicroGroups},
+    {"MicroBasics",                     test_MicroBasics},
+    {"MicroStartStop",                  test_MicroStartStop},
+    {"MicroServiceStopsOnClosedConn",   test_MicroServiceStopsOnClosedConn},
+    {"MicroServiceStopsWhenServerStops", test_MicroServiceStopsWhenServerStops},
+    {"MicroAsyncErrorHandler",          test_MicroAsyncErrorHandler},
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

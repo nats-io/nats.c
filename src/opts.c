@@ -915,6 +915,19 @@ natsOptions_SetClosedCB(natsOptions *opts, natsConnectionHandler closedCb,
 }
 
 natsStatus
+natsOptions_setMicroCallbacks(natsOptions *opts, natsConnectionHandler closed, natsErrHandler errHandler)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->microClosedCb = closed;
+    opts->microAsyncErrCb = errHandler;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
 natsOptions_SetDisconnectedCB(natsOptions *opts,
                               natsConnectionHandler disconnectedCb,
                               void *closure)

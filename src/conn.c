@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2023 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -526,9 +526,16 @@ _processInfo(natsConnection *nc, char *info, int len)
 {
     natsStatus  s     = NATS_OK;
     nats_JSON   *json = NULL;
+    bool        postDiscoveredServersCb = false;
+    bool        postLameDuckCb = false;
 
     if (info == NULL)
         return NATS_OK;
+
+    natsOptions_lock(nc->opts);
+    postDiscoveredServersCb = (nc->opts->discoveredServersCb != NULL);
+    postLameDuckCb = (nc->opts->lameDuckCb != NULL);
+    natsOptions_unlock(nc->opts);
 
     _clearServerInfo(&(nc->info));
 
@@ -574,13 +581,13 @@ _processInfo(natsConnection *nc, char *info, int len)
                                    nc->info.connectURLsCount,
                                    tlsName,
                                    &added);
-        if ((s == NATS_OK) && added && !nc->initc && (nc->opts->discoveredServersCb != NULL))
+        if ((s == NATS_OK) && added && !nc->initc && postDiscoveredServersCb)
             natsAsyncCb_PostConnHandler(nc, ASYNC_DISCOVERED_SERVERS);
     }
     // Process the LDM callback after the above. It will cover cases where
     // we have connect URLs and invoke discovered server callback, and case
     // where we don't.
-    if ((s == NATS_OK) && nc->info.lameDuckMode && (nc->opts->lameDuckCb != NULL))
+    if ((s == NATS_OK) && nc->info.lameDuckMode && postLameDuckCb)
         natsAsyncCb_PostConnHandler(nc, ASYNC_LAME_DUCK_MODE);
 
     if (s != NATS_OK)
@@ -1523,6 +1530,15 @@ _doReconnect(void *arg)
     int                             i           = 0;
     natsCustomReconnectDelayHandler crd         = NULL;
     void                            *crdClosure = NULL;
+    bool                            postDisconnectedCb = false;
+    bool                            postReconnectedCb = false;
+    bool                            postConnectedCb = false;
+
+    natsOptions_lock(nc->opts);
+    postDisconnectedCb = (nc->opts->disconnectedCb != NULL);
+    postReconnectedCb = (nc->opts->reconnectedCb != NULL);
+    postConnectedCb = (nc->opts->connectedCb != NULL);
+    natsOptions_unlock(nc->opts);
 
     natsConn_Lock(nc);
 
@@ -1542,7 +1558,7 @@ _doReconnect(void *arg)
 
     // Perform appropriate callback if needed for a disconnect.
     // (do not do this if we are here on initial connect failure)
-    if (!nc->initc && (nc->opts->disconnectedCb != NULL))
+    if (!nc->initc && postDisconnectedCb)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
     crd = nc->opts->customReconnectDelayCB;
@@ -1705,7 +1721,7 @@ _doReconnect(void *arg)
             // This was the initial connect. Set this to false.
             nc->initc = false;
             // Invoke the callback.
-            if (nc->opts->connectedCb != NULL)
+            if (postConnectedCb)
                 natsAsyncCb_PostConnHandler(nc, ASYNC_CONNECTED);
         }
         else
@@ -1713,7 +1729,7 @@ _doReconnect(void *arg)
             // Call reconnectedCB if appropriate. Since we are in a separate
             // thread, we could invoke the callback directly, however, we
             // still post it so all callbacks from a connection are serialized.
-            if (nc->opts->reconnectedCb != NULL)
+            if (postReconnectedCb)
                 natsAsyncCb_PostConnHandler(nc, ASYNC_RECONNECTED);
         }
 
@@ -1997,13 +2013,20 @@ _connect(natsConnection *nc)
     int         max = 0;
     int64_t     wtime = 0;
     bool        retry = false;
+    bool        retryOnFailedConnect = false;
+    bool        hasConnectedCb = false;
+
+    natsOptions_lock(nc->opts);
+    hasConnectedCb = (nc->opts->connectedCb != NULL);
+    retryOnFailedConnect = nc->opts->retryOnFailedConnect;
+    natsOptions_unlock(nc->opts);
 
     natsConn_Lock(nc);
     nc->initc = true;
 
     pool = nc->srvPool;
 
-    if ((nc->opts->retryOnFailedConnect) && (nc->opts->connectedCb == NULL))
+    if ((retryOnFailedConnect) && !hasConnectedCb)
     {
         retry = true;
         max   = nc->opts->maxReconnect;
@@ -2056,6 +2079,7 @@ _connect(natsConnection *nc)
                     retSts = NATS_OK;
             }
         }
+
         if (!retry)
             break;
 
@@ -2069,8 +2093,8 @@ _connect(natsConnection *nc)
 
     // If not connected and retry asynchronously on failed connect
     if ((nc->status != NATS_CONN_STATUS_CONNECTED)
-            && nc->opts->retryOnFailedConnect
-            && (nc->opts->connectedCb != NULL))
+            && retryOnFailedConnect
+            && hasConnectedCb)
     {
         natsConn_Unlock(nc);
 
@@ -2471,7 +2495,14 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     struct threadsToJoin    ttj;
     bool                    sockWasActive = false;
     bool                    detach = false;
+    bool                    postClosedCb = false;
+    bool                    postDisconnectedCb = false;
     natsSubscription        *sub = NULL;
+
+    natsOptions_lock(nc->opts);
+    postClosedCb = (nc->opts->closedCb != NULL);
+    postDisconnectedCb = (nc->opts->disconnectedCb != NULL);
+    natsOptions_unlock(nc->opts);
 
     natsConn_lockAndRetain(nc);
 
@@ -2546,7 +2577,7 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     // Perform appropriate callback if needed for a disconnect.
     // Do not invoke if we were disconnected and failed to reconnect (since
     // it has already been invoked in doReconnect).
-    if (doCBs && !nc->rle && (nc->opts->disconnectedCb != NULL) && sockWasActive)
+    if (doCBs && !nc->rle && postDisconnectedCb && sockWasActive)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
     sub = nc->respMux;
@@ -2562,7 +2593,7 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     natsConn_Lock(nc);
 
     // Perform appropriate callback if needed for a connection closed.
-    if (doCBs && (nc->opts->closedCb != NULL))
+    if (doCBs && postClosedCb)
         natsAsyncCb_PostConnHandler(nc, ASYNC_CLOSED);
 
     nc->status = status;

@@ -1,11 +1,23 @@
 var searchData=
 [
-  ['stanconnection_0',['stanConnection',['../group__types_group.html#ga9e826493769d23086cfccefe95cdf64c',1,'nats.h']]],
-  ['stanconnectionlosthandler_1',['stanConnectionLostHandler',['../group__callbacks_group.html#gac34092f6c698374f86ad349302bdd55c',1,'nats.h']]],
-  ['stanconnoptions_2',['stanConnOptions',['../group__types_group.html#ga13d64411878ba13a6ca39c915f2447c1',1,'nats.h']]],
-  ['stanmsg_3',['stanMsg',['../group__types_group.html#ga2cf5db7703b42d97abe56a3e83b2a87d',1,'nats.h']]],
-  ['stanmsghandler_4',['stanMsgHandler',['../group__callbacks_group.html#gaf7456e37fa14f1834d9048d3789e9409',1,'nats.h']]],
-  ['stanpubackhandler_5',['stanPubAckHandler',['../group__callbacks_group.html#gad5d6a685731b3bf635995b7375af4d18',1,'nats.h']]],
-  ['stansuboptions_6',['stanSubOptions',['../group__types_group.html#ga023712711f5c289663fc2223e83686d3',1,'nats.h']]],
-  ['stansubscription_7',['stanSubscription',['../group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5',1,'nats.h']]]
+  ['natsconnection_0',['natsConnection',['../group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec',1,'nats.h']]],
+  ['natsconnectionhandler_1',['natsConnectionHandler',['../group__callbacks_group.html#gacdef6aff3e47953f19e35857ab8e274c',1,'nats.h']]],
+  ['natscustomreconnectdelayhandler_2',['natsCustomReconnectDelayHandler',['../group__callbacks_group.html#ga3353d4b92851c52121f65aaf0684cba4',1,'nats.h']]],
+  ['natserrhandler_3',['natsErrHandler',['../group__callbacks_group.html#ga9e511dffa471dfb971b7dd2b12329626',1,'nats.h']]],
+  ['natsevloop_5fattach_4',['natsEvLoop_Attach',['../group__callbacks_group.html#ga245eab0a01a485e40fba267f84ec037f',1,'nats.h']]],
+  ['natsevloop_5fdetach_5',['natsEvLoop_Detach',['../group__callbacks_group.html#gab63dee7f7012ba11ae20b76dbc36f2d0',1,'nats.h']]],
+  ['natsevloop_5freadaddremove_6',['natsEvLoop_ReadAddRemove',['../group__callbacks_group.html#gaea4c125ecfb43eaf43da20e8444c2aaa',1,'nats.h']]],
+  ['natsevloop_5fwriteaddremove_7',['natsEvLoop_WriteAddRemove',['../group__callbacks_group.html#ga2bb5dd2d821ca5bbc0488f7e6aceed17',1,'nats.h']]],
+  ['natsinbox_8',['natsInbox',['../group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1',1,'nats.h']]],
+  ['natsmsg_9',['natsMsg',['../group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a',1,'nats.h']]],
+  ['natsmsghandler_10',['natsMsgHandler',['../group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe',1,'nats.h']]],
+  ['natsmsglist_11',['natsMsgList',['../group__types_group.html#gafd5523161ec3783e79719cb9a9a66b5b',1,'nats.h']]],
+  ['natsoncompletecb_12',['natsOnCompleteCB',['../group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a',1,'nats.h']]],
+  ['natsoptions_13',['natsOptions',['../group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e',1,'nats.h']]],
+  ['natssignaturehandler_14',['natsSignatureHandler',['../group__callbacks_group.html#gab786ffd670c86de0563559351305080b',1,'nats.h']]],
+  ['natssock_15',['natsSock',['../nats_8h.html#af798865ac824e5959987de0fe8d07383',1,'nats.h']]],
+  ['natsstatistics_16',['natsStatistics',['../group__types_group.html#ga57a4b8c7109e2773878655722ce028aa',1,'nats.h']]],
+  ['natssubscription_17',['natsSubscription',['../group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8',1,'nats.h']]],
+  ['natstokenhandler_18',['natsTokenHandler',['../group__callbacks_group.html#ga4b02de70fe9380d184fd01d87527f499',1,'nats.h']]],
+  ['natsuserjwthandler_19',['natsUserJWTHandler',['../group__callbacks_group.html#ga258b30458134be90f17315c037f34b7b',1,'nats.h']]]
 ];

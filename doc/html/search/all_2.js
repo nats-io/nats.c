@@ -4,5 +4,5 @@ var searchData=
   ['backofflen_1',['BackOffLen',['../structjs_consumer_config.html#ad2f6ca3f2d0f977aedb8687c462c1cfc',1,'jsConsumerConfig']]],
   ['batch_2',['Batch',['../structjs_fetch_request.html#a84f06b60e25decb2674996f0cb315f63',1,'jsFetchRequest']]],
   ['bucket_3',['Bucket',['../structkv_config.html#a11b636da727c17566d5ab1274f69fee5',1,'kvConfig']]],
-  ['bytes_4',['Bytes',['../structjs_lost_stream_data.html#a841fcadca3f66e9170a51080dc1acf30',1,'jsLostStreamData::Bytes()'],['../structjs_stream_state.html#ae603fa6ecfb63c93b61272b7d1b8fb4d',1,'jsStreamState::Bytes()']]]
+  ['bytes_4',['Bytes',['../structjs_lost_stream_data.html#a841fcadca3f66e9170a51080dc1acf30',1,'jsLostStreamData::Bytes'],['../structjs_stream_state.html#ae603fa6ecfb63c93b61272b7d1b8fb4d',1,'jsStreamState::Bytes']]]
 ];

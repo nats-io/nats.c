@@ -40,5 +40,11 @@ var annotated_dup =
     [ "kvKeysList", "structkv_keys_list.html", "structkv_keys_list" ],
     [ "kvPurgeOptions", "structkv_purge_options.html", "structkv_purge_options" ],
     [ "kvWatchOptions", "structkv_watch_options.html", "structkv_watch_options" ],
+    [ "micro_endpoint_config_s", "structmicro__endpoint__config__s.html", "structmicro__endpoint__config__s" ],
+    [ "micro_endpoint_info_s", "structmicro__endpoint__info__s.html", "structmicro__endpoint__info__s" ],
+    [ "micro_endpoint_stats_s", "structmicro__endpoint__stats__s.html", "structmicro__endpoint__stats__s" ],
+    [ "micro_service_config_s", "structmicro__service__config__s.html", "structmicro__service__config__s" ],
+    [ "micro_service_info_s", "structmicro__service__info__s.html", "structmicro__service__info__s" ],
+    [ "micro_service_stats_s", "structmicro__service__stats__s.html", "structmicro__service__stats__s" ],
     [ "natsMsgList", "structnats_msg_list.html", "structnats_msg_list" ]
 ];

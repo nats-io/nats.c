@@ -48,6 +48,8 @@ on:
     secrets:
       COVERALLS_REPO_TOKEN:
         description: "Coveralls repo token"
+      CODECOV_TOKEN:
+        description: "Codecov repo token"
 
 permissions:
   contents: write # so it can comment

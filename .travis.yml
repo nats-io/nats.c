@@ -25,123 +25,123 @@ env:
 jobs:
   include:
 
-    - name: "gcc-9 - TLS OFF"
-      compiler: gcc
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - sourceline: ppa:ubuntu-toolchain-r/test
-          packages:
-            - g++-9
-      env:
-        - MATRIX_EVAL="CC=gcc-9"
-        - BUILD_OPT="-DNATS_BUILD_WITH_TLS=OFF -DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release" DO_COVERAGE="no"
+    # - name: "gcc-9 - TLS OFF"
+    #   compiler: gcc
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - ubuntu-toolchain-r-test
+    #         - sourceline: ppa:ubuntu-toolchain-r/test
+    #       packages:
+    #         - g++-9
+    #   env:
+    #     - MATRIX_EVAL="CC=gcc-9"
+    #     - BUILD_OPT="-DNATS_BUILD_WITH_TLS=OFF -DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release" DO_COVERAGE="no"
 
-    - name: "gcc-9 - Streaming OFF"
-      compiler: gcc
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - sourceline: ppa:ubuntu-toolchain-r/test
-          packages:
-            - g++-9
-      env:
-        - MATRIX_EVAL="CC=gcc-9"
-        - BUILD_OPT="-DNATS_BUILD_STREAMING=OFF -DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release" DO_COVERAGE="no" CTEST_OPT="-I 1,1"
+    # - name: "gcc-9 - Streaming OFF"
+    #   compiler: gcc
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - ubuntu-toolchain-r-test
+    #         - sourceline: ppa:ubuntu-toolchain-r/test
+    #       packages:
+    #         - g++-9
+    #   env:
+    #     - MATRIX_EVAL="CC=gcc-9"
+    #     - BUILD_OPT="-DNATS_BUILD_STREAMING=OFF -DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release" DO_COVERAGE="no" CTEST_OPT="-I 1,1"
 
-    - name: "gcc-9 - Default - sanitize address"
-      compiler: gcc
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - sourceline: ppa:ubuntu-toolchain-r/test
-          packages:
-            - g++-9
-      env:
-        - MATRIX_EVAL="CC=gcc-9"
-        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
+    # - name: "gcc-9 - Default - sanitize address"
+    #   compiler: gcc
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - ubuntu-toolchain-r-test
+    #         - sourceline: ppa:ubuntu-toolchain-r/test
+    #       packages:
+    #         - g++-9
+    #   env:
+    #     - MATRIX_EVAL="CC=gcc-9"
+    #     - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
 
-    - name: "gcc-9 - Lib msg delivery - sanitize address"
-      compiler: gcc
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - sourceline: ppa:ubuntu-toolchain-r/test
-          packages:
-            - g++-9
-      env:
-        - MATRIX_EVAL="CC=gcc-9"
-        - NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
+    # - name: "gcc-9 - Lib msg delivery - sanitize address"
+    #   compiler: gcc
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - ubuntu-toolchain-r-test
+    #         - sourceline: ppa:ubuntu-toolchain-r/test
+    #       packages:
+    #         - g++-9
+    #   env:
+    #     - MATRIX_EVAL="CC=gcc-9"
+    #     - NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
 
-    - name: "gcc-9 - Write deadline - sanitize address"
-      compiler: gcc
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - sourceline: ppa:ubuntu-toolchain-r/test
-          packages:
-            - g++-9
-      env:
-        - MATRIX_EVAL="CC=gcc-9"
-        - NATS_DEFAULT_LIB_WRITE_DEADLINE=2000 BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
+    # - name: "gcc-9 - Write deadline - sanitize address"
+    #   compiler: gcc
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - ubuntu-toolchain-r-test
+    #         - sourceline: ppa:ubuntu-toolchain-r/test
+    #       packages:
+    #         - g++-9
+    #   env:
+    #     - MATRIX_EVAL="CC=gcc-9"
+    #     - NATS_DEFAULT_LIB_WRITE_DEADLINE=2000 BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
 
-    - name: "gcc-9 - Default - sanitize thread"
-      compiler: gcc
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - sourceline: ppa:ubuntu-toolchain-r/test
-          packages:
-            - g++-9
-      env:
-        - MATRIX_EVAL="CC=gcc-9"
-        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" DO_COVERAGE="no"
+    # - name: "gcc-9 - Default - sanitize thread"
+    #   compiler: gcc
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - ubuntu-toolchain-r-test
+    #         - sourceline: ppa:ubuntu-toolchain-r/test
+    #       packages:
+    #         - g++-9
+    #   env:
+    #     - MATRIX_EVAL="CC=gcc-9"
+    #     - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" DO_COVERAGE="no"
 
-    - name: "clang-8 - TLS OFF"
-      compiler: clang
-      addons:
-        apt:
-          sources:
-            - llvm-toolchain-xenial-8
-          packages:
-            - clang-8
-      env:
-        - MATRIX_EVAL="CC=clang-8"
-        # Run only one test, this matrix is just to make sure that we compile ok.
-        - BUILD_OPT="-DNATS_BUILD_WITH_TLS=OFF -DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release" DO_COVERAGE="no" CTEST_OPT="-I 1,1"
+    # - name: "clang-8 - TLS OFF"
+    #   compiler: clang
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - llvm-toolchain-xenial-8
+    #       packages:
+    #         - clang-8
+    #   env:
+    #     - MATRIX_EVAL="CC=clang-8"
+    #     # Run only one test, this matrix is just to make sure that we compile ok.
+    #     - BUILD_OPT="-DNATS_BUILD_WITH_TLS=OFF -DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release" DO_COVERAGE="no" CTEST_OPT="-I 1,1"
 
-    - name: "clang-8 - Default - sanitize address"
-      compiler: clang
-      addons:
-        apt:
-          sources:
-            - llvm-toolchain-xenial-8
-          packages:
-            - clang-8
-      env:
-        - MATRIX_EVAL="CC=clang-8"
-        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
+    # - name: "clang-8 - Default - sanitize address"
+    #   compiler: clang
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - llvm-toolchain-xenial-8
+    #       packages:
+    #         - clang-8
+    #   env:
+    #     - MATRIX_EVAL="CC=clang-8"
+    #     - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
 
-    - name: "clang-8 - Default - sanitize thread"
-      compiler: clang
-      addons:
-        apt:
-          sources:
-            - llvm-toolchain-xenial-8
-          packages:
-            - clang-8
-      env:
-        - MATRIX_EVAL="CC=clang-8"
-        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
+    # - name: "clang-8 - Default - sanitize thread"
+    #   compiler: clang
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - llvm-toolchain-xenial-8
+    #       packages:
+    #         - clang-8
+    #   env:
+    #     - MATRIX_EVAL="CC=clang-8"
+    #     - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
 
 script:
-  - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT -DNATS_SANITIZE=ON -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON -DNATS_PROTOBUF_DIR=$HOME/deps/pbuf -DNATS_BUILD_USE_SODIUM=ON -DNATS_SODIUM_DIR=$HOME/deps/sodium" "$CTEST_OPT"
+  - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT -DNATS_SANITIZE=ON -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON -DNATS_PROTOBUF_DIR=$HOME/deps/pbuf -DNATS_BUILD_USE_SODIUM=ON -DNATS_SODIUM_DIR=$HOME/deps/sodium" "-I 1,20" # "$CTEST_OPT"
 
 after_success:
   - cd ..

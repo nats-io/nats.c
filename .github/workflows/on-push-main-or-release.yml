@@ -16,3 +16,4 @@ jobs:
     uses: ./.github/workflows/build-all-debug.yml
     secrets:
       COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

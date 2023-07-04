@@ -3,6 +3,8 @@ name: build all (Debug)
 on:
   workflow_call:
     secrets:
+      CODECOV_TOKEN:
+        required: true
       COVERALLS_REPO_TOKEN:
         required: true
 
@@ -31,6 +33,7 @@ jobs:
       name: "${{ matrix.compiler }}: coverage ${{ matrix.coverage }}"
     secrets:
       COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   san-addr:
     strategy:
@@ -48,6 +51,7 @@ jobs:
       name: "gcc: sanitize address: ${{ (matrix.lib_msg_delivery == 'ON' && matrix.lib_write_deadline == 'OFF' && 'msg-delivery') || (matrix.lib_msg_delivery == 'OFF' && matrix.lib_write_deadline == 'ON' && 'write-deadline') || 'default' }}"
     secrets:
       COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   san-thread:
     uses: ./.github/workflows/build-test.yml
@@ -56,3 +60,4 @@ jobs:
       name: "gcc: sanitize thread"
     secrets:
       COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

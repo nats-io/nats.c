@@ -145,6 +145,7 @@ script:
 
 after_success:
   - cd ..
+  - export
   - if [[ "$DO_COVERAGE" == "coverage" && "$TRAVIS_COMPILER" == "gcc" ]]; then coveralls --gcov-options '\-lp' -r . -i "src/" -e "src/win/" -e "src/unix/" -e "src/stan/protocol.pb-c.c" -E ".*\.h$"; fi
 
 notifications:

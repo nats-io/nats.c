@@ -1,0 +1,23 @@
+# name: PR merged to main
+# on:
+#   pull_request_target:
+#     types:
+#       - closed
+#     branches:
+#       - main
+
+# permissions:
+#   contents: write # so it can comment
+#   pull-requests: write # so it can create pull requests
+
+# jobs:
+#   backport:
+#     if: >
+#       github.event.pull_request.merged
+#       && github.event.action == 'closed'
+#       && contains(github.event.pull_request.labels.*.name, 'backport-to-dev')
+#     uses: ./.github/workflows/merge.yml
+#     with:
+#       target_branch: test2
+#       pr_number: ${{github.event.pull_request.number}}
+#       commit_sha: ${{github.event.pull_request.merge_commit_sha}}

@@ -1,0 +1,18 @@
+name: pushed main or release
+on:
+  push:
+    branches:
+      - main
+      - release-**
+
+permissions:
+  contents: write # so it can comment
+
+jobs:
+  build-release:
+    uses: ./.github/workflows/build-all-release.yml
+
+  build-debug:
+    uses: ./.github/workflows/build-all-debug.yml
+    secrets:
+      COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}

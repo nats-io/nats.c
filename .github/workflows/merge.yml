@@ -1,0 +1,37 @@
+name: BackportW
+on:
+  workflow_call:
+    inputs:
+      target_branch:
+        description: "Branch to merge to"
+        type: string
+        required: true
+        default: "main"
+      pr_number:
+        description: "Original PR number to reference"
+        type: string
+        required: true
+      commit_sha:
+        description: "SHA of the merge commit, will only merge up to that commit"
+        type: string
+        required: true
+
+permissions:
+  contents: write # so it can comment
+  pull-requests: write # so it can create pull requests
+
+jobs:
+  backport:
+    name: Backport
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./.github/scripts/merge-branch.sh ${{inputs.target_branch}} ${{inputs.pr_number}} ${{inputs.commit_sha}}

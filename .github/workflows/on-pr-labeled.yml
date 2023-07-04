@@ -1,0 +1,28 @@
+name: PR labeled
+on:
+  pull_request:
+    types:
+      - labeled
+
+permissions:
+  contents: write # so it can comment
+  pull-requests: write # so it can create pull requests
+
+jobs:
+  backport:
+    name: "Backport to `test2`"
+    if: |
+      github.event.label.name =='backport-to-dev' && 
+      github.ref == 'refs/heads/main' &&
+      github.event.pull_request.merged
+    uses: ./.github/workflows/merge.yml
+    with:
+      target_branch: test2
+      pr_number: ${{github.event.pull_request.number}}
+      commit_sha: ${{github.event.pull_request.merge_commit_sha}}
+
+  build-release:
+    if: |
+      github.event.label.name =='build-release' &&
+      (!github.event.pull_request.merged)
+    uses: ./.github/workflows/build-all-release.yml

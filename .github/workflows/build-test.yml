@@ -1,0 +1,235 @@
+name: build and test
+on:
+  workflow_call:
+    inputs:
+      arch:
+        type: string
+        default: "64"
+      compiler:
+        type: string
+        default: "gcc"
+      coverage:
+        type: string
+        default: "OFF"
+      lib_msg_delivery:
+        type: string
+        default: "OFF"
+      lib_write_deadline:
+        type: string
+        default: "OFF"
+      name:
+        type: string
+        description: "name of the build"
+        default: "build"
+      quick_test:
+        type: string
+        default: "OFF"
+      sanitize:
+        type: string
+        description: "sanitize option to use, 'address' or 'thread'"
+      server_version:
+        type: string
+        description: "nats-server version to test with"
+        default: "latest"
+      streaming:
+        type: string
+        default: "ON"
+      tls:
+        type: string
+        default: "ON"
+      type:
+        type: string
+        description: "Debug or Release."
+        default: "Release"
+      ubuntu_version:
+        type: string
+        description: "Ubuntu version to use, e.g. '20.04'"
+        default: "latest"
+    secrets:
+      COVERALLS_REPO_TOKEN:
+        description: "Coveralls repo token"
+
+permissions:
+  contents: write # so it can comment
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -x -eo pipefail {0}
+
+jobs:
+  build-test:
+    runs-on: ubuntu-${{ inputs.ubuntu_version }}
+    name: ${{ inputs.name }}
+    steps:
+      - name: Checkout nats.c
+        uses: actions/checkout@v3
+
+      - name: "Checkout dependencies (nats.c.deps)"
+        uses: actions/checkout@v3
+        with:
+          repository: nats-io/nats.c.deps
+          path: deps
+
+      # configure the unique build artifact name
+      - id: configure-artifact
+        name: Configure unique build artifact name
+        env:
+          unique: build-ubuntu-${{ inputs.ubuntu_version }}-${{ inputs.type }}-${{ inputs.compiler }}-${{ inputs.arch }}
+        run: |
+          if [[ "${{ inputs.tls }}" == "OFF" ]]; then
+            unique="${unique}-notls"
+          fi
+          if [[ "${{ inputs.streaming }}" == "OFF" ]]; then
+            unique="${unique}-nostreaming"
+          fi
+          if [[ "${{ inputs.coverage }}" == "ON" ]]; then
+            unique="${unique}-coverage"
+          fi
+          if [[ -n "${{ inputs.sanitize }}" ]]; then
+            unique="${unique}-${{ inputs.sanitize }}"
+          fi
+          if [[ "${{ inputs.lib_msg_delivery }}" == "ON" ]]; then
+            unique="{$unique}-msg-delivery"
+          fi
+          if [[ "${{ inputs.lib_write_deadline }}" == "ON" ]]; then
+            unique="{$unique}-write-deadline"
+          fi
+          echo "name=${unique}" >> $GITHUB_OUTPUT
+
+      # configure the cmake flags and NATS_... environment variables
+      - id: cmake-flags
+        name: Configure cmake flags
+        env:
+          flags: -DNATS_BUILD_ARCH=${{ inputs.arch }}
+            -DCMAKE_BUILD_TYPE=${{ inputs.type }}
+            -DNATS_BUILD_STREAMING=${{ inputs.streaming }}
+            -DNATS_BUILD_WITH_TLS=${{ inputs.tls }}
+            -DNATS_PROTOBUF_DIR=${{ github.workspace}}/deps/pbuf
+            -DNATS_BUILD_USE_SODIUM=ON
+            -DNATS_SODIUM_DIR=${{ github.workspace}}/deps/sodium
+        run: |
+          if [[ -n "${{ inputs.sanitize }}" ]]; then
+            flags="$flags -DNATS_SANITIZE=ON -DCMAKE_C_FLAGS=-fsanitize=${{ inputs.sanitize }}"
+          fi
+          if [[ "${{ inputs.coverage }}" == "ON" ]]; then
+            flags="$flags -DNATS_COVERAGE=ON"
+          fi
+          echo "flags=$flags" >> $GITHUB_OUTPUT
+
+      - id: nats-vars
+        name: Configure NATS_ environment variables
+        run: |
+          if [[ -n "${{ inputs.sanitize }}" ]]; then
+            echo "NATS_TEST_VALGRIND=yes" >> $GITHUB_ENV
+          fi
+          if [[ "${{ inputs.lib_msg_delivery }}" == "ON" ]]; then
+            echo "NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes" >> $GITHUB_ENV
+          fi
+          if [[ "${{ inputs.lib_write_deadline }}" == "ON" ]]; then
+            echo "NATS_DEFAULT_LIB_WRITE_DEADLINE=2000" >> $GITHUB_ENV
+          fi
+          echo "CC=${{ inputs.compiler }}" >> $GITHUB_ENV
+
+      # install build dependencies
+      - name: Install ${{ inputs.compiler }} if needed
+        if: startsWith(inputs.compiler, 'clang-') || startsWith(inputs.compiler, 'gcc-')
+        run: |
+          sudo apt-get -q update
+          sudo apt-get -y install ${{ inputs.compiler }}
+
+      # - name: Install libprotobuf-c
+      #   run: |
+      #     sudo apt-get -q update
+      #     sudo apt-get -y install libprotobuf-c-dev
+
+      # if we have already built, unarchive and no need to configure/build with
+      # cmake
+      - name: Download previous build artifact
+        id: download-prior-build
+        continue-on-error: true
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ steps.configure-artifact.outputs.name }}
+          path: .
+
+      - name: Unarchive build artifact
+        if: steps.download-prior-build.outcome == 'success'
+        run: tar -xzf build.tar.gz
+
+      # otherwise, configure cmake, build, archive and upload
+      - name: CMake
+        if: steps.download-prior-build.outcome != 'success'
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. ${{ steps.cmake-flags.outputs.flags }}
+          make rebuild_cache && make
+
+      - name: "Rebuild the list of tests to match the compile flags"
+        if: steps.download-prior-build.outcome != 'success'
+        working-directory: ./build
+        run: |
+          ./test/testsuite
+          if [[ $(diff list.txt ../test/list.txt; echo $?) != 0 ]]; then
+            mv list.txt ../test/list.txt
+            make rebuild_cache
+          fi
+
+      - name: Archive build artifact
+        if: steps.download-prior-build.outcome != 'success'
+        run: |
+          tar -czf build.tar.gz build
+
+      - name: Upload build artifact
+        if: steps.download-prior-build.outcome != 'success'
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ steps.configure-artifact.outputs.name }}
+          path: build.tar.gz
+
+      # testing
+
+      - name: "Download nats-server version ${{ inputs.server_version }}"
+        if: inputs.quick_test != 'ON' && !inputs.server_version
+        working-directory: ./build
+        run: |
+          if [[ "${{ inputs.server_version }}" == "latest" ]]; then
+            rel=$(curl -s https://api.github.com/repos/nats-io/nats-server/releases/latest | jq -r '.tag_name')
+          else
+            rel=${{ inputs.server_version }}
+          fi
+          wget https://github.com/nats-io/nats-server/releases/download/${rel}/nats-server-${rel}-linux-amd64.tar.gz
+          if [[ $? == 0 ]]; then
+            tar -xzf nats-server-${rel}-linux-amd64.tar.gz
+            cp nats-server-${rel}-linux-amd64/nats-server ../deps/nats-server
+          else
+            curl -sf 'https://binaries.nats.dev/nats-io/nats-server/v2?os=linux&arch=amd64&version=${{ inputs.server_version }}'' | PREFIX=. sh
+            mv ./nats-server ../deps/nats-server
+          fi
+
+      - name: "Test"
+        working-directory: ./build
+        run: |
+          export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
+          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
+          if [[ "${{ inputs.quick_test }}" == "ON" ]]; then
+            ctest --timeout 60 --output-on-failure -I 1,1
+          else
+            # ctest --timeout 60 --output-on-failure 2>&1 | tee /tmp/out.txt
+            ctest --timeout 60 --output-on-failure -I 1,40 2>&1 | tee /tmp/out.txt
+            if [[ $(grep -q 'WARNING: ThreadSanitizer: ' /tmp/out.txt; echo $?) == 0 ]]; then
+              echo "!!! ThreadSanitizer detected WARNING(s) !!!"
+              exit 1
+            fi
+          fi
+
+      - name: "Upload coverage with coveralls CLI"
+        if: inputs.quick_test != 'ON' && inputs.coverage == 'ON'
+        env:
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+          COVERALLS_SERVICE_NAME: "nats-c" # does not appear to work!
+        run: |
+          pip install --user cpp-coveralls
+          echo ">>>>>>> $COVERALLS_REPO_TOKEN <<<<<<<<"
+          coveralls --verbose --gcov-options '\-lp' -r . -i "src/" -e "src/win/" -e "src/unix/" -e "src/stan/protocol.pb-c.c" -E ".*\.h$"
+

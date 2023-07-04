@@ -20,6 +20,7 @@
 #else
 #include <dirent.h>
 #include <sys/stat.h>
+#include <execinfo.h>
 #endif
 
 #include "buf.h"
@@ -35898,6 +35899,18 @@ generateList(void)
     fclose(list);
 }
 
+#ifndef _WIN32
+static void _sigsegv_handler(int sig) {
+  void *array[20];
+  size_t size = backtrace(array, 20);
+
+  // print out all the frames to stderr
+  fprintf(stderr, "Error: signal %d:\n", sig);
+  backtrace_symbols_fd(array, size, STDERR_FILENO);
+  exit(1);
+}
+#endif // _WIN32
+
 int main(int argc, char **argv)
 {
     const char *envStr;
@@ -35925,6 +35938,10 @@ int main(int argc, char **argv)
         printf("@@ Usage: %s [start] [end] (0 .. %d)\n", argv[0], (maxTests - 1));
         return 1;
     }
+
+#ifndef _WIN32
+    signal(SIGSEGV, _sigsegv_handler);
+#endif // _WIN32
 
     envStr = getenv("NATS_TEST_TRAVIS");
     if ((envStr != NULL) && (envStr[0] != '\0'))

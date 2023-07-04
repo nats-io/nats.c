@@ -1,0 +1,58 @@
+name: build all (Debug)
+
+on:
+  workflow_call:
+    secrets:
+      COVERALLS_REPO_TOKEN:
+        required: true
+
+permissions:
+  contents: write # so it can comment
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -x -eo pipefail {0}
+
+jobs:
+  cov:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            coverage: ON
+          - compiler: clang
+            coverage: OFF
+    uses: ./.github/workflows/build-test.yml
+    with:
+      compiler: ${{ matrix.compiler }}
+      coverage: ${{ matrix.coverage }}
+      type: Debug
+      name: "${{ matrix.compiler }}: coverage ${{ matrix.coverage }}"
+    secrets:
+      COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+
+  san-addr:
+    strategy:
+      matrix:
+        lib_msg_delivery: [ON, OFF]
+        lib_write_deadline: [ON, OFF]
+        exclude:
+          - lib_msg_delivery: ON
+            lib_write_deadline: ON
+    uses: ./.github/workflows/build-test.yml
+    with:
+      sanitize: address
+      lib_msg_delivery: ${{ matrix.lib_msg_delivery }}
+      lib_write_deadline: ${{ matrix.lib_write_deadline }}
+      name: "gcc: sanitize address: ${{ (matrix.lib_msg_delivery == 'ON' && matrix.lib_write_deadline == 'OFF' && 'msg-delivery') || (matrix.lib_msg_delivery == 'OFF' && matrix.lib_write_deadline == 'ON' && 'write-deadline') || 'default' }}"
+    secrets:
+      COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+
+  san-thread:
+    uses: ./.github/workflows/build-test.yml
+    with:
+      sanitize: thread
+      name: "gcc: sanitize thread"
+    secrets:
+      COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}

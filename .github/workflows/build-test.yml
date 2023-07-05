@@ -249,7 +249,6 @@ jobs:
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: coverage.info
           fail_ci_if_error: true
           gcov: true
           gcov_args: '-lp'

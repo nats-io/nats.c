@@ -246,13 +246,14 @@ jobs:
       #     lcov --capture --directory . --output-file coverage.info
 
       - name: Upload coverage reports to Codecov
+        if: inputs.quick_test != 'ON' && inputs.coverage == 'ON'
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
           gcov: true
           gcov_args: '-lp'
-          gcov_include: './src/*'
-          gcov_ignore: './src/win/*,./src/unix/*,./src/stan/protocol.pb-c.c'
+          gcov_include: './src/*.c'
+          # gcov_ignore: './test/*,./src/win/*,./src/unix/*,./src/stan/protocol.pb-c.c'
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

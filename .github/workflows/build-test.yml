@@ -253,7 +253,7 @@ jobs:
           fail_ci_if_error: true
           gcov: true
           gcov_args: -lp
-          gcov_include: src/*.c,src/stan/*.c
-          gcov_ignore: src/stan/protocol.pb-c.c
+          gcov_include: 'src/*'
+          gcov_ignore: 'src/win/*,src/unix/*'
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

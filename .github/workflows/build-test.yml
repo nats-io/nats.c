@@ -254,6 +254,6 @@ jobs:
           gcov: true
           gcov_args: -lp
           verbose: true
-          gcov_ignore: 'examples/**,src/win/**,src/unix/**,src/stan/protocol.pb-c.c'
+          gcov_ignore: 'examples/**'
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

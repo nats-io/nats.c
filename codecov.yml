@@ -1,0 +1,15 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 78%
+        threshold: 0.2%
+github_checks:
+  annotations: true
+comment:
+  require_changes: false
+ignore:
+  - examples
+  - src/win
+  - src/unix
+  - src/stan/protocol.pb-c.c

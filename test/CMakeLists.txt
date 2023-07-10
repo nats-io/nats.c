@@ -40,6 +40,7 @@ foreach(name ${listOfTestNames})
 
   # Make sure the test passes
   set_tests_properties(Test_${name} PROPERTIES PASS_REGULAR_EXPRESSION "ALL PASSED")
+  set_tests_properties(Test_${name} PROPERTIES FAIL_REGULAR_EXPRESSION "WARNING\: ThreadSanitizer\:")
 
   # Bump the test index number
   math(EXPR testIndex "${testIndex}+1")

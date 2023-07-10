@@ -16881,9 +16881,13 @@ test_VersionMatchesTag(void)
     tag = getenv("TRAVIS_TAG");
     if ((tag == NULL) || (tag[0] == '\0'))
     {
-        test("Skipping test since no tag detected: ");
-        testCond(true);
-        return;
+        tag = getenv("GITHUB_TAG");
+        if ((tag == NULL) || (tag[0] == '\0'))
+        {
+            test("Skipping test since no tag detected: ");
+            testCond(true);
+            return;
+        }
     }
     test("Check tag and version match: ");
     // We expect a tag of the form vX.Y.Z. If that's not the case,

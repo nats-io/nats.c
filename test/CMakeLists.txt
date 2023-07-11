@@ -37,7 +37,9 @@ file(STRINGS no-sanitize.txt listOfSkipSanitize)
 
 # For each test name
 foreach(name ${listOfTestNames})
-  if(DEFINED ENV{NATS_SANITIZE} AND NOT "${name}" IN_LIST listOfSkipSanitize)
+  if(DEFINED ENV{NATS_SANITIZE} AND "${name}" IN_LIST listOfSkipSanitize)
+    # skip, see https://github.com/nats-io/nats.c/issues/672
+  else()
     # Create a test and pass the index (start and end are the same)
     # to the testsuite executable
     add_test(NAME Test_${name}

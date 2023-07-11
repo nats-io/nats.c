@@ -90,7 +90,6 @@ jobs:
           CMAKE_C_FLAGS="${CMAKE_C_FLAGS} -Werror"
           if [[ -n "${{ inputs.sanitize }}" ]]; then
             flags="$flags -DNATS_SANITIZE=ON -DCMAKE_C_FLAGS='${CMAKE_C_FLAGS} -fsanitize=${{ inputs.sanitize }}'"
-            echo "NATS_SANITIZE=ON" >> $GITHUB_ENV
           fi
           if [[ "${{ inputs.coverage }}" == "ON" ]]; then
             flags="$flags -DNATS_COVERAGE=ON"
@@ -102,6 +101,7 @@ jobs:
         run: |
           if [[ -n "${{ inputs.sanitize }}" ]]; then
             echo "NATS_TEST_VALGRIND=yes" >> $GITHUB_ENV
+            echo "NATS_SANITIZE=ON" >> $GITHUB_ENV
           fi
           if [[ "${{ inputs.lib_msg_delivery }}" == "ON" ]]; then
             echo "NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes" >> $GITHUB_ENV
@@ -184,7 +184,6 @@ jobs:
           if [[ "${{ inputs.quick_test }}" == "ON" ]]; then
             ctest --timeout 60 --output-on-failure -I 1,1
           else
-            echo "----------- Sanitize: $NATS_SANITIZE"
             ctest --timeout 60 --output-on-failure
           fi
 

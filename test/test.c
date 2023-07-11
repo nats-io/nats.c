@@ -16877,20 +16877,20 @@ test_VersionMatchesTag(void)
 {
     natsStatus  s = NATS_OK;
     const char  *tag;
+    char        test_name[256];
 
-    tag = getenv("TRAVIS_TAG");
-    if ((tag == NULL) || (tag[0] == '\0'))
+    if (tag = getenv("TRAVIS_TAG"), ((tag != NULL) && (tag[0] != '\0')))
+        snprintf(test_name, sizeof(test_name), "Check version '%s' matches TRAVIS_TAG '%s'", nats_GetVersion(), tag);
+    else if (tag = getenv("GITHUB_TAG"), ((tag != NULL) && (tag[0] == '\0')))
+        snprintf(test_name, sizeof(test_name), "Check version '%s' matches GITHUB_TAG '%s'", nats_GetVersion(), tag);
+    else
     {
-        tag = getenv("GITHUB_TAG");
-        if ((tag == NULL) || (tag[0] == '\0'))
-        {
-            test("Skipping test since no tag detected: ");
-            testCond(true);
-            return;
-        }
+        test("Skipping test since no tag detected: ");
+        testCond(true);
+        return;
     }
-    test("Check tag and version match: ");
-    // We expect a tag of the form vX.Y.Z. If that's not the case,
+
+    test(test_name); // We expect a tag of the form vX.Y.Z. If that's not the case,
     // we need someone to have a look. So fail if first letter is not
     // a `v`
     if (tag[0] != 'v')

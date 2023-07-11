@@ -6,3 +6,4 @@ JetStreamOrderedConsWithErrors
 PendingLimitsDeliveredAndDropped
 ReconnectWithTokenHandler
 SrvVersionAtLeast
+AuthFailToReconnect

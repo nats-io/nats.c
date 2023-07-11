@@ -182,29 +182,9 @@ jobs:
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
           if [[ "${{ inputs.quick_test }}" == "ON" ]]; then
             ctest --timeout 60 --output-on-failure -I 1,1
-            exit 0
+          else
+            ctest --timeout 60 --output-on-failure
           fi
-
-          # exclude flappers
-          cat <<EOF >exclude_tests.txt
-          Test_KeyValueMirrorCrossDomains
-          EOF
-
-          if [[ "${{ inputs.sanitize }}" == "thread" ]]; then
-            cat <<EOF >>exclude_tests.txt
-          Test_AutoUnsubNoUnsubOnDestroy
-          Test_ClientAutoUnsubAndReconnect
-          Test_EventLoop
-          Test_JetStreamOrderedConsSrvRestart
-          Test_JetStreamOrderedConsWithErrors
-          Test_PendingLimitsDeliveredAndDropped
-          Test_ReconnectWithTokenHandler
-          Test_SrvVersionAtLeast
-          EOF
-          fi
-
-          exclude_opt="-E $(cat exclude_tests.txt | sed '/^$/d' | sed 's/$/\\\$/g' | sort -u | xargs | sed 's/ /|/g')"
-          ctest --timeout 60 --output-on-failure $exclude_opt 2>&1
 
       - name: Upload coverage reports to Codecov
         if: inputs.quick_test != 'ON' && inputs.coverage == 'ON'

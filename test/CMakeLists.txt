@@ -1,17 +1,20 @@
 if(NOT BUILD_TESTING)
   return()
 endif()
+
 if(NOT NATS_BUILD_LIB_STATIC)
-   MESSAGE(FATAL_ERROR
-     "Building tests require static library, or run CMake with -DBUILD_TESTING=OFF")
+  MESSAGE(FATAL_ERROR
+    "Building tests require static library, or run CMake with -DBUILD_TESTING=OFF")
   return()
-endif()  
+endif()
 
 # We need this to build the test program
 include_directories(${PROJECT_SOURCE_DIR}/src)
+
 if(NATS_BUILD_WITH_TLS)
   include_directories(${OPENSSL_INCLUDE_DIR})
 endif(NATS_BUILD_WITH_TLS)
+
 if(NATS_BUILD_STREAMING)
   include_directories(${NATS_PROTOBUF_INCLUDE_DIRS})
   include_directories(${PROJECT_SOURCE_DIR}/src/stan)
@@ -28,22 +31,22 @@ set(testIndex 0)
 
 # Read the file 'list.txt' to get all the test names
 file(STRINGS list.txt listOfTestNames)
+file(STRINGS no-sanitize.txt listOfSkipSanitizeThread)
 
 # For each test name
 foreach(name ${listOfTestNames})
+  if(NOT "${name}" IN_LIST listOfSkipSanitizeThread)
+    # Create a test and pass the index (start and end are the same)
+    # to the testsuite executable
+    add_test(NAME Test_${name}
+      WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+      COMMAND testsuite ${testIndex} ${testIndex})
 
-  # Create a test and pass the index (start and end are the same)
-  # to the testsuite executable
-  add_test(NAME Test_${name}
-           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-           COMMAND testsuite ${testIndex} ${testIndex})
-
-  # Make sure the test passes
-  set_tests_properties(Test_${name} PROPERTIES PASS_REGULAR_EXPRESSION "ALL PASSED")
-  set_tests_properties(Test_${name} PROPERTIES FAIL_REGULAR_EXPRESSION "WARNING\: ThreadSanitizer\:")
+    # Make sure the test passes
+    set_tests_properties(Test_${name} PROPERTIES PASS_REGULAR_EXPRESSION "ALL PASSED")
+    set_tests_properties(Test_${name} PROPERTIES FAIL_REGULAR_EXPRESSION "WARNING\: ThreadSanitizer\:")
+  endif()
 
   # Bump the test index number
   math(EXPR testIndex "${testIndex}+1")
 endforeach()
-
-

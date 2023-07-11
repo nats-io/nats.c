@@ -16879,7 +16879,7 @@ test_VersionMatchesTag(void)
 {
     natsStatus  s = NATS_OK;
     const char  *tag;
-    char test_name[256];
+    char        test_name[256];
 
     char *sanitize_write_after_free = calloc(1, 1);
     free(sanitize_write_after_free);

@@ -1,5 +1,8 @@
 #!/bin/sh
 
+
+  - echo "--------------------- NATS_SANITIZE=$NATS_SANITIZE"
+
 # $1 is compiler (gcc, clang)
 # $2 is "coverage" for coverage
 # $3 is build options to pass to cmake

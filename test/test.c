@@ -16860,6 +16860,8 @@ test_Version(void)
 {
     const char *str = NULL;
 
+    void *sanitize_leak_pointer = calloc(1, 1);
+    testCond(sanitize_leak_pointer != NULL);
     test("Compatibility: ");
     testCond(nats_CheckCompatibility() == true);
 
@@ -16877,6 +16879,11 @@ test_VersionMatchesTag(void)
 {
     natsStatus  s = NATS_OK;
     const char  *tag;
+
+    char *sanitize_write_after_free = calloc(1, 1);
+    free(sanitize_write_after_free);
+    *sanitize_write_after_free = 1;
+    testCond(*sanitize_write_after_free == 1);
 
     tag = getenv("TRAVIS_TAG");
     if ((tag == NULL) || (tag[0] == '\0'))

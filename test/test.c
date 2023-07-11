@@ -840,6 +840,14 @@ sumThread(void *arg)
 
 static int NUM_THREADS = 1000;
 
+int _race = 0;
+static void testThreadRace(void *arg)
+{
+    test("testThreadRace: ");
+    _race = 1;
+    testCond(1);
+}
+
 static void
 test_natsThread(void)
 {
@@ -850,6 +858,20 @@ test_natsThread(void)
     struct threadArg    tArgs;
     natsThread          **threads = NULL;
     int                 i,j;
+
+    test("Create thread: ");
+    s = natsThread_Create(&t, testThreadRace, &tArgs);
+    testCond(s == NATS_OK);
+    test("main thread: ");
+    _race = 2;
+    testCond(1);
+    test("Joining thread: ");
+    natsThread_Join(t);
+    testCond(1);
+    test("Destroy thread: ");
+    natsThread_Destroy(t);
+    testCond(1);
+    return;
 
     if (valgrind)
         NUM_THREADS = 100;

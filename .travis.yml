@@ -62,7 +62,7 @@ jobs:
             - g++-9
       env:
         - MATRIX_EVAL="CC=gcc-9"
-        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no" NATS_SANITIZE="ON"
 
     - name: "gcc-9 - Lib msg delivery - sanitize address"
       compiler: gcc
@@ -75,7 +75,7 @@ jobs:
             - g++-9
       env:
         - MATRIX_EVAL="CC=gcc-9"
-        - NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
+        - NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no" NATS_SANITIZE="ON"
 
     - name: "gcc-9 - Write deadline - sanitize address"
       compiler: gcc
@@ -88,7 +88,7 @@ jobs:
             - g++-9
       env:
         - MATRIX_EVAL="CC=gcc-9"
-        - NATS_DEFAULT_LIB_WRITE_DEADLINE=2000 BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
+        - NATS_DEFAULT_LIB_WRITE_DEADLINE=2000 BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"  NATS_SANITIZE="ON"
 
     - name: "gcc-9 - Default - sanitize thread"
       compiler: gcc
@@ -101,7 +101,7 @@ jobs:
             - g++-9
       env:
         - MATRIX_EVAL="CC=gcc-9"
-        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" DO_COVERAGE="no"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" DO_COVERAGE="no"  NATS_SANITIZE="ON"
 
     - name: "clang-8 - TLS OFF"
       compiler: clang
@@ -126,7 +126,7 @@ jobs:
             - clang-8
       env:
         - MATRIX_EVAL="CC=clang-8"
-        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"  NATS_SANITIZE="ON"
 
     - name: "clang-8 - Default - sanitize thread"
       compiler: clang
@@ -138,7 +138,7 @@ jobs:
             - clang-8
       env:
         - MATRIX_EVAL="CC=clang-8"
-        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
+        - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"  NATS_SANITIZE="ON"
 
 script:
   - $TRAVIS_BUILD_DIR/buildOnTravis.sh "$CC" "$DO_COVERAGE" "$BUILD_OPT -DNATS_SANITIZE=ON -DNATS_BUILD_TLS_USE_OPENSSL_1_1_API=ON -DNATS_PROTOBUF_DIR=$HOME/deps/pbuf -DNATS_BUILD_USE_SODIUM=ON -DNATS_SODIUM_DIR=$HOME/deps/sodium" "$CTEST_OPT"

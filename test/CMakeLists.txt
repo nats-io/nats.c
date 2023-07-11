@@ -31,11 +31,13 @@ set(testIndex 0)
 
 # Read the file 'list.txt' to get all the test names
 file(STRINGS list.txt listOfTestNames)
-file(STRINGS no-sanitize.txt listOfSkipSanitizeThread)
+
+# See https://github.com/nats-io/nats.c/issues/672
+file(STRINGS no-sanitize.txt listOfSkipSanitize)
 
 # For each test name
 foreach(name ${listOfTestNames})
-  if(NOT "${name}" IN_LIST listOfSkipSanitizeThread)
+  if(DEFINED ENV{NATS_SANITIZE} AND NOT "${name}" IN_LIST listOfSkipSanitize)
     # Create a test and pass the index (start and end are the same)
     # to the testsuite executable
     add_test(NAME Test_${name}

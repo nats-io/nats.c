@@ -16890,7 +16890,8 @@ test_VersionMatchesTag(void)
         return;
     }
 
-    test(test_name); // We expect a tag of the form vX.Y.Z. If that's not the case,
+    test(test_name);
+    // We expect a tag of the form vX.Y.Z. If that's not the case,
     // we need someone to have a look. So fail if first letter is not
     // a `v`
     if (tag[0] != 'v')

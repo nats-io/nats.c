@@ -1,9 +1,10 @@
+AuthFailToReconnect
 AutoUnsubNoUnsubOnDestroy
 ClientAutoUnsubAndReconnect
 EventLoop
 JetStreamOrderedConsSrvRestart
 JetStreamOrderedConsWithErrors
+ParseStateReconnectFunctionality
 PendingLimitsDeliveredAndDropped
 ReconnectWithTokenHandler
 SrvVersionAtLeast
-AuthFailToReconnect

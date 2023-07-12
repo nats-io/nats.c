@@ -32,12 +32,17 @@ set(testIndex 0)
 # Read the file 'list.txt' to get all the test names
 file(STRINGS list.txt listOfTestNames)
 
+# See https://github.com/nats-io/nats.c/issues/674
+file(STRINGS flappers.txt listOfSkipFlappers)
+
 # See https://github.com/nats-io/nats.c/issues/672
 file(STRINGS no-sanitize.txt listOfSkipSanitize)
 
 # For each test name
 foreach(name ${listOfTestNames})
-  if(DEFINED ENV{NATS_SANITIZE} AND "${name}" IN_LIST listOfSkipSanitize)
+  if("${name}" IN_LIST listOfSkipFlappers)
+    # skip, see https://github.com/nats-io/nats.c/issues/674
+  elseif(DEFINED ENV{NATS_SANITIZE} AND "${name}" IN_LIST listOfSkipSanitize)
     # skip, see https://github.com/nats-io/nats.c/issues/672
   else()
     # Create a test and pass the index (start and end are the same)

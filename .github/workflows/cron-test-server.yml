@@ -1,0 +1,26 @@
+name: test-server
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # every day at 2AM
+
+permissions:
+  contents: write # so it can comment
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -x -eo pipefail {0}
+
+jobs:
+  test-server:
+    strategy:
+      fail-fast: false
+      matrix:
+        server_version: [main, dev]
+    concurrency:
+      group: test-server
+    uses: ./.github/workflows/build-test.yml
+    with:
+      server_version: ${{ matrix.server_version }}
+      name: "ubuntu.latest-gcc-${{ matrix.server_version }}"
+      cache_build: true

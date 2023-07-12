@@ -5,6 +5,10 @@ on:
       arch:
         type: string
         default: "64"
+      cache_build:
+        type: boolean
+        description: "whether to cache the build"
+        default: false
       compiler:
         type: string
         default: "gcc"
@@ -45,9 +49,6 @@ on:
         type: string
         description: "Ubuntu version to use, e.g. '20.04'"
         default: "latest"
-      use_cache_key:
-        type: string
-        description: "Use cache key to speed up build"
     secrets:
       COVERALLS_REPO_TOKEN:
         description: "Coveralls repo token"
@@ -111,6 +112,9 @@ jobs:
           fi
           echo "CC=${{ inputs.compiler }}" >> $GITHUB_ENV
 
+          # note that the key is not truly unique, but it is good enough for our purposes
+          echo "cache_key=nats.c-u${{ inputs.ubuntu_version }}-${{ inputs.compiler }}-${{ inputs.type }}-${{ inputs.arch }}-$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
       # install build dependencies
       - name: Install ${{ inputs.compiler }} if needed
         if: startsWith(inputs.compiler, 'clang-') || startsWith(inputs.compiler, 'gcc-')
@@ -120,12 +124,12 @@ jobs:
 
       - name: Download previous build
         id: download-prior-build
-        if: inputs.use_cache_key
+        if: inputs.cache_build
         continue-on-error: true
         uses: actions/cache/restore@v3
         with:
           path: build
-          key: ${{ inputs.use_cache_key }}
+          key: ${{ steps.nats-vars.outputs.cache_key }}
 
       # otherwise, configure cmake, build, archive and upload
       - name: CMake
@@ -147,11 +151,11 @@ jobs:
           fi
 
       - name: "Cache the build to reuse it later"
-        if: steps.download-prior-build.outputs.cache-hit != 'true' && inputs.use_cache_key
+        if: steps.download-prior-build.outputs.cache-hit != 'true' && inputs.cache_build
         uses: actions/cache/save@v3
         with:
           path: build
-          key: ${{ inputs.use_cache_key }}
+          key: ${{ steps.nats-vars.outputs.cache_key }}
 
       # testing
       - name: "Test app using dynamic library does not crash if no NATS call is made"

@@ -42,7 +42,7 @@ file(STRINGS no-sanitize.txt listOfSkipSanitize)
 foreach(name ${listOfTestNames})
   if("${name}" IN_LIST listOfSkipFlappers)
     # skip, see https://github.com/nats-io/nats.c/issues/674
-  elseif(DEFINED ENV{NATS_SANITIZE} AND "${name}" IN_LIST listOfSkipSanitize)
+  elseif(DEFINED ENV{NATS_SKIP_GH_674} AND "${name}" IN_LIST listOfSkipSanitize)
     # skip, see https://github.com/nats-io/nats.c/issues/672
   else()
     # Create a test and pass the index (start and end are the same)

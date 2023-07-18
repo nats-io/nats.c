@@ -102,7 +102,9 @@ jobs:
         run: |
           if [[ -n "${{ inputs.sanitize }}" ]]; then
             echo "NATS_TEST_VALGRIND=yes" >> $GITHUB_ENV
-            echo "NATS_SANITIZE=ON" >> $GITHUB_ENV
+          fi
+          if [[ "${{ inputs.sanitize }}" == "thread"]]; then
+            echo "NATS_SKIP_GH_674=ON" >> $GITHUB_ENV
           fi
           if [[ "${{ inputs.lib_msg_delivery }}" == "ON" ]]; then
             echo "NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes" >> $GITHUB_ENV

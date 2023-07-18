@@ -60,6 +60,7 @@ jobs:
             - sourceline: ppa:ubuntu-toolchain-r/test
           packages:
             - g++-9
+            - devtoolset-9-libasan-devel
       env:
         - MATRIX_EVAL="CC=gcc-9"
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
@@ -73,6 +74,7 @@ jobs:
             - sourceline: ppa:ubuntu-toolchain-r/test
           packages:
             - g++-9
+            - devtoolset-9-libasan-devel
       env:
         - MATRIX_EVAL="CC=gcc-9"
         - NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
@@ -86,6 +88,7 @@ jobs:
             - sourceline: ppa:ubuntu-toolchain-r/test
           packages:
             - g++-9
+            - devtoolset-9-libasan-devel
       env:
         - MATRIX_EVAL="CC=gcc-9"
         - NATS_DEFAULT_LIB_WRITE_DEADLINE=2000 BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
@@ -99,6 +102,7 @@ jobs:
             - sourceline: ppa:ubuntu-toolchain-r/test
           packages:
             - g++-9
+            - devtoolset-9-libasan-devel
       env:
         - MATRIX_EVAL="CC=gcc-9"
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" DO_COVERAGE="no" NATS_SKIP_GH_674=ON

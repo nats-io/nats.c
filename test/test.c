@@ -23877,6 +23877,7 @@ test_JetStreamMgtConsumers(void)
     int                 count   = 0;
     natsMsg             *msg    = NULL;
     jsConsumerConfig    *cloneCfg = NULL;
+    const char          *multiFilterSubjects[] = {"bar1", "bar2"};
 
     JS_SETUP(2, 9, 0);
 
@@ -24058,6 +24059,37 @@ test_JetStreamMgtConsumers(void)
                     natsMsg_GetDataLength(resp)) == 0));
     natsMsg_Destroy(resp);
     resp = NULL;
+
+    if (serverVersionAtLeast(2, 10, 0))
+    {
+        test("Add consumer (non durable, filter subjects): ");
+        cfg.FilterSubject = NULL;
+        cfg.FilterSubjects = multiFilterSubjects;
+        cfg.FilterSubjectsLen = 2;
+        s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+        testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+        nats_clearLastError();
+
+        test("Verify config: ");
+        s = natsSubscription_NextMsg(&resp, sub, 1000);
+        testCond((s == NATS_OK) && (resp != NULL) && (strncmp(natsMsg_GetData(resp), "{\"stream_name\":\"MY_STREAM\","
+                                                                                     "\"config\":{\"deliver_policy\":\"last\","
+                                                                                     "\"description\":\"MyDescription\","
+                                                                                     "\"deliver_subject\":\"foo\","
+                                                                                     "\"opt_start_seq\":100,"
+                                                                                     "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","
+                                                                                     "\"ack_wait\":200,\"max_deliver\":300,\"filter_subjects\":[\"bar1\",\"bar2\"],"
+                                                                                     "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"
+                                                                                     "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"
+                                                                                     "\"flow_control\":true,\"idle_heartbeat\":700,"
+                                                                                     "\"num_replicas\":1,\"mem_storage\":true}}",
+                                                              natsMsg_GetDataLength(resp)) == 0));
+        natsMsg_Destroy(resp);
+        resp = NULL;
+        cfg.FilterSubjects = NULL;
+        cfg.FilterSubjectsLen = 0;
+        cfg.FilterSubject = "bar";
+    }
 
     test("Create check sub: ");
     natsSubscription_Destroy(sub);
@@ -24352,6 +24384,32 @@ test_JetStreamMgtConsumers(void)
                 && (strcmp(ci->Config->FilterSubject, "bar.bat") == 0));
     jsConsumerInfo_Destroy(ci);
     ci = NULL;
+
+    if (serverVersionAtLeast(2, 10, 0))
+    {
+        test("Update (filter subjects) works ok: ");
+        cfg.FilterSubject = NULL;
+        cfg.FilterSubjects = multiFilterSubjects;
+        cfg.FilterSubjectsLen = 2;
+        s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
+        testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL) && (ci->Config != NULL)
+                    && (strcmp(ci->Config->Description, "my description") == 0)
+                    && (ci->Config->AckWait == NATS_SECONDS_TO_NANOS(2))
+                    && (ci->Config->MaxDeliver == 1)
+                    && (strcmp(ci->Config->SampleFrequency, "30") == 0)
+                    && (ci->Config->MaxAckPending == 10)
+                    && (ci->Config->HeadersOnly)
+                    && (ci->Config->FilterSubject == NULL)
+                    && (ci->Config->FilterSubjectsLen == 2)
+                    && (ci->Config->FilterSubjects != NULL)
+                    && (strcmp(ci->Config->FilterSubjects[0], "bar1") == 0)
+                    && (strcmp(ci->Config->FilterSubjects[1], "bar2") == 0));
+        jsConsumerInfo_Destroy(ci);
+        ci = NULL;
+        cfg.FilterSubject = "bar.bat";
+        cfg.FilterSubjects = NULL;
+        cfg.FilterSubjectsLen = 0;
+    }
 
     test("Add pull consumer: ");
     jsConsumerConfig_Init(&cfg);
@@ -24664,9 +24722,11 @@ test_JetStreamMgtConsumers(void)
     cfg.Durable = "B";
     cfg.Description = "C";
     cfg.FilterSubject = "D";
-    cfg.SampleFrequency = "E";
-    cfg.DeliverSubject = "F";
-    cfg.DeliverGroup = "G";
+    cfg.FilterSubjects = (const char*[]){"E", "F"};
+    cfg.FilterSubjectsLen = 2;
+    cfg.SampleFrequency = "G";
+    cfg.DeliverSubject = "H";
+    cfg.DeliverGroup = "I";
     cfg.BackOff = (int64_t[]){NATS_MILLIS_TO_NANOS(50), NATS_MILLIS_TO_NANOS(250)};
     cfg.BackOffLen = 2;
     s = js_cloneConsumerConfig(&cfg, &cloneCfg);
@@ -24675,9 +24735,14 @@ test_JetStreamMgtConsumers(void)
                 && (cloneCfg->Durable != NULL) && (strcmp(cloneCfg->Durable, "B") == 0)
                 && (cloneCfg->Description != NULL) && (strcmp(cloneCfg->Description, "C") == 0)
                 && (cloneCfg->FilterSubject != NULL) && (strcmp(cloneCfg->FilterSubject, "D") == 0)
-                && (cloneCfg->SampleFrequency != NULL) && (strcmp(cloneCfg->SampleFrequency, "E") == 0)
-                && (cloneCfg->DeliverSubject != NULL) && (strcmp(cloneCfg->DeliverSubject, "F") == 0)
-                && (cloneCfg->DeliverGroup != NULL) && (strcmp(cloneCfg->DeliverGroup, "G") == 0)
+                && (cloneCfg->FilterSubject != NULL) && (strcmp(cloneCfg->FilterSubject, "D") == 0)
+                && (cloneCfg->FilterSubjectsLen == 2)
+                && (cloneCfg->FilterSubjects != NULL)
+                && (strcmp(cloneCfg->FilterSubjects[0], "E") == 0)
+                && (strcmp(cloneCfg->FilterSubjects[1], "F") == 0)
+                && (cloneCfg->SampleFrequency != NULL) && (strcmp(cloneCfg->SampleFrequency, "G") == 0)
+                && (cloneCfg->DeliverSubject != NULL) && (strcmp(cloneCfg->DeliverSubject, "H") == 0)
+                && (cloneCfg->DeliverGroup != NULL) && (strcmp(cloneCfg->DeliverGroup, "I") == 0)
                 && (cloneCfg->BackOffLen == 2)
                 && (cloneCfg->BackOff != NULL)
                 && (cloneCfg->BackOff[0] == NATS_MILLIS_TO_NANOS(50))
@@ -26202,6 +26267,29 @@ test_JetStreamSubscribe(void)
     testCond((s == NATS_ERR) && (sub == NULL)
                 && (strstr(nats_GetLastError(NULL), "filter subject") != NULL));
     nats_clearLastError();
+
+    if (serverVersionAtLeast(2, 10, 0))
+    {
+        test("Create consumer with multiple filters: ");
+        jsConsumerConfig_Init(&cc);
+        cc.Durable = "dur-multi-filter";
+        cc.DeliverSubject = "push.dur.sub.2";
+        cc.FilterSubjectsLen = 2;
+        cc.FilterSubjects = (const char *[2]){"sub.1", "sub.2"};
+        s = js_AddConsumer(NULL, js, "MULTIPLE_SUBJS", &cc, NULL, &jerr);
+        testCond((s == NATS_OK) && (jerr == 0));
+
+        test("Subscribe subj != filters: ");
+        so.Consumer = "dur-multi-filter";
+        s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, &args, NULL, &so, &jerr);
+        testCond((s == NATS_ERR) && (sub == NULL)
+            && (strstr(nats_GetLastError(NULL), "filter subject") != NULL));
+        nats_clearLastError();
+        cc.FilterSubject = "sub.2";
+        cc.FilterSubjects = NULL;
+        cc.FilterSubjectsLen = 0;
+        so.Consumer = "dur";
+    }
 
     test("Subject not required when binding to stream/consumer: ");
     s = js_Subscribe(&sub, js, NULL, _jsMsgHandler, &args, NULL, &so, &jerr);

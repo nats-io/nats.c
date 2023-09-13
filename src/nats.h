@@ -744,6 +744,8 @@ typedef struct jsConsumerConfig
         int64_t                 *BackOff;               ///< Redelivery durations expressed in nanoseconds
         int                     BackOffLen;
         const char              *FilterSubject;
+        const char              **FilterSubjects;        // Multiple filter subjects introduced in 2.10
+        int                     FilterSubjectsLen;
         jsReplayPolicy          ReplayPolicy;
         uint64_t                RateLimit;
         const char              *SampleFrequency;

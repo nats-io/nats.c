@@ -2756,6 +2756,22 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         IFOK(s, natsBuf_Append(buf, cfg->FilterSubject, -1));
         IFOK(s, natsBuf_AppendByte(buf, '"'));
     }
+    if ((s == NATS_OK) && (cfg->FilterSubjectsLen > 0))
+    {
+        int i;
+
+        s = natsBuf_Append(buf, ",\"filter_subjects\":[", -1);
+        for (i = 0; (s == NATS_OK) && (i < cfg->FilterSubjectsLen); i++)
+        {
+            if (i > 0)
+                s = natsBuf_AppendByte(buf, ',');
+            IFOK(s, natsBuf_AppendByte(buf, '"'));
+            IFOK(s, natsBuf_Append(buf, cfg->FilterSubjects[i], -1));
+            IFOK(s, natsBuf_AppendByte(buf, '"'));
+        }
+
+        IFOK(s, natsBuf_AppendByte(buf, ']'));
+    }
     IFOK(s, _marshalReplayPolicy(buf, cfg->ReplayPolicy))
     if ((s == NATS_OK) && (cfg->RateLimit > 0))
         s = nats_marshalULong(buf, true, "rate_limit_bps", cfg->RateLimit);
@@ -2815,6 +2831,8 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
 void
 js_destroyConsumerConfig(jsConsumerConfig *cc)
 {
+    int i;
+
     if (cc == NULL)
         return;
 
@@ -2824,7 +2842,10 @@ js_destroyConsumerConfig(jsConsumerConfig *cc)
     NATS_FREE((char*) cc->DeliverSubject);
     NATS_FREE((char*) cc->DeliverGroup);
     NATS_FREE((char*) cc->FilterSubject);
-    NATS_FREE((char*) cc->SampleFrequency);
+    for (i = 0; i < cc->FilterSubjectsLen; i++)
+        NATS_FREE((char *)cc->FilterSubjects[i]);
+    NATS_FREE((char *)cc->FilterSubjects);
+    NATS_FREE((char *)cc->SampleFrequency);
     NATS_FREE(cc->BackOff);
     NATS_FREE(cc);
 }
@@ -2931,6 +2952,7 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
         IFOK(s, nats_JSONGetLong(cjson, "ack_wait", &(cc->AckWait)));
         IFOK(s, nats_JSONGetLong(cjson, "max_deliver", &(cc->MaxDeliver)));
         IFOK(s, nats_JSONGetStr(cjson, "filter_subject", (char**) &(cc->FilterSubject)));
+        IFOK(s, nats_JSONGetArrayStr(cjson, "filter_subjects", (char ***)&(cc->FilterSubjects), &(cc->FilterSubjectsLen)));
         IFOK(s, _unmarshalReplayPolicy(cjson, "replay_policy", &(cc->ReplayPolicy)));
         IFOK(s, nats_JSONGetULong(cjson, "rate_limit_bps", &(cc->RateLimit)));
         IFOK(s, nats_JSONGetStr(cjson, "sample_freq", (char**) &(cc->SampleFrequency)));
@@ -3083,7 +3105,7 @@ js_AddConsumer(jsConsumerInfo **new_ci, jsCtx *js,
         {
             // No subject filter, use <stream>.<consumer name>
             // otherwise, the filter subject goes at the end.
-            if (nats_IsStringEmpty(cfg->FilterSubject))
+            if (nats_IsStringEmpty(cfg->FilterSubject) || (cfg->FilterSubjectsLen > 0))
                 res = nats_asprintf(&subj, jsApiConsumerCreateExT,
                                     js_lenWithoutTrailingDot(o.Prefix), o.Prefix,
                                     stream, cfg->Name);
@@ -3633,6 +3655,8 @@ js_cloneConsumerConfig(jsConsumerConfig *org, jsConsumerConfig **clone)
     c->Description = NULL;
     c->BackOff = NULL;
     c->FilterSubject = NULL;
+    c->FilterSubjects = NULL;
+    c->FilterSubjectsLen = 0;
     c->SampleFrequency = NULL;
     c->DeliverSubject = NULL;
     c->DeliverGroup = NULL;
@@ -3651,6 +3675,18 @@ js_cloneConsumerConfig(jsConsumerConfig *org, jsConsumerConfig **clone)
             s = nats_setDefaultError(NATS_NO_MEMORY);
         else
             memcpy(c->BackOff, org->BackOff, org->BackOffLen*sizeof(int64_t));
+    }
+    if ((s == NATS_OK) && (org->FilterSubjects != NULL) && (org->FilterSubjectsLen > 0))
+    {
+        c->FilterSubjects = (const char **)NATS_CALLOC(org->FilterSubjectsLen, sizeof(const char *));
+        if (c->FilterSubjects == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        for (int i = 0; (s == NATS_OK) && (i < org->FilterSubjectsLen); i++)
+        {
+            IF_OK_DUP_STRING(s, c->FilterSubjects[i], org->FilterSubjects[i]);
+        }
+        c->FilterSubjectsLen = org->FilterSubjectsLen;
     }
     if (s == NATS_OK)
         *clone = c;

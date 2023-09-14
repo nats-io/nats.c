@@ -39,7 +39,7 @@ jobs:
         - MATRIX_EVAL="CC=gcc-9"
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release" DO_COVERAGE="no"
 
-    - name: "NATS server - dev"
+    - name: "NATS server - main"
       compiler: gcc
       addons:
         apt:
@@ -49,7 +49,7 @@ jobs:
           packages:
             - g++-9
       env:
-        - NATS_TEST_SERVER_VERSION=dev
+        - NATS_TEST_SERVER_VERSION=main
         - MATRIX_EVAL="CC=gcc-9"
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release" DO_COVERAGE="no"
 

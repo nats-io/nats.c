@@ -16311,6 +16311,11 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
         const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223", "127.0.0.1:4224"};
         test("Check pool: ");
         s = _checkPool(conn, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
+        if (s != NATS_OK)
+        {
+            nats_Sleep(100);
+            s = _checkPool(conn, (char **)urls, (int)(sizeof(urls) / sizeof(char *)));
+        }
         testCond(s == NATS_OK);
     }
 

@@ -17,7 +17,7 @@ if [ "$NATS_TEST_SERVER_VERSION" != "" ]; then
     rel=$(curl -s https://api.github.com/repos/nats-io/nats-server/releases/latest | jq -r '.tag_name')
   fi
 
-  if wget https://github.com/nats-io/nats-server/releases/download/$rel/nats-server-$rel-linux-amd64.tar.gz; then
+  if [ "$rel" != "${rel#v}" ] && wget https://github.com/nats-io/nats-server/releases/download/$rel/nats-server-$rel-linux-amd64.tar.gz; then
     tar -xzf nats-server-$rel-linux-amd64.tar.gz
     mv nats-server-$rel-linux-amd64 $HOME/nats-server-$rel
   else

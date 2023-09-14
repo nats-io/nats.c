@@ -7430,14 +7430,15 @@ _checkPool(natsConnection *nc, char **expectedURLs, int expectedURLsCount)
     bool    ok;
 
     natsMutex_Lock(nc->mu);
-    if (nc->srvPool->size != expectedURLsCount)
-    {
-        printf("Expected pool size to be %d, got %d\n", expectedURLsCount, nc->srvPool->size);
-        natsMutex_Unlock(nc->mu);
-        return NATS_ERR;
-    }
     for (attempts=0; attempts<20; attempts++)
     {
+        if (nc->srvPool->size != expectedURLsCount)
+        {
+            natsMutex_Unlock(nc->mu);
+            nats_Sleep(100);
+            natsMutex_Lock(nc->mu);
+            continue;
+        }
         for (i=0; i<expectedURLsCount; i++)
         {
             url = expectedURLs[i];
@@ -16311,11 +16312,6 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
         const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223", "127.0.0.1:4224"};
         test("Check pool: ");
         s = _checkPool(conn, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
-        if (s != NATS_OK)
-        {
-            nats_Sleep(100);
-            s = _checkPool(conn, (char **)urls, (int)(sizeof(urls) / sizeof(char *)));
-        }
         testCond(s == NATS_OK);
     }
 

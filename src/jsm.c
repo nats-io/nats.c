@@ -3105,7 +3105,7 @@ js_AddConsumer(jsConsumerInfo **new_ci, jsCtx *js,
         {
             // No subject filter, use <stream>.<consumer name>
             // otherwise, the filter subject goes at the end.
-            if (nats_IsStringEmpty(cfg->FilterSubject) || (cfg->FilterSubjectsLen > 0))
+            if (nats_IsStringEmpty(cfg->FilterSubject))
                 res = nats_asprintf(&subj, jsApiConsumerCreateExT,
                                     js_lenWithoutTrailingDot(o.Prefix), o.Prefix,
                                     stream, cfg->Name);

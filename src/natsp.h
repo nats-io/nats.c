@@ -103,6 +103,7 @@
 #define MAX_FRAMES (50)
 
 #define nats_IsStringEmpty(s) ((((s) == NULL) || ((s)[0] == '\0')) ? true : false)
+#define nats_HasPrefix(_s, _prefix) (nats_IsStringEmpty(_s) ? nats_IsStringEmpty(_prefix) : (strncmp((_s), (_prefix), strlen(_prefix)) == 0))
 
 #define DUP_STRING(s, s1, s2) \
         { \

@@ -2201,18 +2201,34 @@ _processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig
     jsConsumerConfig    *ccfg        = info->Config;
     const char          *dg          = NULL;
     natsStatus          s            = NATS_OK;
+    bool                matches      = false;
+    int                 i;
 
     *dlvSubject = NULL;
 
     // Make sure this new subject matches or is a subset.
-    if (!nats_IsStringEmpty(subj)
-        && !nats_IsStringEmpty(ccfg->FilterSubject)
-        && (strcmp(subj, ccfg->FilterSubject) != 0))
+    if (!nats_IsStringEmpty(subj))
     {
-        return nats_setError(NATS_ERR, "subject '%s' does not match consumer filter subject '%s'",
-                             subj, ccfg->FilterSubject);
+        if (nats_IsStringEmpty(ccfg->FilterSubject) && (ccfg->FilterSubjectsLen == 0))
+        {
+            matches = true;
+        }
+        else if (!nats_IsStringEmpty(ccfg->FilterSubject) && nats_HasPrefix(subj, ccfg->FilterSubject))
+        {
+            matches = true;
+        }
+        else if (ccfg->FilterSubjectsLen > 0)
+        {
+            for (i = 0; (i < ccfg->FilterSubjectsLen) && !matches; i++)
+            {
+                matches = nats_HasPrefix(subj, ccfg->FilterSubjects[i]);
+            }
+        }
+        if (!matches)
+        {
+            return nats_setError(NATS_ERR, "subject '%s' does not match any consumer filter subjects.", subj);
+        }
     }
-
     // Check that if user wants to create a queue sub,
     // the consumer has no HB nor FC.
     queue = (nats_IsStringEmpty(queue) ? NULL : queue);

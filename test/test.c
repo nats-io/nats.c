@@ -7425,47 +7425,53 @@ _checkPool(natsConnection *nc, char **expectedURLs, int expectedURLsCount)
 {
     int     i, j, attempts;
     natsSrv *srv;
-    char    *url;
+    char    *url = NULL;
     char    buf[64];
-    bool    ok;
+    bool    ok = false;
 
     natsMutex_Lock(nc->mu);
-    for (attempts=0; attempts<20; attempts++)
+    for (attempts = 0; (!ok) && (attempts < 20); attempts++)
     {
-        if (nc->srvPool->size != expectedURLsCount)
+        ok = (nc->srvPool->size == expectedURLsCount);
+        for (i = 0; i < expectedURLsCount; i++)
         {
-            natsMutex_Unlock(nc->mu);
-            nats_Sleep(100);
-            natsMutex_Lock(nc->mu);
-            continue;
-        }
-        for (i=0; i<expectedURLsCount; i++)
-        {
+            bool foundInPool = false;
             url = expectedURLs[i];
-            ok = false;
-            for (j=0; j<nc->srvPool->size; j++)
+            for (j = 0; j < nc->srvPool->size; j++)
             {
                 srv = nc->srvPool->srvrs[j];
                 snprintf(buf, sizeof(buf), "%s:%d", srv->url->host, srv->url->port);
                 if (strcmp(buf, url))
                 {
-                    ok = true;
+                    foundInPool = true;
                     break;
                 }
             }
-            if (!ok)
+            if (!foundInPool)
             {
-                natsMutex_Unlock(nc->mu);
-                nats_Sleep(100);
-                natsMutex_Lock(nc->mu);
-                continue;
+                ok = false;
+                break;
             }
         }
+
+        if (ok)
+            break;
+
         natsMutex_Unlock(nc->mu);
-        return NATS_OK;
+        nats_Sleep(100);
+        natsMutex_Lock(nc->mu);
     }
+
+    if (!ok)
+    {
+        if (nc->srvPool->size != expectedURLsCount)
+            printf("After 20 retries expected pool size to be %d, got %d\n", expectedURLsCount, nc->srvPool->size);
+        else if (url != NULL)
+            printf("After 20 retries did not find %s in pool\n", url);
+    }
+
     natsMutex_Unlock(nc->mu);
-    return NATS_ERR;
+    return ok ? NATS_OK : NATS_ERR;
 }
 
 static natsStatus

@@ -216,6 +216,19 @@ typedef struct natsMsgList
 
 } natsMsgList;
 
+/** \brief A type to represent user-provided metadata, a list of k=v pairs.
+ *
+ * Used in JetStream, microservice configuration.
+ */
+
+typedef struct natsMetadata
+{
+        // User-provided metadata for the stream, encoded as an array of {"key", "value",...}
+        const char **List;
+        // Number of key/value pairs in Metadata, 1/2 of the length of the array.
+        int Count;
+} natsMetadata;
+
 /**
  * The JetStream context. Use for JetStream assets management and communication.
  *
@@ -406,6 +419,11 @@ typedef struct jsRePublish
  *
  * \note The strings are applications owned and will not be freed by the library.
  *
+ * \note NATS server 2.10 added stream Metadata which contains user-provided
+ * string name/value pairs. The metadata is encoded in the form of a string
+ * array [n1, v1, n2, v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}.
+ * MetadataLen contains the number of **pairs** in Metadata.
+ *
  * @see jsStreamConfig_Init
  *
  * \code{.unparsed}
@@ -511,6 +529,10 @@ typedef struct jsStreamConfig {
         // Allow KV like semantics to also discard new on a per subject basis
         bool                    DiscardNewPerSubject;
 
+        // Configuration options introduced in 2.10
+
+        // User-provided metadata for the stream, encoded as an array of {"key", "value",...}
+        natsMetadata Metadata;
 } jsStreamConfig;
 
 /**
@@ -716,6 +738,13 @@ typedef struct jsStreamNamesList
  * instead, it will receive only messages headers (if present) with the addition of
  * the header #JSMsgSize ("Nats-Msg-Size"), whose value is the payload size.
  *
+ * \note NATS server 2.10 added FilterSubjects, an array of multiple filter
+ * subjects. It is mutually exclusive with the previously available single
+ * FilterSubject.
+ *
+ * \note NATS server 2.10 added consumer Metadata which contains user-provided
+ * string name/value pairs.
+ *
  * @see jsConsumerConfig_Init
  *
  * \code{.unparsed}
@@ -744,8 +773,6 @@ typedef struct jsConsumerConfig
         int64_t                 *BackOff;               ///< Redelivery durations expressed in nanoseconds
         int                     BackOffLen;
         const char              *FilterSubject;
-        const char              **FilterSubjects;        // Multiple filter subjects introduced in 2.10
-        int                     FilterSubjectsLen;
         jsReplayPolicy          ReplayPolicy;
         uint64_t                RateLimit;
         const char              *SampleFrequency;
@@ -772,6 +799,14 @@ typedef struct jsConsumerConfig
         // Force memory storage.
         bool                    MemoryStorage;
 
+        // Configuration options introduced in 2.10
+
+        // Multiple filter subjects
+        const char **FilterSubjects;
+        int FilterSubjectsLen;
+
+        // User-provided metadata for the consumer, encoded as an array of {"key", "value",...}
+        natsMetadata Metadata;
 } jsConsumerConfig;
 
 /**
@@ -7367,13 +7402,7 @@ struct micro_endpoint_config_s
      */
     const char *Subject;
 
-    /**
-     * @brief Metadata for the endpoint in the form of a string array [n1, v1,
-     * n2, v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}.
-     * MetadataLen contains the number of **pairs** in Metadata.
-     */
-    const char **Metadata;
-    int MetadataLen;
+    natsMetadata Metadata;
 
     /**
      * @brief The request handler for the endpoint.
@@ -7403,12 +7432,9 @@ struct micro_endpoint_info_s
     const char *Subject;
 
     /**
-     * @brief The metadata for the endpoint in the form of a string array [n1,
-     * v1, n2, v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}.
-     * MetadataLen contains the number of **pairs** in Metadata.
+     * @brief Metadata for the endpoint, a JSON-encoded user-provided object, e.g. `{"key":"value"}`
      */
-    const char **Metadata;
-    int MetadataLen;
+    natsMetadata Metadata;
 };
 
 /**
@@ -7477,12 +7503,9 @@ struct micro_service_config_s
     const char *Description;
 
     /**
-     * @brief Metadata for the service in the form of a string array [n1, v1,
-     * n2, v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}.
-     * MetadataLen contains the number of **pairs** in Metadata.
+     * @brief Metadata for the service, a JSON-encoded user-provided object, e.g. `{"key":"value"}`
      */
-    const char **Metadata;
-    int MetadataLen;
+    natsMetadata Metadata;
 
     /**
      * @brief The "main" (aka default) endpoint configuration. 
@@ -7564,12 +7587,9 @@ struct micro_service_info_s
     const char *Id;
 
     /**
-     * @brief The service metadata in the form of a string array [n1, v1, n2,
-     * v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}. MetadataLen
-     * contains the number of **pairs** in Metadata.
+     * @brief Metadata for the service, a JSON-encoded user-provided object, e.g. `{"key":"value"}`
      */
-    const char **Metadata;
-    int MetadataLen;
+    natsMetadata Metadata;
 
     /**
      * @brief Endpoints.

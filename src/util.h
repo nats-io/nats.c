@@ -15,6 +15,7 @@
 #define UTIL_H_
 
 #include "natsp.h"
+#include "mem.h"
 
 #define JSON_MAX_NEXTED 100
 
@@ -45,7 +46,6 @@ typedef struct
 {
     char        *str;
     natsStrHash *fields;
-
 } nats_JSON;
 
 typedef struct
@@ -242,6 +242,25 @@ nats_marshalULong(natsBuffer *buf, bool comma, const char *fieldName, uint64_t u
 
 natsStatus
 nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, int64_t d);
+
+natsStatus
+nats_marshalMetadata(natsBuffer *buf, bool comma, const char *fieldName, natsMetadata md);
+
+natsStatus
+nats_unmarshalMetadata(nats_JSON *json, const char *fieldName, natsMetadata *md);
+
+natsStatus
+nats_cloneMetadata(natsMetadata *clone, natsMetadata md);
+
+static inline void nats_freeMetadata(natsMetadata *md)
+{
+    if (md != NULL)
+    {
+        NATS_FREE(md->List);
+        md->List = NULL;
+        md->Count = 0;
+    }
+}
 
 bool
 nats_IsSubjectValid(const char *subject, bool wcAllowed);

@@ -16318,11 +16318,6 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
         const char *urls[] = {"127.0.0.1:4222", "127.0.0.1:4223", "127.0.0.1:4224"};
         test("Check pool: ");
         s = _checkPool(conn, (char**)urls, (int)(sizeof(urls)/sizeof(char*)));
-        if (s != NATS_OK)
-        {
-            nats_Sleep(100);
-            s = _checkPool(conn, (char **)urls, (int)(sizeof(urls) / sizeof(char *)));
-        }
         testCond(s == NATS_OK);
     }
 
@@ -22490,6 +22485,7 @@ test_JetStreamUnmarshalConsumerInfo(void)
         "{\"config\":{\"num_replicas\":1}}",
         "{\"config\":{\"mem_storage\":true}}",
         "{\"config\":{\"name\":\"my_name\"}}",
+        "{\"config\":{\"name\":\"my_name\",\"metadata\":{\"k1\":\"v1\",\"k2\":\"v2\"}}}",
     };
     const char          *bad[] = {
         "{\"stream_name\":123}",
@@ -24041,6 +24037,10 @@ test_JetStreamMgtConsumers(void)
     cfg.Heartbeat = 700;
     cfg.Replicas = 1;
     cfg.MemoryStorage = true;
+    const char *md[] =  {"key1","val1","key2","val2"};
+    cfg.Metadata.List = md;
+    cfg.Metadata.Count = 2;
+
     // We create a consumer with non existing stream, so we
     // expect this to fail. We are just checking that the config
     // is properly serialized.
@@ -24059,6 +24059,7 @@ test_JetStreamMgtConsumers(void)
                     "\"opt_start_seq\":100,"\
                     "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","\
                     "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","\
+                    "\"metadata\":{\"key1\":\"val1\",\"key2\":\"val2\"},"\
                     "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"\
                     "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"\
                     "\"flow_control\":true,\"idle_heartbeat\":700,"\
@@ -24086,6 +24087,7 @@ test_JetStreamMgtConsumers(void)
                                                                                      "\"opt_start_seq\":100,"
                                                                                      "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","
                                                                                      "\"ack_wait\":200,\"max_deliver\":300,\"filter_subjects\":[\"bar1\",\"bar2\"],"
+                                                                                     "\"metadata\":{\"key1\":\"val1\",\"key2\":\"val2\"},"\
                                                                                      "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"
                                                                                      "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"
                                                                                      "\"flow_control\":true,\"idle_heartbeat\":700,"
@@ -24112,20 +24114,19 @@ test_JetStreamMgtConsumers(void)
 
     test("Verify config: ");
     s = natsSubscription_NextMsg(&resp, sub, 1000);
-    testCond((s == NATS_OK) && (resp != NULL)
-                && (strncmp(natsMsg_GetData(resp),
-                    "{\"stream_name\":\"MY_STREAM\","\
-                    "\"config\":{\"deliver_policy\":\"last\","\
-                    "\"description\":\"MyDescription\","\
-                    "\"durable_name\":\"dur\",\"deliver_subject\":\"foo\","\
-                    "\"opt_start_seq\":100,"\
-                    "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","\
-                    "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","\
-                    "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"\
-                    "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"\
-                    "\"flow_control\":true,\"idle_heartbeat\":700,"\
-                    "\"num_replicas\":1,\"mem_storage\":true}}",
-                    natsMsg_GetDataLength(resp)) == 0));
+    testCond((s == NATS_OK) && (resp != NULL) && (strncmp(natsMsg_GetData(resp), "{\"stream_name\":\"MY_STREAM\","
+                                                                                 "\"config\":{\"deliver_policy\":\"last\","
+                                                                                 "\"description\":\"MyDescription\","
+                                                                                 "\"durable_name\":\"dur\",\"deliver_subject\":\"foo\","
+                                                                                 "\"opt_start_seq\":100,"
+                                                                                 "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","
+                                                                                 "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","
+                                                                                 "\"metadata\":{\"key1\":\"val1\",\"key2\":\"val2\"},"
+                                                                                 "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"
+                                                                                 "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"
+                                                                                 "\"flow_control\":true,\"idle_heartbeat\":700,"
+                                                                                 "\"num_replicas\":1,\"mem_storage\":true}}",
+                                                          natsMsg_GetDataLength(resp)) == 0));
     natsMsg_Destroy(resp);
     resp = NULL;
     natsSubscription_Destroy(sub);
@@ -24156,6 +24157,7 @@ test_JetStreamMgtConsumers(void)
                     "\"opt_start_seq\":100,"\
                     "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","\
                     "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","\
+                    "\"metadata\":{\"key1\":\"val1\",\"key2\":\"val2\"},"\
                     "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"\
                     "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"\
                     "\"flow_control\":true,\"idle_heartbeat\":700,"\
@@ -32852,21 +32854,15 @@ test_MicroBasics(void)
         .Subject = "svc.do",
         .Handler = _microHandleRequestNoisy42,
     };
-    const char *ep_md[] = {
-        "key1", "value1",
-        "key2", "value2",
-        "key3", "value3",
-    };
-    const char *service_md[] = {
-        "skey1", "svalue1",
-        "skey2", "svalue2",
-    };
+    const char *epMDList[] = {"key1","value1","key2","value2","key3","value3"};
+    natsMetadata epMD = {.List = epMDList, .Count=3};
+    const char *serviceMDList[] = {"skey1","svalue1","skey2","svalue2"};
+    natsMetadata serviceMD = {.List = serviceMDList, .Count=2};
     microEndpointConfig ep2_cfg = {
         .Name = "unused",
         .Subject = "svc.unused",
         .Handler = _microHandleRequestNoisy42,
-        .MetadataLen = 3,
-        .Metadata = ep_md,
+        .Metadata = epMD,
     };
     microEndpointConfig *eps[] = {
         &ep1_cfg,
@@ -32876,8 +32872,7 @@ test_MicroBasics(void)
         .Version = "1.0.0",
         .Name = "CoolService",
         .Description = "returns 42",
-        .MetadataLen = 2,
-        .Metadata = service_md,
+        .Metadata = serviceMD,
     };
     natsMsg *reply = NULL;
     microServiceInfo *info = NULL;
@@ -32937,7 +32932,7 @@ test_MicroBasics(void)
                  (strlen(info->Id) > 0) &&
                  (strcmp(info->Description, "returns 42") == 0) &&
                  (strcmp(info->Version, "1.0.0") == 0) &&
-                 (info->MetadataLen == 2));
+                 (info->Metadata.Count == 2));
         microServiceInfo_Destroy(info);
     }
 
@@ -32962,6 +32957,7 @@ test_MicroBasics(void)
         }
         testCond(NATS_OK == s);
 
+        printf("<>/<> '%.*s'\n", reply->dataLen, reply->data);
         snprintf(buf, sizeof(buf), "Parse INFO response#%d: ", i);
         test(buf);
         js = NULL;
@@ -32978,13 +32974,12 @@ test_MicroBasics(void)
 
         snprintf(buf, sizeof(buf), "Validate INFO service metadata#%d: ", i);
         test(buf);
-        md =  NULL;
+        md = NULL;
         testCond(
             (NATS_OK == nats_JSONGetObject(js, "metadata", &md))
             && (NATS_OK == nats_JSONGetStrPtr(md, "skey1", &str)) && (strcmp(str, "svalue1") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(md, "skey2", &str)) && (strcmp(str, "svalue2") == 0)
         );
-
         test("Validate INFO has 2 endpoints: ");
         array = NULL;
         array_len = 0;
@@ -32992,7 +32987,7 @@ test_MicroBasics(void)
         testCond((NATS_OK == s) && (array != NULL) && (array_len == 2));
 
         test("Validate INFO svc.do endpoint: ");
-        md =  NULL;
+        md = NULL;
         testCond(
             (NATS_OK == nats_JSONGetStrPtr(array[0], "name", &str)) && (strcmp(str, "do") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(array[0], "subject", &str)) && (strcmp(str, "svc.do") == 0)
@@ -33000,7 +32995,7 @@ test_MicroBasics(void)
         );
 
         test("Validate INFO unused endpoint with metadata: ");
-        md =  NULL;
+        md = NULL;
         testCond(
             (NATS_OK == nats_JSONGetStrPtr(array[1], "name", &str)) && (strcmp(str, "unused") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(array[1], "subject", &str)) && (strcmp(str, "svc.unused") == 0)

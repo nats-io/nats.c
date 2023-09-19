@@ -136,6 +136,7 @@ js_destroyStreamConfig(jsStreamConfig *cfg)
         _destroyStreamSource(cfg->Sources[i]);
     NATS_FREE(cfg->Sources);
     _destroyRePublish(cfg->RePublish);
+    nats_freeMetadata(&(cfg->Metadata));
     NATS_FREE(cfg);
 }
 
@@ -605,6 +606,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_JSONGetLong(jcfg, "duplicate_window", &(cfg->Duplicates)));
     IFOK(s, _unmarshalPlacement(jcfg, "placement", &(cfg->Placement)));
     IFOK(s, _unmarshalStreamSource(jcfg, "mirror", &(cfg->Mirror)));
+    IFOK(s, nats_unmarshalMetadata(jcfg, "metadata", &(cfg->Metadata)));
     // Get the sources and unmarshal if present
     IFOK(s, nats_JSONGetArrayObject(jcfg, "sources", &sources, &sourcesLen));
     if ((s == NATS_OK) && (sources != NULL))
@@ -753,6 +755,7 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         IFOK(s, natsBuf_Append(buf, ",\"mirror_direct\":true", -1));
     if ((s == NATS_OK) && cfg->DiscardNewPerSubject)
         IFOK(s, natsBuf_Append(buf, ",\"discard_new_per_subject\":true", -1));
+    IFOK(s, nats_marshalMetadata(buf, true, "metadata", cfg->Metadata));
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
@@ -2772,6 +2775,7 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
 
         IFOK(s, natsBuf_AppendByte(buf, ']'));
     }
+    IFOK(s, nats_marshalMetadata(buf, true, "metadata", cfg->Metadata));
     IFOK(s, _marshalReplayPolicy(buf, cfg->ReplayPolicy))
     if ((s == NATS_OK) && (cfg->RateLimit > 0))
         s = nats_marshalULong(buf, true, "rate_limit_bps", cfg->RateLimit);
@@ -2844,6 +2848,7 @@ js_destroyConsumerConfig(jsConsumerConfig *cc)
     NATS_FREE((char*) cc->FilterSubject);
     for (i = 0; i < cc->FilterSubjectsLen; i++)
         NATS_FREE((char *)cc->FilterSubjects[i]);
+    nats_freeMetadata(&(cc->Metadata));
     NATS_FREE((char *)cc->FilterSubjects);
     NATS_FREE((char *)cc->SampleFrequency);
     NATS_FREE(cc->BackOff);
@@ -2968,6 +2973,7 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
         IFOK(s, nats_JSONGetArrayLong(cjson, "backoff", &(cc->BackOff), &(cc->BackOffLen)));
         IFOK(s, nats_JSONGetLong(cjson, "num_replicas", &(cc->Replicas)));
         IFOK(s, nats_JSONGetBool(cjson, "mem_storage", &(cc->MemoryStorage)));
+        IFOK(s, nats_unmarshalMetadata(cjson, "metadata", &(cc->Metadata)));
     }
 
     if (s == NATS_OK)
@@ -3105,14 +3111,14 @@ js_AddConsumer(jsConsumerInfo **new_ci, jsCtx *js,
         {
             // No subject filter, use <stream>.<consumer name>
             // otherwise, the filter subject goes at the end.
-            if (nats_IsStringEmpty(cfg->FilterSubject))
-                res = nats_asprintf(&subj, jsApiConsumerCreateExT,
-                                    js_lenWithoutTrailingDot(o.Prefix), o.Prefix,
-                                    stream, cfg->Name);
-            else
+            if (!nats_IsStringEmpty(cfg->FilterSubject) && (cfg->FilterSubjectsLen == 0))
                 res = nats_asprintf(&subj, jsApiConsumerCreateExWithFilterT,
                                     js_lenWithoutTrailingDot(o.Prefix), o.Prefix,
                                     stream, cfg->Name, cfg->FilterSubject);
+            else
+                res = nats_asprintf(&subj, jsApiConsumerCreateExT,
+                                    js_lenWithoutTrailingDot(o.Prefix), o.Prefix,
+                                    stream, cfg->Name);
         }
         else if (nats_IsStringEmpty(cfg->Durable))
             res = nats_asprintf(&subj, jsApiConsumerCreateT,
@@ -3135,6 +3141,14 @@ js_AddConsumer(jsConsumerInfo **new_ci, jsCtx *js,
 
     // If we got a response, check for error or return the consumer info result.
     IFOK(s, _unmarshalConsumerCreateOrGetResp(new_ci, resp, errCode));
+
+    if ((s == NATS_OK)
+        && (new_ci != NULL)
+        && (cfg->FilterSubjectsLen > 0)
+        && ((*new_ci)->Config->FilterSubjectsLen == 0))
+    {
+        s = nats_setError(NATS_INVALID_ARG, "%s", "multiple consumer filter subjects not supported by the server");
+    }
 
     NATS_FREE(subj);
     natsMsg_Destroy(resp);
@@ -3688,6 +3702,7 @@ js_cloneConsumerConfig(jsConsumerConfig *org, jsConsumerConfig **clone)
         }
         c->FilterSubjectsLen = org->FilterSubjectsLen;
     }
+    IFOK(s, nats_cloneMetadata(&(c->Metadata), org->Metadata));
     if (s == NATS_OK)
         *clone = c;
     else

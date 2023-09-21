@@ -2539,3 +2539,18 @@ nats_cloneMetadata(natsMetadata *clone, natsMetadata md)
     }
     return s;
 }
+
+void
+nats_freeMetadata(natsMetadata *md)
+{
+    if (md == NULL)
+        return;
+
+    for (int i = 0; i < md->Count * 2; i++)
+    {
+        NATS_FREE((char *)md->List[i]);
+    }
+    NATS_FREE(md->List);
+    md->List = NULL;
+    md->Count = 0;
+}

@@ -252,15 +252,8 @@ nats_unmarshalMetadata(nats_JSON *json, const char *fieldName, natsMetadata *md)
 natsStatus
 nats_cloneMetadata(natsMetadata *clone, natsMetadata md);
 
-static inline void nats_freeMetadata(natsMetadata *md)
-{
-    if (md != NULL)
-    {
-        NATS_FREE(md->List);
-        md->List = NULL;
-        md->Count = 0;
-    }
-}
+void
+nats_freeMetadata(natsMetadata *md);
 
 bool
 nats_IsSubjectValid(const char *subject, bool wcAllowed);

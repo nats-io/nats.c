@@ -80,6 +80,9 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsStorageTypeFileStr    "file"
 #define jsStorageTypeMemStr     "memory"
 
+#define jsStorageCompressionNoneStr "none"
+#define jsStorageCompressionS2Str   "s2"
+
 #define jsDeliverAllStr             "all"
 #define jsDeliverLastStr            "last"
 #define jsDeliverNewStr             "new"

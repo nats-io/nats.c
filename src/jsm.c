@@ -537,6 +537,49 @@ _marshalStorageType(jsStorageType storage, natsBuffer *buf)
 }
 
 static natsStatus
+_unmarshalStorageCompression(nats_JSON *json, const char *fieldName, jsStorageCompression *compression)
+{
+    natsStatus s = NATS_OK;
+    const char *str = NULL;
+
+    s = nats_JSONGetStrPtr(json, "compression", &str);
+    if (str == NULL)
+            return NATS_UPDATE_ERR_STACK(s);
+
+    if (strcmp(str, jsStorageCompressionNoneStr) == 0)
+            *compression = js_StorageCompressionNone;
+    else if (strcmp(str, jsStorageCompressionS2Str) == 0)
+            *compression = js_StorageCompressionS2;
+    else
+            s = nats_setError(NATS_ERR, "unable to unmarshal storage compression '%s'", str);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_marshalStorageCompression(jsStorageCompression compression, natsBuffer *buf)
+{
+    natsStatus s;
+    const char *st = NULL;
+
+    s = natsBuf_Append(buf, ",\"compression\":\"", -1);
+    switch (compression)
+    {
+    case js_StorageCompressionNone:
+            st = jsStorageCompressionNoneStr;
+            break;
+    case js_StorageCompressionS2:
+            st = jsStorageCompressionS2Str;
+            break;
+    default:
+            return nats_setError(NATS_INVALID_ARG, "invalid storage type %d", (int)compression);
+    }
+    IFOK(s, natsBuf_Append(buf, st, -1));
+    IFOK(s, natsBuf_AppendByte(buf, '"'));
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
 _unmarshalRePublish(nats_JSON *json, const char *fieldName, jsRePublish **new_republish)
 {
     jsRePublish         *rp     = NULL;
@@ -606,7 +649,6 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_JSONGetLong(jcfg, "duplicate_window", &(cfg->Duplicates)));
     IFOK(s, _unmarshalPlacement(jcfg, "placement", &(cfg->Placement)));
     IFOK(s, _unmarshalStreamSource(jcfg, "mirror", &(cfg->Mirror)));
-    IFOK(s, nats_unmarshalMetadata(jcfg, "metadata", &(cfg->Metadata)));
     // Get the sources and unmarshal if present
     IFOK(s, nats_JSONGetArrayObject(jcfg, "sources", &sources, &sourcesLen));
     if ((s == NATS_OK) && (sources != NULL))
@@ -634,6 +676,9 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_JSONGetBool(jcfg, "allow_direct", &(cfg->AllowDirect)));
     IFOK(s, nats_JSONGetBool(jcfg, "mirror_direct", &(cfg->MirrorDirect)));
     IFOK(s, nats_JSONGetBool(jcfg, "discard_new_per_subject", &(cfg->DiscardNewPerSubject)));
+
+    IFOK(s, nats_unmarshalMetadata(jcfg, "metadata", &(cfg->Metadata)));
+    IFOK(s, _unmarshalStorageCompression(jcfg, "storage", &(cfg->Compression)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -755,7 +800,9 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         IFOK(s, natsBuf_Append(buf, ",\"mirror_direct\":true", -1));
     if ((s == NATS_OK) && cfg->DiscardNewPerSubject)
         IFOK(s, natsBuf_Append(buf, ",\"discard_new_per_subject\":true", -1));
+
     IFOK(s, nats_marshalMetadata(buf, true, "metadata", cfg->Metadata));
+    IFOK(s, _marshalStorageCompression(cfg->Compression, buf));
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
@@ -1121,6 +1168,7 @@ jsStreamConfig_Init(jsStreamConfig *cfg)
     cfg->Storage        = js_FileStorage;
     cfg->Discard        = js_DiscardOld;
     cfg->Replicas       = 1;
+    cfg->Compression    = js_StorageCompressionNone;
     return NATS_OK;
 }
 

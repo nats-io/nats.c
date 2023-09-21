@@ -22063,15 +22063,37 @@ test_JetStreamUnmarshalStreamConfig(void)
     json = NULL;
 
     test("Stream config with all: ");
-    if (snprintf(tmp, sizeof(tmp), "{\"name\":\"TEST\",\"description\":\"this is my stream\",\"subjects\":[\"foo\",\"bar\"],"\
-        "\"retention\":\"workqueue\",\"max_consumers\":5,\"max_msgs\":10,\"max_bytes\":1000,"\
-        "\"max_age\":20000000,\"max_msg_size\":1024,\"max_msgs_per_subject\":1,\"discard\":\"new\",\"storage\":\"memory\","\
-        "\"num_replicas\":3,\"no_ack\":true,\"template_owner\":\"owner\","\
-        "\"duplicate_window\":100000000000,\"placement\":{\"cluster\":\"cluster\",\"tags\":[\"tag1\",\"tag2\"]},"\
-        "\"mirror\":{\"name\":\"TEST2\",\"opt_start_seq\":10,\"filter_subject\":\"foo\",\"external\":{\"api\":\"my_prefix\",\"deliver\":\"deliver_prefix\"}},"\
-        "\"sources\":[{\"name\":\"TEST3\",\"opt_start_seq\":20,\"filter_subject\":\"bar\",\"external\":{\"api\":\"my_prefix2\",\"deliver\":\"deliver_prefix2\"}}],"\
-        "\"sealed\":true,\"deny_delete\":true,\"deny_purge\":true,\"allow_rollup_hdrs\":true,\"republish\":{\"src\":\"foo\",\"dest\":\"bar\"},"\
-        "\"allow_direct\":true,\"mirror_direct\":true}") >= (int) sizeof(tmp))
+    if (snprintf(tmp, sizeof(tmp), "{"
+        "\"name\":\"TEST\""
+        ",\"description\":\"this is my stream\""
+        ",\"subjects\":[\"foo\",\"bar\"]"
+        ",\"retention\":\"workqueue\""
+        ",\"max_consumers\":5"
+        ",\"max_msgs\":10"
+        ",\"max_bytes\":1000"
+        ",\"max_age\":20000000"
+        ",\"max_msgs_per_subject\":1"
+        ",\"max_msg_size\":1024"
+        ",\"discard\":\"new\""
+        ",\"storage\":\"memory\""
+        ",\"num_replicas\":3"
+        ",\"no_ack\":true"
+        ",\"template_owner\":\"owner\""
+        ",\"duplicate_window\":100000000000"
+        ",\"placement\":{\"cluster\":\"cluster\",\"tags\":[\"tag1\",\"tag2\"]}"
+        ",\"mirror\":{\"name\":\"TEST2\",\"opt_start_seq\":10,\"filter_subject\":\"foo\",\"external\":{\"api\":\"my_prefix\",\"deliver\":\"deliver_prefix\"}}"
+        ",\"sources\":[{\"name\":\"TEST3\",\"opt_start_seq\":20,\"filter_subject\":\"bar\",\"external\":{\"api\":\"my_prefix2\",\"deliver\":\"deliver_prefix2\"}}]"
+        ",\"sealed\":true"
+        ",\"deny_delete\":true"
+        ",\"deny_purge\":true"
+        ",\"allow_rollup_hdrs\":true"
+        ",\"republish\":{\"src\":\"foo\",\"dest\":\"bar\"}"
+        ",\"allow_direct\":true"
+        ",\"mirror_direct\":true"
+        ",\"discard_new_per_subject\":true"
+        ",\"metadata\":{\"foo\":\"bar\"}"
+        ",\"compression\":\"s2\""
+        "}") >= (int) sizeof(tmp))
     {
         abort();
     }
@@ -22116,7 +22138,14 @@ test_JetStreamUnmarshalStreamConfig(void)
                     && (strcmp(sc->RePublish->Source, "foo") == 0)
                     && (sc->RePublish->Destination != NULL)
                     && (strcmp(sc->RePublish->Destination, "bar") == 0))
-                && sc->AllowDirect && sc->MirrorDirect);
+                && sc->AllowDirect && sc->MirrorDirect
+                && sc->DiscardNewPerSubject
+                && (sc->Metadata.Count == 1)
+                && (sc->Metadata.List != NULL)
+                && (strcmp(sc->Metadata.List[0], "foo") == 0)
+                && (strcmp(sc->Metadata.List[1], "bar") == 0)
+                && (sc->Compression == js_StorageCompressionS2)
+                );
     js_destroyStreamConfig(sc);
     sc = NULL;
     nats_JSONDestroy(json);
@@ -22328,6 +22357,11 @@ test_JetStreamMarshalStreamConfig(void)
     rp.HeadersOnly = true;
     sc.RePublish = &rp;
 
+    // 2.10 options: Compression, Metadata
+    sc.Compression = js_StorageCompressionS2;
+    sc.Metadata.List = (const char *[]){"k1", "v1", "k2", "v2"};
+    sc.Metadata.Count = 2;
+
     test("Marshal stream config: ");
     s = js_marshalStreamConfig(&buf, &sc);
     testCond((s == NATS_OK) && (buf != NULL) && (natsBuf_Len(buf) > 0));
@@ -22397,7 +22431,10 @@ test_JetStreamMarshalStreamConfig(void)
                 && rsc->RePublish->HeadersOnly
                 && rsc->AllowDirect
                 && rsc->MirrorDirect
-                && rsc->DiscardNewPerSubject);
+                && rsc->DiscardNewPerSubject
+                && (rsc->Compression == js_StorageCompressionS2)
+                && (rsc->Metadata.Count == 2)
+                );
     js_destroyStreamConfig(rsc);
     rsc = NULL;
     // Check that this does not crash
@@ -23168,6 +23205,28 @@ test_JetStreamMgtStreams(void)
                 && ((jerr == 0) || (jerr == JSStreamNameExistErr)));
     nats_clearLastError();
 
+    if (serverVersionAtLeast(2, 10, 0))
+    {
+        test("Create stream with 2.10 server features: ");
+        cfg.Name = "TEST210";
+        cfg.Subjects = (const char*[]){"foo210"};
+        cfg.SubjectsLen = 1;
+        cfg.Metadata.List = (const char *[]){"k1", "v1", "k2", "v2"};
+        cfg.Metadata.Count = 2;
+        cfg.Compression = js_StorageCompressionS2;
+        s = js_AddStream(&si, js, &cfg, NULL, &jerr);
+        testCond((s == NATS_OK)
+            && (si != NULL)
+            && (si->Config != NULL)
+            && (strcmp(si->Config->Name, "TEST210") == 0)
+            && (si->Config->Metadata.Count == 2)
+            && (si->Config->Compression == js_StorageCompressionS2)
+            && (jerr == 0)
+            );
+        jsStreamInfo_Destroy(si);
+        si = NULL;
+    }
+
     jerr = 0;
     // Reset config
     jsStreamConfig_Init(&cfg);
@@ -23880,7 +23939,6 @@ test_JetStreamMgtConsumers(void)
     int                 count   = 0;
     natsMsg             *msg    = NULL;
     jsConsumerConfig    *cloneCfg = NULL;
-    const char          *multiFilterSubjects[] = {"bar1", "bar2"};
 
     JS_SETUP(2, 9, 0);
 
@@ -24037,8 +24095,7 @@ test_JetStreamMgtConsumers(void)
     cfg.Heartbeat = 700;
     cfg.Replicas = 1;
     cfg.MemoryStorage = true;
-    const char *md[] =  {"key1","val1","key2","val2"};
-    cfg.Metadata.List = md;
+    cfg.Metadata.List = (const char *[]){"key1", "val1", "key2", "val2"};
     cfg.Metadata.Count = 2;
 
     // We create a consumer with non existing stream, so we
@@ -24072,7 +24129,7 @@ test_JetStreamMgtConsumers(void)
     {
         test("Add consumer (non durable, filter subjects): ");
         cfg.FilterSubject = NULL;
-        cfg.FilterSubjects = multiFilterSubjects;
+        cfg.FilterSubjects = (const char *[]){"bar1", "bar2"};
         cfg.FilterSubjectsLen = 2;
         s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
         testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
@@ -24114,19 +24171,21 @@ test_JetStreamMgtConsumers(void)
 
     test("Verify config: ");
     s = natsSubscription_NextMsg(&resp, sub, 1000);
-    testCond((s == NATS_OK) && (resp != NULL) && (strncmp(natsMsg_GetData(resp), "{\"stream_name\":\"MY_STREAM\","
-                                                                                 "\"config\":{\"deliver_policy\":\"last\","
-                                                                                 "\"description\":\"MyDescription\","
-                                                                                 "\"durable_name\":\"dur\",\"deliver_subject\":\"foo\","
-                                                                                 "\"opt_start_seq\":100,"
-                                                                                 "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","
-                                                                                 "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","
-                                                                                 "\"metadata\":{\"key1\":\"val1\",\"key2\":\"val2\"},"
-                                                                                 "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"
-                                                                                 "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"
-                                                                                 "\"flow_control\":true,\"idle_heartbeat\":700,"
-                                                                                 "\"num_replicas\":1,\"mem_storage\":true}}",
-                                                          natsMsg_GetDataLength(resp)) == 0));
+    testCond((s == NATS_OK) && (resp != NULL)
+                && (strncmp(natsMsg_GetData(resp),
+                    "{\"stream_name\":\"MY_STREAM\","\
+                    "\"config\":{\"deliver_policy\":\"last\","\
+                    "\"description\":\"MyDescription\","\
+                    "\"durable_name\":\"dur\",\"deliver_subject\":\"foo\","\
+                    "\"opt_start_seq\":100,"\
+                    "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","\
+                    "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","\
+                    "\"metadata\":{\"key1\":\"val1\",\"key2\":\"val2\"},"\
+                    "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"\
+                    "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"\
+                    "\"flow_control\":true,\"idle_heartbeat\":700,"\
+                    "\"num_replicas\":1,\"mem_storage\":true}}",
+                    natsMsg_GetDataLength(resp)) == 0));
     natsMsg_Destroy(resp);
     resp = NULL;
     natsSubscription_Destroy(sub);
@@ -24398,7 +24457,7 @@ test_JetStreamMgtConsumers(void)
     {
         test("Update (filter subjects) works ok: ");
         cfg.FilterSubject = NULL;
-        cfg.FilterSubjects = multiFilterSubjects;
+        cfg.FilterSubjects = (const char *[]){"bar1", "bar2"};
         cfg.FilterSubjectsLen = 2;
         s = js_UpdateConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
         testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL) && (ci->Config != NULL)
@@ -32854,15 +32913,14 @@ test_MicroBasics(void)
         .Subject = "svc.do",
         .Handler = _microHandleRequestNoisy42,
     };
-    const char *epMDList[] = {"key1","value1","key2","value2","key3","value3"};
-    natsMetadata epMD = {.List = epMDList, .Count=3};
-    const char *serviceMDList[] = {"skey1","svalue1","skey2","svalue2"};
-    natsMetadata serviceMD = {.List = serviceMDList, .Count=2};
     microEndpointConfig ep2_cfg = {
         .Name = "unused",
         .Subject = "svc.unused",
         .Handler = _microHandleRequestNoisy42,
-        .Metadata = epMD,
+        .Metadata = (natsMetadata){
+            .List = (const char *[]){"key1", "value1", "key2", "value2", "key3", "value3"},
+            .Count = 3,
+        },
     };
     microEndpointConfig *eps[] = {
         &ep1_cfg,
@@ -32872,7 +32930,10 @@ test_MicroBasics(void)
         .Version = "1.0.0",
         .Name = "CoolService",
         .Description = "returns 42",
-        .Metadata = serviceMD,
+        .Metadata = (natsMetadata){
+            .List = (const char *[]){"skey1", "svalue1", "skey2", "svalue2"},
+            .Count = 2,
+        },
     };
     natsMsg *reply = NULL;
     microServiceInfo *info = NULL;
@@ -32957,7 +33018,6 @@ test_MicroBasics(void)
         }
         testCond(NATS_OK == s);
 
-        printf("<>/<> '%.*s'\n", reply->dataLen, reply->data);
         snprintf(buf, sizeof(buf), "Parse INFO response#%d: ", i);
         test(buf);
         js = NULL;

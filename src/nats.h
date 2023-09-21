@@ -298,6 +298,15 @@ typedef enum
 } jsStorageType;
 
 /**
+ * Determines how messages are compressed when stored for retention.
+ */
+typedef enum
+{
+        js_StorageCompressionNone = 0, ///< Specifies no compression. It's the default.
+        js_StorageCompressionS2,   ///< Specifies S2.
+} jsStorageCompression;
+
+/**
  * Determines how the consumer should select the first message to deliver.
  */
 typedef enum
@@ -419,11 +428,9 @@ typedef struct jsRePublish
  *
  * \note The strings are applications owned and will not be freed by the library.
  *
- * \note NATS server 2.10 added stream Metadata which contains user-provided
- * string name/value pairs. The metadata is encoded in the form of a string
- * array [n1, v1, n2, v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}.
- * MetadataLen contains the number of **pairs** in Metadata.
- *
+ * \note NATS server 2.10 added user-provided Metadata, storage Compression
+ * type, FirstSeq to specify the starting sequence number, and SubjectTransform.
+ * 
  * @see jsStreamConfig_Init
  *
  * \code{.unparsed}
@@ -529,10 +536,19 @@ typedef struct jsStreamConfig {
         // Allow KV like semantics to also discard new on a per subject basis
         bool                    DiscardNewPerSubject;
 
-        // Configuration options introduced in 2.10
+        /**
+         * @brief Configuration options introduced in 2.10
+         *
+         * - Metadata is a user-provided array of key/value pairs, encoded as a
+         *   string array [n1, v1, n2, v2, ...] representing key/value pairs
+         *   {n1:v1, n2:v2, ...}.
+         *
+         * - Compression: js_StorageCompressionNone (default) or
+         *   js_StorageCompressionS2
+         */
 
-        // User-provided metadata for the stream, encoded as an array of {"key", "value",...}
         natsMetadata Metadata;
+        jsStorageCompression Compression;
 } jsStreamConfig;
 
 /**

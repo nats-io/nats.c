@@ -679,6 +679,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
 
     IFOK(s, nats_unmarshalMetadata(jcfg, "metadata", &(cfg->Metadata)));
     IFOK(s, _unmarshalStorageCompression(jcfg, "storage", &(cfg->Compression)));
+    IFOK(s, nats_JSONGetULong(jcfg, "first_seq", &(cfg->FirstSeq)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -803,6 +804,7 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
 
     IFOK(s, nats_marshalMetadata(buf, true, "metadata", cfg->Metadata));
     IFOK(s, _marshalStorageCompression(cfg->Compression, buf));
+    IFOK(s, nats_marshalULong(buf, true, "first_seq", cfg->FirstSeq));
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 

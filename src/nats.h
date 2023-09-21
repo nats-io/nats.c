@@ -545,10 +545,13 @@ typedef struct jsStreamConfig {
          *
          * - Compression: js_StorageCompressionNone (default) or
          *   js_StorageCompressionS2
+         * 
+         * - FirstSeq: the starting sequence number for the stream.
          */
 
         natsMetadata Metadata;
         jsStorageCompression Compression;
+        uint64_t FirstSeq;
 } jsStreamConfig;
 
 /**

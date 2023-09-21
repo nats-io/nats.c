@@ -22093,6 +22093,7 @@ test_JetStreamUnmarshalStreamConfig(void)
         ",\"discard_new_per_subject\":true"
         ",\"metadata\":{\"foo\":\"bar\"}"
         ",\"compression\":\"s2\""
+        ",\"first_seq\":9999"
         "}") >= (int) sizeof(tmp))
     {
         abort();
@@ -22145,6 +22146,7 @@ test_JetStreamUnmarshalStreamConfig(void)
                 && (strcmp(sc->Metadata.List[0], "foo") == 0)
                 && (strcmp(sc->Metadata.List[1], "bar") == 0)
                 && (sc->Compression == js_StorageCompressionS2)
+                && (sc->FirstSeq == 9999)
                 );
     js_destroyStreamConfig(sc);
     sc = NULL;
@@ -22361,6 +22363,7 @@ test_JetStreamMarshalStreamConfig(void)
     sc.Compression = js_StorageCompressionS2;
     sc.Metadata.List = (const char *[]){"k1", "v1", "k2", "v2"};
     sc.Metadata.Count = 2;
+    sc.FirstSeq = 9999;
 
     test("Marshal stream config: ");
     s = js_marshalStreamConfig(&buf, &sc);
@@ -22434,6 +22437,7 @@ test_JetStreamMarshalStreamConfig(void)
                 && rsc->DiscardNewPerSubject
                 && (rsc->Compression == js_StorageCompressionS2)
                 && (rsc->Metadata.Count == 2)
+                && (rsc->FirstSeq == 9999)
                 );
     js_destroyStreamConfig(rsc);
     rsc = NULL;
@@ -23214,6 +23218,7 @@ test_JetStreamMgtStreams(void)
         cfg.Metadata.List = (const char *[]){"k1", "v1", "k2", "v2"};
         cfg.Metadata.Count = 2;
         cfg.Compression = js_StorageCompressionS2;
+        cfg.FirstSeq = 9999;
         s = js_AddStream(&si, js, &cfg, NULL, &jerr);
         testCond((s == NATS_OK)
             && (si != NULL)
@@ -23221,6 +23226,7 @@ test_JetStreamMgtStreams(void)
             && (strcmp(si->Config->Name, "TEST210") == 0)
             && (si->Config->Metadata.Count == 2)
             && (si->Config->Compression == js_StorageCompressionS2)
+            && (si->Config->FirstSeq == 9999)
             && (jerr == 0)
             );
         jsStreamInfo_Destroy(si);

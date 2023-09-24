@@ -22094,6 +22094,7 @@ test_JetStreamUnmarshalStreamConfig(void)
         ",\"metadata\":{\"foo\":\"bar\"}"
         ",\"compression\":\"s2\""
         ",\"first_seq\":9999"
+        ",\"subject_transform\":{\"src\":\"foo\",\"dest\":\"bar\"}"
         "}") >= (int) sizeof(tmp))
     {
         abort();
@@ -22147,6 +22148,9 @@ test_JetStreamUnmarshalStreamConfig(void)
                 && (strcmp(sc->Metadata.List[1], "bar") == 0)
                 && (sc->Compression == js_StorageCompressionS2)
                 && (sc->FirstSeq == 9999)
+                && (sc->SubjectTransform != NULL)
+                && (strcmp(sc->SubjectTransform->Source, "foo") == 0)
+                && (strcmp(sc->SubjectTransform->Destination, "bar") == 0)
                 );
     js_destroyStreamConfig(sc);
     sc = NULL;
@@ -22268,6 +22272,10 @@ test_JetStreamMarshalStreamConfig(void)
     jsStreamConfig      *rsc           = NULL;
     int64_t             optStartTime   = 1624583232123456000;
     jsRePublish         rp;
+    jsSubjectTransformConfig st = {
+        .Source = "foo",
+        .Destination = "bar",
+    };
 
     test("init bad args: ");
     s = jsStreamConfig_Init(NULL);
@@ -22359,11 +22367,12 @@ test_JetStreamMarshalStreamConfig(void)
     rp.HeadersOnly = true;
     sc.RePublish = &rp;
 
-    // 2.10 options: Compression, Metadata
+    // 2.10 options: Compression, Metadata, etc.
     sc.Compression = js_StorageCompressionS2;
     sc.Metadata.List = (const char *[]){"k1", "v1", "k2", "v2"};
     sc.Metadata.Count = 2;
     sc.FirstSeq = 9999;
+    sc.SubjectTransform = &st;
 
     test("Marshal stream config: ");
     s = js_marshalStreamConfig(&buf, &sc);
@@ -22438,6 +22447,9 @@ test_JetStreamMarshalStreamConfig(void)
                 && (rsc->Compression == js_StorageCompressionS2)
                 && (rsc->Metadata.Count == 2)
                 && (rsc->FirstSeq == 9999)
+                && (rsc->SubjectTransform != NULL)
+                && (strcmp(rsc->SubjectTransform->Source, "foo") == 0)
+                && (strcmp(rsc->SubjectTransform->Destination, "bar") == 0)
                 );
     js_destroyStreamConfig(rsc);
     rsc = NULL;
@@ -23212,6 +23224,7 @@ test_JetStreamMgtStreams(void)
     if (serverVersionAtLeast(2, 10, 0))
     {
         test("Create stream with 2.10 server features: ");
+        jsSubjectTransformConfig stc = {.Source = "foo210", .Destination = "bar210"};
         cfg.Name = "TEST210";
         cfg.Subjects = (const char*[]){"foo210"};
         cfg.SubjectsLen = 1;
@@ -23219,6 +23232,7 @@ test_JetStreamMgtStreams(void)
         cfg.Metadata.Count = 2;
         cfg.Compression = js_StorageCompressionS2;
         cfg.FirstSeq = 9999;
+        cfg.SubjectTransform = &stc;
         s = js_AddStream(&si, js, &cfg, NULL, &jerr);
         testCond((s == NATS_OK)
             && (si != NULL)
@@ -23227,6 +23241,9 @@ test_JetStreamMgtStreams(void)
             && (si->Config->Metadata.Count == 2)
             && (si->Config->Compression == js_StorageCompressionS2)
             && (si->Config->FirstSeq == 9999)
+            && (si->Config->SubjectTransform != NULL)
+            && (strcmp(si->Config->SubjectTransform->Source, "foo210") == 0)
+            && (strcmp(si->Config->SubjectTransform->Destination, "bar210") == 0)
             && (jerr == 0)
             );
         jsStreamInfo_Destroy(si);

@@ -116,6 +116,17 @@ _destroyRePublish(jsRePublish *rp)
     NATS_FREE(rp);
 }
 
+static void
+_destroySubjectTransformConfig(jsSubjectTransformConfig *cfg)
+{
+    if (cfg == NULL)
+        return;
+
+    NATS_FREE((char *)cfg->Source);
+    NATS_FREE((char *)cfg->Destination);
+    NATS_FREE(cfg);
+}
+
 void
 js_destroyStreamConfig(jsStreamConfig *cfg)
 {
@@ -137,6 +148,7 @@ js_destroyStreamConfig(jsStreamConfig *cfg)
     NATS_FREE(cfg->Sources);
     _destroyRePublish(cfg->RePublish);
     nats_freeMetadata(&(cfg->Metadata));
+    _destroySubjectTransformConfig(cfg->SubjectTransform);
     NATS_FREE(cfg);
 }
 
@@ -580,6 +592,52 @@ _marshalStorageCompression(jsStorageCompression compression, natsBuffer *buf)
 }
 
 static natsStatus
+_unmarshalSubjectTransformConfig(nats_JSON *json, const char *fieldName, jsSubjectTransformConfig **new_cfg)
+{
+    natsStatus s = NATS_OK;
+    nats_JSON *obj = NULL;
+    jsSubjectTransformConfig *cfg = NULL;
+
+    s = nats_JSONGetObject(json, fieldName, &obj);
+    if (s != NATS_OK)
+        return s;
+    if (obj == NULL)
+    {
+        *new_cfg = NULL;
+        return NATS_OK;
+    }
+    
+    if (s == NATS_OK)
+    {
+        cfg = (jsSubjectTransformConfig *)NATS_CALLOC(1, sizeof(jsSubjectTransformConfig));
+        if (cfg == NULL)
+            return nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    IFOK(s, nats_JSONGetStr(obj, "src", (char **)&(cfg->Source)));
+    IFOK(s, nats_JSONGetStr(obj, "dest", (char **)&(cfg->Destination)));
+    *new_cfg = cfg;
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_marshalSubjectTransformConfig(jsSubjectTransformConfig *cfg, natsBuffer *buf)
+{
+    natsStatus s;
+    if (cfg == NULL)
+        return NATS_OK;
+
+    s = natsBuf_Append(buf, ",\"subject_transform\":{", -1);
+    IFOK(s, natsBuf_Append(buf, "\"src\":\"", -1));
+    if (cfg->Source != NULL)
+        IFOK(s, natsBuf_Append(buf, cfg->Source, -1));
+    IFOK(s, natsBuf_Append(buf, "\",\"dest\":\"", -1));
+    if (cfg->Destination != NULL)
+        IFOK(s, natsBuf_Append(buf, cfg->Destination, -1));
+    IFOK(s, natsBuf_Append(buf, "\"}", -1));
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
 _unmarshalRePublish(nats_JSON *json, const char *fieldName, jsRePublish **new_republish)
 {
     jsRePublish         *rp     = NULL;
@@ -680,6 +738,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_unmarshalMetadata(jcfg, "metadata", &(cfg->Metadata)));
     IFOK(s, _unmarshalStorageCompression(jcfg, "storage", &(cfg->Compression)));
     IFOK(s, nats_JSONGetULong(jcfg, "first_seq", &(cfg->FirstSeq)));
+    IFOK(s, _unmarshalSubjectTransformConfig(jcfg, "subject_transform", &(cfg->SubjectTransform)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -805,6 +864,7 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
     IFOK(s, nats_marshalMetadata(buf, true, "metadata", cfg->Metadata));
     IFOK(s, _marshalStorageCompression(cfg->Compression, buf));
     IFOK(s, nats_marshalULong(buf, true, "first_seq", cfg->FirstSeq));
+    IFOK(s, _marshalSubjectTransformConfig(cfg->SubjectTransform, buf));
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
@@ -1321,6 +1381,24 @@ _addOrUpdate(jsStreamInfo **new_si, jsStreamAction action, jsCtx *js, jsStreamCo
     // allocated for the conversion).
     if (msc)
         _restoreMirrorAndSourcesExternal(cfg);
+
+    // Make sure the 2.10 config fields actually worked, in case the server is
+    // older.
+    if ((s == NATS_OK) && (new_si != NULL) && (*new_si != NULL)
+        && (cfg->Compression != (*new_si)->Config->Compression)
+        && (cfg->FirstSeq != (*new_si)->Config->FirstSeq)
+        && (cfg->Metadata.Count != (*new_si)->Config->Metadata.Count)
+        && ((cfg->SubjectTransform != NULL) 
+            && (
+                ((*new_si)->Config->SubjectTransform == NULL)
+                || strcmp(cfg->SubjectTransform->Source, (*new_si)->Config->SubjectTransform->Source) != 0
+                || strcmp(cfg->SubjectTransform->Destination, (*new_si)->Config->SubjectTransform->Destination) != 0
+            )
+        )
+    )
+    {
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamConfigRequired);
+    }
 
     natsBuf_Destroy(buf);
     natsMsg_Destroy(resp);

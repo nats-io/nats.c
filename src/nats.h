@@ -416,6 +416,16 @@ typedef struct jsRePublish
 } jsRePublish;
 
 /**
+ * SubjectTransformConfig is for applying a subject transform (to matching
+ * messages) before doing anything else when a new message is received
+ */
+typedef struct jsSubjectTransformConfig
+{
+        const char *Source;
+        const char *Destination;
+} jsSubjectTransformConfig;
+
+/**
  * Configuration of a JetStream stream.
  *
  * There are sensible defaults for most. If no subjects are
@@ -430,7 +440,7 @@ typedef struct jsRePublish
  *
  * \note NATS server 2.10 added user-provided Metadata, storage Compression
  * type, FirstSeq to specify the starting sequence number, and SubjectTransform.
- * 
+ *
  * @see jsStreamConfig_Init
  *
  * \code{.unparsed}
@@ -545,13 +555,18 @@ typedef struct jsStreamConfig {
          *
          * - Compression: js_StorageCompressionNone (default) or
          *   js_StorageCompressionS2
-         * 
+         *
          * - FirstSeq: the starting sequence number for the stream.
+         *
+         * - SubjectTransformConfig is for applying a subject transform (to
+         *   matching messages) before doing anything else when a new message is
+         *   received
          */
 
         natsMetadata Metadata;
         jsStorageCompression Compression;
         uint64_t FirstSeq;
+        jsSubjectTransformConfig *SubjectTransform;
 } jsStreamConfig;
 
 /**

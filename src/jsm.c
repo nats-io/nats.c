@@ -116,19 +116,7 @@ _destroyRePublish(jsRePublish *rp)
     NATS_FREE(rp);
 }
 
-static void
-_destroySubjectTransformConfig(jsSubjectTransformConfig *cfg)
-{
-    if (cfg == NULL)
-        return;
-
-    NATS_FREE((char *)cfg->Source);
-    NATS_FREE((char *)cfg->Destination);
-    NATS_FREE(cfg);
-}
-
-void
-js_destroyStreamConfig(jsStreamConfig *cfg)
+void js_destroyStreamConfig(jsStreamConfig *cfg)
 {
     int i;
 
@@ -148,7 +136,8 @@ js_destroyStreamConfig(jsStreamConfig *cfg)
     NATS_FREE(cfg->Sources);
     _destroyRePublish(cfg->RePublish);
     nats_freeMetadata(&(cfg->Metadata));
-    _destroySubjectTransformConfig(cfg->SubjectTransform);
+    NATS_FREE((char *)cfg->SubjectTransform.Source);
+    NATS_FREE((char *)cfg->SubjectTransform.Destination);
     NATS_FREE(cfg);
 }
 
@@ -189,7 +178,10 @@ _destroyStreamSourceInfo(jsStreamSourceInfo *info)
     NATS_FREE(info->Name);
     NATS_FREE((char**)info->FilterSubject);
     for (i=0; i < info->SubjectTransformsLen; i++)
-        _destroySubjectTransformConfig(info->SubjectTransforms[i]);
+    {
+        NATS_FREE((char *)info->SubjectTransforms[i].Source);
+        NATS_FREE((char *)info->SubjectTransforms[i].Destination);
+    }
     NATS_FREE(info->SubjectTransforms);
     _destroyExternalStream(info->External);
     NATS_FREE(info);
@@ -598,26 +590,18 @@ _marshalStorageCompression(jsStorageCompression compression, natsBuffer *buf)
 }
 
 static natsStatus
-_unmarshalSubjectTransformConfig(nats_JSON *obj, jsSubjectTransformConfig **new_cfg)
+_unmarshalSubjectTransformConfig(nats_JSON *obj, jsSubjectTransformConfig *cfg)
 {
     natsStatus s = NATS_OK;
-    jsSubjectTransformConfig *cfg = NULL;
 
+    memset(cfg, 0, sizeof(jsSubjectTransformConfig));
     if (obj == NULL)
     {
-        *new_cfg = NULL;
         return NATS_OK;
     }
 
-    if (s == NATS_OK)
-    {
-        cfg = (jsSubjectTransformConfig *)NATS_CALLOC(1, sizeof(jsSubjectTransformConfig));
-        if (cfg == NULL)
-            return nats_setDefaultError(NATS_NO_MEMORY);
-    }
     IFOK(s, nats_JSONGetStr(obj, "src", (char **)&(cfg->Source)));
     IFOK(s, nats_JSONGetStr(obj, "dest", (char **)&(cfg->Destination)));
-    *new_cfg = cfg;
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -625,7 +609,7 @@ static natsStatus
 _marshalSubjectTransformConfig(jsSubjectTransformConfig *cfg, natsBuffer *buf)
 {
     natsStatus s;
-    if (cfg == NULL)
+    if (cfg == NULL || (nats_IsStringEmpty(cfg->Source) && nats_IsStringEmpty(cfg->Destination)))
         return NATS_OK;
 
     s = natsBuf_Append(buf, ",\"subject_transform\":{", -1);
@@ -636,6 +620,36 @@ _marshalSubjectTransformConfig(jsSubjectTransformConfig *cfg, natsBuffer *buf)
     if (cfg->Destination != NULL)
         IFOK(s, natsBuf_Append(buf, cfg->Destination, -1));
     IFOK(s, natsBuf_Append(buf, "\"}", -1));
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_marshalStreamConsumerLimits(jsStreamConsumerLimits *limits, natsBuffer *buf)
+{
+    natsStatus s;
+    if (limits == NULL || (limits->InactiveThreshold == 0 && limits->MaxAckPending == 0))
+        return NATS_OK;
+
+    s = natsBuf_Append(buf, ",\"consumer_limits\":{", -1);
+    IFOK(s, nats_marshalLong(buf, false, "inactive_threshold", limits->InactiveThreshold));
+    IFOK(s, nats_marshalLong(buf, true, "max_ack_pending", limits->MaxAckPending));
+    IFOK(s, natsBuf_AppendByte(buf, '}'));
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_unmarshalStreamConsumerLimits(nats_JSON *obj, jsStreamConsumerLimits *limits)
+{
+    natsStatus s = NATS_OK;
+
+    memset(limits, 0, sizeof(*limits));
+    if (obj == NULL)
+    {
+        return NATS_OK;
+    }
+
+    IFOK(s, nats_JSONGetLong(obj, "inactive_threshold", &limits->InactiveThreshold));
+    IFOK(s, nats_JSONGetInt(obj, "max_ack_pending", &limits->MaxAckPending));
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -741,9 +755,11 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_unmarshalMetadata(jcfg, "metadata", &(cfg->Metadata)));
     IFOK(s, _unmarshalStorageCompression(jcfg, "storage", &(cfg->Compression)));
     IFOK(s, nats_JSONGetULong(jcfg, "first_seq", &(cfg->FirstSeq)));
-
     IFOK(s, nats_JSONGetObject(jcfg, "subject_transform", &obj));
     IFOK(s, _unmarshalSubjectTransformConfig(obj, &(cfg->SubjectTransform)));
+    obj = NULL;
+    IFOK(s, nats_JSONGetObject(jcfg, "consumer_limits", &obj));
+    IFOK(s, _unmarshalStreamConsumerLimits(obj, &(cfg->ConsumerLimits)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -869,7 +885,8 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
     IFOK(s, nats_marshalMetadata(buf, true, "metadata", cfg->Metadata));
     IFOK(s, _marshalStorageCompression(cfg->Compression, buf));
     IFOK(s, nats_marshalULong(buf, true, "first_seq", cfg->FirstSeq));
-    IFOK(s, _marshalSubjectTransformConfig(cfg->SubjectTransform, buf));
+    IFOK(s, _marshalSubjectTransformConfig(&cfg->SubjectTransform, buf));
+    IFOK(s, _marshalStreamConsumerLimits(&cfg->ConsumerLimits, buf));
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
@@ -1088,7 +1105,7 @@ _unmarshalStreamSourceInfo(nats_JSON *pjson, const char *fieldName, jsStreamSour
     {
         int i;
 
-        ssi->SubjectTransforms = (jsSubjectTransformConfig **)NATS_CALLOC(subjectTransformsLen, sizeof(jsSubjectTransformConfig *));
+        ssi->SubjectTransforms = (jsSubjectTransformConfig *)NATS_CALLOC(subjectTransformsLen, sizeof(jsSubjectTransformConfig));
         if (ssi->SubjectTransforms == NULL)
             s = nats_setDefaultError(NATS_NO_MEMORY);
 
@@ -1416,15 +1433,13 @@ _addOrUpdate(jsStreamInfo **new_si, jsStreamAction action, jsCtx *js, jsStreamCo
         && (cfg->Compression != (*new_si)->Config->Compression)
         && (cfg->FirstSeq != (*new_si)->Config->FirstSeq)
         && (cfg->Metadata.Count != (*new_si)->Config->Metadata.Count)
-        && ((cfg->SubjectTransform != NULL) 
-            && (
-                ((*new_si)->Config->SubjectTransform == NULL)
-                || strcmp(cfg->SubjectTransform->Source, (*new_si)->Config->SubjectTransform->Source) != 0
-                || strcmp(cfg->SubjectTransform->Destination, (*new_si)->Config->SubjectTransform->Destination) != 0
-            )
+        && nats_StringEquals(cfg->SubjectTransform.Source, (*new_si)->Config->SubjectTransform.Source)
+        && nats_StringEquals(cfg->SubjectTransform.Destination, (*new_si)->Config->SubjectTransform.Destination)
+        && (cfg->ConsumerLimits.InactiveThreshold != (*new_si)->Config->ConsumerLimits.InactiveThreshold)
+        && (cfg->ConsumerLimits.MaxAckPending != (*new_si)->Config->ConsumerLimits.MaxAckPending)
         )
-    )
     {
+        // <>/<> wrong error
         return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamConfigRequired);
     }
 

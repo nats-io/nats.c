@@ -426,6 +426,16 @@ typedef struct jsSubjectTransformConfig
 } jsSubjectTransformConfig;
 
 /**
+ * SubjectTransformConfig is for applying a subject transform (to matching
+ * messages) before doing anything else when a new message is received
+ */
+typedef struct jsStreamConsumerLimits
+{
+        int64_t InactiveThreshold;
+        int MaxAckPending;
+} jsStreamConsumerLimits;
+
+/**
  * Configuration of a JetStream stream.
  *
  * There are sensible defaults for most. If no subjects are
@@ -561,12 +571,16 @@ typedef struct jsStreamConfig {
          * - SubjectTransformConfig is for applying a subject transform (to
          *   matching messages) before doing anything else when a new message is
          *   received
+         *
+         * - ConsumerLimits is for setting the limits on certain options on all
+         *   consumers of the stream.
          */
 
         natsMetadata Metadata;
         jsStorageCompression Compression;
         uint64_t FirstSeq;
-        jsSubjectTransformConfig *SubjectTransform;
+        jsSubjectTransformConfig SubjectTransform;
+        jsStreamConsumerLimits ConsumerLimits;
 } jsStreamConfig;
 
 /**
@@ -689,7 +703,7 @@ typedef struct jsStreamSourceInfo
         uint64_t                Lag;
         int64_t                 Active;
         const char *            FilterSubject;
-        jsSubjectTransformConfig **SubjectTransforms;
+        jsSubjectTransformConfig *SubjectTransforms;
         int                     SubjectTransformsLen;
 
 } jsStreamSourceInfo;

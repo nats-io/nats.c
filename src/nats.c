@@ -152,10 +152,10 @@ _finalCleanup(void)
     if (gLib.sslInitialized)
     {
 #if defined(NATS_HAS_TLS)
+#if !defined(NATS_USE_OPENSSL_1_1)
         ERR_free_strings();
         EVP_cleanup();
         CRYPTO_cleanup_all_ex_data();
-#if !defined(NATS_USE_OPENSSL_1_1)
         ERR_remove_thread_state(0);
 #endif
         sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
@@ -1625,10 +1625,11 @@ nats_sslInit(void)
         gLib.sslInitialized = true;
 
 #if defined(NATS_HAS_TLS)
+#if !defined(NATS_USE_OPENSSL_1_1)
         // Initialize SSL.
         SSL_library_init();
         SSL_load_error_strings();
-
+#endif
 #endif
         s = natsThreadLocal_CreateKey(&(gLib.sslTLKey), _cleanupThreadSSL);
     }

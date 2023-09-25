@@ -688,6 +688,9 @@ typedef struct jsStreamSourceInfo
         jsExternalStream        *External;
         uint64_t                Lag;
         int64_t                 Active;
+        const char *            FilterSubject;
+        jsSubjectTransformConfig **SubjectTransforms;
+        int                     SubjectTransformsLen;
 
 } jsStreamSourceInfo;
 

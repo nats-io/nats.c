@@ -181,10 +181,16 @@ _destroyClusterInfo(jsClusterInfo *cluster)
 static void
 _destroyStreamSourceInfo(jsStreamSourceInfo *info)
 {
+    int i;
+
     if (info == NULL)
         return;
 
     NATS_FREE(info->Name);
+    NATS_FREE((char**)info->FilterSubject);
+    for (i=0; i < info->SubjectTransformsLen; i++)
+        _destroySubjectTransformConfig(info->SubjectTransforms[i]);
+    NATS_FREE(info->SubjectTransforms);
     _destroyExternalStream(info->External);
     NATS_FREE(info);
 }
@@ -592,21 +598,17 @@ _marshalStorageCompression(jsStorageCompression compression, natsBuffer *buf)
 }
 
 static natsStatus
-_unmarshalSubjectTransformConfig(nats_JSON *json, const char *fieldName, jsSubjectTransformConfig **new_cfg)
+_unmarshalSubjectTransformConfig(nats_JSON *obj, jsSubjectTransformConfig **new_cfg)
 {
     natsStatus s = NATS_OK;
-    nats_JSON *obj = NULL;
     jsSubjectTransformConfig *cfg = NULL;
 
-    s = nats_JSONGetObject(json, fieldName, &obj);
-    if (s != NATS_OK)
-        return s;
     if (obj == NULL)
     {
         *new_cfg = NULL;
         return NATS_OK;
     }
-    
+
     if (s == NATS_OK)
     {
         cfg = (jsSubjectTransformConfig *)NATS_CALLOC(1, sizeof(jsSubjectTransformConfig));
@@ -672,6 +674,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     jsStreamConfig      *cfg        = NULL;
     nats_JSON           **sources   = NULL;
     int                 sourcesLen  = 0;
+    nats_JSON           *obj        = NULL; 
     natsStatus          s;
 
     if (fieldName != NULL)
@@ -738,7 +741,9 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_unmarshalMetadata(jcfg, "metadata", &(cfg->Metadata)));
     IFOK(s, _unmarshalStorageCompression(jcfg, "storage", &(cfg->Compression)));
     IFOK(s, nats_JSONGetULong(jcfg, "first_seq", &(cfg->FirstSeq)));
-    IFOK(s, _unmarshalSubjectTransformConfig(jcfg, "subject_transform", &(cfg->SubjectTransform)));
+
+    IFOK(s, nats_JSONGetObject(jcfg, "subject_transform", &obj));
+    IFOK(s, _unmarshalSubjectTransformConfig(obj, &(cfg->SubjectTransform)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -1053,6 +1058,8 @@ _unmarshalStreamSourceInfo(nats_JSON *pjson, const char *fieldName, jsStreamSour
     nats_JSON               *json = NULL;
     jsStreamSourceInfo      *ssi  = NULL;
     natsStatus              s;
+    nats_JSON               **subjectTransforms = NULL;
+    int                     subjectTransformsLen = 0;
 
     if (fieldName != NULL)
     {
@@ -1073,6 +1080,27 @@ _unmarshalStreamSourceInfo(nats_JSON *pjson, const char *fieldName, jsStreamSour
     IFOK(s, _unmarshalExternalStream(json, "external", &(ssi->External)));
     IFOK(s, nats_JSONGetULong(json, "lag", &(ssi->Lag)));
     IFOK(s, nats_JSONGetLong(json, "active", &(ssi->Active)));
+    IFOK(s, nats_JSONGetStr(json, "filter_subject", (char **)&(ssi->FilterSubject)));
+
+    // Get the sources and unmarshal if present
+    IFOK(s, nats_JSONGetArrayObject(json, "subject_transforms", &subjectTransforms, &subjectTransformsLen));
+    if ((s == NATS_OK) && (subjectTransforms != NULL))
+    {
+        int i;
+
+        ssi->SubjectTransforms = (jsSubjectTransformConfig **)NATS_CALLOC(subjectTransformsLen, sizeof(jsSubjectTransformConfig *));
+        if (ssi->SubjectTransforms == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+        for (i = 0; (s == NATS_OK) && (i < subjectTransformsLen); i++)
+        {
+            s = _unmarshalSubjectTransformConfig(subjectTransforms[i],  &(ssi->SubjectTransforms[i]));
+            if (s == NATS_OK)
+                ssi->SubjectTransformsLen++;
+        }
+        // Free the array of JSON objects that was allocated by nats_JSONGetArrayObject.
+        NATS_FREE(subjectTransforms);
+    }
 
     if (s == NATS_OK)
         *new_src = ssi;

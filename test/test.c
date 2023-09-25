@@ -22164,18 +22164,19 @@ test_JetStreamUnmarshalStreamInfo(void)
     natsStatus          s;
     nats_JSON           *json = NULL;
     jsStreamInfo        *si   = NULL;
-    const char          *good[] = {
+    const char *good[] = {
         "{\"cluster\":{\"name\":\"S1\",\"leader\":\"S2\"}}",
         "{\"cluster\":{\"name\":\"S1\",\"leader\":\"S2\",\"replicas\":[{\"name\":\"S1\",\"current\":true,\"offline\":false,\"active\":123,\"lag\":456},{\"name\":\"S1\",\"current\":false,\"offline\":true,\"active\":123,\"lag\":456}]}}",
         "{\"mirror\":{\"name\":\"M\",\"lag\":123,\"active\":456}}",
         "{\"mirror\":{\"name\":\"M\",\"external\":{\"api\":\"MyApi\",\"deliver\":\"deliver.prefix\"},\"lag\":123,\"active\":456}}",
         "{\"sources\":[{\"name\":\"S1\",\"lag\":123,\"active\":456}]}",
+        "{\"sources\":[{\"name\":\"S1\",\"lag\":123,\"active\":456,\"filter_subject\":\"foo\",\"subject_transforms:\":[{\"src\":\"foo\",\"dest\":\"bar\"}]}]}",
         "{\"sources\":[{\"name\":\"S1\",\"lag\":123,\"active\":456},{\"name\":\"S2\",\"lag\":123,\"active\":456}]}",
         "{\"sources\":[{\"name\":\"S1\",\"external\":{\"api\":\"MyApi\",\"deliver\":\"deliver.prefix\"},\"lag\":123,\"active\":456},{\"name\":\"S2\",\"lag\":123,\"active\":456}]}",
         "{\"alternates\":[{\"name\":\"S1\",\"domain\":\"domain\",\"cluster\":\"abc\"}]}",
         "{\"alternates\":[{\"name\":\"S1\",\"domain\":\"domain\",\"cluster\":\"abc\"},{\"name\":\"S2\",\"domain\":\"domain\",\"cluster\":\"abc\"}]}",
     };
-    const char          *bad[] = {
+    const char *bad[] = {
         "{\"config\":123}",
         "{\"config\":{\"retention\":\"bad_policy\"}}",
         "{\"config\":{\"discard\":\"bad_policy\"}}",

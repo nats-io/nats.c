@@ -176,7 +176,7 @@ _destroyStreamSourceInfo(jsStreamSourceInfo *info)
         return;
 
     NATS_FREE(info->Name);
-    NATS_FREE((char**)info->FilterSubject);
+    NATS_FREE((char*)info->FilterSubject);
     for (i=0; i < info->SubjectTransformsLen; i++)
     {
         NATS_FREE((char *)info->SubjectTransforms[i].Source);

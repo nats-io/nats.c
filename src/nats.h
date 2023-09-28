@@ -7453,6 +7453,10 @@ struct micro_endpoint_config_s
      */
     const char *Subject;
 
+    /**
+     * @briefMetadata for the endpoint, a JSON-encoded user-provided object,
+     * e.g. `{"key":"value"}`
+     */
     natsMetadata Metadata;
 
     /**
@@ -7483,7 +7487,8 @@ struct micro_endpoint_info_s
     const char *Subject;
 
     /**
-     * @brief Metadata for the endpoint, a JSON-encoded user-provided object, e.g. `{"key":"value"}`
+     * @briefMetadata for the endpoint, a JSON-encoded user-provided object,
+     * e.g. `{"key":"value"}`
      */
     natsMetadata Metadata;
 };

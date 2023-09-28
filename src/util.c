@@ -2506,7 +2506,8 @@ natsStatus
 nats_cloneMetadata(natsMetadata *clone, natsMetadata md)
 {
     natsStatus s = NATS_OK;
-    int i, n;
+    int i = 0;
+    int n;
     char **list = NULL;
 
     clone->Count = 0;

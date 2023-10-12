@@ -10,6 +10,8 @@ cmake-build*/
 install/
 html/
 !doc/html/
+test/datastore_*/
+test/conf_*
 
 # Emacs
 *~

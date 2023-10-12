@@ -103,6 +103,17 @@
 #define MAX_FRAMES (50)
 
 #define nats_IsStringEmpty(s) ((((s) == NULL) || ((s)[0] == '\0')) ? true : false)
+#define nats_HasPrefix(_s, _prefix) (nats_IsStringEmpty(_s) ? nats_IsStringEmpty(_prefix) : (strncmp((_s), (_prefix), strlen(_prefix)) == 0))
+
+static inline bool nats_StringEquals(const char *s1, const char *s2)
+{
+    if (s1 == NULL)
+        return (s2 == NULL);
+    if (s2 == NULL)
+        return false;
+
+    return strcmp(s1, s2);
+}
 
 #define DUP_STRING(s, s1, s2) \
         { \

@@ -16,6 +16,7 @@
 #include "microp.h"
 #include "conn.h"
 #include "opts.h"
+#include "util.h"
 
 static inline void _lock_service(microService *m) { natsMutex_Lock(m->service_mu); }
 static inline void _unlock_service(microService *m) { natsMutex_Unlock(m->service_mu); }
@@ -457,7 +458,8 @@ _clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Name, cfg->Name));
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Version, cfg->Version));
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Description, cfg->Description));
-    MICRO_CALL(err, micro_clone_metadata(&new_cfg->Metadata, &new_cfg->MetadataLen, cfg->Metadata, cfg->MetadataLen));
+    MICRO_CALL(err, micro_ErrorFromStatus(
+                        nats_cloneMetadata(&new_cfg->Metadata, cfg->Metadata)));
     MICRO_CALL(err, micro_clone_endpoint_config(&new_cfg->Endpoint, cfg->Endpoint));
     if (err != NULL)
     {
@@ -480,7 +482,7 @@ _free_cloned_service_config(microServiceConfig *cfg)
     NATS_FREE((char *)cfg->Name);
     NATS_FREE((char *)cfg->Version);
     NATS_FREE((char *)cfg->Description);
-    micro_free_cloned_metadata(cfg->Metadata, cfg->MetadataLen);
+    nats_freeMetadata(&cfg->Metadata);
     micro_free_cloned_endpoint_config(cfg->Endpoint);
     NATS_FREE(cfg);
 }
@@ -739,7 +741,8 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
     MICRO_CALL(err, micro_strdup((char **)&info->Version, m->cfg->Version));
     MICRO_CALL(err, micro_strdup((char **)&info->Description, m->cfg->Description));
     MICRO_CALL(err, micro_strdup((char **)&info->Id, m->id));
-    MICRO_CALL(err, micro_clone_metadata(&info->Metadata, &info->MetadataLen, m->cfg->Metadata, m->cfg->MetadataLen));
+    MICRO_CALL(err, micro_ErrorFromStatus(
+        nats_cloneMetadata(&info->Metadata, m->cfg->Metadata)));
 
     if (err == NULL)
     {
@@ -768,7 +771,8 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
             {
                 MICRO_CALL(err, micro_strdup((char **)&info->Endpoints[len].Name, ep->name));
                 MICRO_CALL(err, micro_strdup((char **)&info->Endpoints[len].Subject, ep->subject));
-                MICRO_CALL(err, micro_clone_metadata(&(info->Endpoints[len].Metadata), &info->Endpoints[len].MetadataLen, ep->config->Metadata, ep->config->MetadataLen));
+                MICRO_CALL(err, micro_ErrorFromStatus(
+                                    nats_cloneMetadata(&info->Endpoints[len].Metadata, ep->config->Metadata)));
                 if (err == NULL)
                 {
                     len++;
@@ -801,14 +805,14 @@ void microServiceInfo_Destroy(microServiceInfo *info)
     {
         NATS_FREE((char *)info->Endpoints[i].Name);
         NATS_FREE((char *)info->Endpoints[i].Subject);
-        micro_free_cloned_metadata(info->Endpoints[i].Metadata, info->Endpoints[i].MetadataLen);
+        nats_freeMetadata(&info->Endpoints[i].Metadata);
     }
     NATS_FREE((char *)info->Endpoints);
     NATS_FREE((char *)info->Name);
     NATS_FREE((char *)info->Version);
     NATS_FREE((char *)info->Description);
     NATS_FREE((char *)info->Id);
-    micro_free_cloned_metadata(info->Metadata, info->MetadataLen);
+    nats_freeMetadata(&info->Metadata);
     NATS_FREE(info);
 }
 
@@ -905,49 +909,4 @@ void microServiceStats_Destroy(microServiceStats *stats)
     NATS_FREE((char *)stats->Version);
     NATS_FREE((char *)stats->Id);
     NATS_FREE(stats);
-}
-
-void micro_free_cloned_metadata(const char **metadata, int len)
-{
-    int i;
-
-    if (metadata == NULL)
-        return;
-
-    for (i = 0; i < len*2; i++)
-    {
-        NATS_FREE((char *)metadata[i]);
-    }
-    NATS_FREE((char **)metadata);
-}
-
-microError *micro_clone_metadata(const char ***new_metadata, int *new_len, const char **metadata, int len)
-{
-    char **dup = NULL;
-    int i;
-
-    if (new_metadata == NULL)
-        return micro_ErrorInvalidArg;
-    *new_metadata = NULL;
-
-    if (len == 0)
-        return NULL;
-
-    dup = NATS_CALLOC(len * 2, sizeof(char *));
-    if (dup == NULL)
-        return micro_ErrorOutOfMemory;
-
-    for (i = 0; i < len*2; i++)
-    {
-        micro_strdup(&dup[i], metadata[i]);
-        if (dup[i] == NULL)
-        {
-            micro_free_cloned_metadata((const char **)dup, i);
-            return micro_ErrorOutOfMemory;
-        }
-    }
-
-    *new_metadata = (const char **)dup;
-    *new_len = len;
-    return NULL;
 }

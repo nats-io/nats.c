@@ -14,6 +14,7 @@
 #include <ctype.h>
 
 #include "microp.h"
+#include "util.h"
 
 static microError *_dup_with_prefix(char **dst, const char *prefix, const char *src);
 
@@ -323,7 +324,8 @@ micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
 
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Name, cfg->Name));
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Subject, cfg->Subject));
-    MICRO_CALL(err, micro_clone_metadata(&new_cfg->Metadata, &new_cfg->MetadataLen, cfg->Metadata, cfg->MetadataLen));
+    MICRO_CALL(err, micro_ErrorFromStatus(
+                        nats_cloneMetadata(&new_cfg->Metadata, cfg->Metadata)));
 
     if (err != NULL)
     {
@@ -344,7 +346,7 @@ void micro_free_cloned_endpoint_config(microEndpointConfig *cfg)
     // to be freed.
     NATS_FREE((char *)cfg->Name);
     NATS_FREE((char *)cfg->Subject);
-    micro_free_cloned_metadata(cfg->Metadata, cfg->MetadataLen);
+    nats_freeMetadata(&cfg->Metadata);
 
     NATS_FREE(cfg);
 }

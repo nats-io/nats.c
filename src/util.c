@@ -2428,3 +2428,130 @@ bool nats_IsSubjectValid(const char *subject, bool wcAllowed)
     }
     return true;
 }
+
+natsStatus
+nats_marshalMetadata(natsBuffer *buf, bool comma, const char *fieldName, natsMetadata md)
+{
+    natsStatus s = NATS_OK;
+    int i;
+    const char *start = (comma ? ",\"" : "\"");
+
+    if (md.Count <= 0)
+        return NATS_OK;
+
+    IFOK(s, natsBuf_Append(buf, start, -1));
+    IFOK(s, natsBuf_Append(buf, fieldName, -1));
+    IFOK(s, natsBuf_Append(buf, "\":{", 3));
+    for (i = 0; (s == NATS_OK) && (i < md.Count); i++)
+    {
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+        IFOK(s, natsBuf_Append(buf, md.List[i * 2], -1));
+        IFOK(s, natsBuf_Append(buf, "\":\"", 3));
+        IFOK(s, natsBuf_Append(buf, md.List[i * 2 + 1], -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+
+        if (i != md.Count - 1)
+            IFOK(s, natsBuf_AppendByte(buf, ','));
+    }
+    IFOK(s, natsBuf_AppendByte(buf, '}'));
+    return NATS_OK;
+}
+
+static natsStatus
+_addMD(void *closure, const char *fieldName, nats_JSONField *f)
+{
+    natsMetadata *md = (natsMetadata *)closure;
+
+    char *name = NATS_STRDUP(fieldName);
+    char *value = NATS_STRDUP(f->value.vstr);
+    if ((name == NULL) || (value == NULL))
+    {
+        NATS_FREE(name);
+        NATS_FREE(value);
+        return nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    md->List[md->Count * 2] = name;
+    md->List[md->Count * 2 + 1] = value;
+    md->Count++;
+    return NATS_OK;
+}
+
+natsStatus
+nats_unmarshalMetadata(nats_JSON *json, const char *fieldName, natsMetadata *md)
+{
+    natsStatus s = NATS_OK;
+    nats_JSON *mdJSON = NULL;
+    int n;
+
+    md->List = NULL;
+    md->Count = 0;
+    if (json == NULL)
+        return NATS_OK;
+
+    s = nats_JSONGetObject(json, fieldName, &mdJSON);
+    if ((s != NATS_OK) || (mdJSON == NULL))
+        return NATS_OK;
+
+    n = natsStrHash_Count(mdJSON->fields);
+    md->List = NATS_CALLOC(n * 2, sizeof(char *));
+    if (md->List == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    IFOK(s, nats_JSONRange(mdJSON, TYPE_STR, 0, _addMD, md));
+
+    return s;
+}
+
+natsStatus
+nats_cloneMetadata(natsMetadata *clone, natsMetadata md)
+{
+    natsStatus s = NATS_OK;
+    int i = 0;
+    int n;
+    char **list = NULL;
+
+    clone->Count = 0;
+    clone->List = NULL;
+    if (md.Count == 0)
+        return NATS_OK;
+
+    n = md.Count * 2;
+    list = NATS_CALLOC(n, sizeof(char *));
+    if (list == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+
+    for (i = 0; (s == NATS_OK) && (i < n); i++)
+    {
+        list[i] = NATS_STRDUP(md.List[i]);
+        if (list[i] == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    if (s == NATS_OK)
+    {
+        clone->List = (const char **)list;
+        clone->Count = md.Count;
+    }
+    else
+    {
+        for (n = i, i = 0; i < n; i++)
+            NATS_FREE(list[i]);
+        NATS_FREE(list);
+    }
+    return s;
+}
+
+void
+nats_freeMetadata(natsMetadata *md)
+{
+    if (md == NULL)
+        return;
+
+    for (int i = 0; i < md->Count * 2; i++)
+    {
+        NATS_FREE((char *)md->List[i]);
+    }
+    NATS_FREE(md->List);
+    md->List = NULL;
+    md->Count = 0;
+}

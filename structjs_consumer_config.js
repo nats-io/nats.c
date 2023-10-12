@@ -27,5 +27,8 @@ var structjs_consumer_config =
     [ "DeliverGroup", "structjs_consumer_config.html#ae0765f3b5effe365187d3cf809c6ed3c", null ],
     [ "InactiveThreshold", "structjs_consumer_config.html#af6376a6009124c25d7016bc548f3855d", null ],
     [ "Replicas", "structjs_consumer_config.html#acfba6d6ecb6323fd8ffe6c0bb4fbffae", null ],
-    [ "MemoryStorage", "structjs_consumer_config.html#a046177256938d6a601c629f9fd82f888", null ]
+    [ "MemoryStorage", "structjs_consumer_config.html#a046177256938d6a601c629f9fd82f888", null ],
+    [ "FilterSubjects", "structjs_consumer_config.html#ada703eb1db0288d8a937126d6d856c6f", null ],
+    [ "FilterSubjectsLen", "structjs_consumer_config.html#a2a6cdec5efe7542496f8b8cccb539643", null ],
+    [ "Metadata", "structjs_consumer_config.html#a8bfc0284c57028bf9cf809205d989959", null ]
 ];

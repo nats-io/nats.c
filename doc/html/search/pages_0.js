@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['_25nats_20c_20client_2e_0',['%NATS C client.',['../index.html',1,'']]]
+  ['c_20client_0',['NATS C client.',['../index.html',1,'']]],
+  ['client_1',['NATS C client.',['../index.html',1,'']]]
 ];

@@ -34,12 +34,15 @@ var nats_8h =
     [ "natsOptions", "group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e", null ],
     [ "natsInbox", "group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1", null ],
     [ "natsMsgList", "group__types_group.html#gafd5523161ec3783e79719cb9a9a66b5b", null ],
+    [ "natsMetadata", "group__types_group.html#ga3b454f3c6ac697a3cdc5bdd3c9ece12b", null ],
     [ "jsCtx", "group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1", null ],
     [ "jsPubOptions", "group__types_group.html#ga7bbea3575d35dcdbfc9b766b04269eb7", null ],
     [ "jsPlacement", "group__types_group.html#ga49d1138fac9da8b85d00a367081e91c9", null ],
     [ "jsExternalStream", "group__types_group.html#gaef6601477f6456bebc229f7f38982a6c", null ],
     [ "jsStreamSource", "group__types_group.html#gab4c43c87d81917aab748a50eee028449", null ],
     [ "jsRePublish", "group__types_group.html#gab991313d33ce270a882e4d0756c138f6", null ],
+    [ "jsSubjectTransformConfig", "group__types_group.html#gac3148248f38749f6ba70471b7a6b96e1", null ],
+    [ "jsStreamConsumerLimits", "group__types_group.html#gadb76a02c18655461dbd3ee266502338c", null ],
     [ "jsStreamConfig", "group__types_group.html#ga26fd6a73df327ca3c271e46ddefc8acf", null ],
     [ "jsLostStreamData", "group__types_group.html#gaf80828510450faf84bbf456e94f5b784", null ],
     [ "jsStreamStateSubject", "group__types_group.html#ga55dce2fa9ecd215716cc9ceece7dfefa", null ],
@@ -129,6 +132,10 @@ var nats_8h =
     [ "jsStorageType", "group__types_group.html#ga1802a53c79e667f093bba033b16adc98", [
       [ "js_FileStorage", "group__types_group.html#gga1802a53c79e667f093bba033b16adc98a1d9dad1854cf374b22e3688b98284dec", null ],
       [ "js_MemoryStorage", "group__types_group.html#gga1802a53c79e667f093bba033b16adc98a428ed10448726ad01c1db77a7f748314", null ]
+    ] ],
+    [ "jsStorageCompression", "group__types_group.html#ga10d2999dc673ed95e131e6ce5181f720", [
+      [ "js_StorageCompressionNone", "group__types_group.html#gga10d2999dc673ed95e131e6ce5181f720a97bd071285006dc90dc4600a25f85e89", null ],
+      [ "js_StorageCompressionS2", "group__types_group.html#gga10d2999dc673ed95e131e6ce5181f720afab4e3a974823f4438292b2405349d4a", null ]
     ] ],
     [ "jsDeliverPolicy", "group__types_group.html#ga117ed2c35f89ef3144540ed9cbadc818", [
       [ "js_DeliverAll", "group__types_group.html#gga117ed2c35f89ef3144540ed9cbadc818ac692ba1363103768ac4bb58695549758", null ],

@@ -1,4 +1,6 @@
 var searchData=
 [
-  ['functions_0',['Functions',['../group__func_group.html',1,'(Global Namespace)'],['../group__micro_functions.html',1,'(Global Namespace)']]]
+  ['entries_0',['KeyValue store entries',['../group__kv_entry.html',1,'']]],
+  ['environment_20variables_1',['Environment Variables',['../group__env_variables_group.html',1,'']]],
+  ['experimental_20microservices_2',['EXPERIMENTAL - Microservices',['../group__micro_group.html',1,'']]]
 ];

@@ -28,5 +28,10 @@ var structjs_stream_config =
     [ "RePublish", "structjs_stream_config.html#a95ab0061b6e935b129a4a9c133e6b11c", null ],
     [ "AllowDirect", "structjs_stream_config.html#a28630f6f07ca02553c5d5718d7c29721", null ],
     [ "MirrorDirect", "structjs_stream_config.html#a9d67ddcc7c54c345dd60ed5e59234f1e", null ],
-    [ "DiscardNewPerSubject", "structjs_stream_config.html#a3fb7d5e1a09829fe742749da880afe4a", null ]
+    [ "DiscardNewPerSubject", "structjs_stream_config.html#a3fb7d5e1a09829fe742749da880afe4a", null ],
+    [ "Metadata", "structjs_stream_config.html#a7aa4849b0f555c9de6b6da953929a565", null ],
+    [ "Compression", "structjs_stream_config.html#a406554aaf1e16eed4abade52f7ca5e61", null ],
+    [ "FirstSeq", "structjs_stream_config.html#a7ed5e8e5a8d367b25751b9708d0e395b", null ],
+    [ "SubjectTransform", "structjs_stream_config.html#a0ce1d0a7c1f0576151f505724ae393d1", null ],
+    [ "ConsumerLimits", "structjs_stream_config.html#a5ce51cb5a36febda30bb444a0f59c2d1", null ]
 ];

@@ -147,6 +147,7 @@ AsyncSubscriptionPendingDrain
 SyncSubscriptionPending
 SyncSubscriptionPendingDrain
 AsyncErrHandler
+AsyncErrHandlerSubDestroyed
 AsyncSubscriberStarvation
 AsyncSubscriberOnClose
 NextMsgCallOnAsyncSub
@@ -257,6 +258,14 @@ KeyValueDiscardOldToNew
 KeyValueRePublish
 KeyValueMirrorDirectGet
 KeyValueMirrorCrossDomains
+MicroMatchEndpointSubject
+MicroAddService
+MicroGroups
+MicroBasics
+MicroStartStop
+MicroServiceStopsOnClosedConn
+MicroServiceStopsWhenServerStops
+MicroAsyncErrorHandler
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

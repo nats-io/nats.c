@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2023 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -2228,9 +2228,155 @@ nats_marshalULong(natsBuffer *buf, bool comma, const char *fieldName, uint64_t u
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// fmtFrac formats the fraction of v/10**prec (e.g., ".12345") into the
+// tail of buf, omitting trailing zeros. It omits the decimal
+// point too when the fraction is 0. It returns the index where the
+// output bytes begin and the value v/10**prec.
+static void
+fmt_frac(char *buf, int w, uint64_t v, int prec, int *nw, uint64_t *nv)
+{
+    // Omit trailing zeros up to and including decimal point.
+    bool print = false;
+    int i;
+    int digit;
 
-bool
-nats_IsSubjectValid(const char *subject, bool wcAllowed)
+    for (i = 0; i < prec; i++)
+    {
+        digit = v % 10;
+        print = print || digit != 0;
+        if (print)
+        {
+            w--;
+            buf[w] = digit + '0';
+        }
+        v /= 10;
+    }
+    if (print)
+    {
+        w--;
+        buf[w] = '.';
+    }
+    *nw = w;
+    *nv = v;
+}
+
+// fmtInt formats v into the tail of buf.
+// It returns the index where the output begins.
+static int
+fmt_int(char *buf, int w, uint64_t v)
+{
+    if (v == 0)
+    {
+        w--;
+        buf[w] = '0';
+    }
+    else
+    {
+        while (v > 0)
+        {
+            w--;
+            buf[w] = v % 10 + '0';
+            v /= 10;
+        }
+    }
+    return w;
+}
+
+natsStatus
+nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, int64_t d)
+{
+    // Largest time is 2540400h10m10.000000000s
+    char buf[32];
+    int w = 32;
+    bool neg = d < 0;
+    uint64_t u = (uint64_t) (neg ? -d : d);
+    int prec;
+    natsStatus s = NATS_OK;
+    const char *start = (comma ? ",\"" : "\"");
+
+    if (u < 1000000000)
+    {
+        // Special case: if duration is smaller than a second,
+        // use smaller units, like 1.2ms
+        w--;
+        buf[w] = 's';
+        w--;
+        if (u == 0)
+        {
+            s = natsBuf_Append(out_buf, start, -1);
+            IFOK(s, natsBuf_Append(out_buf, field_name, -1));
+            IFOK(s, natsBuf_Append(out_buf, "\":\"0s\"", -1));
+            return NATS_UPDATE_ERR_STACK(s);
+        }
+        else if (u < 1000)
+        {
+            // print nanoseconds
+            prec = 0;
+            buf[w] = 'n';
+        }
+        else if (u < 1000000)
+        {
+            // print microseconds
+            prec = 3;
+            // U+00B5 'µ' micro sign == 0xC2 0xB5 (in reverse?)
+            buf[w] = '\xB5';
+            w--; // Need room for two bytes.
+            buf[w] = '\xC2';
+        }
+        else
+        {
+            // print milliseconds
+            prec = 6;
+            buf[w] = 'm';
+        }
+        fmt_frac(buf, w, u, prec, &w, &u);
+        w = fmt_int(buf, w, u);
+    }
+    else
+    {
+        w--;
+        buf[w] = 's';
+
+        fmt_frac(buf, w, u, 9, &w, &u);
+
+        // u is now integer seconds
+        w = fmt_int(buf, w, u % 60);
+        u /= 60;
+
+        // u is now integer minutes
+        if (u > 0)
+        {
+            w--;
+            buf[w] = 'm';
+            w = fmt_int(buf, w, u % 60);
+            u /= 60;
+
+            // u is now integer hours
+            // Stop at hours because days can be different lengths.
+            if (u > 0)
+            {
+                w--;
+                buf[w] = 'h';
+                w = fmt_int(buf, w, u);
+            }
+        }
+    }
+
+    if (neg)
+    {
+        w--;
+        buf[w] = '-';
+    }
+
+    s = natsBuf_Append(out_buf, start, -1);
+    IFOK(s, natsBuf_Append(out_buf, field_name, -1));
+    IFOK(s, natsBuf_Append(out_buf, "\":\"", -1));
+    IFOK(s, natsBuf_Append(out_buf, buf + w, sizeof(buf) - w));
+    IFOK(s, natsBuf_Append(out_buf, "\"", -1));
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+bool nats_IsSubjectValid(const char *subject, bool wcAllowed)
 {
     int     i       = 0;
     int     len     = 0;
@@ -2281,4 +2427,131 @@ nats_IsSubjectValid(const char *subject, bool wcAllowed)
         }
     }
     return true;
+}
+
+natsStatus
+nats_marshalMetadata(natsBuffer *buf, bool comma, const char *fieldName, natsMetadata md)
+{
+    natsStatus s = NATS_OK;
+    int i;
+    const char *start = (comma ? ",\"" : "\"");
+
+    if (md.Count <= 0)
+        return NATS_OK;
+
+    IFOK(s, natsBuf_Append(buf, start, -1));
+    IFOK(s, natsBuf_Append(buf, fieldName, -1));
+    IFOK(s, natsBuf_Append(buf, "\":{", 3));
+    for (i = 0; (s == NATS_OK) && (i < md.Count); i++)
+    {
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+        IFOK(s, natsBuf_Append(buf, md.List[i * 2], -1));
+        IFOK(s, natsBuf_Append(buf, "\":\"", 3));
+        IFOK(s, natsBuf_Append(buf, md.List[i * 2 + 1], -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+
+        if (i != md.Count - 1)
+            IFOK(s, natsBuf_AppendByte(buf, ','));
+    }
+    IFOK(s, natsBuf_AppendByte(buf, '}'));
+    return NATS_OK;
+}
+
+static natsStatus
+_addMD(void *closure, const char *fieldName, nats_JSONField *f)
+{
+    natsMetadata *md = (natsMetadata *)closure;
+
+    char *name = NATS_STRDUP(fieldName);
+    char *value = NATS_STRDUP(f->value.vstr);
+    if ((name == NULL) || (value == NULL))
+    {
+        NATS_FREE(name);
+        NATS_FREE(value);
+        return nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    md->List[md->Count * 2] = name;
+    md->List[md->Count * 2 + 1] = value;
+    md->Count++;
+    return NATS_OK;
+}
+
+natsStatus
+nats_unmarshalMetadata(nats_JSON *json, const char *fieldName, natsMetadata *md)
+{
+    natsStatus s = NATS_OK;
+    nats_JSON *mdJSON = NULL;
+    int n;
+
+    md->List = NULL;
+    md->Count = 0;
+    if (json == NULL)
+        return NATS_OK;
+
+    s = nats_JSONGetObject(json, fieldName, &mdJSON);
+    if ((s != NATS_OK) || (mdJSON == NULL))
+        return NATS_OK;
+
+    n = natsStrHash_Count(mdJSON->fields);
+    md->List = NATS_CALLOC(n * 2, sizeof(char *));
+    if (md->List == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    IFOK(s, nats_JSONRange(mdJSON, TYPE_STR, 0, _addMD, md));
+
+    return s;
+}
+
+natsStatus
+nats_cloneMetadata(natsMetadata *clone, natsMetadata md)
+{
+    natsStatus s = NATS_OK;
+    int i = 0;
+    int n;
+    char **list = NULL;
+
+    clone->Count = 0;
+    clone->List = NULL;
+    if (md.Count == 0)
+        return NATS_OK;
+
+    n = md.Count * 2;
+    list = NATS_CALLOC(n, sizeof(char *));
+    if (list == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+
+    for (i = 0; (s == NATS_OK) && (i < n); i++)
+    {
+        list[i] = NATS_STRDUP(md.List[i]);
+        if (list[i] == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    if (s == NATS_OK)
+    {
+        clone->List = (const char **)list;
+        clone->Count = md.Count;
+    }
+    else
+    {
+        for (n = i, i = 0; i < n; i++)
+            NATS_FREE(list[i]);
+        NATS_FREE(list);
+    }
+    return s;
+}
+
+void
+nats_freeMetadata(natsMetadata *md)
+{
+    if (md == NULL)
+        return;
+
+    for (int i = 0; i < md->Count * 2; i++)
+    {
+        NATS_FREE((char *)md->List[i]);
+    }
+    NATS_FREE(md->List);
+    md->List = NULL;
+    md->Count = 0;
 }

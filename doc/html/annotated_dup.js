@@ -25,6 +25,7 @@ var annotated_dup =
     [ "jsSequencePair", "structjs_sequence_pair.html", "structjs_sequence_pair" ],
     [ "jsStreamAlternate", "structjs_stream_alternate.html", "structjs_stream_alternate" ],
     [ "jsStreamConfig", "structjs_stream_config.html", "structjs_stream_config" ],
+    [ "jsStreamConsumerLimits", "structjs_stream_consumer_limits.html", "structjs_stream_consumer_limits" ],
     [ "jsStreamInfo", "structjs_stream_info.html", "structjs_stream_info" ],
     [ "jsStreamInfoList", "structjs_stream_info_list.html", "structjs_stream_info_list" ],
     [ "jsStreamNamesList", "structjs_stream_names_list.html", "structjs_stream_names_list" ],
@@ -33,6 +34,7 @@ var annotated_dup =
     [ "jsStreamState", "structjs_stream_state.html", "structjs_stream_state" ],
     [ "jsStreamStateSubject", "structjs_stream_state_subject.html", "structjs_stream_state_subject" ],
     [ "jsStreamStateSubjects", "structjs_stream_state_subjects.html", "structjs_stream_state_subjects" ],
+    [ "jsSubjectTransformConfig", "structjs_subject_transform_config.html", "structjs_subject_transform_config" ],
     [ "jsSubOptions", "structjs_sub_options.html", "structjs_sub_options" ],
     [ "jsTier", "structjs_tier.html", "structjs_tier" ],
     [ "kvConfig", "structkv_config.html", "structkv_config" ],
@@ -40,5 +42,12 @@ var annotated_dup =
     [ "kvKeysList", "structkv_keys_list.html", "structkv_keys_list" ],
     [ "kvPurgeOptions", "structkv_purge_options.html", "structkv_purge_options" ],
     [ "kvWatchOptions", "structkv_watch_options.html", "structkv_watch_options" ],
+    [ "micro_endpoint_config_s", "structmicro__endpoint__config__s.html", "structmicro__endpoint__config__s" ],
+    [ "micro_endpoint_info_s", "structmicro__endpoint__info__s.html", "structmicro__endpoint__info__s" ],
+    [ "micro_endpoint_stats_s", "structmicro__endpoint__stats__s.html", "structmicro__endpoint__stats__s" ],
+    [ "micro_service_config_s", "structmicro__service__config__s.html", "structmicro__service__config__s" ],
+    [ "micro_service_info_s", "structmicro__service__info__s.html", "structmicro__service__info__s" ],
+    [ "micro_service_stats_s", "structmicro__service__stats__s.html", "structmicro__service__stats__s" ],
+    [ "natsMetadata", "structnats_metadata.html", "structnats_metadata" ],
     [ "natsMsgList", "structnats_msg_list.html", "structnats_msg_list" ]
 ];

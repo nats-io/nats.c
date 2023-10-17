@@ -16,6 +16,16 @@
 
 #include "natsp.h"
 
+static inline void natsOptions_lock(natsOptions *opts)
+{
+    natsMutex_Lock(opts->mu);
+}
+
+static inline void natsOptions_unlock(natsOptions *opts)
+{
+    natsMutex_Unlock(opts->mu);
+}
+
 #define LOCK_AND_CHECK_OPTIONS(o, c) \
     if (((o) == NULL) || ((c))) \
         return nats_setDefaultError(NATS_INVALID_ARG); \
@@ -37,5 +47,8 @@
 
 natsOptions*
 natsOptions_clone(natsOptions *opts);
+
+natsStatus
+natsOptions_setMicroCallbacks(natsOptions *opts, natsConnectionHandler closedCb, natsErrHandler errCb);
 
 #endif /* OPTS_H_ */

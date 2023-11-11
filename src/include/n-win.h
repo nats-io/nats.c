@@ -63,6 +63,8 @@ typedef int                 natsRecvLen;
 
 #define nats_vsnprintf(b, sb, f, a) vsnprintf_s((b), (sb), (_TRUNCATE), (f), (a))
 
+#define nats_vscprintf _vscprintf
+
 int
 nats_asprintf(char **newStr, const char *fmt, ...);
 

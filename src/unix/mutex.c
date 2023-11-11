@@ -78,7 +78,7 @@ natsMutex_Lock(natsMutex *m)
                 #if defined(__x86_64__) || \
                     defined(__mips__)
                     __asm__ __volatile__ ("pause" ::: "memory");
-                #elif defined(__arm__) || \
+                #elif (defined(__arm__) && __ARM_ARCH >=6) || \
                       defined(__aarch64__)
                     __asm__ __volatile__ ("yield" ::: "memory");
                 #elif defined(__powerpc__) || \

@@ -65,6 +65,7 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsErrConsumerConfigRequired         "consumer configuration required"
 #define jsErrInvalidDurableName             "invalid durable name"
 #define jsErrInvalidConsumerName            "invalid consumer name"
+#define jsErrConcurrentFetchNotAllowed      "concurrent fetch request not allowed"
 
 #define jsCtrlHeartbeat     (1)
 #define jsCtrlFlowControl   (2)
@@ -78,6 +79,9 @@ extern const int64_t    jsDefaultRequestWait;
 
 #define jsStorageTypeFileStr    "file"
 #define jsStorageTypeMemStr     "memory"
+
+#define jsStorageCompressionNoneStr "none"
+#define jsStorageCompressionS2Str   "s2"
 
 #define jsDeliverAllStr             "all"
 #define jsDeliverLastStr            "last"
@@ -101,6 +105,9 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsAckNak            "-NAK"
 #define jsAckInProgress     "+WPI"
 #define jsAckTerm           "+TERM"
+
+// jsExtDomainT is used to create a StreamSource External APIPrefix
+#define jsExtDomainT "$JS.%s.API"
 
 // jsApiAccountInfo is for obtaining general information about JetStream.
 #define jsApiAccountInfo "%.*s.INFO"
@@ -126,6 +133,12 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiDurableCreateT is used to create durable consumers.
 #define jsApiDurableCreateT "%.*s.CONSUMER.DURABLE.CREATE.%s.%s"
 
+// jsApiConsumerCreateExT is used to create a named consumer.
+#define jsApiConsumerCreateExT "%.*s.CONSUMER.CREATE.%s.%s"
+
+// jsApiConsumerCreateExWithFilterT is used to create a named consumer with a filter subject.
+#define jsApiConsumerCreateExWithFilterT "%.*s.CONSUMER.CREATE.%s.%s.%s"
+
 // jsApiConsumerInfoT is used to get information about consumers.
 #define jsApiConsumerInfoT "%.*s.CONSUMER.INFO.%s.%s"
 
@@ -143,6 +156,24 @@ extern const int64_t    jsDefaultRequestWait;
 
 // jsApiMsgGetT is the endpoint to get a message, either by sequence or last per subject.
 #define jsApiMsgGetT "%.*s.STREAM.MSG.GET.%s"
+
+// jsApiMsgGetT is the endpoint to get a message, either by sequence or last per subject.
+#define jsApiDirectMsgGetT "%.*s.DIRECT.GET.%s"
+
+// jsApiDirectMsgGetLastBySubjectT is the endpoint to perform a direct get of a message by subject.
+#define jsApiDirectMsgGetLastBySubjectT "%.*s.DIRECT.GET.%s.%s"
+
+// jsApiStreamListT is the endpoint to get the list of stream infos.
+#define jsApiStreamListT "%.*s.STREAM.LIST"
+
+// jsApiStreamNamesT is the endpoint to get the list of stream names.
+#define jsApiStreamNamesT "%.*s.STREAM.NAMES"
+
+// jsApiConsumerListT is the endpoint to get the list of consumers for a stream.
+#define jsApiConsumerListT "%.*s.CONSUMER.LIST.%s"
+
+// jsApiConsumerNamesT is the endpoint to get the list of consumer names for a stream.
+#define jsApiConsumerNamesT "%.*s.CONSUMER.NAMES.%s"
 
 // Creates a subject based on the option's prefix, the subject format and its values.
 #define js_apiSubj(s, o, f, ...) (nats_asprintf((s), (f), (o)->Prefix, __VA_ARGS__) < 0 ? NATS_NO_MEMORY : NATS_OK)
@@ -212,7 +243,7 @@ void
 js_cleanStreamState(jsStreamState *state);
 
 natsStatus
-js_checkDurName(const char *dur);
+js_checkConsName(const char *cons, bool isDurable);
 
 natsStatus
 js_getMetaData(const char *reply,
@@ -231,3 +262,12 @@ js_retain(jsCtx *js);
 
 void
 js_release(jsCtx *js);
+
+natsStatus
+js_directGetMsgToJSMsg(const char *stream, natsMsg *msg);
+
+natsStatus
+js_cloneConsumerConfig(jsConsumerConfig *org, jsConsumerConfig **clone);
+
+void
+js_destroyConsumerConfig(jsConsumerConfig *cc);

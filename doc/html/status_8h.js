@@ -163,6 +163,22 @@ var status_8h =
       [ "JSConsumerMaxRequestBatchNegativeErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70abca8571110c4244d218c2dc1779d8786", null ],
       [ "JSConsumerMaxRequestExpiresToSmallErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a9c1c31813a713fcee44ec06728cc6382", null ],
       [ "JSConsumerMaxDeliverBackoffErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70af7c1cf2c692140c4b28ebfc47acb0c41", null ],
-      [ "JSStreamInfoMaxSubjectsErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a7b5cebb5aaebd7b3bfa43f5457e97553", null ]
+      [ "JSStreamInfoMaxSubjectsErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a7b5cebb5aaebd7b3bfa43f5457e97553", null ],
+      [ "JSStreamOfflineErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a7c88e5ccabcb2debe1ce0c1a05bbe18b", null ],
+      [ "JSConsumerOfflineErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aa0eb191886a17e917f2fa0eaa81d4b61", null ],
+      [ "JSNoLimitsErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70acfa2c06f8baef07cd96a3627ddea641b", null ],
+      [ "JSConsumerMaxPendingAckExcessErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ac4afe1d580083bd55c36b3e55a5ef479", null ],
+      [ "JSStreamMaxStreamBytesExceededErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a60fd558fc8d0f31b895c7b579ba0c8b7", null ],
+      [ "JSStreamMoveAndScaleErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a584d0bf058191cf2257d934f0bc5935c", null ],
+      [ "JSStreamMoveInProgressErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70abf7739c7a0569149ed24ae8b9fbaf889", null ],
+      [ "JSConsumerMaxRequestBatchExceededErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a597c98a0637cec454b724b049098cee8", null ],
+      [ "JSConsumerReplicasExceedsStreamErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a1d159f128cd9b261b5270f7e36ed22d1", null ],
+      [ "JSConsumerNameContainsPathSeparatorsErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aab479befe55dfbc113b128367ea3739e", null ],
+      [ "JSStreamNameContainsPathSeparatorsErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a6a833a78d95a6946e7ead515393c01ff", null ],
+      [ "JSStreamMoveNotInProgressErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70abd66e18ccdc8c7e5737f09d39bc64e7b", null ],
+      [ "JSStreamNameExistRestoreFailedErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a9698a9c41a36783ff8bd8738dbce16cf", null ],
+      [ "JSConsumerCreateFilterSubjectMismatchErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aaee714daa8b2d00c09d202bbf682a099", null ],
+      [ "JSConsumerCreateDurableAndNameMismatchErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a2fd5f6bb7dac1ef16bdc0818886f78ac", null ],
+      [ "JSReplicasCountCannotBeNegativeErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a0e2194a4bb7565834982a39deddea878", null ]
     ] ]
 ];

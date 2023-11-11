@@ -13,6 +13,7 @@ var group__callbacks_group =
     [ "natsOnCompleteCB", "group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a", null ],
     [ "natsCustomReconnectDelayHandler", "group__callbacks_group.html#ga3353d4b92851c52121f65aaf0684cba4", null ],
     [ "jsPubAckErrHandler", "group__callbacks_group.html#ga954768cc1d3388bb6ab723e777647992", null ],
+    [ "jsPubAckHandler", "group__callbacks_group.html#ga4f66e065bd918f02510d4c53d8a5b729", null ],
     [ "stanPubAckHandler", "group__callbacks_group.html#gad5d6a685731b3bf635995b7375af4d18", null ],
     [ "stanMsgHandler", "group__callbacks_group.html#gaf7456e37fa14f1834d9048d3789e9409", null ],
     [ "stanConnectionLostHandler", "group__callbacks_group.html#gac34092f6c698374f86ad349302bdd55c", null ]

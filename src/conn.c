@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2023 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -526,9 +526,16 @@ _processInfo(natsConnection *nc, char *info, int len)
 {
     natsStatus  s     = NATS_OK;
     nats_JSON   *json = NULL;
+    bool        postDiscoveredServersCb = false;
+    bool        postLameDuckCb = false;
 
     if (info == NULL)
         return NATS_OK;
+
+    natsOptions_lock(nc->opts);
+    postDiscoveredServersCb = (nc->opts->discoveredServersCb != NULL);
+    postLameDuckCb = (nc->opts->lameDuckCb != NULL);
+    natsOptions_unlock(nc->opts);
 
     _clearServerInfo(&(nc->info));
 
@@ -561,7 +568,7 @@ _processInfo(natsConnection *nc, char *info, int len)
     // if advertise is disabled on that server, or servers that
     // did not include themselves in the async INFO protocol.
     // If empty, do not remove the implicit servers from the pool.
-    if ((s == NATS_OK) && (nc->info.connectURLsCount > 0))
+    if ((s == NATS_OK) && !nc->opts->ignoreDiscoveredServers && (nc->info.connectURLsCount > 0))
     {
         bool        added    = false;
         const char  *tlsName = NULL;
@@ -575,13 +582,13 @@ _processInfo(natsConnection *nc, char *info, int len)
                                    nc->info.connectURLsCount,
                                    tlsName,
                                    &added);
-        if ((s == NATS_OK) && added && !nc->initc && (nc->opts->discoveredServersCb != NULL))
+        if ((s == NATS_OK) && added && !nc->initc && postDiscoveredServersCb)
             natsAsyncCb_PostConnHandler(nc, ASYNC_DISCOVERED_SERVERS);
     }
     // Process the LDM callback after the above. It will cover cases where
     // we have connect URLs and invoke discovered server callback, and case
     // where we don't.
-    if ((s == NATS_OK) && nc->info.lameDuckMode && (nc->opts->lameDuckCb != NULL))
+    if ((s == NATS_OK) && nc->info.lameDuckMode && postLameDuckCb)
         natsAsyncCb_PostConnHandler(nc, ASYNC_LAME_DUCK_MODE);
 
     if (s != NATS_OK)
@@ -694,7 +701,6 @@ _makeTLSConn(natsConnection *nc)
     }
     if (s == NATS_OK)
     {
-#if defined(NATS_HAS_TLS)
         if (nc->opts->sslCtx->skipVerify)
         {
             SSL_set_verify(ssl, SSL_VERIFY_NONE, NULL);
@@ -729,7 +735,6 @@ _makeTLSConn(natsConnection *nc)
             if (s == NATS_OK)
                 SSL_set_verify(ssl, SSL_VERIFY_PEER, _collectSSLErr);
         }
-#endif
     }
     if ((s == NATS_OK) && (SSL_do_handshake(ssl) != 1))
     {
@@ -902,12 +907,29 @@ _connectProto(natsConnection *nc, char **proto)
         pwd   = opts->password;
         token = opts->token;
         nkey  = opts->nkey;
+
+        // Options take precedence for an implicit URL. If above is still
+        // empty, we will check if we have saved a user from an explicit
+        // URL in the server pool.
+        if (nats_IsStringEmpty(user)
+            && nats_IsStringEmpty(token)
+            && (nc->srvPool->user != NULL))
+        {
+            user = nc->srvPool->user;
+            pwd  = nc->srvPool->pwd;
+            // Again, if there is no password, assume username is token.
+            if (pwd == NULL)
+            {
+                token = user;
+                user = NULL;
+            }
+        }
     }
 
     if (opts->userJWTHandler != NULL)
     {
         char *errTxt = NULL;
-        bool userCb  = opts->userJWTHandler != natsConn_userFromFile;
+        bool userCb  = opts->userJWTHandler != natsConn_userCreds;
 
         // If callback is not the internal one, we need to release connection lock.
         if (userCb)
@@ -1115,6 +1137,15 @@ _resendSubscriptions(natsConnection *nc)
 
         adjustedMax = 0;
         natsSub_Lock(sub);
+        // If JS ordered consumer, trigger a reset. Don't check the error
+        // condition here. If there is a failure, it will be retried
+        // at the next HB interval.
+        if ((sub->jsi != NULL) && (sub->jsi->ordered))
+        {
+            jsSub_resetOrderedConsumer(sub, sub->jsi->sseq+1);
+            natsSub_Unlock(sub);
+            continue;
+        }
         if (natsSub_drainStarted(sub))
         {
             natsSub_Unlock(sub);
@@ -1500,6 +1531,15 @@ _doReconnect(void *arg)
     int                             i           = 0;
     natsCustomReconnectDelayHandler crd         = NULL;
     void                            *crdClosure = NULL;
+    bool                            postDisconnectedCb = false;
+    bool                            postReconnectedCb = false;
+    bool                            postConnectedCb = false;
+
+    natsOptions_lock(nc->opts);
+    postDisconnectedCb = (nc->opts->disconnectedCb != NULL);
+    postReconnectedCb = (nc->opts->reconnectedCb != NULL);
+    postConnectedCb = (nc->opts->connectedCb != NULL);
+    natsOptions_unlock(nc->opts);
 
     natsConn_Lock(nc);
 
@@ -1519,7 +1559,7 @@ _doReconnect(void *arg)
 
     // Perform appropriate callback if needed for a disconnect.
     // (do not do this if we are here on initial connect failure)
-    if (!nc->initc && (nc->opts->disconnectedCb != NULL))
+    if (!nc->initc && postDisconnectedCb)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
     crd = nc->opts->customReconnectDelayCB;
@@ -1529,7 +1569,6 @@ _doReconnect(void *arg)
         // TODO: since we sleep only after the whole list has been tried, we can't
         // rely on individual *natsSrv to know if it is a TLS or non-TLS url.
         // We have to pick which type of jitter to use, for now, we use these hints:
-        jitter = nc->opts->reconnectJitter;
         if (nc->opts->secure || (nc->opts->sslCtx != NULL))
             jitter = nc->opts->reconnectJitterTLS;
     }
@@ -1558,8 +1597,6 @@ _doReconnect(void *arg)
                 natsConn_Unlock(nc);
                 sleepTime = crd(nc, wlf, crdClosure);
                 natsConn_Lock(nc);
-                if (natsConn_isClosed(nc))
-                    break;
             }
             else
             {
@@ -1567,6 +1604,8 @@ _doReconnect(void *arg)
                 if (jitter > 0)
                     sleepTime += rand() % jitter;
             }
+            if (natsConn_isClosed(nc))
+                break;
             natsCondition_TimedWait(nc->reconnectCond, nc->mu, sleepTime);
         }
         else
@@ -1683,7 +1722,7 @@ _doReconnect(void *arg)
             // This was the initial connect. Set this to false.
             nc->initc = false;
             // Invoke the callback.
-            if (nc->opts->connectedCb != NULL)
+            if (postConnectedCb)
                 natsAsyncCb_PostConnHandler(nc, ASYNC_CONNECTED);
         }
         else
@@ -1691,7 +1730,7 @@ _doReconnect(void *arg)
             // Call reconnectedCB if appropriate. Since we are in a separate
             // thread, we could invoke the callback directly, however, we
             // still post it so all callbacks from a connection are serialized.
-            if (nc->opts->reconnectedCb != NULL)
+            if (postReconnectedCb)
                 natsAsyncCb_PostConnHandler(nc, ASYNC_RECONNECTED);
         }
 
@@ -1975,13 +2014,20 @@ _connect(natsConnection *nc)
     int         max = 0;
     int64_t     wtime = 0;
     bool        retry = false;
+    bool        retryOnFailedConnect = false;
+    bool        hasConnectedCb = false;
+
+    natsOptions_lock(nc->opts);
+    hasConnectedCb = (nc->opts->connectedCb != NULL);
+    retryOnFailedConnect = nc->opts->retryOnFailedConnect;
+    natsOptions_unlock(nc->opts);
 
     natsConn_Lock(nc);
     nc->initc = true;
 
     pool = nc->srvPool;
 
-    if ((nc->opts->retryOnFailedConnect) && (nc->opts->connectedCb == NULL))
+    if ((retryOnFailedConnect) && !hasConnectedCb)
     {
         retry = true;
         max   = nc->opts->maxReconnect;
@@ -2034,6 +2080,7 @@ _connect(natsConnection *nc)
                     retSts = NATS_OK;
             }
         }
+
         if (!retry)
             break;
 
@@ -2047,8 +2094,8 @@ _connect(natsConnection *nc)
 
     // If not connected and retry asynchronously on failed connect
     if ((nc->status != NATS_CONN_STATUS_CONNECTED)
-            && nc->opts->retryOnFailedConnect
-            && (nc->opts->connectedCb != NULL))
+            && retryOnFailedConnect
+            && hasConnectedCb)
     {
         natsConn_Unlock(nc);
 
@@ -2449,7 +2496,14 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     struct threadsToJoin    ttj;
     bool                    sockWasActive = false;
     bool                    detach = false;
+    bool                    postClosedCb = false;
+    bool                    postDisconnectedCb = false;
     natsSubscription        *sub = NULL;
+
+    natsOptions_lock(nc->opts);
+    postClosedCb = (nc->opts->closedCb != NULL);
+    postDisconnectedCb = (nc->opts->disconnectedCb != NULL);
+    natsOptions_unlock(nc->opts);
 
     natsConn_lockAndRetain(nc);
 
@@ -2524,7 +2578,7 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     // Perform appropriate callback if needed for a disconnect.
     // Do not invoke if we were disconnected and failed to reconnect (since
     // it has already been invoked in doReconnect).
-    if (doCBs && !nc->rle && (nc->opts->disconnectedCb != NULL) && sockWasActive)
+    if (doCBs && !nc->rle && postDisconnectedCb && sockWasActive)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
     sub = nc->respMux;
@@ -2540,7 +2594,7 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     natsConn_Lock(nc);
 
     // Perform appropriate callback if needed for a connection closed.
-    if (doCBs && (nc->opts->closedCb != NULL))
+    if (doCBs && postClosedCb)
         natsAsyncCb_PostConnHandler(nc, ASYNC_CLOSED);
 
     nc->status = status;
@@ -2577,10 +2631,10 @@ _createMsg(natsMsg **newMsg, natsConnection *nc, char *buf, int bufLen, int hdrL
         replyLen = natsBuf_Len(nc->ps->ma.reply);
     }
 
-    s = natsMsg_create(newMsg,
+    s = natsMsg_createWithPadding(newMsg,
                        (const char*) natsBuf_Data(nc->ps->ma.subject), subjLen,
                        (const char*) reply, replyLen,
-                       (const char*) buf, bufLen, hdrLen);
+                       (const char*) buf, bufLen, nc->opts->payloadPaddingSize, hdrLen);
     return s;
 }
 
@@ -2593,9 +2647,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     natsMsgDlvWorker *ldw = NULL;
     bool             sc   = false;
     bool             sm   = false;
-    int              dl   = 0;
     nats_MsgList     *list = NULL;
-    natsMutex        *mu   = NULL;
     natsCondition    *cond = NULL;
     // For JetStream cases
     jsSub            *jsi    = NULL;
@@ -2605,41 +2657,55 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     natsMsgFilter    mf      = NULL;
     void             *mfc    = NULL;
 
+    // Do this outside of locks, even if we end-up having to destroy
+    // it because we have reached the maxPendingMsgs count or other
+    // conditions. This reduces lock contention.
+    s = _createMsg(&msg, nc, buf, bufLen, nc->ps->ma.hdr);
+    if (s != NATS_OK)
+        return s;
+    // bufLen is the total length of headers + data. Since headers become
+    // more and more prevalent, it makes sense to count them both toward
+    // the subscription's pending limit. So use bufLen for accounting.
+
     natsMutex_Lock(nc->subsMu);
 
     nc->stats.inMsgs  += 1;
     nc->stats.inBytes += (uint64_t) bufLen;
 
-    sub = natsHash_Get(nc->subs, nc->ps->ma.sid);
-    if (sub != NULL)
+    if ((mf = nc->filter) != NULL)
     {
-        mf  = nc->filter;
         mfc = nc->filterClosure;
-    }
-    natsMutex_Unlock(nc->subsMu);
+        natsMutex_Unlock(nc->subsMu);
 
-    if (sub == NULL)
-        return NATS_OK;
-
-    // Do this outside of sub's lock, even if we end-up having to destroy
-    // it because we have reached the maxPendingMsgs count. This reduces
-    // lock contention.
-    s = _createMsg(&msg, nc, buf, bufLen, nc->ps->ma.hdr);
-    if (s != NATS_OK)
-        return s;
-    // bufLen is the overall buffer len. In presence of headers, we need
-    // to capture the real message payload data length, which has been
-    // computed as the bufLen - header size.
-    dl = msg->dataLen;
-
-    if (mf != NULL)
-    {
         (*mf)(nc, &msg, mfc);
         if (msg == NULL)
             return NATS_OK;
+
+        natsMutex_Lock(nc->subsMu);
     }
 
-    // Pick mutex, condition variable and list based on if the sub is
+    sub = natsHash_Get(nc->subs, nc->ps->ma.sid);
+    if (sub == NULL)
+    {
+        natsMutex_Unlock(nc->subsMu);
+        natsMsg_Destroy(msg);
+        return NATS_OK;
+    }
+    // We need to retain the subscription since as soon as we release the
+    // nc->subsMu lock, the subscription could be destroyed and we would
+    // reference freed memory.
+    natsSubAndLdw_LockAndRetain(sub);
+
+    natsMutex_Unlock(nc->subsMu);
+
+    if (sub->closed || sub->drainSkip)
+    {
+        natsSubAndLdw_UnlockAndRelease(sub);
+        natsMsg_Destroy(msg);
+        return NATS_OK;
+    }
+
+    // Pick condition variable and list based on if the sub is
     // part of a global delivery thread pool or not.
     // Note about `list`: this is used only to link messages, but
     // sub->msgList needs to be used to update/check number of pending
@@ -2647,26 +2713,18 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     // messages from many different subscriptions.
     if ((ldw = sub->libDlvWorker) != NULL)
     {
-        mu   = ldw->lock;
         cond = ldw->cond;
         list = &(ldw->msgList);
     }
     else
     {
-        mu   = sub->mu;
         cond = sub->cond;
         list = &(sub->msgList);
     }
 
-    natsMutex_Lock(mu);
-    if (sub->closed || sub->drainSkip)
-    {
-        natsMutex_Unlock(mu);
-        natsMsg_Destroy(msg);
-        return NATS_OK;
-    }
-
-    if ((jsi = sub->jsi) != NULL)
+    jsi = sub->jsi;
+    // For JS subscriptions (but not pull ones), handle hearbeat and flow control here.
+    if (jsi && !jsi->pull)
     {
         ctrlMsg = natsMsg_isJSCtrl(msg, &jct);
         if (ctrlMsg && jct == jsCtrlHeartbeat)
@@ -2680,10 +2738,10 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         {
             bool replaced = false;
 
-            s = jsSub_checkOrderedMsg(sub, mu, msg, &replaced);
+            s = jsSub_checkOrderedMsg(sub, msg, &replaced);
             if ((s != NATS_OK) || replaced)
             {
-                natsMutex_Unlock(mu);
+                natsSubAndLdw_UnlockAndRelease(sub);
                 natsMsg_Destroy(msg);
                 return s;
             }
@@ -2693,7 +2751,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     if (!ctrlMsg)
     {
         sub->msgList.msgs++;
-        sub->msgList.bytes += dl;
+        sub->msgList.bytes += bufLen;
 
         if (((sub->msgsLimit > 0) && (sub->msgList.msgs > sub->msgsLimit))
             || ((sub->bytesLimit > 0) && (sub->msgList.bytes > sub->bytesLimit)))
@@ -2707,7 +2765,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
             // Undo stats from above.
             sub->msgList.msgs--;
-            sub->msgList.bytes -= dl;
+            sub->msgList.bytes -= bufLen;
         }
         else
         {
@@ -2748,7 +2806,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     else if ((jct == jsCtrlHeartbeat) && (msg->reply == NULL))
     {
         // Handle control heartbeat messages.
-        s = jsSub_processSequenceMismatch(sub, mu, msg, &sm);
+        s = jsSub_processSequenceMismatch(sub, msg, &sm);
     }
     else if ((jct == jsCtrlFlowControl) && (msg->reply != NULL))
     {
@@ -2765,7 +2823,11 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         }
     }
 
-    natsMutex_Unlock(mu);
+    // If we are going to post to the error handler, do not release yet.
+    if (sc || sm)
+        natsSubAndLdw_Unlock(sub);
+    else
+        natsSubAndLdw_UnlockAndRelease(sub);
 
     if ((s == NATS_OK) && fcReply)
         s = natsConnection_Publish(nc, fcReply, NULL, 0);
@@ -2778,9 +2840,11 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         natsConn_Lock(nc);
 
         nc->err = (sc ? NATS_SLOW_CONSUMER : NATS_MISMATCH);
+        natsAsyncCb_PostErrHandler(nc, sub, nc->err, NULL);
 
-        if (nc->opts->asyncErrCb != NULL)
-            natsAsyncCb_PostErrHandler(nc, sub, nc->err, NULL);
+        // Now release the subscription (it has been retained in
+        // natsAsyncCb_PostErrHandler function).
+        natsSub_release(sub);
 
         natsConn_Unlock(nc);
     }
@@ -2802,8 +2866,7 @@ _processPermissionViolation(natsConnection *nc, char *error)
     natsConn_Lock(nc);
     nc->err = NATS_NOT_PERMITTED;
     snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
-    if (nc->opts->asyncErrCb != NULL)
-        natsAsyncCb_PostErrHandler(nc, NULL, nc->err, NATS_STRDUP(error));
+    natsAsyncCb_PostErrHandler(nc, NULL, nc->err, NATS_STRDUP(error));
     natsConn_Unlock(nc);
 }
 
@@ -2817,7 +2880,7 @@ _processAuthError(natsConnection *nc, int errCode, char *error)
     nc->err = NATS_CONNECTION_AUTH_FAILED;
     snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
 
-    if (!nc->initc && nc->opts->asyncErrCb != NULL)
+    if (!nc->initc)
         natsAsyncCb_PostErrHandler(nc, NULL, nc->err, NATS_STRDUP(error));
 
     if (nc->cur->lastAuthErrCode == errCode)
@@ -2970,7 +3033,7 @@ _isQueueNameValid(const char *name)
     len = (int) strlen(name);
     for (i=0; i<len ; i++)
     {
-        if (isspace(name[i]))
+        if (isspace((unsigned char) name[i]))
             return false;
     }
     return true;
@@ -3537,13 +3600,10 @@ natsConnection_Flush(natsConnection *nc)
 static void
 _pushDrainErr(natsConnection *nc, natsStatus s, const char *errTxt)
 {
+    char tmp[256];
     natsConn_Lock(nc);
-    if (nc->opts->asyncErrCb != NULL)
-    {
-        char tmp[256];
-        snprintf(tmp, sizeof(tmp), "Drain error: %s: %u (%s)", errTxt, s, natsStatus_GetText(s));
-        natsAsyncCb_PostErrHandler(nc, NULL, s, NATS_STRDUP(tmp));
-    }
+    snprintf(tmp, sizeof(tmp), "Drain error: %s: %u (%s)", errTxt, s, natsStatus_GetText(s));
+    natsAsyncCb_PostErrHandler(nc, NULL, s, NATS_STRDUP(tmp));
     natsConn_Unlock(nc);
 }
 
@@ -3790,7 +3850,7 @@ natsConnection_Buffered(natsConnection *nc)
     int buffered = -1;
 
     if (nc == NULL)
-        return nats_setDefaultError(NATS_INVALID_ARG);
+        return buffered;
 
     natsConn_Lock(nc);
 
@@ -3852,7 +3912,8 @@ natsConnection_GetConnectedUrl(natsConnection *nc, char *buffer, size_t bufferSi
 
     buffer[0] = '\0';
 
-    if ((nc->status == NATS_CONN_STATUS_CONNECTED) && (nc->cur->url->fullUrl != NULL))
+    if (((nc->status == NATS_CONN_STATUS_CONNECTED) || (nc->status == NATS_CONN_STATUS_CONNECTING))
+        && (nc->cur->url->fullUrl != NULL))
     {
         if (strlen(nc->cur->url->fullUrl) >= bufferSize)
             s = nats_setDefaultError(NATS_INSUFFICIENT_BUFFER);
@@ -3878,7 +3939,8 @@ natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t buf
 
     buffer[0] = '\0';
 
-    if ((nc->status == NATS_CONN_STATUS_CONNECTED) && (nc->info.id != NULL))
+    if (((nc->status == NATS_CONN_STATUS_CONNECTED) || (nc->status == NATS_CONN_STATUS_CONNECTING))
+        && (nc->info.id != NULL))
     {
         if (strlen(nc->info.id) >= bufferSize)
             s = nats_setDefaultError(NATS_INSUFFICIENT_BUFFER);
@@ -4187,12 +4249,15 @@ _getJwtOrSeed(char **val, const char *fn, bool seed, int item)
 }
 
 natsStatus
-natsConn_userFromFile(char **userJWT, char **customErrTxt, void *closure)
+natsConn_userCreds(char **userJWT, char **customErrTxt, void *closure)
 {
     natsStatus  s   = NATS_OK;
     userCreds   *uc = (userCreds*) closure;
 
-    s = _getJwtOrSeed(userJWT, uc->userOrChainedFile, false, 0);
+    if (uc->jwtAndSeedContent != NULL)
+        s = nats_GetJWTOrSeed(userJWT, uc->jwtAndSeedContent, 0);
+    else
+        s = _getJwtOrSeed(userJWT, uc->userOrChainedFile, false, 0);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -4203,7 +4268,9 @@ _sign(userCreds *uc, const unsigned char *input, int inputLen, unsigned char *si
     natsStatus      s            = NATS_OK;
     char            *encodedSeed = NULL;
 
-    if (uc->seedFile != NULL)
+    if (uc->jwtAndSeedContent != NULL)
+        s = nats_GetJWTOrSeed(&encodedSeed, uc->jwtAndSeedContent, 1);
+    else if (uc->seedFile != NULL)
         s = _getJwtOrSeed(&encodedSeed, uc->seedFile, true, 0);
     else
         s = _getJwtOrSeed(&encodedSeed, uc->userOrChainedFile, true, 1);
@@ -4367,4 +4434,40 @@ natsConn_setFilterWithClosure(natsConnection *nc, natsMsgFilter f, void* closure
     nc->filter        = f;
     nc->filterClosure = closure;
     natsMutex_Unlock(nc->subsMu);
+}
+
+void
+natsConn_defaultErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
+{
+    uint64_t    cid      = 0;
+    const char  *lastErr = NULL;
+    const char  *errTxt  = NULL;
+
+    natsConn_Lock(nc);
+    cid = nc->info.CID;
+    natsConn_Unlock(nc);
+
+    // Get possibly more detailed error message. If empty, we will print the default
+    // error status text.
+    natsConnection_GetLastError(nc, &lastErr);
+    errTxt = (nats_IsStringEmpty(lastErr) ? natsStatus_GetText(err) : lastErr);
+    // If there is a subscription, check if it is a JetStream one and if so, take
+    // the "public" subject (the one that was provided to the subscribe call).
+    if (sub != NULL)
+    {
+        char *subject = NULL;
+
+        natsSub_Lock(sub);
+        if ((sub->jsi != NULL) && (sub->jsi->psubj != NULL))
+            subject = sub->jsi->psubj;
+        else
+            subject = sub->subject;
+        fprintf(stderr, "Error %d - %s on connection [%" PRIu64 "] on \"%s\"\n", err, errTxt, cid, subject);
+        natsSub_Unlock(sub);
+    }
+    else
+    {
+        fprintf(stderr, "Error %d - %s on connection [%" PRIu64 "]\n", err, errTxt, cid);
+    }
+    fflush(stderr);
 }

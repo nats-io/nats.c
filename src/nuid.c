@@ -76,7 +76,7 @@ _rand64(int64_t maxValue)
 {
     int64_t v;
 
-    v  = ((int64_t) _randCMWC() << 32);
+    v  = ((uint64_t) _randCMWC() << 32);
     v |= (int64_t) _randCMWC();
 
     if (v < 0)

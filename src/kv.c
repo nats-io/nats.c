@@ -21,9 +21,11 @@
 #include "conn.h"
 #include "sub.h"
 
-static const char *kvBucketNameTmpl  = "KV_%s";
-static const char *kvSubjectsTmpl    = "$KV.%s.>";
-static const char *kvSubjectsPreTmpl = "$KV.%s.";
+static const char *kvBucketNamePre          = "KV_";
+static const char *kvBucketNameTmpl         = "KV_%s";
+static const char *kvSubjectsTmpl           = "$KV.%s.>";
+static const char *kvSubjectsPreTmpl        = "$KV.%s.";
+static const char *kvSubjectsPreDomainTmpl  = "%s.$KV.%s.";
 
 #define KV_WATCH_FOR_EVER (int64_t)(0x7FFFFFFFFFFFFFFF)
 
@@ -34,14 +36,17 @@ natsBuffer  buf;
 #define USE_JS_PREFIX   true
 #define KEY_NAME_ONLY   false
 
-#define BUILD_SUBJECT(p) \
+#define FOR_A_PUT       true
+#define NOT_FOR_A_PUT   false
+
+#define BUILD_SUBJECT(p, fp) \
 s = natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer)); \
 if ((p) && kv->useJSPrefix) \
 { \
     IFOK(s, natsBuf_Append(&buf, kv->js->opts.Prefix, -1)); \
     IFOK(s, natsBuf_AppendByte(&buf, '.')); \
 } \
-IFOK(s, natsBuf_Append(&buf, kv->pre, -1)); \
+IFOK(s, natsBuf_Append(&buf, ((fp) ? (kv->usePutPre ? kv->putPre : kv->pre) : kv->pre), -1)); \
 IFOK(s, natsBuf_Append(&buf, key, -1)); \
 IFOK(s, natsBuf_AppendByte(&buf, 0));
 
@@ -101,7 +106,7 @@ validBucketName(const char *bucket)
     for (i=0; i<(int)strlen(bucket); i++)
     {
         c = bucket[i];
-        if ((isalnum(c) == 0) && (c != '_') && (c != '-'))
+        if ((isalnum((unsigned char) c) == 0) && (c != '_') && (c != '-'))
             return false;
     }
     return true;
@@ -119,6 +124,7 @@ _freeKV(kvStore *kv)
     NATS_FREE(kv->bucket);
     NATS_FREE(kv->stream);
     NATS_FREE(kv->pre);
+    NATS_FREE(kv->putPre);
     natsMutex_Destroy(kv->mu);
     NATS_FREE(kv);
     js_release(js);
@@ -188,52 +194,38 @@ _createKV(kvStore **new_kv, jsCtx *js, const char *bucket)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static bool
-_sameStrings(const char *s1, const char *s2)
+static natsStatus
+_changePutPrefixIfMirrorPresent(kvStore *kv, jsStreamInfo *si)
 {
-    bool s1Empty = nats_IsStringEmpty(s1);
-    bool s2Empty = nats_IsStringEmpty(s2);
+    natsStatus      s       = NATS_OK;
+    const char      *bucket = NULL;
+    jsStreamSource  *m      = si->Config->Mirror;
 
-    // Same if both empty.
-    if (s1Empty && s2Empty)
-        return true;
+    if (m == NULL)
+        return NATS_OK;
 
-    // Not same if one is empty while other is not.
-    if ((s1Empty && !s2Empty) || (!s1Empty && s2Empty))
-        return false;
+    bucket = m->Name;
+    if (strstr(m->Name, kvBucketNamePre) == m->Name)
+        bucket = m->Name + strlen(kvBucketNamePre);
 
-    // Return result of comparison of s1 and s2
-    return (strcmp(s1, s2) == 0 ? true : false);
-}
+    if ((m->External != NULL) && !nats_IsStringEmpty(m->External->APIPrefix))
+    {
+        kv->useJSPrefix = false;
 
-static bool
-_sameStreamCfg(jsStreamConfig *oc, jsStreamConfig *nc)
-{
-    // Check some of the stream's configuration properties only,
-    // the ones that we set when creating a KV stream.
-    if (!_sameStrings(oc->Description, nc->Description))
-        return false;
-    if (oc->SubjectsLen != nc->SubjectsLen)
-        return false;
-    if (!_sameStrings(oc->Subjects[0], nc->Subjects[0]))
-        return false;
-    if (oc->MaxMsgsPerSubject != nc->MaxMsgsPerSubject)
-        return false;
-    if (oc->MaxBytes != nc->MaxBytes)
-        return false;
-    if (oc->MaxAge != nc->MaxAge)
-        return false;
-    if (oc->MaxMsgSize != nc->MaxMsgSize)
-        return false;
-    if (oc->Storage != nc->Storage)
-        return false;
-    if (oc->Replicas != nc->Replicas)
-        return false;
-    if (oc->AllowRollup != nc->AllowRollup)
-        return false;
-    if (oc->DenyDelete != nc->DenyDelete)
-        return false;
-    return true;
+        NATS_FREE(kv->pre);
+        kv->pre = NULL;
+        if (nats_asprintf(&(kv->pre), kvSubjectsPreTmpl, bucket) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else if (nats_asprintf(&(kv->putPre), kvSubjectsPreDomainTmpl, m->External->APIPrefix, bucket) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    else if (nats_asprintf(&(kv->putPre), kvSubjectsPreTmpl, bucket) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+
+    if (s == NATS_OK)
+        kv->usePutPre = true;
+
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -244,6 +236,9 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
     int64_t         replicas= 1;
     kvStore         *kv     = NULL;
     char            *subject= NULL;
+    jsStreamInfo    *si     = NULL;
+    const char      *omn    = NULL;
+    const char      **osn   = NULL;
     jsStreamConfig  sc;
 
     if ((new_kv == NULL) || (js == NULL) || (cfg == NULL))
@@ -273,12 +268,11 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
         int64_t     maxBytes    = (cfg->MaxBytes == 0 ? -1 : cfg->MaxBytes);
         int32_t     maxMsgSize  = (cfg->MaxValueSize == 0 ? -1 : cfg->MaxValueSize);
         jsErrCode   jerr        = 0;
+        const char  **subjects  = (const char*[1]){subject};
 
         jsStreamConfig_Init(&sc);
         sc.Name = kv->stream;
         sc.Description = cfg->Description;
-        sc.Subjects = (const char*[1]){subject};
-        sc.SubjectsLen = 1;
         sc.MaxMsgsPerSubject = history;
         sc.MaxBytes = maxBytes;
         sc.MaxAge = cfg->TTL;
@@ -287,28 +281,108 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
         sc.Replicas = replicas;
         sc.AllowRollup = true;
         sc.DenyDelete = true;
+        sc.AllowDirect = true;
+        sc.RePublish = cfg->RePublish;
+
+        if (cfg->Mirror != NULL)
+        {
+            jsStreamSource *m = cfg->Mirror;
+
+            if (!nats_IsStringEmpty(m->Name)
+                && (strstr(m->Name, kvBucketNamePre) != m->Name))
+            {
+                char *newName = NULL;
+                if (nats_asprintf(&newName, kvBucketNameTmpl, m->Name) < 0)
+                    s = nats_setDefaultError(NATS_NO_MEMORY);
+                else
+                {
+                    omn = m->Name;
+                    m->Name = newName;
+                }
+            }
+            sc.Mirror = m;
+            sc.MirrorDirect = true;
+        }
+        else if (cfg->SourcesLen > 0)
+        {
+            osn = (const char**) NATS_CALLOC(cfg->SourcesLen, sizeof(char*));
+            if (osn == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+
+            if (s == NATS_OK)
+            {
+                int i;
+
+                for (i=0; i<cfg->SourcesLen; i++)
+                {
+                    jsStreamSource *ss = cfg->Sources[i];
+
+                    if (ss == NULL)
+                        continue;
+
+                    // Set this regardless of error in the loop. We need it for
+                    // proper cleanup at the end.
+                    osn[i] = ss->Name;
+
+                    if ((s == NATS_OK) && !nats_IsStringEmpty(ss->Name)
+                        && (strstr(ss->Name, kvBucketNamePre) != ss->Name))
+                    {
+                        char *newName = NULL;
+
+                        if (nats_asprintf(&newName, kvBucketNameTmpl, ss->Name) < 0)
+                            s = nats_setDefaultError(NATS_NO_MEMORY);
+                        else
+                            ss->Name = newName;
+                    }
+                }
+                if (s == NATS_OK)
+                {
+                    sc.Sources = cfg->Sources;
+                    sc.SourcesLen = cfg->SourcesLen;
+                }
+            }
+        }
+        else
+        {
+            sc.Subjects = subjects;
+            sc.SubjectsLen = 1;
+        }
 
         // If connecting to a v2.7.2+, create with discard new policy
         if (natsConn_srvVersionAtLeast(kv->js->nc, 2, 7, 2))
             sc.Discard = js_DiscardNew;
 
-        s = js_AddStream(NULL, js, &sc, NULL, &jerr);
-        if ((s != NATS_OK) && (jerr == JSStreamNameExistErr))
+        s = js_AddStream(&si, js, &sc, NULL, &jerr);
+        if (s == NATS_OK)
         {
-            jsStreamInfo *si = NULL;
+            // If the stream allow direct get message calls, then we will do so.
+            kv->useDirect = si->Config->AllowDirect;
 
-            nats_clearLastError();
-            s = js_GetStreamInfo(&si, js, sc.Name, NULL, NULL);
-            if (s == NATS_OK)
+            s = _changePutPrefixIfMirrorPresent(kv, si);
+        }
+        jsStreamInfo_Destroy(si);
+
+        // Restore original mirror/source names
+        if (omn != NULL)
+        {
+            NATS_FREE((char*) cfg->Mirror->Name);
+            cfg->Mirror->Name = omn;
+        }
+        if (osn != NULL)
+        {
+            int i;
+
+            for (i=0; i<cfg->SourcesLen; i++)
             {
-                si->Config->Discard = sc.Discard;
-                if (_sameStreamCfg(si->Config, &sc))
-                    s = js_UpdateStream(NULL, js, &sc, NULL, NULL);
-                else
-                    s = nats_setError(NATS_ERR, "%s",
-                        "Existing configuration is different");
+                jsStreamSource *ss = cfg->Sources[i];
+
+                if ((ss != NULL) && (ss->Name != osn[i]))
+                {
+                    NATS_FREE((char*) ss->Name);
+                    ss->Name = osn[i];
+                }
             }
-            jsStreamInfo_Destroy(si);
+            NATS_FREE((char**) osn);
         }
     }
     if (s == NATS_OK)
@@ -338,10 +412,15 @@ js_KeyValue(kvStore **new_kv, jsCtx *js, const char *bucket)
     s = js_GetStreamInfo(&si, js, kv->stream, NULL, NULL);
     if (s == NATS_OK)
     {
+        // If the stream allow direct get message calls, then we will do so.
+        kv->useDirect = si->Config->AllowDirect;
+
         // Do some quick sanity checks that this is a correctly formed stream for KV.
         // Max msgs per subject should be > 0.
         if (si->Config->MaxMsgsPerSubject < 1)
             s = nats_setError(NATS_INVALID_ARG, "%s", kvErrBadBucket);
+
+        IFOK(s, _changePutPrefixIfMirrorPresent(kv, si));
 
         jsStreamInfo_Destroy(si);
     }
@@ -402,8 +481,8 @@ validKey(const char *key)
         {
             return false;
         }
-        else if ((isalnum(c) == 0) && (c != '.') && (c != '_') && (c != '-')
-                    && (c != '/') && (c != '\\') && (c != '='))
+        else if ((isalnum((unsigned char) c) == 0) && (c != '.') && (c != '_')
+                    && (c != '-') && (c != '/') && (c != '\\') && (c != '='))
         {
             return false;
         }
@@ -456,6 +535,7 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key, uint
     natsMsg     *msg    = NULL;
     kvEntry     *e      = NULL;
     DEFINE_BUF_FOR_SUBJECT;
+    jsDirectGetMsgOptions dgo;
 
     *new_entry = NULL;
     *deleted   = false;
@@ -463,16 +543,30 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key, uint
     if (!validKey(key))
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
-    BUILD_SUBJECT(KEY_NAME_ONLY);
-    if (revision == 0)
+    BUILD_SUBJECT(KEY_NAME_ONLY, NOT_FOR_A_PUT);
+
+    if (kv->useDirect)
+    {
+        jsDirectGetMsgOptions_Init(&dgo);
+        if (revision == 0)
+            dgo.LastBySubject = natsBuf_Data(&buf);
+        else
+            dgo.Sequence = revision;
+
+        IFOK(s, js_DirectGetMsg(&msg, kv->js, kv->stream, NULL, &dgo));
+    }
+    else if (revision == 0)
     {
         IFOK(s, js_GetLastMsg(&msg, kv->js, kv->stream, natsBuf_Data(&buf), NULL, NULL));
     }
     else
     {
         IFOK(s, js_GetMsg(&msg, kv->js, kv->stream, revision, NULL, NULL));
-        IFOK(s, (strcmp(natsMsg_GetSubject(msg), natsBuf_Data(&buf)) == 0 ? NATS_OK : NATS_NOT_FOUND));
     }
+    // If a sequence was provided, just make sure that the retrieved
+    // message subject matches the request.
+    if (revision != 0)
+        IFOK(s, (strcmp(natsMsg_GetSubject(msg), natsBuf_Data(&buf)) == 0 ? NATS_OK : NATS_NOT_FOUND));
     IFOK(s, _createEntry(&e, kv, &msg));
     if (s == NATS_OK)
         e->op = _getKVOp(e->msg);
@@ -569,7 +663,7 @@ _putEntry(uint64_t *rev, kvStore *kv, jsPubOptions *po, const char *key, const v
     if (!validKey(key))
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
-    BUILD_SUBJECT(USE_JS_PREFIX);
+    BUILD_SUBJECT(USE_JS_PREFIX, FOR_A_PUT);
     IFOK(s, js_Publish(ppa, kv->js, natsBuf_Data(&buf), data, len, po, NULL));
 
     if ((s == NATS_OK) && (rev != NULL))
@@ -672,7 +766,7 @@ _delete(kvStore *kv, const char *key, bool purge, kvPurgeOptions *opts)
     if (!validKey(key))
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
 
-    BUILD_SUBJECT(USE_JS_PREFIX);
+    BUILD_SUBJECT(USE_JS_PREFIX, FOR_A_PUT);
     IFOK(s, natsMsg_Create(&msg, natsBuf_Data(&buf), NULL, NULL, 0));
     if (s == NATS_OK)
     {
@@ -785,6 +879,7 @@ kvStore_PurgeDeletes(kvStore *kv, kvPurgeOptions *opts)
         for (; h != NULL; )
         {
             natsBuf_Reset(&buf);
+            // Use kv->pre here, always.
             IFOK(s, natsBuf_Append(&buf, kv->pre, -1));
             IFOK(s, natsBuf_Append(&buf, h->key, -1));
             IFOK(s, natsBuf_AppendByte(&buf, '\0'));
@@ -891,6 +986,7 @@ GET_NEXT:
         }
         w->refs--;
 
+        // Use kv->pre here, always.
         if ((s == NATS_OK) && (strlen(msg->subject) <= strlen(w->kv->pre)))
             s = nats_setError(NATS_ERR, "invalid update's subject '%s'", msg->subject);
 
@@ -980,7 +1076,7 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
     w->kv = kv;
     w->refs = 1;
 
-    BUILD_SUBJECT(KEY_NAME_ONLY);
+    BUILD_SUBJECT(KEY_NAME_ONLY, NOT_FOR_A_PUT);
     IFOK(s, natsMutex_Create(&(w->mu)));
     if (s == NATS_OK)
     {
@@ -997,7 +1093,11 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
             if (opts->IgnoreDeletes)
                 w->ignoreDel = true;
         }
+        // Need to explicitly bind to the stream here because the subject
+        // we construct may not help find the stream when using mirrors.
+        so.Stream = kv->stream;
         s = js_SubscribeSync(&(w->sub), kv->js, natsBuf_Data(&buf), NULL, &so, NULL);
+        IFOK(s, natsSubscription_SetPendingLimits(w->sub, -1, -1));
         if (s == NATS_OK)
         {
             natsSubscription *sub = w->sub;
@@ -1042,7 +1142,7 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     list->Keys = NULL;
-    *(int*)&(list->Count) = 0;
+    list->Count = 0;
 
     kvWatchOptions_Init(&o);
     if (opts != NULL)
@@ -1085,7 +1185,7 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
     // Set the list's Count to `count`, not `n` since `count`
     // will reflect the actual number of keys that have been
     // properly strdup'ed.
-    *(int*)&(list->Count) = count;
+    list->Count = count;
 
     // If there was a failure (especially when strdup'ing) keys,
     // this will do the proper cleanup and re-initialize the list.
@@ -1107,7 +1207,7 @@ kvKeysList_Destroy(kvKeysList *list)
         NATS_FREE(list->Keys[i]);
     NATS_FREE(list->Keys);
     list->Keys = NULL;
-    *(int*)&(list->Count) = 0;
+    list->Count = 0;
 }
 
 natsStatus
@@ -1128,7 +1228,7 @@ kvStore_History(kvEntryList *list, kvStore *kv, const char *key, kvWatchOptions 
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     list->Entries = NULL;
-    *(int*)&(list->Count) = 0;
+    list->Count = 0;
 
     kvWatchOptions_Init(&o);
     if (opts != NULL)
@@ -1153,7 +1253,7 @@ kvStore_History(kvEntryList *list, kvStore *kv, const char *key, kvWatchOptions 
         if (list->Entries == NULL)
             s = nats_setDefaultError(NATS_NO_MEMORY);
         else
-            *(int*)&(list->Count) = n;
+            list->Count = n;
     }
     // Transfer entries to the array (on success), or destroy
     // the entries if there was an error.
@@ -1187,7 +1287,7 @@ kvEntryList_Destroy(kvEntryList *list)
         kvEntry_Destroy(list->Entries[i]);
     NATS_FREE(list->Entries);
     list->Entries = NULL;
-    *(int*)&(list->Count) = 0;
+    list->Count = 0;
 }
 
 natsStatus
@@ -1278,6 +1378,12 @@ int64_t
 kvStatus_Replicas(kvStatus *sts)
 {
     return (sts == NULL || sts->si->Config == NULL ? 0 : sts->si->Config->Replicas);
+}
+
+uint64_t
+kvStatus_Bytes(kvStatus *sts)
+{
+    return (sts == NULL ? 0 : sts->si->State.Bytes);
 }
 
 void

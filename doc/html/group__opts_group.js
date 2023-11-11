@@ -35,6 +35,7 @@ var group__opts_group =
     [ "natsOptions_SetDisconnectedCB", "group__opts_group.html#gadc8dc0cedd91bda71d544f3dedc4a039", null ],
     [ "natsOptions_SetReconnectedCB", "group__opts_group.html#ga26a48c8529fffa5f5d1a61c030979980", null ],
     [ "natsOptions_SetDiscoveredServersCB", "group__opts_group.html#gab5baab507c974402ab0d8c5e8227ee65", null ],
+    [ "natsOptions_SetIgnoreDiscoveredServers", "group__opts_group.html#ga7e4172084520708b8c9f28e73174461c", null ],
     [ "natsOptions_SetLameDuckModeCB", "group__opts_group.html#ga54dea2ffeb33779771652a7a14fc4adc", null ],
     [ "natsOptions_SetEventLoop", "group__opts_group.html#gab09491bad908dedcb323c780280733ff", null ],
     [ "natsOptions_UseGlobalMessageDelivery", "group__opts_group.html#gabf060c92648b50c069f0abe7cbb06f1c", null ],
@@ -46,10 +47,12 @@ var group__opts_group =
     [ "natsOptions_SetRetryOnFailedConnect", "group__opts_group.html#ga20946800d024b7089e73d63454d1c19f", null ],
     [ "natsOptions_SetUserCredentialsCallbacks", "group__opts_group.html#ga60117450fc1f7b6f81bab455aeed7515", null ],
     [ "natsOptions_SetUserCredentialsFromFiles", "group__opts_group.html#ga59b47f7b7a19085cf8eaada9bfe5606e", null ],
+    [ "natsOptions_SetUserCredentialsFromMemory", "group__opts_group.html#ga5d3d4d1269dd289f93c56b8a1ddccd43", null ],
     [ "natsOptions_SetNKey", "group__opts_group.html#ga0290eac4665569c850468d9f00e246a0", null ],
     [ "natsOptions_SetNKeyFromSeed", "group__opts_group.html#ga696f02e0493c00d3c1eafff45b62b68e", null ],
     [ "natsOptions_SetWriteDeadline", "group__opts_group.html#gaafda5fb8d9ee3a17bd475ceaecfac218", null ],
     [ "natsOptions_DisableNoResponders", "group__opts_group.html#ga192465163abb87ad48a843b45cdf9984", null ],
     [ "natsOptions_SetCustomInboxPrefix", "group__opts_group.html#gac5173473a731a4a36d15346fedddf91f", null ],
+    [ "natsOptions_SetMessageBufferPadding", "group__opts_group.html#ga5acd292cdaeb63d3d7bd9bbc05513c8f", null ],
     [ "natsOptions_Destroy", "group__opts_group.html#ga93d8068cd6fff53b7f8e1c403db45eb9", null ]
 ];

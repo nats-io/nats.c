@@ -1,10 +1,8 @@
 var searchData=
 [
-  ['ackfloor_0',['AckFloor',['../structjs_consumer_info.html#ab69c36ae092df9b0663b675a5abbab55',1,'jsConsumerInfo']]],
-  ['ackpolicy_1',['AckPolicy',['../structjs_consumer_config.html#a8a311af614dfae1b0f4e4af7db467aab',1,'jsConsumerConfig']]],
-  ['ackwait_2',['AckWait',['../structjs_consumer_config.html#a651a94b9b78668dde830dc7869610e67',1,'jsConsumerConfig']]],
-  ['active_3',['Active',['../structjs_peer_info.html#a8441d023932c388953197f7ea39402fe',1,'jsPeerInfo::Active()'],['../structjs_stream_source_info.html#a28b8cc0a9d487672955d3a3fa03de247',1,'jsStreamSourceInfo::Active()']]],
-  ['allowrollup_4',['AllowRollup',['../structjs_stream_config.html#aba71cdb342181f52bb9f7ff5f770a1fa',1,'jsStreamConfig']]],
-  ['api_5',['API',['../structjs_account_info.html#a94ab71c69b7883c2731ae8741ddc1e94',1,'jsAccountInfo']]],
-  ['apiprefix_6',['APIPrefix',['../structjs_external_stream.html#a2eaf2c0c3e77c269f44e254af8b24e96',1,'jsExternalStream']]]
+  ['backoff_0',['BackOff',['../structjs_consumer_config.html#aa2d0aff64a2c46122d0f0fe89e8ae011',1,'jsConsumerConfig']]],
+  ['backofflen_1',['BackOffLen',['../structjs_consumer_config.html#ad2f6ca3f2d0f977aedb8687c462c1cfc',1,'jsConsumerConfig']]],
+  ['batch_2',['Batch',['../structjs_fetch_request.html#a84f06b60e25decb2674996f0cb315f63',1,'jsFetchRequest']]],
+  ['bucket_3',['Bucket',['../structkv_config.html#a11b636da727c17566d5ab1274f69fee5',1,'kvConfig']]],
+  ['bytes_4',['bytes',['../structjs_lost_stream_data.html#a841fcadca3f66e9170a51080dc1acf30',1,'jsLostStreamData::Bytes'],['../structjs_stream_state.html#ae603fa6ecfb63c93b61272b7d1b8fb4d',1,'jsStreamState::Bytes']]]
 ];

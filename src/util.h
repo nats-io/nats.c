@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2023 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -15,6 +15,7 @@
 #define UTIL_H_
 
 #include "natsp.h"
+#include "mem.h"
 
 #define JSON_MAX_NEXTED 100
 
@@ -45,7 +46,6 @@ typedef struct
 {
     char        *str;
     natsStrHash *fields;
-
 } nats_JSON;
 
 typedef struct
@@ -67,8 +67,6 @@ typedef struct
 } nats_JSONField;
 
 typedef natsStatus (*jsonRangeCB)(void *userInfo, const char *fieldName, nats_JSONField *f);
-
-#define nats_IsStringEmpty(s) (((s == NULL) || (s[0] == '\0')) ? true : false)
 
 #define snprintf_truncate(d, szd, f, ...) if (snprintf((d), (szd), (f), __VA_ARGS__) >= (int) (szd)) { \
     int offset = (int) (szd) - 2;         \
@@ -242,7 +240,25 @@ nats_marshalLong(natsBuffer *buf, bool comma, const char *fieldName, int64_t lva
 natsStatus
 nats_marshalULong(natsBuffer *buf, bool comma, const char *fieldName, uint64_t uval);
 
+natsStatus
+nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, int64_t d);
+
+natsStatus
+nats_marshalMetadata(natsBuffer *buf, bool comma, const char *fieldName, natsMetadata md);
+
+natsStatus
+nats_unmarshalMetadata(nats_JSON *json, const char *fieldName, natsMetadata *md);
+
+natsStatus
+nats_cloneMetadata(natsMetadata *clone, natsMetadata md);
+
+void
+nats_freeMetadata(natsMetadata *md);
+
 bool
 nats_IsSubjectValid(const char *subject, bool wcAllowed);
+
+natsStatus
+nats_parseTime(char *str, int64_t *timeUTC);
 
 #endif /* UTIL_H_ */

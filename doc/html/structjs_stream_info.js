@@ -6,5 +6,7 @@ var structjs_stream_info =
     [ "Cluster", "structjs_stream_info.html#a8d10d6fdc3f713ac726c72cae06a209a", null ],
     [ "Mirror", "structjs_stream_info.html#ab71aae7e4f6c62e2a09a3a52c9e4fa2a", null ],
     [ "Sources", "structjs_stream_info.html#a2e7ca48a93fe57265609e7e0cd3fa386", null ],
-    [ "SourcesLen", "structjs_stream_info.html#af14110cb1f8e16e3dade8d9f7c2fd672", null ]
+    [ "SourcesLen", "structjs_stream_info.html#af14110cb1f8e16e3dade8d9f7c2fd672", null ],
+    [ "Alternates", "structjs_stream_info.html#a720c4ff9090bafda50000843810ab1bb", null ],
+    [ "AlternatesLen", "structjs_stream_info.html#ad37a5fd700bd5df54e5002c7de51c3ad", null ]
 ];

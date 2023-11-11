@@ -114,10 +114,32 @@ natsSubAndLdw_Lock(natsSubscription *sub)
 }
 
 void
+natsSubAndLdw_LockAndRetain(natsSubscription *sub)
+{
+    natsMutex_Lock(sub->mu);
+    sub->refs++;
+    SUB_DLV_WORKER_LOCK(sub);
+}
+
+void
 natsSubAndLdw_Unlock(natsSubscription *sub)
 {
     SUB_DLV_WORKER_UNLOCK(sub);
     natsMutex_Unlock(sub->mu);
+}
+
+void
+natsSubAndLdw_UnlockAndRelease(natsSubscription *sub)
+{
+    int refs = 0;
+
+    SUB_DLV_WORKER_UNLOCK(sub);
+
+    refs = --(sub->refs);
+    natsMutex_Unlock(sub->mu);
+
+    if (refs == 0)
+        _freeSubscription(sub);
 }
 
 // Runs under the subscription lock but will release it for a JS subscription
@@ -239,7 +261,7 @@ natsSub_deliverMsgs(void *arg)
             sub->msgList.tail = NULL;
 
         sub->msgList.msgs--;
-        sub->msgList.bytes -= msg->dataLen;
+        sub->msgList.bytes -= natsMsg_dataAndHdrLen(msg);
 
         msg->next = NULL;
 
@@ -731,7 +753,7 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
                 sub->msgList.tail = NULL;
 
             sub->msgList.msgs--;
-            sub->msgList.bytes -= msg->dataLen;
+            sub->msgList.bytes -= natsMsg_dataAndHdrLen(msg);
 
             msg->next = NULL;
 
@@ -1124,6 +1146,52 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
     return s;
 }
 
+int64_t
+natsSubscription_GetID(natsSubscription* sub)
+{
+    int64_t id = 0;
+
+    if (sub == NULL)
+        return 0;
+
+    natsSub_Lock(sub);
+
+    if (sub->closed)
+    {
+        natsSub_Unlock(sub);
+        return 0;
+    }
+
+    id = sub->sid;
+
+    natsSub_Unlock(sub);
+
+    return id;
+}
+
+const char*
+natsSubscription_GetSubject(natsSubscription* sub)
+{
+    const char* subject = NULL;
+
+    if (sub == NULL)
+        return NULL;
+
+    natsSub_Lock(sub);
+
+    if (sub->closed)
+    {
+        natsSub_Unlock(sub);
+        return NULL;
+    }
+
+    subject = (const char*)sub->subject;
+
+    natsSub_Unlock(sub);
+
+    return subject;
+}
+
 natsStatus
 natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes)
 {
@@ -1401,6 +1469,16 @@ natsSubscription_Destroy(natsSubscription *sub)
     natsSub_Lock(sub);
 
     doUnsub = !(sub->closed);
+    // If not yet closed but user is closing from message callback but it
+    // happens that auto-unsub was used and the max number was delivered, then
+    // we can suppress the UNSUB protocol.
+    if (doUnsub && (sub->max > 0))
+        doUnsub = sub->delivered < sub->max;
+
+    // For a JetStream subscription, disable the "delete consumer" flag
+    // because we auto-delete only on explicit calls to unsub/drain.
+    if (sub->jsi != NULL)
+        sub->jsi->dc = false;
 
     natsSub_Unlock(sub);
 

@@ -549,6 +549,7 @@ _processInfo(natsConnection *nc, char *info, int len)
     IFOK(s, nats_JSONGetInt(json, "port", &(nc->info.port)));
     IFOK(s, nats_JSONGetBool(json, "auth_required", &(nc->info.authRequired)));
     IFOK(s, nats_JSONGetBool(json, "tls_required", &(nc->info.tlsRequired)));
+    IFOK(s, nats_JSONGetBool(json, "tls_available", &(nc->info.tlsAvailable)));
     IFOK(s, nats_JSONGetLong(json, "max_payload", &(nc->info.maxPayload)));
     IFOK(s, nats_JSONGetArrayStr(json, "connect_urls",
                                  &(nc->info.connectURLs),
@@ -776,7 +777,7 @@ _checkForSecure(natsConnection *nc)
     natsStatus  s = NATS_OK;
 
     // Check for mismatch in setups
-    if (nc->opts->secure && !nc->info.tlsRequired)
+    if (nc->opts->secure && !nc->info.tlsRequired && !nc->info.tlsAvailable)
         s = nats_setDefaultError(NATS_SECURE_CONNECTION_WANTED);
     else if (nc->info.tlsRequired && !nc->opts->secure)
     {

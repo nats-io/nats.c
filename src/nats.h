@@ -2637,6 +2637,22 @@ natsOptions_SetReconnectBufSize(natsOptions *opts, int reconnectBufSize);
 NATS_EXTERN natsStatus
 natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending);
 
+/** \brief Sets the maximum number of pending bytes per subscription.
+ *
+ * Specifies the maximum number of inbound bytes that can be buffered in the
+ * library, for each subscription, before inbound messages are dropped and
+ * #NATS_SLOW_CONSUMER status is reported to the #natsErrHandler callback (if
+ * one has been set).
+ *
+ * @see natsOptions_SetErrorHandler()
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param maxPending the number of bytes allowed to be buffered by the
+ * library before triggering a slow consumer scenario.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetMaxPendingBytes(natsOptions* opts, long maxPending);
+
 /** \brief Sets the error handler for asynchronous events.
  *
  * Specifies the callback to invoke when an asynchronous error

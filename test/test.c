@@ -14447,12 +14447,13 @@ test_AsyncErrHandler_MaxPendingBytes(void)
     arg.sub = sub;
     natsMutex_Unlock(arg.m);
 
+    size_t data_len = 10;
     const char msg[] = { 0,1,2,3,4,5,6,7,8,9 }; //10 bytes long message
 
     for (int i = 0;
-        (s == NATS_OK) && (i < (opts->maxPendingBytes + 100)); i+=10) //increment by 10 (message size) each iteration
+        (s == NATS_OK) && (i < (opts->maxPendingBytes + 100)); i+=data_len) //increment by 10 (message size) each iteration
     {
-        s = natsConnection_PublishString(nc, "async_test", msg);
+        s = natsConnection_Publish(nc, "async_test", msg, data_len);
     }
     IFOK(s, natsConnection_Flush(nc));
 
@@ -33646,13 +33647,14 @@ test_MicroAsyncErrorHandler_MaxPendingBytes(void)
     arg.status = NATS_OK;
     natsMutex_Unlock(arg.m);
 
+    size_t data_len = 10;
     const char msg[] = { 0,1,2,3,4,5,6,7,8,9 }; //10 bytes long message
 
     test("Cause an error by sending too many messages: ");
     for (int i = 0;
-        (s == NATS_OK) && (i < (opts->maxPendingBytes + 100)); i+=10) //increment by 10 (message size) each iteration
+        (s == NATS_OK) && (i < (opts->maxPendingBytes + 100)); i+=data_len) //increment by 10 (message size) each iteration
     {
-        s = natsConnection_PublishString(nc, "async_test", "hello");
+        s = natsConnection_Publish(nc, "async_test", msg, data_len);
     }
     testCond((NATS_OK == s)
         && (NATS_OK == natsConnection_Flush(nc)));

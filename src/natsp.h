@@ -265,6 +265,7 @@ struct __natsOptions
     int64_t                 pingInterval;
     int                     maxPingsOut;
     int                     maxPendingMsgs;
+    long                    maxPendingBytes;
 
     natsSSLCtx              *sslCtx;
 

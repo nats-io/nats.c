@@ -430,10 +430,6 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
 {
     natsStatus          s = NATS_OK;
     natsSubscription    *sub = NULL;
-    int                 bytesLimit = nc->opts->maxPendingMsgs * 1024;
-
-    if (bytesLimit <= 0)
-        return nats_setError(NATS_INVALID_ARG, "Invalid bytes limit of %d", bytesLimit);
 
     sub = (natsSubscription*) NATS_CALLOC(1, sizeof(natsSubscription));
     if (sub == NULL)
@@ -454,7 +450,7 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     sub->msgCb          = cb;
     sub->msgCbClosure   = cbClosure;
     sub->msgsLimit      = nc->opts->maxPendingMsgs;
-    sub->bytesLimit     = bytesLimit;
+    sub->bytesLimit     = nc->opts->maxPendingBytes;
     sub->jsi            = jsi;
 
     sub->subject = NATS_STRDUP(subj);

@@ -2651,7 +2651,7 @@ natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending);
  * library before triggering a slow consumer scenario.
  */
 NATS_EXTERN natsStatus
-natsOptions_SetMaxPendingBytes(natsOptions* opts, long maxPending);
+natsOptions_SetMaxPendingBytes(natsOptions* opts, int64_t maxPending);
 
 /** \brief Sets the error handler for asynchronous events.
  *

@@ -884,7 +884,7 @@ natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending)
 }
 
 natsStatus
-natsOptions_SetMaxPendingBytes(natsOptions* opts, long maxPending)
+natsOptions_SetMaxPendingBytes(natsOptions* opts, int64_t maxPending)
 {
     LOCK_AND_CHECK_OPTIONS(opts, (maxPending <= 0));
 

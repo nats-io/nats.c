@@ -2580,7 +2580,7 @@ test_natsOptions(void)
              && (opts->maxPingsOut == 2)
              && (opts->ioBufSize == 32 * 1024)
              && (opts->maxPendingMsgs == 65536)
-             && (opts->maxPendingBytes == 67108864)
+             && (opts->maxPendingBytes == NATS_OPTS_DEFAULT_MAX_PENDING_BYTES)
              && (opts->user == NULL)
              && (opts->password == NULL)
              && (opts->token == NULL)
@@ -14421,6 +14421,9 @@ test_AsyncErrHandler_MaxPendingBytes(void)
     natsSubscription* sub = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     struct threadArg    arg;
+    int                 data_len = 10;
+    const char          msg[] = { 0,1,2,3,4,5,6,7,8,9 }; //10 bytes long message
+    int64_t             pendingBytesLimit = 100;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -14431,7 +14434,7 @@ test_AsyncErrHandler_MaxPendingBytes(void)
 
     s = natsOptions_Create(&opts);
     IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
-    IFOK(s, natsOptions_SetMaxPendingBytes(opts, 100));
+    IFOK(s, natsOptions_SetMaxPendingBytes(opts, pendingBytesLimit));
     IFOK(s, natsOptions_SetErrorHandler(opts, _asyncErrCb, (void*)&arg));
 
     if (s != NATS_OK)
@@ -14446,12 +14449,8 @@ test_AsyncErrHandler_MaxPendingBytes(void)
     natsMutex_Lock(arg.m);
     arg.sub = sub;
     natsMutex_Unlock(arg.m);
-
-    size_t data_len = 10;
-    const char msg[] = { 0,1,2,3,4,5,6,7,8,9 }; //10 bytes long message
-
     for (int i = 0;
-        (s == NATS_OK) && (i < (opts->maxPendingBytes + 100)); i+=data_len) //increment by 10 (message size) each iteration
+        (s == NATS_OK) && (i < (pendingBytesLimit + 100)); i+=data_len) //increment by 10 (message size) each iteration
     {
         s = natsConnection_Publish(nc, "async_test", msg, data_len);
     }
@@ -33618,6 +33617,9 @@ test_MicroAsyncErrorHandler_MaxPendingBytes(void)
         .State = &arg,
         .DoneHandler = _microServiceDoneHandler,
     };
+    int data_len = 10;
+    const char msg[] = { 0,1,2,3,4,5,6,7,8,9 }; //10 bytes long message
+    int64_t pendingBytesLimit = 100;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -33625,7 +33627,7 @@ test_MicroAsyncErrorHandler_MaxPendingBytes(void)
 
     s = natsOptions_Create(&opts);
     IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
-    IFOK(s, natsOptions_SetMaxPendingBytes(opts, 100));
+    IFOK(s, natsOptions_SetMaxPendingBytes(opts, pendingBytesLimit));
     if (s != NATS_OK)
         FAIL("Unable to create options for test AsyncErrHandler");
 
@@ -33640,19 +33642,16 @@ test_MicroAsyncErrorHandler_MaxPendingBytes(void)
     test("Test microservice is running: ");
     testCond(!microService_IsStopped(m))
 
-        test("Add test endpoint: ");
+    test("Add test endpoint: ");
     testCond(NULL == micro_add_endpoint(&ep, m, NULL, &ep_cfg, true));
 
     natsMutex_Lock(arg.m);
     arg.status = NATS_OK;
     natsMutex_Unlock(arg.m);
 
-    size_t data_len = 10;
-    const char msg[] = { 0,1,2,3,4,5,6,7,8,9 }; //10 bytes long message
-
     test("Cause an error by sending too many messages: ");
     for (int i = 0;
-        (s == NATS_OK) && (i < (opts->maxPendingBytes + 100)); i+=data_len) //increment by 10 (message size) each iteration
+        (s == NATS_OK) && (i < (pendingBytesLimit + 100)); i+=data_len) //increment by 10 (message size) each iteration
     {
         s = natsConnection_Publish(nc, "async_test", msg, data_len);
     }

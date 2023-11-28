@@ -146,7 +146,8 @@ AsyncSubscriptionPending
 AsyncSubscriptionPendingDrain
 SyncSubscriptionPending
 SyncSubscriptionPendingDrain
-AsyncErrHandler
+AsyncErrHandlerMaxPendingMsgs
+AsyncErrHandlerMaxPendingBytes
 AsyncErrHandlerSubDestroyed
 AsyncSubscriberStarvation
 AsyncSubscriberOnClose
@@ -265,7 +266,8 @@ MicroBasics
 MicroStartStop
 MicroServiceStopsOnClosedConn
 MicroServiceStopsWhenServerStops
-MicroAsyncErrorHandler
+MicroAsyncErrorHandlerMaxPendingMsgs
+MicroAsyncErrorHandlerMaxPendingBytes
 StanPBufAllocator
 StanConnOptions
 StanSubOptions

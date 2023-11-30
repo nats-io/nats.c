@@ -1529,7 +1529,7 @@ natsOptions_Create(natsOptions **newOpts)
     opts->maxPingsOut           = NATS_OPTS_DEFAULT_MAX_PING_OUT;
     opts->ioBufSize             = NATS_OPTS_DEFAULT_IO_BUF_SIZE;
     opts->maxPendingMsgs        = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
-    opts->maxPendingBytes       = NATS_OPTS_DEFAULT_MAX_PENDING_BYTES;
+    opts->maxPendingBytes       = -1;
     opts->timeout               = NATS_OPTS_DEFAULT_TIMEOUT;
     opts->libMsgDelivery        = natsLib_isLibHandlingMsgDeliveryByDefault();
     opts->writeDeadline         = natsLib_defaultWriteDeadline();

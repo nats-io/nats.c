@@ -2580,7 +2580,7 @@ test_natsOptions(void)
              && (opts->maxPingsOut == 2)
              && (opts->ioBufSize == 32 * 1024)
              && (opts->maxPendingMsgs == 65536)
-             && (opts->maxPendingBytes == NATS_OPTS_DEFAULT_MAX_PENDING_BYTES)
+             && (opts->maxPendingBytes == -1)
              && (opts->user == NULL)
              && (opts->password == NULL)
              && (opts->token == NULL)
@@ -14344,7 +14344,7 @@ _asyncErrCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void* clo
 
     arg->closed = true;
     arg->done = true;
-    natsCondition_Signal(arg->c);
+    natsCondition_Broadcast(arg->c);
 
     natsMutex_Unlock(arg->m);
 }
@@ -14424,6 +14424,7 @@ test_AsyncErrHandler_MaxPendingBytes(void)
     int                 data_len = 10;
     const char          msg[] = { 0,1,2,3,4,5,6,7,8,9 }; //10 bytes long message
     int64_t             pendingBytesLimit = 100;
+    int                 i = 0;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -14449,7 +14450,7 @@ test_AsyncErrHandler_MaxPendingBytes(void)
     natsMutex_Lock(arg.m);
     arg.sub = sub;
     natsMutex_Unlock(arg.m);
-    for (int i = 0;
+    for (i;
         (s == NATS_OK) && (i < (pendingBytesLimit + 100)); i+=data_len) //increment by 10 (message size) each iteration
     {
         s = natsConnection_Publish(nc, "async_test", msg, data_len);
@@ -33620,6 +33621,7 @@ test_MicroAsyncErrorHandler_MaxPendingBytes(void)
     int data_len = 10;
     const char msg[] = { 0,1,2,3,4,5,6,7,8,9 }; //10 bytes long message
     int64_t pendingBytesLimit = 100;
+    int i = 0;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -33650,7 +33652,7 @@ test_MicroAsyncErrorHandler_MaxPendingBytes(void)
     natsMutex_Unlock(arg.m);
 
     test("Cause an error by sending too many messages: ");
-    for (int i = 0;
+    for (i;
         (s == NATS_OK) && (i < (pendingBytesLimit + 100)); i+=data_len) //increment by 10 (message size) each iteration
     {
         s = natsConnection_Publish(nc, "async_test", msg, data_len);

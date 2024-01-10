@@ -1799,7 +1799,7 @@ _base64Encode(const char *map, bool padding, const unsigned char *src, int srcLe
 
     *pDest = NULL;
 
-    if ((src == NULL) || (src[0] == '\0'))
+    if ((src == NULL) || (srcLen == 0))
         return NATS_OK;
 
     n = srcLen;

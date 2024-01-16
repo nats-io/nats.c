@@ -11,6 +11,7 @@ echo "build opts = " $3
 echo "test opts  = " $4
 
 if [ "$NATS_TEST_SERVER_VERSION" != "" ]; then
+  rm -fr $HOME/nats-server*
   rel=$NATS_TEST_SERVER_VERSION
   mkdir -p $HOME/nats-server-$rel
   if [ "$rel" = "latest" ]; then
@@ -19,12 +20,31 @@ if [ "$NATS_TEST_SERVER_VERSION" != "" ]; then
 
   if [ "$rel" != "${rel#v}" ] && wget https://github.com/nats-io/nats-server/releases/download/$rel/nats-server-$rel-linux-amd64.tar.gz; then
     tar -xzf nats-server-$rel-linux-amd64.tar.gz
-    mv nats-server-$rel-linux-amd64 $HOME/nats-server-$rel
+    mv nats-server-$rel-linux-amd64 nats-server
   else
-    curl -sf "https://binaries.nats.dev/nats-io/nats-server/v2@$rel" | PREFIX=. sh
-    mv nats-server $HOME/nats-server-$rel
+    for c in 1 2 3 4 5
+    do
+      echo "Attempt $c to download binary for main"
+      rm ./nats-server
+      curl -sf "https://binaries.nats.dev/nats-io/nats-server/v2@$rel" | PREFIX=. sh
+      # We are sometimes getting nats-server of size 0. Make sure we have a
+      # working nats-server by making sure we get a version number.
+      v="$(./nats-server -v)"
+      if [ "$v" != "" ]; then
+        break
+      fi
+    done
   fi
+  mv nats-server $HOME/nats-server-$rel
   PATH=$HOME/nats-server-$rel:$PATH
+fi
+
+export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
+if [ "$NATS_TEST_SERVER_VERSION" = "" ]; then
+  echo "==============================================="
+  echo "= Unable to get the server version, aborting! ="
+  echo "==============================================="
+  exit 1
 fi
 
 if [ "$1" != "gcc" ]; then
@@ -54,7 +74,6 @@ if [ $res -ne 0 ]; then
 fi
 
 export NATS_TEST_TRAVIS=yes
-export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
 echo "Using NATS server version: $NATS_TEST_SERVER_VERSION"
 ctest --timeout 60 --output-on-failure $4
 res=$?

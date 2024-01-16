@@ -192,6 +192,7 @@ SSLMultithreads
 SSLConnectVerboseOption
 SSLSocketLeakEventLoop
 SSLReconnectWithAuthError
+SSLAvailable
 ServersOption
 AuthServers
 AuthFailToReconnect

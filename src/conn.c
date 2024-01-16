@@ -1804,18 +1804,21 @@ _readProto(natsConnection *nc, natsBuffer **proto)
 
     s = natsBuf_Create(&buf, 10);
     if (s != NATS_OK)
-        return s;
+        return NATS_UPDATE_ERR_STACK(s);
 
     for (;;)
     {
         s = natsSock_Read(&(nc->sockCtx), oneChar, 1, NULL);
-        if (s == NATS_CONNECTION_CLOSED)
-            break;
+        if (s != NATS_OK)
+        {
+            natsBuf_Destroy(buf);
+            return NATS_UPDATE_ERR_STACK(s);
+        }
         s = natsBuf_AppendByte(buf, oneChar[0]);
         if (s != NATS_OK)
         {
             natsBuf_Destroy(buf);
-            return s;
+            return NATS_UPDATE_ERR_STACK(s);
         }
         if (oneChar[0] == protoEnd)
             break;
@@ -1824,7 +1827,7 @@ _readProto(natsConnection *nc, natsBuffer **proto)
     if (s != NATS_OK)
     {
         natsBuf_Destroy(buf);
-        return s;
+        return NATS_UPDATE_ERR_STACK(s);
     }
     *proto = buf;
     return NATS_OK;

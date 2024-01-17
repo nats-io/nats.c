@@ -166,6 +166,7 @@ typedef struct __natsServerInfo
     char        *version;
     bool        authRequired;
     bool        tlsRequired;
+    bool        tlsAvailable;
     int64_t     maxPayload;
     char        **connectURLs;
     int         connectURLsCount;

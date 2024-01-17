@@ -549,6 +549,7 @@ _processInfo(natsConnection *nc, char *info, int len)
     IFOK(s, nats_JSONGetInt(json, "port", &(nc->info.port)));
     IFOK(s, nats_JSONGetBool(json, "auth_required", &(nc->info.authRequired)));
     IFOK(s, nats_JSONGetBool(json, "tls_required", &(nc->info.tlsRequired)));
+    IFOK(s, nats_JSONGetBool(json, "tls_available", &(nc->info.tlsAvailable)));
     IFOK(s, nats_JSONGetLong(json, "max_payload", &(nc->info.maxPayload)));
     IFOK(s, nats_JSONGetArrayStr(json, "connect_urls",
                                  &(nc->info.connectURLs),
@@ -776,7 +777,7 @@ _checkForSecure(natsConnection *nc)
     natsStatus  s = NATS_OK;
 
     // Check for mismatch in setups
-    if (nc->opts->secure && !nc->info.tlsRequired)
+    if (nc->opts->secure && !nc->info.tlsRequired && !nc->info.tlsAvailable)
         s = nats_setDefaultError(NATS_SECURE_CONNECTION_WANTED);
     else if (nc->info.tlsRequired && !nc->opts->secure)
     {
@@ -1803,18 +1804,21 @@ _readProto(natsConnection *nc, natsBuffer **proto)
 
     s = natsBuf_Create(&buf, 10);
     if (s != NATS_OK)
-        return s;
+        return NATS_UPDATE_ERR_STACK(s);
 
     for (;;)
     {
         s = natsSock_Read(&(nc->sockCtx), oneChar, 1, NULL);
-        if (s == NATS_CONNECTION_CLOSED)
-            break;
+        if (s != NATS_OK)
+        {
+            natsBuf_Destroy(buf);
+            return NATS_UPDATE_ERR_STACK(s);
+        }
         s = natsBuf_AppendByte(buf, oneChar[0]);
         if (s != NATS_OK)
         {
             natsBuf_Destroy(buf);
-            return s;
+            return NATS_UPDATE_ERR_STACK(s);
         }
         if (oneChar[0] == protoEnd)
             break;
@@ -1823,7 +1827,7 @@ _readProto(natsConnection *nc, natsBuffer **proto)
     if (s != NATS_OK)
     {
         natsBuf_Destroy(buf);
-        return s;
+        return NATS_UPDATE_ERR_STACK(s);
     }
     *proto = buf;
     return NATS_OK;

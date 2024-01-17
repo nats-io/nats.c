@@ -93,6 +93,7 @@ static const char *clientName  = "client";
 
 // Forward declaration
 static void _startMockupServerThread(void *closure);
+static void _createConfFile(char *buf, int bufLen, const char *content);
 
 typedef natsStatus (*testCheckInfoCB)(char *buffer);
 
@@ -4423,8 +4424,8 @@ test_natsBase64Encode(void)
             "ZGZzbGZkbGtqc2ZkbGxramZkcyBkZnNqbGtsa2ZzZGEgZGZzYWxramtsZmRzYWxraiBhZGZza2psbGtqZmRhc2xramZkc2xr",
             "VGhpcyBpcyBhbm90aGVyIHdpdGggbnVtYmVycyBsaWtlIDEyMzQ1Njc4LjkwIGFuZCBzcGVjaWFsIGNoYXJhY3RlcnMgIUAjJCVeJiooKS09Ky8=",
     };
-    const uint8_t   someBytes[] = {1, 2, 0, 3, 4, 5, 0, 6, 7, 8, 0, 9, 0};
-    const char      *sbe = "AQIAAwQFAAYHCAAJAA==";
+    const uint8_t   someBytes[] = {0, 2, 0, 3, 4, 5, 0, 6, 7, 8, 0, 9, 0};
+    const char      *sbe = "AAIAAwQFAAYHCAAJAA==";
     int             sbl  = 13;
     int             sl   = 0;
     int             dl   = 0;
@@ -4455,7 +4456,7 @@ test_natsBase64Encode(void)
     test("EncodeURL bytes: ");
     {
         s = nats_Base64RawURL_EncodeString((const unsigned char*) &someBytes, sbl, &enc);
-        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, "AQIAAwQFAAYHCAAJAA") != 0)))
+        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, "AAIAAwQFAAYHCAAJAA") != 0)))
             s = NATS_ERR;
 
         free(enc);
@@ -21603,6 +21604,53 @@ test_SSLReconnectWithAuthError(void)
 }
 
 static void
+test_SSLAvailable(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    char conf[256];
+    char cmdLine[1024];
+
+    _createConfFile(conf, sizeof(conf), "allow_non_tls: true\n");
+    test("Start server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-tls -tlscert certs/server-cert.pem -tlskey certs/server-key.pem -tlscacert certs/ca.pem -c %s", conf);
+    serverPid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(serverPid);
+    testCond(true);
+
+    test("Create options: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
+    IFOK(s, natsOptions_SetURL(opts, "tls://localhost:4222"));
+    testCond(s == NATS_OK);
+
+    test("Connect with TLS: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
+    natsOptions_Destroy(opts);
+    opts = NULL;
+
+    test("Connection without: ");
+    s = natsConnection_ConnectTo(&nc, "nats://localhost:4222");
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+    remove(conf);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
+static void
 rmtree(const char *path)
 {
 #ifdef _WIN32
@@ -32949,6 +32997,7 @@ test_MicroBasics(void)
         .Name = "do",
         .Subject = "svc.do",
         .Handler = _microHandleRequestNoisy42,
+        .State = NULL,
     };
     microEndpointConfig ep2_cfg = {
         .Name = "unused",
@@ -32958,6 +33007,7 @@ test_MicroBasics(void)
             .List = (const char *[]){"key1", "value1", "key2", "value2", "key3", "value3"},
             .Count = 3,
         },
+        .State = NULL,
     };
     microEndpointConfig *eps[] = {
         &ep1_cfg,
@@ -32971,6 +33021,8 @@ test_MicroBasics(void)
             .List = (const char *[]){"skey1", "svalue1", "skey2", "svalue2"},
             .Count = 2,
         },
+        .Endpoint = NULL,
+        .State = NULL,
     };
     natsMsg *reply = NULL;
     microServiceInfo *info = NULL;
@@ -35952,6 +36004,7 @@ static testInfo allTests[] =
     {"SSLConnectVerboseOption",         test_SSLConnectVerboseOption},
     {"SSLSocketLeakEventLoop",          test_SSLSocketLeakWithEventLoop},
     {"SSLReconnectWithAuthError",       test_SSLReconnectWithAuthError},
+    {"SSLAvailable",                    test_SSLAvailable},
 
     // Clusters Tests
 

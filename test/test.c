@@ -4429,8 +4429,8 @@ test_natsBase64Encode(void)
             "ZGZzbGZkbGtqc2ZkbGxramZkcyBkZnNqbGtsa2ZzZGEgZGZzYWxramtsZmRzYWxraiBhZGZza2psbGtqZmRhc2xramZkc2xr",
             "VGhpcyBpcyBhbm90aGVyIHdpdGggbnVtYmVycyBsaWtlIDEyMzQ1Njc4LjkwIGFuZCBzcGVjaWFsIGNoYXJhY3RlcnMgIUAjJCVeJiooKS09Ky8=",
     };
-    const uint8_t   someBytes[] = {1, 2, 0, 3, 4, 5, 0, 6, 7, 8, 0, 9, 0};
-    const char      *sbe = "AQIAAwQFAAYHCAAJAA==";
+    const uint8_t   someBytes[] = {0, 2, 0, 3, 4, 5, 0, 6, 7, 8, 0, 9, 0};
+    const char      *sbe = "AAIAAwQFAAYHCAAJAA==";
     int             sbl  = 13;
     int             sl   = 0;
     int             dl   = 0;
@@ -4461,7 +4461,7 @@ test_natsBase64Encode(void)
     test("EncodeURL bytes: ");
     {
         s = nats_Base64RawURL_EncodeString((const unsigned char*) &someBytes, sbl, &enc);
-        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, "AQIAAwQFAAYHCAAJAA") != 0)))
+        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, "AAIAAwQFAAYHCAAJAA") != 0)))
             s = NATS_ERR;
 
         free(enc);

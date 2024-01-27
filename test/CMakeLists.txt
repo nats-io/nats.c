@@ -5,7 +5,7 @@ if(NOT NATS_BUILD_LIB_STATIC)
    MESSAGE(FATAL_ERROR
      "Building tests require static library, or run CMake with -DBUILD_TESTING=OFF")
   return()
-endif()  
+endif()
 
 # We need this to build the test program
 include_directories(${PROJECT_SOURCE_DIR}/src)

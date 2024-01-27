@@ -2551,7 +2551,7 @@ nats_freeMetadata(natsMetadata *md)
     {
         NATS_FREE((char *)md->List[i]);
     }
-    NATS_FREE(md->List);
+    NATS_FREE((char*) md->List);
     md->List = NULL;
     md->Count = 0;
 }

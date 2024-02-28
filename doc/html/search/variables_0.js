@@ -5,7 +5,7 @@ var searchData=
   ['ackhandlerclosure_2',['AckHandlerClosure',['../structjs_options_1_1js_options_publish_async.html#a60c95f10797c04ea2e625759c6936ec9',1,'jsOptions::jsOptionsPublishAsync']]],
   ['ackpolicy_3',['AckPolicy',['../structjs_consumer_config.html#a8a311af614dfae1b0f4e4af7db467aab',1,'jsConsumerConfig']]],
   ['ackwait_4',['AckWait',['../structjs_consumer_config.html#a651a94b9b78668dde830dc7869610e67',1,'jsConsumerConfig']]],
-  ['active_5',['active',['../structjs_peer_info.html#a8441d023932c388953197f7ea39402fe',1,'jsPeerInfo::Active'],['../structjs_stream_source_info.html#a28b8cc0a9d487672955d3a3fa03de247',1,'jsStreamSourceInfo::Active']]],
+  ['active_5',['Active',['../structjs_peer_info.html#a8441d023932c388953197f7ea39402fe',1,'jsPeerInfo::Active'],['../structjs_stream_source_info.html#a28b8cc0a9d487672955d3a3fa03de247',1,'jsStreamSourceInfo::Active']]],
   ['allowdirect_6',['AllowDirect',['../structjs_stream_config.html#a28630f6f07ca02553c5d5718d7c29721',1,'jsStreamConfig']]],
   ['allowrollup_7',['AllowRollup',['../structjs_stream_config.html#aba71cdb342181f52bb9f7ff5f770a1fa',1,'jsStreamConfig']]],
   ['alternates_8',['Alternates',['../structjs_stream_info.html#a720c4ff9090bafda50000843810ab1bb',1,'jsStreamInfo']]],

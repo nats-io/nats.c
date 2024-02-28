@@ -6,7 +6,7 @@ var group__conn_mgt_group =
     [ "natsConnection_ConnectTo", "group__conn_mgt_group.html#gafb83c8d7970ba68be0e6c40c38cdfde4", null ],
     [ "natsConnection_IsClosed", "group__conn_mgt_group.html#ga530f0f1c75c58a81aae1a59f15b46d9f", null ],
     [ "natsConnection_IsReconnecting", "group__conn_mgt_group.html#ga5aa349fc3895dde772671b324b07a688", null ],
-    [ "natsConnection_IsDraining", "group__conn_mgt_group.html#ga15a0f8aa9a6f621535d01593a4c8edd5", null ],
+    [ "natsConnection_IsDraining", "group__conn_mgt_group.html#ga2c3a8b08304579fd426e63f1d241f32e", null ],
     [ "natsConnection_Status", "group__conn_mgt_group.html#ga33fa209522e5e0226b5b7c7d720a3b98", null ],
     [ "natsConnection_Buffered", "group__conn_mgt_group.html#ga0433159e518540ff874c4026fe9cd0c5", null ],
     [ "natsConnection_Flush", "group__conn_mgt_group.html#ga1c98f8d89bb8e20ea8621e860a90267f", null ],
@@ -25,7 +25,7 @@ var group__conn_mgt_group =
     [ "natsConnection_GetClientIP", "group__conn_mgt_group.html#gadafcfeeeac2733c7119981ab97b7103d", null ],
     [ "natsConnection_GetRTT", "group__conn_mgt_group.html#gaa3fd27e6e7d8131e679d4f10e201c435", null ],
     [ "natsConnection_HasHeaderSupport", "group__conn_mgt_group.html#gad765b80ae8e1a06a7a942cccf29f042a", null ],
-    [ "natsConnection_GetLocalIPAndPort", "group__conn_mgt_group.html#ga761095a42374b4dafa178df7d7652dd5", null ],
+    [ "natsConnection_GetLocalIPAndPort", "group__conn_mgt_group.html#gaa079d4712912ed8e484fa8a60fe71bcb", null ],
     [ "natsConnection_Close", "group__conn_mgt_group.html#ga19e204d27a232e2d4334301fc002b2ed", null ],
     [ "natsConnection_Destroy", "group__conn_mgt_group.html#gafda2f702276fb0ac301efac10df09495", null ]
 ];

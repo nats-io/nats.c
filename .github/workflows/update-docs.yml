@@ -17,15 +17,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Cache Doxygen
-        id: cache-doxygen
-        uses: actions/cache@v4
-        with:
-          path: /usr/bin/doxygen
-          key: doxygen
-
       - name: Set up Doxygen
-        if: steps.cache-doxygen.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y doxygen

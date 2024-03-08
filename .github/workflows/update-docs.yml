@@ -26,6 +26,7 @@ jobs:
         id: update
         run: |
           cd doc
+          rm -rf ./html/*
           doxygen DoxyFile.NATS.Client
           git diff --quiet || echo "CHANGES=true" >> $GITHUB_OUTPUT
 

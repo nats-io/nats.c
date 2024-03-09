@@ -1,0 +1,45 @@
+name: Update Docs
+
+on:
+  push:
+    branches:
+        - main
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # to push branches
+      pull-requests: write # to create pull requests
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen
+
+      - name: Generate Documentation
+        id: update
+        run: |
+          cd doc
+          rm -rf ./html/*
+          doxygen DoxyFile.NATS.Client
+          git diff --quiet || echo "CHANGES=true" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        if: steps.update.outputs.CHANGES == 'true'
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: Update documentation
+          branch: update-docs
+          title: Auto-generated documentation update
+          body: Documentation changes were detected. Please review and merge.
+          labels: documentation
+          base: main
+          branch-suffix: timestamp
+          delete-branch: true

@@ -4,6 +4,7 @@ on:
   push:
     branches:
         - main
+        - release_*
 
 jobs:
   update-docs:
@@ -37,9 +38,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: Update documentation
           branch: update-docs
-          title: Auto-generated documentation update
+          title: Auto-generated documentation update [skip ci]
           body: Documentation changes were detected. Please review and merge.
           labels: documentation
-          base: main
           branch-suffix: timestamp
           delete-branch: true

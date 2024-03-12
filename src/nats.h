@@ -852,12 +852,13 @@ typedef struct jsConsumerConfig
 
         // Configuration options introduced in 2.10
 
-        // Multiple filter subjects
-        const char **FilterSubjects;
-        int FilterSubjectsLen;
+        const char              **FilterSubjects;       ///< Multiple filter subjects
+        int                     FilterSubjectsLen;
+        natsMetadata            Metadata;               ///< User-provided metadata for the consumer, encoded as an array of {"key", "value",...}
 
-        // User-provided metadata for the consumer, encoded as an array of {"key", "value",...}
-        natsMetadata Metadata;
+        // Configuration options introduced in 2.11
+
+        int64_t                 PauseUntil;             ///< Suspends the consumer until this deadline, represented as number of nanoseconds since epoch.
 } jsConsumerConfig;
 
 /**
@@ -1003,7 +1004,8 @@ typedef struct jsConsumerInfo
         uint64_t                NumPending;
         jsClusterInfo           *Cluster;
         bool                    PushBound;
-
+        bool                    Paused;
+        int64_t                 PauseRemaining;        ///< Remaining time in nanoseconds.
 } jsConsumerInfo;
 
 /**
@@ -1033,6 +1035,18 @@ typedef struct jsConsumerNamesList
         int     Count;
 
 } jsConsumerNamesList;
+
+/**
+ * Request to pause the consumer, used to call js_PauseConsumer.
+ *
+ * @see jsConsumerPauseResponse
+ */
+typedef struct jsConsumerPauseResponse
+{
+        bool            Paused;        
+        int64_t         PauseUntil;     ///< UTC time expressed as number of nanoseconds since epoch.
+        int64_t         PauseRemaining; ///< Remaining time in nanoseconds.
+} jsConsumerPauseResponse;
 
 /**
  * Reports on API calls to JetStream for this account.
@@ -5944,6 +5958,25 @@ js_GetConsumerInfo(jsConsumerInfo **ci, jsCtx *js,
 NATS_EXTERN natsStatus
 js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
                       jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Pauses a consumer.
+ *
+ * Pauses the consumer named <c>consumer</c> on stream named <c>stream</c>.
+ *
+ * @param new_cpr if not NULL, will receive the response of the operation.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param consumer the name of the consumer.
+ * @param pauseUntil the time in nanoseconds since the Unix epoch to pause the consumer until.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+
+natsStatus
+js_PauseConsumer(jsConsumerPauseResponse **new_cpr, jsCtx *js,
+                 const char *stream, const char *consumer,
+                 uint64_t pauseUntil, jsOptions *opts, jsErrCode *errCode);
 
 /** \brief Destroys the consumer information object.
  *

@@ -3469,7 +3469,7 @@ js_unmarshalConsumerPauseResp(nats_JSON *json, jsConsumerPauseResponse **new_cpr
     if (s == NATS_OK)
         *new_cpr = cpr;
     else
-        NATS_FREE(cpr);
+        jsConsumerPauseResponse_Destroy(cpr);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -3527,6 +3527,16 @@ _marshalConsumerPauseReq(natsBuffer **new_buf, uint64_t pauseUntil)
 
     return NATS_UPDATE_ERR_STACK(s);
 }
+
+void
+jsConsumerPauseResponse_Destroy(jsConsumerPauseResponse *cpr)
+{
+    if (cpr == NULL)
+        return;
+
+    NATS_FREE(cpr);
+}
+
 
 natsStatus
 js_PauseConsumer(jsConsumerPauseResponse **new_cpr, jsCtx *js,

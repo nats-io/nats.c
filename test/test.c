@@ -24391,7 +24391,7 @@ test_JetStreamMgtConsumers(void)
             && !cpr->Paused
             && (cpr->PauseUntil == 0)
             && (cpr->PauseRemaining == 0));
-        NATS_FREE(cpr);
+        jsConsumerPauseResponse_Destroy(cpr);
     }
 
     test("Add consumer (durable): ");

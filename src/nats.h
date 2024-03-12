@@ -5978,6 +5978,15 @@ js_PauseConsumer(jsConsumerPauseResponse **new_cpr, jsCtx *js,
                  const char *stream, const char *consumer,
                  uint64_t pauseUntil, jsOptions *opts, jsErrCode *errCode);
 
+/** \brief Destroys the PauseConsumer response object.
+ *
+ * Releases memory allocated for this object.
+ *
+ * @param cpr the pointer to the #jsConsumerPauseResponse object.
+ */
+NATS_EXTERN void
+jsConsumerPauseResponse_Destroy(jsConsumerPauseResponse *cpr);
+
 /** \brief Destroys the consumer information object.
  *
  * Releases memory allocated for this consumer information object.

@@ -24242,38 +24242,6 @@ test_JetStreamMgtConsumers(void)
         cfg.FilterSubject = "bar";
     }
 
-#define TIME_20350101 (2051251200L * 1000000000L)
-#define TIME_20350101_STR "\"2035-01-01T08:00:00Z\""
-
-    if (serverVersionAtLeast(2, 11, 0))
-    {
-        test("Add consumer (non durable, paused): ");
-        cfg.PauseUntil = TIME_20350101;
-        s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
-        testCond((s == NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
-        nats_clearLastError();
-
-        test("Verify config: ");
-        s = natsSubscription_NextMsg(&resp, sub, 1000);
-        testCond((s == NATS_OK) && (resp != NULL) && (strncmp(natsMsg_GetData(resp), "{\"stream_name\":\"MY_STREAM\","
-                                                                                     "\"config\":{\"deliver_policy\":\"last\","
-                                                                                     "\"description\":\"MyDescription\","
-                                                                                     "\"deliver_subject\":\"foo\","
-                                                                                     "\"opt_start_seq\":100,"
-                                                                                     "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","
-                                                                                     "\"ack_wait\":200,\"max_deliver\":300,\"filter_subject\":\"bar\","
-                                                                                     "\"metadata\":{\"key1\":\"val1\",\"key2\":\"val2\"},"
-                                                                                     "\"pause_until\":" TIME_20350101_STR ","
-                                                                                     "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"
-                                                                                     "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"
-                                                                                     "\"flow_control\":true,\"idle_heartbeat\":700,"
-                                                                                     "\"num_replicas\":1,\"mem_storage\":true}}",
-                                                              natsMsg_GetDataLength(resp)) == 0));
-        natsMsg_Destroy(resp);
-        cfg.PauseUntil = 0;
-        resp = NULL;
-    }
-
     test("Create check sub: ");
     natsSubscription_Destroy(sub);
     sub = NULL;
@@ -24357,11 +24325,17 @@ test_JetStreamMgtConsumers(void)
     cfg.Name = "my_name";
     cfg.DeliverSubject = "mn.foo";
     cfg.FilterSubject = "bar.>";
+#define TIME_20350101 (2051251200L * 1000000000L)
+    if (serverVersionAtLeast(2, 11, 0))
+    {
+        cfg.PauseUntil = TIME_20350101;
+    }
     s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL)
                 && (strcmp(ci->Stream, "MY_STREAM") == 0)
                 && (strcmp(ci->Name, "my_name") == 0)
-                && (strcmp(ci->Config->Name, "my_name") == 0));
+                && (strcmp(ci->Config->Name, "my_name") == 0)
+                && ((cfg.PauseUntil == 0) || (ci->Paused && ci->PauseRemaining > 0)));
     jsConsumerInfo_Destroy(ci);
     ci = NULL;
 
@@ -24374,7 +24348,7 @@ test_JetStreamMgtConsumers(void)
             && cpr->Paused
             && (cpr->PauseUntil == TIME_20350101)
             && (cpr->PauseRemaining > 0));
-        NATS_FREE(cpr);
+        jsConsumerPauseResponse_Destroy(cpr);
         cpr = NULL;
 
         test("Verify consumer paused with GetInfo: ");
@@ -24382,7 +24356,7 @@ test_JetStreamMgtConsumers(void)
         testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL)
             && ci->Paused
             && (ci->PauseRemaining > 0));
-        NATS_FREE(ci);
+        jsConsumerInfo_Destroy(ci);
         ci = NULL;
 
         test("Unpause consumer: ");
@@ -24392,6 +24366,7 @@ test_JetStreamMgtConsumers(void)
             && (cpr->PauseUntil == 0)
             && (cpr->PauseRemaining == 0));
         jsConsumerPauseResponse_Destroy(cpr);
+        cpr = NULL;
     }
 
     test("Add consumer (durable): ");

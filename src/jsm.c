@@ -3513,7 +3513,6 @@ _marshalConsumerPauseReq(natsBuffer **new_buf, uint64_t pauseUntil)
     natsStatus s = NATS_OK;
     natsBuffer *buf = NULL;
 
-
     s = natsBuf_Create(&buf, 256);
     IFOK(s, natsBuf_AppendByte(buf, '{'));
     if ((s == NATS_OK) && (pauseUntil > 0)) {

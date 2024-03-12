@@ -1039,7 +1039,7 @@ typedef struct jsConsumerNamesList
 /**
  * Request to pause the consumer, used to call js_PauseConsumer.
  *
- * @see jsConsumerPauseResponse
+ * @see js_PauseConsumer
  */
 typedef struct jsConsumerPauseResponse
 {
@@ -5973,7 +5973,7 @@ js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
  * if not needed.
  */
 
-natsStatus
+NATS_EXTERN natsStatus
 js_PauseConsumer(jsConsumerPauseResponse **new_cpr, jsCtx *js,
                  const char *stream, const char *consumer,
                  uint64_t pauseUntil, jsOptions *opts, jsErrCode *errCode);

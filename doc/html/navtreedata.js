@@ -25,9 +25,14 @@
 var NAVTREE =
 [
   [ "NATS C Client with JetStream and Streaming support", "index.html", [
-    [ "NATS C client.", "index.html", "index" ],
+    [ "NATS C client.", "index.html", [
+      [ "Introduction", "index.html#intro_sec", null ],
+      [ "Installation", "index.html#install_sec", null ],
+      [ "Frequently Asked Questions", "index.html#faq_sec", null ],
+      [ "Other Documentation", "index.html#other_doc_section", null ]
+    ] ],
     [ "Deprecated List", "deprecated.html", null ],
-    [ "Topics", "topics.html", "topics" ],
+    [ "Modules", "modules.html", "modules" ],
     [ "Classes", "annotated.html", [
       [ "Class List", "annotated.html", "annotated_dup" ],
       [ "Class Index", "classes.html", null ],
@@ -53,10 +58,12 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"group__kv_watcher.html#ga562c216a0199c30455af4c2da46000e5",
-"group__sub_group.html#ga5a029a784c0a7f8b5800b48cc995db20",
+"group__js_assets_group.html#gac3dfc87863dbbb3c959ecde4bce905bc",
+"group__micro_constants.html#ga27bccc83509da632aec126d97c320fbb",
+"group__opts_group.html#gab09491bad908dedcb323c780280733ff",
+"group__types_group.html#gaaf92318ce94a1ae3547c9a7af5a3f4f6",
 "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ae7479c265d0e8cace4ab19a59cfcbbbb",
-"structjs_stream_config.html#a7338c82c8cbfcd5f4bfb7ad34b1d8395"
+"structjs_stream_config.html#a4f9f422d2e9e7389860291ab19bd7f10"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

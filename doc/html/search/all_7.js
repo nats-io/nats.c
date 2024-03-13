@@ -1,11 +1,7 @@
 var searchData=
 [
-  ['id_0',['Id',['../structmicro__service__info__s.html#a9368a61ebb6cf74a27ea261d7517d9c2',1,'micro_service_info_s::Id'],['../structmicro__service__stats__s.html#afbc7f9586df0c4d8969736e76284bb20',1,'micro_service_stats_s::Id']]],
-  ['ignoredeletes_1',['IgnoreDeletes',['../structkv_watch_options.html#a0535edd21b26affc0057575bafc21a07',1,'kvWatchOptions']]],
-  ['inactivethreshold_2',['InactiveThreshold',['../structjs_stream_consumer_limits.html#aaf4fdc51f35f27690c05c410d185e5d1',1,'jsStreamConsumerLimits::InactiveThreshold'],['../structjs_consumer_config.html#af6376a6009124c25d7016bc548f3855d',1,'jsConsumerConfig::InactiveThreshold']]],
-  ['inboxes_3',['Inboxes',['../group__inbox_group.html',1,'']]],
-  ['includehistory_4',['IncludeHistory',['../structkv_watch_options.html#a08274f08ae96e14d9ded326e4e665649',1,'kvWatchOptions']]],
-  ['info_5',['Info',['../structjs_options_1_1js_options_stream.html#a2ca89c298b4df1f5e3e0a44e205c789c',1,'jsOptions::jsOptionsStream']]],
-  ['installation_6',['Installation',['../index.html#install_sec',1,'']]],
-  ['introduction_7',['Introduction',['../index.html#intro_sec',1,'']]]
+  ['handler_79',['Handler',['../structmicro__endpoint__config__s.html#a4a916af910a5eb88abf3f0aa60082667',1,'micro_endpoint_config_s']]],
+  ['headersonly_80',['HeadersOnly',['../structjs_re_publish.html#a16ebc4cdae4a407cf4e32aad212888db',1,'jsRePublish::HeadersOnly()'],['../structjs_consumer_config.html#a30d4142bac47ab6dc583c5ee193704e6',1,'jsConsumerConfig::HeadersOnly()']]],
+  ['heartbeat_81',['Heartbeat',['../structjs_consumer_config.html#ac439828c3bedb8826a1e92de13280d53',1,'jsConsumerConfig::Heartbeat()'],['../structjs_fetch_request.html#ae8e73c7cc2e2a2d2502407c9b1522496',1,'jsFetchRequest::Heartbeat()']]],
+  ['history_82',['History',['../structkv_config.html#a0ec6b3afbfdaa33436e2ae748e986e98',1,'kvConfig']]]
 ];

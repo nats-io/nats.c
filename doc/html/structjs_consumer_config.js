@@ -30,5 +30,6 @@ var structjs_consumer_config =
     [ "MemoryStorage", "structjs_consumer_config.html#a046177256938d6a601c629f9fd82f888", null ],
     [ "FilterSubjects", "structjs_consumer_config.html#ada703eb1db0288d8a937126d6d856c6f", null ],
     [ "FilterSubjectsLen", "structjs_consumer_config.html#a2a6cdec5efe7542496f8b8cccb539643", null ],
-    [ "Metadata", "structjs_consumer_config.html#a8bfc0284c57028bf9cf809205d989959", null ]
+    [ "Metadata", "structjs_consumer_config.html#a8bfc0284c57028bf9cf809205d989959", null ],
+    [ "PauseUntil", "structjs_consumer_config.html#acf04468ef0a8bc4e83912e850e47a8ae", null ]
 ];

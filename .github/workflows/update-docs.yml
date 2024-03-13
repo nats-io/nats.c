@@ -30,16 +30,17 @@ jobs:
           rm -rf ./html/*
           doxygen DoxyFile.NATS.Client
           git diff --quiet || echo "CHANGES=true" >> $GITHUB_OUTPUT
+          echo "SOURCE_TITLE=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+          echo "SOURCE_SHA=$(git log -1 --pretty=%h)" >> $GITHUB_OUTPUT
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         if: steps.update.outputs.CHANGES == 'true'
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: Update documentation
-          branch: update-docs
-          title: Auto-generated documentation update [skip ci]
+          commit-message: "[skip ci] Update docs: ${{ steps.update.outputs.SOURCE_SHA }}: ${{ steps.update.outputs.SOURCE_TITLE }}"
+          branch: update-docs-${{ github.ref_name }}
+          title: Auto-generated documentation update for ${{ github.ref_name }}
           body: Documentation changes were detected. Please review and merge.
           labels: documentation
-          branch-suffix: timestamp
           delete-branch: true

@@ -3585,6 +3585,7 @@ js_PauseConsumer(jsConsumerPauseResponse **new_cpr, jsCtx *js,
 
     NATS_FREE(subj);
     natsMsg_Destroy(resp);
+    natsBuf_Destroy(buf);
 
     if (s == NATS_NOT_FOUND)
     {

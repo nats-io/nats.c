@@ -2656,7 +2656,10 @@ PROCESS_INFO:
             // set only if jsi->consumer is NULL!
             if (jsi->consumer == NULL)
             {
-                DUP_STRING(s, jsi->consumer, info->Name);
+                if (info->Name != NULL)
+                {
+                    DUP_STRING(s, jsi->consumer, info->Name);
+                }
                 if (s == NATS_OK)
                 {
                     NATS_FREE(jsi->nxtMsgSubj);

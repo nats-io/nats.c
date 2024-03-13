@@ -63,6 +63,7 @@ jobs:
           packages:
             - g++-9
       env:
+        - NATS_TEST_SERVER_VERSION=main
         - MATRIX_EVAL="CC=gcc-9"
         - BUILD_OPT="-DNATS_BUILD_WITH_TLS=OFF -DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release" DO_COVERAGE="no"
 
@@ -89,6 +90,7 @@ jobs:
           packages:
             - g++-9
       env:
+        - NATS_TEST_SERVER_VERSION=main
         - MATRIX_EVAL="CC=gcc-9"
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
 
@@ -102,6 +104,7 @@ jobs:
           packages:
             - g++-9
       env:
+        - NATS_TEST_SERVER_VERSION=main
         - MATRIX_EVAL="CC=gcc-9"
         - NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
 
@@ -115,6 +118,7 @@ jobs:
           packages:
             - g++-9
       env:
+        - NATS_TEST_SERVER_VERSION=main
         - MATRIX_EVAL="CC=gcc-9"
         - NATS_DEFAULT_LIB_WRITE_DEADLINE=2000 BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
 
@@ -153,6 +157,7 @@ jobs:
           packages:
             - clang-8
       env:
+        - NATS_TEST_SERVER_VERSION=main
         - MATRIX_EVAL="CC=clang-8"
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=address" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
 
@@ -165,6 +170,7 @@ jobs:
           packages:
             - clang-8
       env:
+        - NATS_TEST_SERVER_VERSION=main
         - MATRIX_EVAL="CC=clang-8"
         - BUILD_OPT="-DNATS_BUILD_ARCH=64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-fsanitize=thread" NATS_TEST_VALGRIND=yes DO_COVERAGE="no"
 

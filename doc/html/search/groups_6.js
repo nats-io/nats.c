@@ -1,8 +1,6 @@
 var searchData=
 [
-  ['keyvalue_20store_0',['KeyValue store',['../group__kv_group.html',1,'']]],
-  ['keyvalue_20store_20entries_1',['KeyValue store entries',['../group__kv_entry.html',1,'']]],
-  ['keyvalue_20store_20management_2',['KeyValue store management',['../group__kv_group_mgt.html',1,'']]],
-  ['keyvalue_20store_20status_3',['KeyValue store status',['../group__kv_status.html',1,'']]],
-  ['keyvalue_20store_20watcher_4',['KeyValue store watcher',['../group__kv_watcher.html',1,'']]]
+  ['libevent_20adapter_1874',['Libevent Adapter',['../group__libevent_functions.html',1,'']]],
+  ['library_1875',['Library',['../group__library_group.html',1,'']]],
+  ['libuv_20adapter_1876',['Libuv Adapter',['../group__libuv_functions.html',1,'']]]
 ];

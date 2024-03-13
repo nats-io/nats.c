@@ -188,7 +188,8 @@ var group__types_group =
       [ "MemoryStorage", "structjs_consumer_config.html#a046177256938d6a601c629f9fd82f888", null ],
       [ "FilterSubjects", "structjs_consumer_config.html#ada703eb1db0288d8a937126d6d856c6f", null ],
       [ "FilterSubjectsLen", "structjs_consumer_config.html#a2a6cdec5efe7542496f8b8cccb539643", null ],
-      [ "Metadata", "structjs_consumer_config.html#a8bfc0284c57028bf9cf809205d989959", null ]
+      [ "Metadata", "structjs_consumer_config.html#a8bfc0284c57028bf9cf809205d989959", null ],
+      [ "PauseUntil", "structjs_consumer_config.html#acf04468ef0a8bc4e83912e850e47a8ae", null ]
     ] ],
     [ "jsConsumerSequenceMismatch", "structjs_consumer_sequence_mismatch.html", [
       [ "Stream", "structjs_consumer_sequence_mismatch.html#aad6a17af1719c023c38a6fd254b73f8e", null ],
@@ -224,7 +225,9 @@ var group__types_group =
       [ "NumWaiting", "structjs_consumer_info.html#a57e4a4139310c50a1f3d51af67197af0", null ],
       [ "NumPending", "structjs_consumer_info.html#aeaefd5a500996013b1ce13d8872e869b", null ],
       [ "Cluster", "structjs_consumer_info.html#a6f4401563a9fd102226d82cdc6136e32", null ],
-      [ "PushBound", "structjs_consumer_info.html#a31282cdc72000a91af03f89899740bfa", null ]
+      [ "PushBound", "structjs_consumer_info.html#a31282cdc72000a91af03f89899740bfa", null ],
+      [ "Paused", "structjs_consumer_info.html#a13f80f4b24da173ef2da051e69f216d7", null ],
+      [ "PauseRemaining", "structjs_consumer_info.html#a86501e735531929add3e161d40479c44", null ]
     ] ],
     [ "jsConsumerInfoList", "structjs_consumer_info_list.html", [
       [ "List", "structjs_consumer_info_list.html#a75354882af5e11959b198a70bde14db8", null ],
@@ -233,6 +236,11 @@ var group__types_group =
     [ "jsConsumerNamesList", "structjs_consumer_names_list.html", [
       [ "List", "structjs_consumer_names_list.html#aa4b3cf17902a2d580cc3a230bfa5d309", null ],
       [ "Count", "structjs_consumer_names_list.html#a0bccbad8ac5d335a0ed89970a58900fb", null ]
+    ] ],
+    [ "jsConsumerPauseResponse", "structjs_consumer_pause_response.html", [
+      [ "Paused", "structjs_consumer_pause_response.html#a5ffb8a5073ee4ccf88ae4c634a5c5984", null ],
+      [ "PauseUntil", "structjs_consumer_pause_response.html#a7315c1b69c9134d214b5307b58e9cbbe", null ],
+      [ "PauseRemaining", "structjs_consumer_pause_response.html#a3264f6817caad99f8578fb41c50a726e", null ]
     ] ],
     [ "jsAPIStats", "structjs_a_p_i_stats.html", [
       [ "Total", "structjs_a_p_i_stats.html#a1545170bebb347d0ea1254f51c3027cf", null ],
@@ -396,6 +404,7 @@ var group__types_group =
     [ "jsConsumerInfo", "group__types_group.html#ga2f21bb79884e56a5613d7fe76b11b1e5", null ],
     [ "jsConsumerInfoList", "group__types_group.html#gadad3bf72baae970662248d82d9b05d0a", null ],
     [ "jsConsumerNamesList", "group__types_group.html#gad00ab4381eec504ada3272aa9ff8adb2", null ],
+    [ "jsConsumerPauseResponse", "group__types_group.html#gad333f1891809ea7641908e62dcc809ce", null ],
     [ "jsAPIStats", "group__types_group.html#gad057a0107367ce5727975f3daf63ff75", null ],
     [ "jsAccountLimits", "group__types_group.html#gaa889f706cce285adb9cea8aba0b76866", null ],
     [ "jsTier", "group__types_group.html#ga1d48d3eb36b50c9ab6d8477dccf247d8", null ],

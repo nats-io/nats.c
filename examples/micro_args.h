@@ -11,8 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "microp.h"
-#include "micro_args.h"
+#ifndef MICRO_ARGS_H_
+#define MICRO_ARGS_H_
+
+/**
+ * Request unmarshaled as "arguments", a space-separated list of numbers and strings.
+ * TODO document the interface.
+ */
+typedef struct args_s microArgs;
 
 struct args_s
 {
@@ -20,18 +26,17 @@ struct args_s
     int count;
 };
 
-static microError *parse(void **args, int *args_len, const char *data, int data_len);
 
 static inline microError *new_args(microArgs **ptr, int n)
 {
-    *ptr = NATS_CALLOC(1, sizeof(microArgs));
+    *ptr = calloc(1, sizeof(microArgs));
     if (*ptr == NULL)
         return micro_ErrorOutOfMemory;
 
-    (*ptr)->args = NATS_CALLOC(n, sizeof(void *));
+    (*ptr)->args = calloc(n, sizeof(void *));
     if ((*ptr)->args == NULL)
     {
-        NATS_FREE(*ptr);
+        free(*ptr);
         return micro_ErrorOutOfMemory;
     }
 
@@ -39,81 +44,11 @@ static inline microError *new_args(microArgs **ptr, int n)
     return NULL;
 }
 
-microError *
-micro_ParseArgs(microArgs **ptr, const char *data, int data_len)
+typedef enum parserState
 {
-    microError *err = NULL;
-    microArgs *args = NULL;
-    int n = 0;
-
-    if ((ptr == NULL) || (data == NULL) || (data_len < 0))
-        return microError_Wrapf(micro_ErrorInvalidArg, "failed to parse args");
-
-    MICRO_CALL(err, parse(NULL, &n, data, data_len));
-    MICRO_CALL(err, new_args(&args, n));
-    MICRO_CALL(err, parse(args->args, &n, data, data_len));
-
-    if (err != NULL)
-    {
-        microArgs_Destroy(args);
-        return microError_Wrapf(err, "failed to parse args");
-    }
-    *ptr = args;
-    return NULL;
-}
-
-void microArgs_Destroy(microArgs *args)
-{
-    int i;
-
-    if (args == NULL)
-        return;
-
-    for (i = 0; i < args->count; i++)
-    {
-        NATS_FREE(args->args[i]);
-    }
-    NATS_FREE(args->args);
-    NATS_FREE(args);
-}
-
-int microArgs_Count(microArgs *args)
-{
-    if (args == NULL)
-        return 0;
-
-    return args->count;
-}
-
-microError *
-microArgs_GetInt(int *val, microArgs *args, int index)
-{
-    if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
-        return micro_ErrorInvalidArg;
-
-    *val = *((int *)args->args[index]);
-    return NULL;
-}
-
-microError *
-microArgs_GetFloat(long double *val, microArgs *args, int index)
-{
-    if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
-        return micro_ErrorInvalidArg;
-
-    *val = *((long double *)args->args[index]);
-    return NULL;
-}
-
-microError *
-microArgs_GetString(const char **val, microArgs *args, int index)
-{
-    if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
-        return micro_ErrorInvalidArg;
-
-    *val = (const char *)args->args[index];
-    return NULL;
-}
+    NewArg = 0,
+    NumberArg,
+} parserState;
 
 // decodes the rest of a string into a pre-allocated buffer of sufficient
 // length, or just calculates the needed buffer size. The opening quote must
@@ -205,7 +140,7 @@ decode_and_dupe_rest_of_string(char **dup, int *i, const char *data, int data_le
 
     *i = start;
 
-    *dup = NATS_CALLOC(decoded_len + 1, sizeof(char));
+    *dup = calloc(decoded_len + 1, sizeof(char));
     if (*dup == NULL)
     {
         return micro_ErrorOutOfMemory;
@@ -217,12 +152,6 @@ decode_and_dupe_rest_of_string(char **dup, int *i, const char *data, int data_le
     (*dup)[decoded_len] = 0;
     return NULL;
 }
-
-typedef enum parserState
-{
-    NewArg = 0,
-    NumberArg,
-} parserState;
 
 static microError *
 parse(void **args, int *args_len, const char *data, int data_len)
@@ -318,7 +247,7 @@ parse(void **args, int *args_len, const char *data, int data_len)
                     numbuf[num_len] = 0;
                     if (is_float)
                     {
-                        args[n] = NATS_CALLOC(1, sizeof(long double));
+                        args[n] = calloc(1, sizeof(long double));
                         if (args[n] == NULL)
                         {
                             return micro_ErrorOutOfMemory;
@@ -327,7 +256,7 @@ parse(void **args, int *args_len, const char *data, int data_len)
                     }
                     else
                     {
-                        args[n] = NATS_CALLOC(1, sizeof(int));
+                        args[n] = calloc(1, sizeof(int));
                         if (args[n] == NULL)
                         {
                             return micro_ErrorOutOfMemory;
@@ -353,3 +282,85 @@ parse(void **args, int *args_len, const char *data, int data_len)
     *args_len = n;
     return NULL;
 }
+
+static inline void microArgs_Destroy(microArgs *args)
+{
+    int i;
+
+    if (args == NULL)
+        return;
+
+    for (i = 0; i < args->count; i++)
+    {
+        free(args->args[i]);
+    }
+    free(args->args);
+    free(args);
+}
+
+static microError *
+micro_ParseArgs(microArgs **ptr, const char *data, int data_len)
+{
+    microError *err = NULL;
+    microArgs *args = NULL;
+    int n = 0;
+
+    if ((ptr == NULL) || (data == NULL) || (data_len < 0))
+        return microError_Wrapf(micro_ErrorInvalidArg, "failed to parse args");
+
+    if (err == NULL)
+        err = parse(NULL, &n, data, data_len);
+    if (err == NULL)
+        err = new_args(&args, n);
+    if (err == NULL)
+        err = parse(args->args, &n, data, data_len);
+
+    if (err != NULL)
+    {
+        microArgs_Destroy(args);
+        return microError_Wrapf(err, "failed to parse args");
+    }
+    *ptr = args;
+    return NULL;
+}
+
+static inline int microArgs_Count(microArgs *args)
+{
+    if (args == NULL)
+        return 0;
+
+    return args->count;
+}
+
+static inline microError *
+microArgs_GetInt(int *val, microArgs *args, int index)
+{
+    if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
+        return micro_ErrorInvalidArg;
+
+    *val = *((int *)args->args[index]);
+    return NULL;
+}
+
+static inline microError *
+microArgs_GetFloat(long double *val, microArgs *args, int index)
+{
+    if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
+        return micro_ErrorInvalidArg;
+
+    *val = *((long double *)args->args[index]);
+    return NULL;
+}
+
+static inline microError *
+microArgs_GetString(const char **val, microArgs *args, int index)
+{
+    if ((args == NULL) || (index < 0) || (index >= args->count) || (val == NULL))
+        return micro_ErrorInvalidArg;
+
+    *val = (const char *)args->args[index];
+    return NULL;
+}
+
+
+#endif /* MICRO_H_ */

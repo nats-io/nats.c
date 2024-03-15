@@ -24325,7 +24325,7 @@ test_JetStreamMgtConsumers(void)
     cfg.Name = "my_name";
     cfg.DeliverSubject = "mn.foo";
     cfg.FilterSubject = "bar.>";
-#define TIME_20350101 (2051251200L * 1000000000L)
+#define TIME_20350101 ((int64_t)2051251200L * (int64_t)1000000000L)
     if (serverVersionAtLeast(2, 11, 0))
     {
         cfg.PauseUntil = TIME_20350101;

@@ -138,9 +138,6 @@ struct micro_request_s
     microEndpoint *Endpoint;
 };
 
-extern microError *micro_ErrorOutOfMemory;
-extern microError *micro_ErrorInvalidArg;
-
 microError *micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
 microError *micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg);
 microError *micro_init_monitoring(microService *m);

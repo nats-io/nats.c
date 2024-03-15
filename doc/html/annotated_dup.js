@@ -8,6 +8,7 @@ var annotated_dup =
     [ "jsConsumerInfo", "structjs_consumer_info.html", "structjs_consumer_info" ],
     [ "jsConsumerInfoList", "structjs_consumer_info_list.html", "structjs_consumer_info_list" ],
     [ "jsConsumerNamesList", "structjs_consumer_names_list.html", "structjs_consumer_names_list" ],
+    [ "jsConsumerPauseResponse", "structjs_consumer_pause_response.html", "structjs_consumer_pause_response" ],
     [ "jsConsumerSequenceMismatch", "structjs_consumer_sequence_mismatch.html", "structjs_consumer_sequence_mismatch" ],
     [ "jsDirectGetMsgOptions", "structjs_direct_get_msg_options.html", "structjs_direct_get_msg_options" ],
     [ "jsExternalStream", "structjs_external_stream.html", "structjs_external_stream" ],

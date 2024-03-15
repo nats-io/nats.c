@@ -40,7 +40,8 @@ static inline void natsOptions_unlock(natsOptions *opts)
 #define NATS_OPTS_DEFAULT_PING_INTERVAL         (2 * 60 * 1000)     // 2 minutes
 #define NATS_OPTS_DEFAULT_MAX_PING_OUT          (2)
 #define NATS_OPTS_DEFAULT_IO_BUF_SIZE           (32 * 1024)         // 32 KB
-#define NATS_OPTS_DEFAULT_MAX_PENDING_MSGS      (65536)
+#define NATS_OPTS_DEFAULT_MAX_PENDING_MSGS      (65536)             // 65536 messages
+#define NATS_OPTS_DEFAULT_MAX_PENDING_BYTES     (64 * 1024 * 1024)  // 64 MB
 #define NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE    (8 * 1024 * 1024)   // 8 MB
 #define NATS_OPTS_DEFAULT_RECONNECT_JITTER      (100)               // 100 ms
 #define NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS  (1000)              // 1 second

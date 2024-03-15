@@ -15,6 +15,7 @@
 #include <stdlib.h>
 
 #include "examples.h"
+#include "micro_args.h"
 
 typedef struct service_state_s
 {

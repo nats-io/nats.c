@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "examples.h"
+#include "micro_args.h"
 
 // Hello World! NATS microservice example.
 //

@@ -11,5 +11,7 @@ var structjs_consumer_info =
     [ "NumWaiting", "structjs_consumer_info.html#a57e4a4139310c50a1f3d51af67197af0", null ],
     [ "NumPending", "structjs_consumer_info.html#aeaefd5a500996013b1ce13d8872e869b", null ],
     [ "Cluster", "structjs_consumer_info.html#a6f4401563a9fd102226d82cdc6136e32", null ],
-    [ "PushBound", "structjs_consumer_info.html#a31282cdc72000a91af03f89899740bfa", null ]
+    [ "PushBound", "structjs_consumer_info.html#a31282cdc72000a91af03f89899740bfa", null ],
+    [ "Paused", "structjs_consumer_info.html#a13f80f4b24da173ef2da051e69f216d7", null ],
+    [ "PauseRemaining", "structjs_consumer_info.html#a86501e735531929add3e161d40479c44", null ]
 ];

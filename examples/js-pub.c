@@ -88,6 +88,7 @@ int main(int argc, char **argv)
             cfg.Name = stream;
             // Set the subject
             cfg.Subjects = (const char*[1]){subj};
+            // Set the subject count
             cfg.SubjectsLen = 1;
             // Make it a memory stream.
             cfg.Storage = js_MemoryStorage;

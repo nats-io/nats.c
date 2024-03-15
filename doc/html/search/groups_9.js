@@ -1,4 +1,6 @@
 var searchData=
 [
-  ['options_0',['Options',['../group__opts_group.html',1,'Options'],['../group__stan_conn_opts_group.html',1,'Streaming Connection Options'],['../group__stan_sub_opts_group.html',1,'Streaming Subscription Options']]]
+  ['public_20constants_1887',['Public constants',['../group__micro_constants.html',1,'']]],
+  ['public_20structs_1888',['Public structs',['../group__micro_structs.html',1,'']]],
+  ['publishing_1889',['Publishing',['../group__conn_pub_group.html',1,'(Global Namespace)'],['../group__js_pub_group.html',1,'(Global Namespace)'],['../group__stan_conn_pub_group.html',1,'(Global Namespace)']]]
 ];

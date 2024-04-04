@@ -50,7 +50,7 @@ micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
 
     MICRO_CALL(err, micro_ErrorFromStatus(natsMutex_Create(&ep->endpoint_mu)));
     MICRO_CALL(err, micro_clone_endpoint_config(&ep->config, cfg));
-    MICRO_CALL(err, _dup_with_prefix(&ep->name, prefix, cfg->Name));
+    MICRO_CALL(err, micro_strdup(&ep->name, cfg->Name));
     MICRO_CALL(err, _dup_with_prefix(&ep->subject, prefix, subj));
     if (err != NULL)
     {

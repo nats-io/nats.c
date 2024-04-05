@@ -95,7 +95,7 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
 
     if (m->first_ep != NULL)
     {
-        if (strcmp(m->first_ep->name, ep->name) == 0)
+        if (strcmp(m->first_ep->subject, ep->subject) == 0)
         {
             ep->next = m->first_ep->next;
             prev_ep = m->first_ep;
@@ -106,7 +106,7 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
             prev_ptr = m->first_ep;
             for (ptr = m->first_ep->next; ptr != NULL; prev_ptr = ptr, ptr = ptr->next)
             {
-                if (strcmp(ptr->name, ep->name) == 0)
+                if (strcmp(ptr->subject, ep->subject) == 0)
                 {
                     ep->next = ptr->next;
                     prev_ptr->next = ep;

@@ -14451,7 +14451,7 @@ test_AsyncErrHandler_MaxPendingBytes(void)
     natsMutex_Lock(arg.m);
     arg.sub = sub;
     natsMutex_Unlock(arg.m);
-    for (i;
+    for (i=0;
         (s == NATS_OK) && (i < (pendingBytesLimit + 100)); i+=data_len) //increment by 10 (message size) each iteration
     {
         s = natsConnection_Publish(nc, "async_test", msg, data_len);
@@ -33704,7 +33704,7 @@ test_MicroAsyncErrorHandler_MaxPendingBytes(void)
     natsMutex_Unlock(arg.m);
 
     test("Cause an error by sending too many messages: ");
-    for (i;
+    for (i=0;
         (s == NATS_OK) && (i < (pendingBytesLimit + 100)); i+=data_len) //increment by 10 (message size) each iteration
     {
         s = natsConnection_Publish(nc, "async_test", msg, data_len);

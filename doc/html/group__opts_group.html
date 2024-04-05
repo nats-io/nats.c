@@ -182,6 +182,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga95510436eee06f9992ded96a44795c40"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga95510436eee06f9992ded96a44795c40">natsOptions_SetMaxPendingMsgs</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int maxPending)</td></tr>
 <tr class="memdesc:ga95510436eee06f9992ded96a44795c40"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the maximum number of pending messages per subscription.  <a href="group__opts_group.html#ga95510436eee06f9992ded96a44795c40">More...</a><br /></td></tr>
 <tr class="separator:ga95510436eee06f9992ded96a44795c40"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga77afd954ca548054631215e511468e60"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga77afd954ca548054631215e511468e60">natsOptions_SetMaxPendingBytes</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int64_t maxPending)</td></tr>
+<tr class="memdesc:ga77afd954ca548054631215e511468e60"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the maximum number of pending bytes per subscription.  <a href="group__opts_group.html#ga77afd954ca548054631215e511468e60">More...</a><br /></td></tr>
+<tr class="separator:ga77afd954ca548054631215e511468e60"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga127ec7a8196b453947a7fa9a64096cbd"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga127ec7a8196b453947a7fa9a64096cbd">natsOptions_SetErrorHandler</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, <a class="el" href="group__callbacks_group.html#ga9e511dffa471dfb971b7dd2b12329626">natsErrHandler</a> errHandler, void *closure)</td></tr>
 <tr class="memdesc:ga127ec7a8196b453947a7fa9a64096cbd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the error handler for asynchronous events.  <a href="group__opts_group.html#ga127ec7a8196b453947a7fa9a64096cbd">More...</a><br /></td></tr>
 <tr class="separator:ga127ec7a8196b453947a7fa9a64096cbd"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1452,6 +1455,43 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
     <tr><td class="paramname">maxPending</td><td>the number of messages allowed to be buffered by the library before triggering a slow consumer scenario. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ga77afd954ca548054631215e511468e60"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga77afd954ca548054631215e511468e60">&#9670;&nbsp;</a></span>natsOptions_SetMaxPendingBytes()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetMaxPendingBytes </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>maxPending</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Specifies the maximum number of inbound bytes that can be buffered in the library, for each subscription, before inbound messages are dropped and <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ae93ff5b7fe31f8570308385d92d317b0">NATS_SLOW_CONSUMER</a> status is reported to the <a class="el" href="group__callbacks_group.html#ga9e511dffa471dfb971b7dd2b12329626" title="Callback used to notify the user of errors encountered while processing inbound messages.">natsErrHandler</a> callback (if one has been set).</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga127ec7a8196b453947a7fa9a64096cbd" title="Sets the error handler for asynchronous events.">natsOptions_SetErrorHandler()</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">maxPending</td><td>the number of bytes allowed to be buffered by the library before triggering a slow consumer scenario. </td></tr>
   </table>
   </dd>
 </dl>

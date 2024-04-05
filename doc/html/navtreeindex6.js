@@ -1,5 +1,7 @@
 var NAVTREEINDEX6 =
 {
+"structjs_stream_config.html#a0b44ea5251ef20bf5b5658bcfbea832d":[2,0,9,11],
+"structjs_stream_config.html#a0c5f3354073dbe72650e3db7f59a47af":[2,0,9,2],
 "structjs_stream_config.html#a0ce1d0a7c1f0576151f505724ae393d1":[2,0,9,32],
 "structjs_stream_config.html#a28630f6f07ca02553c5d5718d7c29721":[2,0,9,26],
 "structjs_stream_config.html#a34960d6acc710c2f32b563f4bb7c9c0a":[2,0,9,20],

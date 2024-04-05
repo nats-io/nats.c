@@ -30,6 +30,7 @@ var group__opts_group =
     [ "natsOptions_SetCustomReconnectDelay", "group__opts_group.html#ga3593165aa113d6736e0226ddc56b3e9d", null ],
     [ "natsOptions_SetReconnectBufSize", "group__opts_group.html#gaa0d4b7ece8477cb9879f0dafff3456a5", null ],
     [ "natsOptions_SetMaxPendingMsgs", "group__opts_group.html#ga95510436eee06f9992ded96a44795c40", null ],
+    [ "natsOptions_SetMaxPendingBytes", "group__opts_group.html#ga77afd954ca548054631215e511468e60", null ],
     [ "natsOptions_SetErrorHandler", "group__opts_group.html#ga127ec7a8196b453947a7fa9a64096cbd", null ],
     [ "natsOptions_SetClosedCB", "group__opts_group.html#ga44410242e73134e5bb51ef27904a9253", null ],
     [ "natsOptions_SetDisconnectedCB", "group__opts_group.html#gadc8dc0cedd91bda71d544f3dedc4a039", null ],

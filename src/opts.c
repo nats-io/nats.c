@@ -884,6 +884,18 @@ natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending)
 }
 
 natsStatus
+natsOptions_SetMaxPendingBytes(natsOptions* opts, int64_t maxPending)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, (maxPending <= 0));
+
+    opts->maxPendingBytes = maxPending;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
 natsOptions_SetErrorHandler(natsOptions *opts, natsErrHandler errHandler,
                             void *closure)
 {
@@ -1517,6 +1529,7 @@ natsOptions_Create(natsOptions **newOpts)
     opts->maxPingsOut           = NATS_OPTS_DEFAULT_MAX_PING_OUT;
     opts->ioBufSize             = NATS_OPTS_DEFAULT_IO_BUF_SIZE;
     opts->maxPendingMsgs        = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
+    opts->maxPendingBytes       = -1;
     opts->timeout               = NATS_OPTS_DEFAULT_TIMEOUT;
     opts->libMsgDelivery        = natsLib_isLibHandlingMsgDeliveryByDefault();
     opts->writeDeadline         = natsLib_defaultWriteDeadline();

@@ -2581,6 +2581,7 @@ test_natsOptions(void)
              && (opts->maxPingsOut == 2)
              && (opts->ioBufSize == 32 * 1024)
              && (opts->maxPendingMsgs == 65536)
+             && (opts->maxPendingBytes == -1)
              && (opts->user == NULL)
              && (opts->password == NULL)
              && (opts->token == NULL)
@@ -2811,6 +2812,10 @@ test_natsOptions(void)
     test("Set Max Pending Msgs : ");
     s = natsOptions_SetMaxPendingMsgs(opts, 10000);
     testCond((s == NATS_OK) && (opts->maxPendingMsgs == 10000));
+
+    test("Set Max Pending Bytes : ");
+    s = natsOptions_SetMaxPendingBytes(opts, 1000000);
+    testCond((s == NATS_OK) && (opts->maxPendingBytes == 1000000))
 
     test("Set Error Handler: ");
     s = natsOptions_SetErrorHandler(opts, _dummyErrHandler, NULL);
@@ -14340,13 +14345,13 @@ _asyncErrCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void* clo
 
     arg->closed = true;
     arg->done = true;
-    natsCondition_Signal(arg->c);
+    natsCondition_Broadcast(arg->c);
 
     natsMutex_Unlock(arg->m);
 }
 
 static void
-test_AsyncErrHandler(void)
+test_AsyncErrHandler_MaxPendingMsgs(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14408,6 +14413,71 @@ test_AsyncErrHandler(void)
     _stopServer(serverPid);
 }
 
+static void
+test_AsyncErrHandler_MaxPendingBytes(void)
+{
+    natsStatus          s;
+    natsConnection* nc = NULL;
+    natsOptions* opts = NULL;
+    natsSubscription* sub = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+    int                 data_len = 10;
+    const char          msg[] = { 0,1,2,3,4,5,6,7,8,9 }; //10 bytes long message
+    int64_t             pendingBytesLimit = 100;
+    int                 i = 0;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    arg.status = NATS_OK;
+    arg.control = 7;
+
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+    IFOK(s, natsOptions_SetMaxPendingBytes(opts, pendingBytesLimit));
+    IFOK(s, natsOptions_SetErrorHandler(opts, _asyncErrCb, (void*)&arg));
+
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test AsyncErrHandler");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "async_test", _recvTestString, (void*)&arg));
+
+    natsMutex_Lock(arg.m);
+    arg.sub = sub;
+    natsMutex_Unlock(arg.m);
+    for (i=0;
+        (s == NATS_OK) && (i < (pendingBytesLimit + 100)); i+=data_len) //increment by 10 (message size) each iteration
+    {
+        s = natsConnection_Publish(nc, "async_test", msg, data_len);
+    }
+    IFOK(s, natsConnection_Flush(nc));
+
+    // Wait for async err callback
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.done)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+
+    test("Aync fired properly, and all checks are good: ");
+    testCond((s == NATS_OK)
+        && arg.done
+        && arg.closed
+        && (arg.status == NATS_OK));
+
+    natsOptions_Destroy(opts);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
+}
 
 static void
 _asyncErrBlockingCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void* closure)
@@ -33537,7 +33607,7 @@ _microAsyncErrorRequestHandler(microRequest *req)
 }
 
 static void
-test_MicroAsyncErrorHandler(void)
+test_MicroAsyncErrorHandler_MaxPendingMsgs(void)
 {
     natsStatus          s;
     struct threadArg    arg;
@@ -33592,6 +33662,89 @@ test_MicroAsyncErrorHandler(void)
         (s == NATS_OK) && (i < (opts->maxPendingMsgs + 100)); i++)
     {
         s = natsConnection_PublishString(nc, "async_test", "hello");
+    }
+    testCond((NATS_OK == s)
+        && (NATS_OK == natsConnection_Flush(nc)));
+
+    test("Wait for async err callback: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.closed)
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && arg.closed && (arg.status == NATS_SLOW_CONSUMER));
+
+    microService_Destroy(m);
+    _waitForMicroservicesAllDone(&arg);
+
+    test("Destroy the test connection: ");
+    natsConnection_Destroy(nc);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+static void
+test_MicroAsyncErrorHandler_MaxPendingBytes(void)
+{
+    natsStatus          s;
+    struct threadArg    arg;
+    natsConnection* nc = NULL;
+    natsOptions* opts = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    microService* m = NULL;
+    microEndpoint* ep = NULL;
+    microEndpointConfig ep_cfg = {
+        .Name = "do",
+        .Subject = "async_test",
+        .Handler = _microAsyncErrorRequestHandler,
+    };
+    microServiceConfig cfg = {
+        .Name = "test",
+        .Version = "1.0.0",
+        .ErrHandler = _microAsyncErrorHandler,
+        .State = &arg,
+        .DoneHandler = _microServiceDoneHandler,
+    };
+    int data_len = 10;
+    const char msg[] = { 0,1,2,3,4,5,6,7,8,9 }; //10 bytes long message
+    int64_t pendingBytesLimit = 100;
+    int i = 0;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL));
+    IFOK(s, natsOptions_SetMaxPendingBytes(opts, pendingBytesLimit));
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test AsyncErrHandler");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to NATS: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    _startMicroservice(&m, nc, &cfg, NULL, 0, &arg);
+
+    test("Test microservice is running: ");
+    testCond(!microService_IsStopped(m))
+
+    test("Add test endpoint: ");
+    testCond(NULL == micro_add_endpoint(&ep, m, NULL, &ep_cfg, true));
+
+    natsMutex_Lock(arg.m);
+    arg.status = NATS_OK;
+    natsMutex_Unlock(arg.m);
+
+    test("Cause an error by sending too many messages: ");
+    for (i=0;
+        (s == NATS_OK) && (i < (pendingBytesLimit + 100)); i+=data_len) //increment by 10 (message size) each iteration
+    {
+        s = natsConnection_Publish(nc, "async_test", msg, data_len);
     }
     testCond((NATS_OK == s)
         && (NATS_OK == natsConnection_Flush(nc)));
@@ -35996,7 +36149,8 @@ static testInfo allTests[] =
     {"AsyncSubscriptionPendingDrain",   test_AsyncSubscriptionPendingDrain},
     {"SyncSubscriptionPending",         test_SyncSubscriptionPending},
     {"SyncSubscriptionPendingDrain",    test_SyncSubscriptionPendingDrain},
-    {"AsyncErrHandler",                 test_AsyncErrHandler},
+    {"AsyncErrHandlerMaxPendingMsgs",   test_AsyncErrHandler_MaxPendingMsgs},
+    {"AsyncErrHandlerMaxPendingBytes",  test_AsyncErrHandler_MaxPendingBytes },
     {"AsyncErrHandlerSubDestroyed",     test_AsyncErrHandlerSubDestroyed},
     {"AsyncSubscriberStarvation",       test_AsyncSubscriberStarvation},
     {"AsyncSubscriberOnClose",          test_AsyncSubscriberOnClose},
@@ -36122,7 +36276,8 @@ static testInfo allTests[] =
     {"MicroStartStop",                  test_MicroStartStop},
     {"MicroServiceStopsOnClosedConn",   test_MicroServiceStopsOnClosedConn},
     {"MicroServiceStopsWhenServerStops", test_MicroServiceStopsWhenServerStops},
-    {"MicroAsyncErrorHandler",          test_MicroAsyncErrorHandler},
+    {"MicroAsyncErrorHandlerMaxPendingMsgs",    test_MicroAsyncErrorHandler_MaxPendingMsgs},
+    {"MicroAsyncErrorHandlerMaxPendingBytes",   test_MicroAsyncErrorHandler_MaxPendingBytes },
 
 #if defined(NATS_HAS_STREAMING)
     {"StanPBufAllocator",               test_StanPBufAllocator},

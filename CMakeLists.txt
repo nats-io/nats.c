@@ -177,7 +177,9 @@ if(UNIX)
   else(APPLE)
     set(NATS_OS "LINUX")
     set(NATS_USE_PTHREAD "-pthread")
-    set(NATS_EXTRA_LIB "rt -lpthread")
+    if(NOT ANDROID)
+      set(NATS_EXTRA_LIB "rt -lpthread")
+    endif()
   endif(APPLE)
   if (${NATS_BUILD_ARCH} MATCHES "32")
     if(NOT APPLE)
@@ -236,11 +238,11 @@ endif(NATS_BUILD_WITH_TLS)
 # Versionning and Doc
 
 set(NATS_VERSION_MAJOR  3)
-set(NATS_VERSION_MINOR  7)
-set(NATS_VERSION_PATCH  1)
+set(NATS_VERSION_MINOR  9)
+set(NATS_VERSION_PATCH  0)
 set(NATS_VERSION_SUFFIX "-beta")
 
-set(NATS_VERSION_REQUIRED_NUMBER 0x030700)
+set(NATS_VERSION_REQUIRED_NUMBER 0x030900)
 
 if(NATS_UPDATE_VERSION OR NATS_UPDATE_DOC)
 configure_file(

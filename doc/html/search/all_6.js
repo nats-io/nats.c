@@ -1,7 +1,10 @@
 var searchData=
 [
-  ['handler_0',['Handler',['../structmicro__endpoint__config__s.html#a4a916af910a5eb88abf3f0aa60082667',1,'micro_endpoint_config_s']]],
-  ['headersonly_1',['headersonly',['../structjs_re_publish.html#a16ebc4cdae4a407cf4e32aad212888db',1,'jsRePublish::HeadersOnly'],['../structjs_consumer_config.html#a30d4142bac47ab6dc583c5ee193704e6',1,'jsConsumerConfig::HeadersOnly']]],
-  ['heartbeat_2',['heartbeat',['../structjs_consumer_config.html#ac439828c3bedb8826a1e92de13280d53',1,'jsConsumerConfig::Heartbeat'],['../structjs_fetch_request.html#ae8e73c7cc2e2a2d2502407c9b1522496',1,'jsFetchRequest::Heartbeat']]],
-  ['history_3',['History',['../structkv_config.html#a0ec6b3afbfdaa33436e2ae748e986e98',1,'kvConfig']]]
+  ['filtersubject_72',['FilterSubject',['../structjs_stream_source.html#af787b51dde9d77626f33860564eb08c3',1,'jsStreamSource::FilterSubject()'],['../structjs_stream_source_info.html#a0c0f08cd9dc97a5df116356bfebb8824',1,'jsStreamSourceInfo::FilterSubject()'],['../structjs_consumer_config.html#af56ab7708b11e85e0b9115d152d281ca',1,'jsConsumerConfig::FilterSubject()']]],
+  ['filtersubjects_73',['FilterSubjects',['../structjs_consumer_config.html#ada703eb1db0288d8a937126d6d856c6f',1,'jsConsumerConfig']]],
+  ['filtersubjectslen_74',['FilterSubjectsLen',['../structjs_consumer_config.html#a2a6cdec5efe7542496f8b8cccb539643',1,'jsConsumerConfig']]],
+  ['firstseq_75',['FirstSeq',['../structjs_stream_config.html#a7ed5e8e5a8d367b25751b9708d0e395b',1,'jsStreamConfig::FirstSeq()'],['../structjs_stream_state.html#a55bb6719163acef7fdb6d0bc3ae8d5da',1,'jsStreamState::FirstSeq()']]],
+  ['firsttime_76',['FirstTime',['../structjs_stream_state.html#afb7a708022faff518c060b33e99b04b0',1,'jsStreamState']]],
+  ['flowcontrol_77',['FlowControl',['../structjs_consumer_config.html#a484c64b6c54f6f758f54315470ed20d0',1,'jsConsumerConfig']]],
+  ['functions_78',['Functions',['../group__func_group.html',1,'(Global Namespace)'],['../group__micro_functions.html',1,'(Global Namespace)']]]
 ];

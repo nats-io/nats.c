@@ -852,12 +852,13 @@ typedef struct jsConsumerConfig
 
         // Configuration options introduced in 2.10
 
-        // Multiple filter subjects
-        const char **FilterSubjects;
-        int FilterSubjectsLen;
+        const char              **FilterSubjects;       ///< Multiple filter subjects
+        int                     FilterSubjectsLen;
+        natsMetadata            Metadata;               ///< User-provided metadata for the consumer, encoded as an array of {"key", "value",...}
 
-        // User-provided metadata for the consumer, encoded as an array of {"key", "value",...}
-        natsMetadata Metadata;
+        // Configuration options introduced in 2.11
+
+        int64_t                 PauseUntil;             ///< Suspends the consumer until this deadline, represented as number of nanoseconds since epoch.
 } jsConsumerConfig;
 
 /**
@@ -1003,7 +1004,8 @@ typedef struct jsConsumerInfo
         uint64_t                NumPending;
         jsClusterInfo           *Cluster;
         bool                    PushBound;
-
+        bool                    Paused;
+        int64_t                 PauseRemaining;        ///< Remaining time in nanoseconds.
 } jsConsumerInfo;
 
 /**
@@ -1033,6 +1035,18 @@ typedef struct jsConsumerNamesList
         int     Count;
 
 } jsConsumerNamesList;
+
+/**
+ * Request to pause the consumer, used to call js_PauseConsumer.
+ *
+ * @see js_PauseConsumer
+ */
+typedef struct jsConsumerPauseResponse
+{
+        bool            Paused;        
+        int64_t         PauseUntil;     ///< UTC time expressed as number of nanoseconds since epoch.
+        int64_t         PauseRemaining; ///< Remaining time in nanoseconds.
+} jsConsumerPauseResponse;
 
 /**
  * Reports on API calls to JetStream for this account.
@@ -4090,7 +4104,7 @@ natsConnection_IsReconnecting(natsConnection *nc);
  *
  * @param nc the pointer to the #natsConnection object.
  */
-bool
+NATS_EXTERN bool
 natsConnection_IsDraining(natsConnection *nc);
 
 /** \brief Returns the current state of the connection.
@@ -4397,7 +4411,7 @@ natsConnection_HasHeaderSupport(natsConnection *nc);
  * @return #NATS_SYS_ERROR if a system error getting the IP and port occurred.
  * @return #NATS_NO_MEMORY if the library was unable to allocate memory for the returned IP string.
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port);
 
 /** \brief Closes the connection.
@@ -5961,6 +5975,34 @@ NATS_EXTERN natsStatus
 js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
                       jsOptions *opts, jsErrCode *errCode);
 
+/** \brief Pauses a consumer.
+ *
+ * Pauses the consumer named <c>consumer</c> on stream named <c>stream</c>.
+ *
+ * @param new_cpr if not NULL, will receive the response of the operation.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param consumer the name of the consumer.
+ * @param pauseUntil the time in nanoseconds since the Unix epoch to pause the consumer until.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+
+NATS_EXTERN natsStatus
+js_PauseConsumer(jsConsumerPauseResponse **new_cpr, jsCtx *js,
+                 const char *stream, const char *consumer,
+                 uint64_t pauseUntil, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the PauseConsumer response object.
+ *
+ * Releases memory allocated for this object.
+ *
+ * @param cpr the pointer to the #jsConsumerPauseResponse object.
+ */
+NATS_EXTERN void
+jsConsumerPauseResponse_Destroy(jsConsumerPauseResponse *cpr);
+
 /** \brief Destroys the consumer information object.
  *
  * Releases memory allocated for this consumer information object.
@@ -7216,15 +7258,15 @@ kvStatus_Destroy(kvStatus *sts);
  *
  * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
  * necessarily bumping the major version of the library.
- * 
+ *
  * ### NATS Microservices.
  *
  * Microservices can expose one or more request-response endpoints that process
- * incoming NATS messages. 
+ * incoming NATS messages.
  *
  * Microservices are created by calling micro_AddService, and configured by
  * passing a microServiceConfig to it. Many microservices can share a single
- * connection to a NATS server. 
+ * connection to a NATS server.
  *
  * Once created, a microservice will subscribe to all endpoints' subjects and
  * associate them with the configured handlers. It will also subscribe to and
@@ -7311,7 +7353,7 @@ typedef struct micro_endpoint_stats_s microEndpointStats;
  * This error type is returned by most microservice functions. You can create
  * your own custom errors by using #micro_Errorf and wrap existing errors using
  * #microError_Wrapf. Errors are heap-allocated and must be freed with either
- * #microError_Destroy or by passing it into #microRequest_Respond. 
+ * #microError_Destroy or by passing it into #microRequest_Respond.
  *
  * There are no public fields in this struct, use #microError_Code,
  * #microError_Status, and #microError_String to get more information about the
@@ -7322,7 +7364,7 @@ typedef struct micro_error_s microError;
 /**
  * @brief a collection of endpoints and other groups, with a
  * common prefix to their subjects and names.
- * 
+ *
  * It has no other purpose than
  * convenience, for organizing endpoint subject space.
  */
@@ -7335,7 +7377,7 @@ typedef struct micro_group_s microGroup;
  */
 typedef struct micro_request_s microRequest;
 
-/** 
+/**
  * @brief the main object for a configured microservice.
  *
  * It can be created with #micro_AddService, and configured by passing a
@@ -7371,12 +7413,16 @@ typedef struct micro_service_config_s microServiceConfig;
 typedef struct micro_service_info_s microServiceInfo;
 
 /**
- * @brief The Microservice service-level stats struct. 
+ * @brief The Microservice service-level stats struct.
  *
  * @see micro_service_stats_s for descriptions of the fields,
  * microService_GetStats
  */
 typedef struct micro_service_stats_s microServiceStats;
+
+
+NATS_EXTERN microError *micro_ErrorOutOfMemory;
+NATS_EXTERN microError *micro_ErrorInvalidArg;
 
 /** @} */ // end of microTypes
 
@@ -7442,7 +7488,7 @@ typedef void (*microDoneHandler)(microService *m);
 /** \defgroup microStructs Public structs
  *
  *  Microservice public structs.
- * 
+ *
  *  @{
  */
 
@@ -7516,7 +7562,7 @@ struct micro_endpoint_stats_s
 {
     const char *Name;
     const char *Subject;
-    
+
     /**
      * @brief The number of requests received by the endpoint.
      */
@@ -7580,7 +7626,7 @@ struct micro_service_config_s
     natsMetadata Metadata;
 
     /**
-     * @brief The "main" (aka default) endpoint configuration. 
+     * @brief The "main" (aka default) endpoint configuration.
      *
      * It is the default in that it does not require calling
      * microService_AddEndpoint, it is added automatically when creating the
@@ -7637,7 +7683,7 @@ struct micro_service_info_s
      * @brief Response type. Always `"io.nats.micro.v1.info_response"`.
      */
     const char *Type;
-    
+
     /**
      * @brief The name of the service.
      */
@@ -7652,7 +7698,7 @@ struct micro_service_info_s
      * @brief The description of the service.
      */
     const char *Description;
-    
+
     /**
      * @brief The ID of the service instance responding to the request.
      */
@@ -7708,7 +7754,7 @@ struct micro_service_stats_s
      * @brief The stats for each endpoint of the service.
      */
     microEndpointStats *Endpoints;
-    
+
     /**
      * @brief The number of endpoints in the `endpoints` array.
      */
@@ -7725,7 +7771,7 @@ struct micro_service_stats_s
 
 /**
  * @brief The prefix for all microservice monitoring subjects.
- * 
+ *
  * For example, `"$SRV.PING"`.
  */
 #define MICRO_API_PREFIX "$SRV"
@@ -7850,7 +7896,7 @@ microService_AddGroup(microGroup **new_group, microService *m, const char *prefi
  *
  * @note This function may fail while stopping the service, do not assume
  * unconditional success if clean up is important.
- * 
+ *
  * @param m the #microService to stop and destroy.
  *
  * @return a #microError if an error occurred.
@@ -8034,7 +8080,7 @@ microRequest_AddHeader(microRequest *req, const char *key, const char *value);
 NATS_EXTERN microError *
 microRequest_DeleteHeader(microRequest *req, const char *key);
 
-/** @brief Returns the connection associated with the request. 
+/** @brief Returns the connection associated with the request.
  *
  * @param req the request.
  *
@@ -8045,7 +8091,7 @@ microRequest_DeleteHeader(microRequest *req, const char *key);
 NATS_EXTERN natsConnection *
 microRequest_GetConnection(microRequest *req);
 
-/** @brief Returns the data in the the request, as a byte array. 
+/** @brief Returns the data in the the request, as a byte array.
  *
  * @note The request owns the data, so it should not be freed other than with
  * `microRequest_Destroy`.
@@ -8055,25 +8101,25 @@ microRequest_GetConnection(microRequest *req);
  * @param req the request.
  *
  * @return a pointer to the request's data.
- * 
+ *
  * @see #natsMsg_GetData, #microRequest_GetDataLength
  */
 NATS_EXTERN const char *
 microRequest_GetData(microRequest *req);
 
-/** @brief Returns the number of data bytes in the the request. 
+/** @brief Returns the number of data bytes in the the request.
  *
  * @param req the request.
  *
  * @return the number of data bytes in the request.
- * 
+ *
  * @see #natsMsg_GetDataLength, #microRequest_GetData
  */
 NATS_EXTERN int
 microRequest_GetDataLength(microRequest *req);
 
 /** \brief Returns the pointer to the user-provided endpoint state, if
- * the request is associated with an endpoint. 
+ * the request is associated with an endpoint.
  *
  * @param req the request.
  *
@@ -8109,7 +8155,7 @@ microRequest_GetHeaderKeys(microRequest *req, const char ***keys, int *count);
  * @param key the key for which the value is requested.
  * @param value the memory location where the library will store the pointer to the first
  * value (if more than one is found) associated with the `key`.
- * 
+ *
  * @return a #microError if an error occurred.
  *
  * @see #natsMsgHeader_Get, #microRequest_GetHeaderValue, #microRequest_GetHeaderValues
@@ -8156,7 +8202,7 @@ microRequest_GetMsg(microRequest *req);
 NATS_EXTERN const char *
 microRequest_GetReply(microRequest *req);
 
-/** @brief Returns the pointer to the microservice associated with the request. 
+/** @brief Returns the pointer to the microservice associated with the request.
  *
  * @param req the request.
  *
@@ -8193,7 +8239,7 @@ microRequest_GetSubject(microRequest *req);
  * @param data the response data.
  * @param len the length of the response data.
  *
- * @return an error, if any. 
+ * @return an error, if any.
  */
 NATS_EXTERN microError *
 microRequest_Respond(microRequest *req, const char *data, size_t len);
@@ -8202,7 +8248,7 @@ microRequest_Respond(microRequest *req, const char *data, size_t len);
  * @brief Respond to a request with a simple error.
  *
  * If err is NULL, `RespondError` does nothing.
- * 
+ *
  * @note microRequest_RespondError is called automatially if the handler returns
  * an error. Usually, there is no need for a handler to use this function
  * directly. If the request
@@ -8210,7 +8256,7 @@ microRequest_Respond(microRequest *req, const char *data, size_t len);
  * @param req the request.
  * @param err the error to include in the response header. If `NULL`, no error.
  *
- * @return an error, if any. 
+ * @return an error, if any.
  */
 NATS_EXTERN microError *
 microRequest_RespondError(microRequest *req, microError *err);
@@ -8220,7 +8266,7 @@ microRequest_RespondError(microRequest *req, microError *err);
  *
  * If err is NULL, `RespondErrorWithData` is equivalent to `Respond`. If err is
  * not NULL, the response will include the error in the response header, and err
- * will be freed. 
+ * will be freed.
  *
  * The following example illustrates idiomatic usage in a request handler. Since
  * this handler handles its own error responses, the only error it might return
@@ -8235,7 +8281,7 @@ microRequest_RespondError(microRequest *req, microError *err);
  * \endcode
  *
  * Or, if the request handler has its own cleanup logic:
- * 
+ *
  * \code{.c}
  * if (err = somefunc(), err != NULL)
  *     goto CLEANUP;
@@ -8253,10 +8299,10 @@ microRequest_RespondError(microRequest *req, microError *err);
  * @param data the response data.
  * @param len the length of the response data.
  *
- * @note 
+ * @note
  *
  *
- * @return an error, if any. 
+ * @return an error, if any.
  */
 NATS_EXTERN microError *
 microRequest_RespondCustom(microRequest *req, microError *err, const char *data, size_t len);
@@ -8340,10 +8386,10 @@ microError_Destroy(microError *err);
 
 /**
  * @brief Returns the NATS status associated with the error.
- * 
- * @param err 
- * 
- * @return the status 
+ *
+ * @param err
+ *
+ * @return the status
  */
 NATS_EXTERN natsStatus
 microError_Status(microError *err);
@@ -8357,7 +8403,7 @@ microError_Status(microError *err);
  * @param err the error.
  * @param buf the output buffer.
  * @param len the capacity of the output buffer.
- * @return `buf` 
+ * @return `buf`
  */
 NATS_EXTERN const char *
 microError_String(microError *err, char *buf, size_t len);
@@ -8371,7 +8417,7 @@ microError_String(microError *err, char *buf, size_t len);
  *
  * @param err the original error
  * @param format the new message to prepend to the original error message.
- * @param ... 
+ * @param ...
  *
  * @return a new, wrapped, error.
  */
@@ -8387,19 +8433,19 @@ microError_Wrapf(microError *err, const char *format, ...);
 
 /**
  * @brief Creates a new microservice client.
- * 
+ *
  * @param new_client received the pointer to the new client.
  * @param nc a NATS connection.
  * @param cfg for future use, use NULL for now.
- * 
- * @return a #microError if an error occurred. 
+ *
+ * @return a #microError if an error occurred.
  */
 NATS_EXTERN microError *
 micro_NewClient(microClient **new_client, natsConnection *nc, microClientConfig *cfg);
 
 /**
  * @brief Destroys a microservice client.
- * 
+ *
  * @param client the client to destroy.
  */
 NATS_EXTERN void
@@ -8414,7 +8460,7 @@ microClient_Destroy(microClient *client);
  * @param subject the subject to send the request on.
  * @param data the request data.
  * @param data_len the request data length.
- * 
+ *
  * @return a #microError if an error occurred.
  */
 NATS_EXTERN microError *
@@ -8430,7 +8476,7 @@ microClient_DoRequest(natsMsg **reply, microClient *client, const char *subject,
 
 /**
  * @brief Destroys a #microServiceInfo object.
- * 
+ *
  * @param info the object to destroy.
  */
 NATS_EXTERN void
@@ -8438,7 +8484,7 @@ microServiceInfo_Destroy(microServiceInfo *info);
 
 /**
  * @brief Destroys a #microServiceStats object.
- * 
+ *
  * @param stats the object to destroy.
  */
 NATS_EXTERN void

@@ -24164,7 +24164,7 @@ test_JetStreamMgtConsumers(void)
         jsConsumerConfig_Init(&cfg);
         cfg.DeliverPolicy = dlvPolicies[i];
         s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
-        testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+        testCond((s == NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
         nats_clearLastError();
 
         test("Verify config: ");
@@ -24179,7 +24179,7 @@ test_JetStreamMgtConsumers(void)
     jsConsumerConfig_Init(&cfg);
     cfg.DeliverPolicy = (jsDeliverPolicy) 100;
     s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
-    testCond((s = NATS_INVALID_ARG) && (jerr == 0) && (ci == NULL));
+    testCond((s == NATS_INVALID_ARG) && (jerr == 0) && (ci == NULL));
     nats_clearLastError();
 
     for (i=0; i<3; i++)
@@ -24188,7 +24188,7 @@ test_JetStreamMgtConsumers(void)
         jsConsumerConfig_Init(&cfg);
         cfg.AckPolicy = ackPolicies[i];
         s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
-        testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+        testCond((s == NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
         nats_clearLastError();
 
         test("Verify config: ");
@@ -24203,7 +24203,7 @@ test_JetStreamMgtConsumers(void)
     jsConsumerConfig_Init(&cfg);
     cfg.AckPolicy = (jsAckPolicy) 100;
     s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
-    testCond((s = NATS_INVALID_ARG) && (jerr == 0) && (ci == NULL));
+    testCond((s == NATS_INVALID_ARG) && (jerr == 0) && (ci == NULL));
     nats_clearLastError();
 
     for (i=0; i<2; i++)
@@ -24212,7 +24212,7 @@ test_JetStreamMgtConsumers(void)
         jsConsumerConfig_Init(&cfg);
         cfg.ReplayPolicy = replayPolicies[i];
         s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
-        testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+        testCond((s == NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
         nats_clearLastError();
 
         test("Verify config: ");
@@ -24227,7 +24227,7 @@ test_JetStreamMgtConsumers(void)
     jsConsumerConfig_Init(&cfg);
     cfg.ReplayPolicy = (jsReplayPolicy) 100;
     s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
-    testCond((s = NATS_INVALID_ARG) && (jerr == 0) && (ci == NULL));
+    testCond((s == NATS_INVALID_ARG) && (jerr == 0) && (ci == NULL));
     nats_clearLastError();
 
     test("Add consumer (non durable): ");
@@ -24257,7 +24257,7 @@ test_JetStreamMgtConsumers(void)
     // expect this to fail. We are just checking that the config
     // is properly serialized.
     s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
-    testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+    testCond((s == NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
     nats_clearLastError();
 
     test("Verify config: ");
@@ -24287,7 +24287,7 @@ test_JetStreamMgtConsumers(void)
         cfg.FilterSubjects = (const char *[]){"bar1", "bar2"};
         cfg.FilterSubjectsLen = 2;
         s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
-        testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+        testCond((s == NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
         nats_clearLastError();
 
         test("Verify config: ");
@@ -24299,7 +24299,7 @@ test_JetStreamMgtConsumers(void)
                                                                                      "\"opt_start_seq\":100,"
                                                                                      "\"opt_start_time\":\"2021-06-23T18:22:00.12345Z\",\"ack_policy\":\"explicit\","
                                                                                      "\"ack_wait\":200,\"max_deliver\":300,\"filter_subjects\":[\"bar1\",\"bar2\"],"
-                                                                                     "\"metadata\":{\"key1\":\"val1\",\"key2\":\"val2\"},"\
+                                                                                     "\"metadata\":{\"key1\":\"val1\",\"key2\":\"val2\"},"
                                                                                      "\"replay_policy\":\"instant\",\"rate_limit_bps\":400,"
                                                                                      "\"sample_freq\":\"60%%\",\"max_waiting\":500,\"max_ack_pending\":600,"
                                                                                      "\"flow_control\":true,\"idle_heartbeat\":700,"
@@ -24321,7 +24321,7 @@ test_JetStreamMgtConsumers(void)
     test("Add consumer (durable): ");
     cfg.Durable = "dur";
     s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
-    testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+    testCond((s == NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
     nats_clearLastError();
 
     test("Verify config: ");
@@ -24356,7 +24356,7 @@ test_JetStreamMgtConsumers(void)
     cfg.Durable = NULL;
     cfg.Name = "my_name";
     s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
-    testCond((s = NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
+    testCond((s == NATS_ERR) && (jerr == JSStreamNotFoundErr) && (ci == NULL));
     nats_clearLastError();
 
     test("Verify config: ");
@@ -24395,13 +24395,49 @@ test_JetStreamMgtConsumers(void)
     cfg.Name = "my_name";
     cfg.DeliverSubject = "mn.foo";
     cfg.FilterSubject = "bar.>";
+#define TIME_20350101 ((int64_t)2051251200L * (int64_t)1000000000L)
+    if (serverVersionAtLeast(2, 11, 0))
+    {
+        cfg.PauseUntil = TIME_20350101;
+    }
     s = js_AddConsumer(&ci, js, "MY_STREAM", &cfg, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL)
                 && (strcmp(ci->Stream, "MY_STREAM") == 0)
                 && (strcmp(ci->Name, "my_name") == 0)
-                && (strcmp(ci->Config->Name, "my_name") == 0));
+                && (strcmp(ci->Config->Name, "my_name") == 0)
+                && ((cfg.PauseUntil == 0) || (ci->Paused && ci->PauseRemaining > 0)));
     jsConsumerInfo_Destroy(ci);
     ci = NULL;
+
+    if (serverVersionAtLeast(2, 11, 0))
+    {
+        test("Pause consumer: ");
+        jsConsumerPauseResponse *cpr = NULL;
+        s = js_PauseConsumer(&cpr, js, "MY_STREAM", "my_name", TIME_20350101, NULL, &jerr);
+        testCond((s == NATS_OK) && (jerr == 0) && (cpr != NULL)
+            && cpr->Paused
+            && (cpr->PauseUntil == TIME_20350101)
+            && (cpr->PauseRemaining > 0));
+        jsConsumerPauseResponse_Destroy(cpr);
+        cpr = NULL;
+
+        test("Verify consumer paused with GetInfo: ");
+        s = js_GetConsumerInfo(&ci, js, "MY_STREAM", "my_name", NULL, &jerr);
+        testCond((s == NATS_OK) && (jerr == 0) && (ci != NULL)
+            && ci->Paused
+            && (ci->PauseRemaining > 0));
+        jsConsumerInfo_Destroy(ci);
+        ci = NULL;
+
+        test("Unpause consumer: ");
+        s = js_PauseConsumer(&cpr, js, "MY_STREAM", "my_name", 0, NULL, &jerr);
+        testCond((s == NATS_OK) && (jerr == 0) && (cpr != NULL)
+            && !cpr->Paused
+            && (cpr->PauseUntil == 0)
+            && (cpr->PauseRemaining == 0));
+        jsConsumerPauseResponse_Destroy(cpr);
+        cpr = NULL;
+    }
 
     test("Add consumer (durable): ");
     jsConsumerConfig_Init(&cfg);
@@ -30275,6 +30311,7 @@ test_JetStreamBackOffRedeliveries(void)
     so.Config.AckPolicy = js_AckExplicit;
     so.Config.DeliverPolicy = js_DeliverAll;
     so.Config.DeliverSubject = inbox;
+    so.Config.MaxDeliver = 2;
     so.Config.BackOff = (int64_t[]){NATS_MILLIS_TO_NANOS(50), NATS_MILLIS_TO_NANOS(250)};
     so.Config.BackOffLen = 2;
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);

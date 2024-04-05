@@ -175,6 +175,9 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiConsumerNamesT is the endpoint to get the list of consumer names for a stream.
 #define jsApiConsumerNamesT "%.*s.CONSUMER.NAMES.%s"
 
+// jsApiConsumerPauseT is the endpoint to pause a consumer.
+#define jsApiConsumerPauseT "%.*s.CONSUMER.PAUSE.%s.%s"
+
 // Creates a subject based on the option's prefix, the subject format and its values.
 #define js_apiSubj(s, o, f, ...) (nats_asprintf((s), (f), (o)->Prefix, __VA_ARGS__) < 0 ? NATS_NO_MEMORY : NATS_OK)
 

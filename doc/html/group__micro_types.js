@@ -12,5 +12,7 @@ var group__micro_types =
     [ "microService", "group__micro_types.html#gaf6f5aef8773b70746e84c100c2b19b28", null ],
     [ "microServiceConfig", "group__micro_types.html#ga1e46c0657cf42e83b366d224f380fb55", null ],
     [ "microServiceInfo", "group__micro_types.html#ga033705d0404de94efb7a6444c6e91743", null ],
-    [ "microServiceStats", "group__micro_types.html#gaf832de937edc57bcc3af5e1456b3760c", null ]
+    [ "microServiceStats", "group__micro_types.html#gaf832de937edc57bcc3af5e1456b3760c", null ],
+    [ "micro_ErrorOutOfMemory", "group__micro_types.html#gab8c75a7c8001f647b5d2f27a0b26e82e", null ],
+    [ "micro_ErrorInvalidArg", "group__micro_types.html#ga7c15167de03a8d39553afb2b81caca6b", null ]
 ];

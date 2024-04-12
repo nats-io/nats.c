@@ -7421,8 +7421,8 @@ typedef struct micro_service_info_s microServiceInfo;
 typedef struct micro_service_stats_s microServiceStats;
 
 
-NATS_EXTERN microError *micro_ErrorOutOfMemory;
-NATS_EXTERN microError *micro_ErrorInvalidArg;
+extern NATS_EXTERN microError *micro_ErrorOutOfMemory;
+extern NATS_EXTERN microError *micro_ErrorInvalidArg;
 
 /** @} */ // end of microTypes
 

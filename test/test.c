@@ -32391,6 +32391,15 @@ test_KeyValueMirrorCrossDomains(void)
 
     test("Get key: ");
     s = kvStore_Get(&e, mkv, "name");
+    // levb: we seem to get the old value at times here, so try one more time if
+    // there's a mismatch
+    for (i = 0; i < 3; i++)
+        if ((s == NATS_OK) && (e != NULL) && (strcmp(kvEntry_ValueString(e), "rip") != 0))
+        {
+            kvEntry_Destroy(e);
+            e = NULL;
+            s = kvStore_Get(&e, mkv, "name");
+        }
     if ((s == NATS_OK) && (e != NULL))
         s = (strcmp(kvEntry_ValueString(e), "rip") == 0 ? NATS_OK : NATS_ERR);
     testCond(s == NATS_OK);

@@ -1,0 +1,25 @@
+name: "Release"
+on:
+  push:
+
+permissions:
+  contents: write # required by build-test to comment on coverage but not used here.
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -x -eo pipefail {0}
+
+jobs:
+  quick:
+    name: "DefaultR"
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        ubuntu_version: [latest, 20.04]
+    uses: ./.github/workflows/build-test.yml
+    with:
+      server_version: main
+      ubuntu_version: ${{ matrix.ubuntu_version }}
+      compiler: ${{ matrix.compiler }}
+      repeat: 3

@@ -50,3 +50,15 @@ jobs:
     name: "No Streaming"
     with:
       streaming: OFF
+
+  coverage:
+    if: github.base_ref == 'main'
+    name: "Coverage"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      coverage: ON
+      server_version: main
+      type: Debug
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+

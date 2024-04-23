@@ -135,7 +135,6 @@ jobs:
           fi
           if [ "$rel" != "${rel#v}" ] && wget https://github.com/nats-io/nats-server/releases/download/$rel/nats-server-$rel-linux-amd64.tar.gz; then
             tar -xzf nats-server-$rel-linux-amd64.tar.gz
-            ls -lsra nats-server-$rel-linux-amd64
             cp nats-server-$rel-linux-amd64/nats-server ../deps/nats-server/nats-server
           else
             for c in 1 2 3 4 5
@@ -152,8 +151,6 @@ jobs:
             done
             mv ./nats-server ../deps/nats-server/nats-server
           fi
-          echo "------------------------------------------"
-          ../deps/nats-server/nats-server -v # <>/<>
 
       - name: "Test"
         working-directory: ./build

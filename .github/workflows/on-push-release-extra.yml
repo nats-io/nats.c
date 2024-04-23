@@ -52,7 +52,6 @@ jobs:
       streaming: OFF
 
   coverage:
-    if: github.base_ref == 'main'
     name: "Coverage"
     uses: ./.github/workflows/build-test.yml
     with:
@@ -61,4 +60,3 @@ jobs:
       type: Debug
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-

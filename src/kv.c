@@ -1145,6 +1145,7 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
     }
 
     natsBuf_Cleanup(&buf);
+    NATS_FREE_STRINGS(subscribeSubjects, numKeys);
 
     if (s == NATS_OK)
         *new_watcher = w;

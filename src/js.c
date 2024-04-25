@@ -1792,6 +1792,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     natsStatus      s       = NATS_OK;
     natsMsg         **msgs  = NULL;
     int             count   = 0;
+    int             batch   = 0;
     natsConnection  *nc     = NULL;
     const char      *subj   = NULL;
     const char      *rply   = NULL;
@@ -1916,9 +1917,10 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
             noWait = req->NoWait;
     }
 
+    batch = req->Batch;
     // If we have OK and not all messages, we will send a fetch
     // request to the server.
-    while ((s == NATS_OK) && (count != req->Batch) && ((req->MaxBytes == 0) || (size < req->MaxBytes)))
+    while ((s == NATS_OK) && (count != batch) && ((req->MaxBytes == 0) || (size < req->MaxBytes)))
     {
         natsMsg *msg    = NULL;
         bool    usrMsg  = false;
@@ -1933,7 +1935,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
         if ((s == NATS_OK) && sendReq)
         {
             sendReq = false;
-            req->Batch = req->Batch - (int64_t) count;
+            req->Batch = req->Batch - count;
             req->Expires = NATS_MILLIS_TO_NANOS(timeout);
             req->NoWait = noWait;
             s = _sendPullRequest(nc, subj, rply, &buf, req);

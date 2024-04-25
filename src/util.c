@@ -2555,3 +2555,56 @@ nats_freeMetadata(natsMetadata *md)
     md->List = NULL;
     md->Count = 0;
 }
+
+
+int nats_printStringArray(char *out, int bufLen, const char **strings, int count)
+{
+    bool copy = (bufLen > 0);
+    int  len = 0;
+    int  i;
+
+    if (copy && (len + 1 < bufLen))
+        out[len] = '[';
+    len++;
+
+    for (i=0; i<count; i++)
+    {
+        const char *str = strings[i];
+        int strLen = (int) strlen(str);
+
+        if (copy)
+        {
+            if (len + strLen + 1 < bufLen)
+            {
+                memcpy(out+len, str, strLen);
+                len += strLen;
+                out[len++] = ',';
+            }
+            else
+            {
+                return len;
+            }
+        }
+        else
+        {
+            len += strLen + 1;
+        }
+    }
+
+    if (copy && (len + 1 < bufLen))
+        out[len] = ']';
+    len++;
+
+    if (!copy)
+        return len + 1; // +1 for the '\0'
+
+    if (len < bufLen)
+        out[len++] = '\0';
+    else
+    {
+        out[bufLen-1] = '\0';
+        len = bufLen;
+    }
+
+    return len;
+}

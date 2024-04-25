@@ -261,4 +261,7 @@ nats_IsSubjectValid(const char *subject, bool wcAllowed);
 natsStatus
 nats_parseTime(char *str, int64_t *timeUTC);
 
+int
+nats_printStringArray(char *out, int bufLen, const char **strings, int count);
+
 #endif /* UTIL_H_ */

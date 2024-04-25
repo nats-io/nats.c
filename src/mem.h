@@ -27,6 +27,16 @@
 #endif
 #define NATS_FREE(p)        free((p))
 
+static void NATS_FREE_STRINGS(char **strings, int count)
+{
+    if (strings == NULL)
+        return;
+
+    for (int i = 0; i < count; i++)
+        NATS_FREE((char *)strings[i]);
+    NATS_FREE(strings);
+}
+
 // GNU C Library version 2.25 or later.
 #if defined(__GLIBC__) && \
     (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25))

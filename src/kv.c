@@ -1074,6 +1074,11 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
 
     if ((new_watcher == NULL) || (kv == NULL) || numKeys <= 0)
         return nats_setDefaultError(NATS_INVALID_ARG);
+    for (i=0; i<numKeys; i++)
+    {
+        if (nats_IsStringEmpty(keys[i]))
+            return nats_setDefaultError(NATS_INVALID_ARG);
+    }
 
     *new_watcher = NULL;
 

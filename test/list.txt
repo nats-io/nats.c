@@ -250,6 +250,7 @@ JetStreamInfoAlternates
 KeyValueManager
 KeyValueBasics
 KeyValueWatch
+KeyValueWatchMulti
 KeyValueHistory
 KeyValueKeys
 KeyValueDeleteVsPurge

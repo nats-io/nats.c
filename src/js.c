@@ -2480,7 +2480,7 @@ _subscribeMulti(natsSubscription **new_sub, jsCtx *js, const char **subjects, in
     // that is, if user did not provide a `Stream` name through options).
     if (nats_IsStringEmpty(stream) && numSubjects > 0)
     {
-        // Ise the first subject to find the stream.
+        // Use the first subject to find the stream.
         s = _lookupStreamBySubject(&stream, nc, subjects[0], &jo, errCode);
         if (s != NATS_OK)
             goto END;

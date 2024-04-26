@@ -26166,6 +26166,9 @@ test_JetStreamSubscribe(void)
     char                longsn[256];
 #endif
     natsThread          *threads[10] = {NULL};
+    const char *subjectsStack[] = {"foo", "bar"};
+    const char **subjects = subjectsStack;
+    const int numSubjects = sizeof(subjectsStack)/sizeof(char*);
 
     ENSURE_JS_VERSION(2, 3, 5);
 
@@ -26221,8 +26224,8 @@ test_JetStreamSubscribe(void)
     test("Create stream: ");
     jsStreamConfig_Init(&sc);
     sc.Name = "TEST";
-    sc.Subjects = (const char*[1]){"foo"};
-    sc.SubjectsLen = 1;
+    sc.Subjects = subjects;
+    sc.SubjectsLen = numSubjects;
     s = js_AddStream(NULL, js, &sc, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
 
@@ -26230,6 +26233,8 @@ test_JetStreamSubscribe(void)
     s = js_Publish(NULL, js, "foo", "msg1", 4, NULL, &jerr);
     IFOK(s, js_Publish(NULL, js, "foo", "msg2", 4, NULL, &jerr));
     IFOK(s, js_Publish(NULL, js, "foo", "msg3", 4, NULL, &jerr));
+    IFOK(s, js_Publish(NULL, js, "bar", "msg1", 4, NULL, &jerr));
+    IFOK(s, js_Publish(NULL, js, "bar", "msg2", 4, NULL, &jerr));
     testCond(s == NATS_OK);
 
     test("Create sub to check lib sends ACKs: ");
@@ -26662,6 +26667,31 @@ test_JetStreamSubscribe(void)
                 && (nats_GetLastError(NULL) == NULL));
     natsSubscription_Destroy(sub);
     sub = NULL;
+
+    if (serverVersionAtLeast(2, 10, 14))
+    {
+        test("Create consumer (multiple subjects): ");
+        jsSubOptions_Init(&so);
+        so.Config.Durable = "delcons3sync";
+        s = js_SubscribeSyncMulti(&sub, js, subjects, numSubjects, NULL, &so, &jerr);
+        testCond((s == NATS_OK) && (jerr == 0));
+
+        test("Drain deletes consumer: ");
+        s = natsSubscription_Drain(sub);
+        for (i = 0; i < 5; i++)
+        {
+            natsMsg *msg = NULL;
+            IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+            IFOK(s, natsMsg_Ack(msg, NULL));
+            natsMsg_Destroy(msg);
+            msg = NULL;
+        }
+        IFOK(s, natsSubscription_WaitForDrainCompletion(sub, 1000));
+        IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", "delcons3sync", NULL, &jerr));
+        testCond((s == NATS_NOT_FOUND) && (ci == NULL) && (jerr == JSConsumerNotFoundErr) && (nats_GetLastError(NULL) == NULL));
+        natsSubscription_Destroy(sub);
+        sub = NULL;
+    }
 
     test("Create consumer: ");
     jsSubOptions_Init(&so);
@@ -31359,6 +31389,54 @@ test_KeyValueWatch(void)
 
     natsThread_Join(t);
     natsThread_Destroy(t);
+    kvWatcher_Destroy(w);
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
+static void
+test_KeyValueWatchMulti(void)
+{
+    natsStatus s;
+    kvStore *kv = NULL;
+    kvWatcher *w = NULL;
+    kvConfig kvc;
+
+    JS_SETUP(2, 10, 14);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "WATCH";
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    // Now try wildcard matching and make sure we only get last value when starting.
+    test("Put values in different keys: ");
+    s = kvStore_PutString(NULL, kv, "a.name", "A");
+    IFOK(s, kvStore_PutString(NULL, kv, "b.name", "B"));
+    IFOK(s, kvStore_PutString(NULL, kv, "a.name", "AA"));
+    IFOK(s, kvStore_PutString(NULL, kv, "b.name", "BB"));
+    IFOK(s, kvStore_PutString(NULL, kv, "a.age", "22"));
+    IFOK(s, kvStore_PutString(NULL, kv, "a.age", "99"));
+    testCond(s == NATS_OK);
+
+    test("Create watcher: ");
+    const char **subjects = (const char *[]){"a.*", "b.*", "c.*"};
+    s = kvStore_WatchMulti(&w, kv, subjects, 3, NULL);
+    testCond(s == NATS_OK);
+
+    testCond(_expectUpdate(w, "a.name", "AA", 3));
+    testCond(_expectUpdate(w, "b.name", "BB", 4));
+    testCond(_expectUpdate(w, "a.age", "99", 6));
+    testCond(_expectInitDone(w));
+
+    IFOK(s, kvStore_PutString(NULL, kv, "c.occupation", "gardener"));
+    IFOK(s, kvStore_PutString(NULL, kv, "XXX.occupation", "no, plumber"));
+    IFOK(s, kvStore_PutString(NULL, kv, "c.occupation", "a digital plumber for a digital garden"));
+    testCond(_expectUpdate(w, "c.occupation", "gardener", 7));
+    testCond(_expectUpdate(w, "c.occupation", "a digital plumber for a digital garden", 9));
+
     kvWatcher_Destroy(w);
     kvStore_Destroy(kv);
 
@@ -36267,6 +36345,7 @@ static testInfo allTests[] =
     {"KeyValueManager",                 test_KeyValueManager},
     {"KeyValueBasics",                  test_KeyValueBasics},
     {"KeyValueWatch",                   test_KeyValueWatch},
+    {"KeyValueWatchMulti",              test_KeyValueWatchMulti},
     {"KeyValueHistory",                 test_KeyValueHistory},
     {"KeyValueKeys",                    test_KeyValueKeys},
     {"KeyValueDeleteVsPurge",           test_KeyValueDeleteVsPurge},

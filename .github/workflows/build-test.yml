@@ -1,0 +1,173 @@
+on:
+  workflow_call:
+    inputs:
+      arch:
+        type: string
+        default: "64"
+      compiler:
+        type: string
+        default: "gcc"
+      coverage:
+        type: string
+        default: "OFF"
+      lib_msg_delivery:
+        type: string
+        default: "OFF"
+      lib_write_deadline:
+        type: string
+        default: "OFF"
+      repeat:
+        type: string
+        default: "1"
+      sanitize:
+        type: string
+        description: "sanitize option to use, 'address' or 'thread'"
+      server_version:
+        type: string
+        description: "nats-server version to test with"
+        default: "latest"
+      streaming:
+        type: string
+        default: "ON"
+      tls:
+        type: string
+        default: "ON"
+      type:
+        type: string
+        description: "Debug or Release."
+        default: "Release"
+      ubuntu_version:
+        type: string
+        description: "Ubuntu version to use, e.g. '20.04'"
+        default: "latest"
+    secrets:
+      CODECOV_TOKEN:
+        description: "Codecov repo token"
+
+permissions:
+  contents: write # to comment on coverage.
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -x -eo pipefail {0}
+
+jobs:
+  do:
+    runs-on: ubuntu-${{ inputs.ubuntu_version }}
+    name: "ubuntu:${{ inputs.ubuntu_version }} ${{ inputs.compiler }} nats:${{ inputs.server_version }}"
+    steps:
+      - name: Checkout nats.c
+        uses: actions/checkout@v4
+
+      - name: "Checkout dependencies (nats.c.deps)"
+        uses: actions/checkout@v4
+        with:
+          repository: nats-io/nats.c.deps
+          path: deps
+
+      # configure the cmake flags and NATS_... environment variables
+      - id: cmake-flags
+        name: Configure cmake flags
+        env:
+          flags: -DNATS_BUILD_ARCH=${{ inputs.arch }}
+            -DCMAKE_BUILD_TYPE=${{ inputs.type }}
+            -DNATS_BUILD_STREAMING=${{ inputs.streaming }}
+            -DNATS_BUILD_WITH_TLS=${{ inputs.tls }}
+            -DNATS_PROTOBUF_DIR=${{ github.workspace}}/deps/pbuf
+            -DNATS_BUILD_USE_SODIUM=ON
+            -DNATS_SODIUM_DIR=${{ github.workspace}}/deps/sodium
+        run: |
+          if [[ -n "${{ inputs.sanitize }}" ]]; then
+            flags="$flags -DNATS_SANITIZE=ON -DCMAKE_C_FLAGS=-fsanitize=${{ inputs.sanitize }}"
+          fi
+          if [[ "${{ inputs.coverage }}" == "ON" ]]; then
+            flags="$flags -DNATS_COVERAGE=ON"
+          fi
+          echo "flags=$flags" >> $GITHUB_OUTPUT
+
+      - id: nats-vars
+        name: Configure NATS_ environment variables
+        run: |
+          if [[ -n "${{ inputs.sanitize }}" ]]; then
+            echo "NATS_TEST_VALGRIND=yes" >> $GITHUB_ENV
+          fi
+          if [[ "${{ inputs.lib_msg_delivery }}" == "ON" ]]; then
+            echo "NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes" >> $GITHUB_ENV
+          fi
+          if [[ "${{ inputs.lib_write_deadline }}" == "ON" ]]; then
+            echo "NATS_DEFAULT_LIB_WRITE_DEADLINE=2000" >> $GITHUB_ENV
+          fi
+          echo "CC=${{ inputs.compiler }}" >> $GITHUB_ENV
+
+      # install build dependencies
+      - name: Install ${{ inputs.compiler }} if needed
+        if: startsWith(inputs.compiler, 'clang-') || startsWith(inputs.compiler, 'gcc-')
+        run: |
+          sudo apt-get -q update
+          sudo apt-get -y install ${{ inputs.compiler }}
+
+      # otherwise, configure cmake, build, archive and upload
+      - name: CMake
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. ${{ steps.cmake-flags.outputs.flags }}
+          make rebuild_cache && make
+
+      - name: "Rebuild the list of tests to match the compile flags"
+        working-directory: ./build
+        run: |
+          ./test/testsuite
+          if [[ $(diff list.txt ../test/list.txt; echo $?) != 0 ]]; then
+            mv list.txt ../test/list.txt
+            make rebuild_cache
+          fi
+
+      # testing
+
+      - name: "Download nats-server version ${{ inputs.server_version }}"
+        if: inputs.server_version
+        working-directory: ./build
+        run: |
+          rel=${{ inputs.server_version }}
+          if [ "$rel" = "latest" ]; then
+            rel=$(curl -s https://api.github.com/repos/nats-io/nats-server/releases/latest | jq -r '.tag_name')
+          fi
+          if [ "$rel" != "${rel#v}" ] && wget https://github.com/nats-io/nats-server/releases/download/$rel/nats-server-$rel-linux-amd64.tar.gz; then
+            tar -xzf nats-server-$rel-linux-amd64.tar.gz
+            cp nats-server-$rel-linux-amd64/nats-server ../deps/nats-server/nats-server
+          else
+            for c in 1 2 3 4 5
+            do
+              echo "Attempt $c to download binary for main"
+              rm -f ./nats-server
+              curl -sf "https://binaries.nats.dev/nats-io/nats-server/v2@$rel" | PREFIX=. sh
+              # We are sometimes getting nats-server of size 0. Make sure we have a
+              # working nats-server by making sure we get a version number.
+              v="$(./nats-server -v)"
+              if [ "$v" != "" ]; then
+                break
+              fi
+            done
+            mv ./nats-server ../deps/nats-server/nats-server
+          fi
+
+      - name: "Test"
+        working-directory: ./build
+        run: |
+          export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
+          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
+          flags=""
+          ctest --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }} 2>&1 | tee /tmp/out.txt
+          if [[ $(grep -q 'ThreadSanitizer: ' /tmp/out.txt; echo $?) == 0 ]]; then
+            echo "!!! ThreadSanitizer detected WARNING(s) !!!"
+            exit 1
+          fi
+
+      - name: Upload coverage reports to Codecov
+        if: inputs.coverage == 'ON'
+        uses: codecov/codecov-action@v4
+        with:
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          # verbose: true

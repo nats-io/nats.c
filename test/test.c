@@ -36348,7 +36348,7 @@ generateList(void)
 #ifndef _WIN32
 static void _sigsegv_handler(int sig) {
   void *array[20];
-  size_t size = backtrace(array, 20);
+  int size = backtrace(array, 20);
 
   // print out all the frames to stderr
   fprintf(stderr, "Error: signal %d:\n", sig);

@@ -6338,6 +6338,15 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
              natsMsgHandler cb, void* cbClosure,
              jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
 
+/** \brief Create an asynchronous subscription to multiple subjects.
+ *
+ * Like #js_Subscribe, but accepts multiple subjects, each can be a wildcard.
+ */
+NATS_EXTERN natsStatus
+js_SubscribeMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
+             natsMsgHandler cb, void *cbClosure,
+             jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
+
 /** \brief Create a synchronous subscription.
  *
  * See important notes in #js_Subscribe.
@@ -6357,20 +6366,10 @@ NATS_EXTERN natsStatus
 js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
                  jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
 
-/** \brief Create a synchronous subscription to multiple subjects.
+/** \brief Create an asynchronous subscription to multiple subjects.
  *
- * See important notes in #js_Subscribe.
- *
- * @param sub the location where to store the pointer to the newly created
- * #natsSubscription object.
- * @param js the pointer to the #jsCtx object.
- * @param subjects the subjects this subscription is created for (consumer's FilterSubjects).
- * @param cb the #natsMsgHandler prototype.
- * @param cbClosure a pointer to an user defined object (can be `NULL`).
- * @param opts the pointer to the #jsOptions object, possibly `NULL`.
- * @param subOpts the subscribe options, possibly `NULL`.
- * @param errCode the location where to store the JetStream specific error code, or `NULL`
- * if not needed.
+ * Like #js_SubscribeSync, but accepts multiple subjects, each can be a
+ * wildcard.
  */
 NATS_EXTERN natsStatus
 js_SubscribeSyncMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,

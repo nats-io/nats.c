@@ -2790,6 +2790,23 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
 }
 
 natsStatus
+js_SubscribeMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
+                  natsMsgHandler cb, void *cbClosure,
+                  jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if (cb == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _subscribeMulti(sub, js, subjects, numSubjects, NULL, cb, cbClosure, false, jsOpts, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
                  jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {

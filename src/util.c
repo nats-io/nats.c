@@ -2557,54 +2557,59 @@ nats_freeMetadata(natsMetadata *md)
 }
 
 
-int nats_printStringArray(char *out, int bufLen, const char **strings, int count)
+// allocates a sufficiently large buffer and formats the strings into it, as a
+// ["unencoded-string-0","unencoded-string-1",...]. For an empty array of
+// strings returns "[]".
+natsStatus nats_formatStringArray(char **out, const char **strings, int count)
 {
-    bool copy = (bufLen > 0);
-    int  len = 0;
+    natsStatus s = NATS_OK;
+    natsBuffer buf;
+    int len = 0;
     int  i;
 
-    if (copy && (len + 1 < bufLen))
-        out[len] = '[';
-    len++;
-
-    for (i=0; i<count; i++)
+    len++; // For the '['
+    for (i = 0; i < count; i++)
     {
-        const char *str = strings[i];
-        int strLen = (int) strlen(str);
+        len += 2; // For the quotes
+        if (i > 0)
+            len++; // For the ','
+        if (strings[i] == NULL)
+            len += strlen("(null)");
+        else
+            len += strlen(strings[i]);
+    }
+    len++; // For the ']'
+    len++; // For the '\0'
 
-        if (copy)
+    s = natsBuf_Init(&buf, len);
+
+    natsBuf_AppendByte(&buf, '[');
+    for (i = 0; (s == NATS_OK) && (i < count); i++)
+    {
+        if (i > 0)
         {
-            if (len + strLen + 1 < bufLen)
-            {
-                memcpy(out+len, str, strLen);
-                len += strLen;
-                out[len++] = ',';
-            }
-            else
-            {
-                return len;
-            }
+            IFOK(s, natsBuf_AppendByte(&buf, ','));
+        }
+        IFOK(s, natsBuf_AppendByte(&buf, '"'));
+        if (strings[i] == NULL)
+        {
+            IFOK(s, natsBuf_Append(&buf, "(null)", -1));
         }
         else
         {
-            len += strLen + 1;
+            IFOK(s, natsBuf_Append(&buf, strings[i], -1));
         }
+        IFOK(s, natsBuf_AppendByte(&buf, '"'));
     }
 
-    if (copy && (len + 1 < bufLen))
-        out[len] = ']';
-    len++;
-
-    if (!copy)
-        return len + 1; // +1 for the '\0'
-
-    if (len < bufLen)
-        out[len++] = '\0';
-    else
+    IFOK(s, natsBuf_AppendByte(&buf, ']'));
+    IFOK(s, natsBuf_AppendByte(&buf, '\0'));
+    
+    if (s != NATS_OK)
     {
-        out[bufLen-1] = '\0';
-        len = bufLen;
+        return s;
     }
 
-    return len;
+    *out = natsBuf_Data(&buf);
+    return NATS_OK;
 }

@@ -42,6 +42,7 @@ HeadersLift
 HeadersAPIs
 MsgIsJSControl
 SrvVersionAtLeast
+FormatStringArray
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize

@@ -2598,15 +2598,7 @@ PROCESS_INFO:
                     s = nats_setDefaultError(NATS_NO_MEMORY);
             }
             IF_OK_DUP_STRING(s, jsi->stream, stream);
-            if ((s == NATS_OK) && numSubjects > 0)
-            {
-                int l = nats_printStringArray(NULL, 0, subjects, numSubjects);
-                jsi->psubj = NATS_CALLOC(l, 1); // '\0' included
-                if (jsi->psubj == NULL)
-                    s = nats_setDefaultError(NATS_NO_MEMORY);
-                if (s == NATS_OK)
-                    nats_printStringArray(jsi->psubj, l, subjects, numSubjects);
-            }
+            IFOK(s, nats_formatStringArray(&jsi->psubj, subjects, numSubjects));
             if (s == NATS_OK)
             {
                 jsi->js     = js;

@@ -5466,6 +5466,31 @@ test_natsSrvVersionAtLeast(void)
     natsConnection_Destroy(nc);
 }
 
+static void
+test_natsFormatStringArray(void)
+{
+    natsStatus s;
+    char *str = NULL;
+
+    test("Check empty: ");
+    s = nats_formatStringArray(&str, NULL, 0);
+    testCond((s == NATS_OK) && (str != NULL) && (strcmp(str, "[]") == 0));
+    NATS_FREE(str);
+    str = NULL;
+
+    test("Check one: ");
+    const char *oneArray[] = {"one"};
+    s = nats_formatStringArray(&str, oneArray, 1);
+    testCond((s == NATS_OK) && (str != NULL) && (strcmp(str, "[\"one\"]") == 0));
+    NATS_FREE(str);
+
+    test("Check multiple: ");
+    const char *threeArray[] = {"one","two","three"};
+    s = nats_formatStringArray(&str, threeArray, 3);
+    testCond((s == NATS_OK) && (str != NULL) && (strcmp(str, "[\"one\",\"two\",\"three\"]") == 0));
+    NATS_FREE(str);
+}
+
 static natsStatus
 _checkStart(const char *url, int orderIP, int maxAttempts)
 {
@@ -36125,6 +36150,7 @@ static testInfo allTests[] =
     {"HeadersAPIs",                     test_natsMsgHeaderAPIs},
     {"MsgIsJSControl",                  test_natsMsgIsJSCtrl},
     {"SrvVersionAtLeast",               test_natsSrvVersionAtLeast},
+    {"FormatStringArray",               test_natsFormatStringArray},
 
     // Package Level Tests
 

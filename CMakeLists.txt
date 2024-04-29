@@ -5,7 +5,7 @@ include(CTest)
 include(FindPackageHandleStandardArgs)
 
 # Uncomment to have the build process verbose
-#set(CMAKE_VERBOSE_MAKEFILE TRUE)
+# set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
 # Uncomment to have the executable moved to 'build' instead of their respective 'build/xxx' directories
 #set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})

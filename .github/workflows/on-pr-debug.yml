@@ -1,0 +1,66 @@
+name: "Debug"
+on:
+  pull_request:
+
+permissions:
+  contents: write # so it can comment
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -x -eo pipefail {0}
+
+jobs:
+  default:
+    name: "DefaultD"
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    uses: ./.github/workflows/build-test.yml
+    with:
+      compiler: ${{ matrix.compiler }}
+      server_version: main
+      type: Debug
+      repeat: 3
+
+  coverage:
+    name: "Coverage"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      coverage: ON
+      server_version: main
+      type: Debug
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  sanitize-addr:
+    name: "Sanitize address"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      sanitize: address
+      server_version: main
+      type: Debug
+
+  sanitize-addr-lib-msg-delivery:
+    name: "Sanitize address (lib_msg_delivery)"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      sanitize: address
+      server_version: main
+      lib_msg_delivery: ON
+
+  san-addr:
+    name: "Sanitize address (lib_write_deadline)"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      sanitize: address
+      server_version: main
+      lib_write_deadline: ON
+
+  san-thread:
+    name: "Sanitize thread"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      sanitize: thread
+      server_version: main
+      repeat: 3

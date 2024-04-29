@@ -2764,12 +2764,12 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
            natsMsgHandler usrCB, void *usrCBClosure, bool isPullMode,
            jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {
+    natsStatus s = NATS_OK;
     const char *subjects[] = {subject};
+    int numSubjects = nats_IsStringEmpty(subject) ? 0 : 1;
 
-    if (nats_IsStringEmpty(subject))
-        return _subscribeMulti(new_sub, js, NULL, 0, pullDurable, usrCB, usrCBClosure, isPullMode, jsOpts, opts, errCode);
-
-    return _subscribeMulti(new_sub, js, subjects, 1, pullDurable, usrCB, usrCBClosure, isPullMode, jsOpts, opts, errCode);
+    s = _subscribeMulti(new_sub, js, subjects, numSubjects, pullDurable, usrCB, usrCBClosure, isPullMode, jsOpts, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus

@@ -27,14 +27,13 @@
 #endif
 #define NATS_FREE(p)        free((p))
 
+// **Note** does not free the array itself.
 static void NATS_FREE_STRINGS(char **strings, int count)
 {
     if (strings == NULL)
         return;
-
     for (int i = 0; i < count; i++)
         NATS_FREE((char *)strings[i]);
-    NATS_FREE(strings);
 }
 
 // GNU C Library version 2.25 or later.

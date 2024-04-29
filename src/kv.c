@@ -1068,7 +1068,9 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
     natsStatus      s;
     kvWatcher       *w = NULL;
     jsSubOptions    so;
-    char **subscribeSubjects = NULL;    
+    char *singleSubject[1];
+    char **multipleSubjects = NULL; // allocate if numKeys > 1
+    char **subscribeSubjects = singleSubject;
     int i;
     DEFINE_BUF_FOR_SUBJECT;
 
@@ -1090,13 +1092,23 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
     w->kv = kv;
     w->refs = 1;
 
-    subscribeSubjects = (char**) NATS_CALLOC(numKeys, sizeof(const char*));
-    if (subscribeSubjects == NULL)
+    if (numKeys == 1)
     {
-        _freeWatcher(w);
-        return nats_setDefaultError(NATS_NO_MEMORY);
+        // special case for single key to avoid a calloc.
+        subscribeSubjects[0] = (char *)keys[0];
+
     }
-    for (i=0; i<numKeys; i++)
+    else
+    {
+        multipleSubjects = (char **)NATS_CALLOC(numKeys, sizeof(const char *));
+        if (multipleSubjects == NULL)
+        {
+            _freeWatcher(w);
+            return nats_setDefaultError(NATS_NO_MEMORY);
+        }
+        subscribeSubjects = multipleSubjects;
+    }
+    for (i = 0; i < numKeys; i++)
     {
         const char *key = keys[i];
         BUILD_SUBJECT(KEY_NAME_ONLY, NOT_FOR_A_PUT); // into buf, '\0'-terminated.
@@ -1105,6 +1117,7 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
         {
             s = nats_setDefaultError(NATS_NO_MEMORY);
             NATS_FREE_STRINGS(subscribeSubjects, i);
+            NATS_FREE(multipleSubjects);
             _freeWatcher(w);
             return nats_setDefaultError(NATS_NO_MEMORY);
         }
@@ -1146,6 +1159,7 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
 
     natsBuf_Cleanup(&buf);
     NATS_FREE_STRINGS(subscribeSubjects, numKeys);
+    NATS_FREE(multipleSubjects);
 
     if (s == NATS_OK)
         *new_watcher = w;

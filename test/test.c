@@ -5470,29 +5470,35 @@ static void
 test_natsFormatStringArray(void)
 {
     natsStatus s;
-    char *array[4];
-    memset(array, 0, sizeof(array));
+    size_t i, N;
 
-    test("Check empty: ");
-    s = nats_formatStringArray(&array[0], NULL, 0);
-    testCond((s == NATS_OK) && (array[0] != NULL) && (strcmp(array[0], "[]") == 0));
+    typedef struct
+    {
+        const char *name;
+        const char **in;
+        int inLen;
+        const char *out;
+    } TC;
 
-    test("Check one: ");
-    const char *oneArray[] = {"one"};
-    s = nats_formatStringArray(&array[1], oneArray, 1);
-    testCond((s == NATS_OK) && (array[1] != NULL) && (strcmp(array[1], "[\"one\"]") == 0));
+    TC tcs[] = {
+        {"Empty", NULL, 0, "[]"},
+        {"One", (const char *[]){"one"}, 1, "[\"one\"]"},
+        {"Three", (const char *[]){"one", "two", "three"}, 3, "[\"one\",\"two\",\"three\"]"},
+        {"NULL", (const char *[]){NULL}, 1, "[\"(null)\"]"},
+    };
 
-    test("Check multiple: ");
-    const char *threeArray[] = {"one", "two", "three"};
-    s = nats_formatStringArray(&array[2], threeArray, 3);
-    testCond((s == NATS_OK) && (array[2] != NULL) && (strcmp(array[2], "[\"one\",\"two\",\"three\"]") == 0));
+    char *out[sizeof(tcs) / sizeof(TC)];
+    memset(out, 0, sizeof(out));
 
-    test("Check NULL: ");
-    const char *nullArray[] = {NULL};
-    s = nats_formatStringArray(&array[3], nullArray, 1);
-    testCond((s == NATS_OK) && (array[3] != NULL) && (strcmp(array[3], "[\"(null)\"]") == 0));
+    N = sizeof(tcs) / sizeof(TC);
+    for (i = 0; i < N; i++)
+    {
+        test(tcs[i].name);
+        s = nats_formatStringArray(&out[i], tcs[i].in, tcs[i].inLen);
+        testCond((s == NATS_OK) && (out[i] != NULL) && (strcmp(out[i], tcs[i].out) == 0));
+    }
 
-    NATS_FREE_STRINGS(array, 3);
+    NATS_FREE_STRINGS(out, N);
 }
 
 static natsStatus

@@ -5470,25 +5470,29 @@ static void
 test_natsFormatStringArray(void)
 {
     natsStatus s;
-    char *str = NULL;
+    char *array[4];
+    memset(array, 0, sizeof(array));
 
     test("Check empty: ");
-    s = nats_formatStringArray(&str, NULL, 0);
-    testCond((s == NATS_OK) && (str != NULL) && (strcmp(str, "[]") == 0));
-    NATS_FREE(str);
-    str = NULL;
+    s = nats_formatStringArray(&array[0], NULL, 0);
+    testCond((s == NATS_OK) && (array[0] != NULL) && (strcmp(array[0], "[]") == 0));
 
     test("Check one: ");
     const char *oneArray[] = {"one"};
-    s = nats_formatStringArray(&str, oneArray, 1);
-    testCond((s == NATS_OK) && (str != NULL) && (strcmp(str, "[\"one\"]") == 0));
-    NATS_FREE(str);
+    s = nats_formatStringArray(&array[1], oneArray, 1);
+    testCond((s == NATS_OK) && (array[1] != NULL) && (strcmp(array[1], "[\"one\"]") == 0));
 
     test("Check multiple: ");
-    const char *threeArray[] = {"one","two","three"};
-    s = nats_formatStringArray(&str, threeArray, 3);
-    testCond((s == NATS_OK) && (str != NULL) && (strcmp(str, "[\"one\",\"two\",\"three\"]") == 0));
-    NATS_FREE(str);
+    const char *threeArray[] = {"one", "two", "three"};
+    s = nats_formatStringArray(&array[2], threeArray, 3);
+    testCond((s == NATS_OK) && (array[2] != NULL) && (strcmp(array[2], "[\"one\",\"two\",\"three\"]") == 0));
+
+    test("Check NULL: ");
+    const char *nullArray[] = {NULL};
+    s = nats_formatStringArray(&array[3], nullArray, 1);
+    testCond((s == NATS_OK) && (array[3] != NULL) && (strcmp(array[3], "[\"(null)\"]") == 0));
+
+    NATS_FREE_STRINGS(array, 3);
 }
 
 static natsStatus

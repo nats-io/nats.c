@@ -6341,6 +6341,18 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
 /** \brief Create an asynchronous subscription to multiple subjects.
  *
  * Like #js_Subscribe, but accepts multiple subjects, each can be a wildcard.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param js the pointer to the #jsCtx object.
+ * @param subject the subject this subscription is created for.
+ * @param cb the #natsMsgHandler callback.
+ * @param cbClosure a pointer to an user defined object (can be `NULL`). See
+ * the #natsMsgHandler prototype.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param subOpts the subscribe options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
  */
 NATS_EXTERN natsStatus
 js_SubscribeMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
@@ -6355,8 +6367,6 @@ js_SubscribeMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int 
  * #natsSubscription object.
  * @param js the pointer to the #jsCtx object.
  * @param subject the subject this subscription is created for (consumer's FilterSubject).
- * @param cb the #natsMsgHandler prototype.
- * @param cbClosure a pointer to an user defined object (can be `NULL`).
  * @param opts the pointer to the #jsOptions object, possibly `NULL`.
  * @param subOpts the subscribe options, possibly `NULL`.
  * @param errCode the location where to store the JetStream specific error code, or `NULL`
@@ -6370,6 +6380,16 @@ js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
  *
  * Like #js_SubscribeSync, but accepts multiple subjects, each can be a
  * wildcard.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param js the pointer to the #jsCtx object.
+ * @param subjects the subjects this subscription is created for (consumer's FilterSubjects).
+ * @param numSubjects the number of subjects for the subscription (consumer's FilterSubjectsLen).
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param subOpts the subscribe options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
  */
 NATS_EXTERN natsStatus
 js_SubscribeSyncMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,

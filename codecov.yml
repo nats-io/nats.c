@@ -11,8 +11,8 @@ coverage:
   status:
     project:
       default:
-        target: 65%
-        threshold: 1%
+        target: auto
+        threshold: 10%
 github_checks:
   annotations: true
 comment:

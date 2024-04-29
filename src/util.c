@@ -2607,6 +2607,7 @@ natsStatus nats_formatStringArray(char **out, const char **strings, int count)
     
     if (s != NATS_OK)
     {
+        natsBuf_Cleanup(&buf);
         return s;
     }
 

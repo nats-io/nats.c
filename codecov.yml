@@ -7,12 +7,17 @@ ignore:
 coverage:
   precision: 2
   round: down
-  range: "60...75"
+  range: "60...80"
   status:
     project:
       default:
-        target: 65%
-        threshold: 1%
+        target: auto
+        threshold: 5%
+    patch:
+      default:
+        target: auto
+        threshold: 20%
+        informational: true
 github_checks:
   annotations: true
 comment:

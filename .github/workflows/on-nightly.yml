@@ -1,0 +1,23 @@
+name: "Nightly"
+on:
+  schedule:
+    # * is a special character in YAML so you have to quote this string
+    - cron:  '37 4 * * *'
+
+permissions:
+  contents: write # required by build-test to comment on coverage but not used here.
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -x -eo pipefail {0}
+
+jobs:
+  quick:
+    name: "DefaultR"
+    strategy:
+      fail-fast: false
+      matrix:
+        server_version: [main, latest]
+    uses: ./.github/workflows/build-test.yml
+    with:
+      server_version: ${{ matrix.server_version }}

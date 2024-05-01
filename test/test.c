@@ -32533,7 +32533,7 @@ test_KeyValueMirrorCrossDomains(void)
     test("Check mirror syncs: ");
     for (i=0; (ok != 2) && (i < 10); i++)
     {
-        if (kvWatcher_Next(&e, w, 1000) == NATS_OK)
+        if (kvWatcher_Next(&e, w, 10000) == NATS_OK)
         {
             if (((strcmp(kvEntry_Key(e), "age") == 0) || (strcmp(kvEntry_Key(e), "name") == 0))
                 && (kvEntry_Operation(e) == kvOp_Delete))

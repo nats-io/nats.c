@@ -42,6 +42,7 @@ HeadersLift
 HeadersAPIs
 MsgIsJSControl
 SrvVersionAtLeast
+FormatStringArray
 ReconnectServerStats
 ParseStateReconnectFunctionality
 ServersRandomize
@@ -250,6 +251,7 @@ JetStreamInfoAlternates
 KeyValueManager
 KeyValueBasics
 KeyValueWatch
+KeyValueWatchMulti
 KeyValueHistory
 KeyValueKeys
 KeyValueDeleteVsPurge

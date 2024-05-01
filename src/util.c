@@ -2555,3 +2555,62 @@ nats_freeMetadata(natsMetadata *md)
     md->List = NULL;
     md->Count = 0;
 }
+
+
+// allocates a sufficiently large buffer and formats the strings into it, as a
+// ["unencoded-string-0","unencoded-string-1",...]. For an empty array of
+// strings returns "[]".
+natsStatus nats_formatStringArray(char **out, const char **strings, int count)
+{
+    natsStatus s = NATS_OK;
+    natsBuffer buf;
+    int len = 0;
+    int  i;
+
+    len++; // For the '['
+    for (i = 0; i < count; i++)
+    {
+        len += 2; // For the quotes
+        if (i > 0)
+            len++; // For the ','
+        if (strings[i] == NULL)
+            len += strlen("(null)");
+        else
+            len += strlen(strings[i]);
+    }
+    len++; // For the ']'
+    len++; // For the '\0'
+
+    s = natsBuf_Init(&buf, len);
+
+    natsBuf_AppendByte(&buf, '[');
+    for (i = 0; (s == NATS_OK) && (i < count); i++)
+    {
+        if (i > 0)
+        {
+            IFOK(s, natsBuf_AppendByte(&buf, ','));
+        }
+        IFOK(s, natsBuf_AppendByte(&buf, '"'));
+        if (strings[i] == NULL)
+        {
+            IFOK(s, natsBuf_Append(&buf, "(null)", -1));
+        }
+        else
+        {
+            IFOK(s, natsBuf_Append(&buf, strings[i], -1));
+        }
+        IFOK(s, natsBuf_AppendByte(&buf, '"'));
+    }
+
+    IFOK(s, natsBuf_AppendByte(&buf, ']'));
+    IFOK(s, natsBuf_AppendByte(&buf, '\0'));
+    
+    if (s != NATS_OK)
+    {
+        natsBuf_Cleanup(&buf);
+        return s;
+    }
+
+    *out = natsBuf_Data(&buf);
+    return NATS_OK;
+}

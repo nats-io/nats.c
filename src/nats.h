@@ -6338,6 +6338,27 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
              natsMsgHandler cb, void* cbClosure,
              jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
 
+/** \brief Create an asynchronous subscription to multiple subjects.
+ *
+ * Like #js_Subscribe, but accepts multiple subjects, each can be a wildcard.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param js the pointer to the #jsCtx object.
+ * @param subject the subject this subscription is created for.
+ * @param cb the #natsMsgHandler callback.
+ * @param cbClosure a pointer to an user defined object (can be `NULL`). See
+ * the #natsMsgHandler prototype.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param subOpts the subscribe options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_SubscribeMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
+             natsMsgHandler cb, void *cbClosure,
+             jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
+
 /** \brief Create a synchronous subscription.
  *
  * See important notes in #js_Subscribe.
@@ -6345,8 +6366,7 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
  * @param sub the location where to store the pointer to the newly created
  * #natsSubscription object.
  * @param js the pointer to the #jsCtx object.
- * @param subject the subject this subscription is created for.
- * the #natsMsgHandler prototype.
+ * @param subject the subject this subscription is created for (consumer's FilterSubject).
  * @param opts the pointer to the #jsOptions object, possibly `NULL`.
  * @param subOpts the subscribe options, possibly `NULL`.
  * @param errCode the location where to store the JetStream specific error code, or `NULL`
@@ -6355,6 +6375,25 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
 NATS_EXTERN natsStatus
 js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
                  jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
+
+/** \brief Create an asynchronous subscription to multiple subjects.
+ *
+ * Like #js_SubscribeSync, but accepts multiple subjects, each can be a
+ * wildcard.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param js the pointer to the #jsCtx object.
+ * @param subjects the subjects this subscription is created for (consumer's FilterSubjects).
+ * @param numSubjects the number of subjects for the subscription (consumer's FilterSubjectsLen).
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param subOpts the subscribe options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_SubscribeSyncMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
+                      jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode);
 
 /** \brief Create a pull subscriber.
  *
@@ -7002,6 +7041,30 @@ kvStore_PurgeDeletes(kvStore *kv, kvPurgeOptions *opts);
  */
 NATS_EXTERN natsStatus
 kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *keys, kvWatchOptions *opts);
+
+/** \brief Returns a watcher for any updates to keys that match one of the
+ * `keys` argument.
+ *
+ * Returns a watcher for any updates to keys that match the one of `keys`
+ * argument, which could include wildcards.
+ *
+ * A `NULL` entry will be posted when the watcher has received all initial
+ * values.
+ *
+ * Call #kvWatcher_Next to get the next #kvEntry.
+ *
+ * \note The watcher should be destroyed to release memory using
+ * #kvWatcher_Destroy.
+ *
+ * @param new_watcher the location where to store the pointer to the new
+ * #kvWatcher object.
+ * @param kv the pointer to the #kvStore object.
+ * @param keys the keys (wildcard possible) to create the watcher for.
+ * @param numKeys the number of keys in the `keys` array.
+ * @param opts the watcher options, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int numKeys, kvWatchOptions *opts);
 
 /** \brief Returns a watcher for any updates to any keys of the KeyValue store bucket.
  *

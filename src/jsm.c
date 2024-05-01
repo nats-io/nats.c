@@ -3199,7 +3199,6 @@ js_unmarshalConsumerInfo(nats_JSON *json, jsConsumerInfo **new_ci)
     IFOK(s, nats_JSONGetBool(json, "push_bound", &(ci->PushBound)));
     IFOK(s, nats_JSONGetBool(json, "paused", &(ci->Paused)));
     IFOK(s, nats_JSONGetLong(json, "pause_remaining", &(ci->PauseRemaining)));
-
     if (s == NATS_OK)
         *new_ci = ci;
     else

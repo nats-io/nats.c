@@ -2197,38 +2197,68 @@ _checkConfig(jsConsumerConfig *s, jsConsumerConfig *u)
 
 static natsStatus
 _processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig *userCfg,
-                 bool isPullMode, const char *subj, const char *queue)
+                 bool isPullMode, const char **subjects, int numSubjects, const char *queue)
 {
-    bool                dlvSubjEmpty = false;
-    jsConsumerConfig    *ccfg        = info->Config;
-    const char          *dg          = NULL;
-    natsStatus          s            = NATS_OK;
-    bool                matches      = false;
-    int                 i;
+    bool dlvSubjEmpty = false;
+    jsConsumerConfig *ccfg = info->Config;
+    const char *dg = NULL;
+    natsStatus s = NATS_OK;
+    const char *stackFilterSubject[] = {ccfg->FilterSubject};
+    const char **filterSubjects = stackFilterSubject;
+    int filterSubjectsLen = 1;
+    int incoming, existing;
 
     *dlvSubject = NULL;
-
-    // Make sure this new subject matches or is a subset.
-    if (!nats_IsStringEmpty(subj))
+    // Always represent the consumer's filter subjects as a list, to match
+    // uniformly against the incoming subject list. Consider lists of 1 empty
+    // subject empty lists.
+    if (ccfg->FilterSubjectsLen > 0)
     {
-        if (nats_IsStringEmpty(ccfg->FilterSubject) && (ccfg->FilterSubjectsLen == 0))
+        filterSubjects = ccfg->FilterSubjects;
+        filterSubjectsLen = ccfg->FilterSubjectsLen;
+    }
+    if ((filterSubjectsLen == 1) && nats_IsStringEmpty(filterSubjects[0]))
+    {
+        filterSubjects = NULL;
+        filterSubjectsLen = 0;
+    }
+    if ((numSubjects == 1) && nats_IsStringEmpty(subjects[0]))
+    {
+        subjects = NULL;
+        numSubjects = 0;
+    }
+
+    // Match the subjects against the consumer's filter subjects.
+    if (numSubjects > 0 && filterSubjectsLen > 0)
+    {
+        // If the consumer has filter subject(s), then the subject(s) must match.
+        bool matches = true;
+
+        // TODO - This is N**2, but we don't expect a large number of subjects.
+        for (incoming = 0; incoming < numSubjects; incoming++)
         {
-            matches = true;
-        }
-        else if (!nats_IsStringEmpty(ccfg->FilterSubject) && nats_HasPrefix(subj, ccfg->FilterSubject))
-        {
-            matches = true;
-        }
-        else if (ccfg->FilterSubjectsLen > 0)
-        {
-            for (i = 0; (i < ccfg->FilterSubjectsLen) && !matches; i++)
+            bool found = false;
+            for (existing = 0; existing < filterSubjectsLen; existing++)
             {
-                matches = nats_HasPrefix(subj, ccfg->FilterSubjects[i]);
+                if (strcmp(subjects[incoming], filterSubjects[existing]) == 0)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                matches = false;
+                break;
             }
         }
+
         if (!matches)
         {
-            return nats_setError(NATS_ERR, "subject '%s' does not match any consumer filter subjects.", subj);
+            if (numSubjects == 1 && filterSubjectsLen == 1)
+                return nats_setError(NATS_ERR, "subject '%s' does not match consumer filter subject '%s'.", subjects[0], filterSubjects[0]);
+            else
+                return nats_setError(NATS_ERR, "%d subjects do not match any consumer filter subjects.", numSubjects);
         }
     }
     // Check that if user wants to create a queue sub,
@@ -2330,7 +2360,7 @@ js_checkConsName(const char *cons, bool isDurable)
 }
 
 static natsStatus
-_subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const char *pullDurable,
+_subscribeMulti(natsSubscription **new_sub, jsCtx *js, const char **subjects, int numSubjects, const char *pullDurable,
            natsMsgHandler usrCB, void *usrCBClosure, bool isPullMode,
            jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {
@@ -2393,7 +2423,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     consumer = opts->Consumer;
     consBound= (!nats_IsStringEmpty(stream) && !nats_IsStringEmpty(consumer));
 
-    if (nats_IsStringEmpty(subject) && !consBound)
+    if (((numSubjects <= 0) || nats_IsStringEmpty(subjects[0])) && !consBound)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     // Do some quick checks here for ordered consumers.
@@ -2450,9 +2480,10 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
 
     // Find the stream mapped to the subject if not bound to a stream already,
     // that is, if user did not provide a `Stream` name through options).
-    if (nats_IsStringEmpty(stream))
+    if (nats_IsStringEmpty(stream) && numSubjects > 0)
     {
-        s = _lookupStreamBySubject(&stream, nc, subject, &jo, errCode);
+        // Use the first subject to find the stream.
+        s = _lookupStreamBySubject(&stream, nc, subjects[0], &jo, errCode);
         if (s != NATS_OK)
             goto END;
 
@@ -2475,7 +2506,7 @@ PROCESS_INFO:
             s = nats_setError(NATS_ERR, "%s", "no configuration in consumer info");
             goto END;
         }
-        s = _processConsInfo(&deliver, info, &(opts->Config), isPullMode, subject, opts->Queue);
+        s = _processConsInfo(&deliver, info, &(opts->Config), isPullMode, subjects, numSubjects, opts->Queue);
         if (s != NATS_OK)
             goto END;
 
@@ -2509,7 +2540,15 @@ PROCESS_INFO:
         }
 
         // Do filtering always, server will clear as needed.
-        cfg->FilterSubject = subject;
+        if (numSubjects == 1)
+        {
+            cfg->FilterSubject = subjects[0];
+        }
+        else
+        {
+            cfg->FilterSubjects = subjects;
+            cfg->FilterSubjectsLen = numSubjects;
+        }
 
         if (opts->Ordered)
         {
@@ -2559,8 +2598,7 @@ PROCESS_INFO:
                     s = nats_setDefaultError(NATS_NO_MEMORY);
             }
             IF_OK_DUP_STRING(s, jsi->stream, stream);
-            if ((s == NATS_OK) && !nats_IsStringEmpty(subject))
-                DUP_STRING(s, jsi->psubj, subject);
+            IFOK(s, nats_formatStringArray(&jsi->psubj, subjects, numSubjects));
             if (s == NATS_OK)
             {
                 jsi->js     = js;
@@ -2713,6 +2751,26 @@ END:
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const char *pullDurable,
+           natsMsgHandler usrCB, void *usrCBClosure, bool isPullMode,
+           jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s = NATS_OK;
+    const char *singleSubject[] = {subject};
+    int numSubjects = 1;
+    const char **subjects = singleSubject;
+
+    if (nats_IsStringEmpty(subject))
+    {
+        numSubjects = 0;
+        subjects = NULL;
+    }
+
+    s = _subscribeMulti(new_sub, js, subjects, numSubjects, pullDurable, usrCB, usrCBClosure, isPullMode, jsOpts, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 natsStatus
 js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
              natsMsgHandler cb, void *cbClosure,
@@ -2731,6 +2789,23 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
 }
 
 natsStatus
+js_SubscribeMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
+                  natsMsgHandler cb, void *cbClosure,
+                  jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if (cb == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _subscribeMulti(sub, js, subjects, numSubjects, NULL, cb, cbClosure, false, jsOpts, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
                  jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {
@@ -2740,6 +2815,19 @@ js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
         *errCode = 0;
 
     s = _subscribe(sub, js, subject, NULL, NULL, NULL, false, jsOpts, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_SubscribeSyncMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
+                    jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    s = _subscribeMulti(sub, js, subjects, numSubjects, NULL, NULL, NULL, false, jsOpts, opts, errCode);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

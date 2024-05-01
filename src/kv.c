@@ -1058,13 +1058,29 @@ kvWatcher_Destroy(kvWatcher *w)
 natsStatus
 kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOptions *opts)
 {
+    const char *subjects = { key };
+    return kvStore_WatchMulti(new_watcher, kv, &subjects, 1, opts);
+}
+
+natsStatus
+kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int numKeys, kvWatchOptions *opts)
+{
     natsStatus      s;
     kvWatcher       *w = NULL;
     jsSubOptions    so;
+    char *singleSubject[1];
+    char **multipleSubjects = NULL; // allocate if numKeys > 1
+    char **subscribeSubjects = singleSubject;
+    int i;
     DEFINE_BUF_FOR_SUBJECT;
 
-    if ((new_watcher == NULL) || (kv == NULL) || nats_IsStringEmpty(key))
+    if ((new_watcher == NULL) || (kv == NULL) || numKeys <= 0)
         return nats_setDefaultError(NATS_INVALID_ARG);
+    for (i=0; i<numKeys; i++)
+    {
+        if (nats_IsStringEmpty(keys[i]))
+            return nats_setDefaultError(NATS_INVALID_ARG);
+    }
 
     *new_watcher = NULL;
 
@@ -1076,7 +1092,36 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
     w->kv = kv;
     w->refs = 1;
 
-    BUILD_SUBJECT(KEY_NAME_ONLY, NOT_FOR_A_PUT);
+    if (numKeys == 1)
+    {
+        // special case for single key to avoid a calloc.
+        subscribeSubjects[0] = (char *)keys[0];
+
+    }
+    else
+    {
+        multipleSubjects = (char **)NATS_CALLOC(numKeys, sizeof(const char *));
+        if (multipleSubjects == NULL)
+        {
+            _freeWatcher(w);
+            return nats_setDefaultError(NATS_NO_MEMORY);
+        }
+        subscribeSubjects = multipleSubjects;
+    }
+    for (i = 0; i < numKeys; i++)
+    {
+        const char *key = keys[i];
+        BUILD_SUBJECT(KEY_NAME_ONLY, NOT_FOR_A_PUT); // into buf, '\0'-terminated.
+        subscribeSubjects[i] = NATS_STRDUP(natsBuf_Data(&buf));
+        if (subscribeSubjects[i] == NULL)
+        {
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+            NATS_FREE_STRINGS(subscribeSubjects, i);
+            NATS_FREE(multipleSubjects);
+            _freeWatcher(w);
+            return nats_setDefaultError(NATS_NO_MEMORY);
+        }
+    }
     IFOK(s, natsMutex_Create(&(w->mu)));
     if (s == NATS_OK)
     {
@@ -1096,7 +1141,7 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
         // Need to explicitly bind to the stream here because the subject
         // we construct may not help find the stream when using mirrors.
         so.Stream = kv->stream;
-        s = js_SubscribeSync(&(w->sub), kv->js, natsBuf_Data(&buf), NULL, &so, NULL);
+        s = js_SubscribeSyncMulti(&(w->sub), kv->js, (const char **)subscribeSubjects, numKeys, NULL, &so, NULL);
         IFOK(s, natsSubscription_SetPendingLimits(w->sub, -1, -1));
         if (s == NATS_OK)
         {
@@ -1113,6 +1158,8 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
     }
 
     natsBuf_Cleanup(&buf);
+    NATS_FREE_STRINGS(subscribeSubjects, numKeys);
+    NATS_FREE(multipleSubjects);
 
     if (s == NATS_OK)
         *new_watcher = w;

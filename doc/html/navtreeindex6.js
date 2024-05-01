@@ -1,5 +1,11 @@
 var NAVTREEINDEX6 =
 {
+"structjs_sequence_pair.html#ab051e0815302c48ba6122bd18d9d76f7":[2,0,24,1],
+"structjs_stream_alternate.html":[2,0,17],
+"structjs_stream_alternate.html#a07f36f98c7dcdf435f803e4f0ccaac57":[2,0,17,0],
+"structjs_stream_alternate.html#a3e85014d03dd425435ed5a0b6a5dfb1d":[2,0,17,2],
+"structjs_stream_alternate.html#a7c25ab1a427b78c4e1ba58ff7cdb5a8f":[2,0,17,1],
+"structjs_stream_config.html":[2,0,9],
 "structjs_stream_config.html#a0b44ea5251ef20bf5b5658bcfbea832d":[2,0,9,11],
 "structjs_stream_config.html#a0c5f3354073dbe72650e3db7f59a47af":[2,0,9,2],
 "structjs_stream_config.html#a0ce1d0a7c1f0576151f505724ae393d1":[2,0,9,32],

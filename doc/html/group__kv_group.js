@@ -18,6 +18,7 @@ var group__kv_group =
     [ "kvPurgeOptions_Init", "group__kv_group.html#ga243113fd7df34ce104850ab888f04021", null ],
     [ "kvStore_PurgeDeletes", "group__kv_group.html#ga34ab74b229ff88e64301ea53a274da69", null ],
     [ "kvStore_Watch", "group__kv_group.html#ga30feca870f580c7b9d2ad07a740505b2", null ],
+    [ "kvStore_WatchMulti", "group__kv_group.html#ga409bfd787a87d0e37b69d3711fdb28f4", null ],
     [ "kvStore_WatchAll", "group__kv_group.html#gaf011f1dd6813391c65664e982747602e", null ],
     [ "kvStore_Keys", "group__kv_group.html#ga6030fc2a672ae868f7603587245b9d5a", null ],
     [ "kvKeysList_Destroy", "group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45", null ],

@@ -12047,12 +12047,17 @@ test_RequestTimeout(void)
     natsMsg             *msg      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
 
+    printf("<>/<> 1\n");
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
     test("Test Request should timeout: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    printf("<>/<> 2: %d\n", s);
+
     IFOK(s, natsConnection_RequestString(&msg, nc, "foo", "bar", 500));
+    printf("<>/<> 3: %d\n", s);
+
     testCond(serverVersionAtLeast(2, 2, 0) ? (s == NATS_NO_RESPONDERS) : (s == NATS_TIMEOUT));
 
     natsConnection_Destroy(nc);

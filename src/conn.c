@@ -81,14 +81,8 @@ _processConnInit(natsConnection *nc);
 static void
 _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doCBs);
 
-static natsStatus
-_tryReconnect(natsConnection *nc, natsStatus s, bool forcedReconnect, bool *started);
-
-static void
-_maybeReconnect(natsConnection *nc, natsStatus s) { _tryReconnect(nc, s, false, NULL); }
-
-static natsStatus
-_forceReconnect(natsConnection *nc, natsStatus s, bool *started) { return _tryReconnect(nc, s, true, started); }
+static bool
+_processOpError(natsConnection *nc, natsStatus s, bool initialConnect);
 
 static natsStatus
 _flushTimeout(natsConnection *nc, int64_t timeout);
@@ -2108,9 +2102,7 @@ _connect(natsConnection *nc)
     {
         natsConn_Unlock(nc);
 
-        bool reconnectStarted = false;
-        s = _forceReconnect(nc, retSts, &reconnectStarted);
-        if ((s == NATS_OK) && reconnectStarted)
+        if (_processOpError(nc, retSts, true))
         {
             nats_clearLastError();
             return NATS_NOT_YET_CONNECTED;
@@ -2142,30 +2134,34 @@ _evStopPolling(natsConnection *nc)
     return s;
 }
 
-// _tryReconnect handles errors from reading or parsing the protocol, or forced
-// reconnection. It will fire off a doReconnect thread if needed.
+// _processOpError handles errors from reading or parsing the protocol.
 // The lock should not be held entering this function.
-static natsStatus
-_tryReconnect(natsConnection *nc, natsStatus newErr, bool forcedReconnect, bool *started)
+static bool
+_processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
 {
-    natsStatus s = NATS_OK;
+    bool forceReconnect;
 
     natsConn_Lock(nc);
 
-    if (!forcedReconnect)
+    forceReconnect = initialConnect || nc->forceReconnect;
+    nc->forceReconnect = false;
+
+    if (!forceReconnect)
     {
         if (_isConnecting(nc) || natsConn_isClosed(nc) || (nc->inReconnect > 0))
         {
             natsConn_Unlock(nc);
 
-            return NATS_OK;
+            return false;
         }
     }
 
     // Do reconnect only if allowed and we were actually connected
     // or if we are retrying on initial failed connect.
-    if (forcedReconnect || (nc->opts->allowReconnect && (nc->status == NATS_CONN_STATUS_CONNECTED)))
+    if (forceReconnect || (nc->opts->allowReconnect && (nc->status == NATS_CONN_STATUS_CONNECTED)))
     {
+        natsStatus ls = NATS_OK;
+
         // Set our new status
         nc->status = NATS_CONN_STATUS_RECONNECTING;
 
@@ -2185,7 +2181,7 @@ _tryReconnect(natsConnection *nc, natsStatus newErr, bool forcedReconnect, bool 
         // on the socket since we are going to reconnect.
         if (nc->el.attached)
         {
-            s = _evStopPolling(nc);
+            ls = _evStopPolling(nc);
             natsSock_Close(nc->sockCtx.fd);
             nc->sockCtx.fd = NATS_SOCK_INVALID;
 
@@ -2194,24 +2190,25 @@ _tryReconnect(natsConnection *nc, natsStatus newErr, bool forcedReconnect, bool 
         }
 
         // Fail pending flush requests.
-        if (s == NATS_OK)
+        if (ls == NATS_OK)
             _clearPendingFlushRequests(nc);
         // If option set, also fail pending requests.
-        if ((s == NATS_OK) && nc->opts->failRequestsOnDisconnect)
+        if ((ls == NATS_OK) && nc->opts->failRequestsOnDisconnect)
             _clearPendingRequestCalls(nc, NATS_CONNECTION_DISCONNECTED);
 
         // Create the pending buffer to hold all write requests while we try
         // to reconnect.
-        IFOK (s, natsBuf_Create(&(nc->pending), nc->opts->reconnectBufSize));
-        if (s == NATS_OK)
+        if (ls == NATS_OK)
+            ls = natsBuf_Create(&(nc->pending), nc->opts->reconnectBufSize);
+        if (ls == NATS_OK)
         {
             nc->usePending = true;
 
             // Start the reconnect thread
-            s = natsThread_Create(&(nc->reconnectThread),
+            ls = natsThread_Create(&(nc->reconnectThread),
                                   _doReconnect, (void*) nc);
         }
-        if (s == NATS_OK)
+        if (ls == NATS_OK)
         {
             // We created the reconnect thread successfully, so retain
             // the connection.
@@ -2219,25 +2216,20 @@ _tryReconnect(natsConnection *nc, natsStatus newErr, bool forcedReconnect, bool 
             nc->inReconnect++;
             natsConn_Unlock(nc);
 
-            if (started != NULL)
-                *started = true;
-
-            return NATS_OK;
+            return true;
         }
     }
 
     // reconnect not allowed or we failed to setup the reconnect code.
 
-    if (started != NULL)
-        *started = false;
     nc->status = NATS_CONN_STATUS_DISCONNECTED;
-    nc->err = newErr;
+    nc->err = s;
 
     natsConn_Unlock(nc);
 
     _close(nc, NATS_CONN_STATUS_CLOSED, false, true);
 
-    return NATS_UPDATE_ERR_STACK(s);
+    return false;
 }
 
 static void
@@ -2280,7 +2272,7 @@ _readLoop(void  *arg)
             s = natsParser_Parse(nc, buffer, n);
 
         if (s != NATS_OK)
-            _maybeReconnect(nc, s);
+            _processOpError(nc, s, false);
 
         natsConn_Lock(nc);
     }
@@ -2409,7 +2401,7 @@ _processPingTimer(natsTimer *timer, void *arg)
     if (++(nc->pout) > nc->opts->maxPingsOut)
     {
         natsConn_Unlock(nc);
-        _maybeReconnect(nc, NATS_STALE_CONNECTION);
+        _processOpError(nc, NATS_STALE_CONNECTION, false);
         return;
     }
 
@@ -2934,7 +2926,7 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
 
     if (strcasecmp(error, STALE_CONNECTION) == 0)
     {
-        _maybeReconnect(nc, NATS_STALE_CONNECTION);
+        _processOpError(nc, NATS_STALE_CONNECTION, false);
     }
     else if (nats_strcasestr(error, PERMISSIONS_ERR) != NULL)
     {
@@ -3346,18 +3338,6 @@ natsConnection_Connect(natsConnection **newConn, natsOptions *options)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-natsStatus
-natsConnection_Reconnect(natsConnection *nc)
-{
-    natsStatus s = NATS_OK;
-
-    if (natsConnection_IsClosed(nc))
-        return nats_setDefaultError(NATS_INVALID_ARG);
-
-    IFOK(s, _forceReconnect(nc, NATS_OK, NULL));
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
 static natsStatus
 _processUrlString(natsOptions *opts, const char *urls)
 {
@@ -3445,6 +3425,28 @@ natsConnection_ConnectTo(natsConnection **newConn, const char *url)
         natsConn_release(nc);
 
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_Reconnect(natsConnection *nc)
+{
+    if (nc == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+    if (natsConn_isClosed(nc))
+    {
+        natsConn_Unlock(nc);
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    }
+
+    nc->forceReconnect = true;
+    natsSock_Close(nc->sockCtx.fd);
+    nc->sockCtx.fd = NATS_SOCK_INVALID;
+    nc->sockCtx.fdActive = false;
+
+    natsConn_Unlock(nc);
+    return NATS_OK;
 }
 
 // Test if connection  has been closed.
@@ -4142,7 +4144,7 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
         s = natsParser_Parse(nc, buffer, n);
 
     if (s != NATS_OK)
-        _maybeReconnect(nc, s);
+        _processOpError(nc, s, false);
 
     natsConn_release(nc);
 }
@@ -4191,7 +4193,7 @@ natsConnection_ProcessWriteEvent(natsConnection *nc)
     natsConn_Unlock(nc);
 
     if (s != NATS_OK)
-        _maybeReconnect(nc, s);
+        _processOpError(nc, s, false);
 
     (void) NATS_UPDATE_ERR_STACK(s);
 }

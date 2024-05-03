@@ -20264,19 +20264,19 @@ test_ForcedReconnect(void)
     natsMsg_Destroy(msg);
     msg = NULL;
 
+    test("Reconect on errors if allowReconnect is not set: ");
+    natsMutex_Lock(nc->mu);
+    nc->opts->allowReconnect = false;
+    natsMutex_Unlock(nc->mu);
+    s = natsConnection_Reconnect(nc);
+    testCond(s == NATS_ILLEGAL_STATE);
+
     natsConnection_Close(nc);
     test("Reconect on a close connection errors: ");
     s = natsConnection_Reconnect(nc);
     testCond(s == NATS_CONNECTION_CLOSED);
 
     test("Reconect on a NULL connection errors: ");
-    s = natsConnection_Reconnect(NULL);
-    testCond(s == NATS_INVALID_ARG);
-
-    test("Reconect on errors if allowReconnect is not set: ");
-    natsMutex_Lock(nc->mu);
-    nc->opts->allowReconnect = false;
-    natsMutex_Unlock(nc->mu);
     s = natsConnection_Reconnect(NULL);
     testCond(s == NATS_INVALID_ARG);
 

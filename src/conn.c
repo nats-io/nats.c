@@ -3436,7 +3436,10 @@ natsConnection_Reconnect(natsConnection *nc)
     }
 
     if (!nc->opts->allowReconnect)
-        return nats_setDefaultError(NATS_INVALID_ARG);
+    {
+        natsConn_Unlock(nc);
+        return nats_setDefaultError(NATS_ILLEGAL_STATE);
+    }
 
     natsSock_Close(nc->sockCtx.fd);
 

@@ -3442,8 +3442,6 @@ natsConnection_Reconnect(natsConnection *nc)
 
     nc->forceReconnect = true;
     natsSock_Close(nc->sockCtx.fd);
-    nc->sockCtx.fd = NATS_SOCK_INVALID;
-    nc->sockCtx.fdActive = false;
 
     natsConn_Unlock(nc);
     return NATS_OK;

@@ -20264,6 +20264,15 @@ test_ForcedReconnect(void)
     natsMsg_Destroy(msg);
     msg = NULL;
 
+    natsConnection_Close(nc);
+    test("Reconect on a close connection errors: ");
+    s = natsConnection_Reconnect(nc);
+    testCond(s == NATS_CONNECTION_CLOSED);
+
+    test("Reconect on a NULL connection errors: ");
+    s = natsConnection_Reconnect(NULL);
+    testCond(s == NATS_INVALID_ARG);
+
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);

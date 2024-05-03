@@ -20265,9 +20265,9 @@ test_ForcedReconnect(void)
     msg = NULL;
 
     natsSubscription_Destroy(sub);
-    sub = NULL;
     natsConnection_Destroy(nc);
-    nc = NULL;
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
 }
 
 static void

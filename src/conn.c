@@ -2102,7 +2102,6 @@ _connect(natsConnection *nc)
     }
 
     // If not connected and retry asynchronously on failed connect
-    printf("<>/<> nc->status: %d retry: %d, has CB:%d\n", nc->status, retryOnFailedConnect, hasConnectedCb);
     if ((nc->status != NATS_CONN_STATUS_CONNECTED)
             && retryOnFailedConnect
             && hasConnectedCb)
@@ -2153,12 +2152,10 @@ _tryReconnect(natsConnection *nc, natsStatus newErr, bool forcedReconnect, bool 
 
     natsConn_Lock(nc);
 
-    printf("<>/<> tryReconnect 1: forced:%d\n", forcedReconnect);
     if (!forcedReconnect)
     {
         if (_isConnecting(nc) || natsConn_isClosed(nc) || (nc->inReconnect > 0))
         {
-            printf("<>/<> tryReconnect 2: nothing to do\n");
             natsConn_Unlock(nc);
 
             return NATS_OK;
@@ -2169,7 +2166,6 @@ _tryReconnect(natsConnection *nc, natsStatus newErr, bool forcedReconnect, bool 
     // or if we are retrying on initial failed connect.
     if (forcedReconnect || (nc->opts->allowReconnect && (nc->status == NATS_CONN_STATUS_CONNECTED)))
     {
-        printf("<>/<> tryReconnect 3: try: %d %d\n", nc->opts->allowReconnect, nc->status);
         // Set our new status
         nc->status = NATS_CONN_STATUS_RECONNECTING;
 
@@ -2226,7 +2222,6 @@ _tryReconnect(natsConnection *nc, natsStatus newErr, bool forcedReconnect, bool 
             if (started != NULL)
                 *started = true;
 
-            printf("<>/<> tryReconnect 4: OK\n");
             return NATS_OK;
         }
     }

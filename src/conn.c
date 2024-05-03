@@ -3319,9 +3319,9 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
 natsStatus
 natsConnection_Connect(natsConnection **newConn, natsOptions *options)
 {
-    natsStatus s = NATS_OK;
-    natsConnection *nc = NULL;
-    natsOptions *opts = NULL;
+    natsStatus      s       = NATS_OK;
+    natsConnection  *nc     = NULL;
+    natsOptions     *opts   = NULL;
 
     if (options == NULL)
     {

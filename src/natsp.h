@@ -700,7 +700,6 @@ struct __natsConnection
     natsThread          *reconnectThread;
     int                 inReconnect;
     natsCondition       *reconnectCond;
-    bool                forceReconnect;
 
     natsStatistics      stats;
 

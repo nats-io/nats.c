@@ -2139,14 +2139,9 @@ _evStopPolling(natsConnection *nc)
 static bool
 _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
 {
-    bool forceReconnect;
-
     natsConn_Lock(nc);
 
-    forceReconnect = initialConnect || nc->forceReconnect;
-    nc->forceReconnect = false;
-
-    if (!forceReconnect)
+    if (!initialConnect)
     {
         if (_isConnecting(nc) || natsConn_isClosed(nc) || (nc->inReconnect > 0))
         {
@@ -2158,7 +2153,7 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
 
     // Do reconnect only if allowed and we were actually connected
     // or if we are retrying on initial failed connect.
-    if (forceReconnect || (nc->opts->allowReconnect && (nc->status == NATS_CONN_STATUS_CONNECTED)))
+    if (initialConnect || (nc->opts->allowReconnect && (nc->status == NATS_CONN_STATUS_CONNECTED)))
     {
         natsStatus ls = NATS_OK;
 
@@ -3440,7 +3435,9 @@ natsConnection_Reconnect(natsConnection *nc)
         return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
-    nc->forceReconnect = true;
+    if (!nc->opts->allowReconnect)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
     natsSock_Close(nc->sockCtx.fd);
 
     natsConn_Unlock(nc);

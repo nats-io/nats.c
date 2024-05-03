@@ -20273,6 +20273,13 @@ test_ForcedReconnect(void)
     s = natsConnection_Reconnect(NULL);
     testCond(s == NATS_INVALID_ARG);
 
+    test("Reconect on errors if allowReconnect is not set: ");
+    natsMutex_Lock(nc->mu);
+    nc->opts->allowReconnect = false;
+    natsMutex_Unlock(nc->mu);
+    s = natsConnection_Reconnect(NULL);
+    testCond(s == NATS_INVALID_ARG);
+
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);

@@ -20203,6 +20203,74 @@ test_NoPartialOnReconnect(void)
 }
 
 static void
+test_ForcedReconnect(void)
+{
+    natsStatus s;
+    struct threadArg    arg;
+    natsOptions *opts = NULL;
+    natsConnection *nc = NULL;
+    natsSubscription *sub = NULL;
+    natsMsg *msg = NULL;
+    natsPid pid = NATS_INVALID_PID;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("unable to setup test");
+
+    test("Start server, connect, subscribe: ");
+    pid = _startServer("nats://127.0.0.1:4222", "-p 4222", true);
+    CHECK_SERVER_STARTED(pid);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &arg));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
+    testCond(s == NATS_OK);
+
+    test("Send a message to foo: ");
+    s = natsMsg_Create(&msg, "foo", NULL, "bar", 3);
+    IFOK(s, natsConnection_PublishMsg(nc, msg));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Receive the message: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK) && (msg != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Forced reconnect: ");
+    s = natsConnection_Reconnect(nc);
+    testCond(s == NATS_OK);
+
+    test("Waiting for reconnect: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+    arg.reconnected = false;
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Send a message to foo: ");
+    s = natsMsg_Create(&msg, "foo", NULL, "bar", 3);
+    IFOK(s, natsConnection_PublishMsg(nc, msg));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Receive the message: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK) && (msg != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    natsConnection_Destroy(nc);
+    nc = NULL;
+}
+
+static void
 _stopServerInThread(void *closure)
 {
     natsPid pid = *((natsPid*) closure);
@@ -36210,6 +36278,7 @@ static testInfo allTests[] =
     {"RetryOnFailedConnect",            test_RetryOnFailedConnect},
     {"NoPartialOnReconnect",            test_NoPartialOnReconnect},
     {"ReconnectFailsPendingRequests",   test_ReconnectFailsPendingRequest},
+    {"ForcedReconnect",                 test_ForcedReconnect},
 
     {"ErrOnConnectAndDeadlock",         test_ErrOnConnectAndDeadlock},
     {"ErrOnMaxPayloadLimit",            test_ErrOnMaxPayloadLimit},

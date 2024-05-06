@@ -20227,11 +20227,8 @@ test_ForcedReconnect(void)
     testCond(s == NATS_OK);
 
     test("Send a message to foo: ");
-    s = natsMsg_Create(&msg, "foo", NULL, "bar", 3);
-    IFOK(s, natsConnection_PublishMsg(nc, msg));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "bar"));
     testCond(s == NATS_OK);
-    natsMsg_Destroy(msg);
-    msg = NULL;
 
     test("Receive the message: ");
     s = natsSubscription_NextMsg(&msg, sub, 1000);
@@ -20252,11 +20249,8 @@ test_ForcedReconnect(void)
     testCond(s == NATS_OK);
 
     test("Send a message to foo: ");
-    s = natsMsg_Create(&msg, "foo", NULL, "bar", 3);
-    IFOK(s, natsConnection_PublishMsg(nc, msg));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "bar"));
     testCond(s == NATS_OK);
-    natsMsg_Destroy(msg);
-    msg = NULL;
 
     test("Receive the message: ");
     s = natsSubscription_NextMsg(&msg, sub, 1000);
@@ -20264,12 +20258,16 @@ test_ForcedReconnect(void)
     natsMsg_Destroy(msg);
     msg = NULL;
 
-    test("Reconect on errors if allowReconnect is not set: ");
+    test("Reconnect again with allowReconnect false, the call succeeds: ");
     natsMutex_Lock(nc->mu);
     nc->opts->allowReconnect = false;
     natsMutex_Unlock(nc->mu);
     s = natsConnection_Reconnect(nc);
-    testCond(s == NATS_ILLEGAL_STATE);
+    testCond(s == NATS_OK);
+
+    test("But the connection is closed: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_CONNECTION_CLOSED) && (msg == NULL));
 
     natsConnection_Close(nc);
     test("Reconect on a close connection errors: ");

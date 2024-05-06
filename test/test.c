@@ -20265,6 +20265,8 @@ test_ForcedReconnect(void)
     s = natsConnection_Reconnect(nc);
     testCond(s == NATS_OK);
 
+    // On MacOS this returns NATS_CONNECTION_CLOSED, on Ubuntu we get a
+    // NATS_TIMEOUT.
     test("But the connection is closed: ");
     s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond(((s == NATS_CONNECTION_CLOSED) || (s = NATS_TIMEOUT)) && (msg == NULL));

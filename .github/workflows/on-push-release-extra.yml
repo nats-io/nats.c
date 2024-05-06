@@ -14,6 +14,13 @@ defaults:
     shell: bash --noprofile --norc -x -eo pipefail {0}
 
 jobs:
+  flakes:
+    name: "check for flaky tests"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      server_version: main
+      repeat: 5
+
   server-versions:
     strategy:
       fail-fast: false

@@ -22,4 +22,3 @@ jobs:
       server_version: main
       ubuntu_version: ${{ matrix.ubuntu_version }}
       compiler: ${{ matrix.compiler }}
-      repeat: 3

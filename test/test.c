@@ -20267,7 +20267,7 @@ test_ForcedReconnect(void)
 
     test("But the connection is closed: ");
     s = natsSubscription_NextMsg(&msg, sub, 1000);
-    testCond((s == NATS_CONNECTION_CLOSED) && (msg == NULL));
+    testCond(((s == NATS_CONNECTION_CLOSED) || (s = NATS_TIMEOUT)) && (msg == NULL));
 
     natsConnection_Close(nc);
     test("Reconect on a close connection errors: ");

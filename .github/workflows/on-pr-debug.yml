@@ -21,7 +21,6 @@ jobs:
       compiler: ${{ matrix.compiler }}
       server_version: main
       type: Debug
-      repeat: 3
 
   coverage:
     name: "Coverage"
@@ -63,4 +62,3 @@ jobs:
     with:
       sanitize: thread
       server_version: main
-      repeat: 3

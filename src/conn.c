@@ -3422,6 +3422,25 @@ natsConnection_ConnectTo(natsConnection **newConn, const char *url)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+natsStatus
+natsConnection_Reconnect(natsConnection *nc)
+{
+    if (nc == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+    if (natsConn_isClosed(nc))
+    {
+        natsConn_Unlock(nc);
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    }
+
+    natsSock_Close(nc->sockCtx.fd);
+
+    natsConn_Unlock(nc);
+    return NATS_OK;
+}
+
 // Test if connection  has been closed.
 bool
 natsConnection_IsClosed(natsConnection *nc)

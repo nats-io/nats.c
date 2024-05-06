@@ -4033,6 +4033,18 @@ stanMsg_Destroy(stanMsg *msg);
 NATS_EXTERN natsStatus
 natsConnection_Connect(natsConnection **nc, natsOptions *options);
 
+/** \brief Causes the client to drop the connection to the current server and
+ * perform standard reconnection process.
+ *
+ * This means that all subscriptions and consumers should be resubscribed and
+ * their work resumed after successful reconnect where all reconnect options are
+ * respected.
+ * 
+ * @param nc the pointer to the #natsConnection object.
+ */
+natsStatus
+natsConnection_Reconnect(natsConnection *nc);
+
 /** \brief Process a read event when using external event loop.
  *
  * When using an external event loop, and the callback indicating that

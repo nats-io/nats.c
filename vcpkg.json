@@ -1,0 +1,11 @@
+{
+  "name": "nats-c",
+  "version-string": "1.0.0",
+  "builtin-baseline": "326d8b43e365352ba3ccadf388d989082fe0f2a6",
+  "dependencies": [
+    {
+      "name": "openssl",
+      "version>=": "3.3.0"
+    }
+  ]
+}

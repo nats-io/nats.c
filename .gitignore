@@ -26,6 +26,8 @@ test/conf_*
 
 .vscode/
 .idea/
+.vs/
+out/
 
 # Mac
 .DS_Store

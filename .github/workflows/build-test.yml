@@ -117,7 +117,7 @@ jobs:
       - name: "Rebuild the list of tests to match the compile flags"
         working-directory: ./build
         run: |
-          ./test/testsuite
+          ./bin/testsuite
           if [[ $(diff list.txt ../test/list.txt; echo $?) != 0 ]]; then
             mv list.txt ../test/list.txt
             make rebuild_cache

@@ -5,10 +5,6 @@ on:
 permissions:
   contents: write # so it can comment
 
-defaults:
-  run:
-    shell: bash --noprofile --norc -x -eo pipefail {0}
-
 jobs:
   Ubuntu:
     name: "Ubuntu"

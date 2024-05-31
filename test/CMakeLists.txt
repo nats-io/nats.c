@@ -7,6 +7,10 @@ if(NOT NATS_BUILD_LIB_STATIC)
   return()
 endif()
 
+if(MSVC)
+  set_source_files_properties(test.c PROPERTIES COMPILE_FLAGS "/w")
+endif()
+
 # We need this to build the test program
 include_directories(${PROJECT_SOURCE_DIR}/src)
 if(NATS_BUILD_WITH_TLS)

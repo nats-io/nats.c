@@ -10,7 +10,7 @@ defaults:
     shell: bash --noprofile --norc -x -eo pipefail {0}
 
 jobs:
-  default:
+  Ubuntu:
     name: "DefaultD"
     strategy:
       fail-fast: false
@@ -62,3 +62,29 @@ jobs:
     with:
       sanitize: thread
       server_version: main
+
+  Windows:
+    name: "DefaultD"
+    runs-on: windows-latest
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout nats.c
+        uses: actions/checkout@v4
+
+      - name: Build
+        env:
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+        run: |
+          cmake -B build -S . -DNATS_BUILD_STREAMING=OFF
+          cmake --build build --config Debug
+
+      - name: Test
+        run: |
+          cd build
+          ./bin/Debug/testsuite

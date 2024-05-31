@@ -33,7 +33,7 @@ handle_arithmetics_op(microRequest *req, arithmeticsOP op)
 {
     microError *err = NULL;
     microArgs *args = NULL;
-    long double a1, a2, result;
+    long double a1 = 0, a2 = 0, result = 0;
     char buf[1024];
     int len = 0;
 

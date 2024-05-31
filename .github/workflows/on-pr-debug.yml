@@ -11,7 +11,7 @@ defaults:
 
 jobs:
   Ubuntu:
-    name: "DefaultD"
+    name: "Ubuntu"
     strategy:
       fail-fast: false
       matrix:
@@ -64,7 +64,7 @@ jobs:
       server_version: main
 
   Windows:
-    name: "DefaultD"
+    name: "Windows"
     runs-on: windows-latest
     steps:
       - name: Export GitHub Actions cache environment variables

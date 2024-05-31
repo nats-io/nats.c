@@ -54,7 +54,7 @@ defaults:
 jobs:
   do:
     runs-on: ubuntu-${{ inputs.ubuntu_version }}
-    name: "ubuntu:${{ inputs.ubuntu_version }} ${{ inputs.compiler }} nats:${{ inputs.server_version }}"
+    name: "${{ inputs.ubuntu_version }} - nats:${{ inputs.server_version }}"
     steps:
       - name: Checkout nats.c
         uses: actions/checkout@v4

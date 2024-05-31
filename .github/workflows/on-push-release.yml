@@ -11,7 +11,7 @@ defaults:
 
 jobs:
   quick:
-    name: "DefaultR"
+    name: "Ubuntu"
     strategy:
       fail-fast: false
       matrix:

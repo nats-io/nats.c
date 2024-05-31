@@ -36,17 +36,9 @@ on:
         type: string
         description: "Debug or Release."
         default: "Release"
-      os:
-        type: string
-        description: "OS to use, either 'ubuntu' or 'windows'"
-        default: "latest"
       ubuntu_version:
         type: string
-        description: "Ubuntu version to use, e.g. '20.04'."
-        default: "latest"
-      windows_version:
-        type: string
-        description: "Windows version to use."
+        description: "Ubuntu version to use, e.g. '20.04'"
         default: "latest"
     secrets:
       CODECOV_TOKEN:
@@ -60,10 +52,9 @@ defaults:
     shell: bash --noprofile --norc -x -eo pipefail {0}
 
 jobs:
-  Ubuntu:
+  do:
     runs-on: ubuntu-${{ inputs.ubuntu_version }}
-    name: "${{ inputs.ubuntu_version }} to nats:${{ inputs.server_version }}"
-    if: ${{ inputs.os == 'ubuntu' }}
+    name: "ubuntu:${{ inputs.ubuntu_version }} ${{ inputs.compiler }} nats:${{ inputs.server_version }}"
     steps:
       - name: Checkout nats.c
         uses: actions/checkout@v4
@@ -179,29 +170,4 @@ jobs:
         with:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
-
-  Windows:
-    name: "Windows"
-    runs-on: windows-${{ inputs.windows_version }}
-    steps:
-      - name: Export GitHub Actions cache environment variables
-        uses: actions/github-script@v7
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-
-      - name: Checkout nats.c
-        uses: actions/checkout@v4
-
-      - name: Build
-        env:
-          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-        run: |
-          cmake -B build -S . -DNATS_BUILD_STREAMING=OFF
-          cmake --build build --config Debug
-
-      - name: Test
-        run: |
-          cd build
-          ./bin/Debug/testsuite
+          # verbose: true

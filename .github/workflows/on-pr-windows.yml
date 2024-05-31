@@ -25,10 +25,8 @@ jobs:
         env:
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
         run: |
-          cmake -B build -S .
+          cmake -B build -S . -DNATS_BUILD_STREAMING=OFF
           cmake --build build --config Debug
-          cd build
-          ./bin/Debug/testsuite
 
       - name: Test
         run: |

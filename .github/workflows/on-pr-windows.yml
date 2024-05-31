@@ -25,7 +25,7 @@ jobs:
         env:
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
         run: |
-          cmake -B build -S . -NATS_BUILD_STREAMING=OFF
+          cmake -B build -S . -DNATS_BUILD_STREAMING=OFF
           cmake --build build --config Debug
 
       - name: Test

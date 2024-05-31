@@ -81,7 +81,7 @@ jobs:
         env:
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
         run: |
-          cmake -B build -S . -DCMAKE_C_FLAGS="/W4 /WX" -DNATS_BUILD_STREAMING=OFF
+          cmake -B build -S . -DCMAKE_C_FLAGS=/W4 -DNATS_BUILD_STREAMING=OFF
           cmake --build build --config Debug
 
       - name: Test

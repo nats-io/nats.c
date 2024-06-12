@@ -1764,6 +1764,25 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
+    test("'tcp://%4C%65v:p%77d@localhost':");
+    s = natsUrl_Create(&u, "tcp://%4C%65v:p%77d@localhost");
+    testCond((s == NATS_OK)
+              && (u != NULL)
+              && (u->host != NULL)
+              && (strcmp(u->host, "localhost") == 0)
+              && (u->username != NULL)
+              && (strcmp(u->username, "Lev") == 0)
+              && (u->password != NULL)
+              && (strcmp(u->password, "pwd") == 0)
+              && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("'tcp://%4c%65v:p%@localhost':");
+    s = natsUrl_Create(&u, "tcp://%4%65v:p%@localhost");
+    testCond((s == NATS_ERR) && (u == NULL) && (strstr(nats_GetLastError(NULL), "invalid percent encoding in URL: %4%65v") != NULL));
+    nats_clearLastError();
+
     test("'tcp://localhost: 4222':");
     s = natsUrl_Create(&u, "tcp://localhost: 4222");
     testCond((s == NATS_INVALID_ARG)

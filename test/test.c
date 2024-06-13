@@ -1764,8 +1764,8 @@ test_natsUrl(void)
     natsUrl_Destroy(u);
     u = NULL;
 
-    test("'tcp://%4C%65v:p%77d@localhost':");
-    s = natsUrl_Create(&u, "tcp://%4C%65v:p%77d@localhost");
+    test("'tcp://%4C%65v%00ignored:p%77d%00ignoredalso@localhost':");
+    s = natsUrl_Create(&u, "tcp://%4C%65v%00ignored:p%77d%00ignoredalso@localhost");
     testCond((s == NATS_OK)
               && (u != NULL)
               && (u->host != NULL)
@@ -1775,6 +1775,12 @@ test_natsUrl(void)
               && (u->password != NULL)
               && (strcmp(u->password, "pwd") == 0)
               && (u->port == 4222));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("'tcp://%4C%65v:p%77d@localhost':");
+    s = natsUrl_Create(&u, "tcp://%4C%65v:p%77d@localhost");
+    testCond((s == NATS_OK) && (u != NULL) && (u->host != NULL) && (strcmp(u->host, "localhost") == 0) && (u->username != NULL) && (strcmp(u->username, "Lev") == 0) && (u->password != NULL) && (strcmp(u->password, "pwd") == 0) && (u->port == 4222));
     natsUrl_Destroy(u);
     u = NULL;
 

@@ -76,7 +76,7 @@ fi
 export NATS_TEST_TRAVIS=yes
 export NATS_TEST_KEEP_SERVER_OUTPUT=yes
 echo "Using NATS server version: $NATS_TEST_SERVER_VERSION"
-ctest -VV -R 'JetStreamInfoAlternates' --repeat-until-fail 10
+ctest -VV -R 'JetStreamInfoAlternates' --repeat-until-fail 50
 res=$?
 if [ $res -ne 0 ]; then
   exit $res

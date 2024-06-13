@@ -27912,7 +27912,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
-    test("Wait and check HB received: ");
+    test("Check HB received: ");
     nats_Sleep(300);
     natsSubAndLdw_Lock(sub);
     s = (sub->jsi->mismatch.dseq == 1 ? NATS_OK : NATS_ERR);

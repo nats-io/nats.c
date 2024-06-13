@@ -27965,11 +27965,11 @@ test_JetStreamSubscribeIdleHearbeat(void)
         s = natsConnection_PublishString(nc, inbox, (_msg));               \
     }
 
-#define PUBLISH_FAKE_RESET()      \
-    {                             \
-        natsSub_Lock(sub);        \
-        sub->jsi->ackNone = true; \
-        natsSub_Unlock(sub);      \
+#define PUBLISH_FAKE_RESET()       \
+    {                              \
+        natsSub_Lock(sub);         \
+        sub->jsi->ackNone = false; \
+        natsSub_Unlock(sub);       \
     }
 
     test("Check seq mismatch: ");

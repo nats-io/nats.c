@@ -15,6 +15,7 @@
 #include "util.h"
 
 #include <string.h>
+#include <ctype.h>
 
 #include "mem.h"
 
@@ -44,6 +45,42 @@ _parsePort(int *port, const char *sport)
         *port = (int) n;
 
     return s;
+}
+
+static natsStatus _decodeAndDup(char **decoded, const char *encoded)
+{
+    size_t len = strlen(encoded);
+    const char *p = encoded;
+    const char *e = encoded + len;
+    char *d;
+
+    *decoded = NATS_MALLOC(len + 1);
+    if (*decoded == NULL)
+    {
+        return nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    d = *decoded;
+    for (; p < e; p++)
+    {
+        if (*p != '%')
+        {
+            *d++ = *p;
+            continue;
+        }
+
+        if (e - p < 3 || (!isxdigit(*(p + 1)) || !isxdigit(*(p + 2))))
+        {
+            NATS_FREE(*decoded);
+            *decoded = NULL;
+            return nats_setError(NATS_ERR, "invalid percent encoding in URL: %s", encoded);
+        }
+
+        char buf[3] = {p[1], p[2], '\0'};
+        *d++ = (char)strtol(buf, NULL, 16);
+        p += 2;
+    }
+    *d = '\0';
+    return NATS_OK;
 }
 
 natsStatus
@@ -166,9 +203,9 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
         DUP_STRING(s, url->host, host);
 
         if (user != NULL)
-            IF_OK_DUP_STRING(s, url->username, user);
+            IFOK(s, _decodeAndDup(&url->username, user));
         if (pwd != NULL)
-            IF_OK_DUP_STRING(s, url->password, pwd);
+            IFOK(s, _decodeAndDup(&url->password, pwd));
 
         if ((s == NATS_OK) && nats_asprintf(&url->fullUrl, "%s://%s%s%s%s%s:%d%s%s",
                 scheme, userval, usep, pwdval, hsep, host, url->port, pathsep, pathval) < 0)

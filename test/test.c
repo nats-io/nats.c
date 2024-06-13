@@ -27951,18 +27951,35 @@ test_JetStreamSubscribeIdleHearbeat(void)
     s = js_Publish(NULL, js, "foo", "msg2", 4, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
 
+    // Cheat by pretending that the server sends message seq 3, while client
+    // received only seq 1. Disable auto-ack for this message, or we mess up the
+    // server state.
+#define PUBLISH_FAKE_JS_MSG_WITH_SEQ(_reply, _msg)                         \
+    {                                                                      \
+        natsSub_Lock(sub);                                                 \
+        inbox = sub->subject;                                              \
+        sub->jsi->ackNone = true;                                          \
+        natsSub_Unlock(sub);                                               \
+                                                                           \
+        natsConn_setFilterWithClosure(nc, _setMsgReply, (void *)(_reply)); \
+        s = natsConnection_PublishString(nc, inbox, (_msg));               \
+    }
+
+#define PUBLISH_FAKE_RESET()       \
+    {                              \
+        natsSub_Lock(sub);         \
+        sub->jsi->ackNone = false; \
+        natsSub_Unlock(sub);       \
+    }
+
     test("Check seq mismatch: ");
-    natsSub_Lock(sub);
-    inbox = sub->subject;
-    natsSub_Unlock(sub);
-    // Cheat by pretending that the server sends message seq 3, while client received only seq 1.
-    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur1.1.3.3.1624472520000000000.0");
-    s = natsConnection_PublishString(nc, inbox, "msg3");
+    PUBLISH_FAKE_JS_MSG_WITH_SEQ("$JS.ACK.TEST.dur1.1.3.3.1624472520000000000.0", "msg3 fake");
     // Wait for past the next HB and we should get an async error
     natsMutex_Lock(args.m);
     while ((s != NATS_TIMEOUT) && !args.done)
         s = natsCondition_TimedWait(args.c, args.m, 300);
     natsMutex_Unlock(args.m);
+    PUBLISH_FAKE_RESET();
     testCond(s == NATS_OK);
 
     test("Check that notification is sent only once: ");
@@ -27996,8 +28013,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     testCond(s == NATS_OK);
 
     test("Skip again: ");
-    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur1.1.4.4.1624482520000000000.0");
-    s = natsConnection_PublishString(nc, inbox, "msg4");
+    PUBLISH_FAKE_JS_MSG_WITH_SEQ("$JS.ACK.TEST.dur1.1.4.4.1624482520000000000.0", "msg4 fake");
     testCond(s == NATS_OK);
 
     test("Check async cb invoked: ");
@@ -28005,6 +28021,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     while ((s != NATS_TIMEOUT) && !args.done)
         s = natsCondition_TimedWait(args.c, args.m, 1000);
     natsMutex_Unlock(args.m);
+    PUBLISH_FAKE_RESET();
     testCond(s == NATS_OK);
 
     test("Check HB timer reports missed HB: ");
@@ -28059,11 +28076,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     nats_clearLastError();
 
     test("Skip: ");
-    natsSub_Lock(sub);
-    inbox = sub->subject;
-    natsSub_Unlock(sub);
-    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur2.1.4.4.1624482520000000000.0");
-    s = natsConnection_PublishString(nc, inbox, "msg4");
+    PUBLISH_FAKE_JS_MSG_WITH_SEQ("$JS.ACK.TEST.dur2.1.4.4.1624482520000000000.0", "msg4 fake");
     testCond(s == NATS_OK);
 
     // For sync subs, we should not get async error
@@ -28074,6 +28087,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     natsMutex_Unlock(args.m);
     testCond(s == NATS_TIMEOUT);
     nats_clearLastError();
+    PUBLISH_FAKE_RESET();
 
     test("NextMsg reports error: ");
     s = natsSubscription_NextMsg(&msg, sub, 1000);
@@ -28103,8 +28117,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     testCond(s == NATS_OK);
 
     test("Skip again: ");
-    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur1.1.5.5.1624492520000000000.0");
-    s = natsConnection_PublishString(nc, inbox, "msg5");
+    PUBLISH_FAKE_JS_MSG_WITH_SEQ("$JS.ACK.TEST.dur1.1.5.5.1624492520000000000.0", "msg5 fake");
     testCond(s == NATS_OK);
 
     test("NextMsg reports error: ");
@@ -28112,6 +28125,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond((s == NATS_MISMATCH) && (msg == NULL));
     nats_clearLastError();
+    PUBLISH_FAKE_RESET();
 
     test("Check HB timer reports missed HB: ");
     s = NATS_OK;

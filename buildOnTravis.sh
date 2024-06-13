@@ -74,6 +74,7 @@ if [ $res -ne 0 ]; then
 fi
 
 export NATS_TEST_TRAVIS=yes
+export NATS_TEST_KEEP_SERVER_OUTPUT=yes
 echo "Using NATS server version: $NATS_TEST_SERVER_VERSION"
 ctest --timeout 60 --output-on-failure $4
 res=$?

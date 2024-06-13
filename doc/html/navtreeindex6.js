@@ -1,5 +1,7 @@
 var NAVTREEINDEX6 =
 {
+"structjs_sequence_pair.html":[2,0,24],
+"structjs_sequence_pair.html#a6d205effd29f8994f0028bfaf2e8d816":[2,0,24,0],
 "structjs_sequence_pair.html#ab051e0815302c48ba6122bd18d9d76f7":[2,0,24,1],
 "structjs_stream_alternate.html":[2,0,17],
 "structjs_stream_alternate.html#a07f36f98c7dcdf435f803e4f0ccaac57":[2,0,17,0],

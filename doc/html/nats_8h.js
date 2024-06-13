@@ -280,6 +280,7 @@ var nats_8h =
     [ "stanMsg_GetDataLength", "group__stan_msg_group.html#ga7d1e394a686bc25ab7376b7f28b9e777", null ],
     [ "stanMsg_Destroy", "group__stan_msg_group.html#gacd0059fb499963f5b2eae18053e5f74f", null ],
     [ "natsConnection_Connect", "group__conn_mgt_group.html#ga740be1ba16a8570eb98ef6755ebf52ce", null ],
+    [ "natsConnection_Reconnect", "group__conn_mgt_group.html#gab189a6974024f58944cdaa5612d4587e", null ],
     [ "natsConnection_ProcessReadEvent", "group__conn_mgt_group.html#gaa89c06e30e19ff361125bfc9114d89a8", null ],
     [ "natsConnection_ProcessWriteEvent", "group__conn_mgt_group.html#gad81b603b84c0180aefc6d5ebad7f2a47", null ],
     [ "natsConnection_ConnectTo", "group__conn_mgt_group.html#gafb83c8d7970ba68be0e6c40c38cdfde4", null ],

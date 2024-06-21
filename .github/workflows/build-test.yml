@@ -54,7 +54,7 @@ defaults:
 jobs:
   do:
     runs-on: ubuntu-${{ inputs.ubuntu_version }}
-    name: "ubuntu:${{ inputs.ubuntu_version }} ${{ inputs.compiler }} nats:${{ inputs.server_version }}"
+    name: "${{ inputs.ubuntu_version }} - nats:${{ inputs.server_version }}"
     steps:
       - name: Checkout nats.c
         uses: actions/checkout@v4
@@ -117,7 +117,7 @@ jobs:
       - name: "Rebuild the list of tests to match the compile flags"
         working-directory: ./build
         run: |
-          ./test/testsuite
+          ./bin/testsuite
           if [[ $(diff list.txt ../test/list.txt; echo $?) != 0 ]]; then
             mv list.txt ../test/list.txt
             make rebuild_cache

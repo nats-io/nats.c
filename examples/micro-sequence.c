@@ -94,7 +94,7 @@ static microError *handle_sequence(microRequest *req)
     microArgs *args = NULL;
     int n = 0;
     int i;
-    const char *function;
+    const char *function = NULL;
     long double initialValue = 1.0;
     long double value = 1.0;
     long double denominator = 0;

@@ -67,7 +67,7 @@ if [ $res -ne 0 ]; then
 fi
 
 echo "Test app using dynamic library does not crash if no NATS call is made"
-test/dylib/nonats
+bin/nonats
 res=$?
 if [ $res -ne 0 ]; then
   exit $res

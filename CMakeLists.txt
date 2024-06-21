@@ -7,8 +7,11 @@ include(FindPackageHandleStandardArgs)
 # Uncomment to have the build process verbose
 # set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
-# Uncomment to have the executable moved to 'build' instead of their respective 'build/xxx' directories
-#set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+# Set output directories for libraries and executables.
+# This is important for Windows builds to have the DLLs in the same directory as the executables.
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Set a default build type if none was specified
 set(default_build_type "Release")

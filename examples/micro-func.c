@@ -131,7 +131,7 @@ handle_function_op(microRequest *req, functionHandler op)
 {
     microError *err = NULL;
     microArgs *args = NULL;
-    int n;
+    int n = 0;
     long double result;
     char buf[1024];
     int len = 0;

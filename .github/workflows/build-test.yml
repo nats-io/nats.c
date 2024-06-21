@@ -165,7 +165,7 @@ jobs:
           fi
 
       - name: Upload coverage reports to Codecov
-        if: inputs.coverage == 'ON'
+        if: inputs.coverage == 'ON' && github.event.pull_request.head.repo.full_name == github.repository
         uses: codecov/codecov-action@v4
         with:
           fail_ci_if_error: true

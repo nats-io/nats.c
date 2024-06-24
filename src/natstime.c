@@ -13,13 +13,15 @@
 
 #include "natsp.h"
 
+#include "natstime.h"
+
 #ifdef _WIN32
 #include <sys/timeb.h>
 #endif
 #include <time.h>
 
 int64_t
-nats_Now(void)
+nats_now(void)
 {
 #ifdef _WIN32
     struct _timeb now;
@@ -39,7 +41,7 @@ nats_Now(void)
 }
 
 int64_t
-nats_NowInNanoSeconds(void)
+nats_nowInNanoSeconds(void)
 {
 #ifdef _WIN32
     struct _timeb now;
@@ -79,7 +81,7 @@ natsDeadline_GetTimeout(natsDeadline *deadline)
     if (!(deadline->active))
         return -1;
 
-    timeout = (int) (deadline->absoluteTime - nats_Now());
+    timeout = (int) (deadline->absoluteTime - nats_now());
     if (timeout < 0)
         timeout = 0;
 

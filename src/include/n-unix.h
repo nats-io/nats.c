@@ -39,11 +39,6 @@
 #include <arpa/inet.h>
 #include <poll.h>
 
-typedef pthread_t       natsThread;
-typedef pthread_key_t   natsThreadLocal;
-typedef pthread_mutex_t natsMutex;
-typedef pthread_cond_t  natsCondition;
-typedef pthread_once_t  natsInitOnceType;
 typedef socklen_t       natsSockLen;
 typedef size_t          natsRecvLen;
 
@@ -59,7 +54,6 @@ typedef size_t          natsRecvLen;
 
 #define __NATS_FUNCTION__ __func__
 
-#define nats_asprintf       asprintf
 #define nats_strcasestr     strcasestr
 #define nats_vsnprintf      vsnprintf
 #define nats_strtok         strtok_r

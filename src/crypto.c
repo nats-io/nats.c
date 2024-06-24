@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "natsp.h"
+
 #include "crypto.h"
 
 #ifdef NATS_USE_LIBSODIUM
@@ -498,7 +500,8 @@ natsCrypto_Sign(const unsigned char *seed,
     char          *sm = NULL;
     unsigned char sk[NATS_CRYPTO_SECRET_BYTES];
 
-    sm = NATS_MALLOC(inputLen + NATS_CRYPTO_SIGN_BYTES);
+    // TODO <>/<> use a pool for allocations
+    sm = nats_alloc(inputLen + NATS_CRYPTO_SIGN_BYTES, false);
     if (sm == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
@@ -507,7 +510,7 @@ natsCrypto_Sign(const unsigned char *seed,
     memcpy(signature, sm, NATS_CRYPTO_SIGN_BYTES);
     secure_memzero((void*) sm, NATS_CRYPTO_SIGN_BYTES);
     secure_memzero((void*) sk, sizeof(sk));
-    NATS_FREE(sm);
+    nats_free(sm);
     return NATS_OK;
 }
 

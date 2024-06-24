@@ -15,10 +15,6 @@
 #ifndef ERR_H_
 #define ERR_H_
 
-#include "status.h"
-#include "nats.h"
-#include "natsp.h"
-
 #define NATS_SSL_ERR_REASON_STRING ERR_reason_error_string(ERR_get_error())
 
 #define nats_setDefaultError(e) nats_setError((e), "%s", natsStatus_GetText(e))

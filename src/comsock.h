@@ -15,6 +15,31 @@
 #define SOCK_H_
 
 #include "natsp.h"
+#include "natstime.h"
+
+#define WAIT_FOR_READ (0)
+#define WAIT_FOR_WRITE (1)
+#define WAIT_FOR_CONNECT (2)
+
+struct __natsSockCtx
+{
+    natsSock fd;
+    bool fdActive;
+
+    natsDeadline readDeadline;
+    natsDeadline writeDeadline;
+
+    // During Connect we don't use an external event loop (such as libuv), then
+    // set to true.
+    bool useEventLoop;
+
+    int orderIP; // possible values: 0,4,6,46,64
+
+    // By default, the list of IPs returned by the hostname resolution will
+    // be shuffled. This option, if `true`, will disable the shuffling.
+    bool noRandomize;
+
+};
 
 natsStatus
 natsSock_Init(natsSockCtx *ctx);
@@ -24,29 +49,16 @@ natsStatus
 natsSock_WaitReady(int waitMode, natsSockCtx *ctx);
 
 void
-natsSock_ShuffleIPs(natsSockCtx *ctx, struct addrinfo **tmp, int tmpSize, struct addrinfo **ipListHead, int count);
+natsSock_ShuffleIPs(natsSockCtx *ctx, natsPool *pool, struct addrinfo **ipListHead, int count);
 
 natsStatus
-natsSock_ConnectTcp(natsSockCtx *ctx, const char *host, int port);
+natsSock_ConnectTcp(natsSockCtx *ctx, natsPool *pool, const char *host, int port);
 
 natsStatus
 natsSock_SetBlocking(natsSock fd, bool blocking);
 
 bool
 natsSock_IsConnected(natsSock fd);
-
-// Reads a line from the socket and returns it without the line-ending characters.
-// This call blocks until the line is complete, or the socket is closed or an
-// error occurs.
-// Handles blocking and non-blocking sockets. For the later, an optional 'deadline'
-// indicates how long it can wait for the full read to complete.
-//
-// NOTE: 'buffer[0]' must be set to '\0' prior to the very first call. If the
-// peer is sending multiple lines, it is possible that this function reads the
-// next line(s) (or partials) in a single call. In this case, the caller needs
-// to repeat the call with the same buffer to "read" the next line.
-natsStatus
-natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize);
 
 // Reads up to 'maxBufferSize' bytes from the socket and put them in 'buffer'.
 // If the socket is blocking, wait until some data is available or the socket
@@ -56,7 +68,7 @@ natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize);
 // If an external event loop is used, it is possible that this function
 // returns NATS_OK with 'n' == 0.
 natsStatus
-natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n);
+natsSock_Read(natsSockCtx *ctx, uint8_t *buffer, size_t maxBufferSize, size_t *n);
 
 // Writes up to 'len' bytes to the socket. If the socket is blocking,
 // wait for some data to be sent. If the socket is non-blocking, wait up
@@ -64,13 +76,7 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n);
 // If an external event loop is used, it is possible that this function
 // returns NATS_OK with 'n' == 0.
 natsStatus
-natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n);
-
-// Writes 'len' bytes to the socket. Does not return until all bytes
-// have been written, unless the socket is closed or an error occurs
-// (including write timeout).
-natsStatus
-natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len);
+natsSock_Write(natsSockCtx *ctx, natsString *buf, size_t *n);
 
 natsStatus
 natsSock_Flush(natsSock fd);
@@ -85,12 +91,9 @@ void
 natsSock_Shutdown(natsSock fd);
 
 void
-natsSock_ClearDeadline(natsSockCtx *ctx);
-
-void
 natsSock_InitDeadline(natsSockCtx *ctx, int64_t timeout);
 
 natsStatus
-natsSock_GetLocalIPAndPort(natsSockCtx *ctx, char **ip, int *port);
+natsSock_GetLocalIPAndPort(natsSockCtx *ctx, natsPool *pool, const char **ip, int *port);
 
 #endif /* SOCK_H_ */

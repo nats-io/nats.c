@@ -14,7 +14,7 @@
 #ifndef EXAMPLES_H_
 #define EXAMPLES_H_
 
-#include <nats.h>
+#include <nats/nats.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -64,8 +64,7 @@ bool        pull        = false;
 bool        flowctrl    = false;
 
 static natsStatus
-printStats(int mode, natsConnection *conn, natsSubscription *sub,
-           natsStatistics *stats)
+printStats(int mode, natsConnection *conn) //, natsSubscription *sub, natsStatistics *stats)
 {
     natsStatus  s           = NATS_OK;
     uint64_t    inMsgs      = 0;
@@ -77,24 +76,24 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
     int64_t     delivered   = 0;
     int64_t     sdropped    = 0;
 
-    s = natsConnection_GetStats(conn, stats);
-    if (s == NATS_OK)
-        s = natsStatistics_GetCounts(stats, &inMsgs, &inBytes,
-                                     &outMsgs, &outBytes, &reconnected);
-    if ((s == NATS_OK) && (sub != NULL))
-    {
-        s = natsSubscription_GetStats(sub, &pending, NULL, NULL, NULL,
-                                      &delivered, &sdropped);
+    // s = natsConnection_GetStats(conn, stats);
+    // if (s == NATS_OK)
+    //     s = natsStatistics_GetCounts(stats, &inMsgs, &inBytes,
+    //                                  &outMsgs, &outBytes, &reconnected);
+    // if ((s == NATS_OK) && (sub != NULL))
+    // {
+    //     s = natsSubscription_GetStats(sub, &pending, NULL, NULL, NULL,
+    //                                   &delivered, &sdropped);
 
-        // Since we use AutoUnsubscribe(), when the max has been reached,
-        // the subscription is automatically closed, so this call would
-        // return "Invalid Subscription". Ignore this error.
-        if (s == NATS_INVALID_SUBSCRIPTION)
-        {
-            s = NATS_OK;
-            pending = 0;
-        }
-    }
+    //     // Since we use AutoUnsubscribe(), when the max has been reached,
+    //     // the subscription is automatically closed, so this call would
+    //     // return "Invalid Subscription". Ignore this error.
+    //     if (s == NATS_INVALID_SUBSCRIPTION)
+    //     {
+    //         s = NATS_OK;
+    //         pending = 0;
+    //     }
+    // }
 
     if (s == NATS_OK)
     {
@@ -121,20 +120,6 @@ printStats(int mode, natsConnection *conn, natsSubscription *sub,
 }
 
 static void
-printPerf(const char *perfTxt)
-{
-    if ((start > 0) && (elapsed == 0))
-        elapsed = nats_Now() - start;
-
-    if (elapsed <= 0)
-        printf("\nNot enough messages or too fast to report performance!\n");
-    else
-        printf("\n%s %" PRId64 " messages in "\
-               "%" PRId64 " milliseconds (%d msgs/sec)\n",
-               perfTxt, count, elapsed, (int)((count * 1000) / elapsed));
-}
-
-static void
 printUsageAndExit(const char *progName, const char *usage)
 {
     printf("\nUsage: %s [options]\n\nThe options are:\n\n"\
@@ -153,9 +138,6 @@ printUsageAndExit(const char *progName, const char *usage)
 "-wd            write deadline in milliseconds\n" \
                 "%s\n",
                 progName, usage);
-
-    natsOptions_Destroy(opts);
-    nats_Close();
 
     exit(1);
 }
@@ -200,7 +182,7 @@ parseUrls(const char *urls, natsOptions *gopts)
     } while (ptr != NULL);
 
     if (s == NATS_OK)
-        s = natsOptions_SetServers(gopts, (const char**) serverUrls, num);
+        s = nats_SetServers(gopts, (const char**) serverUrls, num);
 
     free(urlsCopy);
 
@@ -214,7 +196,8 @@ parseArgs(int argc, char **argv, const char *usage)
     bool        urlsSet = false;
     int         i;
 
-    if (natsOptions_Create(&opts) != NATS_OK)
+    opts = nats_GetDefaultOptions();
+    if (opts == NULL)
         s = NATS_NO_MEMORY;
 
     for (i=1; (i<argc) && (s == NATS_OK); i++)
@@ -233,49 +216,49 @@ parseArgs(int argc, char **argv, const char *usage)
             if (s == NATS_OK)
                 urlsSet = true;
         }
-        else if (strcasecmp(argv[i], "-tls") == 0)
-        {
-            s = natsOptions_SetSecure(opts, true);
-        }
-        else if (strcasecmp(argv[i], "-tlscacert") == 0)
-        {
-            if (i + 1 == argc)
-                printUsageAndExit(argv[0], usage);
+        // else if (strcasecmp(argv[i], "-tls") == 0)
+        // {
+        //     s = natsOptions_SetSecure(opts, true);
+        // }
+        // else if (strcasecmp(argv[i], "-tlscacert") == 0)
+        // {
+        //     if (i + 1 == argc)
+        //         printUsageAndExit(argv[0], usage);
 
-            s = natsOptions_LoadCATrustedCertificates(opts, argv[++i]);
-        }
-        else if (strcasecmp(argv[i], "-tlscert") == 0)
-        {
-            if (i + 1 == argc)
-                printUsageAndExit(argv[0], usage);
+        //     s = natsOptions_LoadCATrustedCertificates(opts, argv[++i]);
+        // }
+        // else if (strcasecmp(argv[i], "-tlscert") == 0)
+        // {
+        //     if (i + 1 == argc)
+        //         printUsageAndExit(argv[0], usage);
 
-            certFile = argv[++i];
-        }
-        else if (strcasecmp(argv[i], "-tlskey") == 0)
-        {
-            if (i + 1 == argc)
-                printUsageAndExit(argv[0], usage);
+        //     certFile = argv[++i];
+        // }
+        // else if (strcasecmp(argv[i], "-tlskey") == 0)
+        // {
+        //     if (i + 1 == argc)
+        //         printUsageAndExit(argv[0], usage);
 
-            keyFile = argv[++i];
-        }
-        else if (strcasecmp(argv[i], "-tlsciphers") == 0)
-        {
-            if (i + 1 == argc)
-                printUsageAndExit(argv[0], usage);
+        //     keyFile = argv[++i];
+        // }
+        // else if (strcasecmp(argv[i], "-tlsciphers") == 0)
+        // {
+        //     if (i + 1 == argc)
+        //         printUsageAndExit(argv[0], usage);
 
-            s = natsOptions_SetCiphers(opts, argv[++i]);
-        }
-        else if (strcasecmp(argv[i], "-tlshost") == 0)
-        {
-            if (i + 1 == argc)
-                printUsageAndExit(argv[0], usage);
+        //     s = natsOptions_SetCiphers(opts, argv[++i]);
+        // }
+        // else if (strcasecmp(argv[i], "-tlshost") == 0)
+        // {
+        //     if (i + 1 == argc)
+        //         printUsageAndExit(argv[0], usage);
 
-            s = natsOptions_SetExpectedHostname(opts, argv[++i]);
-        }
-        else if (strcasecmp(argv[i], "-tlsskip") == 0)
-        {
-            s = natsOptions_SkipServerVerification(opts, true);
-        }
+        //     s = natsOptions_SetExpectedHostname(opts, argv[++i]);
+        // }
+        // else if (strcasecmp(argv[i], "-tlsskip") == 0)
+        // {
+        //     s = natsOptions_SkipServerVerification(opts, true);
+        // }
         else if (strcasecmp(argv[i], "-sync") == 0)
         {
             async = false;
@@ -321,10 +304,10 @@ parseArgs(int argc, char **argv, const char *usage)
 
             timeout = atol(argv[++i]);
         }
-        else if (strcasecmp(argv[i], "-gd") == 0)
-        {
-            s = natsOptions_UseGlobalMessageDelivery(opts, true);
-        }
+        // else if (strcasecmp(argv[i], "-gd") == 0)
+        // {
+        //     s = natsOptions_UseGlobalMessageDelivery(opts, true);
+        // }
         else if (strcasecmp(argv[i], "-c") == 0)
         {
             if (i + 1 == argc)
@@ -372,20 +355,20 @@ parseArgs(int argc, char **argv, const char *usage)
         {
             unsubscribe = true;
         }
-        else if (strcasecmp(argv[i], "-creds") == 0)
-        {
-            if (i + 1 == argc)
-                printUsageAndExit(argv[0], usage);
+        // else if (strcasecmp(argv[i], "-creds") == 0)
+        // {
+        //     if (i + 1 == argc)
+        //         printUsageAndExit(argv[0], usage);
 
-            s = natsOptions_SetUserCredentialsFromFiles(opts, argv[++i], NULL);
-        }
-        else if (strcasecmp(argv[i], "-wd") == 0)
-        {
-            if (i + 1 == argc)
-                printUsageAndExit(argv[0], usage);
+        //     s = natsOptions_SetUserCredentialsFromFiles(opts, argv[++i], NULL);
+        // }
+        // else if (strcasecmp(argv[i], "-wd") == 0)
+        // {
+        //     if (i + 1 == argc)
+        //         printUsageAndExit(argv[0], usage);
 
-            s = natsOptions_SetWriteDeadline(opts, atol(argv[++i]));
-        }
+        //     s = natsOptions_SetWriteDeadline(opts, atol(argv[++i]));
+        // }
         else if (strcasecmp(argv[i], "-stream") == 0)
         {
             if (i + 1 == argc)
@@ -409,8 +392,8 @@ parseArgs(int argc, char **argv, const char *usage)
         }
     }
 
-    if ((s == NATS_OK) && ((certFile != NULL) || (keyFile != NULL)))
-        s = natsOptions_LoadCertificatesChain(opts, certFile, keyFile);
+    // if ((s == NATS_OK) && ((certFile != NULL) || (keyFile != NULL)))
+    //     s = natsOptions_LoadCertificatesChain(opts, certFile, keyFile);
 
     if ((s == NATS_OK) && !urlsSet)
         s = parseUrls(NATS_DEFAULT_URL, opts);
@@ -422,8 +405,6 @@ parseArgs(int argc, char **argv, const char *usage)
 
         nats_PrintLastErrorStack(stderr);
 
-        natsOptions_Destroy(opts);
-        nats_Close();
         exit(1);
     }
 

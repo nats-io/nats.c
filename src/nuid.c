@@ -13,6 +13,9 @@
 
 #include "natsp.h"
 
+#include "nuid.h"
+#include "err.h"
+
 // From https://en.wikipedia.org/wiki/Multiply-with-carry
 
 // CMWC working parts
@@ -121,7 +124,6 @@ typedef struct natsNUID
 
 typedef struct natsLockedNUID
 {
-    natsMutex   *mu;
     natsNUID    nuid;
 
 } natsLockedNUID;
@@ -163,9 +165,9 @@ _resetSequential(natsNUID *nuid)
     natsStatus s;
 
     s = _nextLong(&(nuid->seq), false, maxSeq);
-    if (s == NATS_OK)
+    if (STILL_OK(s))
         s = _nextLong(&(nuid->inc), false, maxInc - minInc);
-    if (s == NATS_OK)
+    if (STILL_OK(s))
         nuid->inc += minInc;
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -180,7 +182,7 @@ _randomizePrefix(natsNUID *nuid)
     int64_t     r = 0;
 
     s = _nextLong(&r, true, maxPre);
-    if (s == NATS_OK)
+    if (STILL_OK(s))
     {
         int64_t l;
         int     i = NUID_PRE_LEN;
@@ -197,26 +199,25 @@ _randomizePrefix(natsNUID *nuid)
 void
 natsNUID_free(void)
 {
-    natsMutex_Destroy(globalNUID.mu);
-    globalNUID.mu = NULL;
 }
 
 // Seed sequential random with math/random and current time and generate crypto prefix.
 natsStatus
 natsNUID_init(void)
 {
-    natsStatus      s;
-    unsigned int    seed = (unsigned int) nats_NowInNanoSeconds();
+    natsStatus      s = NATS_OK;
+    unsigned int    seed = (unsigned int) nats_nowInNanoSeconds();
 
     memset(&globalNUID, 0, sizeof(natsLockedNUID));
 
     srand(seed);
     _initCMWC(seed);
 
-    s = natsMutex_Create(&(globalNUID.mu));
-    if (s == NATS_OK)
+    // <>//<>
+    // s = natsMutex_Create(&(globalNUID.mu));
+    if (STILL_OK(s))
         s = _resetSequential(&(globalNUID.nuid));
-    if (s == NATS_OK)
+    if (STILL_OK(s))
         s = _randomizePrefix(&(globalNUID.nuid));
 
     if (s != NATS_OK)
@@ -240,11 +241,11 @@ _nextNUID(natsNUID *nuid, char *buffer, int bufferLen)
     if (nuid->seq >= maxSeq)
     {
         s = _randomizePrefix(nuid);
-        if (s == NATS_OK)
+        if (STILL_OK(s))
             s = _resetSequential(nuid);
     }
 
-    if (s == NATS_OK)
+    if (STILL_OK(s))
     {
         int64_t l;
         int     i;
@@ -272,11 +273,12 @@ natsNUID_Next(char *buffer, int bufferLen)
 {
     natsStatus s;
 
-    natsMutex_Lock(globalNUID.mu);
+    // <>//<>
+    // natsMutex_Lock(globalNUID.mu);
 
     s = _nextNUID(&(globalNUID.nuid), buffer, bufferLen);
 
-    natsMutex_Unlock(globalNUID.mu);
+    // natsMutex_Unlock(globalNUID.mu);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

@@ -12,11 +12,13 @@
 // limitations under the License.
 
 #include "../natsp.h"
+
 #include "../mem.h"
+#include "../err.h"
 #include "../comsock.h"
 
 void
-natsSys_Init(void)
+nats_sysInit(void)
 {
     // Would do anything that needs to be initialized when
     // the library loads, specific to unix.
@@ -25,7 +27,7 @@ natsSys_Init(void)
 natsStatus
 natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
 {
-    natsDeadline    *deadline = &(ctx->writeDeadline);
+    // natsDeadline    *deadline = &(ctx->writeDeadline);
     struct pollfd   pfd;
     int             timeout   = -1;
     int             res;
@@ -37,7 +39,7 @@ natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
     switch (waitMode)
     {
         case WAIT_FOR_READ:
-            deadline = &(ctx->readDeadline);
+            // deadline = &(ctx->readDeadline);
             pfd.events = POLLIN;
             break;
         case WAIT_FOR_WRITE:
@@ -48,8 +50,8 @@ natsSock_WaitReady(int waitMode, natsSockCtx *ctx)
             abort();
     }
 
-    if (deadline != NULL)
-        timeout = natsDeadline_GetTimeout(deadline);
+    // if (deadline != NULL)
+    //     timeout = natsDeadline_GetTimeout(deadline);
 
     res = poll(&pfd, 1, timeout);
     if (res == NATS_SOCK_ERROR)

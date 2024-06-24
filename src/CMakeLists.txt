@@ -54,7 +54,6 @@ endif(NATS_BUILD_LIB_STATIC)
 # Install the libraries and header files
 # --------------------------------------
 
-
 if(NATS_BUILD_LIB_SHARED)
   set_property(TARGET nats PROPERTY DEBUG_POSTFIX d)
   target_include_directories(nats PUBLIC
@@ -80,5 +79,5 @@ if(NATS_BUILD_LIB_STATIC)
 endif(NATS_BUILD_LIB_STATIC)
 
 install(FILES deprnats.h DESTINATION ${NATS_INCLUDE_DIR} RENAME nats.h)
-install(FILES nats.h status.h version.h DESTINATION ${NATS_INCLUDE_DIR}/nats)
+install(FILES nats/nats.h DESTINATION ${NATS_INCLUDE_DIR}/nats)
 install(FILES adapters/libevent.h adapters/libuv.h DESTINATION ${NATS_INCLUDE_DIR}/nats/adapters)

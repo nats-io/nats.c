@@ -13,16 +13,8 @@
 
 #include "natsp.h"
 
-#include <errno.h>
-#include <string.h>
-#include <stdio.h>
-#include <assert.h>
-#include <time.h>
-
-#include "status.h"
+#include "hash.h"
 #include "comsock.h"
-#include "mem.h"
-#include "util.h"
 
 natsStatus
 natsSock_Init(natsSockCtx *ctx)
@@ -79,28 +71,20 @@ natsSock_SetCommonTcpOptions(natsSock fd)
 }
 
 void
-natsSock_ShuffleIPs(natsSockCtx *ctx, struct addrinfo **tmp, int tmpSize, struct addrinfo **ipListHead, int count)
+natsSock_ShuffleIPs(natsSockCtx *ctx, natsPool *pool, struct addrinfo **ipListHead, int count)
 {
     struct addrinfo **ips   = NULL;
     struct addrinfo *p      = NULL;
-    bool            doFree  = false;
     int             i, j;
 
     if (ctx->noRandomize || (ipListHead == NULL) || (*ipListHead == NULL) || count <= 1)
         return;
 
-    if (count > tmpSize)
-    {
-        ips = (struct addrinfo**) NATS_CALLOC(count, sizeof(struct addrinfo*));
-        // Let's not fail the caller, simply don't shuffle.
-        if (ips == NULL)
-            return;
-        doFree = true;
-    }
-    else
-    {
-        ips = tmp;
-    }
+    ips = (struct addrinfo**) nats_palloc(pool, count * sizeof(struct addrinfo*));
+    // Let's not fail the caller, simply don't shuffle.
+    if (ips == NULL)
+        return;
+
     p = *ipListHead;
     // Put them in a array
     for (i=0; i<count; i++)
@@ -126,16 +110,12 @@ natsSock_ShuffleIPs(natsSockCtx *ctx, struct addrinfo **tmp, int tmpSize, struct
     }
     // Update the list head with the first in the array.
     *ipListHead = ips[0];
-
-    // If we allocated the array, free it.
-    if (doFree)
-        NATS_FREE(ips);
 }
 
 #define MAX_HOST_NAME   (256)
 
 natsStatus
-natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
+natsSock_ConnectTcp(natsSockCtx *ctx, natsPool *pool, const char *phost, int port)
 {
     natsStatus      s    = NATS_OK;
     int             res;
@@ -151,12 +131,11 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     int64_t         start         = 0;
     int64_t         totalTimeout  = 0;
     int64_t         timeoutPerIP  = 0;
-    struct addrinfo *tmpStorage[64];
 
     if (phost == NULL)
         return nats_setError(NATS_ADDRESS_MISSING, "%s", "No host specified");
 
-    hostLen = (int) strlen(phost);
+    hostLen = (int) nats_strlen(phost);
     if ((hostLen == 0) || ((hostLen == 1) && phost[0] == '['))
         return nats_setError(NATS_INVALID_ARG, "Invalid host name: %s", phost);
 
@@ -173,8 +152,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     if ((ctx->orderIP == 46) || (ctx->orderIP == 64))
         max = 2;
 
-    start = nats_Now();
-
+    start = nats_now();
     for (i=0; i<max; i++)
     {
         struct addrinfo hints;
@@ -206,7 +184,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
             count++;
             numIPs++;
         }
-        natsSock_ShuffleIPs(ctx, tmpStorage, sizeof(tmpStorage), &(servInfos[numServInfo]), count);
+        natsSock_ShuffleIPs(ctx, pool, &(servInfos[numServInfo]), count);
         numServInfo++;
     }
     // If we got a getaddrinfo() and there is no servInfos to try to connect to
@@ -260,10 +238,8 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
                                   NATS_SOCK_GET_ERROR);
             }
 #endif
-            if (s == NATS_OK)
-                s = natsSock_SetBlocking(ctx->fd, false);
-
-            if (s == NATS_OK)
+            IFOK(s, natsSock_SetBlocking(ctx->fd, false));
+            if (STILL_OK(s))
             {
                 res = connect(ctx->fd, p->ai_addr, (natsSockLen) p->ai_addrlen);
                 if ((res == NATS_SOCK_ERROR)
@@ -273,7 +249,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
                         natsDeadline_Init(&(ctx->writeDeadline), timeoutPerIP);
 
                     s = natsSock_WaitReady(WAIT_FOR_CONNECT, ctx);
-                    if ((s == NATS_OK) && !natsSock_IsConnected(ctx->fd))
+                    if ((STILL_OK(s)) && !natsSock_IsConnected(ctx->fd))
                         s = NATS_TIMEOUT;
                 }
                 else if (res == NATS_SOCK_ERROR)
@@ -282,18 +258,18 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
                 }
             }
 
-            if (s == NATS_OK)
+            if (STILL_OK(s))
             {
                 s = natsSock_SetCommonTcpOptions(ctx->fd);
                 // We have connected OK and completed setting options, so we are done.
-                if (s == NATS_OK)
+                if (STILL_OK(s))
                     break;
             }
 
             _closeFd(ctx->fd);
             ctx->fd = NATS_SOCK_INVALID;
         }
-        if (s == NATS_OK)
+        if (STILL_OK(s))
         {
             // Clear the error stack in case we got errors in the loop until
             // being able to successfully connect.
@@ -307,7 +283,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     // If there was a deadline, reset the deadline with whatever is left.
     if (totalTimeout > 0)
     {
-        int64_t used = nats_Now() - start;
+        int64_t used = nats_now() - start;
         int64_t left = totalTimeout - used;
 
         natsDeadline_Init(&(ctx->writeDeadline), (left > 0 ? left : 0));
@@ -317,101 +293,20 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
 }
 
 natsStatus
-natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize)
+natsSock_Read(natsSockCtx *ctx, uint8_t *buffer, size_t maxBufferSize, size_t *n)
 {
-    natsStatus  s           = NATS_OK;
-    int         readBytes   = 0;
-    size_t      totalBytes  = 0;
-    char        *p          = buffer;
-    char        *eol;
-
-    // By contract, the caller needs to set buffer[0] to '\0' before the first
-    // call.
-    if (*p != '\0')
-    {
-        // We assume that this is not the first call with the given buffer.
-        // Move possible data after the first line to the beginning of the
-        // buffer.
-        char    *nextLine;
-        size_t  nextStart;
-        size_t  len = 0;
-
-        // The start of the next line will be the length of the line at the
-        // start of the buffer + 2, which is the number of characters
-        // representing CRLF.
-        nextStart = strlen(buffer) + 2;
-        nextLine  = (char*) (buffer + nextStart);
-
-        // There is some data...
-        if (*nextLine != '\0')
-        {
-            // The next line (even if partial) is guaranteed to be NULL
-            // terminated.
-            len = strlen(nextLine);
-
-            // Move to the beginning of the buffer (and include the NULL char)
-            memmove(buffer, nextLine, len + 1);
-
-            // Now, if the string contains a CRLF, we don't even need to read
-            // from the socket. Update the buffer and return.
-            if ((eol = strstr(buffer, _CRLF_)) != NULL)
-            {
-                // Replace the '\r' with '\0' to NULL terminate the string.
-                *eol = '\0';
-
-                // We are done!
-                return NATS_OK;
-            }
-
-            // This is a partial, we need to read more data until we get to
-            // the end of the line (\r\n).
-            p = (char*) (p + len);
-            totalBytes += len;
-        }
-        else
-        {
-            *p = '\0';
-        }
-    }
-
-    while (1)
-    {
-        s = natsSock_Read(ctx, p, (maxBufferSize - totalBytes), &readBytes);
-        if (s != NATS_OK)
-            return NATS_UPDATE_ERR_STACK(s);
-
-        if (totalBytes + readBytes == maxBufferSize)
-            return nats_setDefaultError(NATS_LINE_TOO_LONG);
-
-        // We need to append a NULL character after what we have received.
-        *(p + readBytes) = '\0';
-
-        if ((eol = strstr(p, _CRLF_)) != NULL)
-        {
-            *eol = '\0';
-            return NATS_OK;
-        }
-
-        p          += readBytes;
-        totalBytes += readBytes;
-    }
-}
-
-natsStatus
-natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
-{
-    natsStatus  s         = NATS_OK;
-    int         readBytes = 0;
-    bool        needRead  = true;
+    natsStatus s = NATS_OK;
+    int readBytes = 0;
+    bool needRead = true;
 
     while (needRead)
     {
 #if defined(NATS_HAS_TLS)
         if (ctx->ssl != NULL)
-            readBytes = SSL_read(ctx->ssl, buffer, (int) maxBufferSize);
+            readBytes = SSL_read(ctx->ssl, buffer, (int)maxBufferSize);
         else
 #endif
-            readBytes = recv(ctx->fd, buffer, (natsRecvLen) maxBufferSize, 0);
+            readBytes = recv(ctx->fd, buffer, (natsRecvLen)maxBufferSize, 0);
 
         if (readBytes == 0)
         {
@@ -447,12 +342,13 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
 #if defined(NATS_HAS_TLS)
                 if (ctx->ssl != NULL)
                     return nats_setError(NATS_IO_ERROR, "SSL_read error: %s",
-                                        NATS_SSL_ERR_REASON_STRING);
+                                         NATS_SSL_ERR_REASON_STRING);
                 else
 #endif
                     return nats_setError(NATS_IO_ERROR, "recv error: %d",
-                                        NATS_SOCK_GET_ERROR);
+                                         NATS_SOCK_GET_ERROR);
             }
+
             else if (ctx->useEventLoop)
             {
                 // When using an external event loop, we are done. We will be
@@ -468,13 +364,10 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
             s = natsSock_WaitReady(WAIT_FOR_READ, ctx);
             if (s != NATS_OK)
                 return NATS_UPDATE_ERR_STACK(s);
-
             continue;
         }
-
         if (n != NULL)
             *n = readBytes;
-
         needRead = false;
     }
 
@@ -482,11 +375,11 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
 }
 
 natsStatus
-natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
+natsSock_Write(natsSockCtx *ctx, natsString *buf, size_t *n)
 {
-    natsStatus  s         = NATS_OK;
-    int         bytes     = 0;
-    bool        needWrite = true;
+    natsStatus s = NATS_OK;
+    int bytes = 0;
+    bool needWrite = true;
 
     while (needWrite)
     {
@@ -496,7 +389,7 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
         else
 #endif
 #ifdef MSG_NOSIGNAL
-            bytes = send(ctx->fd, data, len, MSG_NOSIGNAL);
+            bytes = send(ctx->fd, buf->data, buf->len, MSG_NOSIGNAL);
 #else
             bytes = send(ctx->fd, data, len, 0);
 #endif
@@ -556,52 +449,14 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
             s = natsSock_WaitReady(WAIT_FOR_WRITE, ctx);
             if (s != NATS_OK)
                 return NATS_UPDATE_ERR_STACK(s);
-
             continue;
         }
-
         if (n != NULL)
             *n = bytes;
-
         needWrite = false;
     }
 
     return NATS_OK;
-}
-
-natsStatus
-natsSock_WriteFully(natsSockCtx *ctx, const char *data, int len)
-{
-    natsStatus  s     = NATS_OK;
-    int         n     = 0;
-
-    if (len == 0)
-        return NATS_OK;
-
-    do
-    {
-        s = natsSock_Write(ctx, data, len, &n);
-        if (s == NATS_OK)
-        {
-            data += n;
-            len  -= n;
-
-            // We have sent the whole buffer. Return.
-            if (len == 0)
-                return NATS_OK;
-        }
-    }
-    while (s == NATS_OK);
-
-    // If we are using a write deadline, shutdown the socket to trigger a
-    // possible reconnect
-    if (s == NATS_TIMEOUT)
-    {
-        natsSock_Shutdown(ctx->fd);
-        ctx->fdActive = false;
-    }
-
-    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void
@@ -619,7 +474,7 @@ natsSock_InitDeadline(natsSockCtx *ctx, int64_t timeout)
 }
 
 natsStatus
-natsSock_GetLocalIPAndPort(natsSockCtx *ctx, char **ip, int *port)
+natsSock_GetLocalIPAndPort(natsSockCtx *ctx, natsPool *pool, const char **ip, int *port)
 {
     struct sockaddr_storage addr;
     natsSockLen             addrLen = (natsSockLen) sizeof(addr);
@@ -657,7 +512,7 @@ natsSock_GetLocalIPAndPort(natsSockCtx *ctx, char **ip, int *port)
     if (inet_ntop(fam, laddr, localIP, sizeof(localIP)) == NULL)
         return nats_setError(NATS_SYS_ERROR, "inet_ntop error: %d", NATS_SOCK_GET_ERROR);
 
-    if ((*ip = NATS_STRDUP(localIP)) == NULL)
+    if ((*ip = nats_pstrdupC(pool, localIP)) == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
     return NATS_OK;

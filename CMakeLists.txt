@@ -5,7 +5,7 @@ include(CTest)
 include(FindPackageHandleStandardArgs)
 
 # Uncomment to have the build process verbose
-# set(CMAKE_VERBOSE_MAKEFILE TRUE)
+set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
 # Set output directories for libraries and executables.
 # This is important for Windows builds to have the DLLs in the same directory as the executables.
@@ -29,19 +29,19 @@ option(NATS_UPDATE_VERSION "Update the version file" OFF)
 option(NATS_UPDATE_DOC "Update the doc template file" OFF)
 option(NATS_COVERAGE "Code coverage" OFF)
 option(NATS_BUILD_NO_SPIN "Enable if spin code does not compile on your arch" OFF)
-option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
-option(NATS_BUILD_TLS_FORCE_HOST_VERIFY "Forces hostname verification" ON)
+option(NATS_BUILD_WITH_TLS "Build with TLS support" OFF)
+option(NATS_BUILD_TLS_FORCE_HOST_VERIFY "Forces hostname verification" OFF)
 option(NATS_BUILD_TLS_USE_OPENSSL_1_1_API "Build for OpenSSL 1.1+" ON)
 option(NATS_BUILD_USE_SODIUM "Build using libsodium library" OFF)
 option(NATS_BUILD_EXAMPLES "Build examples" ON)
 option(NATS_BUILD_LIBUV_EXAMPLE "Build libuv examples" OFF)
-option(NATS_BUILD_LIBEVENT_EXAMPLE "Build libevent examples" OFF)
-option(NATS_BUILD_STATIC_EXAMPLES "Statically link examples" OFF)
-option(NATS_BUILD_STREAMING "Build NATS Streaming" ON)
+option(NATS_BUILD_LIBEVENT_EXAMPLE "Build libevent examples" ON)
+option(NATS_BUILD_STATIC_EXAMPLES "Statically link examples" ON)
+option(NATS_BUILD_STREAMING "Build NATS Streaming" OFF)
 option(NATS_BUILD_NO_PREFIX_CONNSTS "No prefix for connection status enum" OFF)
 option(NATS_BUILD_LIB_STATIC "Build static library" ON)
-option(NATS_BUILD_LIB_SHARED "Build shared library" ON)
-option(NATS_COMPILER_HARDENING "Compiler hardening flags" OFF)
+option(NATS_BUILD_LIB_SHARED "Build shared library" OFF)
+option(NATS_COMPILER_HARDENING "Compiler hardening flags" ON)
 if(UNIX AND APPLE)
   option(CMAKE_MACOSX_RPATH "Build with macOS RPath" ON)
 endif()
@@ -64,7 +64,7 @@ if(NATS_BUILD_WITH_TLS)
 endif(NATS_BUILD_WITH_TLS)
 
 set(LIBUV_DIR "" CACHE PATH "Libuv install directory")
-set(LIBEVENT_DIR "" CACHE PATH "Libevent install directory")
+set(LIBEVENT_DIR "/usr/local" CACHE PATH "Libevent install directory")
 
 set(NATS_DOC_PROJECT_NAME "NATS C Client with JetStream support")
 if(NATS_BUILD_STREAMING)
@@ -165,7 +165,7 @@ if(UNIX)
 
   # Some compiler hardening flags.
   if(NATS_COMPILER_HARDENING)
-     set(NATS_COMMON_C_FLAGS "${NATS_COMMON_C_FLAGS} -fPIE -fstack-protector-all -D_FORTIFY_SOURCE=2 -O1")
+     set(NATS_COMMON_C_FLAGS "${NATS_COMMON_C_FLAGS} -fPIE -fstack-protector-all -D_FORTIFY_SOURCE=2 -O0")
      # Works only with GCC.
      if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
        set(NATS_COMMON_C_FLAGS "${NATS_COMMON_C_FLAGS} -Wl,-z,relro,-z,now -pie")
@@ -279,10 +279,6 @@ endif(UNIX)
 
 add_subdirectory(src)
 add_subdirectory(examples)
-add_subdirectory(examples/getstarted)
-if(NATS_BUILD_STREAMING)
-  add_subdirectory(examples/stan)
-endif()
 add_subdirectory(test)
-add_subdirectory(test/dylib)
+
 #----------------------------

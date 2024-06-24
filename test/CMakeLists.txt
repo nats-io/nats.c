@@ -1,3 +1,8 @@
+cmake_minimum_required(VERSION 3.10)
+
+# Uncomment to have the build process verbose
+set(CMAKE_VERBOSE_MAKEFILE TRUE)
+
 if(NOT BUILD_TESTING)
   return()
 endif()
@@ -13,40 +18,30 @@ endif()
 
 # We need this to build the test program
 include_directories(${PROJECT_SOURCE_DIR}/src)
-if(NATS_BUILD_WITH_TLS)
-  include_directories(${OPENSSL_INCLUDE_DIR})
-endif(NATS_BUILD_WITH_TLS)
-if(NATS_BUILD_STREAMING)
-  include_directories(${NATS_PROTOBUF_INCLUDE_DIRS})
-  include_directories(${PROJECT_SOURCE_DIR}/src/stan)
-endif(NATS_BUILD_STREAMING)
+file(GLOB TEST_SOURCES RELATIVE ${PROJECT_SOURCE_DIR}/test *.c)
 
-# Build the test program
-add_executable(testsuite test.c)
+# Build the test program, link statically with the library.
+add_executable(natstest ${TEST_SOURCES})
+target_link_libraries(natstest nats_static ${NATS_EXTRA_LIB})
 
-# Link statically with the library
-target_link_libraries(testsuite nats_static ${NATS_EXTRA_LIB})
-
-# Set the test index to 0
-set(testIndex 0)
+set (LIST_FILE ${PROJECT_SOURCE_DIR}/test/all_tests.txt)
 
 # Read the file 'list.txt' to get all the test names
-file(STRINGS list.txt listOfTestNames)
+if(EXISTS ${LIST_FILE})
+  file(STRINGS ${LIST_FILE} TEST_NAMES)
+else()
+    set(TEST_NAMES)
+endif()
 
-# For each test name
-foreach(name ${listOfTestNames})
+message("Test Names: ${TEST_NAMES}")
 
-  # Create a test and pass the index (start and end are the same)
-  # to the testsuite executable
-  add_test(NAME Test_${name}
-           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-           COMMAND testsuite ${testIndex} ${testIndex})
+foreach(name ${TEST_NAMES})
+  # Remove the _tc() prefix
+  string(REGEX REPLACE "_tc\\(([^)]+)\\)" "\\1" TEST_NAME ${name})
+  add_test(NAME Test_${TEST_NAME}
+          WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+          COMMAND natstest ${TEST_NAME}) 
 
   # Make sure the test passes
-  set_tests_properties(Test_${name} PROPERTIES PASS_REGULAR_EXPRESSION "ALL PASSED")
-
-  # Bump the test index number
-  math(EXPR testIndex "${testIndex}+1")
+  set_tests_properties(Test_${TEST_NAME} PROPERTIES PASS_REGULAR_EXPRESSION "ALL PASSED")
 endforeach()
-
-

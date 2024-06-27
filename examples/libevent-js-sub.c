@@ -62,7 +62,7 @@ onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
         elapsed = nats_Now() - start;
 
     if (count % 1000 == 0)
-        printf("Count = %d\n", count);
+        printf("Count = %llu\n", count);
 
     // Since this is auto-ack callback, we don't need to ack here.
     natsMsg_Destroy(msg);
@@ -83,7 +83,7 @@ typedef struct
 
 } threadInfo;
 
-static void workThread(void *arg)
+static void *workThread(void *arg)
 {
     threadInfo *info = (threadInfo *)arg;
     natsStatus s = NATS_OK;
@@ -172,17 +172,12 @@ static void workThread(void *arg)
 
         for (count = 0; (s == NATS_OK) && (count < total);)
         {
-            jsFetchRequest req;
-            jsFetchRequest_Init(&req);
-            req.Batch = 1024;
-            req.Expires = 5000000; // ns
-            req.NoWait = true;
-            s = natsSubscription_FetchRequest(&list, sub, &req);
-            while (s == NATS_TIMEOUT)
-            {
-                // No good, a hot loop
-                s = natsSubscription_FetchRequest(&list, sub, &req);
-            }
+            int64_t start = nats_Now();
+            s = natsSubscription_Fetch(&list, sub, 100, 60*1000 /* 1 minute */, &jerr);
+            if (s == NATS_OK)
+                printf("Received %d messages\n", list.Count);
+            else
+                printf("Fetch error: %u - %s - jerr=%u, after %lld\n", s, natsStatus_GetText(s), jerr, nats_Now() - start);
 
             if (s != NATS_OK)
                 break;
@@ -194,7 +189,7 @@ static void workThread(void *arg)
             for (i = 0; (s == NATS_OK) && (i < list.Count); i++)
                 s = natsMsg_Ack(list.Msgs[i], &jsOpts);
 
-            printf("Count = %d\n", count);
+            printf("Count = %llu\n", count);
 
             natsMsgList_Destroy(&list);
         }
@@ -266,6 +261,7 @@ static void workThread(void *arg)
     // Since this is a user-thread, call this function to release
     // possible thread-local memory allocated by the library.
     nats_ReleaseThreadMemory();
+    return NULL;
 }
 
 int main(int argc, char **argv)
@@ -279,7 +275,7 @@ int main(int argc, char **argv)
 
     opts = parseArgs(argc, argv, usage);
 
-    printf("Created %s subscription on '%s'.\n",
+    printf("Creating %s subscription on '%s'.\n",
            (pull ? "pull" : (async ? "asynchronous" : "synchronous")), subj);
 
     s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);

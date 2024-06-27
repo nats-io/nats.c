@@ -257,10 +257,12 @@ static void *workThread(void *arg)
     jsCtx_Destroy(js);
     natsStatistics_Destroy(stats);
     natsSubscription_Destroy(sub);
+    natsConnection_Destroy(info->conn); // will break the event loop!
 
     // Since this is a user-thread, call this function to release
     // possible thread-local memory allocated by the library.
     nats_ReleaseThreadMemory();
+
     return NULL;
 }
 
@@ -314,7 +316,7 @@ int main(int argc, char **argv)
         s = info.status;
     }
 
-    natsConnection_Destroy(conn);
+    // natsConnection_Destroy(conn);
     natsOptions_Destroy(opts);
 
     // To silence reports of memory still in used with valgrind

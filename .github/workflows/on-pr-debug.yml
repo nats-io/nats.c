@@ -86,6 +86,14 @@ jobs:
           cd build
           
           ./bin/Debug/testsuite
+          # Exclude frequently failing tests
+          perl -i -ne 'print unless /
+              SSLReconnectWithAuthError             # fails on Windows ~60% of the time
+            | ReconnectImplicitUserInfo             # fails ~60% of the time
+            | DrainConn                             # fails ~20% of the time
+            | MicroAsyncErrorHandlerMaxPendingMsgs  # fails ~10% of the time
+            | natsNowAndSleep                       # fails ~10% of the time
+            /x' list.txt
           mv list.txt ../test/list.txt
           
           # refresh the cache

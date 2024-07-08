@@ -114,9 +114,16 @@ jobs:
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
 
           run_ctest() {
-            echo "Running ctest($1)..."
-            ctest -C Debug --timeout 60 --output-on-failure $1
-            return $?
+            local arg1="$1"
+            local current_set=$(set +o)
+            set +e
+            echo "Running ctest($arg1)..."
+
+            ctest -C Debug --timeout 60 --output-on-failure $arg1
+            
+            local result=$?
+            eval "$current_set"
+            return $result
           }
 
           run_ctest

@@ -86,24 +86,6 @@ jobs:
           cd build
           
           ./bin/Debug/testsuite
-          # Exclude frequently failing tests
-          perl -i -ne 'print unless /
-                SSLReconnectWithAuthError
-                | ReconnectImplicitUserInfo
-                | JetStreamMgtStreams
-                | HotSpotReconnect
-                | AuthServers
-                | JetStreamUnmarshalStreamInfo
-                | DrainConn
-                | MicroAsyncErrorHandlerMaxPendingMsgs
-                | natsNowAndSleep
-                | natsAllocSprintf
-                | SSLSocketLeakEventLoop
-                | GetClientID
-                | natsStrCaseStr
-                | AuthFailToReconnect
-                | GetRTT
-            /x' list.txt
           mv list.txt ../test/list.txt
           
           # refresh the cache
@@ -130,4 +112,4 @@ jobs:
 
           export PATH=../deps/nats-server:$PATH
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
-          ctest -C Debug --timeout 60 --output-on-failure
+          ctest -C Debug --timeout 60 --output-on-failure --rerun-failed

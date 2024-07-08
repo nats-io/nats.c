@@ -92,8 +92,8 @@ jobs:
           cmake -S .. -B .
           cmake --build . --config Debug
 
-          # Download nats-server
-          rel=${{ inputs.server_version }}
+          # Download latest nats-server
+          rel="latest" # TODO: parameterize
           if [ "$rel" = "latest" ]; then
             rel=$(curl -s https://api.github.com/repos/nats-io/nats-server/releases/latest | jq -r '.tag_name')
           fi

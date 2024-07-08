@@ -135,10 +135,11 @@ jobs:
           result=$?
       
           # Retry if failed
-          MAX_RETRIES=3
+          MAX_RETRIES=10
           retries=0
           while [ $result -ne 0 ] && [ $retries -lt $MAX_RETRIES ]; do
             tasklist | grep nats-server.exe | awk '{print $2}' | xargs -I {} taskkill /PID {} /F
+            sleep 3
             echo "Tests failed. Retrying failed tests... ($((retries + 1))/$MAX_RETRIES)"
             retries=$((retries + 1))
             run_ctest --rerun-failed

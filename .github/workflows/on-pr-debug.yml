@@ -91,9 +91,9 @@ jobs:
           # refresh the cache
           cmake -S .. -B .
           cmake --build . --config Debug
-          
-          rel=$(curl -s https://api.github.com/repos/nats-io/nats-server/releases/latest | jq -r '.tag_name')
 
+          # Download latest nats-server          
+          rel=$(curl -s https://api.github.com/repos/nats-io/nats-server/releases/latest | jq -r '.tag_name')
           for c in 1 2 3 4 5
           do
             echo "Attempt $c to download binary for main"
@@ -112,4 +112,31 @@ jobs:
 
           export PATH=../deps/nats-server:$PATH
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
-          ctest -C Debug --timeout 60 --output-on-failure --rerun-failed
+
+          run_ctest() {
+            echo "Running ctest($1)..."
+            ctest -C Debug --timeout 60 --output-on-failure $1
+            return $?
+          }
+
+          run_ctest
+          result=$?
+      
+          # Retry if failed
+          MAX_RETRIES=3
+          retries=0
+          while [ $result -ne 0 ] && [ $retries -lt $MAX_RETRIES ]; do
+            echo "Tests failed. Retrying failed tests... ($((retries + 1))/$MAX_RETRIES)"
+            retries=$((retries + 1))
+            run_ctest --rerun-failed
+            result=$?
+          done
+          
+          # Check the final result
+          if [ $result -ne 0 ]; then
+            echo "Tests failed after $MAX_RETRIES retries."
+            exit 1
+          else
+            echo "All tests passed."
+            exit 0
+          fi

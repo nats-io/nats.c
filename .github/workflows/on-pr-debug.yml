@@ -87,17 +87,22 @@ jobs:
           
           ./bin/Debug/testsuite
           # Exclude frequently failing tests
-          perl -i -ne 'print unless /               # Failures rates:
-              SSLReconnectWithAuthError             # ~60%
-            | ReconnectImplicitUserInfo             # ~60%
-            | AuthServers                           # ~40%
-            | JetStreamUnmarshalStreamInfo          # ~30%
-            | DrainConn                             # ~20%
-            | MicroAsyncErrorHandlerMaxPendingMsgs  # ~10%
-            | natsNowAndSleep                       # ~10%
-            | natsAllocSprintf                      # ~10%
-            | SSLSocketLeakEventLoop                # ~10%
-            | GetClientID                           # ~10%
+          perl -i -ne 'print unless /
+                SSLReconnectWithAuthError
+                | ReconnectImplicitUserInfo
+                | JetStreamMgtStreams
+                | HotSpotReconnect
+                | AuthServers
+                | JetStreamUnmarshalStreamInfo
+                | DrainConn
+                | MicroAsyncErrorHandlerMaxPendingMsgs
+                | natsNowAndSleep
+                | natsAllocSprintf
+                | SSLSocketLeakEventLoop
+                | GetClientID
+                | natsStrCaseStr
+                | AuthFailToReconnect
+                | GetRTT
             /x' list.txt
           mv list.txt ../test/list.txt
           

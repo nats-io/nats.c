@@ -86,11 +86,6 @@ jobs:
           cd build
           
           ./bin/Debug/testsuite
-          # Exclude tests that are known to fail or flappers
-          #perl -i -ne 'print unless /
-          #    SSLReconnectWithAuthError # fails
-          #  | ReconnectImplicitUserInfo # flapper
-          #  /x' list.txt
           mv list.txt ../test/list.txt
           
           # refresh the cache
@@ -119,12 +114,12 @@ jobs:
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
 
           run_ctest() {
-            local arg1="$1"
+            local extra_args="$@"
             local current_set=$(set +o)
             set +e
             echo "Running ctest($arg1)..."
 
-            ctest -C Debug --timeout 60 --output-on-failure $arg1
+            ctest -C Debug --timeout 60 --output-on-failure $extra_args
             
             local result=$?
             eval "$current_set"
@@ -138,7 +133,7 @@ jobs:
           MAX_RETRIES=10
           retries=0
           while [ $result -ne 0 ] && [ $retries -lt $MAX_RETRIES ]; do
-            tasklist | grep nats-server.exe | awk '{print $2}' | xargs -I {} taskkill /PID {} /F
+            tasklist | grep nats-server.exe | awk '{print $2}' | xargs -I {} taskkill /PID {} /F /T
             sleep 3
             echo "Tests failed. Retrying failed tests... ($((retries + 1))/$MAX_RETRIES)"
             retries=$((retries + 1))
@@ -151,6 +146,6 @@ jobs:
             echo "Tests failed after $MAX_RETRIES retries."
             exit 1
           else
-            echo "All tests passed."
+            echo "All tests passed. (retried $retries times)"
             exit 0
           fi

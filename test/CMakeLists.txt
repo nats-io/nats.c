@@ -27,6 +27,7 @@ add_executable(testsuite test.c)
 # Link statically with the library
 target_link_libraries(testsuite nats_static ${NATS_EXTRA_LIB})
 
+
 # Set the test index to 0
 set(testIndex 0)
 
@@ -35,7 +36,6 @@ file(STRINGS list.txt listOfTestNames)
 
 # For each test name
 foreach(name ${listOfTestNames})
-
   # Create a test and pass the index (start and end are the same)
   # to the testsuite executable
   add_test(NAME Test_${name}
@@ -44,6 +44,10 @@ foreach(name ${listOfTestNames})
 
   # Make sure the test passes
   set_tests_properties(Test_${name} PROPERTIES PASS_REGULAR_EXPRESSION "ALL PASSED")
+
+  # Set TSAN_OPTIONS for the test
+  set_tests_properties(Test_${name} PROPERTIES
+           ENVIRONMENT "TSAN_OPTIONS=detect_deadlocks=1:second_deadlock_stack=1:verbosity=2:halt_on_error=1:report_signal_unsafe=1")
 
   # Bump the test index number
   math(EXPR testIndex "${testIndex}+1")

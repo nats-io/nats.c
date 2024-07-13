@@ -99,9 +99,6 @@ jobs:
             flags="$flags -DCMAKE_VERBOSE_MAKEFILE=ON"
           fi
           echo "flags=$flags" >> $GITHUB_OUTPUT
-          if [[ "${{ inputs.verbose_test_output }}" == "ON" || "${{ inputs.sanitize }}" == "thread" ]]; then
-            echo "VVFLAG=-VV" >> $GITHUB_ENV
-          fi
 
       - id: nats-vars
         name: Configure NATS_ environment variables
@@ -176,11 +173,7 @@ jobs:
           export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
           flags=""
-          ctest $VVFLAG --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }} 2>&1 | tee /tmp/out.txt
-          if [[ $(grep -q 'ThreadSanitizer: ' /tmp/out.txt; echo $?) == 0 ]]; then
-            echo "!!! ThreadSanitizer detected WARNING(s) !!!"
-            exit 1
-          fi
+          ctest --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }} 2>&1 | tee /tmp/out.txt
 
       - name: Upload coverage reports to Codecov
         if: inputs.coverage == 'ON'

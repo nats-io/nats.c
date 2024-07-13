@@ -71,7 +71,6 @@ jobs:
       type: Debug
       sanitize: thread
       server_version: main
-      repeat: 10
 
   Windows:
     name: "Windows"

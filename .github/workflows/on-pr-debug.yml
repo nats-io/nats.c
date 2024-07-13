@@ -28,6 +28,16 @@ jobs:
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  dev-mode:
+    name: "DEV_MODE"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      dev_mode: ON
+      server_version: main
+      type: Debug
+      verbose_test_output: ON
+      verbose_make_output: ON
+
   sanitize-addr:
     name: "Sanitize address"
     uses: ./.github/workflows/build-test.yml
@@ -40,6 +50,7 @@ jobs:
     name: "Sanitize address (lib_msg_delivery)"
     uses: ./.github/workflows/build-test.yml
     with:
+      type: Debug
       sanitize: address
       server_version: main
       lib_msg_delivery: ON
@@ -48,6 +59,7 @@ jobs:
     name: "Sanitize address (lib_write_deadline)"
     uses: ./.github/workflows/build-test.yml
     with:
+      type: Debug
       sanitize: address
       server_version: main
       lib_write_deadline: ON
@@ -56,8 +68,10 @@ jobs:
     name: "Sanitize thread"
     uses: ./.github/workflows/build-test.yml
     with:
+      type: Debug
       sanitize: thread
       server_version: main
+      repeat: 10
 
   Windows:
     name: "Windows"

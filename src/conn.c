@@ -3435,7 +3435,7 @@ natsConnection_Reconnect(natsConnection *nc)
         return nats_setDefaultError(NATS_CONNECTION_CLOSED);
     }
 
-    natsSock_Close(nc->sockCtx.fd);
+    natsSock_Shutdown(nc->sockCtx.fd);
 
     natsConn_Unlock(nc);
     return NATS_OK;

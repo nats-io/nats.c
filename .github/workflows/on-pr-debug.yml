@@ -28,6 +28,17 @@ jobs:
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  coverage-pooled:
+    name: "Coverage"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      coverage: ON
+      server_version: main
+      type: Debug
+      lib_msg_delivery: ON
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
   dev-mode:
     name: "DEV_MODE"
     uses: ./.github/workflows/build-test.yml

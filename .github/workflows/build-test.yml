@@ -165,6 +165,8 @@ jobs:
           fi
 
       - name: Upload coverage reports to Codecov
+        # PRs from external contributors fail: https://github.com/codecov/feedback/issues/301
+        # Only upload coverage reports for PRs from the same repo (not forks)
         if: inputs.coverage == 'ON' && github.event.pull_request.head.repo.full_name == github.repository
         uses: codecov/codecov-action@v4
         with:

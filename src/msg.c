@@ -220,7 +220,7 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
         }
         return nats_setError(NATS_PROTOCOL_ERROR, "invalid start of a key: %s", start);
     }
-    if (isspace(*ptr))
+    if (isspace((unsigned char) *ptr))
     {
         if (line == 0)
             return nats_setError(NATS_PROTOCOL_ERROR, "key cannot start with a space: %s", ptr);
@@ -240,7 +240,7 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
         (*col) = '\0';
     }
 
-    while ((ptr != endPtr) && (isspace(*ptr)))
+    while ((ptr != endPtr) && (isspace((unsigned char) *ptr)))
         ptr++;
 
     if (ptr == endPtr)
@@ -259,7 +259,7 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
     endval--;
     if (*endval == '\r')
         endval--;
-    while ((endval != val) && (isspace(*endval)))
+    while ((endval != val) && (isspace((unsigned char) *endval)))
         endval--;
     endval++;
     *(endval) = '\0';
@@ -404,7 +404,7 @@ _liftHeaders(natsMsg *msg, bool setOrAdd)
                     // Restore character of starting description
                     *desc = descb;
                     // Trim left spaces
-                    while ((*desc != '\0') && isspace((int) *desc))
+                    while ((*desc != '\0') && isspace((unsigned char) *desc))
                         desc++;
 
                     // If we are not at the end of description
@@ -412,7 +412,7 @@ _liftHeaders(natsMsg *msg, bool setOrAdd)
                     {
                         // Go to end of description and walk back to trim right.
                         desce = (char*) (desc + (int) strlen(desc) - 1);
-                        while ((desce != desc) && isspace((int) *desce))
+                        while ((desce != desc) && isspace((unsigned char) *desce))
                         {
                             *desce = '\0';
                             desce--;
@@ -744,16 +744,18 @@ natsMsg_GetTime(natsMsg *msg)
 }
 
 natsStatus
-natsMsg_create(natsMsg **newMsg,
+natsMsg_createWithPadding(natsMsg **newMsg,
                const char *subject, int subjLen,
                const char *reply, int replyLen,
-               const char *buf, int bufLen, int hdrLen)
+               const char *buf, int bufLen, int bufPaddingSize, int hdrLen)
 {
     natsMsg     *msg      = NULL;
     char        *ptr      = NULL;
     int         bufSize   = 0;
     int         dataLen   = bufLen;
     bool        hasHdrs   = (hdrLen > 0 ? true : false);
+    // Make payload a null-terminated string and add at least one zero byte to the end
+    int         padLen    = (bufPaddingSize > 0 ? bufPaddingSize : 1);
 
     bufSize  = subjLen;
     bufSize += 1;
@@ -763,7 +765,7 @@ natsMsg_create(natsMsg **newMsg,
         bufSize += 1;
     }
     bufSize += bufLen;
-    bufSize += 1;
+    bufSize += padLen;
     if (hasHdrs)
         bufSize++;
 
@@ -828,7 +830,11 @@ natsMsg_create(natsMsg **newMsg,
     if (buf != NULL)
         memcpy(ptr, buf, dataLen);
     ptr += dataLen;
-    *(ptr) = '\0';
+    memset(ptr, 0, padLen);
+    // This is essentially to match server's view of a message size
+    // when sending messages to pull consumers and keeping track
+    // of size in regards to a max_bytes setting.
+    msg->wsz = subjLen + replyLen + bufLen;
 
     // Setting the callback will trigger garbage collection when
     // natsMsg_Destroy() is invoked.
@@ -837,6 +843,16 @@ natsMsg_create(natsMsg **newMsg,
     *newMsg = msg;
 
     return NATS_OK;
+}
+
+natsStatus
+natsMsg_create(natsMsg **newMsg,
+               const char *subject, int subjLen,
+               const char *reply, int replyLen,
+               const char *buf, int bufLen, int hdrLen)
+{
+    return natsMsg_createWithPadding(newMsg, subject, subjLen, reply, replyLen,
+                                     buf, bufLen, 0, hdrLen);
 }
 
 // Used internally to initialize a message structure, generally defined on the stack,
@@ -897,5 +913,5 @@ natsMsgList_Destroy(natsMsgList *list)
         natsMsg_Destroy(list->Msgs[i]);
     NATS_FREE(list->Msgs);
     list->Msgs = NULL;
-    *(int*)&(list->Count) = 0;
+    list->Count = 0;
 }

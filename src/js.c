@@ -1,4 +1,4 @@
-// Copyright 2021 The NATS Authors
+// Copyright 2021-2022 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -42,12 +42,16 @@ const int64_t    jsDefaultRequestWait    = 5000;
 const int64_t    jsDefaultStallWait      = 200;
 const char       *jsDigits               = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const int        jsBase                  = 62;
-const int64_t    jsOrderedHBInterval     = 5*(int64_t)1E9;
+const int64_t    jsOrderedHBInterval     = NATS_SECONDS_TO_NANOS(5);
 
 #define jsReplyTokenSize    (8)
 #define jsDefaultMaxMsgs    (512 * 1024)
 
 #define jsLastConsumerSeqHdr    "Nats-Last-Consumer"
+
+// Forward declarations
+static void _hbTimerFired(natsTimer *timer, void* closure);
+static void _hbTimerStopped(natsTimer *timer, void* closure);
 
 typedef struct __jsOrderedConsInfo
 {
@@ -81,6 +85,7 @@ _freeContext(jsCtx *js)
     NATS_FREE(js->rpre);
     natsCondition_Destroy(js->cond);
     natsMutex_Destroy(js->mu);
+    natsTimer_Destroy(js->pmtmr);
     nc = js->nc;
     NATS_FREE(js);
 
@@ -123,13 +128,31 @@ js_unlockAndRelease(jsCtx *js)
         _freeContext(js);
 }
 
+static void
+_destroyPMInfo(pmInfo *pmi)
+{
+    if (pmi == NULL)
+        return;
+
+    NATS_FREE(pmi->subject);
+    NATS_FREE(pmi);
+}
+
 void
 jsCtx_Destroy(jsCtx *js)
 {
+    pmInfo *pm;
+
     if (js == NULL)
         return;
 
     js_lock(js);
+    if (js->closed)
+    {
+        js_unlock(js);
+        return;
+    }
+    js->closed = true;
     if (js->rsub != NULL)
     {
         natsSubscription_Destroy(js->rsub);
@@ -148,6 +171,13 @@ jsCtx_Destroy(jsCtx *js)
             natsMsg_Destroy(msg);
         }
     }
+    while ((pm = js->pmHead) != NULL)
+    {
+        js->pmHead = pm->next;
+        _destroyPMInfo(pm);
+    }
+    if (js->pmtmr != NULL)
+        natsTimer_Stop(js->pmtmr);
     js_unlockAndRelease(js);
 }
 
@@ -289,8 +319,17 @@ natsConnection_JetStream(jsCtx **new_js, natsConnection *nc, jsOptions *opts)
         struct jsOptionsPublishAsync *pa = &(js->opts.PublishAsync);
 
         pa->MaxPending          = opts->PublishAsync.MaxPending;
-        pa->ErrHandler          = opts->PublishAsync.ErrHandler;
-        pa->ErrHandlerClosure   = opts->PublishAsync.ErrHandlerClosure;
+        // This takes precedence to error handler
+        if (opts->PublishAsync.AckHandler != NULL)
+        {
+            pa->AckHandler          = opts->PublishAsync.AckHandler;
+            pa->AckHandlerClosure   = opts->PublishAsync.AckHandlerClosure;
+        }
+        else
+        {
+            pa->ErrHandler          = opts->PublishAsync.ErrHandler;
+            pa->ErrHandlerClosure   = opts->PublishAsync.ErrHandlerClosure;
+        }
         pa->StallWait           = opts->PublishAsync.StallWait;
         js->opts.Wait           = opts->Wait;
     }
@@ -370,6 +409,7 @@ js_setOpts(natsConnection **nc, bool *freePfx, jsCtx *js, jsOptions *opts, jsOpt
 
         // Stream info options
         resOpts->Stream.Info.DeletedDetails = (opts == NULL ? js->opts.Stream.Info.DeletedDetails : opts->Stream.Info.DeletedDetails);
+        resOpts->Stream.Info.SubjectsFilter = (opts == NULL ? js->opts.Stream.Info.SubjectsFilter : opts->Stream.Info.SubjectsFilter);
 
         *nc = js->nc;
         js_unlock(js);
@@ -534,6 +574,75 @@ jsPubAck_Destroy(jsPubAck *pa)
 }
 
 static void
+_freePubAck(jsPubAck *pa)
+{
+    if (pa == NULL)
+        return;
+
+    NATS_FREE(pa->Stream);
+    NATS_FREE(pa->Domain);
+}
+
+static natsStatus
+_parsePubAck(natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, char *errTxt, size_t errTxtSize)
+{
+    natsStatus  s       = NATS_OK;
+    jsErrCode   jerr    = 0;
+
+    if (natsMsg_isTimeout(msg))
+    {
+        s = NATS_TIMEOUT;
+    }
+    else if (natsMsg_IsNoResponders(msg))
+    {
+        s = NATS_NO_RESPONDERS;
+    }
+    else
+    {
+        nats_JSON           *json = NULL;
+        jsApiResponse       ar;
+
+        // Now unmarshal the API response and check if there was an error.
+        s = js_unmarshalResponse(&ar, &json, msg);
+        if (s == NATS_OK)
+        {
+            if (js_apiResponseIsErr(&ar))
+            {
+                s = NATS_ERR;
+                jerr = (jsErrCode) ar.Error.ErrCode;
+                snprintf(errTxt, errTxtSize, "%s", ar.Error.Description);
+            }
+            // If it is not an error and caller wants to decode the jsPubAck...
+            else if (pa != NULL)
+            {
+                memset(pa, 0, sizeof(jsPubAck));
+                s = nats_JSONGetStr(json, "stream", &(pa->Stream));
+                IFOK(s, nats_JSONGetULong(json, "seq", &(pa->Sequence)));
+                IFOK(s, nats_JSONGetBool(json, "duplicate", &(pa->Duplicate)));
+                IFOK(s, nats_JSONGetStr(json, "domain", &(pa->Domain)));
+            }
+
+            js_freeApiRespContent(&ar);
+            nats_JSONDestroy(json);
+        }
+    }
+    // This will handle the no responder or timeout cases, or if we had errors
+    // trying to unmarshal the response.
+    if (s != NATS_OK)
+    {
+        // Set the error text only if not already done.
+        if (errTxt[0] == '\0')
+            snprintf(errTxt, errTxtSize, "%s", natsStatus_GetText(s));
+
+        memset(pae, 0, sizeof(jsPubAckErr));
+        pae->Err = s;
+        pae->ErrCode = jerr;
+        pae->ErrText = errTxt;
+    }
+    return s;
+}
+
+static void
 _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     const char      *subject    = natsMsg_GetSubject(msg);
@@ -542,6 +651,7 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
     natsMsg         *pmsg       = NULL;
     char            errTxt[256] = {'\0'};
     jsPubAckErr     pae;
+    jsPubAck        pa;
     struct jsOptionsPublishAsync *opa = NULL;
 
     if ((subject == NULL) || (int) strlen(subject) <= js->rpreLen)
@@ -563,60 +673,47 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
     }
 
     opa = &(js->opts.PublishAsync);
-    if (opa->ErrHandler != NULL)
+    if (opa->AckHandler)
     {
-        natsStatus s = NATS_OK;
+        jsPubAckErr *ppae   = NULL;
+        jsPubAck    *ppa    = NULL;
 
-        memset(&pae, 0, sizeof(jsPubAckErr));
-
-        // Check for no responders
-        if (natsMsg_IsNoResponders(msg))
-        {
-            s = NATS_NO_RESPONDERS;
-        }
+        // If _parsePubAck returns an error, we will set the pointer ppae to
+        // our stack variable 'pae', otherwise, set the pointer ppa to the
+        // stack variable 'pa', which is the jsPubAck (positive ack).
+        if (_parsePubAck(msg, &pa, &pae, errTxt, sizeof(errTxt)) != NATS_OK)
+            ppae = &pae;
         else
-        {
-            nats_JSON           *json = NULL;
-            jsApiResponse       ar;
+            ppa = &pa;
 
-            // Now unmarshal the API response and check if there was an error.
+        // Invoke the handler with pointer to either jsPubAck or jsPubAckErr.
+        js_unlock(js);
 
-            s = js_unmarshalResponse(&ar, &json, msg);
-            if ((s == NATS_OK) && js_apiResponseIsErr(&ar))
-            {
-                pae.Err     = NATS_ERR;
-                pae.ErrCode = (int) ar.Error.ErrCode;
-                snprintf(errTxt, sizeof(errTxt), "%s", ar.Error.Description);
-            }
-            js_freeApiRespContent(&ar);
-            nats_JSONDestroy(json);
-        }
-        if (s != NATS_OK)
-        {
-            pae.Err = s;
-            snprintf(errTxt, sizeof(errTxt), "%s", natsStatus_GetText(pae.Err));
-        }
+        (opa->AckHandler)(js, pmsg, ppa, ppae, opa->AckHandlerClosure);
 
+        js_lock(js);
+
+        _freePubAck(ppa);
+        // Set pmsg to NULL because user was responsible for destroying the message.
+        pmsg = NULL;
+    }
+    else if ((opa->ErrHandler != NULL) && (_parsePubAck(msg, NULL, &pae, errTxt, sizeof(errTxt)) != NATS_OK))
+    {
         // We will invoke CB only if there is any kind of error.
-        if (pae.Err != NATS_OK)
-        {
-            // Associate the message with the pubAckErr object.
-            pae.Msg = pmsg;
-            // And the error text.
-            pae.ErrText = errTxt;
-            js_unlock(js);
+        // Associate the message with the pubAckErr object.
+        pae.Msg = pmsg;
+        js_unlock(js);
 
-            (opa->ErrHandler)(js, &pae, opa->ErrHandlerClosure);
+        (opa->ErrHandler)(js, &pae, opa->ErrHandlerClosure);
 
-            js_lock(js);
+        js_lock(js);
 
-            // If the user resent the message, pae->Msg will have been cleared.
-            // In this case, do not destroy the message. Do not blindly destroy
-            // an address that could have been set, so destroy only if pmsg
-            // is same value than pae->Msg.
-            if (pae.Msg != pmsg)
-                pmsg = NULL;
-        }
+        // If the user resent the message, pae->Msg will have been cleared.
+        // In this case, do not destroy the message. Do not blindly destroy
+        // an address that could have been set, so destroy only if pmsg
+        // is same value than pae->Msg.
+        if (pae.Msg != pmsg)
+            pmsg = NULL;
     }
 
     // Now that the callback has returned, decrement the number of pending messages.
@@ -718,8 +815,138 @@ _newAsyncReply(char *reply, jsCtx *js)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static void
+_timeoutPubAsync(natsTimer *t, void *closure)
+{
+    jsCtx   *js = (jsCtx*) closure;
+    pmInfo  *pm = NULL;
+    int64_t now = nats_Now();
+    int64_t next= 0;
+
+    js_lock(js);
+    if (js->closed)
+    {
+        js_unlock(js);
+        return;
+    }
+
+    while (((pm = js->pmHead) != NULL) && (pm->deadline <= now))
+    {
+        natsMsg *m = NULL;
+
+        if (natsMsg_Create(&m, pm->subject, NULL, NULL, 0) != NATS_OK)
+            break;
+
+        m->sub = js->rsub;
+        natsMsg_setTimeout(m);
+
+        natsSub_Lock(js->rsub);
+        if (js->rsub->msgList.tail != NULL)
+        {
+            js->rsub->msgList.tail->next = m;
+        }
+        else
+        {
+            js->rsub->msgList.head = m;
+            natsCondition_Signal(js->rsub->cond);
+        }
+        js->rsub->msgList.tail = m;
+        js->rsub->msgList.msgs++;
+        js->rsub->msgList.bytes += natsMsg_dataAndHdrLen(m);
+        natsSub_Unlock(js->rsub);
+
+        js->pmHead = pm->next;
+        _destroyPMInfo(pm);
+    }
+
+    if (js->pmHead == NULL)
+    {
+        if (js->pmTail != NULL)
+            js->pmTail = NULL;
+
+        next = 60*60*1000;
+    }
+    else
+    {
+        next = js->pmHead->deadline - now;
+        if (next <= 0)
+            next = 1;
+    }
+    natsTimer_Reset(js->pmtmr, next);
+
+    js_unlock(js);
+}
+
+static void
+_timeoutPubAsyncComplete(natsTimer *t, void *closure)
+{
+    jsCtx *js = (jsCtx*) closure;
+    js_release(js);
+}
+
 static natsStatus
-_registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg)
+_trackPublishAsyncTimeout(jsCtx *js, char *subject, int64_t mw)
+{
+    natsStatus  s       = NATS_OK;
+    pmInfo      *pm     = NULL;
+    pmInfo      *pmi    = NATS_CALLOC(1, sizeof(pmInfo));
+
+    if (pmi == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    pmi->subject = NATS_STRDUP(subject);
+    if (pmi->subject == NULL)
+    {
+        NATS_FREE(pmi);
+        return nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    pmi->deadline = nats_Now() + mw;
+
+    // Check if we can add at the end of the list
+    if (((pm = js->pmTail) != NULL) && (pmi->deadline >= pm->deadline))
+    {
+        js->pmTail->next = pmi;
+        js->pmTail = pmi;
+    }
+    // Or before the first
+    else if (((pm = js->pmHead) != NULL) && (pmi->deadline < pm->deadline))
+    {
+        pmi->next = js->pmHead;
+        js->pmHead = pmi;
+        natsTimer_Reset(js->pmtmr, mw);
+    }
+    // If the list was empty
+    else if (js->pmHead == NULL)
+    {
+        js->pmHead = pmi;
+        js->pmTail = pmi;
+        if (js->pmtmr == NULL)
+        {
+            s = natsTimer_Create(&js->pmtmr, _timeoutPubAsync, _timeoutPubAsyncComplete, mw, (void*) js);
+            if (s == NATS_OK)
+                js_retain(js);
+        }
+        else
+            natsTimer_Reset(js->pmtmr, mw);
+    }
+    else
+    {
+        // Guaranteed to be somewhere in the list (not first, not last, and at
+        // least 2 elements).
+        pm = js->pmHead;
+        while ((pm != NULL) && (pm->next != NULL) && (pmi->deadline > pm->next->deadline))
+            pm = pm->next;
+
+        pmi->next = pm->next;
+        pm->next = pmi;
+    }
+    if (s != NATS_OK)
+        _destroyPMInfo(pmi);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg, int64_t mw)
 {
     natsStatus  s       = NATS_OK;
     char        *id     = NULL;
@@ -752,6 +979,8 @@ _registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg)
 
         release = true;
     }
+    if ((s == NATS_OK) && (mw > 0))
+        s = _trackPublishAsyncTimeout(js, reply, mw);
     if (s == NATS_OK)
         s = natsStrHash_Set(js->pm, id, true, msg, NULL);
     if (s == NATS_OK)
@@ -789,6 +1018,7 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
     natsConnection  *nc = NULL;
     char            replyBuf[32 + jsReplyTokenSize + 1];
     char            *reply = replyBuf;
+    int64_t         mw = 0;
 
     if ((js == NULL) || (msg == NULL) || (*msg == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -801,10 +1031,13 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
     }
 
     if (opts != NULL)
+    {
+        mw = opts->MaxWait;
         s = _setHeadersFromOptions(*msg, opts);
+    }
 
     // On success, the context will be retained.
-    IFOK(s, _registerPubMsg(&nc, reply, js, *msg));
+    IFOK(s, _registerPubMsg(&nc, reply, js, *msg, mw));
     if (s == NATS_OK)
     {
         s = natsConn_publish(nc, *msg, (const char*) reply, false);
@@ -918,7 +1151,7 @@ js_PublishAsyncGetPendingList(natsMsgList *pending, jsCtx *js)
             if (js->pmcount > 0)
                 js->pmcount--;
         }
-        *(int*)&(pending->Count) = count;
+        pending->Count = count;
     }
     js_unlock(js);
 
@@ -1003,12 +1236,18 @@ jsSub_free(jsSub *jsi)
 
     js = jsi->js;
     natsTimer_Destroy(jsi->hbTimer);
+    if (jsi->mhMsg != NULL)
+    {
+        natsMsg_clearNoDestroy(jsi->mhMsg);
+        natsMsg_Destroy(jsi->mhMsg);
+    }
     NATS_FREE(jsi->stream);
     NATS_FREE(jsi->consumer);
     NATS_FREE(jsi->nxtMsgSubj);
     NATS_FREE(jsi->cmeta);
     NATS_FREE(jsi->fcReply);
-    NATS_FREE(jsi->fsubj);
+    NATS_FREE(jsi->psubj);
+    js_destroyConsumerConfig(jsi->ocCfg);
     NATS_FREE(jsi);
 
     js_release(js);
@@ -1024,7 +1263,7 @@ _autoAckCB(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closur
     // Invoke user callback
     (jsi->usrCb)(nc, sub, msg, jsi->usrCbClosure);
 
-    natsMsg_Ack(msg, &(jsi->js->opts));
+    natsMsg_Ack(msg, NULL);
     natsMsg_clearNoDestroy(msg);
     natsMsg_Destroy(msg);
 }
@@ -1083,14 +1322,11 @@ jsSub_deleteConsumerAfterDrain(natsSubscription *sub)
     s = jsSub_deleteConsumer(sub);
     if (s != NATS_OK)
     {
+        char tmp[256];
         natsConn_Lock(nc);
-        if (nc->opts->asyncErrCb != NULL)
-        {
-            char tmp[256];
-            snprintf(tmp, sizeof(tmp), "failed to delete consumer '%s': %u (%s)",
-                    consumer, s, natsStatus_GetText(s));
-            natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
-        }
+        snprintf(tmp, sizeof(tmp), "failed to delete consumer '%s': %u (%s)",
+                 consumer, s, natsStatus_GetText(s));
+        natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
         natsConn_Unlock(nc);
     }
 
@@ -1280,11 +1516,11 @@ jsSub_trackSequences(jsSub *jsi, const char *reply)
 {
     natsStatus  s = NATS_OK;
 
-    if ((reply == NULL) || (strstr(reply, jsAckPrefix) != reply))
-        return NATS_OK;
-
     // Data is equivalent to HB, so consider active.
     jsi->active = true;
+
+    if ((reply == NULL) || (strstr(reply, jsAckPrefix) != reply))
+        return NATS_OK;
 
     // Keep track of inbound message "sequence" for flow control purposes.
     jsi->fciseq++;
@@ -1295,11 +1531,12 @@ jsSub_trackSequences(jsSub *jsi, const char *reply)
 }
 
 natsStatus
-jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *sm)
+jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm)
 {
     jsSub       *jsi   = sub->jsi;
     const char  *str   = NULL;
     int64_t     val    = 0;
+    struct mismatch *m = &jsi->mismatch;
     natsStatus  s;
 
     *sm = false;
@@ -1310,7 +1547,7 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg
     if (jsi->cmeta == NULL)
         return NATS_OK;
 
-    s = js_getMetaData(jsi->cmeta, NULL, NULL, NULL, NULL, &jsi->sseq, &jsi->dseq, NULL, NULL, 2);
+    s = js_getMetaData(jsi->cmeta, NULL, NULL, NULL, NULL, &m->sseq, &m->dseq, NULL, NULL, 2);
     if (s != NATS_OK)
     {
         if (s == NATS_ERR)
@@ -1330,9 +1567,9 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg
         if (val == -1)
             return nats_setError(NATS_ERR, "invalid last consumer sequence: '%s'", str);
 
-        jsi->ldseq = (uint64_t) val;
+        m->ldseq = (uint64_t) val;
     }
-    if (jsi->ldseq == jsi->dseq)
+    if (m->ldseq == m->dseq)
     {
         // Sync subs use this flag to get the NextMsg() to error out and
         // return NATS_MISMATCH to indicate that a mismatch was discovered,
@@ -1347,7 +1584,7 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg
     {
         if (jsi->ordered)
         {
-            s = jsSub_resetOrderedConsumer(sub, mu, jsi->sseq+1);
+            s = jsSub_resetOrderedConsumer(sub, jsi->sseq+1);
         }
         else if (!jsi->ssmn)
         {
@@ -1365,9 +1602,44 @@ jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg
 }
 
 natsStatus
+natsSubscription_GetConsumerInfo(jsConsumerInfo **ci, natsSubscription *sub,
+                                 jsOptions *opts, jsErrCode *errCode)
+{
+    char        *consumer = NULL;
+    const char  *stream   = NULL;
+    jsCtx       *js       = NULL;
+    natsStatus  s         = NATS_OK;
+
+    if ((ci == NULL) || (sub == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsSub_Lock(sub);
+    if ((sub->jsi == NULL) || (sub->jsi->consumer == NULL))
+    {
+        natsSub_Unlock(sub);
+        return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
+    }
+    js = sub->jsi->js;
+    stream = (const char*) sub->jsi->stream;
+    DUP_STRING(s, consumer, sub->jsi->consumer);
+    if (s == NATS_OK)
+        sub->refs++;
+    natsSub_Unlock(sub);
+
+    if (s == NATS_OK)
+    {
+        s = js_GetConsumerInfo(ci, js, stream, consumer, opts, errCode);
+        NATS_FREE(consumer);
+        natsSub_release(sub);
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 natsSubscription_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscription *sub)
 {
     jsSub *jsi;
+    struct mismatch *m = NULL;
 
     if ((csm == NULL) || (sub == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1379,15 +1651,16 @@ natsSubscription_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscr
         return nats_setError(NATS_INVALID_SUBSCRIPTION, "%s", jsErrNotAJetStreamSubscription);
     }
     jsi = sub->jsi;
-    if (jsi->dseq == jsi->ldseq)
+    m = &jsi->mismatch;
+    if (m->dseq == m->ldseq)
     {
         natsSubAndLdw_Unlock(sub);
         return NATS_NOT_FOUND;
     }
     memset(csm, 0, sizeof(jsConsumerSequenceMismatch));
-    csm->Stream = jsi->sseq;
-    csm->ConsumerClient = jsi->dseq;
-    csm->ConsumerServer = jsi->ldseq;
+    csm->Stream = m->sseq;
+    csm->ConsumerClient = m->dseq;
+    csm->ConsumerServer = m->ldseq;
     natsSubAndLdw_Unlock(sub);
     return NATS_OK;
 }
@@ -1423,15 +1696,20 @@ jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply)
 }
 
 static natsStatus
-_checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, jsErrCode *jerr)
+_checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, natsMsg *mhMsg, const char* reqSubj)
 {
     natsStatus  s    = NATS_OK;
     const char  *val = NULL;
     const char  *desc= NULL;
 
+    // Check for missed heartbeat special message
+    if (msg == mhMsg)
+    {
+        *usrMsg = false;
+        return NATS_MISSED_HEARTBEAT;
+    }
+
     *usrMsg = true;
-    if (jerr != NULL)
-        *jerr = 0;
 
     if ((msg->dataLen > 0) || (msg->hdrLen <= 0))
         return NATS_OK;
@@ -1451,6 +1729,17 @@ _checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, jsErrCode *jerr)
     if (!checkSts)
         return NATS_OK;
 
+    // 100 Idle hearbeat, return OK
+    if (strncmp(val, CTRL_STATUS, HDR_STATUS_LEN) == 0)
+        return NATS_OK;
+
+    // Before checking for "errors", if the incoming status message is
+    // for a previous request (message's subject is not reqSubj), then
+    // simply return NATS_OK. The caller will destroy the message and
+    // proceed as if nothing was received.
+    if (strcmp(natsMsg_GetSubject(msg), reqSubj) != 0)
+        return NATS_OK;
+
     // 404 indicating that there are no messages.
     if (strncmp(val, NOT_FOUND_STATUS, HDR_STATUS_LEN) == 0)
         return NATS_NOT_FOUND;
@@ -1468,24 +1757,25 @@ _checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, jsErrCode *jerr)
 
 static natsStatus
 _sendPullRequest(natsConnection *nc, const char *subj, const char *rply,
-                 natsBuffer *buf, int batchSize, int64_t timeout, bool noWait)
+                 natsBuffer *buf, jsFetchRequest *req)
 {
     natsStatus  s;
     int64_t     expires;
 
-    // Make our request expiration a bit shorter than the
-    // current timeout.
-    expires = (timeout >= 20 ? timeout - 10 : timeout);
-
-    // Since "expires" is a Go time.Duration and our timeout
-    // is in milliseconds, convert it to nanos.
-    expires *= 1000000;
+    // Make our request expiration a bit shorter than user provided expiration.
+    expires = (req->Expires >= (int64_t) 20E6 ? req->Expires - (int64_t) 10E6 : req->Expires);
 
     natsBuf_Reset(buf);
     s = natsBuf_AppendByte(buf, '{');
-    IFOK(s, nats_marshalLong(buf, false, "batch", (int64_t) batchSize));
-    IFOK(s, nats_marshalLong(buf, true, "expires", expires));
-    if ((s == NATS_OK) && noWait)
+    // Currently, Batch is required, so will always be > 0
+    IFOK(s, nats_marshalLong(buf, false, "batch", (int64_t) req->Batch));
+    if ((s == NATS_OK) && (req->MaxBytes > 0))
+        s = nats_marshalLong(buf, true, "max_bytes", req->MaxBytes);
+    if ((s == NATS_OK) && (expires > 0))
+        s = nats_marshalLong(buf, true, "expires", expires);
+    if ((s == NATS_OK) && (req->Heartbeat > 0))
+        s = nats_marshalLong(buf, true, "idle_heartbeat", req->Heartbeat);
+    if ((s == NATS_OK) && req->NoWait)
         s = natsBuf_Append(buf, ",\"no_wait\":true", -1);
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
@@ -1497,41 +1787,52 @@ _sendPullRequest(natsConnection *nc, const char *subj, const char *rply,
 }
 
 natsStatus
-natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int64_t timeout,
-                       jsErrCode *errCode)
+_fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpleFetch)
 {
     natsStatus      s       = NATS_OK;
     natsMsg         **msgs  = NULL;
     int             count   = 0;
+    int             batch   = 0;
     natsConnection  *nc     = NULL;
     const char      *subj   = NULL;
     const char      *rply   = NULL;
     int             pmc     = 0;
     char            buffer[64];
     natsBuffer      buf;
-    int64_t         start;
-
-    if (errCode != NULL)
-        *errCode = 0;
+    int64_t         start    = 0;
+    int64_t         deadline = 0;
+    int64_t         timeout  = 0;
+    int             size     = 0;
+    bool            sendReq  = true;
+    jsSub           *jsi     = NULL;
+    natsMsg         *mhMsg   = NULL;
+    char            *reqSubj = NULL;
+    bool            noWait;
 
     if (list == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     memset(list, 0, sizeof(natsMsgList));
 
-    if ((sub == NULL) || (batch <= 0))
+    if ((sub == NULL) || (req == NULL) || (req->Batch <= 0) || (req->MaxBytes < 0))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if (timeout <= 0)
+    if (!req->NoWait && req->Expires <= 0)
         return nats_setDefaultError(NATS_INVALID_TIMEOUT);
 
     natsSub_Lock(sub);
-    if ((sub->jsi == NULL) || !sub->jsi->pull)
+    jsi = sub->jsi;
+    if ((jsi == NULL) || !jsi->pull)
     {
         natsSub_Unlock(sub);
         return nats_setError(NATS_INVALID_SUBSCRIPTION, "%s", jsErrNotAPullSubscription);
     }
-    msgs = (natsMsg**) NATS_CALLOC(batch, sizeof(natsMsg*));
+    if (jsi->inFetch)
+    {
+        natsSub_Unlock(sub);
+        return nats_setError(NATS_ERR, "%s", jsErrConcurrentFetchNotAllowed);
+    }
+    msgs = (natsMsg**) NATS_CALLOC(req->Batch, sizeof(natsMsg*));
     if (msgs == NULL)
     {
         natsSub_Unlock(sub);
@@ -1539,16 +1840,46 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
     }
     natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
     nc   = sub->conn;
-    rply = (const char*) sub->subject;
-    subj = sub->jsi->nxtMsgSubj;
+    subj = jsi->nxtMsgSubj;
     pmc  = (sub->msgList.msgs > 0);
+    jsi->inFetch = true;
+    jsi->fetchID++;
+    if (nats_asprintf(&reqSubj, "%.*s%" PRIu64, (int) strlen(sub->subject)-1, sub->subject, jsi->fetchID) < 0)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    else
+        rply = (const char*) reqSubj;
+    if ((s == NATS_OK) && req->Heartbeat)
+    {
+        int64_t hbi = req->Heartbeat / 1000000;
+        sub->refs++;
+        if (jsi->hbTimer == NULL)
+        {
+            s = natsMsg_create(&jsi->mhMsg, NULL, 0, NULL, 0, NULL, 0, -1);
+            if (s == NATS_OK)
+            {
+                natsMsg_setNoDestroy(jsi->mhMsg);
+                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi*2, (void*) sub);
+            }
+            if (s != NATS_OK)
+                sub->refs--;
+        }
+        else
+            natsTimer_Reset(jsi->hbTimer, hbi);
+
+        mhMsg = jsi->mhMsg;
+    }
     natsSub_Unlock(sub);
 
-    start = nats_Now();
+    if (req->Expires > 0)
+    {
+        start = nats_Now();
+        timeout = req->Expires / (int64_t) 1E6;
+        deadline = start + timeout;
+    }
 
     // First, if there are already pending messages in the internal sub,
     // then get as much messages as we can (but not more than the batch).
-    while (pmc && (s == NATS_OK) && (count < batch))
+    while (pmc && (s == NATS_OK) && (count < req->Batch) && ((req->MaxBytes == 0) || (size < req->MaxBytes)))
     {
         natsMsg *msg  = NULL;
         bool    usrMsg= false;
@@ -1557,66 +1888,78 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
         // but will not wait (and return NATS_TIMEOUT without updating
         // the error stack) if there are no messages.
         s = natsSub_nextMsg(&msg, sub, 0, true);
+        if (s == NATS_TIMEOUT)
+        {
+            s = NATS_OK;
+            break;
+        }
         if (s == NATS_OK)
         {
-            // Here we care only about user messages.
-            s = _checkMsg(msg, false, &usrMsg, errCode);
+            // Here we care only about user messages. We don't need to pass
+            // the request subject since it is not even checked in this case.
+            s = _checkMsg(msg, false, &usrMsg, mhMsg, NULL);
             if ((s == NATS_OK) && usrMsg)
+            {
                 msgs[count++] = msg;
+                size += msg->wsz;
+            }
             else
                 natsMsg_Destroy(msg);
         }
     }
-
-    // If we have OK or TIMEOUT and not all messages, we will send a fetch
-    // request to the server.
-    if (((s == NATS_OK) || (s == NATS_TIMEOUT)) && (count != batch))
+    if (s == NATS_OK)
     {
-        bool sendReq  = true;
-        bool doNoWait = (batch-count > 1 ? true : false);
+        // If we come from natsSubscription_Fetch() (simpleFetch is true), then
+        // we decide on the NoWait value.
+        if (simpleFetch)
+            noWait = (req->Batch - count > 1 ? true : false);
+        else
+            noWait = req->NoWait;
+    }
 
-        // Reset status in case we entered with timeout
-        s = NATS_OK;
+    batch = req->Batch;
+    // If we have OK and not all messages, we will send a fetch
+    // request to the server.
+    while ((s == NATS_OK) && (count != batch) && ((req->MaxBytes == 0) || (size < req->MaxBytes)))
+    {
+        natsMsg *msg    = NULL;
+        bool    usrMsg  = false;
 
-        // Now wait for messages or a 404 saying that there are no more.
-        while ((s == NATS_OK) && (count < batch))
+        if (req->Expires > 0)
         {
-            natsMsg *msg    = NULL;
-            bool    usrMsg  = false;
-
-            timeout -= (nats_Now()-start);
+            timeout = deadline - nats_Now();
             if (timeout <= 0)
                 s = NATS_TIMEOUT;
+        }
 
-            if ((s == NATS_OK) && sendReq)
+        if ((s == NATS_OK) && sendReq)
+        {
+            sendReq = false;
+            req->Batch = req->Batch - count;
+            req->Expires = NATS_MILLIS_TO_NANOS(timeout);
+            req->NoWait = noWait;
+            s = _sendPullRequest(nc, subj, rply, &buf, req);
+        }
+        IFOK(s, natsSub_nextMsg(&msg, sub, timeout, true));
+        if (s == NATS_OK)
+        {
+            s = _checkMsg(msg, true, &usrMsg, mhMsg, rply);
+            if ((s == NATS_OK) && usrMsg)
             {
-                sendReq = false;
-                s = _sendPullRequest(nc, subj, rply, &buf, batch-count, timeout, doNoWait);
+                msgs[count++] = msg;
+                size += msg->wsz;
             }
-            IFOK(s, natsSub_nextMsg(&msg, sub, timeout, true));
-            if (s == NATS_OK)
+            else
             {
-                s = _checkMsg(msg, true, &usrMsg, errCode);
-                if ((s == NATS_OK) && usrMsg)
-                    msgs[count++] = msg;
-                else
+                natsMsg_Destroy(msg);
+                // If we come from "simpleFetch" and we have a 404 for
+                // the noWait request and have not collected any message,
+                // then resend the request and ask to wait this time.
+                if (simpleFetch && noWait && (s == NATS_NOT_FOUND) && (count == 0))
                 {
-                    natsMsg_Destroy(msg);
-                    // If we have a 404 for our "no_wait" request and have
-                    // not collected any message, then resend request to
-                    // wait this time.
-                    if (doNoWait && (s == NATS_NOT_FOUND) && (count == 0))
-                    {
-                        s        = NATS_OK;
-                        doNoWait = false;
-                        sendReq  = true;
-                    }
-                    else if ((s == NATS_TIMEOUT) && (count == 0))
-                    {
-                        // If we get a 408, we will bail if we already collected some
-                        // messages, otherwise ignore and go back calling nextMsg.
-                        s = NATS_OK;
-                    }
+                    s        = NATS_OK;
+                    noWait   = false;
+                    sendReq  = true;
                 }
             }
         }
@@ -1631,17 +1974,63 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
         // If there was an error, we need to clear the error stack,
         // since we return NATS_OK.
         if (s != NATS_OK)
+        {
             nats_clearLastError();
+            s = NATS_OK;
+        }
 
         // Update the list with what we have collected.
         list->Msgs = msgs;
-        *(int*)&(list->Count) = count;
-
-        return NATS_OK;
+        list->Count = count;
     }
 
-    NATS_FREE(msgs);
+    if (s != NATS_OK)
+        NATS_FREE(msgs);
 
+    natsSub_Lock(sub);
+    jsi->inFetch = false;
+    if (req->Heartbeat && (jsi->hbTimer != NULL))
+        natsTimer_Stop(jsi->hbTimer);
+    natsSub_Unlock(sub);
+
+    NATS_FREE(reqSubj);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+jsFetchRequest_Init(jsFetchRequest *request)
+{
+    if (request == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    memset(request, 0, sizeof(jsFetchRequest));
+    return NATS_OK;
+}
+
+natsStatus
+natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int64_t timeout,
+                       jsErrCode *errCode)
+{
+    natsStatus      s;
+    jsFetchRequest  req;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    jsFetchRequest_Init(&req);
+    req.Batch = batch;
+    req.Expires = NATS_MILLIS_TO_NANOS(timeout);
+    s = _fetch(list, sub, &req, true);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsSubscription_FetchRequest(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req)
+{
+    natsStatus      s;
+
+    s = _fetch(list, sub, req, false);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -1652,22 +2041,56 @@ _hbTimerFired(natsTimer *timer, void* closure)
     jsSub               *jsi = sub->jsi;
     bool                alert= false;
     natsConnection      *nc  = NULL;
+    bool                oc   = false;
+    natsStatus          s    = NATS_OK;
 
-    natsSubAndLdw_Lock(sub);
+    natsSub_Lock(sub);
     alert = !jsi->active;
+    oc = jsi->ordered;
     jsi->active = false;
+    if (alert && jsi->pull)
+    {
+        // If there are messages pending then we can't really consider
+        // that we missed hearbeats. Wait for those to be processed and
+        // we will check missed HBs again.
+        if (sub->msgList.msgs == 0)
+        {
+            sub->msgList.msgs++;
+            sub->msgList.head = jsi->mhMsg;
+            sub->msgList.tail = jsi->mhMsg;
+            sub->msgList.bytes = natsMsg_dataAndHdrLen(jsi->mhMsg);
+            natsCondition_Signal(sub->cond);
+            natsTimer_Stop(timer);
+        }
+        natsSub_Unlock(sub);
+        return;
+    }
     nc = sub->conn;
-    natsSubAndLdw_Unlock(sub);
+    natsSub_Unlock(sub);
 
     if (!alert)
         return;
 
+    // For ordered consumers, we will need to reset
+    if (oc)
+    {
+        natsSub_Lock(sub);
+        if (!sub->closed)
+        {
+            // If we fail in that call, we will report to async err callback
+            // (if one is specified).
+            s = jsSub_resetOrderedConsumer(sub, sub->jsi->sseq+1);
+        }
+        natsSub_Unlock(sub);
+    }
+
     natsConn_Lock(nc);
-    // We did create the timer only knowing that there was a async err
-    // handler, but check anyway in case we decide to have timer set
-    // regardless.
-    if (nc->opts->asyncErrCb != NULL)
-        natsAsyncCb_PostErrHandler(nc, sub, NATS_MISSED_HEARTBEAT, NULL);
+    // Even if we have called resetOrderedConsumer, we will post something
+    // to the async error callback, either "missed heartbeats", or the error
+    // that occurred trying to do the reset.
+    if (s == NATS_OK)
+        s = NATS_MISSED_HEARTBEAT;
+    natsAsyncCb_PostErrHandler(nc, sub, s, NULL);
     natsConn_Unlock(nc);
 }
 
@@ -1724,6 +2147,9 @@ _checkConfig(jsConsumerConfig *s, jsConsumerConfig *u)
     if (u->MaxDeliver > 0 && u->MaxDeliver != s->MaxDeliver)
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max deliver", u->MaxDeliver, s->MaxDeliver);
 
+    if (u->BackOffLen > 0 && u->BackOffLen != s->BackOffLen)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%d" CFG_CHECK_ERR_END "%d", "backoff list length", u->BackOffLen, s->BackOffLen);
+
     if ((int) u->ReplayPolicy >= 0 && u->ReplayPolicy != s->ReplayPolicy)
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%d" CFG_CHECK_ERR_END "%d", "replay policy", u->ReplayPolicy, s->ReplayPolicy);
 
@@ -1737,9 +2163,7 @@ _checkConfig(jsConsumerConfig *s, jsConsumerConfig *u)
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max waiting", u->MaxWaiting, s->MaxWaiting);
 
     if (u->MaxAckPending > 0 && u->MaxAckPending != s->MaxAckPending)
-    {
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max ack pending", u->MaxAckPending, s->MaxAckPending);
-    }
 
     // For flow control, we want to fail if the user explicit wanted it, but
     // it is not set in the existing consumer. If it is not asked by the user,
@@ -1750,29 +2174,93 @@ _checkConfig(jsConsumerConfig *s, jsConsumerConfig *u)
     if (u->Heartbeat > 0 && u->Heartbeat != s->Heartbeat)
         return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "heartbeat", u->Heartbeat, s->Heartbeat);
 
+    if (u->HeadersOnly != s->HeadersOnly)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%d" CFG_CHECK_ERR_END "%d", "headers only", u->HeadersOnly, s->HeadersOnly);
+
+    if (u->MaxRequestBatch > 0 && u->MaxRequestBatch != s->MaxRequestBatch)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max request batch", u->Heartbeat, s->Heartbeat);
+
+    if (u->MaxRequestExpires > 0 && u->MaxRequestExpires != s->MaxRequestExpires)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "max request expires", u->MaxRequestExpires, s->MaxRequestExpires);
+
+    if (u->InactiveThreshold > 0 && u->InactiveThreshold != s->InactiveThreshold)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "inactive threshold", u->InactiveThreshold, s->InactiveThreshold);
+
+    if (u->Replicas > 0 && u->Replicas != s->Replicas)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%" PRId64 CFG_CHECK_ERR_END "%" PRId64, "replicas", u->Replicas, s->Replicas);
+
+    if (u->MemoryStorage != s->MemoryStorage)
+        return nats_setError(NATS_ERR, CFG_CHECK_ERR_START "%d" CFG_CHECK_ERR_END "%d", "memory storage", u->MemoryStorage, s->MemoryStorage);
+
     return NATS_OK;
 }
 
 static natsStatus
 _processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig *userCfg,
-                 bool isPullMode, const char *subj, const char *queue)
+                 bool isPullMode, const char **subjects, int numSubjects, const char *queue)
 {
-    bool                dlvSubjEmpty = false;
-    jsConsumerConfig    *ccfg        = info->Config;
-    const char          *dg          = NULL;
-    natsStatus          s            = NATS_OK;
+    bool dlvSubjEmpty = false;
+    jsConsumerConfig *ccfg = info->Config;
+    const char *dg = NULL;
+    natsStatus s = NATS_OK;
+    const char *stackFilterSubject[] = {ccfg->FilterSubject};
+    const char **filterSubjects = stackFilterSubject;
+    int filterSubjectsLen = 1;
+    int incoming, existing;
 
     *dlvSubject = NULL;
-
-    // Make sure this new subject matches or is a subset.
-    if (!nats_IsStringEmpty(subj)
-        && !nats_IsStringEmpty(ccfg->FilterSubject)
-        && (strcmp(subj, ccfg->FilterSubject) != 0))
+    // Always represent the consumer's filter subjects as a list, to match
+    // uniformly against the incoming subject list. Consider lists of 1 empty
+    // subject empty lists.
+    if (ccfg->FilterSubjectsLen > 0)
     {
-        return nats_setError(NATS_ERR, "subject '%s' does not match consumer filter subject '%s'",
-                             subj, ccfg->FilterSubject);
+        filterSubjects = ccfg->FilterSubjects;
+        filterSubjectsLen = ccfg->FilterSubjectsLen;
+    }
+    if ((filterSubjectsLen == 1) && nats_IsStringEmpty(filterSubjects[0]))
+    {
+        filterSubjects = NULL;
+        filterSubjectsLen = 0;
+    }
+    if ((numSubjects == 1) && nats_IsStringEmpty(subjects[0]))
+    {
+        subjects = NULL;
+        numSubjects = 0;
     }
 
+    // Match the subjects against the consumer's filter subjects.
+    if (numSubjects > 0 && filterSubjectsLen > 0)
+    {
+        // If the consumer has filter subject(s), then the subject(s) must match.
+        bool matches = true;
+
+        // TODO - This is N**2, but we don't expect a large number of subjects.
+        for (incoming = 0; incoming < numSubjects; incoming++)
+        {
+            bool found = false;
+            for (existing = 0; existing < filterSubjectsLen; existing++)
+            {
+                if (strcmp(subjects[incoming], filterSubjects[existing]) == 0)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                matches = false;
+                break;
+            }
+        }
+
+        if (!matches)
+        {
+            if (numSubjects == 1 && filterSubjectsLen == 1)
+                return nats_setError(NATS_ERR, "subject '%s' does not match consumer filter subject '%s'.", subjects[0], filterSubjects[0]);
+            else
+                return nats_setError(NATS_ERR, "%d subjects do not match any consumer filter subjects.", numSubjects);
+        }
+    }
     // Check that if user wants to create a queue sub,
     // the consumer has no HB nor FC.
     queue = (nats_IsStringEmpty(queue) ? NULL : queue);
@@ -1852,15 +2340,27 @@ _processConsInfo(const char **dlvSubject, jsConsumerInfo *info, jsConsumerConfig
 }
 
 natsStatus
-js_checkDurName(const char *dur)
+js_checkConsName(const char *cons, bool isDurable)
 {
-    if (strchr(dur, '.') != NULL)
-        return nats_setError(NATS_INVALID_ARG, "invalid durable name '%s' (cannot contain '.')", dur);
+    int i;
+
+    if (nats_IsStringEmpty(cons))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrConsumerNameRequired);
+
+    for (i=0; i<(int)strlen(cons); i++)
+    {
+        char c = cons[i];
+        if ((c == '.') || (c == ' ') || (c == '*') || (c == '>'))
+        {
+            return nats_setError(NATS_INVALID_ARG, "%s '%s' (cannot contain '%c')",
+                (isDurable ? jsErrInvalidDurableName : jsErrInvalidConsumerName), cons, c);
+        }
+    }
     return NATS_OK;
 }
 
 static natsStatus
-_subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const char *pullDurable,
+_subscribeMulti(natsSubscription **new_sub, jsCtx *js, const char **subjects, int numSubjects, const char *pullDurable,
            natsMsgHandler usrCB, void *usrCBClosure, bool isPullMode,
            jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {
@@ -1884,10 +2384,12 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     natsMsgHandler      cb          = NULL;
     void                *cbClosure  = NULL;
     natsInbox           *inbox      = NULL;
+    int64_t             maxap       = 0;
     jsOptions           jo;
     jsSubOptions        o;
     jsConsumerConfig    cfgStack;
     jsConsumerConfig    *cfg = NULL;
+    jsConsumerConfig    *ocCfg = NULL;
 
     if ((new_sub == NULL) || (js == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1903,6 +2405,11 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
         jsSubOptions_Init(&o);
         opts = &o;
     }
+    if (opts->Config.InactiveThreshold < 0)
+        return nats_setError(NATS_INVALID_ARG,
+                             "invalid InactiveThreshold value (%d), needs to be greater or equal to 0",
+                             (int) opts->Config.InactiveThreshold);
+
     // If user configures optional start sequence or time, the deliver policy
     // need to be updated accordingly. Server will return error if user tries to have both set.
     if (opts->Config.OptStartSeq > 0)
@@ -1916,7 +2423,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     consumer = opts->Consumer;
     consBound= (!nats_IsStringEmpty(stream) && !nats_IsStringEmpty(consumer));
 
-    if (nats_IsStringEmpty(subject) && !consBound)
+    if (((numSubjects <= 0) || nats_IsStringEmpty(subjects[0])) && !consBound)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     // Do some quick checks here for ordered consumers.
@@ -1961,7 +2468,7 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
     // If a durable name is specified, check that it is valid
     if (!nats_IsStringEmpty(durable))
     {
-        if ((s = js_checkDurName(durable)) != NATS_OK)
+        if ((s = js_checkConsName(durable, true)) != NATS_OK)
             return NATS_UPDATE_ERR_STACK(s);
     }
 
@@ -1973,9 +2480,10 @@ _subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const cha
 
     // Find the stream mapped to the subject if not bound to a stream already,
     // that is, if user did not provide a `Stream` name through options).
-    if (nats_IsStringEmpty(stream))
+    if (nats_IsStringEmpty(stream) && numSubjects > 0)
     {
-        s = _lookupStreamBySubject(&stream, nc, subject, &jo, errCode);
+        // Use the first subject to find the stream.
+        s = _lookupStreamBySubject(&stream, nc, subjects[0], &jo, errCode);
         if (s != NATS_OK)
             goto END;
 
@@ -1998,12 +2506,13 @@ PROCESS_INFO:
             s = nats_setError(NATS_ERR, "%s", "no configuration in consumer info");
             goto END;
         }
-        s = _processConsInfo(&deliver, info, &(opts->Config), isPullMode, subject, opts->Queue);
+        s = _processConsInfo(&deliver, info, &(opts->Config), isPullMode, subjects, numSubjects, opts->Queue);
         if (s != NATS_OK)
             goto END;
 
         // Capture the HB interval (convert in millsecond since Go duration is in nanos)
         hbi = info->Config->Heartbeat / 1000000;
+        maxap = info->Config->MaxAckPending;
     }
     else if (((s != NATS_OK) && (s != NATS_NOT_FOUND)) || ((s == NATS_NOT_FOUND) && consBound))
     {
@@ -2031,16 +2540,35 @@ PROCESS_INFO:
         }
 
         // Do filtering always, server will clear as needed.
-        cfg->FilterSubject = subject;
+        if (numSubjects == 1)
+        {
+            cfg->FilterSubject = subjects[0];
+        }
+        else
+        {
+            cfg->FilterSubjects = subjects;
+            cfg->FilterSubjectsLen = numSubjects;
+        }
 
         if (opts->Ordered)
         {
+            const char *tmp = NULL;
+
             cfg->FlowControl = true;
             cfg->AckPolicy   = js_AckNone;
             cfg->MaxDeliver  = 1;
-            cfg->AckWait     = (24*60*60)*(int64_t)1E9; // Just set to something known, not utilized.
+            cfg->AckWait     = NATS_SECONDS_TO_NANOS(24*60*60); // Just set to something known, not utilized.
             if (opts->Config.Heartbeat <= 0)
                 cfg->Heartbeat = jsOrderedHBInterval;
+            cfg->MemoryStorage = true;
+            cfg->Replicas      = 1;
+
+            // Let's clone without the delivery subject because it will need
+            // to be set to something new when recreating it anyway.
+            tmp = cfg->DeliverSubject;
+            cfg->DeliverSubject = NULL;
+            s = js_cloneConsumerConfig(cfg, &ocCfg);
+            cfg->DeliverSubject = tmp;
         }
         else
         {
@@ -2050,11 +2578,6 @@ PROCESS_INFO:
 
             // Set DeliverGroup to queue name, possibly NULL
             cfg->DeliverGroup = opts->Queue;
-
-            // If we have acks at all and the MaxAckPending is not set go ahead
-            // and set to the internal max.
-            if ((cfg->MaxAckPending == 0) && (cfg->AckPolicy != js_AckNone))
-                cfg->MaxAckPending = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
         }
 
         // Capture the HB interval (convert in millsecond since Go duration is in nanos)
@@ -2069,22 +2592,22 @@ PROCESS_INFO:
             s = nats_setDefaultError(NATS_NO_MEMORY);
         else
         {
-            if (isPullMode)
+            if (isPullMode && !nats_IsStringEmpty(consumer))
             {
                 if (nats_asprintf(&(jsi->nxtMsgSubj), jsApiRequestNextT, jo.Prefix, stream, consumer) < 0)
                     s = nats_setDefaultError(NATS_NO_MEMORY);
             }
             IF_OK_DUP_STRING(s, jsi->stream, stream);
-            if ((s == NATS_OK) && (opts->Ordered))
-                DUP_STRING(s, jsi->fsubj, cfg->FilterSubject);
+            IFOK(s, nats_formatStringArray(&jsi->psubj, subjects, numSubjects));
             if (s == NATS_OK)
             {
                 jsi->js     = js;
                 jsi->hbi    = hbi;
                 jsi->pull   = isPullMode;
                 jsi->ordered= opts->Ordered;
+                jsi->ocCfg  = ocCfg;
                 jsi->dseq   = 1;
-                jsi->ackNone= opts->Config.AckPolicy == js_AckNone;
+                jsi->ackNone= (opts->Config.AckPolicy == js_AckNone || opts->Ordered);
                 js_retain(js);
 
                 if ((usrCB != NULL) && !opts->ManualAck && !jsi->ackNone)
@@ -2106,36 +2629,34 @@ PROCESS_INFO:
     }
     if (s == NATS_OK)
     {
+        char *pullWCInbox = NULL;
+
         if (isPullMode)
         {
+            // Create a wildcard inbox.
             s = natsConn_newInbox(nc, &inbox);
-            deliver = (const char*) inbox;
+            if (s == NATS_OK)
+            {
+                if (nats_asprintf(&pullWCInbox, "%s.*", (const char*) inbox) < 0)
+                    s = nats_setDefaultError(NATS_NO_MEMORY);
+            }
+            if (s == NATS_OK)
+                deliver = (const char*) pullWCInbox;
         }
         // Create the NATS subscription on given deliver subject. Note that
         // cb/cbClosure will be NULL for sync or pull subscriptions.
         IFOK(s, natsConn_subscribeImpl(&sub, nc, true, deliver,
                                        opts->Queue, 0, cb, cbClosure, false, jsi));
-        if ((s == NATS_OK) && (hbi > 0))
+        if ((s == NATS_OK) && (hbi > 0) && !isPullMode)
         {
-            bool ct = false; // create timer or not.
-
-            // Check to see if it is even worth creating a timer to check
-            // on missed heartbeats, since the way to notify the user will be
-            // through async callback.
-            natsConn_Lock(nc);
-            ct = (nc->opts->asyncErrCb != NULL ? true : false);
-            natsConn_Unlock(nc);
-
-            if (ct)
-            {
-                natsSub_Lock(sub);
-                sub->refs++;
-                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi*2, (void*) sub);
-                if (s != NATS_OK)
-                    sub->refs--;
-                natsSub_Unlock(sub);
-            }
+            natsSub_Lock(sub);
+            sub->refs++;
+            s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi*2, (void*) sub);
+            if (s != NATS_OK)
+                sub->refs--;
+            natsSub_Unlock(sub);
         }
+        NATS_FREE(pullWCInbox);
     }
     if ((s == NATS_OK) && create)
     {
@@ -2166,13 +2687,24 @@ PROCESS_INFO:
         }
         else
         {
+            maxap = info->Config->MaxAckPending;
             natsSub_Lock(sub);
             jsi->dc = true;
+            jsi->pending = info->NumPending + info->Delivered.Consumer;
             // There may be a race in the case of an ordered consumer where by this
             // time, the consumer has been recreated (jsResetOrderedConsumer). So
             // set only if jsi->consumer is NULL!
             if (jsi->consumer == NULL)
+            {
                 DUP_STRING(s, jsi->consumer, info->Name);
+                if (s == NATS_OK)
+                {
+                    NATS_FREE(jsi->nxtMsgSubj);
+                    jsi->nxtMsgSubj = NULL;
+                    if (nats_asprintf(&(jsi->nxtMsgSubj), jsApiRequestNextT, jo.Prefix, stream, jsi->consumer) < 0)
+                        s = nats_setDefaultError(NATS_NO_MEMORY);
+                }
+            }
             natsSub_Unlock(sub);
         }
     }
@@ -2180,6 +2712,21 @@ PROCESS_INFO:
 END:
     if (s == NATS_OK)
     {
+        int64_t ml = 0;
+        int64_t bl = 0;
+
+        natsSub_Lock(sub);
+        ml = (int64_t) sub->msgsLimit;
+        bl = (int64_t) sub->bytesLimit;
+        natsSub_Unlock(sub);
+        if (maxap > ml)
+        {
+            ml = maxap;
+            if (maxap*1024*1024 > bl)
+                bl = maxap*1024*1024;
+
+            natsSubscription_SetPendingLimits(sub, (int) ml, (int) bl);
+        }
         *new_sub = sub;
     }
     else
@@ -2204,6 +2751,26 @@ END:
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_subscribe(natsSubscription **new_sub, jsCtx *js, const char *subject, const char *pullDurable,
+           natsMsgHandler usrCB, void *usrCBClosure, bool isPullMode,
+           jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s = NATS_OK;
+    const char *singleSubject[] = {subject};
+    int numSubjects = 1;
+    const char **subjects = singleSubject;
+
+    if (nats_IsStringEmpty(subject))
+    {
+        numSubjects = 0;
+        subjects = NULL;
+    }
+
+    s = _subscribeMulti(new_sub, js, subjects, numSubjects, pullDurable, usrCB, usrCBClosure, isPullMode, jsOpts, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 natsStatus
 js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
              natsMsgHandler cb, void *cbClosure,
@@ -2222,6 +2789,23 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
 }
 
 natsStatus
+js_SubscribeMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
+                  natsMsgHandler cb, void *cbClosure,
+                  jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if (cb == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _subscribeMulti(sub, js, subjects, numSubjects, NULL, cb, cbClosure, false, jsOpts, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
                  jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {
@@ -2235,6 +2819,19 @@ js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
 }
 
 natsStatus
+js_SubscribeSyncMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
+                    jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    s = _subscribeMulti(sub, js, subjects, numSubjects, NULL, NULL, NULL, false, jsOpts, opts, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject, const char *durable,
                  jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {
@@ -2243,34 +2840,31 @@ js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject, const c
     if (errCode != NULL)
         *errCode = 0;
 
-    if (nats_IsStringEmpty(durable))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrDurRequired);
-
-    // Check for invalid ack policy
-    if (opts != NULL)
-    {
-        jsAckPolicy p = (opts->Config.AckPolicy);
-
-        if ((p == js_AckNone) || (p == js_AckAll))
-        {
-            const char *ap = (p == js_AckNone ? jsAckNoneStr : jsAckAllStr);
-            return nats_setError(NATS_INVALID_ARG,
-                                 "invalid ack mode '%s' for pull consumers", ap);
-        }
-    }
-
     s = _subscribe(sub, js, subject, durable, NULL, NULL, true, jsOpts, opts, errCode);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+typedef struct __ackOpts
+{
+    const char  *ackType;
+    bool        inProgress;
+    bool        sync;
+    int64_t     nakDelay;
+
+} _ackOpts;
+
 static natsStatus
-_ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool inProgress, bool sync, jsErrCode *errCode)
+_ackMsg(natsMsg *msg, jsOptions *opts, _ackOpts *o, jsErrCode *errCode)
 {
     natsSubscription    *sub = NULL;
     natsConnection      *nc  = NULL;
     jsCtx               *js  = NULL;
     jsSub               *jsi = NULL;
     natsStatus          s    = NATS_OK;
+    const char          *body= o->ackType;
+    bool                sync = o->sync;
+    int64_t             wait = 0;
+    char                tmp[64];
 
     if (msg == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -2290,10 +2884,21 @@ _ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool inProgress, boo
     js = jsi->js;
     nc = sub->conn;
 
+    // If option with Wait is specified, transform all Acks as sync operation.
+    if ((opts != NULL) && (opts->Wait > 0))
+    {
+        wait = opts->Wait;
+        sync = true;
+    }
+    if (o->nakDelay > 0)
+    {
+        int64_t v = NATS_MILLIS_TO_NANOS(o->nakDelay);
+        snprintf(tmp, sizeof(tmp), "%s {\"delay\":%" PRId64 "}", o->ackType, v);
+        body = (const char*) tmp;
+    }
     if (sync)
     {
         natsMsg *rply   = NULL;
-        int64_t wait    = (opts != NULL ? opts->Wait : 0);
 
         if (wait == 0)
         {
@@ -2303,15 +2908,15 @@ _ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool inProgress, boo
             wait = js->opts.Wait;
             js_unlock(js);
         }
-        IFOK_JSR(s, natsConnection_RequestString(&rply, nc, msg->reply, ackType, wait));
+        IFOK_JSR(s, natsConnection_RequestString(&rply, nc, msg->reply, body, wait));
         natsMsg_Destroy(rply);
     }
     else
     {
-        s = natsConnection_PublishString(nc, msg->reply, ackType);
+        s = natsConnection_PublishString(nc, msg->reply, body);
     }
     // Indicate that we have ack'ed the message
-    if ((s == NATS_OK) && !inProgress)
+    if ((s == NATS_OK) && !o->inProgress)
         natsMsg_setAcked(msg);
 
     return NATS_UPDATE_ERR_STACK(s);
@@ -2320,31 +2925,61 @@ _ackMsg(natsMsg *msg, jsOptions *opts, const char *ackType, bool inProgress, boo
 natsStatus
 natsMsg_Ack(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckAck, false, false, NULL);
+    natsStatus  s;
+    _ackOpts    o = {jsAckAck, false, false, 0};
+
+    s = _ackMsg(msg, opts, &o, NULL);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsMsg_AckSync(natsMsg *msg, jsOptions *opts, jsErrCode *errCode)
 {
-    return _ackMsg(msg, opts, jsAckAck, false, true, errCode);
+    natsStatus  s;
+    _ackOpts    o = {jsAckAck, false, true, 0};
+
+    s = _ackMsg(msg, opts, &o, errCode);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsMsg_Nak(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckNak, false, false, NULL);
+    natsStatus  s;
+    _ackOpts    o = {jsAckNak, false, false, 0};
+
+    s = _ackMsg(msg, opts, &o, NULL);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsMsg_NakWithDelay(natsMsg *msg, int64_t delay, jsOptions *opts)
+{
+    natsStatus  s;
+    _ackOpts    o = {jsAckNak, false, false, delay};
+
+    s = _ackMsg(msg, opts, &o, NULL);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsMsg_InProgress(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckInProgress, true, false, NULL);
+    natsStatus  s;
+    _ackOpts    o = {jsAckInProgress, true, false, 0};
+
+    s = _ackMsg(msg, opts, &o, NULL);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 natsMsg_Term(natsMsg *msg, jsOptions *opts)
 {
-    return _ackMsg(msg, opts, jsAckTerm, false, false, NULL);
+    natsStatus  s;
+    _ackOpts    o = {jsAckTerm, false, false, 0};
+
+    s = _ackMsg(msg, opts, &o, NULL);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
@@ -2419,7 +3054,7 @@ natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType)
     if (*p != ' ')
         return false;
 
-    while ((*p != '\0') && isspace(*p))
+    while ((*p != '\0') && isspace((unsigned char) *p))
         p++;
 
     if ((*p == '\r') || (*p == '\n') || (*p == '\0'))
@@ -2430,10 +3065,10 @@ natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType)
 
     p += HDR_STATUS_LEN;
 
-    if (!isspace(*p))
+    if (!isspace((unsigned char) *p))
         return false;
 
-    while (isspace(*p))
+    while (isspace((unsigned char) *p))
         p++;
 
     if (strstr(p, "Idle") == p)
@@ -2447,13 +3082,13 @@ natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType)
 // Update and replace sid.
 // Lock should be held on entry but will be unlocked to prevent lock inversion.
 int64_t
-applyNewSID(natsSubscription *sub, natsMutex *mu)
+applyNewSID(natsSubscription *sub)
 {
     int64_t         osid = 0;
     int64_t         nsid = 0;
     natsConnection  *nc  = sub->conn;
 
-    natsMutex_Unlock(mu);
+    natsSub_Unlock(sub);
 
     natsMutex_Lock(nc->subsMu);
     osid = sub->sid;
@@ -2464,7 +3099,7 @@ applyNewSID(natsSubscription *sub, natsMutex *mu)
     natsHash_Set(nc->subs, nsid, sub, NULL);
     natsMutex_Unlock(nc->subsMu);
 
-    natsMutex_Lock(mu);
+    natsSub_Lock(sub);
     sub->sid = nsid;
     return osid;
 }
@@ -2478,8 +3113,11 @@ _recreateOrderedCons(void *closure)
     natsThread          *t   = NULL;
     jsSub               *jsi = NULL;
     jsConsumerInfo      *ci  = NULL;
-    jsConsumerConfig    cc;
+    jsConsumerConfig    *cc  = NULL;
     natsStatus          s;
+
+    // Note: if anything fail here, the reset/recreate of the ordered consumer
+    // will happen again based on the missed HB timer.
 
     // Unsubscribe and subscribe with new inbox and sid.
     // Remap a new low level sub into this sub since its client accessible.
@@ -2499,56 +3137,55 @@ _recreateOrderedCons(void *closure)
 
     if (!oci->done && (s == NATS_OK))
     {
-        natsSubAndLdw_Lock(sub);
+        natsSub_Lock(sub);
         t = oci->thread;
         jsi = sub->jsi;
-        // Reset some items in jsi.
-        jsi->dseq = 1;
-        NATS_FREE(jsi->cmeta);
-        jsi->cmeta = NULL;
-        NATS_FREE(jsi->fcReply);
-        jsi->fcReply = NULL;
-        jsi->fcDelivered = 0;
-        // Create consumer request for starting policy.
-        jsConsumerConfig_Init(&cc);
-        cc.FilterSubject    = jsi->fsubj;
-        cc.FlowControl      = true;
-        cc.AckPolicy        = js_AckNone;
-        cc.MaxDeliver       = 1;
-        cc.AckWait          = (24*60*60)*(int64_t)1E9; // Just set to something known, not utilized.
-        cc.Heartbeat        = jsi->hbi * 1000000;
-        cc.DeliverSubject   = sub->subject;
-        cc.DeliverPolicy    = js_DeliverByStartSequence;
-        cc.OptStartSeq      = oci->sseq;
-        natsSubAndLdw_Unlock(sub);
+        s = js_cloneConsumerConfig(jsi->ocCfg, &cc);
+        natsSub_Unlock(sub);
 
-        s = js_AddConsumer(&ci, jsi->js, jsi->stream, &cc, NULL, NULL);
         if (s == NATS_OK)
         {
-            natsSub_Lock(sub);
-            NATS_FREE(jsi->consumer);
-            jsi->consumer = NULL;
-            DUP_STRING(s, jsi->consumer, ci->Name);
-            natsSub_Unlock(sub);
+            // Create consumer request for starting policy.
+            cc->DeliverSubject = oci->ndlv;
+            cc->DeliverPolicy  = js_DeliverByStartSequence;
+            cc->OptStartSeq    = oci->sseq;
 
-            jsConsumerInfo_Destroy(ci);
+            s = js_AddConsumer(&ci, jsi->js, jsi->stream, cc, NULL, NULL);
+            if (s == NATS_OK)
+            {
+                natsSub_Lock(sub);
+                // Set the consumer name only if the consumer's info delivery subject
+                // matches the subscription's current subject.
+                if (strcmp(ci->Config->DeliverSubject, sub->subject) == 0)
+                {
+                    NATS_FREE(jsi->consumer);
+                    jsi->consumer = NULL;
+                    DUP_STRING(s, jsi->consumer, ci->Name);
+                }
+                natsSub_Unlock(sub);
+
+                jsConsumerInfo_Destroy(ci);
+            }
+
+            // Clear cc->DeliverSubject now before destroying it (since
+            // cc->DeliverSubject points to oci->ndlv (not a copy)
+            cc->DeliverSubject = NULL;
+            js_destroyConsumerConfig(cc);
         }
     }
     if (s != NATS_OK)
     {
+        char tmp[256];
+        const char *lastErr = nats_GetLastError(NULL);
         natsConn_Lock(nc);
-        if (nc->opts->asyncErrCb != NULL)
-        {
-            char tmp[256];
-            snprintf(tmp, sizeof(tmp), "failed recreating ordered consumer: %u (%s)",
-                     s, natsStatus_GetText(s));
-            natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
-        }
+        snprintf(tmp, sizeof(tmp),
+                 "error recreating ordered consumer, will try again: status=%u error=%s",
+                 s, (nats_IsStringEmpty(lastErr) ? natsStatus_GetText(s) : lastErr));
+        natsAsyncCb_PostErrHandler(nc, sub, s, NATS_STRDUP(tmp));
         natsConn_Unlock(nc);
-
-        natsConn_unsubscribe(nc, sub, 0, true, 0);
     }
 
+    NATS_FREE(oci->ndlv);
     NATS_FREE(oci);
     natsThread_Detach(t);
     natsThread_Destroy(t);
@@ -2559,7 +3196,7 @@ _recreateOrderedCons(void *closure)
 // We will create a new consumer and rewire the low level subscription.
 // Lock should be held.
 natsStatus
-jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
+jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq)
 {
     natsStatus          s           = NATS_OK;
     natsConnection      *nc         = sub->conn;
@@ -2568,9 +3205,13 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
     jsOrderedConsInfo   *oci        = NULL;
     int                 max         = 0;
     bool                done        = false;
+    jsSub               *jsi        = sub->jsi;
 
-    if ((sub->jsi == NULL) || (nc == NULL) || sub->closed)
+    if ((jsi == NULL) || (nc == NULL) || sub->closed)
         return NATS_OK;
+
+    // Note: if anything fail here, the reset/recreate of the ordered consumer
+    // will happen again based on the missed HB timer.
 
     // If there was an AUTO_UNSUB, we need to adjust the new value and send
     // an UNSUB for the new sid with new value.
@@ -2579,7 +3220,7 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
         // If we are at or anove sub->max, then we are done with this sub
         // and will send an UNSUB in the _recreateOrderedCons thread function.
         if (sub->jsi->fciseq < sub->max)
-            max = (int)(sub->max - sub->jsi->fciseq);
+            max = (int)(sub->max - jsi->fciseq);
         else
             done = true;
     }
@@ -2590,7 +3231,7 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
         return NATS_UPDATE_ERR_STACK(s);
 
     // Quick unsubscribe. Since we know this is a simple push subscriber we do in place.
-    osid = applyNewSID(sub, mu);
+    osid = applyNewSID(sub);
 
     NATS_FREE(sub->subject);
     sub->subject = (char*) newDeliver;
@@ -2601,15 +3242,24 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
     oci = NATS_CALLOC(1, sizeof(jsOrderedConsInfo));
     if (oci == NULL)
         s = nats_setDefaultError(NATS_NO_MEMORY);
+    else
+        DUP_STRING(s, oci->ndlv, (char*) newDeliver);
 
     if (s == NATS_OK)
     {
+        // Reset some items in jsi.
+        jsi->dseq = 1;
+        NATS_FREE(jsi->fcReply);
+        jsi->fcReply = NULL;
+        jsi->fcDelivered = 0;
+        NATS_FREE(jsi->cmeta);
+        jsi->cmeta = NULL;
+
         oci->osid = osid;
         oci->nsid = sub->sid;
         oci->sseq = sseq;
         oci->nc   = nc;
         oci->sub  = sub;
-        oci->ndlv = (char*) newDeliver;
         oci->max  = max;
         oci->done = done;
         natsSub_retain(sub);
@@ -2621,6 +3271,11 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
             natsSub_release(sub);
         }
     }
+    if ((s != NATS_OK) && (oci != NULL))
+    {
+        NATS_FREE(oci->ndlv);
+        NATS_FREE(oci);
+    }
     return s;
 }
 
@@ -2629,7 +3284,7 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq)
 // The caller has verified that sub.jsi != nil and that this is not a control message.
 // Lock should be held.
 natsStatus
-jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *reset)
+jsSub_checkOrderedMsg(natsSubscription *sub, natsMsg *msg, bool *reset)
 {
     natsStatus  s    = NATS_OK;
     jsSub       *jsi = NULL;
@@ -2650,7 +3305,7 @@ jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *
         if (dseq != jsi->dseq)
         {
             *reset = true;
-            s = jsSub_resetOrderedConsumer(sub, mu, jsi->sseq+1);
+            s = jsSub_resetOrderedConsumer(sub, jsi->sseq+1);
         }
         else
         {

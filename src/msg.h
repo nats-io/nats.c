@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2022 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -41,6 +41,12 @@
 #define natsMsg_isNoDestroy(m)      (((m)->flags &   (1 << 2)) != 0)
 #define natsMsg_clearNoDestroy(m)   ((m)->flags  &= ~(1 << 2))
 
+#define natsMsg_setTimeout(m)       ((m)->flags  |=  (1 << 3))
+#define natsMsg_isTimeout(m)        (((m)->flags &   (1 << 3)) != 0)
+#define natsMsg_clearTimeout(m)     ((m)->flags  &= ~(1 << 3))
+
+#define natsMsg_dataAndHdrLen(m)    ((m)->dataLen + (m)->hdrLen)
+
 struct __natsMsg
 {
     natsGCItem          gc;
@@ -56,6 +62,7 @@ struct __natsMsg
     const char          *data;
     int                 dataLen;
     int                 hdrLen;
+    int                 wsz;
     int                 flags;
     uint64_t            seq;
     int64_t             time;
@@ -97,6 +104,13 @@ natsMsg_create(natsMsg **newMsg,
                const char *subject, int subjLen,
                const char *reply, int replyLen,
                const char *buf, int bufLen, int hdrLen);
+
+natsStatus
+natsMsg_createWithPadding(natsMsg **newMsg,
+                          const char *subject, int subjLen,
+                          const char *reply, int replyLen,
+                          const char *buf, int bufLen, int bufPaddingSize,
+                          int hdrLen);
 
 void
 natsMsg_freeHeaders(natsMsg *msg);

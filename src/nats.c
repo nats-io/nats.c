@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2023 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -123,6 +123,11 @@ typedef struct __natsLib
 
     natsGCList      gc;
 
+    // For micro services code
+    natsMutex *service_callback_mu;
+    // uses `microService*` as the key and the value.
+    natsHash *all_services_to_callback;
+
 } natsLib;
 
 int64_t gLockSpinCount = 2000;
@@ -152,10 +157,10 @@ _finalCleanup(void)
     if (gLib.sslInitialized)
     {
 #if defined(NATS_HAS_TLS)
+#if !defined(NATS_USE_OPENSSL_1_1)
         ERR_free_strings();
         EVP_cleanup();
         CRYPTO_cleanup_all_ex_data();
-#if !defined(NATS_USE_OPENSSL_1_1)
         ERR_remove_thread_state(0);
 #endif
         sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
@@ -332,6 +337,8 @@ _freeLib(void)
     _freeGC();
     _freeDlvWorkers();
     natsNUID_free();
+    natsMutex_Destroy(gLib.service_callback_mu);
+    natsHash_Destroy(gLib.all_services_to_callback);
 
     natsCondition_Destroy(gLib.cond);
 
@@ -763,8 +770,13 @@ _asyncCbsThread(void *arg)
         switch (cb->type)
         {
             case ASYNC_CLOSED:
-               (*(nc->opts->closedCb))(nc, nc->opts->closedCbClosure);
+            {
+                (*(nc->opts->closedCb))(nc, nc->opts->closedCbClosure);
+                if (nc->opts->microClosedCb != NULL)
+                    (*(nc->opts->microClosedCb))(nc, NULL);
                break;
+            }
+
             case ASYNC_DISCONNECTED:
                 (*(nc->opts->disconnectedCb))(nc, nc->opts->disconnectedCbClosure);
                 break;
@@ -784,7 +796,10 @@ _asyncCbsThread(void *arg)
             {
                 if (cb->errTxt != NULL)
                     nats_setErrStatusAndTxt(cb->err, cb->errTxt);
+
                 (*(nc->opts->asyncErrCb))(nc, cb->sub, cb->err, nc->opts->asyncErrCbClosure);
+                if (nc->opts->microAsyncErrCb != NULL)
+                    (*(nc->opts->microAsyncErrCb))(nc, cb->sub, cb->err, NULL);
                 break;
             }
 #if defined(NATS_HAS_STREAMING)
@@ -1048,6 +1063,10 @@ nats_Open(int64_t lockSpinCount)
         if (gLib.dlvWorkers.workers == NULL)
             s = NATS_NO_MEMORY;
     }
+    if (s == NATS_OK)
+        s = natsMutex_Create(&gLib.service_callback_mu);
+    if (s == NATS_OK)
+        s = natsHash_Create(&gLib.all_services_to_callback, 8);
 
     if (s == NATS_OK)
         gLib.initialized = true;
@@ -1625,10 +1644,11 @@ nats_sslInit(void)
         gLib.sslInitialized = true;
 
 #if defined(NATS_HAS_TLS)
+#if !defined(NATS_USE_OPENSSL_1_1)
         // Initialize SSL.
         SSL_library_init();
         SSL_load_error_strings();
-
+#endif
 #endif
         s = natsThreadLocal_CreateKey(&(gLib.sslTLKey), _cleanupThreadSSL);
     }
@@ -1750,7 +1770,7 @@ _deliverMsgs(void *arg)
 
         // Update before checking closed state.
         sub->msgList.msgs--;
-        sub->msgList.bytes -= msg->dataLen;
+        sub->msgList.bytes -= natsMsg_dataAndHdrLen(msg);
 
         // Need to check for closed subscription again here.
         // The subscription could have been unsubscribed from a callback
@@ -1969,13 +1989,13 @@ natsLib_msgDeliveryAssignWorker(natsSubscription *sub)
 }
 
 bool
-natsLib_isLibHandlingMsgDeliveryByDefault()
+natsLib_isLibHandlingMsgDeliveryByDefault(void)
 {
     return gLib.libHandlingMsgDeliveryByDefault;
 }
 
 int64_t
-natsLib_defaultWriteDeadline()
+natsLib_defaultWriteDeadline(void)
 {
     return gLib.libDefaultWriteDeadline;
 }
@@ -1991,4 +2011,39 @@ natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWork
     *idx = workers->idx;
     *workersArray = workers->workers;
     natsMutex_Unlock(workers->lock);
+}
+
+natsStatus
+natsLib_startServiceCallbacks(microService *m)
+{
+    natsStatus s;
+
+    natsMutex_Lock(gLib.service_callback_mu);
+    s = natsHash_Set(gLib.all_services_to_callback, (int64_t)m, (void *)m, NULL);
+    natsMutex_Unlock(gLib.service_callback_mu);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+natsLib_stopServiceCallbacks(microService *m)
+{
+    if (m == NULL)
+        return;
+
+    natsMutex_Lock(gLib.service_callback_mu);
+    natsHash_Remove(gLib.all_services_to_callback, (int64_t)m);
+    natsMutex_Unlock(gLib.service_callback_mu);
+}
+
+natsMutex*
+natsLib_getServiceCallbackMutex(void)
+{
+    return gLib.service_callback_mu;
+}
+
+natsHash*
+natsLib_getAllServicesToCallback(void)
+{
+    return gLib.all_services_to_callback;
 }

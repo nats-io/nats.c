@@ -1,0 +1,24 @@
+ignore:
+  - "test/**"
+  - "examples/**"
+  - "src/win/**"
+  - "src/unix/**"
+  - "src/stan/protocol.pb-c.c"
+coverage:
+  precision: 2
+  round: down
+  range: "60...80"
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 5%
+    patch:
+      default:
+        target: auto
+        threshold: 20%
+        informational: true
+github_checks:
+  annotations: true
+comment:
+  require_changes: false

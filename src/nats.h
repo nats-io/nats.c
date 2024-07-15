@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2023 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -128,6 +128,13 @@ extern "C" {
  */
  #define JSMsgRollupAll         "all"
 
+ // Headers for republished messages and direct get.
+ #define JSStream       "Nats-Stream"
+ #define JSSequence     "Nats-Sequence"
+ #define JSLastSequence "Nats-Last-Sequence"
+ #define JSTimeStamp    "Nats-Time-Stamp"
+ #define JSSubject      "Nats-Subject"
+
 //
 // Types.
 //
@@ -205,9 +212,22 @@ typedef char                        natsInbox;
 typedef struct natsMsgList
 {
         natsMsg         **Msgs;
-        const int       Count;
+        int             Count;
 
 } natsMsgList;
+
+/** \brief A type to represent user-provided metadata, a list of k=v pairs.
+ *
+ * Used in JetStream, microservice configuration.
+ */
+
+typedef struct natsMetadata
+{
+        // User-provided metadata for the stream, encoded as an array of {"key", "value",...}
+        const char **List;
+        // Number of key/value pairs in Metadata, 1/2 of the length of the array.
+        int Count;
+} natsMetadata;
 
 /**
  * The JetStream context. Use for JetStream assets management and communication.
@@ -276,6 +296,15 @@ typedef enum
         js_MemoryStorage,   ///< Specifies in memory only.
 
 } jsStorageType;
+
+/**
+ * Determines how messages are compressed when stored for retention.
+ */
+typedef enum
+{
+        js_StorageCompressionNone = 0, ///< Specifies no compression. It's the default.
+        js_StorageCompressionS2,   ///< Specifies S2.
+} jsStorageCompression;
 
 /**
  * Determines how the consumer should select the first message to deliver.
@@ -368,8 +397,43 @@ typedef struct jsStreamSource
         int64_t                 OptStartTime;   ///< UTC time expressed as number of nanoseconds since epoch.
         const char              *FilterSubject;
         jsExternalStream        *External;
+        // Domain and External are mutually exclusive.
+        // If Domain is set, an External value will be created with
+        // the APIPrefix constructed based on the Domain value.
+        const char              *Domain;
 
 } jsStreamSource;
+
+/**
+ * Allows a source subject to be mapped to a destination subject for republishing.
+ */
+typedef struct jsRePublish
+{
+        const char              *Source;
+        const char              *Destination;
+        bool                    HeadersOnly;
+
+} jsRePublish;
+
+/**
+ * SubjectTransformConfig is for applying a subject transform (to matching
+ * messages) before doing anything else when a new message is received
+ */
+typedef struct jsSubjectTransformConfig
+{
+        const char *Source;
+        const char *Destination;
+} jsSubjectTransformConfig;
+
+/**
+ * SubjectTransformConfig is for applying a subject transform (to matching
+ * messages) before doing anything else when a new message is received
+ */
+typedef struct jsStreamConsumerLimits
+{
+        int64_t InactiveThreshold;
+        int MaxAckPending;
+} jsStreamConsumerLimits;
 
 /**
  * Configuration of a JetStream stream.
@@ -384,6 +448,9 @@ typedef struct jsStreamSource
  *
  * \note The strings are applications owned and will not be freed by the library.
  *
+ * \note NATS server 2.10 added user-provided Metadata, storage Compression
+ * type, FirstSeq to specify the starting sequence number, and SubjectTransform.
+ *
  * @see jsStreamConfig_Init
  *
  * \code{.unparsed}
@@ -397,6 +464,7 @@ typedef struct jsStreamSource
  * const char       *subjects[]     = {"foo", "bar"};
  * const char       *tags[]         = {"tag1", "tag2"};
  * jsStreamSource   *sources[]      = {&s1, &s2};
+ * jsRePublish      rp;
  *
  * jsStreamConfig_Init(&sc);
  *
@@ -437,6 +505,12 @@ typedef struct jsStreamSource
  * sc.Sources = sources;
  * sc.SourcesLen = 2;
  *
+ * // For RePublish subject:
+ * jsRePublish_Init(&rp);
+ * rp.Source = ">";
+ * rp.Destination = "RP.>";
+ * sc.RePublish = &rp;
+ *
  * s = js_AddStream(&si, js, &sc, NULL, &jerr);
  * \endcode
  */
@@ -471,6 +545,42 @@ typedef struct jsStreamConfig {
          */
         bool                    AllowRollup;
 
+        // Allow republish of the message after being sequenced and stored.
+        jsRePublish             *RePublish;
+
+        // Allow higher performance, direct access to get individual messages. E.g. KeyValue
+        bool                    AllowDirect;
+        // Allow higher performance and unified direct access for mirrors as well.
+        bool                    MirrorDirect;
+
+        // Allow KV like semantics to also discard new on a per subject basis
+        bool                    DiscardNewPerSubject;
+
+        /**
+         * @brief Configuration options introduced in 2.10
+         *
+         * - Metadata is a user-provided array of key/value pairs, encoded as a
+         *   string array [n1, v1, n2, v2, ...] representing key/value pairs
+         *   {n1:v1, n2:v2, ...}.
+         *
+         * - Compression: js_StorageCompressionNone (default) or
+         *   js_StorageCompressionS2
+         *
+         * - FirstSeq: the starting sequence number for the stream.
+         *
+         * - SubjectTransformConfig is for applying a subject transform (to
+         *   matching messages) before doing anything else when a new message is
+         *   received
+         *
+         * - ConsumerLimits is for setting the limits on certain options on all
+         *   consumers of the stream.
+         */
+
+        natsMetadata Metadata;
+        jsStorageCompression Compression;
+        uint64_t FirstSeq;
+        jsSubjectTransformConfig SubjectTransform;
+        jsStreamConsumerLimits ConsumerLimits;
 } jsStreamConfig;
 
 /**
@@ -483,6 +593,54 @@ typedef struct jsLostStreamData
         uint64_t                Bytes;
 
 } jsLostStreamData;
+
+/**
+ * This indicate that the given `Subject` in a stream contains `Msgs` messages.
+ *
+ * @see jsStreamStateSubjects
+ */
+typedef struct jsStreamStateSubject
+{
+        const char              *Subject;
+        uint64_t                Msgs;
+
+} jsStreamStateSubject;
+
+/**
+ * List of subjects optionally returned in the stream information request.
+ *
+ * This structure indicates the number of elements in the list, that is,
+ * the list contains `Count` #jsStreamStateSubject elements.
+ *
+ * To get this list in #jsStreamState, you have to ask for it through #jsOptions.
+ *
+ * \code{.unparsed}
+ * jsStreamInfo *si = NULL;
+ * jsOptions    o;
+ *
+ * jsOptions_Init(&o);
+ * o.Stream.Info.SubjectsFilter = "foo.>";
+ * s = js_GetStreamInfo(&si, js, "MY_STREAM", &o, &jerr);
+ *
+ * // handle errors and assume si->State.Subjects is not NULL
+ *
+ * for (i=0; i<si->State.Subjects->Count; i++)
+ * {
+ *      jsStreamStateSubject *subj = &(si->State.Subjects->List[i]);
+ *      printf("Subject=%s Messages count=%d\n", subj->Subject, (int) subj->Msgs);
+ * }
+ * \endcode
+ *
+ * @see jsStreamStateSubject
+ * @see js_GetStreamInfo
+ * @see jsOptions.Stream.Info.SubjectsFilter
+ */
+typedef struct jsStreamStateSubjects
+{
+        jsStreamStateSubject    *List;
+        int                     Count;
+
+} jsStreamStateSubjects;
 
 /**
  * Information about the given stream
@@ -498,6 +656,8 @@ typedef struct jsStreamState
         int64_t                 FirstTime;      ///< UTC time expressed as number of nanoseconds since epoch.
         uint64_t                LastSeq;
         int64_t                 LastTime;       ///< UTC time expressed as number of nanoseconds since epoch.
+        int64_t                 NumSubjects;
+        jsStreamStateSubjects   *Subjects;
         uint64_t                NumDeleted;
         uint64_t                *Deleted;
         int                     DeletedLen;
@@ -542,8 +702,22 @@ typedef struct jsStreamSourceInfo
         jsExternalStream        *External;
         uint64_t                Lag;
         int64_t                 Active;
+        const char *            FilterSubject;
+        jsSubjectTransformConfig *SubjectTransforms;
+        int                     SubjectTransformsLen;
 
 } jsStreamSourceInfo;
+
+/**
+ * Information about an alternate stream represented by a mirror.
+ */
+typedef struct jsStreamAlternate
+{
+        const char              *Name;
+        const char              *Domain;
+        const char              *Cluster;
+
+} jsStreamAlternate;
 
 /**
  * Configuration and current state for this stream.
@@ -560,8 +734,38 @@ typedef struct jsStreamInfo
         jsStreamSourceInfo      *Mirror;
         jsStreamSourceInfo      **Sources;
         int                     SourcesLen;
+        jsStreamAlternate       **Alternates;
+        int                     AlternatesLen;
 
 } jsStreamInfo;
+
+/**
+ * List of stream information objects returned by #js_Streams
+ *
+ * \note Once done, the list should be destroyed calling #jsStreamInfoList_Destroy
+ *
+ * @see jsStreamInfoList_Destroy
+ */
+typedef struct jsStreamInfoList
+{
+        jsStreamInfo    **List;
+        int             Count;
+
+} jsStreamInfoList;
+
+/**
+ * List of stream names returned by #js_StreamNames
+ *
+ * \note Once done, the list should be destroyed calling #jsStreamNamesList_Destroy
+ *
+ * @see jsStreamNamesList_Destroy
+ */
+typedef struct jsStreamNamesList
+{
+        char    **List;
+        int     Count;
+
+} jsStreamNamesList;
 
 /**
  * Configuration of a JetStream consumer.
@@ -585,6 +789,13 @@ typedef struct jsStreamInfo
  * instead, it will receive only messages headers (if present) with the addition of
  * the header #JSMsgSize ("Nats-Msg-Size"), whose value is the payload size.
  *
+ * \note NATS server 2.10 added FilterSubjects, an array of multiple filter
+ * subjects. It is mutually exclusive with the previously available single
+ * FilterSubject.
+ *
+ * \note NATS server 2.10 added consumer Metadata which contains user-provided
+ * string name/value pairs.
+ *
  * @see jsConsumerConfig_Init
  *
  * \code{.unparsed}
@@ -601,16 +812,17 @@ typedef struct jsStreamInfo
  */
 typedef struct jsConsumerConfig
 {
+        const char              *Name;
         const char              *Durable;
         const char              *Description;
-        const char              *DeliverSubject;
-        const char              *DeliverGroup;
         jsDeliverPolicy         DeliverPolicy;
         uint64_t                OptStartSeq;
         int64_t                 OptStartTime;           ///< UTC time expressed as number of nanoseconds since epoch.
         jsAckPolicy             AckPolicy;
         int64_t                 AckWait;
         int64_t                 MaxDeliver;
+        int64_t                 *BackOff;               ///< Redelivery durations expressed in nanoseconds
+        int                     BackOffLen;
         const char              *FilterSubject;
         jsReplayPolicy          ReplayPolicy;
         uint64_t                RateLimit;
@@ -621,6 +833,32 @@ typedef struct jsConsumerConfig
         int64_t                 Heartbeat;              ///< Heartbeat interval expressed in number of nanoseconds.
         bool                    HeadersOnly;
 
+        // Pull based options.
+        int64_t                 MaxRequestBatch;        ///< Maximum Pull Consumer request batch size.
+        int64_t                 MaxRequestExpires;      ///< Maximum Pull Consumer request expiration, expressed in number of nanoseconds.
+        int64_t                 MaxRequestMaxBytes;     ///< Maximum Pull Consumer request maximum bytes.
+
+        // Push based options.
+        const char              *DeliverSubject;
+        const char              *DeliverGroup;
+
+        // Ephemeral inactivity threshold.
+        int64_t                 InactiveThreshold;      ///< How long the server keeps an ephemeral after detecting loss of interest, expressed in number of nanoseconds.
+
+        // Generally inherited by parent stream and other markers, now can be configured directly.
+        int64_t                 Replicas;
+        // Force memory storage.
+        bool                    MemoryStorage;
+
+        // Configuration options introduced in 2.10
+
+        const char              **FilterSubjects;       ///< Multiple filter subjects
+        int                     FilterSubjectsLen;
+        natsMetadata            Metadata;               ///< User-provided metadata for the consumer, encoded as an array of {"key", "value",...}
+
+        // Configuration options introduced in 2.11
+
+        int64_t                 PauseUntil;             ///< Suspends the consumer until this deadline, represented as number of nanoseconds since epoch.
 } jsConsumerConfig;
 
 /**
@@ -677,7 +915,7 @@ typedef struct jsSubOptions
          * attempt to create a subscription for this matching consumer.
          *
          * That is, the consumer should exist prior to the call,
-         * either created by the application calling #js_AddStream
+         * either created by the application calling #js_AddConsumer
          * or it should have been created with some other tools
          * such as the NATS cli.
          */
@@ -766,8 +1004,49 @@ typedef struct jsConsumerInfo
         uint64_t                NumPending;
         jsClusterInfo           *Cluster;
         bool                    PushBound;
-
+        bool                    Paused;
+        int64_t                 PauseRemaining;        ///< Remaining time in nanoseconds.
 } jsConsumerInfo;
+
+/**
+ * List of consumers information objects returned by #js_Consumers
+ *
+ * \note Once done, the list should be destroyed calling #jsConsumerInfoList_Destroy
+ *
+ * @see jsStreamInfoList_Destroy
+ */
+typedef struct jsConsumerInfoList
+{
+        jsConsumerInfo  **List;
+        int             Count;
+
+} jsConsumerInfoList;
+
+/**
+ * List of consumer names returned by #js_ConsumerNames
+ *
+ * \note Once done, the list should be destroyed calling #jsConsumerNamesList_Destroy
+ *
+ * @see jsConsumerNamesList_Destroy
+ */
+typedef struct jsConsumerNamesList
+{
+        char    **List;
+        int     Count;
+
+} jsConsumerNamesList;
+
+/**
+ * Request to pause the consumer, used to call js_PauseConsumer.
+ *
+ * @see js_PauseConsumer
+ */
+typedef struct jsConsumerPauseResponse
+{
+        bool            Paused;        
+        int64_t         PauseUntil;     ///< UTC time expressed as number of nanoseconds since epoch.
+        int64_t         PauseRemaining; ///< Remaining time in nanoseconds.
+} jsConsumerPauseResponse;
 
 /**
  * Reports on API calls to JetStream for this account.
@@ -788,8 +1067,23 @@ typedef struct  jsAccountLimits
         int64_t MaxStore;
         int64_t MaxStreams;
         int64_t MaxConsumers;
+        int64_t MaxAckPending;
+        int64_t MemoryMaxStreamBytes;
+        int64_t StoreMaxStreamBytes;
+        bool    MaxBytesRequired;
 
 } jsAccountLimits;
+
+typedef struct jsTier
+{
+        const char              *Name;
+        uint64_t                Memory;
+        uint64_t                Store;
+        int64_t                 Streams;
+        int64_t                 Consumers;
+        jsAccountLimits         Limits;
+
+} jsTier;
 
 /**
  * Information about the JetStream usage from the current account.
@@ -803,6 +1097,8 @@ typedef struct jsAccountInfo
         char                    *Domain;
         jsAPIStats              API;
         jsAccountLimits         Limits;
+        jsTier                  **Tiers;
+        int                     TiersLen;
 
 } jsAccountInfo;
 
@@ -851,9 +1147,42 @@ typedef struct jsPubAckErr
 } jsPubAckErr;
 
 #ifndef BUILD_IN_DOXYGEN
-// Forward declaration
+// Forward declarations
 typedef void (*jsPubAckErrHandler)(jsCtx *js, jsPubAckErr *pae, void *closure);
+typedef void (*jsPubAckHandler)(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, void *closure);
 #endif
+
+/**
+ * Options for the js_DirectGetMsg() call, which retrieves a message
+ * from any server (not only the leader) as long as the stream has
+ * been created with a AllowDirect option.
+ *
+ * Note that some options are mutually exclusive but are not checked
+ * byt the library. The server will reject invalid requests and
+ * the library will return the error returned from the server.
+ */
+typedef struct jsDirectGetMsgOptions
+{
+        uint64_t        Sequence;               ///< Get the message at this sequence
+        const char      *NextBySubject;         ///< Get the next message (based on sequence) for that subject
+        const char      *LastBySubject;         ///< Get the last message on that subject
+
+} jsDirectGetMsgOptions;
+
+/**
+ * Options for the natsSubscription_FetchRequest() call, which is
+ * similar to natsSubscription_Fetch() but gives more control in
+ * the configuration of the fetch.
+ */
+typedef struct jsFetchRequest
+{
+        int64_t         Expires;        ///< Expiration of the request, expressed in nanoseconds
+        int             Batch;          ///< Maximum number of messages to be received (see MaxBytes)
+        int64_t         MaxBytes;       ///< Maximum bytes for the request (request complete based on whichever Batch or MaxBytes comes first)
+        bool            NoWait;         ///< Will not wait if the request cannot be completed
+        int64_t         Heartbeat;      ///< Have server sends heartbeats to help detect communication failures
+
+} jsFetchRequest;
 
 /**
  * JetStream context options.
@@ -872,8 +1201,22 @@ typedef struct jsOptions
         struct jsOptionsPublishAsync
         {
                 int64_t                 MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
+
+                // If jsPubAckHandler is specified, the callback will be invoked
+                // for every asynchronous published message, either as a positive
+                // result, or with the error encountered when publishing that
+                // message. If this callback is specified, ErrHandler (see below)
+                // will be ignored.
+                jsPubAckHandler         AckHandler;             ///< Callback invoked for each asynchronous published message.
+                void                    *AckHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckHandler callback.
+
+                // This callback is invoked for messages published asynchronously
+                // when an error is returned by the server or if the library has
+                // timed-out waiting for an acknowledgment back from the server
+                // (if publish uses the jsPubOptions.MaxWait).
                 jsPubAckErrHandler      ErrHandler;             ///< Callback invoked when error encountered publishing a given message.
                 void                    *ErrHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckErrHandler callback.
+
                 int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.
 
         } PublishAsync;
@@ -908,7 +1251,8 @@ typedef struct jsOptions
                  */
                 struct jsOptionsStreamInfo
                 {
-                        bool            DeletedDetails; ///< Get the list of deleted message sequences.
+                        bool            DeletedDetails;         ///< Get the list of deleted message sequences.
+                        const char      *SubjectsFilter;        ///< Get the list of subjects in this stream.
 
                 } Info;                                 ///< Optional stream information retrieval options.
 
@@ -963,13 +1307,17 @@ typedef struct kvConfig
         int64_t         MaxBytes;
         jsStorageType   StorageType;
         int             Replicas;
+        jsRePublish     *RePublish;
+        jsStreamSource  *Mirror;
+        jsStreamSource  **Sources;
+        int             SourcesLen;
 
 } kvConfig;
 
 /**
  * KeyValue watcher options object.
  *
- * Initialize the object with #kvWatchOptions_Init;
+ * Initialize the object with #kvWatchOptions_Init
  */
 typedef struct kvWatchOptions
 {
@@ -979,6 +1327,28 @@ typedef struct kvWatchOptions
         int64_t         Timeout;        ///< How long to wait (in milliseconds) for some operations to complete.
 
 } kvWatchOptions;
+
+/**
+ * KeyValue purge options object.
+ *
+ * Initialize the object with #kvPurgeOptions_Init
+ */
+typedef struct kvPurgeOptions
+{
+        // How long to wait (in milliseconds) for some operations to complete.
+        int64_t         Timeout;
+
+        // When calling kvStore_PurgeDeletes(), all keys that have a delete or
+        // purge marker as the last entry are gathered and then those keys
+        // are purged of their content, including the marker.
+        // Starting with NATS C client v3.3.0, if this option is not specified,
+        // only the markers older than 30 minutes will be deleted. Use this
+        // option to set the limit or a negative value to force removal of
+        // markers regardless of their age.
+        // The value is expressed as a time in nanoseconds.
+        int64_t         DeleteMarkersOlderThan;
+
+} kvPurgeOptions;
 
 /** \brief A list of KeyValue store entries.
  *
@@ -1000,7 +1370,7 @@ typedef struct kvWatchOptions
 typedef struct kvEntryList
 {
         kvEntry         **Entries;
-        const int       Count;
+        int             Count;
 
 } kvEntryList;
 
@@ -1024,7 +1394,7 @@ typedef struct kvEntryList
 typedef struct kvKeysList
 {
         char            **Keys;
-        const int       Count;
+        int             Count;
 
 } kvKeysList;
 
@@ -1308,6 +1678,49 @@ typedef int64_t (*natsCustomReconnectDelayHandler)(natsConnection *nc, int attem
  * registering the callback.
  */
 typedef void (*jsPubAckErrHandler)(jsCtx *js, jsPubAckErr *pae, void *closure);
+
+/** \brief Callback used to process asynchronous publish responses from JetStream.
+ *
+ * Callback used to process asynchronous publish responses (positive and negatives)
+ * from JetStream #js_PublishAsync and #js_PublishMsgAsync calls. The provided
+ * #jsPubAck or #jsPubAckErr objects give the user access to the successful
+ * acknowledgment from the server or the encountered error along with the original
+ * message sent to the server for possible restransmitting.
+ *
+ * \warning The user is responsible for destroying the message. If the message
+ * is resent using the #js_PublishMsgAsync call, the library is taking ownership
+ * of the message and calling #natsMsg_Destroy will have no effect because
+ * the pointer will have been set to `NULL`. So it is recommended to always
+ * call #natsMsg_Destroy at the end of the function.
+ *
+ * \code{.unparsed}
+ * void myAckHandler(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, void *closure)
+ * {
+ *      if (pa != NULL)
+ *      {
+ *              // Success case...
+ *      }
+ *      else if (pae != NULL)
+ *      {
+ *              // Error case...
+ *              // If the application wants to resend the message:
+ *              js_PublishMsgAsync(js, &msg, NULL);
+ *      }
+ *      natsMsg_Destroy(msg);
+ * }
+ * \endcode
+ *
+ * \warning The #jsPubAck and #jsPubAckErr objects and their content will be
+ * invalid as soon as the callback returns.
+ *
+ * @param js the pointer to the #jsCtx object.
+ * @param msg the pointer to the original published #natsMsg.
+ * @param pa the pointer to the #jsPubAck object.
+ * @param pae the pointer to the #jsPubAckErr object.
+ * @param closure an optional pointer to a user defined object that was specified when
+ * registering the callback.
+ */
+typedef void (*jsPubAckHandler)(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, void *closure);
 #endif
 
 #if defined(NATS_HAS_STREAMING)
@@ -2238,6 +2651,22 @@ natsOptions_SetReconnectBufSize(natsOptions *opts, int reconnectBufSize);
 NATS_EXTERN natsStatus
 natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending);
 
+/** \brief Sets the maximum number of pending bytes per subscription.
+ *
+ * Specifies the maximum number of inbound bytes that can be buffered in the
+ * library, for each subscription, before inbound messages are dropped and
+ * #NATS_SLOW_CONSUMER status is reported to the #natsErrHandler callback (if
+ * one has been set).
+ *
+ * @see natsOptions_SetErrorHandler()
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param maxPending the number of bytes allowed to be buffered by the
+ * library before triggering a slow consumer scenario.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetMaxPendingBytes(natsOptions* opts, int64_t maxPending);
+
 /** \brief Sets the error handler for asynchronous events.
  *
  * Specifies the callback to invoke when an asynchronous error
@@ -2331,6 +2760,22 @@ NATS_EXTERN natsStatus
 natsOptions_SetDiscoveredServersCB(natsOptions *opts,
                                    natsConnectionHandler discoveredServersCb,
                                    void *closure);
+
+/** \brief Sets if the library should ignore or not discovered servers.
+ *
+ * By default, when a server joins a cluster, a client is notified
+ * of the new URL and added to the list so it can be used in case
+ * of a reconnect.
+ *
+ * The servers can be configured to disable this gossip, however, if
+ * not done at the servers level, this option allows the discovered
+ * servers to be ignored.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param ignore if discovered server should be ignored or not.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetIgnoreDiscoveredServers(natsOptions *opts, bool ignore);
 
 /** \brief Sets the callback to be invoked when server enters lame duck mode.
  *
@@ -2643,6 +3088,22 @@ natsOptions_SetUserCredentialsFromFiles(natsOptions *opts,
                                         const char *userOrChainedFile,
                                         const char *seedFile);
 
+/** \brief Sets JWT handler and handler to sign nonce that uses seed.
+ *
+ * This function acts similarly to natsOptions_SetUserCredentialsFromFiles() but reads from memory instead
+ * from a file. Also it assumes that `jwtAndSeedContent` contains both the JWT and NKey seed.
+ *
+ * As for the format, see natsOptions_SetUserCredentialsFromFiles() documentation.
+ *
+ * @see natsOptions_SetUserCredentialsFromFiles()
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param jwtAndSeedContent string containing user JWT and user NKey seed.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetUserCredentialsFromMemory(natsOptions *opts,
+                                         const char *jwtAndSeedContent);
+
 /** \brief Sets the NKey public key and signature callback.
  *
  * Any time the library creates a TCP connection to the server, the server
@@ -2756,14 +3217,12 @@ natsOptions_DisableNoResponders(natsOptions *opts, bool disabled);
 
 /** \brief Sets a custom inbox prefix
  *
- * The default inbox prefix is "_INBOX.", but you can change it
+ * The default inbox prefix is "_INBOX", but you can change it
  * using this option. This can be useful when setting permissions
  * and/or with import/exports across different accounts.
  *
- * The prefix must not contain the `*` or `>` wildcard and must
- * be a well formed subject. The exception is that the prefix
- * can be set by the user with a terminal token separator. If not
- * set, the library will internally add it.
+ * The prefix must be a valid subject and not contain any of the
+ * wildcards tokens `*` nor `>`.
  *
  * To clear the custom inbox prefix, call this function with `NULL`
  * or the empty string.
@@ -2773,6 +3232,22 @@ natsOptions_DisableNoResponders(natsOptions *opts, bool disabled);
  */
 NATS_EXTERN natsStatus
 natsOptions_SetCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix);
+
+/** \brief Sets a custom padding when allocating buffer for incoming messages
+ *
+ * By default library allocates natsMsg with payload buffer size
+ * equal to payload size. Sometimes it can be useful to add some
+ * padding to the end of the buffer which can be tweaked using
+ * this option.
+ *
+ * To clear the custom message buffer padding, call this function with 0.
+ * Changing this option has no effect on existing NATS connections.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param paddingSize the desired inbox prefix.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetMessageBufferPadding(natsOptions *opts, int paddingSize);
 
 /** \brief Destroys a #natsOptions object.
  *
@@ -3558,6 +4033,18 @@ stanMsg_Destroy(stanMsg *msg);
 NATS_EXTERN natsStatus
 natsConnection_Connect(natsConnection **nc, natsOptions *options);
 
+/** \brief Causes the client to drop the connection to the current server and
+ * perform standard reconnection process.
+ *
+ * This means that all subscriptions and consumers should be resubscribed and
+ * their work resumed after successful reconnect where all reconnect options are
+ * respected.
+ * 
+ * @param nc the pointer to the #natsConnection object.
+ */
+natsStatus
+natsConnection_Reconnect(natsConnection *nc);
+
 /** \brief Process a read event when using external event loop.
  *
  * When using an external event loop, and the callback indicating that
@@ -3629,7 +4116,7 @@ natsConnection_IsReconnecting(natsConnection *nc);
  *
  * @param nc the pointer to the #natsConnection object.
  */
-bool
+NATS_EXTERN bool
 natsConnection_IsDraining(natsConnection *nc);
 
 /** \brief Returns the current state of the connection.
@@ -3936,7 +4423,7 @@ natsConnection_HasHeaderSupport(natsConnection *nc);
  * @return #NATS_SYS_ERROR if a system error getting the IP and port occurred.
  * @return #NATS_NO_MEMORY if the library was unable to allocate memory for the returned IP string.
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port);
 
 /** \brief Closes the connection.
@@ -4352,6 +4839,30 @@ natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max);
  */
 NATS_EXTERN natsStatus
 natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
+
+/** \brief Gets the subscription id.
+ *
+ * Returns the id of the given subscription.
+ *
+ * \note Invalid or closed subscriptions will cause a value of 0 to be returned.
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ */
+NATS_EXTERN int64_t
+natsSubscription_GetID(natsSubscription* sub);
+
+/** \brief Gets the subject name.
+ *
+ * Returns the subject of the given subscription.
+ *
+ * \note Invalid or closed subscriptions will cause a value of NULL to be returned.
+ *
+ * \warning The string belongs to the subscription and must not be freed. Copy it if needed.
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ */
+NATS_EXTERN const char*
+natsSubscription_GetSubject(natsSubscription* sub);
 
 /** \brief Sets the limit for pending messages and bytes.
  *
@@ -5086,6 +5597,15 @@ jsStreamSource_Init(jsStreamSource *source);
 NATS_EXTERN natsStatus
 jsExternalStream_Init(jsExternalStream *external);
 
+/** \brief Initializes a republish structure.
+ *
+ * Use this to set the source, destination and/or headers only for a stream re-publish.
+ *
+ * @param rp the pointer to the #jsRePublish to initialize.
+ */
+NATS_EXTERN natsStatus
+jsRePublish_Init(jsRePublish *rp);
+
 /** \brief Creates a stream.
  *
  * Creates a stream based on the provided configuration (that cannot be `NULL`).
@@ -5208,6 +5728,41 @@ js_GetMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, jsOptions 
 NATS_EXTERN natsStatus
 js_GetLastMsg(natsMsg **msg, jsCtx *js, const char *stream, const char *subject, jsOptions *opts, jsErrCode *errCode);
 
+/** \brief Initializes a direct get message options structure.
+ *
+ * Use this before setting specific direct get message options and passing it
+ * to #js_DirectGetMsg API.
+ *
+ * @param opts the pointer to the #jsDirectGetMsgOptions object.
+ */
+NATS_EXTERN natsStatus
+jsDirectGetMsgOptions_Init(jsDirectGetMsgOptions *opts);
+
+/** \brief Retrieves directly a JetStream message based on provided options.
+ *
+ * If a stream is created with `AllowDirect`, it is possible to retrieve a message
+ * without going through the leader.
+ *
+ * To specify the options, call #jsDirectGetMsgOptions_Init first and the set
+ * the appropriate options, then invoke this function.
+ *
+ * \note Some options are mutually exclusive but the library is not doing the
+ * check and leave it to the server to do it and return the error returned by
+ * the server.
+ *
+ * \note This API can only be used against servers that support the direct
+ * get feature, which is `v2.9.0+`. If running against an older server the
+ * call will likely timeout.
+ *
+ * @param msg the location where to store the pointer to the retrieved message.
+ * @param js  the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param dgOpts the pointer to the #jsDirectGetMsgOptions object, cannot be `NULL`.
+ */
+NATS_EXTERN natsStatus
+js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, jsDirectGetMsgOptions *dgOpts);
+
 /** \brief Deletes a message from the stream.
  *
  * Deletes the message at sequence <c>seq</c> in the stream named <c>stream</c>.
@@ -5282,6 +5837,64 @@ js_GetStreamInfo(jsStreamInfo **si, jsCtx *js, const char *stream, jsOptions *op
 NATS_EXTERN void
 jsStreamInfo_Destroy(jsStreamInfo *si);
 
+/** \brief Retrieves the list of all available streams.
+ *
+ * Retrieves the list of all #jsStreamInfo. It is possible to filter
+ * which streams are to be retrieved based on a subject filter.
+ *
+ * \warning The list should be destroyed when no longer used by
+ * calling #jsStreamInfoList_Destroy.
+ *
+ * @param list the location where to store the pointer to the new #jsStreamInfoList object.
+ * @param js the pointer to the #jsCtx context.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_Streams(jsStreamInfoList **list, jsCtx *js, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the stream information list object.
+ *
+ * Releases memory allocated for this stream information list.
+ *
+ * \warning All #jsStreamInfo pointers contained in the list will
+ * be destroyed by this call.
+ *
+ * @param list the pointer to the #jsStreamInfoList object.
+ */
+NATS_EXTERN void
+jsStreamInfoList_Destroy(jsStreamInfoList *list);
+
+/** \brief Retrieves the list of all available stream names.
+ *
+ * Retrieves the list of all stream names. It is possible to filter
+ * which streams are to be retrieved based on a subject filter.
+ *
+ * \warning The list should be destroyed when no longer used by
+ * calling #jsStreamNamesList_Destroy.
+ *
+ * @param list the location where to store the pointer to the new #jsStreamNamesList object.
+ * @param js the pointer to the #jsCtx context.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_StreamNames(jsStreamNamesList **list, jsCtx *js, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the stream names list object.
+ *
+ * Releases memory allocated for this list of stream names.
+ *
+ * \warning All string pointers contained in the list will
+ * be destroyed by this call.
+ *
+ * @param list the pointer to the #jsStreamNamesList object.
+ */
+NATS_EXTERN void
+jsStreamNamesList_Destroy(jsStreamNamesList *list);
+
 /** \brief Initializes a consumer configuration structure.
  *
  * Use this before adding a consumer.
@@ -5317,6 +5930,30 @@ js_AddConsumer(jsConsumerInfo **ci, jsCtx *js,
                    const char *stream, jsConsumerConfig *cfg,
                    jsOptions *opts, jsErrCode *errCode);
 
+/** \brief Updates a JetStream consumer.
+ *
+ * Updates a consumer based on the provided configuration (that cannot be `NULL`).
+ *
+ * \note If you do not need a #jsConsumerInfo to be returned, you can pass `NULL`,
+ * otherwise, on success you are responsible for freeing this object.
+ *
+ * @see jsConsumerConfig_Init
+ * @see jsConsumerInfo_Destroy
+ *
+ * @param ci the location where to store the pointer to the new #jsConsumerInfo object in
+ * response to the creation request, or `NULL` if the consumer information is not needed.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param cfg the pointer to the #jsConsumerConfig.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_UpdateConsumer(jsConsumerInfo **ci, jsCtx *js,
+                  const char *stream, jsConsumerConfig *cfg,
+                  jsOptions *opts, jsErrCode *errCode);
+
 /** \brief Retrieves information about a consumer.
  *
  * \note The returned object should be destroyed using #jsConsumerInfo_Destroy in order
@@ -5350,6 +5987,34 @@ NATS_EXTERN natsStatus
 js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
                       jsOptions *opts, jsErrCode *errCode);
 
+/** \brief Pauses a consumer.
+ *
+ * Pauses the consumer named <c>consumer</c> on stream named <c>stream</c>.
+ *
+ * @param new_cpr if not NULL, will receive the response of the operation.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param consumer the name of the consumer.
+ * @param pauseUntil the time in nanoseconds since the Unix epoch to pause the consumer until.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+
+NATS_EXTERN natsStatus
+js_PauseConsumer(jsConsumerPauseResponse **new_cpr, jsCtx *js,
+                 const char *stream, const char *consumer,
+                 uint64_t pauseUntil, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the PauseConsumer response object.
+ *
+ * Releases memory allocated for this object.
+ *
+ * @param cpr the pointer to the #jsConsumerPauseResponse object.
+ */
+NATS_EXTERN void
+jsConsumerPauseResponse_Destroy(jsConsumerPauseResponse *cpr);
+
 /** \brief Destroys the consumer information object.
  *
  * Releases memory allocated for this consumer information object.
@@ -5358,6 +6023,64 @@ js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
  */
 NATS_EXTERN void
 jsConsumerInfo_Destroy(jsConsumerInfo *ci);
+
+/** \brief Retrieves the list of all available consumers for a stream.
+ *
+ * Retrieves the list of all #jsConsumerInfo for a given stream.
+ *
+ * \warning The list should be destroyed when no longer used by
+ * calling #jsConsumerInfoList_Destroy.
+ *
+ * @param list the location where to store the pointer to the new #jsConsumerInfoList object.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the stream name whose consumer list is requested.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_Consumers(jsConsumerInfoList **list, jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the consumer information list object.
+ *
+ * Releases memory allocated for this consumer information list.
+ *
+ * \warning All #jsConsumerInfo pointers contained in the list will
+ * be destroyed by this call.
+ *
+ * @param list the pointer to the #jsConsumerInfoList object.
+ */
+NATS_EXTERN void
+jsConsumerInfoList_Destroy(jsConsumerInfoList *list);
+
+/** \brief Retrieves the list of all available consumer names for a stream.
+ *
+ * Retrieves the list of all consumer names for a given stream.
+ *
+ * \warning The list should be destroyed when no longer used by
+ * calling #jsConsumerNamesList_Destroy.
+ *
+ * @param list the location where to store the pointer to the new #jsConsumerNamesList object.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the stream name whose consumer list is requested.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_ConsumerNames(jsConsumerNamesList **list, jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the consumer names list object.
+ *
+ * Releases memory allocated for this list of consumer names.
+ *
+ * \warning All string pointers contained in the list will
+ * be destroyed by this call.
+ *
+ * @param list the pointer to the #jsConsumerNamesList object.
+ */
+NATS_EXTERN void
+jsConsumerNamesList_Destroy(jsConsumerNamesList *list);
 
 /** \brief Retrieves information about the JetStream usage from an account.
  *
@@ -5579,6 +6302,37 @@ jsSubOptions_Init(jsSubOptions *opts);
 
 /** \brief Create an asynchronous subscription.
  *
+ * Typically the user or administrator will have created a JetStream
+ * consumer and this call will reference the stream/consumer to bind
+ * to with the use of #jsSubOptions's `Stream` and `Consumer`.
+ *
+ * Without the stream information, the library will use the provided
+ * `subject` to try figure out which stream this subscription is for.
+ *
+ * If a `Durable` is specified (with #jsSubOptions' `Config.Durable`),
+ * the subscription will be durable. However, note the behavior described
+ * below regarding JetStream consumers created by this call.
+ *
+ * If no `Durable` is specified, the subscription will be ephemeral
+ * and removed by the server either after calling #natsSubscription_Unsubscribe
+ * or after the subscription is destroyed and the `InactivityThreshold`
+ * has elapsed.
+ *
+ * \note If a JetStream consumer does not exist and this call creates
+ * it, it will be removed in the server once the user calls #natsSubscription_Unsubscribe
+ * or #natsSubscription_Drain, even if this is a `Durable` subscription.
+ * If the subscription should be maintained, it should be explicitly
+ * created using #js_AddConsumer and then bound to with the use
+ * of #jsSubOptions' `Stream` and `Consumer`.
+ *
+ * \warning Prior to release v3.4.0, calling #natsSubscription_Destroy
+ * would delete the JetStream consumer if it was created by this call.
+ * The original intent was that it would be deleted only with explicit
+ * calls to unsubscribe or drain. Therefore, starting v3.4.0, if
+ * the user calls only #natsSubscription_Destroy (to free memory),
+ * the JetStream consumer will no longer be deleted. The user would
+ * have to explicitly call #natsSubscription_Unsubscribe or #js_DeleteConsumer.
+ *
  * @param sub the location where to store the pointer to the newly created
  * #natsSubscription object.
  * @param js the pointer to the #jsCtx object.
@@ -5596,13 +6350,35 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
              natsMsgHandler cb, void* cbClosure,
              jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
 
-/** \brief Create a synchronous subscription.
+/** \brief Create an asynchronous subscription to multiple subjects.
+ *
+ * Like #js_Subscribe, but accepts multiple subjects, each can be a wildcard.
  *
  * @param sub the location where to store the pointer to the newly created
  * #natsSubscription object.
  * @param js the pointer to the #jsCtx object.
  * @param subject the subject this subscription is created for.
+ * @param cb the #natsMsgHandler callback.
+ * @param cbClosure a pointer to an user defined object (can be `NULL`). See
  * the #natsMsgHandler prototype.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param subOpts the subscribe options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_SubscribeMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
+             natsMsgHandler cb, void *cbClosure,
+             jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
+
+/** \brief Create a synchronous subscription.
+ *
+ * See important notes in #js_Subscribe.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param js the pointer to the #jsCtx object.
+ * @param subject the subject this subscription is created for (consumer's FilterSubject).
  * @param opts the pointer to the #jsOptions object, possibly `NULL`.
  * @param subOpts the subscribe options, possibly `NULL`.
  * @param errCode the location where to store the JetStream specific error code, or `NULL`
@@ -5612,19 +6388,41 @@ NATS_EXTERN natsStatus
 js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
                  jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
 
+/** \brief Create an asynchronous subscription to multiple subjects.
+ *
+ * Like #js_SubscribeSync, but accepts multiple subjects, each can be a
+ * wildcard.
+ *
+ * @param sub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param js the pointer to the #jsCtx object.
+ * @param subjects the subjects this subscription is created for (consumer's FilterSubjects).
+ * @param numSubjects the number of subjects for the subscription (consumer's FilterSubjectsLen).
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param subOpts the subscribe options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_SubscribeSyncMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
+                      jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode);
+
 /** \brief Create a pull subscriber.
  *
  * A pull based consumer is a type of consumer that does not have a delivery subject,
  * that is the library has to request for the messages to be delivered as needed from the server.
  *
- * \note All pull subscriptions must have a durable name.
+ * \note If no durable name is provided, the pull subscription will create an ephemeral
+ * JetStream consumer. The requirement for a durable name is lifted in NATS C client v3.4.0+
+ * and NATS Server v2.7.0+.
+ * \note If a durable name is specified, it cannot contain the character ".".
  *
- * \note A durable name cannot contain the character ".".
+ * See important notes in #js_Subscribe.
  *
  * @param sub the location where to store the pointer to the newly created #natsSubscription object.
  * @param js the pointer to the #jsCtx object.
  * @param subject the subject this subscription is created for.
- * @param durable the durable name, which is required for pull subscriptions.
+ * @param durable the optional durable name.
  * @param opts the pointer to the #jsOptions object, possibly `NULL`.
  * @param subOpts the subscribe options, possibly `NULL`.
  * @param errCode the location where to store the JetStream specific error code, or `NULL`
@@ -5656,6 +6454,43 @@ NATS_EXTERN natsStatus
 natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int64_t timeout,
                        jsErrCode *errCode);
 
+/** \brief Initializes a fetch request options structure.
+ *
+ * Use this before setting specific fetch options and passing it to #natsSubscription_FetchRequest.
+ *
+ * @param request the pointer to the #jsFetchRequest object.
+ */
+NATS_EXTERN natsStatus
+jsFetchRequest_Init(jsFetchRequest *request);
+
+/** \brief Fetches messages for a pull subscription with a complete request configuration
+ *
+ * Similar to #natsSubscription_Fetch but a full #jsFetchRequest configuration is provided
+ * for maximum control.
+ *
+ * Initialize the #jsFetchRequest structure using #jsFetchRequest_Init and then set
+ * the parameters desired, then invoke this function.
+ *
+ * @param list the location to a #natsMsgList that will be filled by the result of this call.
+ * @param sub the pointer to the #natsSubscription object.
+ * @param request the pointer to a #jsFetchRequest configuration.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_FetchRequest(natsMsgList *list, natsSubscription *sub, jsFetchRequest *request);
+
+/** \brief Returns the jsConsumerInfo associated with this subscription.
+ *
+ * Returns the #jsConsumerInfo associated with this subscription.
+ *
+ * @param ci the location where to store the pointer to the new #jsConsumerInfo object.
+ * @param sub the pointer to the #natsSubscription object.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+natsSubscription_GetConsumerInfo(jsConsumerInfo **ci, natsSubscription *sub,
+                                 jsOptions *opts, jsErrCode *errCode);
 
 /** \brief Returns the consumer sequence mismatch information.
  *
@@ -5758,6 +6593,21 @@ natsMsg_AckSync(natsMsg *msg, jsOptions *opts, jsErrCode *errCode);
  */
 NATS_EXTERN natsStatus
 natsMsg_Nak(natsMsg *msg, jsOptions *opts);
+
+/** \brief Negatively acknowledges a message.
+ *
+ * This tells the server to redeliver the message after the given `delay`
+ * duration expressed in milliseconds. You can configure the number of
+ * redeliveries by passing `MaxDeliver` when you subscribe.
+ *
+ * The default is infinite redeliveries.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param delay the amount of time before the redelivery expressed in milliseconds.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+natsMsg_NakWithDelay(natsMsg *msg, int64_t delay, jsOptions *opts);
 
 /** \brief Resets redelivery timer on the server.
  *
@@ -6020,6 +6870,21 @@ kvEntry_Destroy(kvEntry *e);
 NATS_EXTERN natsStatus
 kvStore_Get(kvEntry **new_entry, kvStore *kv, const char *key);
 
+/** \brief Returns the entry at the specific revision for the key.
+ *
+ * Returns the entry at the specific revision for the key, or #NATS_NOT_FOUND if there is no
+ * entry for that key and revision.
+ *
+ * \note The entry should be destroyed to release memory using #kvEntry_Destroy.
+ *
+ * @param new_entry the location where to store the pointer to the entry associated with the `key`.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ * @param revision the revision of the entry (must be > 0).
+ */
+NATS_EXTERN natsStatus
+kvStore_GetRevision(kvEntry **new_entry, kvStore *kv, const char *key, uint64_t revision);
+
 /** \brief Places the new value for the key into the store.
  *
  * Places the new value for the key into the store.
@@ -6125,9 +6990,10 @@ kvStore_Delete(kvStore *kv, const char *key);
  *
  * @param kv the pointer to the #kvStore object.
  * @param key the name of the key.
+ * @param opts the pointer to the #kvPurgeOptions, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_Purge(kvStore *kv, const char *key);
+kvStore_Purge(kvStore *kv, const char *key, kvPurgeOptions *opts);
 
 /** \brief Initializes a KeyValue watcher options structure.
  *
@@ -6139,24 +7005,35 @@ kvStore_Purge(kvStore *kv, const char *key);
 NATS_EXTERN natsStatus
 kvWatchOptions_Init(kvWatchOptions *opts);
 
-/** \brief Removes all current delete markers.
+/** \brief Initializes a KeyValue purge options structure.
  *
- * Removes all current delete markers.
+ * Use this before setting specific purge options and passing it
+ * to #kvStore_Purge or #kvStore_PurgeDeletes.
+ *
+ * @param opts the pointer to the #kvPurgeOptions to initialize.
+ */
+NATS_EXTERN natsStatus
+kvPurgeOptions_Init(kvPurgeOptions *opts);
+
+/** \brief Purge and removes delete markers.
+ *
+ * Removes data and delete markers, but may keep the markers that are considered
+ * more recent than a certain threshold (default is 30 minutes).
  *
  * This is a maintenance option if there is a larger buildup of delete markers.
  *
- * \note Use #kvWatchOptions.Timeout to specify how long to wait (in milliseconds)
+ * \note Use #kvPurgeOptions.Timeout to specify how long to wait (in milliseconds)
  * in gathering all keys that have purge markers. This function will still
  * purge some of the keys and return #NATS_TIMEOUT to indicate that it may not
  * have deleted them all.
  *
- * @see kvWatchOptions_Init
+ * @see kvPurgeOptions_Init
  *
  * @param kv the pointer to the #kvStore object.
- * @param opts the pointer to the #kvWatchOptions, possibly `NULL`.
+ * @param opts the pointer to the #kvPurgeOptions, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_PurgeDeletes(kvStore *kv, kvWatchOptions *opts);
+kvStore_PurgeDeletes(kvStore *kv, kvPurgeOptions *opts);
 
 /** \brief Returns a watcher for any updates to keys that match the `keys` argument.
  *
@@ -6176,6 +7053,30 @@ kvStore_PurgeDeletes(kvStore *kv, kvWatchOptions *opts);
  */
 NATS_EXTERN natsStatus
 kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *keys, kvWatchOptions *opts);
+
+/** \brief Returns a watcher for any updates to keys that match one of the
+ * `keys` argument.
+ *
+ * Returns a watcher for any updates to keys that match the one of `keys`
+ * argument, which could include wildcards.
+ *
+ * A `NULL` entry will be posted when the watcher has received all initial
+ * values.
+ *
+ * Call #kvWatcher_Next to get the next #kvEntry.
+ *
+ * \note The watcher should be destroyed to release memory using
+ * #kvWatcher_Destroy.
+ *
+ * @param new_watcher the location where to store the pointer to the new
+ * #kvWatcher object.
+ * @param kv the pointer to the #kvStore object.
+ * @param keys the keys (wildcard possible) to create the watcher for.
+ * @param numKeys the number of keys in the `keys` array.
+ * @param opts the watcher options, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int numKeys, kvWatchOptions *opts);
 
 /** \brief Returns a watcher for any updates to any keys of the KeyValue store bucket.
  *
@@ -6400,6 +7301,15 @@ kvStatus_TTL(kvStatus *sts);
 NATS_EXTERN int64_t
 kvStatus_Replicas(kvStatus *sts);
 
+/** \brief Returns the size (in bytes) of this bucket.
+ *
+ * Returns the size (in bytes) of this bucket, or `0` if `sts` itself is `NULL`.
+ *
+ * @param sts the pointer to the #kvStatus object.
+ */
+NATS_EXTERN uint64_t
+kvStatus_Bytes(kvStatus *sts);
+
 /** \brief Destroys the KeyValue status object.
  *
  * Releases memory allocated for this #kvStatus object.
@@ -6414,6 +7324,1252 @@ kvStatus_Destroy(kvStatus *sts);
 /** @} */ // end of kvGroup
 
 /** @} */ // end of funcGroup
+
+//
+// Microservices.
+//
+
+/** \defgroup microGroup EXPERIMENTAL - Microservices
+ *
+ * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
+ * necessarily bumping the major version of the library.
+ *
+ * ### NATS Microservices.
+ *
+ * Microservices can expose one or more request-response endpoints that process
+ * incoming NATS messages.
+ *
+ * Microservices are created by calling micro_AddService, and configured by
+ * passing a microServiceConfig to it. Many microservices can share a single
+ * connection to a NATS server.
+ *
+ * Once created, a microservice will subscribe to all endpoints' subjects and
+ * associate them with the configured handlers. It will also subscribe to and
+ * service monitoring subjects for service-specific pings, metadata, and
+ * statistics requests. The endpoint subscriptions are created with a queue
+ * group, so that incoming requests are automatically load-balanced across all
+ * running instances of a microservice. The monitoring subscriptions are not
+ * groupped, each service instance receives and responds to all monitoring
+ * requests.
+ *
+ * Once created, the microservice is asyncronous, message handlers and other
+ * callbacks will be invoked in separate threads. No further action is needed.
+ * Your program can use microService_Stop, microService_IsStopped to control the
+ * execution of the service.
+ *
+ *  @{
+ */
+
+/** \defgroup microTypes Types
+ *
+ * Microservice types.
+ *
+ *  @{
+ */
+
+/**
+ * @brief The Microservice client.
+ *
+ * Initialize with #micro_NewClient and destroy with #microClient_Destroy.
+ *
+ * @see micro_NewClient, microClient_Destroy
+ */
+typedef struct micro_client_s microClient;
+
+/**
+ * @brief The Microservice configuration object. For forward compatibility only.
+ */
+typedef struct __for_forward_compatibility_only microClientConfig;
+
+/**
+ * @brief `microEndpoint` represents a microservice endpoint.
+ *
+ * The only place where this struct is used by the user is in callbacks, to
+ * identify which endpoint was called, or caused an error.
+ *
+ * @see microRequestHandler, microErrorHandler, microServiceConfig,
+ * microEndpointConfig
+ */
+typedef struct micro_endpoint_s microEndpoint;
+
+/**
+ * @brief The Microservice endpoint configuration object.
+ *
+ * @see micro_endpoint_config_s for descriptions of the fields,
+ * micro_service_config_s, microServiceConfig, microService_AddEndpoint,
+ * microGroup_AddEndpoint
+ */
+typedef struct micro_endpoint_config_s microEndpointConfig;
+
+/**
+ * @brief static information about an endpoint.
+ *
+ * microEndpointInfo is returned by microService_GetInfo function, as part of microServiceInfo. It
+ * is also accessible by sending a `$SRV.INFO.<service-name>[.<id>]` request to
+ * the service. See micro_endpoint_info_s for descriptions of the fields.
+ *
+ * @see micro_endpoint_info_s, micro_service_info_s, microService_GetInfo
+ */
+typedef struct micro_endpoint_info_s microEndpointInfo;
+
+/**
+ * @brief The Microservice endpoint-level stats struct.
+ *
+ * Returned as part of microEndpointStats. See micro_endpoint_stats_s for
+ * descriptions of the fields.
+ *
+ * @see micro_endpoint_stats_s, microServiceStats, microService_GetStats
+ */
+typedef struct micro_endpoint_stats_s microEndpointStats;
+
+/**
+ * @brief the Microservice error object.
+ *
+ * This error type is returned by most microservice functions. You can create
+ * your own custom errors by using #micro_Errorf and wrap existing errors using
+ * #microError_Wrapf. Errors are heap-allocated and must be freed with either
+ * #microError_Destroy or by passing it into #microRequest_Respond.
+ *
+ * There are no public fields in this struct, use #microError_Code,
+ * #microError_Status, and #microError_String to get more information about the
+ * error.
+ */
+typedef struct micro_error_s microError;
+
+/**
+ * @brief a collection of endpoints and other groups, with a
+ * common prefix to their subjects and names.
+ *
+ * It has no other purpose than
+ * convenience, for organizing endpoint subject space.
+ */
+typedef struct micro_group_s microGroup;
+
+/**
+ * @brief a request received by a microservice endpoint.
+ *
+ * @see micro_request_s for descriptions of the fields.
+ */
+typedef struct micro_request_s microRequest;
+
+/**
+ * @brief the main object for a configured microservice.
+ *
+ * It can be created with #micro_AddService, and configured by passing a
+ * microServiceConfig to it. Once no longer needed, a microservice should be
+ * destroyed with microService_Destroy.
+ *
+ * @see micro_AddService, microServiceConfig, microEndpointConfig,
+ * microService_Destroy, microService_Stop, microService_IsStopped,
+ * microService_Run
+ */
+typedef struct micro_service_s microService;
+
+/**
+ * @brief The microservice configuration object.
+ *
+ * The service is created with a clone of the config and all of its values, so
+ * the original can be freed or modified after calling #micro_AddService. See
+ * micro_service_config_s for descriptions of the fields.
+ *
+ * @see micro_service_config_s
+ */
+typedef struct micro_service_config_s microServiceConfig;
+
+/**
+ * @brief Information about a running microservice.
+ *
+ * microServiceInfo is the struct returned by microService_GetInfo function. It
+ * is also accessible by sending a `$SRV.INFO.<service-name>[.<id>]` request to
+ * the service. See micro_service_info_s for descriptions of the fields.
+ *
+ * @see micro_service_info_s, microService_GetInfo
+ */
+typedef struct micro_service_info_s microServiceInfo;
+
+/**
+ * @brief The Microservice service-level stats struct.
+ *
+ * @see micro_service_stats_s for descriptions of the fields,
+ * microService_GetStats
+ */
+typedef struct micro_service_stats_s microServiceStats;
+
+
+extern NATS_EXTERN microError *micro_ErrorOutOfMemory;
+extern NATS_EXTERN microError *micro_ErrorInvalidArg;
+
+/** @} */ // end of microTypes
+
+/** \defgroup microCallbacks Callbacks
+ *
+ *  Microservice callbacks.
+ *  @{
+ */
+
+/**
+ * @brief Callback type for request processing.
+ *
+ * This is the callback that one provides when creating a microservice endpoint.
+ * The library will invoke this callback for each message arriving to the
+ * specified subject.
+ *
+ * @param req The request object, containing the message and other relevant
+ * references.
+ *
+ * @see microEndpointConfig, micro_endpoint_config_s.
+ */
+typedef microError *(*microRequestHandler)(microRequest *req);
+
+/**
+ * @brief Callback type for async error notifications.
+ *
+ * If specified in microServiceConfig, this callback is invoked for internal
+ * errors (e.g. message delivery failures) related to a microservice. If the
+ * error is associated with an endpoint, the ep parameter points at the
+ * endpoint. However, this handler may be invoked for errors happening in
+ * monitoring subjects, in which case ep is NULL.
+ *
+ * The error handler is invoked asynchronously, in a separate theread.
+ *
+ * The error handler is not invoked for microservice-level errors that are sent
+ * back to the client as responses. Note that the error counts in
+ * microEndpointStats include both internal and service-level errors.
+ *
+ * @param m The microservice object.
+ * @param ep The endpoint object, or NULL if the error is not associated with an
+ * endpoint.
+ * @param s The NATS status for the error.
+ *
+ * @see microServiceConfig, micro_service_config_s.
+ */
+typedef void (*microErrorHandler)(microService *m, microEndpoint *ep, natsStatus s);
+
+/**
+ * @brief Callback type for `Done` (service stopped) notifications.
+ *
+ * If specified in microServiceConfig, this callback is invoked right after the
+ * service stops. In the C client, this callback is invoked directly from the
+ * microService_Stop function, in whatever thread is executing it.
+ *
+ * @param m The microservice object.
+ *
+ * @see microServiceConfig, micro_service_config_s.
+ */
+typedef void (*microDoneHandler)(microService *m);
+
+/** @} */ // end of microCallbacks
+
+/** \defgroup microStructs Public structs
+ *
+ *  Microservice public structs.
+ *
+ *  @{
+ */
+
+/**
+ * The Microservice endpoint configuration object.
+ */
+struct micro_endpoint_config_s
+{
+    /**
+     * @brief The name of the endpoint.
+     *
+     * Used in the service stats to list endpoints by name. Must not be empty.
+     */
+    const char *Name;
+
+    /**
+     * @brief The NATS subject the endpoint will listen on.
+     *
+     * Wildcards are allowed. If `Subject` is empty, it attempts to default to
+     * `Name`, provided it is a valid subject.
+     *
+     * For endpoints added to a group, the subject is automatically prefixed
+     * with the group's prefix.
+     */
+    const char *Subject;
+
+    /**
+     * @briefMetadata for the endpoint, a JSON-encoded user-provided object,
+     * e.g. `{"key":"value"}`
+     */
+    natsMetadata Metadata;
+
+    /**
+     * @brief The request handler for the endpoint.
+     */
+    microRequestHandler Handler;
+
+    /**
+     * @brief A user-provided pointer to store with the endpoint
+     * (state/closure).
+     */
+    void *State;
+};
+
+/**
+ * microEndpointInfo is the struct for the endpoint's static metadata.
+ */
+struct micro_endpoint_info_s
+{
+    /**
+     * @brief The name of the service.
+     */
+    const char *Name;
+
+    /**
+     * @brief The semantic version of the service.
+     */
+    const char *Subject;
+
+    /**
+     * @briefMetadata for the endpoint, a JSON-encoded user-provided object,
+     * e.g. `{"key":"value"}`
+     */
+    natsMetadata Metadata;
+};
+
+/**
+ * The Microservice endpoint stats struct.
+ */
+struct micro_endpoint_stats_s
+{
+    const char *Name;
+    const char *Subject;
+
+    /**
+     * @brief The number of requests received by the endpoint.
+     */
+    int64_t NumRequests;
+
+    /**
+     * @brief The number of errors, service-level and internal, associated with
+     * the endpoint.
+     */
+    int64_t NumErrors;
+
+    /**
+     * @brief total request processing time (the seconds part).
+     */
+    int64_t ProcessingTimeSeconds;
+
+    /**
+     * @brief total request processing time (the nanoseconds part).
+     */
+    int64_t ProcessingTimeNanoseconds;
+
+    /**
+     * @brief average request processing time, in ns.
+     */
+    int64_t AverageProcessingTimeNanoseconds;
+
+    /**
+     * @brief a copy of the last error message.
+     */
+    char LastErrorString[2048];
+};
+
+/**
+ * @brief The Microservice top-level configuration object.
+ *
+ * The service is created with a clone of the config and all of its values, so
+ * the original can be freed or modified after calling micro_AddService.
+ */
+struct micro_service_config_s
+{
+    /**
+     * @brief The name of the service.
+     *
+     * It can be used to compose monitoring messages specific to this service.
+     */
+    const char *Name;
+
+    /**
+     * @brief The (semantic) version of the service.
+     */
+    const char *Version;
+
+    /**
+     * @brief The description of the service.
+     */
+    const char *Description;
+
+    /**
+     * @brief Metadata for the service, a JSON-encoded user-provided object, e.g. `{"key":"value"}`
+     */
+    natsMetadata Metadata;
+
+    /**
+     * @brief The "main" (aka default) endpoint configuration.
+     *
+     * It is the default in that it does not require calling
+     * microService_AddEndpoint, it is added automatically when creating the
+     * service.
+     */
+    microEndpointConfig *Endpoint;
+
+    /**
+     * @brief A custom stats handler.
+     *
+     * It will be called to output the service's stats. It replaces the default
+     * stats handler but can pull the service stats using microService_GetStats
+     * function, then marshal them itself, as appropriate.
+     */
+    microRequestHandler StatsHandler;
+
+    /**
+     * @brief An error notification handler.
+     *
+     * It will be called asynchonously upon internal errors. It does not get
+     * called for application-level errors, successfully sent out by the
+     * microservice.
+     */
+    microErrorHandler ErrHandler;
+
+    /**
+     * @brief A callback handler for handling the final cleanup `Done` event,
+     * right before the service is destroyed.
+     *
+     * It will be called directly from #microService_Stop method, so it may be
+     * executed in any of the user threads or in the async callback thread if
+     * the service stops itself on connection closed or an error event.
+     */
+    microDoneHandler DoneHandler;
+
+    /**
+     * @brief A user-provided pointer to state data.
+     *
+     * A closure that is accessible from the request, stats, and internal event
+     * handlers. Please note that handlers are invoked on separate threads,
+     * consider thread-safe mechanisms of accessing the data.
+     */
+    void *State;
+};
+
+/**
+ * microServiceInfo is the struct returned by microService_GetInfo function. It
+ * is also accessible by sending a `$SRV.INFO.<service-name>[.<id>]` request to
+ * the service.
+ */
+struct micro_service_info_s
+{
+    /**
+     * @brief Response type. Always `"io.nats.micro.v1.info_response"`.
+     */
+    const char *Type;
+
+    /**
+     * @brief The name of the service.
+     */
+    const char *Name;
+
+    /**
+     * @brief The semantic version of the service.
+     */
+    const char *Version;
+
+    /**
+     * @brief The description of the service.
+     */
+    const char *Description;
+
+    /**
+     * @brief The ID of the service instance responding to the request.
+     */
+    const char *Id;
+
+    /**
+     * @brief Metadata for the service, a JSON-encoded user-provided object, e.g. `{"key":"value"}`
+     */
+    natsMetadata Metadata;
+
+    /**
+     * @brief Endpoints.
+     */
+    microEndpointInfo *Endpoints;
+
+    /**
+     * @brief The number of endpoints in the `Endpoints` array.
+     */
+    int EndpointsLen;
+};
+
+/**
+ * The Microservice stats struct.
+ */
+struct micro_service_stats_s
+{
+    /**
+     * @brief Response type. Always `"io.nats.micro.v1.stats_response"`.
+     */
+    const char *Type;
+
+    /**
+     * @brief The name of the service.
+     */
+    const char *Name;
+
+    /**
+     * @brief The semantic version of the service.
+     */
+    const char *Version;
+
+    /**
+     * @brief The ID of the service instance responding to the request.
+     */
+    const char *Id;
+
+    /**
+     * @brief The timestamp of when the service was started.
+     */
+    int64_t Started;
+
+    /**
+     * @brief The stats for each endpoint of the service.
+     */
+    microEndpointStats *Endpoints;
+
+    /**
+     * @brief The number of endpoints in the `endpoints` array.
+     */
+    int EndpointsLen;
+};
+
+/** @} */ // end of microStructs
+
+/** \defgroup microConstants Public constants
+ *
+ *  Microservice public constants.
+ *  @{
+ */
+
+/**
+ * @brief The prefix for all microservice monitoring subjects.
+ *
+ * For example, `"$SRV.PING"`.
+ */
+#define MICRO_API_PREFIX "$SRV"
+
+/**
+ * @brief The `type` set in the `$SRV.INFO` responses.
+ */
+#define MICRO_INFO_RESPONSE_TYPE "io.nats.micro.v1.info_response"
+
+/**
+ * @brief For `$SRV.INFO.*` subjects.
+ */
+#define MICRO_INFO_VERB "INFO"
+
+/**
+ * @brief The `type` set in the `$SRV.PING` response.
+ */
+#define MICRO_PING_RESPONSE_TYPE "io.nats.micro.v1.ping_response"
+
+/**
+ * @brief For `$SRV.PING` subjects.
+ */
+#define MICRO_PING_VERB "PING"
+
+/**
+ * @brief The `type` set in the `STATS` response.
+ */
+#define MICRO_STATS_RESPONSE_TYPE "io.nats.micro.v1.stats_response"
+
+/**
+ * @brief The "verb" used in `$SRV.STATS` subjects.
+ */
+#define MICRO_STATS_VERB "STATS"
+
+/**
+ * @brief The response message header used to communicate an erroneous NATS
+ * status back to the requestor.
+ */
+#define MICRO_STATUS_HDR "Nats-Status"
+
+/**
+ * @brief The response message header used to communicate an error message back
+ * to the requestor.
+ */
+#define MICRO_ERROR_HDR "Nats-Service-Error"
+
+/**
+ * @brief The response message header used to communicate an integer error code
+ * back to the requestor.
+ */
+#define MICRO_ERROR_CODE_HDR "Nats-Service-Error-Code"
+
+/** @} */ // end of microConstants
+
+/** \defgroup microFunctions Functions
+ *
+ *  Microservice functions.
+ *  @{
+ */
+
+/** \defgroup microServiceFunctions microService
+ *
+ *  Functions that operate with #microService.
+ *  @{
+ */
+
+/** @brief Creates and starts a new microservice.
+ *
+ * @note The microservice should be destroyed to clean up using
+ * #microService_Destroy.
+ *
+ * @param new_microservice the location where to store the pointer to the new
+ * #microService object.
+ * @param nc the #natsConnection the service will use to receive and respond to
+ * requests.
+ * @param config a #microServiceConfig object with the configuration of the
+ * service. See #micro_service_config_s for descriptions of the fields.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microService_Destroy, #microService_AddEndpoint, #microServiceConfig,
+ * #microEndpointConfig
+ */
+NATS_EXTERN microError *
+micro_AddService(microService **new_microservice, natsConnection *nc, microServiceConfig *config);
+
+/** @brief Adds an endpoint to a microservice and starts listening for messages.
+ *
+ * Endpoints are currently destroyed when the service is stopped, there is no
+ * present way to remove or stop individual endpoints.
+ *
+ * @param m the #microService that the endpoint will be added to.
+ * @param config a #microEndpointConfig object with the configuration of the
+ * endpoint. See #micro_endpoint_config_s for descriptions of the fields.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microService_Destroy, #microEndpointConfig
+ */
+NATS_EXTERN microError *
+microService_AddEndpoint(microService *m, microEndpointConfig *config);
+
+/** @brief Adds an group (prefix) to a microservice.
+ *
+ * Groups are associated with a service, and are destroyed when the service is
+ * destroyed.
+ *
+ * @param new_group the location where to store the pointer to the new
+ * #microGroup object.
+ * @param m the #microService that the group will be added to.
+ * @param prefix a prefix to use on names and subjects of all endpoints in the
+ * group.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microGroup_AddGroup, #microGroup_AddEndpoint
+ */
+NATS_EXTERN microError *
+microService_AddGroup(microGroup **new_group, microService *m, const char *prefix);
+
+/** @brief Destroys a microservice, stopping it first if needed.
+ *
+ * @note This function may fail while stopping the service, do not assume
+ * unconditional success if clean up is important.
+ *
+ * @param m the #microService to stop and destroy.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microService_Stop, #microService_Run
+ */
+NATS_EXTERN microError *
+microService_Destroy(microService *m);
+
+/** @brief Returns the connection associated with the service. If the service
+ * was successfully started, it is safe to assume it's not NULL, however it may
+ * already have been disconnected or closed.
+ *
+ * @param m the #microService.
+ *
+ * @return a #natsConnection associated with the service.
+ */
+NATS_EXTERN natsConnection *
+microService_GetConnection(microService *m);
+
+/** @brief Returns a #microServiceInfo for a microservice.
+ *
+ * @note the #microServiceInfo struct returned by this call should be freed with
+ * #microServiceInfo_Destroy.
+ *
+ * @param new_info receives the pointer to the #microServiceInfo.
+ * @param m the #microService to query.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microServiceInfo, #micro_service_info_s
+ */
+NATS_EXTERN microError *
+microService_GetInfo(microServiceInfo **new_info, microService *m);
+
+/** @brief Returns the pointer to state data (closure). It is originally
+ * provided in #microServiceConfig.State.
+ *
+ * @param m the #microService.
+ *
+ * @return the state pointer.
+ *
+ * @see #microServiceConfig
+ */
+NATS_EXTERN void *
+microService_GetState(microService *m);
+
+/** @brief Returns run-time statistics for a microservice.
+ *
+ * @note the #microServiceStats struct returned by this call should be freed
+ * with #microServiceStats_Destroy.
+ *
+ * @param new_stats receives the pointer to the #microServiceStats.
+ * @param m the #microService to query.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microServiceStats, #micro_service_stats_s
+ */
+NATS_EXTERN microError *
+microService_GetStats(microServiceStats **new_stats, microService *m);
+
+/** @brief Checks if the service is stopped.
+ *
+ * @param m the #microService.
+ *
+ * @return `true` if stopped, otherwise `false`.
+ *
+ * @see #micro_AddService, #microService_Stop, #microService_Run
+ */
+NATS_EXTERN bool
+microService_IsStopped(microService *m);
+
+/** @brief Waits for a microservice to stop.
+ *
+ * #micro_AddService starts the service with async subscriptions.
+ * #microService_Run waits for the service to stop.
+ *
+ * @param m the #microService.
+ *
+ * @return a #microError for invalid arguments, otherwise always succeeds.
+ *
+ * @see #micro_AddService, #microService_Stop
+ */
+NATS_EXTERN microError *
+microService_Run(microService *m);
+
+/** @brief Stops a running microservice.
+ *
+ * Drains and closes the all subscriptions (endpoints and monitoring), resets
+ * the stats, and calls the `Done` callback for the service, so it can do its
+ * own clean up if needed.
+ *
+ * It is possible that this call encounters an error while stopping the service,
+ * in which case it aborts and returns the error. The service then may be in a
+ * partially stopped state, and the `Done` callback will not have been called.
+ *
+ * @param m the #microService.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #micro_AddService, #microService_Run
+ */
+NATS_EXTERN microError *microService_Stop(microService *m);
+
+/** @} */ // end of microServiceFunctions
+
+/** \defgroup microGroupFunctions microGroup
+ *
+ *  Functions that operate with #microGroup.
+ *  @{
+ */
+
+/** @brief Adds a sub-group to #microGroup.
+ *
+ * The new subgroup will be prefixed as "parent_prefix.prefix.". Groups are
+ * associated with a service, and are destroyed when the service is destroyed.
+ *
+ * @param new_group the location where to store the pointer to the new
+ * #microGroup object.
+ * @param parent the #microGroup that the new group will be added to.
+ * @param prefix a prefix to use on names and subjects of all endpoints in the
+ * group.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microGroup_AddGroup, #microGroup_AddEndpoint
+ */
+NATS_EXTERN microError *
+microGroup_AddGroup(microGroup **new_group, microGroup *parent, const char *prefix);
+
+/** @brief Adds an endpoint to a #microGroup and starts listening for messages.
+ *
+ * This is a convenience method to add an endpoint with its `Subject` and `Name`
+ * prefixed with the group's prefix.
+ *
+ * @param g the #microGroup that the endpoint will be added to.
+ * @param config a #microEndpointConfig object with the configuration of the
+ * endpoint. See #micro_endpoint_config_s for descriptions of the fields.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microService_Destroy, #microService_AddEndpoint, #microEndpointConfig
+ */
+NATS_EXTERN microError *
+microGroup_AddEndpoint(microGroup *g, microEndpointConfig *config);
+
+/** @} */ // end of microGroupFunctions
+
+/** \defgroup microRequestFunctions microRequest
+ *
+ *  Functions that operate with #microRequest.
+ *  @{
+ */
+
+/** @brief Adds a header to the underlying NATS request message.
+ *
+ * @param req the request.
+ * @param key the key under which the `value` will be stored. It can't ne `NULL`
+ * or empty.
+ * @param value the string to add to the values associated with the given `key`.
+ * The value can be `NULL` or empty string.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Add, #microRequest_DeleteHeader, #microRequest_GetHeaderKeys,
+ * #microRequest_GetHeaderValue, #microRequest_GetHeaderValues
+ */
+NATS_EXTERN microError *
+microRequest_AddHeader(microRequest *req, const char *key, const char *value);
+
+/** @brief Deletes a header from the underlying NATS request message.
+ *
+ * @param req the request.
+ * @param key the key to delete from the headers map.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Delete, #microRequest_AddHeader
+ */
+NATS_EXTERN microError *
+microRequest_DeleteHeader(microRequest *req, const char *key);
+
+/** @brief Returns the connection associated with the request.
+ *
+ * @param req the request.
+ *
+ * @return a #natsConnection associated with the request. In fact, it's the
+ * connection associated with the service, so by the time the request handler is
+ * invoked the connection state may be different from when it was received.
+ */
+NATS_EXTERN natsConnection *
+microRequest_GetConnection(microRequest *req);
+
+/** @brief Returns the data in the the request, as a byte array.
+ *
+ * @note The request owns the data, so it should not be freed other than with
+ * `microRequest_Destroy`.
+ * @note The data is not `NULL` terminated. Use `microRequest_GetDataLength` to
+ * obtain the number of bytes.
+ *
+ * @param req the request.
+ *
+ * @return a pointer to the request's data.
+ *
+ * @see #natsMsg_GetData, #microRequest_GetDataLength
+ */
+NATS_EXTERN const char *
+microRequest_GetData(microRequest *req);
+
+/** @brief Returns the number of data bytes in the the request.
+ *
+ * @param req the request.
+ *
+ * @return the number of data bytes in the request.
+ *
+ * @see #natsMsg_GetDataLength, #microRequest_GetData
+ */
+NATS_EXTERN int
+microRequest_GetDataLength(microRequest *req);
+
+/** \brief Returns the pointer to the user-provided endpoint state, if
+ * the request is associated with an endpoint.
+ *
+ * @param req the request.
+ *
+ * @return the `state` pointer provided in microEndpointConfig.
+ *
+ * @see #microEndpointConfig, #micro_endpoint_config_s
+ */
+NATS_EXTERN void *
+microRequest_GetEndpointState(microRequest *req);
+
+/** @brief Gets the list of all header keys in the NATS message underlying the
+ * request.
+ *
+ * The returned strings are own by the library and MUST not be freed or altered.
+ * However, the returned array `keys` MUST be freed by the user.
+ *
+ * @param req the request.
+ * @param keys the memory location where the library will store the pointer to
+ * the array of keys.
+ * @param count the memory location where the library will store the number of
+ * keys returned.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Keys, #microRequest_GetHeaderValue, #microRequest_GetHeaderValues
+ */
+NATS_EXTERN microError *
+microRequest_GetHeaderKeys(microRequest *req, const char ***keys, int *count);
+
+/** @brief Get the header entry associated with `key` from the NATS message underlying the request.
+ *
+ * @param req the request.
+ * @param key the key for which the value is requested.
+ * @param value the memory location where the library will store the pointer to the first
+ * value (if more than one is found) associated with the `key`.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Get, #microRequest_GetHeaderValue, #microRequest_GetHeaderValues
+ */
+NATS_EXTERN microError *
+microRequest_GetHeaderValue(microRequest *req, const char *key, const char **value);
+
+/** @brief Get all header values associated with `key` from the NATS message
+ * underlying the request.
+ *
+ * @param req the request.
+ * @param key the key for which the values are requested.
+ * @param values the memory location where the library will store the pointer to
+ * the array value (if more than one is found) associated with the `key`.
+ * @param count the memory location where the library will store the number of
+ * values returned.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Values, #microRequest_GetHeaderValue,
+ * #microRequest_GetHeaderKeys
+ */
+NATS_EXTERN microError *
+microRequest_GetHeaderValues(microRequest *req, const char *key, const char ***values, int *count);
+
+/** @brief Get the NATS message underlying the request.
+ *
+ * @param req the request.
+ *
+ * @return the pointer to #natsMsg.
+ */
+NATS_EXTERN natsMsg *
+microRequest_GetMsg(microRequest *req);
+
+/** @brief Returns the reply subject set in this message.
+ *
+ * Returns the reply, possibly `NULL`.
+ *
+ * @warning The string belongs to the message and must not be freed.
+ * Copy it if needed.
+ *
+ * @param req the request.
+ */
+NATS_EXTERN const char *
+microRequest_GetReply(microRequest *req);
+
+/** @brief Returns the pointer to the microservice associated with the request.
+ *
+ * @param req the request.
+ *
+ * @return the microservice pointer.
+ */
+NATS_EXTERN microService *
+microRequest_GetService(microRequest *req);
+
+/** @brief Returns the pointer to the user-provided service state.
+ *
+ * @param req the request.
+ *
+ * @return the `state` pointer provided in microServiceConfig.
+ *
+ * @see #microServiceConfig, #micro_service_config_s
+ */
+NATS_EXTERN void *
+microRequest_GetServiceState(microRequest *req);
+
+/** @brief Returns the subject of the request message.
+ *
+ * @warning The string belongs to the message and must not be freed.
+ * Copy it if needed.
+ *
+ * @param req the request.
+ */
+NATS_EXTERN const char *
+microRequest_GetSubject(microRequest *req);
+
+/**
+ * @brief Respond to a request, on the same NATS connection.
+ *
+ * @param req the request.
+ * @param data the response data.
+ * @param len the length of the response data.
+ *
+ * @return an error, if any.
+ */
+NATS_EXTERN microError *
+microRequest_Respond(microRequest *req, const char *data, size_t len);
+
+/**
+ * @brief Respond to a request with a simple error.
+ *
+ * If err is NULL, `RespondError` does nothing.
+ *
+ * @note microRequest_RespondError is called automatially if the handler returns
+ * an error. Usually, there is no need for a handler to use this function
+ * directly. If the request
+ *
+ * @param req the request.
+ * @param err the error to include in the response header. If `NULL`, no error.
+ *
+ * @return an error, if any.
+ */
+NATS_EXTERN microError *
+microRequest_RespondError(microRequest *req, microError *err);
+
+/**
+ * @brief Respond to a message, with an OK or an error.
+ *
+ * If err is NULL, `RespondErrorWithData` is equivalent to `Respond`. If err is
+ * not NULL, the response will include the error in the response header, and err
+ * will be freed.
+ *
+ * The following example illustrates idiomatic usage in a request handler. Since
+ * this handler handles its own error responses, the only error it might return
+ * would be a failure to send the response.
+ *
+ * \code{.c}
+ * err = somefunc();
+ * if (err != NULL) {
+ *     return microRequest_RespondCustom(req, err, error_data, data_len);
+ * }
+ * ...
+ * \endcode
+ *
+ * Or, if the request handler has its own cleanup logic:
+ *
+ * \code{.c}
+ * if (err = somefunc(), err != NULL)
+ *     goto CLEANUP;
+ * ...
+ *
+ * CLEANUP:
+ * if (err != NULL) {
+ *     return microRequest_RespondCustom(req, err, error_data, data_len);
+ * }
+ * return NULL;
+ * \endcode
+ *
+ * @param req the request.
+ * @param err the error to include in the response header. If `NULL`, no error.
+ * @param data the response data.
+ * @param len the length of the response data.
+ *
+ * @note
+ *
+ *
+ * @return an error, if any.
+ */
+NATS_EXTERN microError *
+microRequest_RespondCustom(microRequest *req, microError *err, const char *data, size_t len);
+
+/** @brief Add `value` to the header associated with `key` in the NATS message
+ * underlying the request.
+ *
+ * @param req the request.
+ * @param key the key under which the `value` will be stored. It can't ne `NULL`
+ * or empty.
+ * @param value the string to store under the given `key`. The value can be
+ * `NULL` or empty string.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #natsMsgHeader_Set
+ */
+NATS_EXTERN microError *
+microRequest_SetHeader(microRequest *req, const char *key, const char *value);
+
+/** @} */ // end of microRequestFunctions
+
+/** \defgroup microErrorFunctions microError
+ *
+ *  Functions that create and manipulate #microError.
+ *  @{
+ */
+
+/** @brief creates a new #microError, with a printf-like formatted message.
+ *
+ * @note Errors must be freed with #microError_Destroy, but often they are
+ * simply returned up the call stack.
+ *
+ * @param format printf-like format.
+ *
+ * @return a new #microError or micro_ErrorOutOfMemory.
+ */
+NATS_EXTERN microError *
+micro_Errorf(const char *format, ...);
+
+/** @brief creates a new #microError, with a code and a printf-like formatted
+ * message.
+ *
+ * @note Errors must be freed with #microError_Destroy, but often they are
+ * simply returned up the call stack.
+ *
+ * @param code an `int` code, loosely modeled after the HTTP status code.
+ * @param format printf-like format.
+ *
+ * @return a new #microError or micro_ErrorOutOfMemory.
+ */
+NATS_EXTERN microError *
+micro_ErrorfCode(int code, const char *format, ...);
+
+/** @brief Wraps a NATS status into a #microError, if not a NATS_OK.
+ *
+ * @param s NATS status of receiving the response.
+ *
+ * @return a new #microError or `NULL` if no error if found.
+ */
+NATS_EXTERN microError *
+micro_ErrorFromStatus(natsStatus s);
+
+/** @brief returns the int code of the error.
+ *
+ * @param err the error.
+ *
+ * @return the int code.
+ */
+NATS_EXTERN int
+microError_Code(microError *err);
+
+/** @brief destroys a #microError.
+ *
+ * @param err the error.
+ */
+NATS_EXTERN void
+microError_Destroy(microError *err);
+
+#define microError_Ignore(__err) microError_Destroy(__err)
+
+/**
+ * @brief Returns the NATS status associated with the error.
+ *
+ * @param err
+ *
+ * @return the status
+ */
+NATS_EXTERN natsStatus
+microError_Status(microError *err);
+
+/**
+ * @brief Returns a printable string with the error message.
+ *
+ * This function outputs into a user-provided buffer, and returns a "`%s`-able"
+ * pointer to it.
+ *
+ * @param err the error.
+ * @param buf the output buffer.
+ * @param len the capacity of the output buffer.
+ * @return `buf`
+ */
+NATS_EXTERN const char *
+microError_String(microError *err, char *buf, size_t len);
+
+/**
+ * @brief Wraps an exising #microError with a higher printf-like formatted
+ * message.
+ *
+ * @warning The original error may be freed and should not be refered to after
+ * having been wrapped.
+ *
+ * @param err the original error
+ * @param format the new message to prepend to the original error message.
+ * @param ...
+ *
+ * @return a new, wrapped, error.
+ */
+NATS_EXTERN microError *
+microError_Wrapf(microError *err, const char *format, ...);
+
+/** @} */ // end of microErrorFunctions
+
+/** \defgroup microClientFunctions microClient
+ *
+ *  @{
+ */
+
+/**
+ * @brief Creates a new microservice client.
+ *
+ * @param new_client received the pointer to the new client.
+ * @param nc a NATS connection.
+ * @param cfg for future use, use NULL for now.
+ *
+ * @return a #microError if an error occurred.
+ */
+NATS_EXTERN microError *
+micro_NewClient(microClient **new_client, natsConnection *nc, microClientConfig *cfg);
+
+/**
+ * @brief Destroys a microservice client.
+ *
+ * @param client the client to destroy.
+ */
+NATS_EXTERN void
+microClient_Destroy(microClient *client);
+
+/**
+ * @brief Sends a request to a microservice and receives the response.
+ *
+ * @param reply receives the pointer to the response NATS message. `reply` must
+ * be freed with #natsMsg_Destroy.
+ * @param client the client to use.
+ * @param subject the subject to send the request on.
+ * @param data the request data.
+ * @param data_len the request data length.
+ *
+ * @return a #microError if an error occurred.
+ */
+NATS_EXTERN microError *
+microClient_DoRequest(natsMsg **reply, microClient *client, const char *subject, const char *data, int data_len);
+
+/** @} */ // end of microClientFunctions
+
+/** \defgroup microCleanupFunctions Miscellaneous
+ *
+ *  Functions to destroy miscellaneous objects.
+ *  @{
+ */
+
+/**
+ * @brief Destroys a #microServiceInfo object.
+ *
+ * @param info the object to destroy.
+ */
+NATS_EXTERN void
+microServiceInfo_Destroy(microServiceInfo *info);
+
+/**
+ * @brief Destroys a #microServiceStats object.
+ *
+ * @param stats the object to destroy.
+ */
+NATS_EXTERN void
+microServiceStats_Destroy(microServiceStats *stats);
+
+/** @} */ // end of microCleanupFunctions
+
+/** @} */ // end of microFunctions
+
+/** @} */ // end of microGroup
 
 /**  \defgroup wildcardsGroup Wildcards
  *  @{

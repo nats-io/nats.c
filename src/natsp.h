@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2022 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -98,11 +98,22 @@
 #define WAIT_FOR_WRITE      (1)
 #define WAIT_FOR_CONNECT    (2)
 
-#define DEFAULT_PORT_STRING "4222"
-
 #define DEFAULT_DRAIN_TIMEOUT   30000 // 30 seconds
 
 #define MAX_FRAMES (50)
+
+#define nats_IsStringEmpty(s) ((((s) == NULL) || ((s)[0] == '\0')) ? true : false)
+#define nats_HasPrefix(_s, _prefix) (nats_IsStringEmpty(_s) ? nats_IsStringEmpty(_prefix) : (strncmp((_s), (_prefix), strlen(_prefix)) == 0))
+
+static inline bool nats_StringEquals(const char *s1, const char *s2)
+{
+    if (s1 == NULL)
+        return (s2 == NULL);
+    if (s2 == NULL)
+        return false;
+
+    return strcmp(s1, s2);
+}
 
 #define DUP_STRING(s, s1, s2) \
         { \
@@ -112,7 +123,7 @@
         }
 
 #define IF_OK_DUP_STRING(s, s1, s2) \
-        if ((s) == NATS_OK) \
+        if (((s) == NATS_OK) && !nats_IsStringEmpty(s2)) \
             DUP_STRING((s), (s1), (s2))
 
 
@@ -133,6 +144,9 @@
 
 #define IFOK(s, c)      if (s == NATS_OK) { s = (c); }
 
+#define NATS_MILLIS_TO_NANOS(d)     (((int64_t)d)*(int64_t)1E6)
+#define NATS_SECONDS_TO_NANOS(d)    (((int64_t)d)*(int64_t)1E9)
+
 extern int64_t gLockSpinCount;
 
 typedef void (*natsInitOnceCb)(void);
@@ -152,6 +166,7 @@ typedef struct __natsServerInfo
     char        *version;
     bool        authRequired;
     bool        tlsRequired;
+    bool        tlsAvailable;
     int64_t     maxPayload;
     char        **connectURLs;
     int         connectURLsCount;
@@ -189,6 +204,7 @@ typedef struct __userCreds
 {
     char        *userOrChainedFile;
     char        *seedFile;
+    char        *jwtAndSeedContent;
 
 } userCreds;
 
@@ -232,6 +248,7 @@ struct __natsOptions
 
     natsConnectionHandler   discoveredServersCb;
     void                    *discoveredServersClosure;
+    bool                    ignoreDiscoveredServers;
 
     natsConnectionHandler   connectedCb;
     void                    *connectedCbClosure;
@@ -242,9 +259,13 @@ struct __natsOptions
     natsErrHandler          asyncErrCb;
     void                    *asyncErrCbClosure;
 
+    natsConnectionHandler   microClosedCb;
+    natsErrHandler          microAsyncErrCb;
+
     int64_t                 pingInterval;
     int                     maxPingsOut;
     int                     maxPendingMsgs;
+    int64_t                 maxPendingBytes;
 
     natsSSLCtx              *sslCtx;
 
@@ -277,7 +298,7 @@ struct __natsOptions
     bool                    retryOnFailedConnect;
 
     // Callback/closure used to get the user JWT. Will be set to
-    // internal natsConn_userFromFile function when userCreds != NULL.
+    // internal natsConn_userCreds function when userCreds != NULL.
     natsUserJWTHandler      userJWTHandler;
     void                    *userJWTClosure;
 
@@ -290,8 +311,9 @@ struct __natsOptions
     // to the server.
     char                    *nkey;
 
-    // If user has invoked natsOptions_SetUserCredentialsFromFiles, this
-    // will be set and points to userOrChainedFile and possibly seedFile.
+    // If user has invoked natsOptions_SetUserCredentialsFromFiles or
+    // natsOptions_SetUserCredentialsFromMemory, this will be set and points to
+    // userOrChainedFile, seedFile, or possibly directly contains the JWT+seed content.
     struct __userCreds      *userCreds;
 
     // Reconnect jitter added to reconnect wait
@@ -307,6 +329,9 @@ struct __natsOptions
 
     // Custom inbox prefix
     char *inboxPfx;
+
+    // Custom message payload padding size
+    int payloadPaddingSize;
 };
 
 typedef struct __nats_MsgList
@@ -328,6 +353,14 @@ typedef struct __natsMsgDlvWorker
 
 } natsMsgDlvWorker;
 
+typedef struct __pmInfo
+{
+    char                *subject;
+    int64_t             deadline;
+    struct __pmInfo     *next;
+
+} pmInfo;
+
 struct __jsCtx
 {
     natsMutex		    *mu;
@@ -336,12 +369,16 @@ struct __jsCtx
     int				    refs;
     natsCondition       *cond;
     natsStrHash         *pm;
+    natsTimer           *pmtmr;
+    pmInfo              *pmHead;
+    pmInfo              *pmTail;
     natsSubscription    *rsub;
     char                *rpre;
     int                 rpreLen;
     int                 pacw;
     int64_t             pmcount;
     int                 stalled;
+    bool                closed;
 };
 
 typedef struct __jsSub
@@ -349,20 +386,31 @@ typedef struct __jsSub
     jsCtx               *js;
     char                *stream;
     char                *consumer;
+    char                *psubj;
     char                *nxtMsgSubj;
     bool                pull;
+    bool                inFetch;
     bool                ordered;
     bool                dc; // delete JS consumer in Unsub()/Drain()
     bool                ackNone;
+    uint64_t            fetchID;
+
+    // This is ConsumerInfo's Pending+Consumer.Delivered that we get from the
+    // add consumer response. Note that some versions of the server gather the
+    // consumer info *after* the creation of the consumer, which means that
+    // some messages may have been already delivered. So the sum of the two
+    // is a more accurate representation of the number of messages pending or
+    // in the process of being delivered to the subscription when created.
+    uint64_t            pending;
 
     int64_t             hbi;
-    int64_t             active;
+    bool                active;
     natsTimer           *hbTimer;
+    natsMsg             *mhMsg;
 
     char                *cmeta;
     uint64_t            sseq;
     uint64_t            dseq;
-    uint64_t            ldseq;
     // Skip sequence mismatch notification. This is used for
     // async subscriptions to notify the asyn err handler only
     // once. Should the mismatch be resolved, this will be
@@ -375,6 +423,13 @@ typedef struct __jsSub
     // the sequence mismatch report. Should the mismatch be
     // resolved, this will be cleared.
     bool                sm;
+    // These are the mismatch seq info
+    struct mismatch
+    {
+        uint64_t        sseq;
+        uint64_t        dseq;
+        uint64_t        ldseq;
+    } mismatch;
 
     // When in auto-ack mode, we have an internal callback
     // that will call natsMsg_Ack after the user callback returns.
@@ -388,8 +443,8 @@ typedef struct __jsSub
     uint64_t            fciseq;
     char                *fcReply;
 
-    // When reseting an OrderedConsumer, need the original filter subject.
-    char                *fsubj;
+    // When reseting an OrderedConsumer, need the original configuration.
+    jsConsumerConfig    *ocCfg;
 
 } jsSub;
 
@@ -401,7 +456,10 @@ struct __kvStore
     char                *bucket;
     char                *stream;
     char                *pre;
+    char                *putPre;
+    bool                usePutPre;
     bool                useJSPrefix;
+    bool                useDirect;
 
 };
 
@@ -429,6 +487,8 @@ struct __kvWatcher
     int                 refs;
     kvStore             *kv;
     natsSubscription    *sub;
+    uint64_t            initPending;
+    uint64_t            received;
     bool                ignoreDel;
     bool                initDone;
     bool                retMarker;
@@ -680,6 +740,14 @@ struct __natsConnection
     // Protected by subsMu
     natsMsgFilter       filter;
     void                *filterClosure;
+
+    // Server version
+    struct
+    {
+        int             ma;
+        int             mi;
+        int             up;
+    } srvVersion;
 };
 
 //
@@ -740,6 +808,18 @@ natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWork
 
 void
 nats_setNATSThreadKey(void);
+
+natsStatus
+natsLib_startServiceCallbacks(microService *m);
+
+void
+natsLib_stopServiceCallbacks(microService *m);
+
+natsMutex*
+natsLib_getServiceCallbackMutex(void);
+
+natsHash*
+natsLib_getAllServicesToCallback(void);
 
 //
 // Threads
@@ -841,7 +921,7 @@ natsStatus
 jsSub_trackSequences(jsSub *jsi, const char *reply);
 
 natsStatus
-jsSub_processSequenceMismatch(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *sm);
+jsSub_processSequenceMismatch(natsSubscription *sub, natsMsg *msg, bool *sm);
 
 char*
 jsSub_checkForFlowControlResponse(natsSubscription *sub);
@@ -850,10 +930,10 @@ natsStatus
 jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply);
 
 natsStatus
-jsSub_checkOrderedMsg(natsSubscription *sub, natsMutex *mu, natsMsg *msg, bool *reset);
+jsSub_checkOrderedMsg(natsSubscription *sub, natsMsg *msg, bool *reset);
 
 natsStatus
-jsSub_resetOrderedConsumer(natsSubscription *sub, natsMutex *mu, uint64_t sseq);
+jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq);
 
 bool
 natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType);

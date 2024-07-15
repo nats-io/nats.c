@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2023 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -192,12 +192,12 @@ nats_Trim(char **pres, const char *s)
     char    *ptr   = (char*) s;
     char    *start = (char*) s;
 
-    while ((*ptr != '\0') && isspace(*ptr))
+    while ((*ptr != '\0') && isspace((unsigned char) *ptr))
         ptr++;
 
     start = ptr;
     ptr = (char*) (s + strlen(s) - 1);
-    while ((ptr != start) && isspace(*ptr))
+    while ((ptr != start) && isspace((unsigned char) *ptr))
         ptr--;
 
     // Compute len of trimmed string
@@ -571,7 +571,7 @@ _jsonGetNum(char **ptr, nats_JSONField *field)
     int         decPCount      = 0;
     int         numTyp         = 0;
 
-    while (isspace(*p))
+    while (isspace((unsigned char) *p))
         p++;
 
     sign = (*p == '-' ? -1.0 : 1.0);
@@ -579,7 +579,7 @@ _jsonGetNum(char **ptr, nats_JSONField *field)
     if ((*p == '-') || (*p == '+'))
         p++;
 
-    while (isdigit(*p))
+    while (isdigit((unsigned char) *p))
         uintVal = uintVal * 10 + (*p++ - '0');
 
     if (*p == '.')
@@ -588,7 +588,7 @@ _jsonGetNum(char **ptr, nats_JSONField *field)
         numTyp = TYPE_DOUBLE;
     }
 
-    while (isdigit(*p))
+    while (isdigit((unsigned char) *p))
     {
         decVal = decVal * 10 + (*p++ - '0');
         decPower *= 10;
@@ -608,7 +608,7 @@ _jsonGetNum(char **ptr, nats_JSONField *field)
         if ((*p == '-') || (*p == '+'))
             p++;
 
-        while (isdigit(*p))
+        while (isdigit((unsigned char) *p))
             eVal = eVal * 10 + (*p++ - '0');
 
         if (expIsNegative)
@@ -716,6 +716,13 @@ _jsonGetArray(char **ptr, nats_JSONArray **newArray, int nested)
     while ((s == NATS_OK) && (*p != '\0'))
     {
         p = _jsonTrimSpace(p);
+
+        if ((typ == TYPE_NOT_SET) && (*p == ']'))
+        {
+            array.typ = TYPE_NULL;
+            end = true;
+            break;
+        }
 
         // Initialize the field before parsing.
         memset(&field, 0, sizeof(nats_JSONField));
@@ -877,7 +884,7 @@ _jsonParseValue(char **str, nats_JSONField *field, int nested)
         field->typ = TYPE_BOOL;
         s = _jsonGetBool(&ptr, &field->value.vbool);
     }
-    else if (isdigit(*ptr) || (*ptr == '-'))
+    else if (isdigit((unsigned char) *ptr) || (*ptr == '-'))
     {
         field->typ = TYPE_NUM;
         s = _jsonGetNum(&ptr, field);
@@ -1284,51 +1291,45 @@ nats_JSONGetObject(nats_JSON *json, const char *fieldName, nats_JSON **value)
 }
 
 natsStatus
-nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
+nats_parseTime(char *orgStr, int64_t *timeUTC)
 {
     natsStatus  s           = NATS_OK;
-    char        *str        = NULL;
     char        *dotPos     = NULL;
     char        utcOff[7]   = {'\0'};
     int64_t     nanosecs    = 0;
     char        *p          = NULL;
-    char        orgStr[35]  = {'\0'};
-    char        timeStr[35] = {'\0'};
+    char        timeStr[42] = {'\0'};
+    char        tmpStr[36]  = {'\0'};
+    char        *str        = NULL;
     char        offSign     = '+';
     int         offHours    = 0;
     int         offMin      = 0;
     int         i, l;
     struct tm   tp;
 
-    s = nats_JSONGetStr(json, fieldName, &str);
-    if ((s == NATS_OK) && (str == NULL))
+    // Check for "0"
+    if (strcmp(orgStr, "0001-01-01T00:00:00Z") == 0)
     {
         *timeUTC = 0;
         return NATS_OK;
     }
-    else if (s != NATS_OK)
-        return NATS_UPDATE_ERR_STACK(s);
 
-    // Check for "0"
-    if (strcmp(str, "0001-01-01T00:00:00Z") == 0)
-    {
-        *timeUTC = 0;
-        goto END;
-    }
-
-    l = (int) strlen(str);
+    l = (int) strlen(orgStr);
     // The smallest date/time should be: "YYYY:MM:DDTHH:MM:SSZ", which is 20
     // while the longest should be: "YYYY:MM:DDTHH:MM:SS.123456789-12:34" which is 35
-    if ((l < 20) || (l > (int) sizeof(timeStr)))
+    if ((l < 20) || (l > (int) (sizeof(tmpStr) - 1)))
     {
         if (l < 20)
-            s = nats_setError(NATS_INVALID_ARG, "time '%s' too small", str);
+            s = nats_setError(NATS_INVALID_ARG, "time '%s' too small", orgStr);
         else
-            s = nats_setError(NATS_INVALID_ARG, "time '%s' too long", str);
-        goto END;
+            s = nats_setError(NATS_INVALID_ARG, "time '%s' too long", orgStr);
+        return NATS_UPDATE_ERR_STACK(s);
     }
 
-    snprintf(orgStr, sizeof(orgStr), "%s", str);
+    // Copy the user provided string in our temporary buffer since we may alter
+    // the string as we parse.
+    snprintf(tmpStr, sizeof(tmpStr), "%s", orgStr);
+    str = (char*) tmpStr;
     memset(&tp, 0, sizeof(struct tm));
 
     // If ends with 'Z', the time is already UTC
@@ -1345,7 +1346,7 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
         if ((strlen(p) != 6) || ((*p != '+') && (*p != '-')) || (*(p+3) != ':'))
         {
             s = nats_setError(NATS_INVALID_ARG, "time '%s' has invalid UTC offset", orgStr);
-            goto END;
+            return NATS_UPDATE_ERR_STACK(s);
         }
         snprintf(utcOff, sizeof(utcOff), "%s", p);
         // Set end of 'str' to beginning of the offset.
@@ -1366,7 +1367,7 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
         if (val == -1)
         {
             s = nats_setError(NATS_INVALID_ARG, "time '%s' is invalid", orgStr);
-            goto END;
+            return NATS_UPDATE_ERR_STACK(s);
         }
 
         for (i=0; i<9-l; i++)
@@ -1375,7 +1376,7 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
         if (val > 999999999)
         {
             s = nats_setError(NATS_INVALID_ARG, "time '%s' second fraction too big", orgStr);
-            goto END;
+            return NATS_UPDATE_ERR_STACK(s);
         }
 
         nanosecs = val;
@@ -1402,7 +1403,7 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
         if (res == -1)
         {
             s = nats_setError(NATS_ERR, "error parsing time '%s'", orgStr);
-            goto END;
+            return NATS_UPDATE_ERR_STACK(s);
         }
         // Compute the offset
         off = (int64_t) ((offHours * 60 * 60) + (offMin * 60));
@@ -1420,7 +1421,25 @@ nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
     {
         s = nats_setError(NATS_ERR, "error parsing time '%s'", orgStr);
     }
-END:
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+nats_JSONGetTime(nats_JSON *json, const char *fieldName, int64_t *timeUTC)
+{
+    natsStatus  s           = NATS_OK;
+    char        *str        = NULL;
+
+    s = nats_JSONGetStr(json, fieldName, &str);
+    if ((s == NATS_OK) && (str == NULL))
+    {
+        *timeUTC = 0;
+        return NATS_OK;
+    }
+    else if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    s = nats_parseTime(str, timeUTC);
     NATS_FREE(str);
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -1442,6 +1461,12 @@ nats_JSONGetArrayField(nats_JSON *json, const char *fieldName, int fieldType, na
         return nats_setError(NATS_INVALID_ARG,
                              "Field '%s' is not an array, it has type: %d",
                              field->name, field->typ);
+    // If empty array, return NULL/OK
+    if (field->value.varr->typ == TYPE_NULL)
+    {
+        *retField = NULL;
+        return NATS_OK;
+    }
     if (fieldType != field->value.varr->typ)
         return nats_setError(NATS_INVALID_ARG,
                              "Asked for field '%s' as an array of type: %d, but it is an array of type: %d",
@@ -1575,6 +1600,32 @@ natsStatus
 nats_JSONGetArrayArray(nats_JSON *json, const char *fieldName, nats_JSONArray ***array, int *arraySize)
 {
     JSON_GET_ARRAY(TYPE_ARRAY, nats_JSONArrayAsArrays);
+}
+
+natsStatus
+nats_JSONRange(nats_JSON *json, int expectedType, int expectedNumType, jsonRangeCB cb, void *userInfo)
+{
+    natsStrHashIter iter;
+    char            *fname  = NULL;
+    void            *val    = NULL;
+    natsStatus      s       = NATS_OK;
+
+    natsStrHashIter_Init(&iter, json->fields);
+    while ((s == NATS_OK) && natsStrHashIter_Next(&iter, &fname, &val))
+    {
+        nats_JSONField *f = (nats_JSONField*) val;
+
+        if (f->typ != expectedType)
+            s = nats_setError(NATS_ERR, "field '%s': expected value type of %d, got %d",
+                              f->name, expectedType, f->typ);
+        else if ((f->typ == TYPE_NUM) && (f->numTyp != expectedNumType))
+            s = nats_setError(NATS_ERR, "field '%s': expected numeric type of %d, got %d",
+                              f->name, expectedNumType, f->numTyp);
+        else
+            s = cb(userInfo, (const char*) f->name, f);
+    }
+    natsStrHashIter_Done(&iter);
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void
@@ -1748,7 +1799,7 @@ _base64Encode(const char *map, bool padding, const unsigned char *src, int srcLe
 
     *pDest = NULL;
 
-    if ((src == NULL) || (src[0] == '\0'))
+    if ((src == NULL) || (srcLen == 0))
         return NATS_OK;
 
     n = srcLen;
@@ -2175,4 +2226,391 @@ nats_marshalULong(natsBuffer *buf, bool comma, const char *fieldName, uint64_t u
 {
     natsStatus s = _marshalLongVal(buf, comma, fieldName, false, 0, uval);
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+// fmtFrac formats the fraction of v/10**prec (e.g., ".12345") into the
+// tail of buf, omitting trailing zeros. It omits the decimal
+// point too when the fraction is 0. It returns the index where the
+// output bytes begin and the value v/10**prec.
+static void
+fmt_frac(char *buf, int w, uint64_t v, int prec, int *nw, uint64_t *nv)
+{
+    // Omit trailing zeros up to and including decimal point.
+    bool print = false;
+    int i;
+    int digit;
+
+    for (i = 0; i < prec; i++)
+    {
+        digit = v % 10;
+        print = print || digit != 0;
+        if (print)
+        {
+            w--;
+            buf[w] = digit + '0';
+        }
+        v /= 10;
+    }
+    if (print)
+    {
+        w--;
+        buf[w] = '.';
+    }
+    *nw = w;
+    *nv = v;
+}
+
+// fmtInt formats v into the tail of buf.
+// It returns the index where the output begins.
+static int
+fmt_int(char *buf, int w, uint64_t v)
+{
+    if (v == 0)
+    {
+        w--;
+        buf[w] = '0';
+    }
+    else
+    {
+        while (v > 0)
+        {
+            w--;
+            buf[w] = v % 10 + '0';
+            v /= 10;
+        }
+    }
+    return w;
+}
+
+natsStatus
+nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, int64_t d)
+{
+    // Largest time is 2540400h10m10.000000000s
+    char buf[32];
+    int w = 32;
+    bool neg = d < 0;
+    uint64_t u = (uint64_t) (neg ? -d : d);
+    int prec;
+    natsStatus s = NATS_OK;
+    const char *start = (comma ? ",\"" : "\"");
+
+    if (u < 1000000000)
+    {
+        // Special case: if duration is smaller than a second,
+        // use smaller units, like 1.2ms
+        w--;
+        buf[w] = 's';
+        w--;
+        if (u == 0)
+        {
+            s = natsBuf_Append(out_buf, start, -1);
+            IFOK(s, natsBuf_Append(out_buf, field_name, -1));
+            IFOK(s, natsBuf_Append(out_buf, "\":\"0s\"", -1));
+            return NATS_UPDATE_ERR_STACK(s);
+        }
+        else if (u < 1000)
+        {
+            // print nanoseconds
+            prec = 0;
+            buf[w] = 'n';
+        }
+        else if (u < 1000000)
+        {
+            // print microseconds
+            prec = 3;
+            // U+00B5 'µ' micro sign == 0xC2 0xB5 (in reverse?)
+            buf[w] = '\xB5';
+            w--; // Need room for two bytes.
+            buf[w] = '\xC2';
+        }
+        else
+        {
+            // print milliseconds
+            prec = 6;
+            buf[w] = 'm';
+        }
+        fmt_frac(buf, w, u, prec, &w, &u);
+        w = fmt_int(buf, w, u);
+    }
+    else
+    {
+        w--;
+        buf[w] = 's';
+
+        fmt_frac(buf, w, u, 9, &w, &u);
+
+        // u is now integer seconds
+        w = fmt_int(buf, w, u % 60);
+        u /= 60;
+
+        // u is now integer minutes
+        if (u > 0)
+        {
+            w--;
+            buf[w] = 'm';
+            w = fmt_int(buf, w, u % 60);
+            u /= 60;
+
+            // u is now integer hours
+            // Stop at hours because days can be different lengths.
+            if (u > 0)
+            {
+                w--;
+                buf[w] = 'h';
+                w = fmt_int(buf, w, u);
+            }
+        }
+    }
+
+    if (neg)
+    {
+        w--;
+        buf[w] = '-';
+    }
+
+    s = natsBuf_Append(out_buf, start, -1);
+    IFOK(s, natsBuf_Append(out_buf, field_name, -1));
+    IFOK(s, natsBuf_Append(out_buf, "\":\"", -1));
+    IFOK(s, natsBuf_Append(out_buf, buf + w, sizeof(buf) - w));
+    IFOK(s, natsBuf_Append(out_buf, "\"", -1));
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+bool nats_IsSubjectValid(const char *subject, bool wcAllowed)
+{
+    int     i       = 0;
+    int     len     = 0;
+    int     lastDot = -1;
+    char    c;
+
+    if (nats_IsStringEmpty(subject))
+        return false;
+
+    len = (int) strlen(subject);
+    for (i=0; i<len ; i++)
+    {
+        c = subject[i];
+        if (isspace((unsigned char) c))
+            return false;
+
+        if (c == '.')
+        {
+            if ((i == len-1) || (i == lastDot+1))
+                return false;
+
+            // If the last token was 1 character long...
+            if (i == lastDot+2)
+            {
+                char prevToken = subject[i-1];
+
+                // If that token was `>`, then it is not a valid subject,
+                // regardless if wildcards are allowed or not.
+                if (prevToken == '>')
+                    return false;
+                else if (!wcAllowed && (prevToken == '*'))
+                    return false;
+            }
+
+            lastDot = i;
+        }
+
+        // Check the last character to see if it is a wildcard. Others
+        // are handled when processing the next '.' character (since
+        // if not a token of their own, they are not considered wildcards).
+        if (i == len-1)
+        {
+            // If they are a token of their own, that is, the preceeding
+            // character is the `.` or they are the first and only character,
+            // then the result will depend if wilcards are allowed or not.
+            if (((c == '>') || (c == '*')) && (i == lastDot+1))
+                return wcAllowed;
+        }
+    }
+    return true;
+}
+
+natsStatus
+nats_marshalMetadata(natsBuffer *buf, bool comma, const char *fieldName, natsMetadata md)
+{
+    natsStatus s = NATS_OK;
+    int i;
+    const char *start = (comma ? ",\"" : "\"");
+
+    if (md.Count <= 0)
+        return NATS_OK;
+
+    IFOK(s, natsBuf_Append(buf, start, -1));
+    IFOK(s, natsBuf_Append(buf, fieldName, -1));
+    IFOK(s, natsBuf_Append(buf, "\":{", 3));
+    for (i = 0; (s == NATS_OK) && (i < md.Count); i++)
+    {
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+        IFOK(s, natsBuf_Append(buf, md.List[i * 2], -1));
+        IFOK(s, natsBuf_Append(buf, "\":\"", 3));
+        IFOK(s, natsBuf_Append(buf, md.List[i * 2 + 1], -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+
+        if (i != md.Count - 1)
+            IFOK(s, natsBuf_AppendByte(buf, ','));
+    }
+    IFOK(s, natsBuf_AppendByte(buf, '}'));
+    return NATS_OK;
+}
+
+static natsStatus
+_addMD(void *closure, const char *fieldName, nats_JSONField *f)
+{
+    natsMetadata *md = (natsMetadata *)closure;
+
+    char *name = NATS_STRDUP(fieldName);
+    char *value = NATS_STRDUP(f->value.vstr);
+    if ((name == NULL) || (value == NULL))
+    {
+        NATS_FREE(name);
+        NATS_FREE(value);
+        return nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    md->List[md->Count * 2] = name;
+    md->List[md->Count * 2 + 1] = value;
+    md->Count++;
+    return NATS_OK;
+}
+
+natsStatus
+nats_unmarshalMetadata(nats_JSON *json, const char *fieldName, natsMetadata *md)
+{
+    natsStatus s = NATS_OK;
+    nats_JSON *mdJSON = NULL;
+    int n;
+
+    md->List = NULL;
+    md->Count = 0;
+    if (json == NULL)
+        return NATS_OK;
+
+    s = nats_JSONGetObject(json, fieldName, &mdJSON);
+    if ((s != NATS_OK) || (mdJSON == NULL))
+        return NATS_OK;
+
+    n = natsStrHash_Count(mdJSON->fields);
+    md->List = NATS_CALLOC(n * 2, sizeof(char *));
+    if (md->List == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    IFOK(s, nats_JSONRange(mdJSON, TYPE_STR, 0, _addMD, md));
+
+    return s;
+}
+
+natsStatus
+nats_cloneMetadata(natsMetadata *clone, natsMetadata md)
+{
+    natsStatus s = NATS_OK;
+    int i = 0;
+    int n;
+    char **list = NULL;
+
+    clone->Count = 0;
+    clone->List = NULL;
+    if (md.Count == 0)
+        return NATS_OK;
+
+    n = md.Count * 2;
+    list = NATS_CALLOC(n, sizeof(char *));
+    if (list == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+
+    for (i = 0; (s == NATS_OK) && (i < n); i++)
+    {
+        list[i] = NATS_STRDUP(md.List[i]);
+        if (list[i] == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    if (s == NATS_OK)
+    {
+        clone->List = (const char **)list;
+        clone->Count = md.Count;
+    }
+    else
+    {
+        for (n = i, i = 0; i < n; i++)
+            NATS_FREE(list[i]);
+        NATS_FREE(list);
+    }
+    return s;
+}
+
+void
+nats_freeMetadata(natsMetadata *md)
+{
+    if (md == NULL)
+        return;
+
+    for (int i = 0; i < md->Count * 2; i++)
+    {
+        NATS_FREE((char *)md->List[i]);
+    }
+    NATS_FREE((char*) md->List);
+    md->List = NULL;
+    md->Count = 0;
+}
+
+
+// allocates a sufficiently large buffer and formats the strings into it, as a
+// ["unencoded-string-0","unencoded-string-1",...]. For an empty array of
+// strings returns "[]".
+natsStatus nats_formatStringArray(char **out, const char **strings, int count)
+{
+    natsStatus s = NATS_OK;
+    natsBuffer buf;
+    int len = 0;
+    int  i;
+
+    len++; // For the '['
+    for (i = 0; i < count; i++)
+    {
+        len += 2; // For the quotes
+        if (i > 0)
+            len++; // For the ','
+        if (strings[i] == NULL)
+            len += strlen("(null)");
+        else
+            len += strlen(strings[i]);
+    }
+    len++; // For the ']'
+    len++; // For the '\0'
+
+    s = natsBuf_Init(&buf, len);
+
+    natsBuf_AppendByte(&buf, '[');
+    for (i = 0; (s == NATS_OK) && (i < count); i++)
+    {
+        if (i > 0)
+        {
+            IFOK(s, natsBuf_AppendByte(&buf, ','));
+        }
+        IFOK(s, natsBuf_AppendByte(&buf, '"'));
+        if (strings[i] == NULL)
+        {
+            IFOK(s, natsBuf_Append(&buf, "(null)", -1));
+        }
+        else
+        {
+            IFOK(s, natsBuf_Append(&buf, strings[i], -1));
+        }
+        IFOK(s, natsBuf_AppendByte(&buf, '"'));
+    }
+
+    IFOK(s, natsBuf_AppendByte(&buf, ']'));
+    IFOK(s, natsBuf_AppendByte(&buf, '\0'));
+    
+    if (s != NATS_OK)
+    {
+        natsBuf_Cleanup(&buf);
+        return s;
+    }
+
+    *out = natsBuf_Data(&buf);
+    return NATS_OK;
 }

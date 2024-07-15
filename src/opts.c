@@ -552,24 +552,25 @@ natsOptions_SetCertificatesChain(natsOptions *opts, const char *certStr, const c
     }
     if (s == NATS_OK)
     {
-        RSA *rsa  = NULL;
-        BIO *bio  = NULL;
+        BIO         *bio  = NULL;
+        EVP_PKEY    *pkey = NULL;
 
         bio = BIO_new_mem_buf((char*) keyStr, -1);
-        if ((bio == NULL) || ((rsa = PEM_read_bio_RSAPrivateKey(bio, NULL, 0, NULL)) == NULL))
+        if ((bio == NULL) || ((pkey = PEM_read_bio_PrivateKey(bio, NULL, 0, NULL)) == NULL))
         {
             s = nats_setError(NATS_SSL_ERROR,
                               "Error creating key: %s",
                               NATS_SSL_ERR_REASON_STRING);
         }
-        if ((s == NATS_OK) && (SSL_CTX_use_RSAPrivateKey(opts->sslCtx->ctx, rsa) != 1))
+
+        if ((s == NATS_OK) && (SSL_CTX_use_PrivateKey(opts->sslCtx->ctx, pkey) != 1))
         {
             s = nats_setError(NATS_SSL_ERROR,
                               "Error using private key: %s",
                               NATS_SSL_ERR_REASON_STRING);
         }
-        if (rsa != NULL)
-            RSA_free(rsa);
+        if (pkey != NULL)
+            EVP_PKEY_free(pkey);
         if (bio != NULL)
             BIO_free(bio);
     }
@@ -883,6 +884,18 @@ natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending)
 }
 
 natsStatus
+natsOptions_SetMaxPendingBytes(natsOptions* opts, int64_t maxPending)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, (maxPending <= 0));
+
+    opts->maxPendingBytes = maxPending;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
 natsOptions_SetErrorHandler(natsOptions *opts, natsErrHandler errHandler,
                             void *closure)
 {
@@ -890,6 +903,9 @@ natsOptions_SetErrorHandler(natsOptions *opts, natsErrHandler errHandler,
 
     opts->asyncErrCb = errHandler;
     opts->asyncErrCbClosure = closure;
+
+    if (opts->asyncErrCb == NULL)
+        opts->asyncErrCb = natsConn_defaultErrHandler;
 
     UNLOCK_OPTS(opts);
 
@@ -904,6 +920,19 @@ natsOptions_SetClosedCB(natsOptions *opts, natsConnectionHandler closedCb,
 
     opts->closedCb = closedCb;
     opts->closedCbClosure = closure;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_setMicroCallbacks(natsOptions *opts, natsConnectionHandler closed, natsErrHandler errHandler)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->microClosedCb = closed;
+    opts->microAsyncErrCb = errHandler;
 
     UNLOCK_OPTS(opts);
 
@@ -949,6 +978,18 @@ natsOptions_SetDiscoveredServersCB(natsOptions *opts,
 
     opts->discoveredServersCb = discoveredServersCb;
     opts->discoveredServersClosure = closure;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_SetIgnoreDiscoveredServers(natsOptions *opts, bool ignore)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->ignoreDiscoveredServers = ignore;
 
     UNLOCK_OPTS(opts);
 
@@ -1095,11 +1136,12 @@ _freeUserCreds(userCreds *uc)
 
     NATS_FREE(uc->userOrChainedFile);
     NATS_FREE(uc->seedFile);
+    NATS_FREE(uc->jwtAndSeedContent);
     NATS_FREE(uc);
 }
 
 static natsStatus
-_createUserCreds(userCreds **puc, bool onlySeedFile, const char *uocf, const char *sf)
+_createUserCreds(userCreds **puc, const char *uocf, const char *sf, const char* jwtAndSeedContent)
 {
     natsStatus  s   = NATS_OK;
     userCreds   *uc = NULL;
@@ -1108,17 +1150,27 @@ _createUserCreds(userCreds **puc, bool onlySeedFile, const char *uocf, const cha
     if (uc == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    if (!onlySeedFile)
+    // in case of content, we do not need to read the files anymore
+    if (jwtAndSeedContent != NULL)
     {
-        uc->userOrChainedFile = NATS_STRDUP(uocf);
-        if (uc->userOrChainedFile == NULL)
+        uc->jwtAndSeedContent = NATS_STRDUP(jwtAndSeedContent);
+        if (uc->jwtAndSeedContent == NULL)
             s = nats_setDefaultError(NATS_NO_MEMORY);
     }
-    if ((s == NATS_OK) && sf != NULL)
+    else
     {
-        uc->seedFile = NATS_STRDUP(sf);
-        if (uc->seedFile == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
+        if (uocf)
+        {
+            uc->userOrChainedFile = NATS_STRDUP(uocf);
+            if (uc->userOrChainedFile == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+        }
+        if ((s == NATS_OK) && sf != NULL)
+        {
+            uc->seedFile = NATS_STRDUP(sf);
+            if (uc->seedFile == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+        }
     }
     if (s != NATS_OK)
         _freeUserCreds(uc);
@@ -1128,32 +1180,9 @@ _createUserCreds(userCreds **puc, bool onlySeedFile, const char *uocf, const cha
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-natsStatus
-natsOptions_SetUserCredentialsFromFiles(natsOptions *opts, const char *userOrChainedFile, const char *seedFile)
+static void
+_setAndUnlockOptsFromUserCreds(natsOptions *opts, userCreds *uc)
 {
-    natsStatus  s   = NATS_OK;
-    userCreds   *uc = NULL;
-
-    LOCK_AND_CHECK_OPTIONS(opts, 0);
-
-    // Both files can be NULL (to unset), but if seeFile can't
-    // be set if userOrChainedFile is not.
-    if (nats_IsStringEmpty(userOrChainedFile) && !nats_IsStringEmpty(seedFile))
-    {
-        UNLOCK_OPTS(opts);
-        return nats_setError(NATS_INVALID_ARG, "%s", "user or chained file need to be specified");
-    }
-
-    if (!nats_IsStringEmpty(userOrChainedFile))
-    {
-        s = _createUserCreds(&uc, false, userOrChainedFile, seedFile);
-        if (s != NATS_OK)
-        {
-            UNLOCK_OPTS(opts);
-            return NATS_UPDATE_ERR_STACK(s);
-        }
-    }
-
     // Free previous object
     _freeUserCreds(opts->userCreds);
     // Set to new one (possibly NULL)
@@ -1161,7 +1190,7 @@ natsOptions_SetUserCredentialsFromFiles(natsOptions *opts, const char *userOrCha
 
     if (uc != NULL)
     {
-        opts->userJWTHandler = natsConn_userFromFile;
+        opts->userJWTHandler = natsConn_userCreds;
         opts->userJWTClosure = (void*) uc;
 
         opts->sigHandler = natsConn_signatureHandler;
@@ -1184,6 +1213,60 @@ natsOptions_SetUserCredentialsFromFiles(natsOptions *opts, const char *userOrCha
     }
 
     UNLOCK_OPTS(opts);
+}
+
+natsStatus
+natsOptions_SetUserCredentialsFromFiles(natsOptions *opts, const char *userOrChainedFile, const char *seedFile)
+{
+    natsStatus  s   = NATS_OK;
+    userCreds   *uc = NULL;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    // Both files can be NULL (to unset), but if seeFile can't
+    // be set if userOrChainedFile is not.
+    if (nats_IsStringEmpty(userOrChainedFile) && !nats_IsStringEmpty(seedFile))
+    {
+        UNLOCK_OPTS(opts);
+        return nats_setError(NATS_INVALID_ARG, "%s", "user or chained file need to be specified");
+    }
+
+    if (!nats_IsStringEmpty(userOrChainedFile))
+    {
+        s = _createUserCreds(&uc, userOrChainedFile, seedFile, NULL);
+        if (s != NATS_OK)
+        {
+            UNLOCK_OPTS(opts);
+            return NATS_UPDATE_ERR_STACK(s);
+        }
+    }
+
+    _setAndUnlockOptsFromUserCreds(opts, uc);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_SetUserCredentialsFromMemory(natsOptions *opts, const char *jwtAndSeedContent)
+{
+    natsStatus  s   = NATS_OK;
+    userCreds   *uc = NULL;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    // if content is not NULL create user creds from it;
+    // otherwise NULL will later lead to setting handlers to NULL
+    if (jwtAndSeedContent != NULL)
+    {
+        s = _createUserCreds(&uc, NULL, NULL, jwtAndSeedContent);
+        if (s != NATS_OK)
+        {
+            UNLOCK_OPTS(opts);
+            return NATS_UPDATE_ERR_STACK(s);
+        }
+    }
+
+    _setAndUnlockOptsFromUserCreds(opts, uc);
 
     return NATS_OK;
 }
@@ -1289,7 +1372,7 @@ natsOptions_SetNKeyFromSeed(natsOptions *opts,
             UNLOCK_OPTS(opts);
             return nats_setDefaultError(NATS_NO_MEMORY);
         }
-        s = _createUserCreds(&uc, true, NULL, seedFile);
+        s = _createUserCreds(&uc, NULL, seedFile, NULL);
         if (s != NATS_OK)
         {
             NATS_FREE(nk);
@@ -1339,8 +1422,8 @@ natsOptions_DisableNoResponders(natsOptions *opts, bool disabled)
     return NATS_OK;
 }
 
-natsStatus
-natsOptions_SetCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix)
+static natsStatus
+_setCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix, bool check)
 {
     natsStatus s = NATS_OK;
 
@@ -1351,35 +1434,50 @@ natsOptions_SetCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix)
 
     if (!nats_IsStringEmpty(inboxPrefix))
     {
-        int i;
-        int last = (int)strlen(inboxPrefix)-1;
+        // If not called from clone(), we need to check the validity of the
+        // inbox prefix.
+        if (check && !nats_IsSubjectValid(inboxPrefix, false))
+            s = nats_setError(NATS_INVALID_ARG, "Invalid inbox prefix '%s'", inboxPrefix);
 
-        for (i=0; i<=last; i++)
-        {
-            char c = inboxPrefix[i];
-
-            if ((c == ' ') || (c == '*') || (c == '>')
-                || ((c == '.') && (i > 0) && (inboxPrefix[i-1] == '.')))
-            {
-                s = nats_setError(NATS_INVALID_ARG, "Invalid inbox prefix '%s'", inboxPrefix);
-                break;
-            }
-        }
         if (s == NATS_OK)
         {
-            if (inboxPrefix[last] != '.')
+            // If invoked from user, there will not be the last '.', which
+            // we will add here.
+            if (check)
             {
                 if (nats_asprintf(&opts->inboxPfx, "%s.", inboxPrefix) < 0)
                     s = nats_setDefaultError(NATS_NO_MEMORY);
             }
             else
+            {
+                // We are invoked from clone(), simply duplicate the string.
                 DUP_STRING(s, opts->inboxPfx, inboxPrefix);
+            }
         }
     }
 
     UNLOCK_OPTS(opts);
 
     return s;
+}
+
+natsStatus
+natsOptions_SetCustomInboxPrefix(natsOptions *opts, const char *inboxPrefix)
+{
+    natsStatus s = _setCustomInboxPrefix(opts, inboxPrefix, true);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsOptions_SetMessageBufferPadding(natsOptions *opts, int paddingSize)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, (paddingSize < 0));
+
+    opts->payloadPaddingSize = paddingSize;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
 }
 
 static void
@@ -1431,12 +1529,14 @@ natsOptions_Create(natsOptions **newOpts)
     opts->maxPingsOut           = NATS_OPTS_DEFAULT_MAX_PING_OUT;
     opts->ioBufSize             = NATS_OPTS_DEFAULT_IO_BUF_SIZE;
     opts->maxPendingMsgs        = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
+    opts->maxPendingBytes       = -1;
     opts->timeout               = NATS_OPTS_DEFAULT_TIMEOUT;
     opts->libMsgDelivery        = natsLib_isLibHandlingMsgDeliveryByDefault();
     opts->writeDeadline         = natsLib_defaultWriteDeadline();
     opts->reconnectBufSize      = NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE;
     opts->reconnectJitter       = NATS_OPTS_DEFAULT_RECONNECT_JITTER;
     opts->reconnectJitterTLS    = NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS;
+    opts->asyncErrCb            = natsConn_defaultErrHandler;
 
     *newOpts = opts;
 
@@ -1511,12 +1611,20 @@ natsOptions_clone(natsOptions *opts)
     }
     else if ((s == NATS_OK) && (opts->userCreds != NULL))
     {
-        s = natsOptions_SetUserCredentialsFromFiles(cloned,
-                                                    opts->userCreds->userOrChainedFile,
-                                                    opts->userCreds->seedFile);
+        if (opts->userCreds->jwtAndSeedContent != NULL)
+        {
+            s = natsOptions_SetUserCredentialsFromMemory(cloned,
+                                                        opts->userCreds->jwtAndSeedContent);
+        }
+        else
+        {
+            s = natsOptions_SetUserCredentialsFromFiles(cloned,
+                                                        opts->userCreds->userOrChainedFile,
+                                                        opts->userCreds->seedFile);
+        }
     }
     if ((s == NATS_OK) && (opts->inboxPfx != NULL))
-        s = natsOptions_SetCustomInboxPrefix(cloned, opts->inboxPfx);
+        s = _setCustomInboxPrefix(cloned, opts->inboxPfx, false);
 
     if (s != NATS_OK)
     {

@@ -1,0 +1,69 @@
+name: "Release"
+on:
+  push:
+    branches:
+      - main
+      - release_*
+
+
+permissions:
+  contents: write # required by build-test to comment on coverage but not used here.
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -x -eo pipefail {0}
+
+jobs:
+  flakes:
+    name: "check for flaky tests"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      server_version: main
+      repeat: 5
+
+  server-versions:
+    strategy:
+      fail-fast: false
+      matrix:
+        server_version: [latest, v2.9.11]
+    uses: ./.github/workflows/build-test.yml
+    name: "Other servers"
+    with:
+      server_version: ${{ matrix.server_version }}
+
+  TLS-OFF:
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    uses: ./.github/workflows/build-test.yml
+    name: "No TLS"
+    with:
+      tls: OFF
+
+  older-cc:
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc-7, gcc-8, clang-8]
+    uses: ./.github/workflows/build-test.yml
+    name: "Older compilers"
+    with:
+      ubuntu_version: 20.04
+      compiler: ${{ matrix.compiler }}
+
+  no-streaming:
+    uses: ./.github/workflows/build-test.yml
+    name: "No Streaming"
+    with:
+      streaming: OFF
+
+  coverage:
+    name: "Coverage"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      coverage: ON
+      server_version: main
+      type: Debug
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

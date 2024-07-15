@@ -126,7 +126,7 @@ natsStatus
 natsConn_publish(natsConnection *nc, natsMsg *msg, const char *reply, bool directFlush);
 
 natsStatus
-natsConn_userFromFile(char **userJWT, char **customErrTxt, void *closure);
+natsConn_userCreds(char **userJWT, char **customErrTxt, void *closure);
 
 natsStatus
 natsConn_signatureHandler(char **customErrTxt, unsigned char **sig, int *sigLen, const char *nonce, void *closure);
@@ -147,6 +147,12 @@ natsConn_initInbox(natsConnection *nc, char *buf, int bufSize, char **newInbox, 
 
 natsStatus
 natsConn_newInbox(natsConnection *nc, natsInbox **newInbox);
+
+bool
+natsConn_srvVersionAtLeast(natsConnection *nc, int major, int minor, int update);
+
+void
+natsConn_defaultErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure);
 
 void
 natsConn_close(natsConnection *nc);

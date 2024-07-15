@@ -79,6 +79,12 @@ void
 natsSubAndLdw_Unlock(natsSubscription *sub);
 
 void
+natsSubAndLdw_LockAndRetain(natsSubscription *sub);
+
+void
+natsSubAndLdw_UnlockAndRelease(natsSubscription *sub);
+
+void
 natsSub_close(natsSubscription *sub, bool connectionClosed);
 
 #endif /* SUB_H_ */

@@ -64,7 +64,7 @@ if(NATS_BUILD_LIB_SHARED)
   install(EXPORT cnats-targets
         NAMESPACE cnats::
         FILE cnats-config.cmake
-        DESTINATION lib/cmake/cnats)
+        DESTINATION ${NATS_LIBDIR}/cmake/cnats)
 endif(NATS_BUILD_LIB_SHARED)
 
 if(NATS_BUILD_LIB_STATIC)
@@ -76,23 +76,9 @@ if(NATS_BUILD_LIB_STATIC)
   install(EXPORT cnats-targets
         NAMESPACE cnats::
         FILE cnats-config.cmake
-        DESTINATION lib/cmake/cnats)
+        DESTINATION ${NATS_LIBDIR}/cmake/cnats)
 endif(NATS_BUILD_LIB_STATIC)
 
 install(FILES deprnats.h DESTINATION ${NATS_INCLUDE_DIR} RENAME nats.h)
 install(FILES nats.h status.h version.h DESTINATION ${NATS_INCLUDE_DIR}/nats)
 install(FILES adapters/libevent.h adapters/libuv.h DESTINATION ${NATS_INCLUDE_DIR}/nats/adapters)
-
-# --------------------------------------
-# Setup the coveralls target and tell it
-# to gather coverage data for all the
-# lib sources.
-# --------------------------------------
-if(NATS_COVERAGE)
-	set(COVERAGE_SRCS ${SOURCES} ${S_SOURCES})
-	list(REMOVE_ITEM COVERAGE_SRCS "${PROJECT_SOURCE_DIR}/src/stan/protocol.pb-c.c")
-	coveralls_setup(
-        "${COVERAGE_SRCS}"
-        ${NATS_COVERAGE_UPLOAD}
-        "${PROJECT_SOURCE_DIR}/coveralls-cmake/cmake")
-endif(NATS_COVERAGE)

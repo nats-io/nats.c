@@ -173,7 +173,7 @@ jobs:
           export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
           flags=""
-          ctest --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }} 2>&1 | tee /tmp/out.txt
+          ctest --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }}
 
       - name: Upload coverage reports to Codecov
         if: inputs.coverage == 'ON'

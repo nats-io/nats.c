@@ -38,24 +38,23 @@ jobs:
       verbose_test_output: ON
       verbose_make_output: ON
 
-  sanitize-addr:
-    name: "Sanitize address"
+  sanitize:
+    name: "Sanitize"
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        sanitize: [address, thread]
+        pooled_delivery: [ON, OFF]
     uses: ./.github/workflows/build-test.yml
     with:
-      sanitize: address
       server_version: main
       type: Debug
+      compiler: ${{ matrix.compiler }}
+      sanitize: ${{ matrix.sanitize }}
+      lib_msg_delivery: ${{ matrix.pooled_delivery }}
 
-  sanitize-addr-lib-msg-delivery:
-    name: "Sanitize address (lib_msg_delivery)"
-    uses: ./.github/workflows/build-test.yml
-    with:
-      type: Debug
-      sanitize: address
-      server_version: main
-      lib_msg_delivery: ON
-
-  san-addr:
+  san-addr-deadline:
     name: "Sanitize address (lib_write_deadline)"
     uses: ./.github/workflows/build-test.yml
     with:
@@ -63,14 +62,6 @@ jobs:
       sanitize: address
       server_version: main
       lib_write_deadline: ON
-
-  san-thread:
-    name: "Sanitize thread"
-    uses: ./.github/workflows/build-test.yml
-    with:
-      type: Debug
-      sanitize: thread
-      server_version: main
 
   Windows:
     name: "Windows"

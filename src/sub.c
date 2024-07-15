@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -23,54 +23,118 @@
 #include "util.h"
 #include "js.h"
 #include "opts.h"
+#include "glib/glib.h"
 
 #ifdef DEV_MODE
 
-static void _retain(natsSubscription *sub)   { sub->refs++; }
-static void _release(natsSubscription *sub)  { sub->refs--; }
-
-void natsSub_Lock(natsSubscription *sub)     { natsMutex_Lock(sub->mu);   }
-void natsSub_Unlock(natsSubscription *sub)   { natsMutex_Unlock(sub->mu); }
+static void _retain(natsSubscription *sub) { sub->refs++; }
+static void _release(natsSubscription *sub) { sub->refs--; }
 
 #else
 
-#define _retain(s)  ((s)->refs++)
+#define _retain(s) ((s)->refs++)
 #define _release(s) ((s)->refs--)
 
 #endif // DEV_MODE
 
-#define SUB_DLV_WORKER_LOCK(s)      if ((s)->libDlvWorker != NULL) \
-                                        natsMutex_Lock((s)->libDlvWorker->lock)
-
-#define SUB_DLV_WORKER_UNLOCK(s)    if ((s)->libDlvWorker != NULL) \
-                                        natsMutex_Unlock((s)->libDlvWorker->lock)
-
 bool testDrainAutoUnsubRace = false;
 
-static void
-_freeSubscription(natsSubscription *sub)
+static inline void _destroyControlMessage(natsMsg *msg)
 {
-    natsMsg *m;
+    if (msg != NULL)
+    {
+        natsMsg_clearNoDestroy(msg);
+        natsMsg_Destroy(msg);
+    }
+}
 
+static inline void _freeControlMessages(natsSubscription *sub)
+{
+    if (sub->control == NULL)
+        return;
+
+    _destroyControlMessage(sub->control->sub.timeout);
+    _destroyControlMessage(sub->control->sub.close);
+    _destroyControlMessage(sub->control->sub.drain);
+    _destroyControlMessage(sub->control->batch.expired);
+    _destroyControlMessage(sub->control->batch.missedHeartbeat);
+    NATS_FREE(sub->control);
+}
+
+// Should be called suring the subscription creation process, or under the sub's lock.
+static inline natsStatus
+_runOwnDispatcher(natsSubscription *sub, bool forReplies)
+{
+    natsStatus s = NATS_OK;
+    if (sub->ownDispatcher.thread != NULL)
+        return NATS_ILLEGAL_STATE; // already running
+
+    sub->dispatcher = &sub->ownDispatcher;
+
+    natsLib_Retain();
+    s = natsThread_Create(&sub->ownDispatcher.thread,
+                          forReplies ? nats_dispatchRepliesOwnThreadf : nats_dispatchMessagesOwnThreadf,
+                          sub->dispatcher);
+    if (s != NATS_OK)
+        natsLib_Release();
+
+    return s;
+}
+
+static inline natsStatus _createControlMessage(natsMsg **msg, natsSubscription *sub)
+{
+    natsStatus s = natsMsg_create(msg, NULL, 0, NULL, 0, NULL, 0, -1);
+    if (s == NATS_OK)
+    {
+        natsMsg_setNoDestroy(*msg);
+        (*msg)->sub = sub;
+    }
+    return s;
+}
+
+// Sets up the default (user-thread NextMsg-only) dispatcher for a sub. Avoid
+// the use of term "pull" since it's not to be confused with JetStream consumer
+// pull requests.
+static natsStatus
+_initOwnDispatcher(natsSubscription *sub)
+{
+    natsStatus s = NATS_OK;
+
+    if (sub->ownDispatcher.dedicatedTo != NULL)
+        return NATS_ILLEGAL_STATE; // already started
+
+    sub->ownDispatcher.dedicatedTo = sub;
+    sub->ownDispatcher.mu = sub->mu;
+    s = natsCondition_Create(&sub->ownDispatcher.cond);
+    return s;
+}
+
+static inline void _cleanupOwnDispatcher(natsSubscription *sub)
+{
+    if (sub->ownDispatcher.thread != NULL)
+    {
+        natsThread_Join(sub->ownDispatcher.thread);
+        natsThread_Destroy(sub->ownDispatcher.thread);
+        sub->ownDispatcher.thread = NULL;
+    }
+
+    nats_destroyQueuedMessages(&sub->ownDispatcher.queue);
+    natsCondition_Destroy(sub->ownDispatcher.cond);
+}
+
+void _freeSub(natsSubscription *sub)
+{
     if (sub == NULL)
         return;
 
-    while ((m = sub->msgList.head) != NULL)
-    {
-        sub->msgList.head = m->next;
-        natsMsg_Destroy(m);
-    }
+    _freeControlMessages(sub);
+    _cleanupOwnDispatcher(sub);
 
     NATS_FREE(sub->subject);
     NATS_FREE(sub->queue);
 
-    if (sub->deliverMsgsThread != NULL)
-    {
-        natsThread_Detach(sub->deliverMsgsThread);
-        natsThread_Destroy(sub->deliverMsgsThread);
-    }
+    natsCondition_Destroy(sub->drainCond);
     natsTimer_Destroy(sub->timeoutTimer);
-    natsCondition_Destroy(sub->cond);
     natsMutex_Destroy(sub->mu);
     jsSub_free(sub->jsi);
 
@@ -79,73 +143,41 @@ _freeSubscription(natsSubscription *sub)
     NATS_FREE(sub);
 }
 
-void
-natsSub_retain(natsSubscription *sub)
-{
-    natsSub_Lock(sub);
-
-    sub->refs++;
-
-    natsSub_Unlock(sub);
-}
-
-void
-natsSub_release(natsSubscription *sub)
+void natsSub_release(natsSubscription *sub)
 {
     int refs = 0;
 
     if (sub == NULL)
         return;
 
-    natsSub_Lock(sub);
+    natsMutex_Lock(sub->mu);
 
     refs = --(sub->refs);
 
-    natsSub_Unlock(sub);
+        natsMutex_Unlock(sub->mu);
 
     if (refs == 0)
-        _freeSubscription(sub);
+        _freeSub(sub);
 }
 
-void
-natsSubAndLdw_Lock(natsSubscription *sub)
-{
-    natsMutex_Lock(sub->mu);
-    SUB_DLV_WORKER_LOCK(sub);
-}
-
-void
-natsSubAndLdw_LockAndRetain(natsSubscription *sub)
-{
-    natsMutex_Lock(sub->mu);
-    sub->refs++;
-    SUB_DLV_WORKER_LOCK(sub);
-}
-
-void
-natsSubAndLdw_Unlock(natsSubscription *sub)
-{
-    SUB_DLV_WORKER_UNLOCK(sub);
-    natsMutex_Unlock(sub->mu);
-}
-
-void
-natsSubAndLdw_UnlockAndRelease(natsSubscription *sub)
+void natsSub_unlockRelease(natsSubscription *sub)
 {
     int refs = 0;
 
-    SUB_DLV_WORKER_UNLOCK(sub);
+    if (sub == NULL)
+        return;
 
     refs = --(sub->refs);
+
     natsMutex_Unlock(sub->mu);
 
     if (refs == 0)
-        _freeSubscription(sub);
+        _freeSub(sub);
 }
 
 // Runs under the subscription lock but will release it for a JS subscription
 // if the JS consumer needs to be deleted.
-static void
+static inline void
 _setDrainCompleteState(natsSubscription *sub)
 {
     // It is possible that we are here without being in "drain in progress"
@@ -178,153 +210,25 @@ _setDrainCompleteState(natsSubscription *sub)
                 sub->drainStatus = NATS_INVALID_SUBSCRIPTION;
         }
         sub->drainState |= SUB_DRAIN_COMPLETE;
-        natsCondition_Broadcast(sub->cond);
+
+        natsCondition_Broadcast(sub->drainCond);
     }
 }
 
-void
-natsSub_setDrainCompleteState(natsSubscription *sub)
+void natsSub_setDrainCompleteState(natsSubscription *sub)
 {
     natsSub_Lock(sub);
     _setDrainCompleteState(sub);
     natsSub_Unlock(sub);
 }
 
-// _deliverMsgs is used to deliver messages to asynchronous subscribers.
-void
-natsSub_deliverMsgs(void *arg)
-{
-    natsSubscription    *sub        = (natsSubscription*) arg;
-    natsConnection      *nc         = sub->conn;
-    natsMsgHandler      mcb         = sub->msgCb;
-    void                *mcbClosure = sub->msgCbClosure;
-    uint64_t            delivered;
-    uint64_t            max;
-    natsMsg             *msg;
-    int64_t             timeout;
-    natsStatus          s = NATS_OK;
-    bool                draining = false;
-    bool                rmSub    = false;
-    natsOnCompleteCB    onCompleteCB = NULL;
-    void                *onCompleteCBClosure = NULL;
-    char                *fcReply = NULL;
-    jsSub               *jsi = NULL;
-
-    // This just serves as a barrier for the creation of this thread.
-    natsConn_Lock(nc);
-    natsConn_Unlock(nc);
-
-    natsSub_Lock(sub);
-    timeout = sub->timeout;
-    jsi = sub->jsi;
-    natsSub_Unlock(sub);
-
-    while (true)
-    {
-        natsSub_Lock(sub);
-
-        s = NATS_OK;
-        while (((msg = sub->msgList.head) == NULL) && !(sub->closed) && !(sub->draining) && (s != NATS_TIMEOUT))
-        {
-            if (timeout != 0)
-                s = natsCondition_TimedWait(sub->cond, sub->mu, timeout);
-            else
-                natsCondition_Wait(sub->cond, sub->mu);
-        }
-
-        if (sub->closed)
-        {
-            natsSub_Unlock(sub);
-            break;
-        }
-        draining = sub->draining;
-
-        // Will happen with timeout subscription
-        if (msg == NULL)
-        {
-            natsSub_Unlock(sub);
-            if (draining)
-            {
-                rmSub = true;
-                break;
-            }
-            // If subscription timed-out, invoke callback with NULL message.
-            if (s == NATS_TIMEOUT)
-                (*mcb)(nc, sub, NULL, mcbClosure);
-            continue;
-        }
-
-        delivered = ++(sub->delivered);
-
-        sub->msgList.head = msg->next;
-
-        if (sub->msgList.tail == msg)
-            sub->msgList.tail = NULL;
-
-        sub->msgList.msgs--;
-        sub->msgList.bytes -= natsMsg_dataAndHdrLen(msg);
-
-        msg->next = NULL;
-
-        // Capture this under lock.
-        max = sub->max;
-
-        // Check for JS flow control
-        fcReply = (jsi == NULL ? NULL : jsSub_checkForFlowControlResponse(sub));
-
-        natsSub_Unlock(sub);
-
-        if ((max == 0) || (delivered <= max))
-        {
-           (*mcb)(nc, sub, msg, mcbClosure);
-        }
-        else
-        {
-            // We need to destroy the message since the user can't do it
-            natsMsg_Destroy(msg);
-        }
-
-        if (fcReply != NULL)
-        {
-            natsConnection_Publish(nc, fcReply, NULL, 0);
-            NATS_FREE(fcReply);
-        }
-
-        // Don't do 'else' because we need to remove when we have hit
-        // the max (after the callback returns).
-        if ((max > 0) && (delivered >= max))
-        {
-            // If we have hit the max for delivered msgs, remove sub.
-            rmSub = true;
-            break;
-        }
-    }
-
-    natsSub_Lock(sub);
-    onCompleteCB        = sub->onCompleteCB;
-    onCompleteCBClosure = sub->onCompleteCBClosure;
-    _setDrainCompleteState(sub);
-    natsSub_Unlock(sub);
-
-    if (rmSub)
-        natsConn_removeSubscription(nc, sub);
-
-    if (onCompleteCB != NULL)
-        (*onCompleteCB)(onCompleteCBClosure);
-
-    natsSub_release(sub);
-}
-
-bool
-natsSub_setMax(natsSubscription *sub, uint64_t max)
+bool natsSub_setMax(natsSubscription *sub, uint64_t max)
 {
     bool accepted = false;
 
     natsSub_Lock(sub);
-    SUB_DLV_WORKER_LOCK(sub);
     sub->max = (max <= sub->delivered ? 0 : max);
     accepted = sub->max != 0;
-    SUB_DLV_WORKER_UNLOCK(sub);
     natsSub_Unlock(sub);
     return accepted;
 }
@@ -350,12 +254,9 @@ natsSubscription_SetOnCompleteCB(natsSubscription *sub, natsOnCompleteCB cb, voi
     return s;
 }
 
-void
-natsSub_close(natsSubscription *sub, bool connectionClosed)
+void natsSub_close(natsSubscription *sub, bool connectionClosed)
 {
     natsSub_Lock(sub);
-
-    SUB_DLV_WORKER_LOCK(sub);
 
     if (!(sub->closed))
     {
@@ -365,74 +266,88 @@ natsSub_close(natsSubscription *sub, bool connectionClosed)
         if ((sub->jsi != NULL) && (sub->jsi->hbTimer != NULL))
             natsTimer_Stop(sub->jsi->hbTimer);
 
-        if (sub->libDlvWorker != NULL)
-        {
-            // If this is a subscription with timeout, stop the timer.
-            if (sub->timeout != 0)
-                natsTimer_Stop(sub->timeoutTimer);
+        // If this is a subscription with timeout, stop the timer.
+        if (sub->timeout != 0)
+            natsTimer_Stop(sub->timeoutTimer);
 
-            // Post a control message to wake-up the worker which will
-            // ensure that all pending messages for this subscription
-            // are removed and the subscription will ultimately be
-            // released in the worker thread.
-            natsLib_msgDeliveryPostControlMsg(sub);
+        if (sub->dispatcher->thread != NULL)
+        {
+            // Post a control message to wake-up the worker which will ensure
+            // that all pending messages for this subscription are removed,
+            // release the subscription and self-destroy.
+            natsSub_enqueueCtrlMsg(sub, sub->control->sub.close);
         }
         else
-            natsCondition_Broadcast(sub->cond);
+        {
+            // Notify any pending natsSub_NextMsg() that the subscription is
+            // closed.
+            natsCondition_Broadcast(sub->ownDispatcher.cond);
+        }
     }
-
-    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 }
 
 static void
-_asyncTimeoutCb(natsTimer *timer, void* closure)
+_asyncTimeoutCb(natsTimer *timer, void *closure)
 {
-    natsSubscription *sub = (natsSubscription*) closure;
+    natsSubscription *sub = (natsSubscription *)closure;
 
     // Should not happen, but in case
-    if (sub->libDlvWorker == NULL)
+    if (sub->dispatcher == NULL)
         return;
 
-    SUB_DLV_WORKER_LOCK(sub);
-
-    // If the subscription is closed, or if we are prevented from posting
-    // a "timeout" control message, do nothing.
-    if (!sub->closed && !sub->timedOut && !sub->timeoutSuspended)
+    natsSub_Lock(sub);
+    // If the subscription has already timed out and has not reset, is closed or
+    // draining - do nothing.
+    if (!sub->closed && !sub->timeoutSuspended)
     {
-        // Prevent from scheduling another control message while we are not
-        // done with previous one.
-        sub->timedOut = true;
-
         // Set the timer to a very high value, it will be reset from the
         // worker thread.
-        natsTimer_Reset(sub->timeoutTimer, 60*60*1000);
+        natsTimer_Reset(sub->timeoutTimer, 60 * 60 * 1000);
 
         // Post a control message to the worker thread.
-        natsLib_msgDeliveryPostControlMsg(sub);
+        natsSub_enqueueCtrlMsg(sub, sub->control->sub.timeout);
     }
-
-    SUB_DLV_WORKER_UNLOCK(sub);
+    natsSub_Unlock(sub);
 }
 
 static void
-_asyncTimeoutStopCb(natsTimer *timer, void* closure)
+_asyncTimeoutStopCb(natsTimer *timer, void *closure)
 {
-    natsSubscription *sub = (natsSubscription*) closure;
+    natsSubscription *sub = (natsSubscription *)closure;
 
     natsSub_release(sub);
+}
+
+natsStatus nats_createControlMessages(natsSubscription *sub)
+{
+    natsStatus s = NATS_OK;
+
+    if (sub->control != NULL)
+        return NATS_OK;
+    sub->control = NATS_CALLOC(1, sizeof(natsSubscriptionControlMessages));
+    if (sub->control == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+    IFOK(s, _createControlMessage(&(sub->control->sub.timeout), sub));
+    IFOK(s, _createControlMessage(&sub->control->sub.close, sub));
+    IFOK(s, _createControlMessage(&sub->control->sub.drain, sub));
+    IFOK(s, _createControlMessage(&sub->control->batch.expired, sub));
+    IFOK(s, _createControlMessage(&sub->control->batch.missedHeartbeat, sub));
+
+    // no need to free on failure, sub's free will clean it up.
+    return s;
 }
 
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
                const char *queueGroup, int64_t timeout, natsMsgHandler cb, void *cbClosure,
-               bool preventUseOfLibDlvPool, jsSub *jsi)
+               bool forReplies, jsSub *jsi)
 {
-    natsStatus          s = NATS_OK;
-    natsSubscription    *sub = NULL;
+    natsStatus s = NATS_OK;
+    natsSubscription *sub = NULL;
 
-    sub = (natsSubscription*) NATS_CALLOC(1, sizeof(natsSubscription));
+    sub = (natsSubscription *)NATS_CALLOC(1, sizeof(natsSubscription));
     if (sub == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
@@ -445,14 +360,14 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
 
     natsConn_retain(nc);
 
-    sub->refs           = 1;
-    sub->conn           = nc;
-    sub->timeout        = timeout;
-    sub->msgCb          = cb;
-    sub->msgCbClosure   = cbClosure;
-    sub->msgsLimit      = nc->opts->maxPendingMsgs;
-    sub->bytesLimit     = nc->opts->maxPendingBytes == -1 ? nc->opts->maxPendingMsgs * 1024 : nc->opts->maxPendingBytes;;
-    sub->jsi            = jsi;
+    sub->refs = 1;
+    sub->conn = nc;
+    sub->timeout = timeout;
+    sub->msgCb = cb;
+    sub->msgCbClosure = cbClosure;
+    sub->msgsLimit = nc->opts->maxPendingMsgs;
+    sub->bytesLimit = nc->opts->maxPendingBytes == -1 ? nc->opts->maxPendingMsgs * 1024 : nc->opts->maxPendingBytes;
+    sub->jsi = jsi;
 
     sub->subject = NATS_STRDUP(subj);
     if (sub->subject == NULL)
@@ -464,38 +379,45 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
         if (sub->queue == NULL)
             s = nats_setDefaultError(NATS_NO_MEMORY);
     }
-    if (s == NATS_OK)
-        s = natsCondition_Create(&(sub->cond));
-    if ((s == NATS_OK) && (cb != NULL))
-    {
-        if (!(nc->opts->libMsgDelivery) || preventUseOfLibDlvPool)
-        {
-            // Let's not rely on the created thread acquiring the lock that
-            // would make it safe to retain only on success.
-            _retain(sub);
 
-            // If we have an async callback, start up a sub specific
-            // thread to deliver the messages.
-            s = natsThread_Create(&(sub->deliverMsgsThread), natsSub_deliverMsgs,
-                                  (void*) sub);
-            if (s != NATS_OK)
-                _release(sub);
+    if (s == NATS_OK)
+        s = natsCondition_Create(&sub->drainCond);
+    if (s == NATS_OK)
+        s = _initOwnDispatcher(sub);
+
+    bool useShared = (forReplies ? nc->opts->useSharedReplyDispatcher : nc->opts->useSharedDispatcher);
+    bool useAsyncThread = (cb != NULL);
+    if ((s == NATS_OK) && useAsyncThread)
+        s = nats_createControlMessages(sub);
+    if (s == NATS_OK)
+    {
+        _retain(sub);
+        if (!useAsyncThread)
+        {            
+            sub->dispatcher = &sub->ownDispatcher;
+            _release(sub);
         }
-        else
+        else if (useShared)
         {
-            _retain(sub);
-            s = natsLib_msgDeliveryAssignWorker(sub);
+            s = nats_assignSubToDispatch(sub, forReplies);
+
+            // If we are using a shared dispatcher, we need to start the
+            // timeout timer. Own dispatcher uses a timed wait on the
+            // condition, and does not need the timer.
             if ((s == NATS_OK) && (timeout > 0))
             {
                 _retain(sub);
-                s = natsTimer_Create(&sub->timeoutTimer, _asyncTimeoutCb,
-                                     _asyncTimeoutStopCb, timeout, (void*) sub);
+                s = natsTimer_Create(&sub->timeoutTimer, _asyncTimeoutCb, _asyncTimeoutStopCb, timeout, sub);
                 if (s != NATS_OK)
                     _release(sub);
             }
-            if (s != NATS_OK)
-                _release(sub);
         }
+        else
+        {
+            s = _runOwnDispatcher(sub, forReplies);
+        }
+        if (s != NATS_OK)
+            _release(sub);
     }
 
     if (s == NATS_OK)
@@ -547,7 +469,6 @@ natsConnection_SubscribeTimeout(natsSubscription **sub, natsConnection *nc, cons
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-
 /*
  * natsSubscribeSync is syntactic sugar for natsSubscribe(&sub, nc, subject, NULL).
  */
@@ -569,8 +490,8 @@ natsConnection_SubscribeSync(natsSubscription **sub, natsConnection *nc, const c
  */
 natsStatus
 natsConnection_QueueSubscribe(natsSubscription **sub, natsConnection *nc,
-                   const char *subject, const char *queueGroup,
-                   natsMsgHandler cb, void *cbClosure)
+                              const char *subject, const char *queueGroup,
+                              natsMsgHandler cb, void *cbClosure)
 {
     natsStatus s;
 
@@ -591,13 +512,12 @@ natsConnection_QueueSubscribe(natsSubscription **sub, natsConnection *nc,
  */
 natsStatus
 natsConnection_QueueSubscribeTimeout(natsSubscription **sub, natsConnection *nc,
-                   const char *subject, const char *queueGroup,
-                   int64_t timeout, natsMsgHandler cb, void *cbClosure)
+                                     const char *subject, const char *queueGroup,
+                                     int64_t timeout, natsMsgHandler cb, void *cbClosure)
 {
     natsStatus s;
 
-    if ((queueGroup == NULL) || (strlen(queueGroup) == 0) || (cb == NULL)
-            || (timeout <= 0))
+    if ((queueGroup == NULL) || (strlen(queueGroup) == 0) || (cb == NULL) || (timeout <= 0))
     {
         return nats_setDefaultError(NATS_INVALID_ARG);
     }
@@ -612,7 +532,7 @@ natsConnection_QueueSubscribeTimeout(natsSubscription **sub, natsConnection *nc,
  */
 natsStatus
 natsConnection_QueueSubscribeSync(natsSubscription **sub, natsConnection *nc,
-                       const char *subject, const char *queueGroup)
+                                  const char *subject, const char *queueGroup)
 {
     natsStatus s;
 
@@ -645,13 +565,13 @@ natsSubscription_NoDeliveryDelay(natsSubscription *sub)
 natsStatus
 natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool pullSubInternal)
 {
-    natsStatus      s    = NATS_OK;
-    natsConnection  *nc  = NULL;
-    natsMsg         *msg = NULL;
-    bool            removeSub = false;
-    int64_t         target    = 0;
-    jsSub           *jsi      = NULL;
-    char            *fcReply  = NULL;
+    natsStatus s = NATS_OK;
+    natsConnection *nc = NULL;
+    natsMsg *msg = NULL;
+    bool removeSub = false;
+    int64_t target = 0;
+    jsSub *jsi = NULL;
+    char *fcReply = NULL;
 
     if ((sub == NULL) || (nextMsg == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -705,19 +625,16 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
     }
 
     nc = sub->conn;
-    jsi= sub->jsi;
+    jsi = sub->jsi;
 
     if (timeout > 0)
     {
-        while ((sub->msgList.msgs == 0)
-               && (s != NATS_TIMEOUT)
-               && !(sub->closed)
-               && !(sub->draining))
+        while ((sub->ownDispatcher.queue.msgs == 0) && (s != NATS_TIMEOUT) && !(sub->closed) && !(sub->draining))
         {
             if (target == 0)
                 target = nats_setTargetTime(timeout);
 
-            s = natsCondition_AbsoluteTimedWait(sub->cond, sub->mu, target);
+            s = natsCondition_AbsoluteTimedWait(sub->ownDispatcher.cond, sub->mu, target);
             if (s != NATS_OK)
                 s = nats_setDefaultError(s);
         }
@@ -729,14 +646,14 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
     }
     else
     {
-        s = (sub->msgList.msgs == 0 ? NATS_TIMEOUT : NATS_OK);
+        s = (sub->ownDispatcher.queue.msgs == 0 ? NATS_TIMEOUT : NATS_OK);
         if ((s != NATS_OK) && !pullSubInternal)
             s = nats_setDefaultError(s);
     }
 
     if (s == NATS_OK)
     {
-        msg = sub->msgList.head;
+        msg = sub->ownDispatcher.queue.head;
         if ((msg == NULL) && sub->draining)
         {
             removeSub = true;
@@ -744,13 +661,13 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
         }
         else
         {
-            sub->msgList.head = msg->next;
+            sub->ownDispatcher.queue.head = msg->next;
 
-            if (sub->msgList.tail == msg)
-                sub->msgList.tail = NULL;
+            if (sub->ownDispatcher.queue.tail == msg)
+                sub->ownDispatcher.queue.tail = NULL;
 
-            sub->msgList.msgs--;
-            sub->msgList.bytes -= natsMsg_dataAndHdrLen(msg);
+            sub->ownDispatcher.queue.msgs--;
+            sub->ownDispatcher.queue.bytes -= natsMsg_dataAndHdrLen(msg);
 
             msg->next = NULL;
 
@@ -765,7 +682,7 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
                     removeSub = true;
             }
 
-            if (sub->draining && (sub->msgList.msgs == 0))
+            if (sub->draining && (sub->ownDispatcher.queue.msgs == 0))
                 removeSub = true;
         }
         if (removeSub)
@@ -815,10 +732,10 @@ natsSubscription_NextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeo
 static natsStatus
 _unsubscribe(natsSubscription *sub, int max, bool drainMode, int64_t timeout)
 {
-    natsStatus      s   = NATS_OK;
-    natsConnection  *nc = NULL;
-    bool            dc  = false;
-    jsSub           *jsi;
+    natsStatus s = NATS_OK;
+    natsConnection *nc = NULL;
+    bool dc = false;
+    jsSub *jsi;
 
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -853,6 +770,7 @@ _unsubscribe(natsSubscription *sub, int max, bool drainMode, int64_t timeout)
 natsStatus
 natsSubscription_Unsubscribe(natsSubscription *sub)
 {
+
     natsStatus s = _unsubscribe(sub, 0, false, 0);
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -864,42 +782,33 @@ natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-void
-natsSub_drain(natsSubscription *sub)
+void natsSub_drain(natsSubscription *sub)
 {
     natsSub_Lock(sub);
-    SUB_DLV_WORKER_LOCK(sub);
     if (sub->closed)
     {
-        SUB_DLV_WORKER_UNLOCK(sub);
         natsSub_Unlock(sub);
         return;
     }
     sub->draining = true;
-    if (sub->libDlvWorker != NULL)
+
+    // If this is a subscription with timeout, stop the timer.
+    if (sub->timeout != 0)
     {
-        // If this is a subscription with timeout, stop the timer.
-        if (sub->timeout != 0)
-        {
-            natsTimer_Stop(sub->timeoutTimer);
-            // Prevent code to reset this timer
-            sub->timeoutSuspended = true;
-        }
+        natsTimer_Stop(sub->timeoutTimer);
+        // Prevent code to reset this timer
+        sub->timeoutSuspended = true;
+    }
 
-        // Set this to true. It will be set to false in the
-        // worker delivery thread when the control message is
-        // processed.
-        sub->libDlvDraining = true;
-
-        // Post a control message to wake-up the worker which will
-        // ensure that all pending messages for this subscription
-        // are removed and the subscription will ultimately be
-        // released in the worker thread.
-        natsLib_msgDeliveryPostControlMsg(sub);
+    if ((sub->dispatcher != NULL) && (sub->dispatcher->thread != NULL))
+    {
+        natsSub_enqueueCtrlMsg(sub, sub->control->sub.drain);
     }
     else
-        natsCondition_Broadcast(sub->cond);
-    SUB_DLV_WORKER_UNLOCK(sub);
+    {
+        natsCondition_Broadcast(sub->ownDispatcher.cond);
+    }
+
     natsSub_Unlock(sub);
 }
 
@@ -911,8 +820,7 @@ _updateDrainStatus(natsSubscription *sub, natsStatus s)
         sub->drainStatus = s;
 }
 
-void
-natsSub_updateDrainStatus(natsSubscription *sub, natsStatus s)
+void natsSub_updateDrainStatus(natsSubscription *sub, natsStatus s)
 {
     natsSub_Lock(sub);
     _updateDrainStatus(sub, s);
@@ -920,33 +828,30 @@ natsSub_updateDrainStatus(natsSubscription *sub, natsStatus s)
 }
 
 // Mark the subscription such that connection stops to try to push messages into its list.
-void
-natsSub_setDrainSkip(natsSubscription *sub, natsStatus s)
+void natsSub_setDrainSkip(natsSubscription *sub, natsStatus s)
 {
     natsSub_Lock(sub);
-    SUB_DLV_WORKER_LOCK(sub);
     _updateDrainStatus(sub, s);
     sub->drainSkip = true;
-    SUB_DLV_WORKER_UNLOCK(sub);
     natsSub_Unlock(sub);
 }
 
 static void
 _flushAndDrain(void *closure)
 {
-    natsSubscription *sub     = (natsSubscription*) closure;
-    natsConnection   *nc      = NULL;
-    natsThread       *t       = NULL;
-    int64_t          timeout  = 0;
-    int64_t          deadline = 0;
-    bool             sync     = false;
-    natsStatus       s;
+    natsSubscription *sub = (natsSubscription *)closure;
+    natsConnection *nc = NULL;
+    natsThread *t = NULL;
+    int64_t timeout = 0;
+    int64_t deadline = 0;
+    bool sync = false;
+    natsStatus s;
 
     natsSub_Lock(sub);
-    nc      = sub->conn;
-    t       = sub->drainThread;
+    nc = sub->conn;
+    t = sub->drainThread;
     timeout = sub->drainTimeout;
-    sync    = (sub->msgCb == NULL ? true : false);
+    sync = (sub->msgCb == NULL ? true : false);
     natsSub_Unlock(sub);
 
     // Make sure that negative value is considered no timeout.
@@ -982,14 +887,15 @@ _flushAndDrain(void *closure)
         // already called NextMsg() for all pending messages before the sub
         // was marked as "draining", so if we detect this situation, we need
         // to switch status to complete here.
-        if (sync && !natsSub_drainComplete(sub) && (sub->msgList.msgs == 0))
+
+        if (sync && !natsSub_drainComplete(sub) && (sub->ownDispatcher.queue.msgs == 0))
         {
             _setDrainCompleteState(sub);
         }
         else
         {
             while ((s != NATS_TIMEOUT) && !natsSub_drainComplete(sub))
-                s = natsCondition_AbsoluteTimedWait(sub->cond, sub->mu, deadline);
+                s = natsCondition_AbsoluteTimedWait(sub->drainCond, sub->mu, deadline);
         }
         natsSub_Unlock(sub);
 
@@ -1006,8 +912,7 @@ _flushAndDrain(void *closure)
 }
 
 // Switch subscription's drain state to "started".
-void
-natsSub_initDrain(natsSubscription *sub)
+void natsSub_initDrain(natsSubscription *sub)
 {
     natsSub_Lock(sub);
     sub->drainState |= SUB_DRAIN_STARTED;
@@ -1034,7 +939,7 @@ natsSub_startDrain(natsSubscription *sub, int64_t timeout)
     // to make sure that this call will not block.
     s = natsConn_enqueueUnsubProto(sub->conn, sub->sid);
     if (s == NATS_OK)
-        s = natsThread_Create(&(sub->drainThread), _flushAndDrain, (void*) sub);
+        s = natsThread_Create(&(sub->drainThread), _flushAndDrain, (void *)sub);
     if (s == NATS_OK)
     {
         sub->drainTimeout = timeout;
@@ -1067,9 +972,9 @@ natsSubscription_DrainTimeout(natsSubscription *sub, int64_t timeout)
 natsStatus
 natsSubscription_WaitForDrainCompletion(natsSubscription *sub, int64_t timeout)
 {
-    natsStatus  s        = NATS_OK;
-    int64_t     deadline = 0;
-    bool        dc       = false;
+    natsStatus s = NATS_OK;
+    int64_t deadline = 0;
+    bool dc = false;
 
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1090,9 +995,9 @@ natsSubscription_WaitForDrainCompletion(natsSubscription *sub, int64_t timeout)
     while ((s != NATS_TIMEOUT) && !natsSub_drainComplete(sub))
     {
         if (timeout > 0)
-            s = natsCondition_AbsoluteTimedWait(sub->cond, sub->mu, deadline);
+            s = natsCondition_AbsoluteTimedWait(sub->drainCond, sub->mu, deadline);
         else
-            natsCondition_Wait(sub->cond, sub->mu);
+            natsCondition_Wait(sub->drainCond, sub->mu);
     }
     natsSub_Unlock(sub);
 
@@ -1130,21 +1035,21 @@ natsSubscription_DrainCompletionStatus(natsSubscription *sub)
 natsStatus
 natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
 {
-    natsStatus  s;
-    int         msgs = 0;
+    natsStatus s;
+    int msgs = 0;
 
     if (queuedMsgs == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     s = natsSubscription_GetPending(sub, &msgs, NULL);
     if (s == NATS_OK)
-        *queuedMsgs = (uint64_t) msgs;
+        *queuedMsgs = (uint64_t)msgs;
 
     return s;
 }
 
 int64_t
-natsSubscription_GetID(natsSubscription* sub)
+natsSubscription_GetID(natsSubscription *sub)
 {
     int64_t id = 0;
 
@@ -1166,10 +1071,10 @@ natsSubscription_GetID(natsSubscription* sub)
     return id;
 }
 
-const char*
-natsSubscription_GetSubject(natsSubscription* sub)
+const char *
+natsSubscription_GetSubject(natsSubscription *sub)
 {
-    const char* subject = NULL;
+    const char *subject = NULL;
 
     if (sub == NULL)
         return NULL;
@@ -1182,13 +1087,15 @@ natsSubscription_GetSubject(natsSubscription* sub)
         return NULL;
     }
 
-    subject = (const char*)sub->subject;
+    subject = (const char *)sub->subject;
 
     natsSub_Unlock(sub);
 
     return subject;
 }
 
+// This works for both shared and dedicated dispatchers since we maintain the
+// per-sub stats.
 natsStatus
 natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes)
 {
@@ -1203,15 +1110,11 @@ natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
-    SUB_DLV_WORKER_LOCK(sub);
-
     if (msgs != NULL)
-        *msgs = sub->msgList.msgs;
+        *msgs = sub->ownDispatcher.queue.msgs;
 
     if (bytes != NULL)
-        *bytes = sub->msgList.bytes;
-
-    SUB_DLV_WORKER_UNLOCK(sub);
+        *bytes = sub->ownDispatcher.queue.bytes;
 
     natsSub_Unlock(sub);
 
@@ -1226,7 +1129,7 @@ natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytes
 
     if ((msgLimit == 0) || (bytesLimit == 0))
         return nats_setError(NATS_INVALID_ARG, "%s",
-                "Limits must be either > 0 or negative to specify no limit");
+                             "Limits must be either > 0 or negative to specify no limit");
 
     natsSub_Lock(sub);
 
@@ -1236,12 +1139,8 @@ natsSubscription_SetPendingLimits(natsSubscription *sub, int msgLimit, int bytes
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
-    SUB_DLV_WORKER_LOCK(sub);
-
     sub->msgsLimit = msgLimit;
     sub->bytesLimit = bytesLimit;
-
-    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -1262,15 +1161,11 @@ natsSubscription_GetPendingLimits(natsSubscription *sub, int *msgLimit, int *byt
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
-    SUB_DLV_WORKER_LOCK(sub);
-
     if (msgLimit != NULL)
         *msgLimit = sub->msgsLimit;
 
     if (bytesLimit != NULL)
         *bytesLimit = sub->bytesLimit;
-
-    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -1291,11 +1186,7 @@ natsSubscription_GetDelivered(natsSubscription *sub, int64_t *msgs)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
-    SUB_DLV_WORKER_LOCK(sub);
-
-    *msgs = (int64_t) sub->delivered;
-
-    SUB_DLV_WORKER_UNLOCK(sub);
+    *msgs = (int64_t)sub->delivered;
 
     natsSub_Unlock(sub);
 
@@ -1316,11 +1207,7 @@ natsSubscription_GetDropped(natsSubscription *sub, int64_t *msgs)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
-    SUB_DLV_WORKER_LOCK(sub);
-
     *msgs = sub->dropped;
-
-    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -1341,15 +1228,11 @@ natsSubscription_GetMaxPending(natsSubscription *sub, int *msgs, int *bytes)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
-    SUB_DLV_WORKER_LOCK(sub);
-
     if (msgs != NULL)
         *msgs = sub->msgsMax;
 
     if (bytes != NULL)
         *bytes = sub->bytesMax;
-
-    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -1370,12 +1253,8 @@ natsSubscription_ClearMaxPending(natsSubscription *sub)
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
-    SUB_DLV_WORKER_LOCK(sub);
-
     sub->msgsMax = 0;
     sub->bytesMax = 0;
-
-    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -1384,12 +1263,12 @@ natsSubscription_ClearMaxPending(natsSubscription *sub)
 
 natsStatus
 natsSubscription_GetStats(natsSubscription *sub,
-        int     *pendingMsgs,
-        int     *pendingBytes,
-        int     *maxPendingMsgs,
-        int     *maxPendingBytes,
-        int64_t *deliveredMsgs,
-        int64_t *droppedMsgs)
+                          int *pendingMsgs,
+                          int *pendingBytes,
+                          int *maxPendingMsgs,
+                          int *maxPendingBytes,
+                          int64_t *deliveredMsgs,
+                          int64_t *droppedMsgs)
 {
     if (sub == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1402,13 +1281,12 @@ natsSubscription_GetStats(natsSubscription *sub,
         return nats_setDefaultError(NATS_INVALID_SUBSCRIPTION);
     }
 
-    SUB_DLV_WORKER_LOCK(sub);
-
+    // messages and bytes are up to date even with a shared dispatcher.
     if (pendingMsgs != NULL)
-        *pendingMsgs = sub->msgList.msgs;
+        *pendingMsgs = sub->ownDispatcher.queue.msgs;
 
     if (pendingBytes != NULL)
-        *pendingBytes = sub->msgList.bytes;
+        *pendingBytes = sub->ownDispatcher.queue.bytes;
 
     if (maxPendingMsgs != NULL)
         *maxPendingMsgs = sub->msgsMax;
@@ -1417,12 +1295,10 @@ natsSubscription_GetStats(natsSubscription *sub,
         *maxPendingBytes = sub->bytesMax;
 
     if (deliveredMsgs != NULL)
-        *deliveredMsgs = (int) sub->delivered;
+        *deliveredMsgs = (int)sub->delivered;
 
     if (droppedMsgs != NULL)
         *droppedMsgs = sub->dropped;
-
-    SUB_DLV_WORKER_UNLOCK(sub);
 
     natsSub_Unlock(sub);
 
@@ -1434,8 +1310,7 @@ natsSubscription_GetStats(natsSubscription *sub,
  * This will return false if the subscription has already been closed,
  * or auto unsubscribed.
  */
-bool
-natsSubscription_IsValid(natsSubscription *sub)
+bool natsSubscription_IsValid(natsSubscription *sub)
 {
     bool valid = false;
 
@@ -1455,8 +1330,7 @@ natsSubscription_IsValid(natsSubscription *sub)
  * Destroys the subscription object, freeing up memory.
  * If not already done, this call will removes interest on the subject.
  */
-void
-natsSubscription_Destroy(natsSubscription *sub)
+void natsSubscription_Destroy(natsSubscription *sub)
 {
     bool doUnsub = false;
 
@@ -1480,7 +1354,7 @@ natsSubscription_Destroy(natsSubscription *sub)
     natsSub_Unlock(sub);
 
     if (doUnsub)
-        (void) natsSubscription_Unsubscribe(sub);
+        (void)natsSubscription_Unsubscribe(sub);
 
     natsSub_release(sub);
 }

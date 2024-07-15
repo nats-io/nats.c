@@ -1,4 +1,4 @@
-// Copyright 2015-2022 The NATS Authors
+// Copyright 2015-2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -41,6 +41,7 @@
 #include "url.h"
 #include "srvpool.h"
 #include "msg.h"
+#include "dispatch.h"
 #include "asynccb.h"
 #include "hash.h"
 #include "stats.h"
@@ -49,7 +50,7 @@
 
 // Comment/uncomment to replace some function calls with direct structure
 // access
-//#define DEV_MODE    (1)
+// #define DEV_MODE    (1)
 
 #define LIB_NATS_VERSION_STRING             NATS_VERSION_STRING
 #define LIB_NATS_VERSION_NUMBER             NATS_VERSION_NUMBER
@@ -272,7 +273,16 @@ struct __natsOptions
     void                    *evLoop;
     natsEvLoopCallbacks     evCbs;
 
-    bool                    libMsgDelivery;
+    // If set to false, the client will start a per-subscription dedicated
+    // thread to deliver messages to the user callbacks. If true, a shared
+    // thread out of a thread pool is used. natsClientConfig controls the pool
+    // size.
+    bool                    useSharedDispatcher;
+
+    // If set to false, the client will start a per-connection dedicated thread
+    // to deliver reply messages to the user callbacks. If true, a shared thread
+    // out of a thread pool is used. natsClientConfig controls the pool size.
+    bool                    useSharedReplyDispatcher;
 
     int                     orderIP; // possible values: 0,4,6,46,64
 
@@ -333,26 +343,6 @@ struct __natsOptions
     // Custom message payload padding size
     int payloadPaddingSize;
 };
-
-typedef struct __nats_MsgList
-{
-    natsMsg     *head;
-    natsMsg     *tail;
-    int         msgs;
-    int         bytes;
-
-} nats_MsgList;
-
-typedef struct __natsMsgDlvWorker
-{
-    natsMutex       *lock;
-    natsCondition   *cond;
-    natsThread      *thread;
-    bool            shutdown;
-    nats_MsgList     msgList;
-
-} natsMsgDlvWorker;
-
 typedef struct __pmInfo
 {
     char                *subject;
@@ -388,11 +378,6 @@ typedef struct __jsSub
     char                *consumer;
     char                *psubj;
     char                *nxtMsgSubj;
-    bool                pull;
-    bool                inFetch;
-    bool                ordered;
-    bool                dc; // delete JS consumer in Unsub()/Drain()
-    bool                ackNone;
     uint64_t            fetchID;
 
     // This is ConsumerInfo's Pending+Consumer.Delivered that we get from the
@@ -404,25 +389,11 @@ typedef struct __jsSub
     uint64_t            pending;
 
     int64_t             hbi;
-    bool                active;
     natsTimer           *hbTimer;
-    natsMsg             *mhMsg;
 
     char                *cmeta;
     uint64_t            sseq;
     uint64_t            dseq;
-    // Skip sequence mismatch notification. This is used for
-    // async subscriptions to notify the asyn err handler only
-    // once. Should the mismatch be resolved, this will be
-    // cleared so notification can happen again.
-    bool                ssmn;
-    // Sequence mismatch. This is for synchronous subscription
-    // so that they don't have to rely on async error callback.
-    // Calling NextMsg() when this is true will cause NextMsg()
-    // to return NATS_SLOW_CONSUMER, so that user can check
-    // the sequence mismatch report. Should the mismatch be
-    // resolved, this will be cleared.
-    bool                sm;
     // These are the mismatch seq info
     struct mismatch
     {
@@ -445,6 +416,27 @@ typedef struct __jsSub
 
     // When reseting an OrderedConsumer, need the original configuration.
     jsConsumerConfig    *ocCfg;
+
+    // Flags, at the end for compactness.
+    unsigned pull : 1;
+    unsigned inFetch : 1;
+    unsigned ordered : 1;
+    unsigned dc : 1; // delete JS consumer in Unsub()/Drain()
+    unsigned ackNone : 1;
+    unsigned active : 1;
+
+    // Skip sequence mismatch notification. This is used for
+    // async subscriptions to notify the asyn err handler only
+    // once. Should the mismatch be resolved, this will be
+    // cleared so notification can happen again.
+    unsigned ssmn : 1;
+    // Sequence mismatch. This is for synchronous subscription
+    // so that they don't have to rely on async error callback.
+    // Calling NextMsg() when this is true will cause NextMsg()
+    // to return NATS_SLOW_CONSUMER, so that user can check
+    // the sequence mismatch report. Should the mismatch be
+    // resolved, this will be cleared.
+    unsigned sm : 1;
 
 } jsSub;
 
@@ -496,6 +488,21 @@ struct __kvWatcher
 
 };
 
+typedef struct __natsSubscriptionControlMessages
+{
+    struct
+    {
+        natsMsg *timeout;
+        natsMsg *close;
+        natsMsg *drain;
+    } sub;
+    struct
+    {
+        natsMsg *expired;
+        natsMsg *missedHeartbeat;
+    } batch;
+} natsSubscriptionControlMessages;
+
 struct __natsSubscription
 {
     natsMutex                   *mu;
@@ -505,27 +512,27 @@ struct __natsSubscription
     // This is non-zero when auto-unsubscribe is used.
     uint64_t                    max;
 
-    // This is updated in the delivery thread (or NextMsg) and indicates
-    // how many message have been presented to the callback (or returned
-    // from NextMsg). Like 'msgs', this is also used to determine if we
-    // have reached the max number of messages.
+    // This is updated in the delivery thread (or NextMsg) and indicates how
+    // many message have been presented to the callback (or returned from
+    // NextMsg). Together with the messages pending dispatch in
+    // dispatch->queue, this is also used to determine if we have reached the
+    // max number of messages.
     uint64_t                    delivered;
 
-    // The list of messages waiting to be delivered to the callback (or
-    // returned from NextMsg).
-    nats_MsgList                msgList;
+    // We always have a dispatcher to keep track of things, even if the
+    // subscription is sync. The dispatcher is set up at the subscription
+    // creation time, and may point to a dedicated thread using sub's own
+    // dispatchQueue, or a shared worker using its own dispatch queue, which
+    // dispatcher->queue then points to.
+    natsDispatcher              *dispatcher; 
+    natsDispatcher              ownDispatcher;
 
-    // True if msgList.count is over pendingMax
-    bool                        slowConsumer;
+    // These are a signals to the sub's async dispatcher thread that something
+    // happened - draining or closing the subscription, or some sort of a
+    // timeout. Since these are optional, we only allocate them when starting an
+    // async dispatcher.
+    natsSubscriptionControlMessages *control;
 
-    // Condition variable used to wait for message delivery.
-    natsCondition               *cond;
-
-    // The subscriber is closed (or closing).
-    bool                        closed;
-
-    // Indicates if this subscription is actively draining.
-    bool                        draining;
     // This holds if draining has started and/or completed.
     uint8_t                     drainState;
     // Thread started to do the flush and wait for drain to complete.
@@ -534,17 +541,7 @@ struct __natsSubscription
     natsStatus                  drainStatus;
     // This is the timeout for the drain operation.
     int64_t                     drainTimeout;
-    // This is set if the flush failed and will prevent the connection for pushing further messages.
-    bool                        drainSkip;
-
-    // Same than draining but for the global delivery situation.
-    // This boolean will be switched off when processed, as opposed
-    // to draining that once set does not get reset.
-    bool                        libDlvDraining;
-
-    // If true, the subscription is closed, but because the connection
-    // was closed, not because of subscription (auto-)unsubscribe.
-    bool                        connClosed;
+    natsCondition               *drainCond;
 
     // Subscriber id. Assigned during the creation, does not change after that.
     int64_t                     sid;
@@ -561,21 +558,12 @@ struct __natsSubscription
     // Reference to the connection that created this subscription.
     struct __natsConnection     *conn;
 
-    // Delivery thread (for async subscription).
-    natsThread                  *deliverMsgsThread;
-
-    // If message delivery is done by the library instead, this is the
-    // reference to the worker handling this subscription.
-    natsMsgDlvWorker            *libDlvWorker;
-
     // Message callback and closure (for async subscription).
     natsMsgHandler              msgCb;
     void                        *msgCbClosure;
 
     int64_t                     timeout;
     natsTimer                   *timeoutTimer;
-    bool                        timedOut;
-    bool                        timeoutSuspended;
 
     // Pending limits, etc..
     int                         msgsMax;
@@ -591,6 +579,27 @@ struct __natsSubscription
     // For JetStream
     jsSub                       *jsi;
 
+    // Flags, groupped together to save space.
+
+    // True if msgList.count is over pendingMax
+    unsigned slowConsumer : 1;
+
+    // The subscriber is closed (or closing).
+    unsigned closed : 1;
+
+    // Indicates if this subscription is actively draining.
+    unsigned draining : 1;
+
+    // This is set if the flush failed and will prevent the connection for pushing further messages.
+    unsigned drainSkip : 1;
+
+    // If true, the subscription is closed, but because the connection
+    // was closed, not because of subscription (auto-)unsubscribe.
+    unsigned connClosed : 1;
+
+    unsigned timedOut : 1;
+
+    unsigned timeoutSuspended : 1;
 };
 
 typedef struct __natsPong
@@ -750,61 +759,8 @@ struct __natsConnection
     } srvVersion;
 };
 
-//
-// Library
-//
-
-void
-natsSys_Init(void);
-
-void
-natsLib_Retain(void);
-
-void
-natsLib_Release(void);
-
-int64_t
-nats_setTargetTime(int64_t timeout);
-
-void
-nats_resetTimer(natsTimer *t, int64_t newInterval);
-
-void
-nats_stopTimer(natsTimer *t);
-
-// Returns the number of timers that have been created and not stopped.
-int
-nats_getTimersCount(void);
-
-// Returns the number of timers actually in the list. This should be
-// equal to nats_getTimersCount() or nats_getTimersCount() - 1 when a
-// timer thread is invoking a timer's callback.
-int
-nats_getTimersCountInList(void);
-
-natsStatus
-nats_postAsyncCbInfo(natsAsyncCbInfo *info);
-
 void
 nats_sslRegisterThreadForCleanup(void);
-
-natsStatus
-nats_sslInit(void);
-
-natsStatus
-natsLib_msgDeliveryPostControlMsg(natsSubscription *sub);
-
-natsStatus
-natsLib_msgDeliveryAssignWorker(natsSubscription *sub);
-
-bool
-natsLib_isLibHandlingMsgDeliveryByDefault(void);
-
-int64_t
-natsLib_defaultWriteDeadline(void);
-
-void
-natsLib_getMsgDeliveryPoolInfo(int *maxSize, int *size, int *idx, natsMsgDlvWorker ***workersArray);
 
 void
 nats_setNATSThreadKey(void);
@@ -831,6 +787,10 @@ natsThread_Create(natsThread **t, natsThreadCb cb, void *arg);
 
 bool
 natsThread_IsCurrent(natsThread *t);
+
+// Returns the current thread ID, mostly for logging purposes.
+uint64_t
+natsThread_ID(void);
 
 void
 natsThread_Join(natsThread *t);
@@ -937,5 +897,17 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq);
 
 bool
 natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType);
+
+static inline void nats_lockDispatcher(natsDispatcher *d)
+{
+    if (d->mu != NULL)
+        natsMutex_Lock(d->mu);
+}
+
+static inline void nats_unlockDispatcher(natsDispatcher *d)
+{
+    if (d->mu != NULL)
+        natsMutex_Unlock(d->mu);
+}
 
 #endif /* NATSP_H_ */

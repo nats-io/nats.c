@@ -38,11 +38,12 @@ foreach(name ${listOfTestNames})
   # Create a test and pass the index (start and end are the same)
   # to the testsuite executable
   add_test(NAME Test_${name}
-           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-           COMMAND testsuite ${testIndex} ${testIndex})
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+    COMMAND testsuite ${testIndex} ${testIndex})
 
   # Make sure the test passes
-  set_tests_properties(Test_${name} PROPERTIES PASS_REGULAR_EXPRESSION "ALL PASSED")
+  set_tests_properties( Test_${name} PROPERTIES
+    PASS_REGULAR_EXPRESSION "ALL PASSED")
 
   # Set TSAN_OPTIONS for the test
   if(NATS_SANITIZE)

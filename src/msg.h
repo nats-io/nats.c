@@ -1,4 +1,4 @@
-// Copyright 2015-2022 The NATS Authors
+// Copyright 2015-2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -40,6 +40,7 @@
 #define natsMsg_setNoDestroy(m)     ((m)->flags  |=  (1 << 2))
 #define natsMsg_isNoDestroy(m)      (((m)->flags &   (1 << 2)) != 0)
 #define natsMsg_clearNoDestroy(m)   ((m)->flags  &= ~(1 << 2))
+#define natsMsg_noDestroyFlag       (1 << 2)
 
 #define natsMsg_setTimeout(m)       ((m)->flags  |=  (1 << 3))
 #define natsMsg_isTimeout(m)        (((m)->flags &   (1 << 3)) != 0)

@@ -33,5 +33,7 @@ natsDeadline_GetTimeout(natsDeadline *deadline);
 void
 natsDeadline_Clear(natsDeadline *deadline);
 
+int64_t
+nats_setTargetTime(int64_t timeout);
 
 #endif /* NATSTIME_H_ */

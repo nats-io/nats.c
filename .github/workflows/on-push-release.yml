@@ -32,12 +32,13 @@ jobs:
       verbose_test_output: ON
       verbose_make_output: ON
 
-  sanitize-addr:
+  san-addr:
     name: "Sanitize address"
     uses: ./.github/workflows/build-test.yml
     with:
       sanitize: address
       server_version: main
+      type: RelWithDebInfo
 
   san-thread:
     name: "Sanitize thread"
@@ -45,3 +46,13 @@ jobs:
     with:
       sanitize: thread
       server_version: main
+      type: RelWithDebInfo
+
+  san-thread-pool:
+    name: "Sanitize thread (msg dispatch pool)"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      sanitize: thread
+      server_version: main
+      type: RelWithDebInfo
+      lib_msg_delivery: ON

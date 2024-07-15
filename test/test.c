@@ -1,4 +1,4 @@
-// Copyright 2015-2023 The NATS Authors
+// Copyright 2015-2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -40,6 +40,7 @@
 #include "js.h"
 #include "kv.h"
 #include "microp.h"
+#include "glib/glibp.h"
 #if defined(NATS_HAS_STREAMING)
 #include "stan/conn.h"
 #include "stan/pub.h"
@@ -63,7 +64,9 @@ static const char *natsStreamingServerExe = "nats-streaming-server";
 static natsMutex *slMu  = NULL;
 static natsHash  *slMap = NULL;
 
-#define test(s)         { printf("#%02d ", ++tests); printf("%s", (s)); fflush(stdout); }
+#define test(s)         { printf("#%02d ", ++tests);printf("%s\n", (s)); fflush(stdout); }
+#define testf(s, ...)   { printf("#%02d ", ++tests); printf((s "\n"), __VA_ARGS__); fflush(stdout); }
+
 #ifdef _WIN32
 #define NATS_INVALID_PID    (NULL)
 #define testCond(c)         if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; return; }
@@ -112,6 +115,7 @@ struct threadArg
     natsStrHash     *inboxes;
     natsStatus      status;
     const char*     string;
+    int             N;
     bool            connected;
     bool            disconnected;
     int64_t         disconnectedAt[4];
@@ -2618,7 +2622,7 @@ test_natsOptions(void)
              && (opts->token == NULL)
              && (opts->tokenCb == NULL)
              && (opts->orderIP == 0)
-             && (opts->writeDeadline == natsLib_defaultWriteDeadline())
+             && (opts->writeDeadline == nats_lib()->config.DefaultWriteDeadline)
              && !opts->noEcho
              && !opts->retryOnFailedConnect
              && !opts->ignoreDiscoveredServers)
@@ -6167,6 +6171,7 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
 
     natsMutex_Lock(arg->m);
 
+    // up to 12 now
     switch (arg->control)
     {
         case 0:
@@ -6201,14 +6206,25 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
         }
         case 3:
         case 9:
+        case 12:
         {
             doSignal = false;
             arg->sum++;
 
-            if ((arg->control != 9) && (arg->sum == 10))
+            if ((arg->control == 3) && (arg->sum == 10))
             {
                 arg->status = natsSubscription_Unsubscribe(sub);
                 doSignal = true;
+            }
+            else if ((arg->control == 12) && (arg->sum == arg->N))
+            {
+                arg->status = NATS_OK;
+                doSignal = true;
+            }
+            else if ((arg->control == 12) && (arg->sum > arg->N))
+            {
+                doSignal = true;
+                arg->status = NATS_ERR;
             }
             break;
         }
@@ -8033,149 +8049,212 @@ _dummyMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
     natsMsg_Destroy(msg);
 }
 
-static void
-test_LibMsgDelivery(void)
+static int _numRunningThreads(natsDispatcherPool *pool)
 {
-    natsStatus          s;
-    natsPid             serverPid = NATS_INVALID_PID;
-    natsOptions         *opts     = NULL;
-    natsConnection      *nc       = NULL;
-    natsSubscription    *s1       = NULL;
-    natsSubscription    *s2       = NULL;
-    natsSubscription    *s3       = NULL;
-    natsSubscription    *s4       = NULL;
-    natsSubscription    *s5       = NULL;
-    natsMsgDlvWorker    *lmd1     = NULL;
-    natsMsgDlvWorker    *lmd2     = NULL;
-    natsMsgDlvWorker    *lmd3     = NULL;
-    natsMsgDlvWorker    *lmd4     = NULL;
-    natsMsgDlvWorker    *lmd5     = NULL;
-    natsMsgDlvWorker    **pwks    = NULL;
-    int                 psize     = 0;
-    int                 pmaxSize  = 0;
-    int                 pidx      = 0;
+    int i, n;
+    for (n = 0, i = 0; i < pool->cap; i++)
+        n += (pool->dispatchers[i].thread != NULL);
+    return n;
+}
 
-    // First, close the library and re-open, to reset things
-    nats_Close();
+static void
+test_AssignSubToDispatch(void)
+{
+    natsStatus s;
+#define MAX_SUBS 500
+    natsPid serverPid = NATS_INVALID_PID;
+    natsConnection *nc = NULL;
+    natsSubscription *subs[MAX_SUBS];
+    natsClientConfig config4 = {
+        .DefaultToThreadPool = true,
+        .ThreadPoolMax = 4,
+    };
+    natsClientConfig config50 = {
+        .DefaultToThreadPool = true,
+        .ThreadPoolMax = 50,
+    };
+    natsDispatcherPool *pool = NULL;
+    natsDispatcherPool *rpool = NULL;
+    natsClientConfig c;
+    struct threadArg arg;
+    char subSubj[32];
+    char pubSubj[32];
+    int i=0, n=0;
 
-    nats_Sleep(100);
+    const int numMsgs = 5;
 
-    nats_Open(-1);
+    typedef struct
+    {
+        int numSubs;
+        natsClientConfig *config;
+        int expectedMax;
+        int expectedDispatchers;
+        bool expectedDefaultPool;
+    } TC;
 
-    // Check some pre-conditions that need to be met for the test to work.
-    test("Check initial values: ")
-    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
-    testCond((pmaxSize == 1) && (psize == 0) && (pidx == 0));
+    TC tcs[] = {
+        {
+            .numSubs = 10,
+            .expectedMax = 1,
+            .expectedDispatchers = 0, // all should be dispatched with dedicated threads
+        },
+        {
+            .config = &config4,
+            .numSubs = 3,
+            .expectedMax = 4,
+            .expectedDispatchers = 3,
+            .expectedDefaultPool = true,
+        },
+        {
+            .config = &config4,
+            .numSubs = 23,
+            .expectedMax = 4,
+            .expectedDispatchers = 4,
+            .expectedDefaultPool = true,
+        },
+        {
+            .numSubs = 77,
+            .config = &config50,
+            .expectedMax = 50,
+            .expectedDispatchers = 50,
+            .expectedDefaultPool = true,
+        },
+    };
+    TC *tc, *end = tcs + (sizeof(tcs) / sizeof(tcs[0]));
 
-    test("Check pool size not negative: ")
+    test("Check pool size not negative: ");
     s = nats_SetMessageDeliveryPoolSize(-1);
     testCond(s != NATS_OK);
 
-    test("Check pool size not zero: ")
+    test("Check pool size not zero: ");
     s = nats_SetMessageDeliveryPoolSize(0);
     testCond(s != NATS_OK);
 
     // Reset stack since we know the above generated errors.
     nats_clearLastError();
 
-    test("Increase size to 2: ")
-    s = nats_SetMessageDeliveryPoolSize(2);
-    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
-    testCond((s == NATS_OK) && (pmaxSize == 2) && (psize == 0));
-
-    test("Check pool size decreased (no error): ")
-    s = nats_SetMessageDeliveryPoolSize(1);
-    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
-    testCond((s == NATS_OK) && (pmaxSize == 2) && (psize == 0));
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
 
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
 
-    s = natsOptions_Create(&opts);
-    IFOK(s, natsOptions_UseGlobalMessageDelivery(opts, true));
-    IFOK(s, natsConnection_Connect(&nc, opts));
-    IFOK(s, natsConnection_Subscribe(&s1, nc, "foo", _dummyMsgHandler, NULL));
-    if (s == NATS_OK)
+    // First, close the library and re-open, to reset things
+    test("Reset the library's global state: ");
+    nats_CloseAndWait(100);
+    testCond(true);
+
+    for (tc = tcs; tc < end; tc++, n++)
     {
-        natsMutex_Lock(s1->mu);
-        lmd1 = s1->libDlvWorker;
-        natsMutex_Unlock(s1->mu);
+        testf("%d subs over %d threads: Re-open, check settings, ensure no shared dispatchers created: ", tc->numSubs, tc->expectedDispatchers);
+        s = nats_OpenWithConfig(tc->config);
+        IFOK(s, (c = nats_lib()->config, NATS_OK));
+        if (s == NATS_OK)
+        {
+            pool = &nats_lib()->messageDispatchers;
+            rpool = &nats_lib()->replyDispatchers;
+        }
+        natsMutex_Lock(pool->lock);
+        natsMutex_Lock(rpool->lock);
+        testCond((s == NATS_OK) &&
+                 (c.DefaultToThreadPool == tc->expectedDefaultPool) &&
+                 (c.ThreadPoolMax == tc->expectedMax) &&
+                 (c.DefaultRepliesToThreadPool == false) &&
+                 (c.ReplyThreadPoolMax == 0) &&
+                 (c.useSeparatePoolForReplies == false) &&
+                 (_numRunningThreads(pool) == 0) &&
+                 (pool->cap == tc->expectedMax) &&
+                 (pool->dispatchers != NULL) &&
+                 (_numRunningThreads(rpool) == 0) &&
+                 (rpool->dispatchers == NULL));
+        natsMutex_Unlock(rpool->lock);
+        natsMutex_Unlock(pool->lock);
+
+        testf("%d subs over %d threads: Initial connect: ", tc->numSubs, tc->expectedDispatchers);
+        s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+        testCond(s == NATS_OK);
+
+        testf("%d subs over %d threads: Create %d subscriptions: ", tc->numSubs, tc->expectedDispatchers, tc->numSubs);
+        if (tc->numSubs > MAX_SUBS)
+            FAIL("Too many subscriptions for this test's buffer");
+
+        arg.string = "test";
+        arg.status = NATS_OK;
+        arg.control = 12;
+        arg.N = tc->numSubs * numMsgs;
+        arg.sum = 0;
+        snprintf(subSubj, sizeof(subSubj), "foo.%d.*", n);
+        for (i = 0; (s == NATS_OK) && (i < tc->numSubs); i++)
+        {
+            s = natsConnection_Subscribe(&subs[i], nc, subSubj, _recvTestString, &arg);
+        }
+        testCond(s == NATS_OK);
+
+        testf("%d subs over %d threads: Check shared dispatchers assigned as expected: ", tc->numSubs, tc->expectedDispatchers);
+        natsMutex_Lock(pool->lock);
+        natsMutex_Lock(rpool->lock);
+        testCond((pool->dispatchers != NULL) &&
+                 (_numRunningThreads(pool) == tc->expectedDispatchers) &&
+                 (_numRunningThreads(rpool) == 0));
+
+        if (tc->config != NULL)
+        {
+            testf("%d subs over %d threads: Verify that the dispatchers have been assigned: ", tc->numSubs, tc->expectedDispatchers);
+            for (i = 0; (s == NATS_OK) && (i < tc->numSubs); i++)
+            {   
+                natsSub_Lock(subs[i]);
+                if (subs[i]->dispatcher != &pool->dispatchers[i % tc->expectedDispatchers])
+                    s = NATS_ERR;
+                natsSub_Unlock(subs[i]);
+            }
+            testCond(s == NATS_OK);
+        }
+        natsMutex_Unlock(rpool->lock);
+        natsMutex_Unlock(pool->lock);
+
+        testf("%d subs over %d threads: Publish %d messages and verify received %d times: ", tc->numSubs, tc->expectedDispatchers, numMsgs, arg.N);
+        for (i = 0; (s == NATS_OK) && (i < numMsgs); i++)
+        {
+            snprintf(pubSubj, sizeof(pubSubj), "foo.%d.%d", n, i);
+            s = natsConnection_PublishString(nc, pubSubj, "test");
+        }
+        if (s == NATS_OK)
+        {
+            natsMutex_Lock(arg.m);
+            while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+                s = natsCondition_TimedWait(arg.c, arg.m, 1500);
+            arg.msgReceived = false;
+            arg.status = NATS_OK;
+            natsMutex_Unlock(arg.m);
+            if (s == NATS_OK)
+                s = arg.status;
+        }
+        testCond(s == NATS_OK);
+
+        testf("%d subs over %d threads: Drain the subs: ", tc->numSubs, tc->expectedDispatchers);
+        for (i = 0; (s == NATS_OK) && (i < tc->numSubs); i++)
+        {
+            s = natsSubscription_Drain(subs[i]);
+            natsSubscription_Destroy(subs[i]);
+        }
+        testCond(s == NATS_OK);
+
+        testf("%d subs over %d threads: Make sure we didn't get unexpected messages: ", tc->numSubs, tc->expectedDispatchers);
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+            s = natsCondition_TimedWait(arg.c, arg.m, 50);
+        natsMutex_Unlock(arg.m);
+        testCond((s == NATS_TIMEOUT) && !arg.msgReceived && arg.status != NATS_ERR);
+
+        testf("%d subs over %d threads: cleanup before next test: ", tc->numSubs, tc->expectedDispatchers);
+        natsConnection_Destroy(nc);
+        nats_Close();
+        testCond(true);
     }
-    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
-    test("Check 1st sub assigned 1st worker: ")
-    testCond((s == NATS_OK) && (psize == 1) && (lmd1 != NULL)
-             && (pidx == 1) && (pwks != NULL) && (lmd1 == pwks[0]));
-
-    s = natsConnection_Subscribe(&s2, nc, "foo", _dummyMsgHandler, NULL);
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(s2->mu);
-        lmd2 = s2->libDlvWorker;
-        natsMutex_Unlock(s2->mu);
-    }
-    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
-    test("Check 2nd sub assigned 2nd worker: ")
-    testCond((s == NATS_OK) && (psize == 2) && (lmd2 != lmd1)
-             && (pidx == 0) && (pwks != NULL) && (lmd2 == pwks[1]));
-
-    s = natsConnection_Subscribe(&s3, nc, "foo", _dummyMsgHandler, NULL);
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(s3->mu);
-        lmd3 = s3->libDlvWorker;
-        natsMutex_Unlock(s3->mu);
-    }
-    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
-    test("Check 3rd sub assigned 1st worker: ")
-    testCond((s == NATS_OK) && (psize == 2) && (lmd3 == lmd1)
-             && (pidx == 1) && (pwks != NULL) && (lmd3 == pwks[0]));
-
-    // Bump the pool size to 4
-    s = nats_SetMessageDeliveryPoolSize(4);
-    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
-    test("Check increase of pool size: ");
-    testCond((s == NATS_OK) && (psize == 2) && (pidx == 1)
-             && (pmaxSize == 4) && (pwks != NULL));
-
-    s = natsConnection_Subscribe(&s4, nc, "foo", _dummyMsgHandler, NULL);
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(s4->mu);
-        lmd4 = s4->libDlvWorker;
-        natsMutex_Unlock(s4->mu);
-    }
-    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
-    test("Check 4th sub assigned 2nd worker: ")
-    testCond((s == NATS_OK) && (psize == 2) && (lmd4 == lmd2)
-             && (pidx == 2) && (pwks != NULL) && (lmd4 == pwks[1]));
-
-    s = natsConnection_Subscribe(&s5, nc, "foo", _dummyMsgHandler, NULL);
-    if (s == NATS_OK)
-    {
-        natsMutex_Lock(s5->mu);
-        lmd5 = s5->libDlvWorker;
-        natsMutex_Unlock(s5->mu);
-    }
-    natsLib_getMsgDeliveryPoolInfo(&pmaxSize, &psize, &pidx, &pwks);
-    test("Check 5th sub assigned 3rd worker: ")
-    testCond((s == NATS_OK) && (psize == 3) && (lmd5 != lmd2)
-             && (pidx == 3) && (pwks != NULL) && (lmd5 == pwks[2]));
-
-    natsSubscription_Destroy(s5);
-    natsSubscription_Destroy(s4);
-    natsSubscription_Destroy(s3);
-    natsSubscription_Destroy(s2);
-    natsSubscription_Destroy(s1);
-    natsConnection_Destroy(nc);
-    natsOptions_Destroy(opts);
     _stopServer(serverPid);
 
-    // Close the library and re-open, to reset things
-    nats_Close();
-
-    nats_Sleep(100);
-
-    nats_Open(-1);
+    _destroyDefaultThreadArgs(&arg);
 }
 
 static void
@@ -11325,7 +11404,6 @@ test_AsyncSubscribeTimeout(void)
     struct threadArg    arg;
     bool                useLibDlv = false;
     int                 i;
-    char                testText[128];
     int64_t             timeout   = 100;
     _asyncTimeoutInfo   ai;
 
@@ -11347,10 +11425,9 @@ test_AsyncSubscribeTimeout(void)
         serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
         CHECK_SERVER_STARTED(serverPid);
 
-        snprintf(testText, sizeof(testText), "Test async %ssubscriber timeout%s: ",
+        testf("Test async %ssubscriber timeout%s: ",
                  ((i == 1 || i == 3) ? "queue " : ""),
                  (i > 1 ? " (lib msg delivery)" : ""));
-        test(testText);
         s = natsConnection_Connect(&nc, opts);
         if (s == NATS_OK)
         {
@@ -12001,9 +12078,18 @@ test_SubRemovedWhileProcessingMsg(void)
     natsOptions         *opts     = NULL;
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg arg;
 
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    arg.status = NATS_OK;
+    arg.control = 12;
+    arg.N = 1;
 
     test("Connect and create sub: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
@@ -12025,7 +12111,7 @@ test_SubRemovedWhileProcessingMsg(void)
 
     test("Check msg not given: ");
     natsSub_Lock(sub);
-    testCond(sub->msgList.msgs == 0);
+    testCond(sub->ownDispatcher.queue.msgs == 0);
     natsSub_Unlock(sub);
 
     natsSubscription_Destroy(sub);
@@ -12041,32 +12127,49 @@ test_SubRemovedWhileProcessingMsg(void)
 
     test("Connect and create sub: ");
     s = natsConnection_Connect(&nc, opts);
-    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _dummyMsgHandler, NULL));
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, NULL));
     testCond(s == NATS_OK);
 
+    natsMutex_Lock(sub->dispatcher->mu);
     natsSub_Lock(sub);
-    natsMutex_Lock(sub->libDlvWorker->lock);
     test("Send message: ");
     s = natsConnection_PublishString(nc, "foo", "hello");
     testCond(s == NATS_OK);
 
+    test("Make sure the message is not enqueued yet: ");
+    testCond(sub->ownDispatcher.queue.msgs == 0);
+
     test("Close sub: ");
-    natsMutex_Unlock(sub->libDlvWorker->lock);
     natsSub_Unlock(sub);
     natsSub_close(sub, false);
     testCond(s == NATS_OK);
 
-    test("Check msg not given: ");
+    test("The message is enqueued: ");
     natsSub_Lock(sub);
-    natsMutex_Lock(sub->libDlvWorker->lock);
-    testCond(sub->msgList.msgs == 0);
-    natsMutex_Unlock(sub->libDlvWorker->lock);
+    testCond(sub->ownDispatcher.queue.msgs == 1);
+    natsSub_Unlock(sub);
+
+    test("Unlock the dispatcher to see what it does: ");
+    natsMutex_Unlock(sub->dispatcher->mu);
+    testCond(s == NATS_OK);
+
+    test("Check message is not given to callback, but is gone quickly: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+        s = natsCondition_TimedWait(arg.c, arg.m, 10);
+
+    natsSub_Lock(sub);
+    testCond((s == NATS_TIMEOUT) &&
+             (arg.msgReceived == false) &&
+             (sub->ownDispatcher.queue.msgs == 0));
+    natsMutex_Unlock(arg.m);
     natsSub_Unlock(sub);
 
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
 
+    _destroyDefaultThreadArgs(&arg);
     _stopServer(serverPid);
 }
 
@@ -13627,12 +13730,14 @@ test_SlowAsyncSubscriber(void)
     CHECK_SERVER_STARTED(serverPid);
 
     s = natsConnection_Connect(&nc, opts);
-    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo.*", _recvTestString, (void*) &arg));
 
     for (int i=0;
-        (s == NATS_OK) && (i < (total + 100)); i++)
+        (s == NATS_OK) && (i < (2 * total)); i++)
     {
-        s = natsConnection_PublishString(nc, "foo", "hello");
+        char subj[32];
+        snprintf(subj, sizeof(subj), "foo.%d", i);
+        s = natsConnection_PublishString(nc, subj, "hello");
     }
 
     test("Check Publish does not fail due to SlowConsumer: ");
@@ -13665,21 +13770,21 @@ test_SlowAsyncSubscriber(void)
     // Release the sub
     natsMutex_Lock(arg.m);
 
-    // Unblock the wait
-    arg.closed = true;
-
     // And destroy the subscription here so that the next msg callback
     // is not invoked.
     natsSubscription_Destroy(sub);
 
+    // Unblock the wait, let the callback finish
+    test("Unblock and wait for the callback to finish: ");
+    arg.closed = true;
     natsCondition_Signal(arg.c);
     arg.msgReceived = false;
     natsMutex_Unlock(arg.m);
 
-    // Let the callback finish
     natsMutex_Lock(arg.m);
     while (!arg.msgReceived)
         natsCondition_TimedWait(arg.c, arg.m, 5000);
+    testCond(arg.msgReceived);
     natsMutex_Unlock(arg.m);
 
     natsOptions_Destroy(opts);
@@ -17959,6 +18064,7 @@ test_DrainSub(void)
     arg.closed = true;
     natsCondition_Signal(arg.c);
     natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
 
     test("Wait for Drain to complete: ");
     s = natsSubscription_WaitForDrainCompletion(sub, -1);
@@ -25842,11 +25948,11 @@ test_JetStreamPublishAsync(void)
         _waitSubPending(rsub, 0);
 
         natsSub_Lock(rsub);
-        rsub->msgList.head = msg;
-        rsub->msgList.tail = msg;
-        rsub->msgList.msgs = 1;
-        rsub->msgList.bytes = natsMsg_dataAndHdrLen(msg);
-        natsCondition_Signal(rsub->cond);
+        rsub->ownDispatcher.queue.head = msg;
+        rsub->ownDispatcher.queue.tail = msg;
+        rsub->ownDispatcher.queue.msgs = 1;
+        rsub->ownDispatcher.queue.bytes = natsMsg_dataAndHdrLen(msg);
+        natsCondition_Signal(rsub->ownDispatcher.cond);
         natsSub_Unlock(rsub);
 
         // Message is owned by subscription, do not destroy it here.
@@ -27951,9 +28057,9 @@ test_JetStreamSubscribeIdleHearbeat(void)
 
     test("Check HB received: ");
     nats_Sleep(300);
-    natsSubAndLdw_Lock(sub);
+    natsSub_Lock(sub);
     s = (sub->jsi->mismatch.dseq == 1 ? NATS_OK : NATS_ERR);
-    natsSubAndLdw_Unlock(sub);
+    natsSub_Unlock(sub);
     testCond(s == NATS_OK);
 
     test("Check HB is not given to app: ");
@@ -28044,9 +28150,9 @@ test_JetStreamSubscribeIdleHearbeat(void)
     // Send real message so that all clears up
     s = js_Publish(NULL, js, "foo", "msg3", 4, NULL, &jerr);
     nats_Sleep(300);
-    natsSubAndLdw_Lock(sub);
+    natsSub_Lock(sub);
     s = (sub->jsi->ssmn == false ? NATS_OK : NATS_ERR);
-    natsSubAndLdw_Unlock(sub);
+    natsSub_Unlock(sub);
     testCond(s == NATS_OK);
 
     test("Skip again: ");
@@ -28148,9 +28254,9 @@ test_JetStreamSubscribeIdleHearbeat(void)
     // Send real message so that all clears up
     s = js_Publish(NULL, js, "foo", "msg4", 4, NULL, &jerr);
     nats_Sleep(300);
-    natsSubAndLdw_Lock(sub);
+    natsSub_Lock(sub);
     s = (sub->jsi->ssmn == false && sub->jsi->sm == false ? NATS_OK : NATS_ERR);
-    natsSubAndLdw_Unlock(sub);
+    natsSub_Unlock(sub);
     testCond(s == NATS_OK);
 
     test("Skip again: ");
@@ -35975,7 +36081,7 @@ _subDlvThreadPooled(natsSubscription *sub)
 {
     bool pooled;
     natsSub_Lock(sub);
-    pooled = (sub->libDlvWorker != NULL);
+    pooled = (sub->dispatcher->dedicatedTo == NULL);
     natsSub_Unlock(sub);
     return pooled;
 }
@@ -36314,7 +36420,7 @@ static testInfo allTests[] =
     {"ParserShouldFail",                test_ParserShouldFail},
     {"ParserSplitMsg",                  test_ParserSplitMsg},
     {"ProcessMsgArgs",                  test_ProcessMsgArgs},
-    {"LibMsgDelivery",                  test_LibMsgDelivery},
+    {"AssignSubToDispatch",             test_AssignSubToDispatch},
     {"AsyncINFO",                       test_AsyncINFO},
     {"RequestPool",                     test_RequestPool},
     {"NoFlusherIfSendAsapOption",       test_NoFlusherIfSendAsap},

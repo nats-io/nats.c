@@ -54,7 +54,7 @@ ParseINFO
 ParserShouldFail
 ParserSplitMsg
 ProcessMsgArgs
-LibMsgDelivery
+AssignSubToDispatch
 AsyncINFO
 RequestPool
 NoFlusherIfSendAsapOption

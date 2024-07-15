@@ -1,4 +1,4 @@
-// Copyright 2015-2023 The NATS Authors
+// Copyright 2015-2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -185,6 +185,28 @@ typedef struct __natsOptions        natsOptions;
  * desired.
  */
 typedef char                        natsInbox;
+
+
+/** \brief An initial configuration for NATS client. Provides control over the
+ * threading model, and sets many default option values.
+ *
+ * @see natsOptions_Create
+ */
+typedef struct __natsClientConfig
+{
+        int64_t DefaultWriteDeadline;
+
+        int64_t LockSpinCount;
+
+        // Subscription message delivery thread control
+        bool DefaultToThreadPool;
+        int ThreadPoolMax;
+
+        // Reply message delivery thread control
+        bool DefaultRepliesToThreadPool;
+        bool useSeparatePoolForReplies;
+        int ReplyThreadPoolMax;
+} natsClientConfig;
 
 /** \brief A list of NATS messages.
  *
@@ -1772,6 +1794,23 @@ typedef void (*stanConnectionLostHandler)(
  *  Library and helper functions.
  * @{
  */
+
+/** \brief Initializes the library.
+ *
+ * This initializes the library, with more control over how threads and/or
+ * thread pools are used to deliver messages to the app.
+ *
+ * It is invoked automatically when creating a connection, with the default
+ * settings (same as nats_Open(-1)).
+ *
+ * \warning You must not call #nats_Open[WithConfig] and #nats_Close
+ * concurrently.
+ *
+ * @param config points to a natsClientConfig. A copy of the settings is made,
+ * so the config can be freed after initializing the NATS client.
+ */
+natsStatus
+nats_OpenWithConfig(natsClientConfig *config);
 
 /** \brief Initializes the library.
  *

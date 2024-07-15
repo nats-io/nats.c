@@ -1137,17 +1137,29 @@ _resendSubscriptions(natsConnection *nc)
 
         adjustedMax = 0;
         natsSub_Lock(sub);
+        if (sub->libDlvWorker != NULL)
+        {
+            natsMutex_Lock(sub->libDlvWorker->lock);
+        }
         // If JS ordered consumer, trigger a reset. Don't check the error
         // condition here. If there is a failure, it will be retried
         // at the next HB interval.
         if ((sub->jsi != NULL) && (sub->jsi->ordered))
         {
             jsSub_resetOrderedConsumer(sub, sub->jsi->sseq+1);
+            if (sub->libDlvWorker != NULL)
+            {
+                natsMutex_Unlock(sub->libDlvWorker->lock);
+            }
             natsSub_Unlock(sub);
             continue;
         }
         if (natsSub_drainStarted(sub))
         {
+            if (sub->libDlvWorker != NULL)
+            {
+                natsMutex_Unlock(sub->libDlvWorker->lock);
+            }
             natsSub_Unlock(sub);
             continue;
         }
@@ -1160,6 +1172,10 @@ _resendSubscriptions(natsConnection *nc)
             // messages have reached the max, if so, unsubscribe.
             if (adjustedMax == 0)
             {
+                if (sub->libDlvWorker != NULL)
+                {
+                    natsMutex_Unlock(sub->libDlvWorker->lock);
+                }
                 natsSub_Unlock(sub);
                 s = natsConn_sendUnsubProto(nc, sub->sid, 0);
                 continue;
@@ -1172,6 +1188,10 @@ _resendSubscriptions(natsConnection *nc)
 
         // Hold the lock up to that point so we are sure not to resend
         // any SUB/UNSUB for a subscription that is in draining mode.
+        if (sub->libDlvWorker != NULL)
+        {
+            natsMutex_Unlock(sub->libDlvWorker->lock);
+        }
         natsSub_Unlock(sub);
     }
 

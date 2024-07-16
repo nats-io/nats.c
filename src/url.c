@@ -12,102 +12,53 @@
 // limitations under the License.
 
 #include "natsp.h"
-#include "util.h"
 
-#include <string.h>
-#include <ctype.h>
+#include "url.h"
 
-#include "mem.h"
-
-void
-natsUrl_Destroy(natsUrl *url)
+bool natsUrl_IsLocalhost(natsUrl *url)
 {
-    if (url == NULL)
-        return;
-
-    NATS_FREE(url->fullUrl);
-    NATS_FREE(url->host);
-    NATS_FREE(url->username);
-    NATS_FREE(url->password);
-    NATS_FREE(url);
+    return ((strcasecmp(url->host, "localhost") == 0) ||
+            (strcasecmp(url->host, "127.0.0.1") == 0) ||
+            (strcasecmp(url->host, "::1") == 0));
 }
 
 static natsStatus
 _parsePort(int *port, const char *sport)
 {
-    natsStatus  s    = NATS_OK;
-    int64_t     n    = 0;
+    natsStatus s = NATS_OK;
+    int64_t n = 0;
 
-    n = nats_ParseInt64(sport, (int) strlen(sport));
+    n = nats_ParseInt64(sport, strlen(sport));
     if ((n < 0) || (n > INT32_MAX))
         s = nats_setError(NATS_INVALID_ARG, "invalid port '%s'", sport);
     else
-        *port = (int) n;
+        *port = (int)n;
 
     return s;
 }
 
-static natsStatus _decodeAndDup(char **decoded, const char *encoded)
-{
-    size_t len = strlen(encoded);
-    const char *p = encoded;
-    const char *e = encoded + len;
-    char *d;
-
-    *decoded = NATS_MALLOC(len + 1);
-    if (*decoded == NULL)
-    {
-        return nats_setDefaultError(NATS_NO_MEMORY);
-    }
-    d = *decoded;
-    for (; p < e; p++)
-    {
-        if (*p != '%')
-        {
-            *d++ = *p;
-            continue;
-        }
-
-        if (e - p < 3 || (!isxdigit(*(p + 1)) || !isxdigit(*(p + 2))))
-        {
-            NATS_FREE(*decoded);
-            *decoded = NULL;
-            return nats_setError(NATS_ERR, "invalid percent encoding in URL: %s", encoded);
-        }
-
-        char buf[3] = {p[1], p[2], '\0'};
-        *d++ = (char)strtol(buf, NULL, 16);
-        p += 2;
-    }
-    *d = '\0';
-    return NATS_OK;
-}
-
 natsStatus
-natsUrl_Create(natsUrl **newUrl, const char *urlStr)
+natsUrl_Create(natsUrl **newUrl, natsPool *pool, const char *urlStr)
 {
-    natsStatus  s      = NATS_OK;
-    char        *copy  = NULL;
-    char        *ptr   = NULL;
-    const char  *scheme= NULL;
-    const char  *user  = NULL;
-    const char  *pwd   = NULL;
-    const char  *host  = NULL;
-    const char  *port  = NULL;
-    const char  *path  = NULL;
-    natsUrl     *url   = NULL;
+    natsStatus s = NATS_OK;
+    char *copy = NULL;
+    char *ptr = NULL;
+    const char *scheme = NULL;
+    const char *user = NULL;
+    const char *pwd = NULL;
+    const char *host = NULL;
+    const char *port = NULL;
+    const char *path = NULL;
+    natsUrl *url = NULL;
 
-    if (nats_IsStringEmpty(urlStr))
+    if (nats_isCStringEmpty(urlStr))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    url = (natsUrl*) NATS_CALLOC(1, sizeof(natsUrl));
-    if (url == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
-
-    s = nats_Trim(&copy, urlStr);
+    s = CHECK_NO_MEMORY(url = nats_palloc( pool, sizeof(natsUrl)));
+    IFOK(s, nats_Trim(&copy, pool, urlStr));
 
     // Scheme
-    if (s == NATS_OK)
+    if (STILL_OK(s))
     {
         ptr = strstr(copy, "://");
         if (ptr == NULL)
@@ -118,18 +69,18 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
         else
         {
             *ptr = '\0';
-            scheme = (const char*) copy;
+            scheme = (const char *)copy;
             ptr += 3;
         }
     }
     // User info
-    if (s == NATS_OK)
+    if (STILL_OK(s))
     {
-        char *sep  = strrchr(ptr, '@');
+        char *sep = strrchr(ptr, '@');
 
         if (sep != NULL)
         {
-            host = (const char*) (sep+1);
+            host = (const char *)(sep + 1);
             *sep = '\0';
 
             if (ptr != sep)
@@ -139,41 +90,41 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
                 {
                     *sep = '\0';
                     if (sep != ptr)
-                        user = (const char*) ptr;
-                    if (sep+1 != host)
-                        pwd = (const char*) (sep+1);
+                        user = (const char *)ptr;
+                    if (sep + 1 != host)
+                        pwd = (const char *)(sep + 1);
                 }
                 else
                 {
-                    user = (const char*) ptr;
+                    user = (const char *)ptr;
                 }
             }
         }
         else
         {
-            host = (const char*) ptr;
+            host = (const char *)ptr;
         }
     }
     // Host
-    if (s == NATS_OK)
+    if (STILL_OK(s))
     {
         // Search for end of IPv6 address (if applicable)
         ptr = strrchr(host, ']');
         if (ptr == NULL)
-            ptr = (char*) host;
+            ptr = (char *)host;
 
         // From that point, search for the last ':' character
         ptr = strrchr(ptr, ':');
         if (ptr != NULL)
         {
             *ptr = '\0';
-            port = (const char*) (ptr+1);
+            port = (const char *)(ptr + 1);
         }
-        if (nats_IsStringEmpty(host))
+        if (nats_isCStringEmpty(host))
             host = "localhost";
     }
     // Port
-    if (s == NATS_OK)
+    if (STILL_OK(s))
     {
         if (port != NULL)
         {
@@ -182,44 +133,55 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
             if (sep != NULL)
             {
                 *sep = '\0';
-                path = (const char*) (sep+1);
+                path = (const char *)(sep + 1);
             }
         }
-        if (nats_IsStringEmpty(port))
+        if (nats_isCStringEmpty(port))
             url->port = 4222;
         else
             s = _parsePort(&url->port, port);
     }
     // Assemble everything
-    if (s == NATS_OK)
+    if (STILL_OK(s))
     {
-        const char  *userval    = (nats_IsStringEmpty(user) ? "" : user);
-        const char  *usep       = (nats_IsStringEmpty(pwd) ? "" : ":");
-        const char  *pwdval     = (nats_IsStringEmpty(pwd) ? "" : pwd);
-        const char  *hsep       = (nats_IsStringEmpty(user) ? "" : "@");
-        const char  *pathsep    = (nats_IsStringEmpty(path) ? "" : "/");
-        const char  *pathval    = (nats_IsStringEmpty(path) ? "" : path);
+        const char *userval = (nats_isCStringEmpty(user) ? "" : user);
+        const char *usep = (nats_isCStringEmpty(pwd) ? "" : ":");
+        const char *pwdval = (nats_isCStringEmpty(pwd) ? "" : pwd);
+        const char *hsep = (nats_isCStringEmpty(user) ? "" : "@");
+        const char *pathsep = (nats_isCStringEmpty(path) ? "" : "/");
+        const char *pathval = (nats_isCStringEmpty(path) ? "" : path);
 
-        DUP_STRING(s, url->host, host);
+        IFOK(s, ALWAYS_OK(url->host = nats_pstrdupC(pool, host)));
+        IFOK(s, ALWAYS_OK(url->username = nats_pstrdupC(pool, user)));
+        IFOK(s, ALWAYS_OK(url->password = nats_pstrdupC(pool, pwd)));
 
-        if (user != NULL)
-            IFOK(s, _decodeAndDup(&url->username, user));
-        if (pwd != NULL)
-            IFOK(s, _decodeAndDup(&url->password, pwd));
-
-        if ((s == NATS_OK) && nats_asprintf(&url->fullUrl, "%s://%s%s%s%s%s:%d%s%s",
-                scheme, userval, usep, pwdval, hsep, host, url->port, pathsep, pathval) < 0)
+        if (STILL_OK(s))
         {
-            s = nats_setDefaultError(NATS_NO_MEMORY);
+            size_t need = 0;
+            size_t cap = 0;
+            char *buf = NULL;
+            for (int i = 0; i < 2; i++)
+            {
+                if (need != 0)
+                {
+                    buf = nats_palloc(pool, need);
+                    if (buf == NULL)
+                        return nats_setDefaultError(NATS_NO_MEMORY);
+                    cap = need;
+                }
+                need = snprintf(buf, cap,
+                                "%s://%s%s%s%s%s:%d%s%s",
+                                scheme, userval, usep, pwdval, hsep, host, url->port, pathsep, pathval);
+                need++; // For the '\0'
+            }
+            url->fullUrl = buf;
         }
+        else
+            s = nats_setDefaultError(NATS_NO_MEMORY);
     }
 
-    NATS_FREE(copy);
-
-    if (s == NATS_OK)
+    if (STILL_OK(s))
         *newUrl = url;
-    else
-        natsUrl_Destroy(url);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

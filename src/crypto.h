@@ -14,8 +14,6 @@
 #ifndef CRYPTO_H_
 #define CRYPTO_H_
 
-#include "status.h"
-
 #define NATS_CRYPTO_SECRET_BYTES    64
 #define NATS_CRYPTO_SIGN_BYTES      64
 

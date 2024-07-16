@@ -20,7 +20,7 @@
 #include "../comsock.h"
 
 void
-natsSys_Init(void)
+nats_sysInit(void)
 {
     WSADATA wsaData;
     int     errorno;

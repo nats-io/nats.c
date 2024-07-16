@@ -14,8 +14,6 @@
 #ifndef URL_H_
 #define URL_H_
 
-#include "status.h"
-
 typedef struct __natsUrl
 {
     char    *fullUrl;
@@ -27,9 +25,9 @@ typedef struct __natsUrl
 } natsUrl;
 
 natsStatus
-natsUrl_Create(natsUrl **newUrl, const char *urlStr);
+natsUrl_Create(natsUrl **newUrl, natsPool *pool, const char *urlStr);
 
-void
-natsUrl_Destroy(natsUrl *url);
+bool
+natsUrl_IsLocalhost(natsUrl *url);
 
 #endif /* SRC_URL_H_ */

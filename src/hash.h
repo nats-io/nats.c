@@ -11,152 +11,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 #ifndef HASH_H_
 #define HASH_H_
 
-struct __natsHashEntry;
-
-typedef struct __natsHashEntry
-{
-    int64_t                 key;
-    void                    *data;
-    struct __natsHashEntry  *next;
-
-} natsHashEntry;
-
-typedef struct __natsHash
-{
-    natsHashEntry   **bkts;
-    int             numBkts;
-    int             mask;
-    int             used;
-    bool            canResize;
-
-} natsHash;
-
-typedef struct __natsHashIter
-{
-    natsHash        *hash;
-    natsHashEntry   *current;
-    natsHashEntry   *next;
-    int             currBkt;
-    bool            started;
-
-} natsHashIter;
-
 typedef struct __natsStrHashEntry
 {
-    uint32_t                    hk;
-    char                        *key;
-    bool                        freeKey;
-    void                        *data;
-    struct __natsStrHashEntry   *next;
-
+    uint32_t hk;
+    char *key;
+    void *data;
+    struct __natsStrHashEntry *next;
 } natsStrHashEntry;
 
-typedef struct __natsStrHash
+struct __natsStrHash
 {
-    natsStrHashEntry    **bkts;
-    int                 numBkts;
-    int                 mask;
-    int                 used;
-    bool                canResize;
+    natsPool *pool;
+    struct __natsStrHashEntry **bkts;
+    int numBkts;
+    int mask;
+    int used;
+    bool canResize;
+};
 
-} natsStrHash;
-
-typedef struct __natsStrHashIter
+struct __natsStrHashIter
 {
-    natsStrHash         *hash;
-    natsStrHashEntry    *current;
-    natsStrHashEntry    *next;
-    int                 currBkt;
-    bool                started;
+    struct __natsStrHash *hash;
+    struct __natsStrHashEntry *current;
+    struct __natsStrHashEntry *next;
+    int currBkt;
+    bool started;
+};
 
-} natsStrHashIter;
-
-#define natsHash_Count(h)       ((h)->used)
-#define natsStrHash_Count(h)    ((h)->used)
+#define natsStrHash_Count(h) ((h)->used)
 
 //
-// Hash with in64_t as the key
+// Hash with char* as the key, created in a memory pool.
 //
 natsStatus
-natsHash_Create(natsHash **newHash, int initialSize);
-
-natsStatus
-natsHash_Set(natsHash *hash, int64_t key, void *data, void **oldData);
-
-void*
-natsHash_Get(natsHash *hash, int64_t key);
-
-void*
-natsHash_Remove(natsHash *hash, int64_t key);
-
-natsStatus
-natsHash_RemoveSingle(natsHash *hash, int64_t *key, void **data);
-
-void
-natsHash_Destroy(natsHash *hash);
-
-//
-// Iterator for Hash int64_t
-//
-void
-natsHashIter_Init(natsHashIter *iter, natsHash *hash);
-
-bool
-natsHashIter_Next(natsHashIter *iter, int64_t *key, void **value);
-
-natsStatus
-natsHashIter_RemoveCurrent(natsHashIter *iter);
-
-void
-natsHashIter_Done(natsHashIter *iter);
-
-//
-// Hash with char* as the key
-//
-natsStatus
-natsStrHash_Create(natsStrHash **newHash, int initialSize);
+natsStrHash_Create(natsStrHash **newHash, natsPool *pool, int initialSize);
 
 uint32_t
 natsStrHash_Hash(const char *data, int dataLen);
 
-#define natsStrHash_Set(h, k, c, d, o) natsStrHash_SetEx((h), (k), (c), ((c) ? true : false), (d), (o))
-
 natsStatus
-natsStrHash_SetEx(natsStrHash *hash, char *key, bool copyKey, bool freeKey,
-                  void *data, void **oldData);
+natsStrHash_Set(natsStrHash *hash, char *key, void *data);
 
-#define natsStrHash_Get(h, k) natsStrHash_GetEx((h), (k), (int) strlen(k))
-
-void*
-natsStrHash_GetEx(natsStrHash *hash, char *key, int keyLen);
-
-void*
-natsStrHash_Remove(natsStrHash *hash, char *key);
-
-natsStatus
-natsStrHash_RemoveSingle(natsStrHash *hash, char **key, void **data);
-
-void
-natsStrHash_Destroy(natsStrHash *hash);
+void *
+natsStrHash_Get(natsStrHash *hash, char *key, int keyLen);
 
 //
 // Iterator for Hash char*
 //
-void
-natsStrHashIter_Init(natsStrHashIter *iter, natsStrHash *hash);
+void natsStrHashIter_Init(natsStrHashIter *iter, natsStrHash *hash);
 
-bool
-natsStrHashIter_Next(natsStrHashIter *iter, char **key, void **value);
+bool natsStrHashIter_Next(natsStrHashIter *iter, char **key, void **value);
 
-natsStatus
-natsStrHashIter_RemoveCurrent(natsStrHashIter *iter);
-
-void
-natsStrHashIter_Done(natsStrHashIter *iter);
-
+void natsStrHashIter_Done(natsStrHashIter *iter);
 
 #endif /* HASH_H_ */

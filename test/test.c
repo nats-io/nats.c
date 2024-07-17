@@ -33932,8 +33932,8 @@ test_MicroAsyncErrorHandler_MaxPendingMsgs(void)
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
-    natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.closed && (arg.status == NATS_SLOW_CONSUMER));
+    natsMutex_Unlock(arg.m);
 
     microService_Destroy(m);
     _waitForMicroservicesAllDone(&arg);

@@ -788,10 +788,6 @@ natsThread_Create(natsThread **t, natsThreadCb cb, void *arg);
 bool
 natsThread_IsCurrent(natsThread *t);
 
-// Returns the current thread ID, mostly for logging purposes.
-uint64_t
-natsThread_ID(void);
-
 void
 natsThread_Join(natsThread *t);
 

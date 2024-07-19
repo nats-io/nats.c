@@ -134,11 +134,6 @@ natsThread_IsCurrent(natsThread *t)
     return false;
 }
 
-uint64_t natsThread_ID(void)
-{
-    return (uint64_t)GetCurrentThreadId();
-}
-
 void natsThread_Yield()
 {
     // The correct way would be to call the following function.

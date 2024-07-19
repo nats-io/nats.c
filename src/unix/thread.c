@@ -123,7 +123,8 @@ natsThread_IsCurrent(natsThread *t)
     return true;
 }
 
-void natsThread_Yield(void)
+void
+natsThread_Yield(void)
 {
     sched_yield();
 }

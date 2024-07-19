@@ -134,7 +134,8 @@ natsThread_IsCurrent(natsThread *t)
     return false;
 }
 
-void natsThread_Yield()
+void
+natsThread_Yield()
 {
     // The correct way would be to call the following function.
     // However, it looks like the connection reconnect test

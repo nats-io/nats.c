@@ -2692,7 +2692,6 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         natsMsg_Destroy(msg);
         return NATS_OK;
     }
-
     // We need to retain the subscription since as soon as we release the
     // nc->subsMu lock, the subscription could be destroyed and we would
     // reference freed memory.

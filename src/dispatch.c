@@ -30,7 +30,6 @@ natsStatus natsSub_enqueueMsgImpl(natsSubscription *sub, natsMsg *msg, bool forc
     bool signal = false;
     bool shared = (sub->dispatcher->dedicatedTo == NULL);
 
-    // Immutable on a created subscription.
     natsDispatchQueue *toQ = &sub->dispatcher->queue;
     natsDispatchQueue *statsQ = &sub->ownDispatcher.queue;
 
@@ -108,7 +107,7 @@ _removeHeadMessage(natsDispatchQueue *queue)
 }
 
 static inline void
-_resetTimer(natsSubscription *sub, bool *timerNeedReset)
+_resetSubTimeoutTimer(natsSubscription *sub, bool *timerNeedReset)
 {
     if (!*timerNeedReset)
         return;
@@ -283,7 +282,7 @@ void nats_dispatchMessages(natsDispatcher *d)
             messageCB(nc, sub, NULL, messageClosure);
 
             if (shared)
-                _resetTimer(sub, &timerNeedReset);
+                _resetSubTimeoutTimer(sub, &timerNeedReset);
             continue;
         }
         else if (msg == ctrl->sub.close)
@@ -361,7 +360,7 @@ void nats_dispatchMessages(natsDispatcher *d)
             }
 
             if (shared)
-                _resetTimer(sub, &timerNeedReset);
+                _resetSubTimeoutTimer(sub, &timerNeedReset);
 
             if (fcReply != NULL)
             {

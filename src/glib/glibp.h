@@ -20,21 +20,8 @@
 #include "../stan/stanp.h"
 #endif
 
-// #include <stddef.h>
-// #include <stdio.h>
-// #include <string.h>
-// #include <inttypes.h>
 #include <assert.h>
-// #include <stdarg.h>
-
-// #include "mem.h"
-// #include "timer.h"
-// #include "util.h"
-// #include "asynccb.h"
-// #include "conn.h"
-// #include "sub.h"
-// #include "nkeys.h"
-// #include "crypto.h"
+#include <stdarg.h>
 
 #include "glib.h"
 

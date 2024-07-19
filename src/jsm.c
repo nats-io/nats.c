@@ -1978,7 +1978,7 @@ js_directGetMsgToJSMsg(const char *stream, natsMsg *msg)
     if ((natsMsg_GetDataLength(msg) == 0)
         && (natsMsgHeader_Get(msg, STATUS_HDR, &val) == NATS_OK))
     {
-        if (strcmp(val, NOT_FOUND_STATUS) == 0)
+        if (strcmp(val, HDR_STATUS_NOT_FOUND_404) == 0)
             return nats_setDefaultError(NATS_NOT_FOUND);
         else
         {

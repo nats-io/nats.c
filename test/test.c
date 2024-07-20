@@ -29220,9 +29220,7 @@ test_JetStreamSubscribePullAsync(void)
     jsOptions jsOpts;
     jsSubOptions so;
     struct threadArg args;
-    int64_t start, dur;
     jsConsumerConfig cc;
-    jsFetchRequest fr;
 
     JS_SETUP(2, 9, 2);
 
@@ -29550,16 +29548,11 @@ test_JetStreamSubscribePullAsyncMissedHB(void)
 {
     natsStatus s;
     natsSubscription *sub = NULL;
-    natsMsg *msg = NULL;
     jsErrCode jerr = 0;
-    natsMsgList list;
     jsStreamConfig sc;
     jsOptions jsOpts;
     jsSubOptions so;
     struct threadArg args;
-    int64_t start, dur;
-    jsConsumerConfig cc;
-    jsFetchRequest fr;
 
     JS_SETUP(2, 9, 2);
 

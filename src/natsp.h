@@ -469,8 +469,6 @@ typedef struct __jsSub
 
 } jsSub;
 
-#define js_replySubjectBufLen(_sub) (strlen((_sub)->subject) + 32)
-
 struct __kvStore
 {
     natsMutex           *mu;

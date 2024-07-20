@@ -1213,11 +1213,13 @@ typedef struct jsFetchRequest
  * - `NATS_OK` - should never happen here!
  * - `NATS_TIMEOUT` indicates that the fetch has reached its lifetime expiration
  *   time, or had NoWait set and there are no more messages.
- * - `NATS_NOT_FOUND` is returned (exactly when??? FIXME.
+ * - `NATS_NOT_FOUND` is returned when the server has no messages to deliver at
+ *   the beginning of a specific request. It may be returned for NoWait
+ *   subscriptions, effectively the same meaning as NATS_TIMEOUT - early
+ *   termination for NoWait.
  * - `NATS_MAX_DELIVERED_MSGS` indicates that lifetime `Batch` message limit has
  *   been reached.
- * - `NATS_LIMIT_REACHED` is returned when the lifetime byte limit is
- *   reached.
+ * - `NATS_LIMIT_REACHED` is returned when the lifetime byte limit is reached.
  * - Other status values represent error conditions.
  * @param closure completeClosure that was passed to js_PullSubscribeAsync
  *
@@ -6558,7 +6560,33 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
 NATS_EXTERN natsStatus
 jsFetchRequest_Init(jsFetchRequest *request);
 
-/** FIXME doc */
+/** \brief Starts a Pull based JetStream subscription, and delivers messages to
+ * a user callback asynchronously.
+ *
+ * The subscription can be set up to run indefinitely, and issue pull requests
+ * as needed, or it can be set up to auto-terminate when certain conditions
+ * (like max messages, or a time-based expiration) are met. `lifetime` is used
+ * to control the basic limits, and whether to use server Heartbeats to detect
+ * connection failures. jsOpts->PullSubscribeAsync is used to control the pulling
+ * parameters, provide extra event callbacks and hooks, and to tune the handling
+ * of missing heartbets.
+ *
+ * @param newsub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param js the pointer to the #jsCtx object.
+ * @param subject the subject this subscription is created for.
+ * @param durable the optional durable name.
+ * @param msgCB the #natsMsgHandler callback.
+ * @param msgCBClosure a pointer to an user defined object (can be `NULL`).
+ * @param lifetime the pointer to the #jsFetchRequest configuration used to set
+ * the sub's lifetime limits on messages, bytes, and elapsed time. It also
+ * allows to specify the heartbeat frequency. The default behavior would be to
+ * terminate the subscription if it fails. #jsOpts provides finer control.
+ * @param jsOpts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param opts the subscribe options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code,
+ * or `NULL` if not needed.
+ */
 NATS_EXTERN natsStatus
 js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject, const char *durable,
                       natsMsgHandler msgCB, void *msgCBClosure, jsFetchRequest *lifetime,

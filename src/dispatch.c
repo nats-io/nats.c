@@ -372,9 +372,10 @@ void nats_dispatchMessages(natsDispatcher *d)
         {
             // If last message in fetch, will call the callback after the
             // message is delievered.
-            // FIXME: do we care to send an async error, if serious?
 
-            printf("<>/<> MISSED HB???\n");
+            // FIXME: do we care to send an async error, if serious?
+            // FIXME: handling missed heartbeat: user option on what to do?
+            // FIXME: ignore missed heartbeat if the sub is reconnecting? Or should this be done in the readloop?
 
             if (fetch->completeCB != NULL)
                 fetch->completeCB(nc, sub, fetchStatus, fetch->completeCBClosure);

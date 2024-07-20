@@ -1841,7 +1841,6 @@ _sendPullRequest(natsConnection *nc, const char *subj, const char *rply,
     IFOK(s, natsConnection_PublishRequest(nc, subj, rply,
         natsBuf_Data(buf), natsBuf_Len(buf)));
 
-    printf("<>/<> Sent PULL REQUEST: '%s' '%s' %.*s\n", subj, rply, natsBuf_Len(buf), natsBuf_Data(buf));
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -2991,7 +2990,7 @@ static bool _autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, vo
 
     *req = fetch->lifetime; // copy bytes, reading immutable data
     req->Batch = want;
-    // FIXME - this seems wrong, we don't know how many bytes we will have
+    // FIXME discuss in PR - this seems wrong, we don't know how many bytes we will have
     // received from what is already requested. Still, can serve as a safe
     // upper bounday.
     req->MaxBytes = remainingBytes;

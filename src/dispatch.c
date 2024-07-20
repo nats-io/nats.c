@@ -309,6 +309,9 @@ void nats_dispatchMessages(natsDispatcher *d)
         // Check for flow control response and update the sub while under lock.
         // We will publish this in the end of the dispatch loop. (Control
         // messages can't have a an fcReply).
+        //
+        // IMPORTANT: we rely on this to set the "active" state of the sub, for
+        // the heartbeat timer to check later.
         fcReply = NULL;
         if ((sub != NULL) && (jsi != NULL))
             fcReply = jsSub_checkForFlowControlResponse(sub);
@@ -385,7 +388,8 @@ void nats_dispatchMessages(natsDispatcher *d)
         }
         else if ((fetchStatus == NATS_OK) && !userMsg)
         {
-            // FIXME heartbeat received, do what?
+            // Do nothing. The active bit for the heartbeat timer (to skip the
+            // next tick) has already been set.
             natsMsg_Destroy(msg);
             continue;
         }

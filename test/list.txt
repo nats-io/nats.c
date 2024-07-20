@@ -236,6 +236,7 @@ JetStreamSubscribeIdleHeartbeat
 JetStreamSubscribeFlowControl
 JetStreamSubscribePull
 JetStreamSubscribePullAsync
+JetStreamSubscribePullAsyncMissedHB
 JetStreamSubscribeHeadersOnly
 JetStreamOrderedCons
 JetStreamOrderedConsWithErrors

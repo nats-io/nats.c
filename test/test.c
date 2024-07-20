@@ -29497,8 +29497,6 @@ test_JetStreamSubscribePullAsync(void)
     };
     for (nowaitTC_t *tc = nowaitTCs; tc->name != NULL; tc++)
     {
-        natsSubscription_Destroy(sub);
-
         for (int i = 0; (s == NATS_OK) && (i < tc->before); i++)
             s = js_Publish(NULL, js, "foo", "hello", 5, NULL, &jerr);
         if (s != NATS_OK)
@@ -29538,9 +29536,44 @@ test_JetStreamSubscribePullAsync(void)
         testf("%s: ", tc->name);
         testCond(_testBatchCompleted(
             &args, sub, batchWaitTimeout, tc->expectedStatus, tc->expectedN, tc->orFewer));
+
+        natsSubscription_Destroy(sub);
+        sub = NULL;
     }
-    natsSubscription_Destroy(sub);
-    sub = NULL;
+
+    JS_TEARDOWN;
+    _destroyDefaultThreadArgs(&args);
+}
+
+static void
+test_JetStreamSubscribePullAsyncMissedHB(void)
+{
+    natsStatus s;
+    natsSubscription *sub = NULL;
+    natsMsg *msg = NULL;
+    jsErrCode jerr = 0;
+    natsMsgList list;
+    jsStreamConfig sc;
+    jsOptions jsOpts;
+    jsSubOptions so;
+    struct threadArg args;
+    int64_t start, dur;
+    jsConsumerConfig cc;
+    jsFetchRequest fr;
+
+    JS_SETUP(2, 9, 2);
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char *[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
 
     test("Check invalid heartbeat : ");
     natsMutex_Lock(args.m);
@@ -29600,8 +29633,8 @@ test_JetStreamSubscribePullAsync(void)
     // Set a message filter that will drop subsequent server's heartbeat
     // messages.
     natsConn_setFilter(nc, _dropIdleHBs);
-    testCond((s == NATS_OK) && 
-        _testBatchCompleted(&args, sub, 500, NATS_MISSED_HEARTBEAT, 0, false));
+    testCond((s == NATS_OK) &&
+             _testBatchCompleted(&args, sub, 500, NATS_MISSED_HEARTBEAT, 0, false));
 
     natsSubscription_Destroy(sub);
     JS_TEARDOWN;
@@ -37085,6 +37118,7 @@ static testInfo allTests[] =
     {"JetStreamSubscribeFlowControl",   test_JetStreamSubscribeFlowControl},
     {"JetStreamSubscribePull",          test_JetStreamSubscribePull},
     {"JetStreamSubscribePullAsync",     test_JetStreamSubscribePullAsync},
+    {"JetStreamSubscribePullAsyncMissedHB", test_JetStreamSubscribePullAsyncMissedHB},
     {"JetStreamSubscribeHeadersOnly",   test_JetStreamSubscribeHeadersOnly},
     {"JetStreamOrderedCons",            test_JetStreamOrderedConsumer},
     {"JetStreamOrderedConsWithErrors",  test_JetStreamOrderedConsumerWithErrors},

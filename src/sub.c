@@ -150,11 +150,11 @@ void natsSub_release(natsSubscription *sub)
     if (sub == NULL)
         return;
 
-    natsMutex_Lock(sub->mu);
+    natsSub_Lock(sub);
 
     refs = --(sub->refs);
 
-    natsMutex_Unlock(sub->mu);
+    natsSub_Unlock(sub);
 
     if (refs == 0)
         _freeSub(sub);
@@ -169,7 +169,7 @@ void natsSub_unlockRelease(natsSubscription *sub)
 
     refs = --(sub->refs);
 
-    natsMutex_Unlock(sub->mu);
+    natsSub_Unlock(sub);
 
     if (refs == 0)
         _freeSub(sub);

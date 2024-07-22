@@ -148,11 +148,7 @@ _startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts
     {
         natsStatus s;
 
-        if (strcmp(serverExe, natsServerExe) == 0)
-            s = _checkStart(url, 46, 10);
-        else
-            s = _checkStreamingStart(url, 10);
-
+        s = _checkStart(url, 46, 10);
         if (s != NATS_OK)
         {
             _stopServer(pid);

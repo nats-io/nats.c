@@ -61,7 +61,7 @@ static inline void _freeControlMessages(natsSubscription *sub)
     NATS_FREE(sub->control);
 }
 
-// Should be called suring the subscription creation process, or under the sub's lock.
+// Should be called during the subscription creation process, or under the sub's lock.
 static inline natsStatus
 _runOwnDispatcher(natsSubscription *sub, bool forReplies)
 {
@@ -150,11 +150,11 @@ void natsSub_release(natsSubscription *sub)
     if (sub == NULL)
         return;
 
-    natsMutex_Lock(sub->mu);
+    natsSub_Lock(sub);
 
     refs = --(sub->refs);
 
-    natsMutex_Unlock(sub->mu);
+    natsSub_Unlock(sub);
 
     if (refs == 0)
         _freeSub(sub);
@@ -169,7 +169,7 @@ void natsSub_unlockRelease(natsSubscription *sub)
 
     refs = --(sub->refs);
 
-    natsMutex_Unlock(sub->mu);
+    natsSub_Unlock(sub);
 
     if (refs == 0)
         _freeSub(sub);
@@ -341,7 +341,7 @@ natsStatus nats_createControlMessages(natsSubscription *sub)
     IFOK(s, _createControlMessage(&sub->control->fetch.missedHeartbeat, sub));
 
     // no need to free on failure, sub's free will clean it up.
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus

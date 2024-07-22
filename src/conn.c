@@ -2739,8 +2739,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         if ((jsi != NULL) && jsi->ackNone)
             natsMsg_setAcked(msg);
 
-        if (s == NATS_OK)
-            s = natsSub_enqueueMsg(sub, msg);
+        s = natsSub_enqueueMsg(sub, msg);
         if (s == NATS_OK)
         {
             sub->slowConsumer = false;

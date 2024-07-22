@@ -2033,6 +2033,10 @@ _hbTimerFired(natsTimer *timer, void* closure)
     natsStatus          s    = NATS_OK;
 
     natsSub_Lock(sub);
+    if (sub->libDlvWorker != NULL)
+    {
+        natsMutex_Lock(sub->libDlvWorker->lock);
+    }
     alert = !jsi->active;
     oc = jsi->ordered;
     jsi->active = false;
@@ -2046,10 +2050,18 @@ _hbTimerFired(natsTimer *timer, void* closure)
             natsSub_enqueueCtrlMsg(sub, sub->control->batch.missedHeartbeat);
             natsTimer_Stop(timer);
         }
+        if (sub->libDlvWorker != NULL)
+        {
+            natsMutex_Unlock(sub->libDlvWorker->lock);
+        }
         natsSub_Unlock(sub);
         return;
     }
     nc = sub->conn;
+    if (sub->libDlvWorker != NULL)
+    {
+        natsMutex_Unlock(sub->libDlvWorker->lock);
+    }
     natsSub_Unlock(sub);
 
     if (!alert)
@@ -2059,11 +2071,19 @@ _hbTimerFired(natsTimer *timer, void* closure)
     if (oc)
     {
         natsSub_Lock(sub);
+        if (sub->libDlvWorker != NULL)
+        {
+            natsMutex_Lock(sub->libDlvWorker->lock);
+        }
         if (!sub->closed)
         {
             // If we fail in that call, we will report to async err callback
             // (if one is specified).
             s = jsSub_resetOrderedConsumer(sub, sub->jsi->sseq+1);
+        }
+        if (sub->libDlvWorker != NULL)
+        {
+            natsMutex_Unlock(sub->libDlvWorker->lock);
         }
         natsSub_Unlock(sub);
     }

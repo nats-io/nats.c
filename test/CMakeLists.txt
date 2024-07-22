@@ -51,6 +51,12 @@ foreach(name ${listOfTestNames})
            ENVIRONMENT "TSAN_OPTIONS=detect_deadlocks=1:second_deadlock_stack=1:halt_on_error=1:report_signal_unsafe=1")
   endif(NATS_SANITIZE)
 
+  # Set TSAN_OPTIONS for the test
+  if(NATS_SANITIZE)
+    set_tests_properties(Test_${name} PROPERTIES
+           ENVIRONMENT "TSAN_OPTIONS=detect_deadlocks=1:second_deadlock_stack=1:halt_on_error=1:report_signal_unsafe=1")
+  endif(NATS_SANITIZE)
+
   # Bump the test index number
   math(EXPR testIndex "${testIndex}+1")
 endforeach()

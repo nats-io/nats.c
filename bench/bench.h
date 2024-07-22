@@ -123,37 +123,6 @@ _startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts
         return NATS_INVALID_PID;
     }
 
-    if (!keepServerOutput)
-    {
-        ZeroMemory(&sa, sizeof(sa));
-        sa.nLength = sizeof(sa);
-        sa.lpSecurityDescriptor = NULL;
-        sa.bInheritHandle = TRUE;
-
-        h = logHandle;
-        if (h == NULL)
-        {
-            h = CreateFile(LOGFILE_NAME,
-                           GENERIC_WRITE,
-                           FILE_SHARE_WRITE | FILE_SHARE_READ,
-                           &sa,
-                           CREATE_ALWAYS,
-                           FILE_ATTRIBUTE_NORMAL,
-                           NULL);
-        }
-
-        si.dwFlags |= STARTF_USESTDHANDLES;
-        si.hStdInput = NULL;
-        si.hStdError = h;
-        si.hStdOutput = h;
-
-        hInheritance = TRUE;
-        flags = CREATE_NO_WINDOW;
-
-        if (logHandle == NULL)
-            logHandle = h;
-    }
-
     // Start the child process.
     if (!CreateProcess(NULL,
                        (LPSTR)exeAndCmdLine,

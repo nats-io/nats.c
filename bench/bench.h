@@ -90,11 +90,6 @@ _stopServer(natsPid pid)
     CloseHandle(pid->hProcess);
     CloseHandle(pid->hThread);
 
-    natsMutex_Lock(slMu);
-    if (slMap != NULL)
-        natsHash_Remove(slMap, (int64_t)pid);
-    natsMutex_Unlock(slMu);
-
     free(pid);
 }
 
@@ -195,11 +190,6 @@ _startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts
             return NATS_INVALID_PID;
         }
     }
-
-    natsMutex_Lock(slMu);
-    if (slMap != NULL)
-        natsHash_Set(slMap, (int64_t)pid, NULL, NULL);
-    natsMutex_Unlock(slMu);
 
     return (natsPid)pid;
 }

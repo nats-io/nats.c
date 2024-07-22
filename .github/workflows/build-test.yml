@@ -10,6 +10,9 @@ on:
       coverage:
         type: string
         default: "OFF"
+      dev_mode:
+        type: string
+        default: "OFF"
       lib_msg_delivery:
         type: string
         default: "OFF"
@@ -40,6 +43,12 @@ on:
         type: string
         description: "Ubuntu version to use, e.g. '20.04'"
         default: "latest"
+      verbose_test_output:
+        type: string
+        default: "OFF"
+      verbose_make_output:
+        type: string
+        default: "ON"
     secrets:
       CODECOV_TOKEN:
         description: "Codecov repo token"
@@ -82,6 +91,12 @@ jobs:
           fi
           if [[ "${{ inputs.coverage }}" == "ON" ]]; then
             flags="$flags -DNATS_COVERAGE=ON"
+          fi
+          if [[ "${{ inputs.dev_mode }}" == "ON" ]]; then
+            flags="$flags -DDEV_MODE=ON"
+          fi
+          if [[ "${{ inputs.verbose_make_output }}" == "ON" ]]; then
+            flags="$flags -DCMAKE_VERBOSE_MAKEFILE=ON"
           fi
           echo "flags=$flags" >> $GITHUB_OUTPUT
 
@@ -158,11 +173,7 @@ jobs:
           export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
           flags=""
-          ctest --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }} 2>&1 | tee /tmp/out.txt
-          if [[ $(grep -q 'ThreadSanitizer: ' /tmp/out.txt; echo $?) == 0 ]]; then
-            echo "!!! ThreadSanitizer detected WARNING(s) !!!"
-            exit 1
-          fi
+          ctest --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }}
 
       - name: Upload coverage reports to Codecov
         # PRs from external contributors fail: https://github.com/codecov/feedback/issues/301

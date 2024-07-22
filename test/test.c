@@ -5477,6 +5477,7 @@ test_natsSrvVersionAtLeast(void)
             {
                 s = NATS_ERR;
             }
+            natsConn_Unlock(nc);
         }
     }
     testCond(s == NATS_OK);
@@ -13337,7 +13338,10 @@ test_ClientAutoUnsubAndReconnect(void)
     nats_Sleep(10);
 
     test("Received no more than max: ");
-    testCond((s == NATS_OK) && (arg.sum == 10));
+    natsMutex_Lock(arg.m);
+    int sum = arg.sum;
+    natsMutex_Unlock(arg.m);
+    testCond((s == NATS_OK) && (sum == 10));
 
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
@@ -13390,6 +13394,7 @@ test_AutoUnsubNoUnsubOnDestroy(void)
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.done)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
@@ -20252,6 +20257,7 @@ test_ForcedReconnect(void)
     CHECK_SERVER_STARTED(pid);
     IFOK(s, natsOptions_Create(&opts));
     IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &arg));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 100));
     IFOK(s, natsConnection_Connect(&nc, opts));
     IFOK(s, natsConnection_SubscribeSync(&sub, nc, "foo"));
     testCond(s == NATS_OK);
@@ -20800,6 +20806,7 @@ test_EventLoop(void)
     natsMutex_Lock(arg.m);
     if (arg.attached != 2 || !arg.detached)
         s = NATS_ERR;
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
@@ -29485,6 +29492,9 @@ _jsOrderedErrHandler(natsConnection *nc, natsSubscription *subscription, natsSta
 {
     struct threadArg    *args = (struct threadArg*) closure;
 
+    if (err != NATS_MISSED_HEARTBEAT)
+        return;
+
     natsMutex_Lock(args->m);
     args->status = err;
     natsCondition_Signal(args->c);
@@ -29824,6 +29834,7 @@ test_JetStreamOrderedConsSrvRestart(void)
     natsMutex_Lock(args.m);
     while ((s != NATS_TIMEOUT) && !args.reconnected)
         s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
     test("Send 1 message: ");
@@ -33921,8 +33932,8 @@ test_MicroAsyncErrorHandler_MaxPendingMsgs(void)
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.closed)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
-    natsMutex_Unlock(arg.m);
     testCond((s == NATS_OK) && arg.closed && (arg.status == NATS_SLOW_CONSUMER));
+    natsMutex_Unlock(arg.m);
 
     microService_Destroy(m);
     _waitForMicroservicesAllDone(&arg);

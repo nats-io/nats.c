@@ -28,36 +28,51 @@ jobs:
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-  sanitize-addr:
-    name: "Sanitize address"
+  coverage-pooled:
+    name: "Coverage"
     uses: ./.github/workflows/build-test.yml
     with:
-      sanitize: address
+      coverage: ON
       server_version: main
       type: Debug
+      lib_msg_delivery: ON
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-  sanitize-addr-lib-msg-delivery:
-    name: "Sanitize address (lib_msg_delivery)"
+  dev-mode:
+    name: "DEV_MODE"
     uses: ./.github/workflows/build-test.yml
     with:
-      sanitize: address
+      dev_mode: ON
       server_version: main
-      lib_msg_delivery: ON
+      type: Debug
+      verbose_test_output: ON
+      verbose_make_output: ON
 
-  san-addr:
+  sanitize:
+    name: "Sanitize"
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        sanitize: [address, thread]
+        pooled_delivery: [ON, OFF]
+    uses: ./.github/workflows/build-test.yml
+    with:
+      server_version: main
+      type: Debug
+      compiler: ${{ matrix.compiler }}
+      sanitize: ${{ matrix.sanitize }}
+      lib_msg_delivery: ${{ matrix.pooled_delivery }}
+
+  san-addr-deadline:
     name: "Sanitize address (lib_write_deadline)"
     uses: ./.github/workflows/build-test.yml
     with:
+      type: Debug
       sanitize: address
       server_version: main
       lib_write_deadline: ON
-
-  san-thread:
-    name: "Sanitize thread"
-    uses: ./.github/workflows/build-test.yml
-    with:
-      sanitize: thread
-      server_version: main
 
   Windows:
     name: "Windows"

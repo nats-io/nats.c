@@ -1046,7 +1046,6 @@ natsOptions_UseGlobalMessageDelivery(natsOptions *opts, bool global)
     // create their own delivery thread or use the one(s) from
     // the library.
     opts->useSharedDispatcher = global;
-    // opts->useSharedReplyDispatcher = global;
 
     UNLOCK_OPTS(opts);
 

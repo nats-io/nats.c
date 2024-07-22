@@ -58,7 +58,6 @@ natsStatus natsSub_enqueueMsgImpl(natsSubscription *sub, natsMsg *msg, bool forc
         statsQ->bytes += natsMsg_dataAndHdrLen(msg);
     }
     sub->slowConsumer = false;
-    msg->sub = sub;
 
     // For shared dispatchers, we need to lock the dispatcher to place items on
     // its queue. When we have a dedicated one, it uses the sub's mu and it's
@@ -69,7 +68,7 @@ natsStatus natsSub_enqueueMsgImpl(natsSubscription *sub, natsMsg *msg, bool forc
     if (toQ->head == NULL)
     {
         signal = true;
-        msg->next = toQ->head;
+        msg->next = NULL;
         toQ->head = msg;
         if (toQ->tail == NULL)
             toQ->tail = msg;
@@ -196,8 +195,6 @@ void nats_dispatchMessages(natsDispatcher *d)
         userMsg = false;
         if (msg != NULL)
         {
-            // At this point sub is set, no need to check for NULL - either we
-            // have it from the message, or we are in the dedicated mode.
             if (msg->sub != NULL)
                 sub = msg->sub;
 
@@ -205,6 +202,12 @@ void nats_dispatchMessages(natsDispatcher *d)
 
             userMsg = msg->subject[0] != '\0';
         }
+
+        // At this point sub is set, no need to check for NULL. Non-NULL
+        // messages must have a sub. The only NULL messages that can come here
+        // are from timeouts detected by the while loop above when running in
+        // the dedicated mode. In that case `sub` is already defaulted to the
+        // dispatcher's dedicated sub.
 
         timeout = ((s == NATS_TIMEOUT) || (msg == sub->control->sub.timeout));
 

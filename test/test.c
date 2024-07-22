@@ -8162,7 +8162,7 @@ test_AssignSubToDispatch(void)
                  (c.ThreadPoolMax == tc->expectedMax) &&
                  (c.DefaultRepliesToThreadPool == false) &&
                  (c.ReplyThreadPoolMax == 0) &&
-                 (c.useSeparatePoolForReplies == false) &&
+                 (c.UseSeparatePoolForReplies == false) &&
                  (_numRunningThreads(pool) == 0) &&
                  (pool->cap == tc->expectedMax) &&
                  (pool->dispatchers != NULL) &&

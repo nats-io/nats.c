@@ -204,7 +204,7 @@ typedef struct __natsClientConfig
 
         // Reply message delivery thread control
         bool DefaultRepliesToThreadPool;
-        bool useSeparatePoolForReplies;
+        bool UseSeparatePoolForReplies;
         int ReplyThreadPoolMax;
 } natsClientConfig;
 
@@ -1798,7 +1798,7 @@ typedef void (*stanConnectionLostHandler)(
 /** \brief Initializes the library.
  *
  * This initializes the library, with more control over how threads and/or
- * thread pools are used to deliver messages to the app.
+ * thread pools are used to deliver messages to the application.
  *
  * It is invoked automatically when creating a connection, with the default
  * settings (same as nats_Open(-1)).

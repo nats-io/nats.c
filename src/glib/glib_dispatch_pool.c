@@ -50,8 +50,8 @@ _startDispatcher(natsDispatcher *d, void (*threadf)(void *))
 
     if (s != NATS_OK)
     {
-        natsLib_Release();
         _destroyDispatcher(d);
+        natsLib_Release();
     }
     return s;
 }

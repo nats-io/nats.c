@@ -283,6 +283,7 @@ add_subdirectory(examples/getstarted)
 if(NATS_BUILD_STREAMING)
   add_subdirectory(examples/stan)
 endif()
+add_subdirectory(bench)
 add_subdirectory(test)
 add_subdirectory(test/dylib)
 #----------------------------

@@ -56,3 +56,11 @@ jobs:
       server_version: main
       type: RelWithDebInfo
       lib_msg_delivery: ON
+
+  bench:
+    name: "Benchmark"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      server_version: main
+      benchmark: ON
+      type: Release

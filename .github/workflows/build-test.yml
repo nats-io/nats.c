@@ -49,6 +49,10 @@ on:
       verbose_make_output:
         type: string
         default: "ON"
+      benchmark:
+        type: string
+        default: "OFF"
+
     secrets:
       CODECOV_TOKEN:
         description: "Codecov repo token"
@@ -168,6 +172,7 @@ jobs:
           fi
 
       - name: "Test"
+        if: inputs.benchmark == 'OFF'
         working-directory: ./build
         run: |
           export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
@@ -184,3 +189,11 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
           # verbose: true
+
+      - name: "Benchmark"
+        if: inputs.benchmark == 'ON'
+        working-directory: ./build
+        run: |
+          export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
+          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
+          ./bin/bench-sub-async

@@ -48,7 +48,7 @@ on:
         default: "OFF"
       verbose_make_output:
         type: string
-        default: "ON"
+        default: "OFF"
       benchmark:
         type: string
         default: "OFF"

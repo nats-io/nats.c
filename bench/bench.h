@@ -90,11 +90,6 @@ _stopServer(natsPid pid)
     CloseHandle(pid->hProcess);
     CloseHandle(pid->hThread);
 
-    natsMutex_Lock(slMu);
-    if (slMap != NULL)
-        natsHash_Remove(slMap, (int64_t)pid);
-    natsMutex_Unlock(slMu);
-
     free(pid);
 }
 
@@ -128,37 +123,6 @@ _startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts
         return NATS_INVALID_PID;
     }
 
-    if (!keepServerOutput)
-    {
-        ZeroMemory(&sa, sizeof(sa));
-        sa.nLength = sizeof(sa);
-        sa.lpSecurityDescriptor = NULL;
-        sa.bInheritHandle = TRUE;
-
-        h = logHandle;
-        if (h == NULL)
-        {
-            h = CreateFile(LOGFILE_NAME,
-                           GENERIC_WRITE,
-                           FILE_SHARE_WRITE | FILE_SHARE_READ,
-                           &sa,
-                           CREATE_ALWAYS,
-                           FILE_ATTRIBUTE_NORMAL,
-                           NULL);
-        }
-
-        si.dwFlags |= STARTF_USESTDHANDLES;
-        si.hStdInput = NULL;
-        si.hStdError = h;
-        si.hStdOutput = h;
-
-        hInheritance = TRUE;
-        flags = CREATE_NO_WINDOW;
-
-        if (logHandle == NULL)
-            logHandle = h;
-    }
-
     // Start the child process.
     if (!CreateProcess(NULL,
                        (LPSTR)exeAndCmdLine,
@@ -184,22 +148,13 @@ _startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts
     {
         natsStatus s;
 
-        if (strcmp(serverExe, natsServerExe) == 0)
-            s = _checkStart(url, 46, 10);
-        else
-            s = _checkStreamingStart(url, 10);
-
+        s = _checkStart(url, 46, 10);
         if (s != NATS_OK)
         {
             _stopServer(pid);
             return NATS_INVALID_PID;
         }
     }
-
-    natsMutex_Lock(slMu);
-    if (slMap != NULL)
-        natsHash_Set(slMap, (int64_t)pid, NULL, NULL);
-    natsMutex_Unlock(slMu);
 
     return (natsPid)pid;
 }

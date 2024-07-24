@@ -10,17 +10,6 @@ include_directories(${PROJECT_SOURCE_DIR}/bench)
 if(NATS_BUILD_WITH_TLS)
   include_directories(${OPENSSL_INCLUDE_DIR})
 endif(NATS_BUILD_WITH_TLS)
-if(NATS_BUILD_LIBUV_EXAMPLE AND LIBUV_DIR)
-  include_directories(${LIBUV_DIR}/include)
-endif()
-if(NATS_BUILD_LIBEVENT_EXAMPLE AND LIBEVENT_DIR)
-  include_directories(${LIBEVENT_DIR}/include)
-endif()
-if(NATS_BUILD_STREAMING)
-  include_directories(${NATS_PROTOBUF_INCLUDE_DIRS})
-  include_directories(${PROJECT_SOURCE_DIR}/src/stan)
-endif(NATS_BUILD_STREAMING)
-
 
 set(LIB_SUFFIX ${CMAKE_STATIC_LIBRARY_SUFFIX})
 

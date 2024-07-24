@@ -16,7 +16,7 @@
 
 #include <limits.h>
 
-#include "natsp.h"
+#include "nats.h"
 #include "comsock.h"
 
 static const char *natsServerExe = "nats-server";

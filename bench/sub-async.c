@@ -234,8 +234,6 @@ int main(void)
             }
 
             totalDuration += (end - start);
-            // if (s == NATS_OK)
-            //     printf("%s: %" PRId64 " ms\n", namebuf, end - start);
         }
 
         printf("%s_average_%d: %" PRId64 " ms\n", namebuf, REPEAT, totalDuration / REPEAT);

@@ -1,4 +1,4 @@
-name: "Debug"
+name: "PR"
 on:
   pull_request:
 
@@ -29,7 +29,7 @@ jobs:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   coverage-pooled:
-    name: "Coverage"
+    name: "Coverage (pooled delivery)"
     uses: ./.github/workflows/build-test.yml
     with:
       coverage: ON
@@ -74,6 +74,14 @@ jobs:
       server_version: main
       lib_write_deadline: ON
 
+  bench:
+    name: "Benchmark"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      server_version: main
+      benchmark: ON
+      type: Release
+
   Windows:
     name: "Windows"
     runs-on: windows-latest
@@ -98,4 +106,4 @@ jobs:
       - name: Test
         run: |
           cd build
-          ./bin/Debug/testsuite
+          ctest -L 'test' --timeout 60 --output-on-failure

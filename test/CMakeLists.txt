@@ -27,7 +27,7 @@ if(NATS_BUILD_STREAMING)
 endif(NATS_BUILD_STREAMING)
 
 # Build the test program
-add_executable(testsuite test.c)
+add_executable(testsuite test.c bench_sub_async.c)
 
 # Link statically with the library
 target_link_libraries(testsuite nats_static ${NATS_EXTRA_LIB})
@@ -45,19 +45,16 @@ endif()
 set(TEST_NAMES)
 
 foreach(LIST_FILE ${ALL_LISTS})
-  # Read the file 'list.txt' to get all the test names
+  # Get all the test names
   if(EXISTS ${LIST_FILE})
     file(STRINGS ${LIST_FILE} TEST_NAMES)
   else()
     set(TEST_NAMES)
   endif()
 
-  message("Test Names: ${TEST_NAMES}")
-
   foreach(name ${TEST_NAMES})
     # Remove the _test() prefix
     string(REGEX REPLACE "_test\\(([^)]+)\\)" "\\1" TEST_NAME ${name})
-    message("Adding test: ${TEST_NAME}")
     add_test(NAME ${TEST_NAME}
       WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
       COMMAND testsuite ${TEST_NAME})
@@ -70,7 +67,7 @@ foreach(LIST_FILE ${ALL_LISTS})
 
       # Set TSAN_OPTIONS for the test
       if(NATS_SANITIZE)
-        set_tests_properties(${name} PROPERTIES
+        set_tests_properties(${TEST_NAME} PROPERTIES
           ENVIRONMENT "TSAN_OPTIONS=detect_deadlocks=1:second_deadlock_stack=1:halt_on_error=1:report_signal_unsafe=1")
       endif(NATS_SANITIZE)
 

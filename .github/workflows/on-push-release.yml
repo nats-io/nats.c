@@ -45,11 +45,3 @@ jobs:
     with:
       sanitize: thread
       server_version: main
-
-  bench:
-    name: "Benchmark"
-    uses: ./.github/workflows/build-test.yml
-    with:
-      server_version: main
-      benchmark: ON
-      type: Release

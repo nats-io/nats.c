@@ -202,9 +202,9 @@ int main(void)
         {
             natsStatus s = NATS_OK;
             int nMessages = TOTAL_MESSAGES / *n;
-            int flushAfter = nMessages / *n / 2;
-            if (flushAfter < 10)
-                flushAfter = 10;
+            int flushAfter = nMessages / *n / 10;
+            if (flushAfter < 5)
+                flushAfter = 5;
             int durMillis = 0;
 
             for (int i = 0; i < REPEAT; i++)

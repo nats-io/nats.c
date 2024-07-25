@@ -13,8 +13,10 @@
 
 #include "bench.h"
 
-#define NSUBS 500
-#define NMSGS (1 * 1000)
+#define MAX_SUBS 500
+int numSubs[] = {1, 2, 3, 5, 7, 11, 23, 43, 83, 163, 317, 499};
+
+#define TOTAL_MESSAGES (500 * 1000)
 #define REPEAT 5
 
 typedef struct
@@ -30,28 +32,13 @@ benchConfig configs[] = {
     {true, 3},
     {true, 4},
     {true, 5},
-    {true, 6},
     {true, 7},
-    {true, 8},
-    {true, 9},
-    {true, 10},
     {true, 11},
-    {true, 12},
-    {true, 13},
-    {true, 14},
-    {true, 15},
-    {true, 16},
-    {true, 17},
-    {true, 18},
     {true, 19},
-    {true, 20},
-    {true, 23},
-    {true, 31},
-    {true, 47},
-    {true, 100},
-    {true, NSUBS / 2 - 1},
-    {true, NSUBS - 1},
-    {true, NSUBS},
+    {true, 41},
+    {true, 79},
+    {true, 157},
+    {true, 307},
 };
 
 typedef struct
@@ -63,20 +50,20 @@ typedef struct
     int64_t closedTimestamp;
 } subState;
 
-subState state[NSUBS];
+subState state[MAX_SUBS];
 
-static uint64_t _expectedSum(void)
+static uint64_t _expectedSum(int N)
 {
     uint64_t sum = 0;
-    for (int64_t i = 0; i < NMSGS; i++)
+    for (int64_t i = 0; i < N; i++)
         sum += i;
     return sum;
 }
 
-static uint64_t _expectedXOR(void)
+static uint64_t _expectedXOR(int N)
 {
     uint64_t xor = 0;
-    for (int64_t i = 0; i < NMSGS; i++)
+    for (int64_t i = 0; i < N; i++)
         xor ^= i;
     return xor;
 }
@@ -108,20 +95,20 @@ _onComplete(void *closure)
     s->closedTimestamp = nats_Now();
 }
 
-static uint64_t expectedSum;
-static uint64_t expectedXOR;
-
 static natsStatus
-_bench(benchConfig *c, int64_t *start, int64_t *end)
+_bench(benchConfig *c, int nSubs, int nMessages, int flushAfter, int *durMillis)
 {
-    natsStatus s = nats_Open(-1);
     natsConnection *conn = NULL;
     natsOptions *opts = NULL;
+    uint64_t expectedSum = _expectedSum(nMessages);
+    uint64_t expectedXOR = _expectedXOR(nMessages);
     char buf[16];
+    int64_t start, end;
 
     memset(state, 0, sizeof(state));
-    *start = nats_Now();
+    start = nats_Now();
 
+    natsStatus s = nats_Open(-1);
     IFOK(s, natsOptions_Create(&opts));
     IFOK(s, nats_SetMessageDeliveryPoolSize(c->maxThreads));
     IFOK(s, natsOptions_SetErrorHandler(opts, asyncCb, NULL));
@@ -129,25 +116,26 @@ _bench(benchConfig *c, int64_t *start, int64_t *end)
 
     IFOK(s, natsConnection_Connect(&conn, opts));
 
-    for (int i = 0; i < NSUBS; i++)
+    for (int i = 0; i < nSubs; i++)
     {
         IFOK(s, natsConnection_Subscribe(&state[i].sub, conn, "foo", _onMessage, &state[i]));
-        IFOK(s, natsSubscription_SetPendingLimits(state[i].sub, INT_MAX, INT_MAX));
-        IFOK(s, natsSubscription_AutoUnsubscribe(state[i].sub, NMSGS));
+        IFOK(s, natsSubscription_SetPendingLimits(state[i].sub, -1, -1));
+        IFOK(s, natsSubscription_AutoUnsubscribe(state[i].sub, nMessages));
         IFOK(s, natsSubscription_SetOnCompleteCB(state[i].sub, _onComplete, &state[i]));
     }
 
-    for (int i = 0; i < NMSGS; i++)
+    for (int i = 0; i < nMessages; i++)
     {
         snprintf(buf, sizeof(buf), "%d", i);
         IFOK(s, natsConnection_PublishString(conn, "foo", buf));
-        IFOK(s, natsConnection_Flush(conn));
+        if ((i % flushAfter) == 0)
+            IFOK(s, natsConnection_Flush(conn));
     }
 
     while (s == NATS_OK)
     {
         bool done = true;
-        for (int i = 0; i < NSUBS; i++)
+        for (int i = 0; i < nSubs; i++)
         {
             // threads don't touch this, should be safe
             if (natsSubscription_IsValid(state[i].sub))
@@ -157,15 +145,15 @@ _bench(benchConfig *c, int64_t *start, int64_t *end)
             }
         }
 
-        nats_Sleep(100);
+        nats_Sleep(10);
         if (done)
             break;
     }
 
-    *end = 0;
+    end = 0;
     if (s == NATS_OK)
     {
-        for (int i = 0; i < NSUBS; i++)
+        for (int i = 0; i < nSubs; i++)
         {
             if (state[i].sum != expectedSum)
             {
@@ -179,64 +167,60 @@ _bench(benchConfig *c, int64_t *start, int64_t *end)
                 s = NATS_ERR;
                 break;
             }
-            if (state[i].count != NMSGS)
+            if ((int)(state[i].count) != nMessages)
             {
-                fprintf(stderr, "Error: count is %" PRId64 " for sub %d, expected %d\n", state[i].count, i, NMSGS);
+                fprintf(stderr, "Error: count is %" PRId64 " for sub %d, expected %d\n", state[i].count, i, nMessages);
                 s = NATS_ERR;
                 break;
             }
 
-            if (state[i].closedTimestamp > *end)
-                *end = state[i].closedTimestamp;
+            if (state[i].closedTimestamp > end)
+                end = state[i].closedTimestamp;
         }
     }
 
     // cleanup
-    for (int i = 0; i < NSUBS; i++)
+    for (int i = 0; i < nSubs; i++)
         natsSubscription_Destroy(state[i].sub);
     natsConnection_Destroy(conn);
     natsOptions_Destroy(opts);
     nats_CloseAndWait(0);
+
+    *durMillis = (int)(end - start);
 
     return s;
 }
 
 int main(void)
 {
-    char namebuf[128];
-    int64_t start = 0, end = 0;
-
-    expectedSum = _expectedSum();
-    expectedXOR = _expectedXOR();
-
     int pid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(pid);
 
     for (benchConfig *c = configs; c < configs + sizeof(configs) / sizeof(configs[0]); c++)
     {
-        natsStatus s = NATS_OK;
-        int64_t totalDuration = 0;
-
-        snprintf(namebuf, sizeof(namebuf), "%d_subs_%d_messages_", NSUBS, NMSGS);
-        if (c->useGlobalDelivery)
-            snprintf(namebuf + strlen(namebuf), sizeof(namebuf) - strlen(namebuf), "global_%d", c->maxThreads);
-        else
-            snprintf(namebuf + strlen(namebuf), sizeof(namebuf) - strlen(namebuf), "designated");
-
-        for (int i = 0; i < REPEAT; i++)
+        for (int *n = numSubs; n < numSubs + sizeof(numSubs) / sizeof(numSubs[0]); n++)
         {
-            s = _bench(c, &start, &end);
-            if (s != NATS_OK)
+            natsStatus s = NATS_OK;
+            int nMessages = TOTAL_MESSAGES / *n;
+            int flushAfter = nMessages / *n / 2;
+            if (flushAfter < 10)
+                flushAfter = 10;
+            int durMillis = 0;
+
+            for (int i = 0; i < REPEAT; i++)
             {
-                fprintf(stderr, "Error: %s\n", natsStatus_GetText(s));
-                nats_PrintLastErrorStack(stderr);
-                exit(1);
+                s = _bench(c, *n, nMessages, flushAfter, &durMillis);
+                if (s != NATS_OK)
+                {
+                    fprintf(stderr, "Error: %s\n", natsStatus_GetText(s));
+                    nats_PrintLastErrorStack(stderr);
+                    exit(1);
+                }
             }
 
-            totalDuration += (end - start);
+            printf("%d,%d,%d\n", c->useGlobalDelivery ? c->maxThreads : -1, *n, durMillis / REPEAT);
+            fflush(stdout);
         }
-
-        printf("%s_average_%d: %" PRId64 " ms\n", namebuf, REPEAT, totalDuration / REPEAT);
     }
 
     _stopServer(pid);

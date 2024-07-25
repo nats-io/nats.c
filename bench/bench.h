@@ -14,8 +14,6 @@
 #ifndef __BENCH_H
 #define __BENCH_H
 
-#include <limits.h>
-
 #include "nats.h"
 #include "comsock.h"
 

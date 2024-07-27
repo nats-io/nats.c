@@ -54,7 +54,7 @@ if [ "$1" != "gcc" ]; then
   fi
 fi
 
-cmake .. $3
+cmake .. $3 -DNATS_BUILD_STREAMING=ON
 res=$?
 if [ $res -ne 0 ]; then
   exit $res

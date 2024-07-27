@@ -319,13 +319,12 @@ static natsStatus _bench(ENV *env, int *best, int *avg, int *worst)
         natsSubscription_Destroy(env->subs[i].sub);
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
+    _stopServer(pid);
     nats_CloseAndWait(0);
 
     *best = (int)b;
     *avg = (int)(a / env->numSubs);
     *worst = (int)w;
-
-    _stopServer(pid);
 
     return s;
 }

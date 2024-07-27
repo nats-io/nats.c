@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "natsp.h"
+#include "test.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -33,51 +33,67 @@
 #include "sub.h"
 #include "msg.h"
 #include "stats.h"
-#include "comsock.h"
 #include "crypto.h"
 #include "nkeys.h"
 #include "parser.h"
 #include "js.h"
 #include "kv.h"
 #include "microp.h"
+
 #if defined(NATS_HAS_STREAMING)
+
 #include "stan/conn.h"
 #include "stan/pub.h"
 #include "stan/sub.h"
 #include "stan/copts.h"
 #include "stan/sopts.h"
-#endif
+
+static const char *clientName = "client";
+
+#endif // NATS_HAS_STREAMING
+
+typedef void (*testFunc)(void);
+
+typedef struct __testInfo
+{
+    const char *name;
+    testFunc func;
+} testInfo;
+
+#define _TEST_PROTO
+#include "list.h"
+#undef _TEST_PROTO
+
+#define _TEST_LIST
+testInfo allTests[] =
+{
+#include "list.h"
+};
+#undef _TEST_LIST
+
 
 static int  tests  = 0;
-static bool failed = false;
+bool failed = false;
 
-static bool keepServerOutput    = false;
+bool keepServerOutput    = false;
 static bool valgrind            = false;
 static bool runOnTravis         = false;
 
-static const char *natsServerExe = "nats-server";
 static const char *serverVersion = NULL;
 
 static const char *natsStreamingServerExe = "nats-streaming-server";
 
-static natsMutex *slMu  = NULL;
-static natsHash  *slMap = NULL;
+natsMutex *slMu  = NULL;
+natsHash  *slMap = NULL;
 
 #define test(s)         { printf("#%02d ", ++tests); printf("%s", (s)); fflush(stdout); }
 #ifdef _WIN32
-#define NATS_INVALID_PID    (NULL)
 #define testCond(c)         if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; return; }
 #define testCondNoReturn(c) if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; }
-#define LOGFILE_NAME    "wserver.log"
 #else
-#define NATS_INVALID_PID    (-1)
 #define testCond(c)         if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; return; }
 #define testCondNoReturn(c) if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; }
-#define LOGFILE_NAME    "server.log"
 #endif
-#define FAIL(m)         { printf("@@ %s @@\n", (m)); failed=true; return; }
-
-#define CHECK_SERVER_STARTED(p) if ((p) == NATS_INVALID_PID) FAIL("Unable to start or verify that the server was started!")
 
 static const char *testServers[] = {"nats://127.0.0.1:1222",
                                     "nats://127.0.0.1:1223",
@@ -86,11 +102,6 @@ static const char *testServers[] = {"nats://127.0.0.1:1222",
                                     "nats://127.0.0.1:1226",
                                     "nats://127.0.0.1:1227",
                                     "nats://127.0.0.1:1228"};
-
-#if defined(NATS_HAS_STREAMING)
-static const char *clusterName = "test-cluster";
-static const char *clientName  = "client";
-#endif
 
 // Forward declaration
 static void _startMockupServerThread(void *closure);
@@ -221,8 +232,7 @@ _destroyDefaultThreadArgs(struct threadArg *args)
     natsCondition_Destroy(args->c);
 }
 
-static void
-test_natsNowAndSleep(void)
+void test_natsNowAndSleep(void)
 {
     int64_t start;
     int64_t end;
@@ -234,8 +244,7 @@ test_natsNowAndSleep(void)
     testCond(((end - start) >= 990) && ((end - start) <= 1010));
 }
 
-static void
-test_natsAllocSprintf(void)
+void test_natsAllocSprintf(void)
 {
     char smallStr[20];
     char mediumStr[256]; // This is the size of the temp buffer in nats_asprintf
@@ -277,8 +286,7 @@ test_natsAllocSprintf(void)
     ptr = NULL;
 }
 
-static void
-test_natsStrCaseStr(void)
+void test_natsStrCaseStr(void)
 {
     const char *s1 = "Hello World!";
     const char *s2 = "wo";
@@ -301,8 +309,7 @@ test_natsStrCaseStr(void)
     testCond(res == NULL);
 }
 
-static void
-test_natsSnprintf(void)
+void test_natsSnprintf(void)
 {
 #if _WIN32
     // This test is specific to older version of Windows
@@ -318,7 +325,7 @@ test_natsSnprintf(void)
 #endif
 }
 
-static void test_natsBuffer(void)
+void test_natsBuffer(void)
 {
     natsStatus  s;
     char        backend[10];
@@ -595,8 +602,7 @@ static void test_natsBuffer(void)
     buf = NULL;
 }
 
-static void
-test_natsParseInt64(void)
+void test_natsParseInt64(void)
 {
     int64_t n;
 
@@ -657,8 +663,7 @@ test_natsParseInt64(void)
     testCond(n == -1);
 }
 
-static void
-test_natsParseControl(void)
+void test_natsParseControl(void)
 {
     natsStatus  s;
     natsControl c;
@@ -734,8 +739,7 @@ test_natsParseControl(void)
     c.args = NULL;
 }
 
-static void
-test_natsNormalizeErr(void)
+void test_natsNormalizeErr(void)
 {
     char error[1024];
     char expected[256];
@@ -783,8 +787,7 @@ test_natsNormalizeErr(void)
     testCond(error[0] == '\0');
 }
 
-static void
-test_natsMutex(void)
+void test_natsMutex(void)
 {
     natsStatus  s;
     natsMutex   *m = NULL;
@@ -842,8 +845,7 @@ sumThread(void *arg)
 
 static int NUM_THREADS = 1000;
 
-static void
-test_natsThread(void)
+void test_natsThread(void)
 {
     natsStatus          s  = NATS_OK;
     natsMutex           *m = NULL;
@@ -967,8 +969,7 @@ _unblockLongWait(void *closure)
     natsMutex_Unlock(args->m);
 }
 
-static void
-test_natsCondition(void)
+void test_natsCondition(void)
 {
     natsStatus          s;
     natsMutex           *m  = NULL;
@@ -1184,8 +1185,7 @@ _timerStopCB(natsTimer *timer, void *arg)
             natsCondition_Wait(tArg.c, tArg.m); \
         natsMutex_Unlock(tArg.m)
 
-static void
-test_natsTimer(void)
+void test_natsTimer(void)
 {
     natsStatus          s;
     natsTimer           *t = NULL;
@@ -1405,8 +1405,7 @@ test_natsTimer(void)
     testCond(s == NATS_OK);
 }
 
-static void
-test_natsUrl(void)
+void test_natsUrl(void)
 {
     natsStatus  s;
     natsUrl     *u = NULL;
@@ -1815,8 +1814,7 @@ test_natsUrl(void)
               && (strstr(nats_GetLastError(NULL), "invalid port '2147483648'") != NULL));
 }
 
-static void
-test_natsCreateStringFromBuffer(void)
+void test_natsCreateStringFromBuffer(void)
 {
     natsStatus  s = NATS_OK;
     natsBuffer  buf;
@@ -1888,8 +1886,7 @@ _testInbox(void *closure)
     args->status = s;
 }
 
-static void
-test_natsInbox(void)
+void test_natsInbox(void)
 {
     natsStatus          s      = NATS_OK;
     natsThread          *threads[INBOX_THREADS_COUNT];
@@ -1956,8 +1953,7 @@ test_natsInbox(void)
 
 static int HASH_ITER = 10000000;
 
-static void
-test_natsHashing(void)
+void test_natsHashing(void)
 {
     const char *keys[] = {"foo",
                           "bar",
@@ -2005,8 +2001,7 @@ test_natsHashing(void)
     testCond((s == NATS_OK) && ((end - start) < 1000));
 }
 
-static void
-test_natsHash(void)
+void test_natsHash(void)
 {
     natsStatus  s;
     natsHash    *hash = NULL;
@@ -2271,8 +2266,7 @@ test_natsHash(void)
     natsHash_Destroy(hash);
 }
 
-static void
-test_natsStrHash(void)
+void test_natsStrHash(void)
 {
     natsStatus  s;
     natsStrHash *hash = NULL;
@@ -2588,8 +2582,7 @@ _dummySigCb(char **customErrTxt, unsigned char **psig, int *sigLen, const char* 
     return NATS_OK;
 }
 
-static void
-test_natsOptions(void)
+void test_natsOptions(void)
 {
     natsStatus  s;
     natsOptions *opts = NULL;
@@ -3145,8 +3138,7 @@ test_natsOptions(void)
     natsOptions_Destroy(opts);
 }
 
-static void
-test_natsSock_ReadLine(void)
+void test_natsSock_ReadLine(void)
 {
     char        buffer[20];
     natsStatus  s;
@@ -3183,8 +3175,7 @@ _dummyJSONCb(void *userInfo, const char *fieldName, nats_JSONField *f)
     return NATS_OK;
 }
 
-static void
-test_natsJSON(void)
+void test_natsJSON(void)
 {
     natsStatus  s;
     nats_JSON   *json = NULL;
@@ -4232,8 +4223,7 @@ test_natsJSON(void)
 
 }
 
-static void
-test_natsEncodeTimeUTC(void)
+void test_natsEncodeTimeUTC(void)
 {
     natsStatus  s;
     char        buf[36] = {'\0'};
@@ -4282,8 +4272,7 @@ test_natsEncodeTimeUTC(void)
     }
 }
 
-static void
-test_natsErrWithLongText(void)
+void test_natsErrWithLongText(void)
 {
     natsStatus  s;
     char        errTxt[300];
@@ -4321,8 +4310,7 @@ test_natsErrWithLongText(void)
     nats_clearLastError();
 }
 
-static void
-test_natsErrStackMoreThanMaxFrames(void)
+void test_natsErrStackMoreThanMaxFrames(void)
 {
     int             i;
     const int       total = MAX_FRAMES+10;
@@ -4375,8 +4363,7 @@ test_natsErrStackMoreThanMaxFrames(void)
     testCond(s == NATS_OK);
 }
 
-static void
-test_natsMsg(void)
+void test_natsMsg(void)
 {
     natsMsg     *msg = NULL;
     natsStatus  s    = NATS_OK;
@@ -4412,8 +4399,7 @@ test_natsMsg(void)
     natsMsg_Destroy(msg);
 }
 
-static void
-test_natsBase32Decode(void)
+void test_natsBase32Decode(void)
 {
     natsStatus      s;
     const char      *src       = "KRUGS4ZANFZSA5DIMUQHEZLTOVWHIIDPMYQGCIDCMFZWKMZSEBSGKY3PMRUW4ZY";
@@ -4439,8 +4425,7 @@ test_natsBase32Decode(void)
                 && (strstr(nats_GetLastError(NULL), "invalid") != NULL));
 }
 
-static void
-test_natsBase64Encode(void)
+void test_natsBase64Encode(void)
 {
     natsStatus  s;
     char        *enc = NULL;
@@ -4586,8 +4571,7 @@ test_natsBase64Encode(void)
     free(dec);
 }
 
-static void
-test_natsCRC16(void)
+void test_natsCRC16(void)
 {
     unsigned char   a[] = {153, 209, 36, 74, 103, 32, 65, 34, 111, 68, 104, 156, 50, 14, 164, 140, 144, 230};
     uint16_t        crc = 0;
@@ -4605,8 +4589,7 @@ test_natsCRC16(void)
     testCond(!nats_CRC16_Validate(a, (int)sizeof(a), expected));
 }
 
-static void
-test_natsKeys(void)
+void test_natsKeys(void)
 {
     natsStatus          s;
     unsigned char       sig[NATS_CRYPTO_SIGN_BYTES];
@@ -4662,8 +4645,7 @@ test_natsKeys(void)
                 && (memcmp(sig, expected, sizeof(expected)) == 0));
 }
 
-static void
-test_natsReadFile(void)
+void test_natsReadFile(void)
 {
     natsStatus      s    = NATS_OK;
     natsBuffer      *buf = NULL;
@@ -4757,8 +4739,7 @@ test_natsReadFile(void)
     remove(fn);
 }
 
-static void
-test_natsGetJWTOrSeed(void)
+void test_natsGetJWTOrSeed(void)
 {
     natsStatus  s;
     char        *val = NULL;
@@ -4804,8 +4785,7 @@ test_natsGetJWTOrSeed(void)
     }
 }
 
-static void
-test_natsHostIsIP(void)
+void test_natsHostIsIP(void)
 {
     struct _testHost {
         const char *host;
@@ -4896,8 +4876,7 @@ _testSockShutdownThread(void *closure)
     natsSock_Shutdown(ctx->fd);
 }
 
-static void
-test_natsWaitReady(void)
+void test_natsWaitReady(void)
 {
     natsStatus          s  = NATS_OK;
     natsThread          *t = NULL;
@@ -4986,8 +4965,7 @@ test_natsWaitReady(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_natsSign(void)
+void test_natsSign(void)
 {
     unsigned char   *sig   = NULL;
     int             sigLen = 0;
@@ -5076,8 +5054,7 @@ _testStatus(const char *testName, char *buf, const char *expectedStatus, const c
     natsMsg_Destroy(msg);
 }
 
-static void
-test_natsMsgHeadersLift(void)
+void test_HeadersLift(void)
 {
     char buf[512];
 
@@ -5138,8 +5115,7 @@ test_natsMsgHeadersLift(void)
     _testStatus("Status with description (extra spaces): ", buf, "404", "No Messages");
 }
 
-static void
-test_natsMsgHeaderAPIs(void)
+void test_natsMsgHeaderAPIs(void)
 {
     natsStatus  s        = NATS_OK;
     natsMsg     *msg     = NULL;
@@ -5367,8 +5343,7 @@ test_natsMsgHeaderAPIs(void)
     natsMsg_Destroy(msg);
 }
 
-static void
-test_natsMsgIsJSCtrl(void)
+void test_natsMsgIsJSCtrl(void)
 {
     struct testCase {
         const char  *buf;
@@ -5426,8 +5401,7 @@ test_natsMsgIsJSCtrl(void)
     }
 }
 
-static void
-test_natsSrvVersionAtLeast(void)
+void test_natsSrvVersionAtLeast(void)
 {
     natsOptions     *opts   = NULL;
     natsConnection  *nc     = NULL;
@@ -5497,8 +5471,7 @@ test_natsSrvVersionAtLeast(void)
     natsConnection_Destroy(nc);
 }
 
-static void
-test_natsFormatStringArray(void)
+void test_natsFormatStringArray(void)
 {
     natsStatus s;
     size_t i, N;
@@ -5532,331 +5505,13 @@ test_natsFormatStringArray(void)
     NATS_FREE_STRINGS(out, N);
 }
 
-static natsStatus
-_checkStart(const char *url, int orderIP, int maxAttempts)
-{
-    natsStatus      s        = NATS_OK;
-    natsUrl         *nUrl    = NULL;
-    int             attempts = 0;
-    natsSockCtx     ctx;
-
-    natsSock_Init(&ctx);
-    ctx.orderIP = orderIP;
-
-    natsDeadline_Init(&(ctx.writeDeadline), 2000);
-
-    s = natsUrl_Create(&nUrl, url);
-    if (s == NATS_OK)
-    {
-        while (((s = natsSock_ConnectTcp(&ctx,
-                                         nUrl->host, nUrl->port)) != NATS_OK)
-               && (attempts++ < maxAttempts))
-        {
-            nats_Sleep(200);
-        }
-
-        natsUrl_Destroy(nUrl);
-
-        if (s == NATS_OK)
-            natsSock_Close(ctx.fd);
-        else
-            s = NATS_NO_SERVER;
-    }
-
-    nats_clearLastError();
-
-    return s;
-}
-
-static natsStatus
-_checkStreamingStart(const char *url, int maxAttempts)
-{
-    natsStatus      s     = NATS_NOT_PERMITTED;
-
-#if defined(NATS_HAS_STREAMING)
-
-    stanConnOptions *opts = NULL;
-    stanConnection  *sc   = NULL;
-    int             attempts = 0;
-
-    s = stanConnOptions_Create(&opts);
-    IFOK(s, stanConnOptions_SetURL(opts, url));
-    IFOK(s, stanConnOptions_SetConnectionWait(opts, 250));
-    if (s == NATS_OK)
-    {
-        while (((s = stanConnection_Connect(&sc, clusterName, "checkStart", opts)) != NATS_OK)
-                && (attempts++ < maxAttempts))
-        {
-            nats_Sleep(200);
-        }
-    }
-
-    stanConnection_Destroy(sc);
-    stanConnOptions_Destroy(opts);
-
-    if (s != NATS_OK)
-        nats_clearLastError();
-#else
-#endif
-    return s;
-}
-
-#ifdef _WIN32
-
-typedef PROCESS_INFORMATION *natsPid;
-
-static HANDLE logHandle = NULL;
-
-static void
-_stopServer(natsPid pid)
-{
-    if (pid == NATS_INVALID_PID)
-        return;
-
-    TerminateProcess(pid->hProcess, 0);
-    WaitForSingleObject(pid->hProcess, INFINITE);
-
-    CloseHandle(pid->hProcess);
-    CloseHandle(pid->hThread);
-
-    natsMutex_Lock(slMu);
-    if (slMap != NULL)
-        natsHash_Remove(slMap, (int64_t) pid);
-    natsMutex_Unlock(slMu);
-
-    free(pid);
-}
-
-static natsPid
-_startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts, bool checkStart)
-{
-    SECURITY_ATTRIBUTES     sa;
-    STARTUPINFO             si;
-    HANDLE                  h;
-    PROCESS_INFORMATION     *pid;
-    DWORD                   flags = 0;
-    BOOL                    createdOk = FALSE;
-    BOOL                    hInheritance = FALSE;
-    char                    *exeAndCmdLine = NULL;
-    int                     ret;
-
-    pid = calloc(1, sizeof(PROCESS_INFORMATION));
-    if (pid == NULL)
-        return NATS_INVALID_PID;
-
-    ZeroMemory(&si, sizeof(si));
-    si.cb = sizeof(si);
-
-    ret = nats_asprintf(&exeAndCmdLine, "%s%s%s", serverExe,
-                        (cmdLineOpts != NULL ? " " : ""),
-                        (cmdLineOpts != NULL ? cmdLineOpts : ""));
-    if (ret < 0)
-    {
-        printf("No memory allocating command line string!\n");
-        free(pid);
-        return NATS_INVALID_PID;
-    }
-
-    if (!keepServerOutput)
-    {
-        ZeroMemory(&sa, sizeof(sa));
-        sa.nLength = sizeof(sa);
-        sa.lpSecurityDescriptor = NULL;
-        sa.bInheritHandle = TRUE;
-
-        h = logHandle;
-        if (h == NULL)
-        {
-            h = CreateFile(LOGFILE_NAME,
-                           GENERIC_WRITE,
-                           FILE_SHARE_WRITE | FILE_SHARE_READ,
-                           &sa,
-                           CREATE_ALWAYS,
-                           FILE_ATTRIBUTE_NORMAL,
-                           NULL);
-        }
-
-        si.dwFlags   |= STARTF_USESTDHANDLES;
-        si.hStdInput  = NULL;
-        si.hStdError  = h;
-        si.hStdOutput = h;
-
-        hInheritance = TRUE;
-        flags        = CREATE_NO_WINDOW;
-
-        if (logHandle == NULL)
-            logHandle = h;
-    }
-
-    // Start the child process.
-    if (!CreateProcess(NULL,
-                       (LPSTR) exeAndCmdLine,
-                       NULL,         // Process handle not inheritable
-                       NULL,         // Thread handle not inheritable
-                       hInheritance, // Set handle inheritance
-                       flags,        // Creation flags
-                       NULL,         // Use parent's environment block
-                       NULL,         // Use parent's starting directory
-                       &si,          // Pointer to STARTUPINFO structure
-                       pid))        // Pointer to PROCESS_INFORMATION structure
-    {
-
-        printf("Unable to start '%s': error (%d).\n",
-               exeAndCmdLine, GetLastError());
-        free(exeAndCmdLine);
-        return NATS_INVALID_PID;
-    }
-
-    free(exeAndCmdLine);
-
-    if (checkStart)
-    {
-        natsStatus s;
-
-        if (strcmp(serverExe, natsServerExe) == 0)
-            s = _checkStart(url, 46, 10);
-        else
-            s = _checkStreamingStart(url, 10);
-
-        if (s != NATS_OK)
-        {
-            _stopServer(pid);
-            return NATS_INVALID_PID;
-        }
-    }
-
-    natsMutex_Lock(slMu);
-    if (slMap != NULL)
-        natsHash_Set(slMap, (int64_t) pid, NULL, NULL);
-    natsMutex_Unlock(slMu);
-
-    return (natsPid) pid;
-}
-
-#else
-
-typedef pid_t               natsPid;
-
-static void
-_stopServer(natsPid pid)
-{
-    int status = 0;
-
-    if (pid == NATS_INVALID_PID)
-        return;
-
-    if (kill(pid, SIGINT) < 0)
-    {
-        perror("kill with SIGINT");
-        if (kill(pid, SIGKILL) < 0)
-        {
-            perror("kill with SIGKILL");
-        }
-    }
-
-    waitpid(pid, &status, 0);
-
-    natsMutex_Lock(slMu);
-    if (slMap != NULL)
-        natsHash_Remove(slMap, (int64_t) pid);
-    natsMutex_Unlock(slMu);
-}
-
-static natsPid
-_startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts, bool checkStart)
-{
-    natsPid pid = fork();
-    if (pid == -1)
-    {
-        perror("fork");
-        return NATS_INVALID_PID;
-    }
-
-    if (pid == 0)
-    {
-        char *exeAndCmdLine = NULL;
-        char *argvPtrs[64];
-        char *line = NULL;
-        int index = 0;
-        int ret = 0;
-        bool overrideAddr = false;
-
-        if ((cmdLineOpts == NULL) || (strstr(cmdLineOpts, "-a ") == NULL))
-            overrideAddr = true;
-
-        ret = nats_asprintf(&exeAndCmdLine, "%s%s%s%s%s", serverExe,
-                                (cmdLineOpts != NULL ? " " : ""),
-                                (cmdLineOpts != NULL ? cmdLineOpts : ""),
-                                (overrideAddr ? " -a 127.0.0.1" : ""),
-                                (keepServerOutput ? "" : " -l " LOGFILE_NAME));
-        if (ret < 0)
-        {
-            perror("No memory allocating command line string!\n");
-            exit(1);
-        }
-
-        memset(argvPtrs, 0, sizeof(argvPtrs));
-        line = exeAndCmdLine;
-
-        while (*line != '\0')
-        {
-            while ((*line == ' ') || (*line == '\t') || (*line == '\n'))
-                *line++ = '\0';
-
-            argvPtrs[index++] = line;
-            while ((*line != '\0') && (*line != ' ')
-                   && (*line != '\t') && (*line != '\n'))
-            {
-                line++;
-            }
-        }
-        argvPtrs[index++] = NULL;
-
-        // Child process. Replace with NATS server
-        execvp(argvPtrs[0], argvPtrs);
-        perror("Exec failed: ");
-        exit(1);
-    }
-    else if (checkStart)
-    {
-        natsStatus s;
-
-        if (strcmp(serverExe, natsServerExe) == 0)
-            s = _checkStart(url, 46, 10);
-        else
-            s = _checkStreamingStart(url, 10);
-
-        if (s != NATS_OK)
-        {
-            _stopServer(pid);
-            return NATS_INVALID_PID;
-        }
-    }
-
-    natsMutex_Lock(slMu);
-    if (slMap != NULL)
-        natsHash_Set(slMap, (int64_t) pid, NULL, NULL);
-    natsMutex_Unlock(slMu);
-
-    // parent, return the child's PID back.
-    return pid;
-}
-#endif
-
-static natsPid
-_startServer(const char *url, const char *cmdLineOpts, bool checkStart)
-{
-    return _startServerImpl(natsServerExe, url, cmdLineOpts, checkStart);
-}
-
 static natsPid
 _startStreamingServer(const char* url, const char *cmdLineOpts, bool checkStart)
 {
     return _startServerImpl(natsStreamingServerExe, url, cmdLineOpts, checkStart);
 }
 
-static void
-test_natsSock_IPOrder(void)
+void test_natsSock_IPOrder(void)
 {
     natsStatus  s;
     natsPid     serverPid;
@@ -5914,8 +5569,7 @@ test_natsSock_IPOrder(void)
     }
 }
 
-static void
-test_natsSock_ConnectTcp(void)
+void test_natsSock_ConnectTcp(void)
 {
     natsPid     serverPid = NATS_INVALID_PID;
 
@@ -5954,8 +5608,7 @@ listOrder(struct addrinfo *head, bool ordered)
     return true;
 }
 
-static void
-test_natsSock_ShuffleIPs(void)
+void test_natsSock_ShuffleIPs(void)
 {
     struct addrinfo *tmp[10];
     struct addrinfo *head = NULL;
@@ -6073,8 +5726,7 @@ _reconnectedCb(natsConnection *nc, void *closure)
     natsMutex_Unlock(arg->m);
 }
 
-static void
-test_ReconnectServerStats(void)
+void test_ReconnectServerStats(void)
 {
     natsStatus      s;
     natsConnection  *nc       = NULL;
@@ -6308,8 +5960,7 @@ _waitForConnClosed(struct threadArg *arg)
     return s;
 }
 
-static void
-test_ParseStateReconnectFunctionality(void)
+void test_ParseStateReconnectFunctionality(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -6396,8 +6047,7 @@ test_ParseStateReconnectFunctionality(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ServersRandomize(void)
+void test_ServersRandomize(void)
 {
     natsStatus      s;
     natsOptions     *opts   = NULL;
@@ -6531,8 +6181,7 @@ test_ServersRandomize(void)
     _stopServer(pid);
 }
 
-static void
-test_SelectNextServer(void)
+void test_SelectNextServer(void)
 {
     natsStatus      s;
     natsOptions     *opts   = NULL;
@@ -6659,8 +6308,7 @@ parserNegTest(int lineNum)
 
 #define PARSER_START_TEST parserNegTest(__LINE__)
 
-static void
-test_ParserPing(void)
+void test_ParserPing(void)
 {
     natsConnection  *nc = NULL;
     natsOptions     *opts = NULL;
@@ -6725,8 +6373,7 @@ test_ParserPing(void)
     natsConnection_Destroy(nc);
 }
 
-static void
-test_ParserErr(void)
+void test_ParserErr(void)
 {
     natsConnection  *nc = NULL;
     natsOptions     *opts = NULL;
@@ -6812,8 +6459,7 @@ test_ParserErr(void)
     natsConnection_Destroy(nc);
 }
 
-static void
-test_ParserOK(void)
+void test_ParserOK(void)
 {
     natsConnection  *nc = NULL;
     natsOptions     *opts = NULL;
@@ -6850,8 +6496,7 @@ test_ParserOK(void)
     natsConnection_Destroy(nc);
 }
 
-static void
-test_ParseINFO(void)
+void test_ParseINFO(void)
 {
     natsConnection  *nc = NULL;
     natsOptions     *opts = NULL;
@@ -6882,8 +6527,7 @@ test_ParseINFO(void)
     natsConnection_Destroy(nc);
 }
 
-static void
-test_ParserShouldFail(void)
+void test_ParserShouldFail(void)
 {
     natsConnection  *nc = NULL;
     natsOptions     *opts = NULL;
@@ -7040,8 +6684,7 @@ test_ParserShouldFail(void)
     natsConnection_Destroy(nc);
 }
 
-static void
-test_ParserSplitMsg(void)
+void test_ParserSplitMsg(void)
 {
     natsConnection  *nc = NULL;
     natsOptions     *opts = NULL;
@@ -7208,8 +6851,7 @@ test_ParserSplitMsg(void)
     if (s != NATS_OK) \
         FAIL("Unable to setup test"); \
 
-static void
-test_ProcessMsgArgs(void)
+void test_ProcessMsgArgs(void)
 {
     natsConnection  *nc = NULL;
     natsOptions     *opts = NULL;
@@ -7582,8 +7224,7 @@ checkNewURLsAddedRandomly(natsConnection *nc, char **urlsAfterPoolSetup, int ini
     return s;
 }
 
-static void
-test_AsyncINFO(void)
+void test_AsyncINFO(void)
 {
     natsConnection  *nc = NULL;
     natsOptions     *opts = NULL;
@@ -7820,8 +7461,7 @@ _parallelRequests(void *closure)
     natsConnection_RequestString(&msg, nc, "foo", "test", 500);
 }
 
-static void
-test_RequestPool(void)
+void test_RequestPool(void)
 {
     natsStatus          s;
     natsPid             pid = NATS_INVALID_PID;
@@ -7884,8 +7524,7 @@ test_RequestPool(void)
     _stopServer(pid);
 }
 
-static void
-test_NoFlusherIfSendAsap(void)
+void test_NoFlusherIfSendAsap(void)
 {
     natsStatus          s;
     natsPid             pid = NATS_INVALID_PID;
@@ -7953,8 +7592,7 @@ test_NoFlusherIfSendAsap(void)
     _stopServer(pid);
 }
 
-static void
-test_HeadersAndSubPendingBytes(void)
+void test_HeadersAndSubPendingBytes(void)
 {
     natsStatus          s;
     natsPid             pid   = NATS_INVALID_PID;
@@ -8033,8 +7671,7 @@ _dummyMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
     natsMsg_Destroy(msg);
 }
 
-static void
-test_LibMsgDelivery(void)
+void test_LibMsgDelivery(void)
 {
     natsStatus          s;
     natsPid             serverPid = NATS_INVALID_PID;
@@ -8178,8 +7815,7 @@ test_LibMsgDelivery(void)
     nats_Open(-1);
 }
 
-static void
-test_DefaultConnection(void)
+void test_DefaultConnection(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -8226,8 +7862,7 @@ test_DefaultConnection(void)
     _stopServer(serverPid);
 }
 
-static void
-test_SimplifiedURLs(void)
+void test_SimplifiedURLs(void)
 {
     natsStatus          s         = NATS_OK;
     natsConnection      *nc       = NULL;
@@ -8288,8 +7923,7 @@ test_SimplifiedURLs(void)
 #endif
 }
 
-static void
-test_IPResolutionOrder(void)
+void test_IPResolutionOrder(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -8445,8 +8079,7 @@ test_IPResolutionOrder(void)
     natsOptions_Destroy(opts);
 }
 
-static void
-test_UseDefaultURLIfNoServerSpecified(void)
+void test_UseDefaultURLIfNoServerSpecified(void)
 {
     natsStatus          s;
     natsOptions         *opts     = NULL;
@@ -8470,8 +8103,7 @@ test_UseDefaultURLIfNoServerSpecified(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ConnectToWithMultipleURLs(void)
+void test_ConnectToWithMultipleURLs(void)
 {
     natsStatus      s;
     natsConnection  *nc       = NULL;
@@ -8502,8 +8134,7 @@ test_ConnectToWithMultipleURLs(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ConnectionToWithNullURLs(void)
+void test_ConnectionToWithNullURLs(void)
 {
     natsStatus      s;
     natsConnection  *nc       = NULL;
@@ -8524,8 +8155,7 @@ test_ConnectionToWithNullURLs(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ConnectionWithNullOptions(void)
+void test_ConnectionWithNullOptions(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -8543,8 +8173,7 @@ test_ConnectionWithNullOptions(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ConnectionStatus(void)
+void test_ConnectionStatus(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -8570,8 +8199,7 @@ test_ConnectionStatus(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ConnClosedCB(void)
+void test_ConnClosedCB(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -8615,8 +8243,7 @@ test_ConnClosedCB(void)
     _stopServer(serverPid);
 }
 
-static void
-test_CloseDisconnectedCB(void)
+void test_CloseDisconnectedCB(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -8661,8 +8288,7 @@ test_CloseDisconnectedCB(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ServerStopDisconnectedCB(void)
+void test_ServerStopDisconnectedCB(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -8705,8 +8331,7 @@ test_ServerStopDisconnectedCB(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_ClosedConnections(void)
+void test_ClosedConnections(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -8775,8 +8400,7 @@ test_ClosedConnections(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ConnectVerboseOption(void)
+void test_ConnectVerboseOption(void)
 {
     natsStatus          s         = NATS_OK;
     natsConnection      *nc       = NULL;
@@ -8829,8 +8453,7 @@ test_ConnectVerboseOption(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ReconnectThreadLeak(void)
+void test_ReconnectThreadLeak(void)
 {
     natsStatus          s;
     natsOptions         *opts     = NULL;
@@ -8891,8 +8514,7 @@ test_ReconnectThreadLeak(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ReconnectTotalTime(void)
+void test_ReconnectTotalTime(void)
 {
     natsStatus  s;
     natsOptions *opts = NULL;
@@ -8905,8 +8527,7 @@ test_ReconnectTotalTime(void)
     natsOptions_Destroy(opts);
 }
 
-static void
-test_ReconnectDisallowedFlags(void)
+void test_ReconnectDisallowedFlags(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -8941,8 +8562,7 @@ test_ReconnectDisallowedFlags(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_ReconnectAllowedFlags(void)
+void test_ReconnectAllowedFlags(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -8999,8 +8619,7 @@ _closeConn(void *arg)
     natsConnection_Close(nc);
 }
 
-static void
-test_ConnCloseBreaksReconnectLoop(void)
+void test_ConnCloseBreaksReconnectLoop(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -9068,8 +8687,7 @@ test_ConnCloseBreaksReconnectLoop(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_BasicReconnectFunctionality(void)
+void test_BasicReconnectFunctionality(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -9155,8 +8773,7 @@ _doneCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
     natsMsg_Destroy(msg);
 }
 
-static void
-test_ExtendedReconnectFunctionality(void)
+void test_ExtendedReconnectFunctionality(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -9261,8 +8878,7 @@ test_ExtendedReconnectFunctionality(void)
     _stopServer(serverPid);
 }
 
-static void
-test_QueueSubsOnReconnect(void)
+void test_QueueSubsOnReconnect(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -9373,8 +8989,7 @@ test_QueueSubsOnReconnect(void)
     _stopServer(serverPid);
 }
 
-static void
-test_IsClosed(void)
+void test_IsClosed(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -9408,8 +9023,7 @@ test_IsClosed(void)
     _stopServer(serverPid);
 }
 
-static void
-test_IsReconnectingAndStatus(void)
+void test_IsReconnectingAndStatus(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -9495,8 +9109,7 @@ test_IsReconnectingAndStatus(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ReconnectBufSize(void)
+void test_ReconnectBufSize(void)
 {
     natsStatus          s         = NATS_OK;
     natsConnection      *nc       = NULL;
@@ -9603,8 +9216,7 @@ _testCustomReconnectDelayOnInitialConnect(natsConnection *nc, int attempts, void
     return 50;
 }
 
-static void
-test_RetryOnFailedConnect(void)
+void test_RetryOnFailedConnect(void)
 {
     natsStatus          s;
     natsConnection      *nc   = NULL;
@@ -9971,8 +9583,7 @@ _startMockupServer(natsSock *serverSock, const char *host, const char *port)
     return s;
 }
 
-static void
-test_ErrOnConnectAndDeadlock(void)
+void test_ErrOnConnectAndDeadlock(void)
 {
     natsStatus          s = NATS_OK;
     natsSock            sock = NATS_SOCK_INVALID;
@@ -10037,8 +9648,7 @@ test_ErrOnConnectAndDeadlock(void)
     natsSock_Close(sock);
 }
 
-static void
-test_ErrOnMaxPayloadLimit(void)
+void test_ErrOnMaxPayloadLimit(void)
 {
     natsStatus          s = NATS_OK;
     natsSock            sock = NATS_SOCK_INVALID;
@@ -10115,8 +9725,7 @@ test_ErrOnMaxPayloadLimit(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_Auth(void)
+void test_Auth(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -10165,8 +9774,7 @@ test_Auth(void)
     _stopServer(serverPid);
 }
 
-static void
-test_AuthFailNoDisconnectCB(void)
+void test_AuthFailNoDisconnectCB(void)
 {
     natsStatus          s;
     natsOptions         *opts     = NULL;
@@ -10206,8 +9814,7 @@ test_AuthFailNoDisconnectCB(void)
     _stopServer(serverPid);
 }
 
-static void
-test_AuthToken(void)
+void test_AuthToken(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -10257,8 +9864,7 @@ _tokenHandler(void* closure)
     return (char*) closure;
 }
 
-static void
-test_AuthTokenHandler(void)
+void test_AuthTokenHandler(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -10328,8 +9934,7 @@ _permsViolationHandler(natsConnection *nc, natsSubscription *sub, natsStatus err
     }
 }
 
-static void
-test_PermViolation(void)
+void test_PermViolation(void)
 {
     natsStatus          s;
     natsConnection      *conn = NULL;
@@ -10424,8 +10029,7 @@ _authViolationHandler(natsConnection *nc, natsSubscription *sub, natsStatus err,
     }
 }
 
-static void
-test_AuthViolation(void)
+void test_AuthViolation(void)
 {
     natsStatus          s = NATS_OK;
     natsSock            sock = NATS_SOCK_INVALID;
@@ -10628,8 +10232,7 @@ _authExpiredHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, v
     }
 }
 
-static void
-test_AuthenticationExpired(void)
+void test_AuthenticationExpired(void)
 {
     natsStatus          s    = NATS_OK;
     natsConnection      *nc  = NULL;
@@ -10766,8 +10369,7 @@ _startServerSendErr2Thread(void *closure)
     natsSock_Close(sock);
 }
 
-static void
-test_AuthenticationExpiredReconnect(void)
+void test_AuthenticationExpiredReconnect(void)
 {
     natsStatus          s    = NATS_OK;
     natsConnection      *nc  = NULL;
@@ -10855,8 +10457,7 @@ test_AuthenticationExpiredReconnect(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_ConnectedServer(void)
+void test_ConnectedServer(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -10899,8 +10500,7 @@ test_ConnectedServer(void)
     _stopServer(serverPid);
 }
 
-static void
-test_MultipleClose(void)
+void test_MultipleClose(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -10929,8 +10529,7 @@ test_MultipleClose(void)
     _stopServer(serverPid);
 }
 
-static void
-test_SimplePublish(void)
+void test_SimplePublish(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -10951,8 +10550,7 @@ test_SimplePublish(void)
     _stopServer(serverPid);
 }
 
-static void
-test_SimplePublishNoData(void)
+void test_SimplePublishNoData(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -10973,8 +10571,7 @@ test_SimplePublishNoData(void)
     _stopServer(serverPid);
 }
 
-static void
-test_PublishMsg(void)
+void test_PublishMsg(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -11027,8 +10624,7 @@ test_PublishMsg(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_InvalidSubsArgs(void)
+void test_InvalidSubsArgs(void)
 {
     natsStatus          s;
     natsConnection      *nc = NULL;
@@ -11191,8 +10787,7 @@ test_InvalidSubsArgs(void)
     _stopServer(serverPid);
 }
 
-static void
-test_AsyncSubscribe(void)
+void test_AsyncSubscribe(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -11314,8 +10909,7 @@ _asyncTimeoutCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *c
     natsMutex_Unlock(ai->arg->m);
 }
 
-static void
-test_AsyncSubscribeTimeout(void)
+void test_AsyncSubscribeTimeout(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -11421,8 +11015,7 @@ test_AsyncSubscribeTimeout(void)
     }
 }
 
-static void
-test_SyncSubscribe(void)
+void test_SyncSubscribe(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -11450,8 +11043,7 @@ test_SyncSubscribe(void)
     _stopServer(serverPid);
 }
 
-static void
-test_PubSubWithReply(void)
+void test_PubSubWithReply(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -11480,8 +11072,7 @@ test_PubSubWithReply(void)
     _stopServer(serverPid);
 }
 
-static void
-test_NoResponders(void)
+void test_NoResponders(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -11582,8 +11173,7 @@ _doFlush(void *arg)
     }
 }
 
-static void
-test_Flush(void)
+void test_Flush(void)
 {
     natsStatus          s;
     natsOptions         *opts     = NULL;
@@ -11706,8 +11296,7 @@ test_Flush(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ConnCloseDoesFlush(void)
+void test_ConnCloseDoesFlush(void)
 {
     natsStatus          s    = NATS_OK;
     natsPid             pid  = NATS_INVALID_PID;
@@ -11757,8 +11346,7 @@ test_ConnCloseDoesFlush(void)
     _stopServer(pid);
 }
 
-static void
-test_QueueSubscriber(void)
+void test_QueueSubscriber(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -11826,8 +11414,7 @@ test_QueueSubscriber(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ReplyArg(void)
+void test_ReplyArg(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -11869,8 +11456,7 @@ test_ReplyArg(void)
     _stopServer(serverPid);
 }
 
-static void
-test_SyncReplyArg(void)
+void test_SyncReplyArg(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -11899,8 +11485,7 @@ test_SyncReplyArg(void)
     _stopServer(serverPid);
 }
 
-static void
-test_Unsubscribe(void)
+void test_Unsubscribe(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -11963,8 +11548,7 @@ test_Unsubscribe(void)
     _stopServer(serverPid);
 }
 
-static void
-test_DoubleUnsubscribe(void)
+void test_DoubleUnsubscribe(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -11993,8 +11577,7 @@ test_DoubleUnsubscribe(void)
     _stopServer(serverPid);
 }
 
-static void
-test_SubRemovedWhileProcessingMsg(void)
+void test_SubRemovedWhileProcessingMsg(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -12070,8 +11653,7 @@ test_SubRemovedWhileProcessingMsg(void)
     _stopServer(serverPid);
 }
 
-static void
-test_RequestTimeout(void)
+void test_RequestTimeout(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -12091,8 +11673,7 @@ test_RequestTimeout(void)
     _stopServer(serverPid);
 }
 
-static void
-test_Request(void)
+void test_Request(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -12205,8 +11786,7 @@ test_Request(void)
     _stopServer(serverPid);
 }
 
-static void
-test_RequestNoBody(void)
+void test_RequestNoBody(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -12321,8 +11901,7 @@ _serverForMuxWithMappedSubject(void *closure)
     natsSock_Close(sock);
 }
 
-static void
-test_RequestMuxWithMappedSubject(void)
+void test_RequestMuxWithMappedSubject(void)
 {
     natsStatus          s;
     natsConnection      *nc  = NULL;
@@ -12371,8 +11950,7 @@ test_RequestMuxWithMappedSubject(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_OldRequest(void)
+void test_OldRequest(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -12456,8 +12034,7 @@ _sendRequest(void *closure)
     natsMsg_Destroy(msg);
 }
 
-static void
-test_SimultaneousRequest(void)
+void test_SimultaneousRequest(void)
 {
     natsStatus          s;
      natsConnection      *nc       = NULL;
@@ -12520,8 +12097,7 @@ test_SimultaneousRequest(void)
      _stopServer(serverPid);
 }
 
-static void
-test_RequestClose(void)
+void test_RequestClose(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -12558,8 +12134,7 @@ test_RequestClose(void)
 }
 
 
-static void
-test_CustomInbox(void)
+void test_CustomInbox(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -12690,8 +12265,7 @@ test_CustomInbox(void)
     _stopServer(serverPid);
 }
 
-static void
-test_MessageBufferPadding(void)
+void test_MessageBufferPadding(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -12747,8 +12321,7 @@ test_MessageBufferPadding(void)
     _stopServer(serverPid);
 }
 
-static void
-test_FlushInCb(void)
+void test_FlushInCb(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -12791,8 +12364,7 @@ test_FlushInCb(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ReleaseFlush(void)
+void test_ReleaseFlush(void)
 {
     natsStatus          s = NATS_OK;
     natsSock            sock = NATS_SOCK_INVALID;
@@ -12870,8 +12442,7 @@ test_ReleaseFlush(void)
 }
 
 
-static void
-test_FlushErrOnDisconnect(void)
+void test_FlushErrOnDisconnect(void)
 {
     natsStatus          s = NATS_OK;
     natsSock            sock = NATS_SOCK_INVALID;
@@ -12946,8 +12517,7 @@ test_FlushErrOnDisconnect(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_Inbox(void)
+void test_Inbox(void)
 {
     natsStatus  s;
     natsInbox   *inbox = NULL;
@@ -12961,8 +12531,7 @@ test_Inbox(void)
     natsInbox_Destroy(inbox);
 }
 
-static void
-test_Stats(void)
+void test_Stats(void)
 {
     natsStatus          s;
     natsConnection      *nc     = NULL;
@@ -13025,8 +12594,7 @@ test_Stats(void)
     _stopServer(serverPid);
 }
 
-static void
-test_BadSubject(void)
+void test_BadSubject(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -13051,8 +12619,7 @@ test_BadSubject(void)
     _stopServer(serverPid);
 }
 
-static void
-test_SubBadSubjectAndQueueName(void)
+void test_SubBadSubjectAndQueueName(void)
 {
     natsStatus          s;
     natsConnection      *nc         = NULL;
@@ -13141,8 +12708,7 @@ _subComplete(void *closure)
     natsMutex_Unlock(arg->m);
 }
 
-static void
-test_ClientAsyncAutoUnsub(void)
+void test_ClientAsyncAutoUnsub(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -13217,8 +12783,7 @@ test_ClientAsyncAutoUnsub(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ClientSyncAutoUnsub(void)
+void test_ClientSyncAutoUnsub(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -13283,8 +12848,7 @@ test_ClientSyncAutoUnsub(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ClientAutoUnsubAndReconnect(void)
+void test_ClientAutoUnsubAndReconnect(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -13366,8 +12930,7 @@ _autoUnsub(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closur
 }
 
 
-static void
-test_AutoUnsubNoUnsubOnDestroy(void)
+void test_AutoUnsubNoUnsubOnDestroy(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -13413,8 +12976,7 @@ test_AutoUnsubNoUnsubOnDestroy(void)
     natsBuf_Destroy(buf);
 }
 
-static void
-test_NextMsgOnClosedSub(void)
+void test_NextMsgOnClosedSub(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -13450,8 +13012,7 @@ _nextMsgKickedOut(void *closure)
     (void) natsSubscription_NextMsg(&msg, sub, 10000);
 }
 
-static void
-test_CloseSubRelease(void)
+void test_CloseSubRelease(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -13499,8 +13060,7 @@ test_CloseSubRelease(void)
     _stopServer(serverPid);
 }
 
-static void
-test_IsValidSubscriber(void)
+void test_IsValidSubscriber(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -13544,8 +13104,7 @@ test_IsValidSubscriber(void)
     _stopServer(serverPid);
 }
 
-static void
-test_SlowSubscriber(void)
+void test_SlowSubscriber(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -13598,8 +13157,7 @@ test_SlowSubscriber(void)
     _stopServer(serverPid);
 }
 
-static void
-test_SlowAsyncSubscriber(void)
+void test_SlowAsyncSubscriber(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -13707,8 +13265,7 @@ _slowConsErrCB(natsConnection *nc, natsSubscription *sub, natsStatus err, void *
     natsMutex_Unlock(arg->m);
 }
 
-static void
-test_SlowConsumerCB(void)
+void test_SlowConsumerCB(void)
 {
     natsStatus          s;
     natsConnection      *nc     = NULL;
@@ -13766,8 +13323,7 @@ test_SlowConsumerCB(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_PendingLimitsDeliveredAndDropped(void)
+void test_PendingLimitsDeliveredAndDropped(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -13996,8 +13552,7 @@ test_PendingLimitsDeliveredAndDropped(void)
     _stopServer(serverPid);
 }
 
-static void
-test_PendingLimitsWithSyncSub(void)
+void test_PendingLimitsWithSyncSub(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14064,8 +13619,7 @@ test_PendingLimitsWithSyncSub(void)
     _stopServer(serverPid);
 }
 
-static void
-test_AsyncSubscriptionPending(void)
+void test_AsyncSubscriptionPending(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14177,8 +13731,7 @@ test_AsyncSubscriptionPending(void)
     _stopServer(serverPid);
 }
 
-static void
-test_AsyncSubscriptionPendingDrain(void)
+void test_AsyncSubscriptionPendingDrain(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14242,8 +13795,7 @@ test_AsyncSubscriptionPendingDrain(void)
     _stopServer(serverPid);
 }
 
-static void
-test_SyncSubscriptionPending(void)
+void test_SyncSubscriptionPending(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14328,8 +13880,7 @@ test_SyncSubscriptionPending(void)
     _stopServer(serverPid);
 }
 
-static void
-test_SyncSubscriptionPendingDrain(void)
+void test_SyncSubscriptionPendingDrain(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14421,8 +13972,7 @@ _asyncErrCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void* clo
     natsMutex_Unlock(arg->m);
 }
 
-static void
-test_AsyncErrHandler_MaxPendingMsgs(void)
+void test_AsyncErrHandlerMaxPendingMsgs(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14484,8 +14034,7 @@ test_AsyncErrHandler_MaxPendingMsgs(void)
     _stopServer(serverPid);
 }
 
-static void
-test_AsyncErrHandler_MaxPendingBytes(void)
+void test_AsyncErrHandlerMaxPendingBytes(void)
 {
     natsStatus          s;
     natsConnection* nc = NULL;
@@ -14580,8 +14129,7 @@ _asyncErrBlockingCb(natsConnection *nc, natsSubscription *sub, natsStatus err, v
     natsMutex_Unlock(arg->m);
 }
 
-static void
-test_AsyncErrHandlerSubDestroyed(void)
+void test_AsyncErrHandlerSubDestroyed(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14716,8 +14264,7 @@ _startCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
     natsMsg_Destroy(msg);
 }
 
-static void
-test_AsyncSubscriberStarvation(void)
+void test_AsyncSubscriberStarvation(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14766,8 +14313,7 @@ test_AsyncSubscriberStarvation(void)
     _stopServer(serverPid);
 }
 
-static void
-test_AsyncSubscriberOnClose(void)
+void test_AsyncSubscriberOnClose(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14838,8 +14384,7 @@ test_AsyncSubscriberOnClose(void)
     _stopServer(serverPid);
 }
 
-static void
-test_NextMsgCallOnAsyncSub(void)
+void test_NextMsgCallOnAsyncSub(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14899,8 +14444,7 @@ testOnCompleteMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg
     natsMsg_Destroy(msg);
 }
 
-static void
-test_SubOnComplete(void)
+void test_SubOnComplete(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -14983,8 +14527,7 @@ test_SubOnComplete(void)
     _stopServer(serverPid);
 }
 
-static void
-test_ServersOption(void)
+void test_ServersOption(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -15048,8 +14591,7 @@ test_ServersOption(void)
     _stopServer(serverPid);
 }
 
-static void
-test_AuthServers(void)
+void test_AuthServers(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -15103,8 +14645,7 @@ test_AuthServers(void)
     _stopServer(serverPid2);
 }
 
-static void
-test_AuthFailToReconnect(void)
+void test_AuthFailToReconnect(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -15191,8 +14732,7 @@ test_AuthFailToReconnect(void)
     _stopServer(serverPid3);
 }
 
-static void
-test_BasicClusterReconnect(void)
+void test_BasicClusterReconnect(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -15309,8 +14849,7 @@ _reconnectTokenHandler(void* closure)
     return token;
 }
 
-static void
-test_ReconnectWithTokenHandler(void)
+void test_ReconnectWithTokenHandler(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -15419,8 +14958,7 @@ struct hashCount
 
 };
 
-static void
-test_HotSpotReconnect(void)
+void test_HotSpotReconnect(void)
 {
     natsStatus          s;
     natsConnection      *nc[NUM_CLIENTS];
@@ -15573,8 +15111,7 @@ test_HotSpotReconnect(void)
     _stopServer(serverPid3);
 }
 
-static void
-test_ProperReconnectDelay(void)
+void test_ProperReconnectDelay(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -15643,8 +15180,7 @@ test_ProperReconnectDelay(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_ProperFalloutAfterMaxAttempts(void)
+void test_ProperFalloutAfterMaxAttempts(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -15715,8 +15251,7 @@ test_ProperFalloutAfterMaxAttempts(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_StopReconnectAfterTwoAuthErr(void)
+void test_StopReconnectAfterTwoAuthErr(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -15807,8 +15342,7 @@ test_StopReconnectAfterTwoAuthErr(void)
     _stopServer(serverPid2);
 }
 
-static void
-test_TimeoutOnNoServer(void)
+void test_TimeoutOnNoServer(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -15886,8 +15420,7 @@ test_TimeoutOnNoServer(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_PingReconnect(void)
+void test_PingReconnect(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -15971,8 +15504,7 @@ test_PingReconnect(void)
 
 }
 
-static void
-test_GetServers(void)
+void test_GetServers(void)
 {
     natsStatus          s;
     natsConnection      *conn = NULL;
@@ -16056,8 +15588,7 @@ test_GetServers(void)
     _stopServer(s1Pid);
 }
 
-static void
-test_GetDiscoveredServers(void)
+void test_GetDiscoveredServers(void)
 {
     natsStatus          s;
     natsConnection      *conn = NULL;
@@ -16116,8 +15647,7 @@ _discoveredServersCb(natsConnection *nc, void *closure)
     natsMutex_Unlock(arg->m);
 }
 
-static void
-test_DiscoveredServersCb(void)
+void test_DiscoveredServersCb(void)
 {
     natsStatus          s;
     natsConnection      *conn = NULL;
@@ -16179,8 +15709,7 @@ test_DiscoveredServersCb(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_IgnoreDiscoveredServers(void)
+void test_IgnoreDiscoveredServers(void)
 {
    natsStatus          s;
     natsConnection      *conn = NULL;
@@ -16298,8 +15827,7 @@ _serverSendsINFOAfterPONG(void *closure)
     natsSock_Close(sock);
 }
 
-static void
-test_ReceiveINFORightAfterFirstPONG(void)
+void test_ReceiveINFORightAfterFirstPONG(void)
 {
     natsStatus          s       = NATS_OK;
     natsThread          *t      = NULL;
@@ -16375,8 +15903,7 @@ test_ReceiveINFORightAfterFirstPONG(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_ServerPoolUpdatedOnClusterUpdate(void)
+void test_ServerPoolUpdatedOnClusterUpdate(void)
 {
     natsStatus          s;
     natsConnection      *conn = NULL;
@@ -16642,8 +16169,7 @@ test_ServerPoolUpdatedOnClusterUpdate(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_ReconnectJitter(void)
+void test_ReconnectJitter(void)
 {
     natsStatus          s       = NATS_OK;
     natsConnection      *nc     = NULL;
@@ -16765,8 +16291,7 @@ _customReconnectDelayCB(natsConnection *nc, int attempts, void *closure)
     return delay;
 }
 
-static void
-test_CustomReconnectDelay(void)
+void test_CustomReconnectDelay(void)
 {
     natsStatus          s       = NATS_OK;
     natsConnection      *nc     = NULL;
@@ -16922,8 +16447,7 @@ _lameDuckMockupServerThread(void *closure)
     natsSock_Close(sock);
 }
 
-static void
-test_LameDuckMode(void)
+void test_LameDuckMode(void)
 {
     natsStatus          s       = NATS_OK;
     natsConnection      *nc     = NULL;
@@ -17004,8 +16528,7 @@ test_LameDuckMode(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_Version(void)
+void test_Version(void)
 {
     const char *str = NULL;
 
@@ -17021,8 +16544,7 @@ test_Version(void)
     testCond(nats_GetVersionNumber() == LIB_NATS_VERSION_NUMBER);
 }
 
-static void
-test_VersionMatchesTag(void)
+void test_VersionMatchesTag(void)
 {
     natsStatus  s = NATS_OK;
     const char  *tag;
@@ -17089,8 +16611,7 @@ _openCloseAndWaitThread(void *closure)
     natsLib_Release();
 }
 
-static void
-test_OpenCloseAndWait(void)
+void test_OpenCloseAndWait(void)
 {
     natsStatus          s;
     natsConnection      *nc  = NULL;
@@ -17216,8 +16737,7 @@ _testGetLastErrInThread(void *arg)
     natsOptions_Destroy(opts);
 }
 
-static void
-test_GetLastError(void)
+void test_GetLastError(void)
 {
     natsStatus  s, getLastErrSts;
     natsOptions *opts = NULL;
@@ -17331,8 +16851,7 @@ test_GetLastError(void)
     nats_clearLastError();
 }
 
-static void
-test_StaleConnection(void)
+void test_StaleConnection(void)
 {
     natsStatus          s = NATS_OK;
     natsSock            sock = NATS_SOCK_INVALID;
@@ -17453,8 +16972,7 @@ test_StaleConnection(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_ServerErrorClosesConnection(void)
+void test_ServerErrorClosesConnection(void)
 {
     natsStatus          s = NATS_OK;
     natsSock            sock = NATS_SOCK_INVALID;
@@ -17558,8 +17076,7 @@ test_ServerErrorClosesConnection(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_NoEcho(void)
+void test_NoEcho(void)
 {
     natsStatus          s;
     natsOptions         *opts = NULL;
@@ -17666,8 +17183,7 @@ _startMockupServerThread(void *closure)
     natsSock_Close(sock);
 }
 
-static void
-test_NoEchoOldServer(void)
+void test_NoEchoOldServer(void)
 {
     natsStatus          s;
     natsConnection      *conn = NULL;
@@ -17723,8 +17239,7 @@ test_NoEchoOldServer(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_DrainSub(void)
+void test_DrainSub(void)
 {
     natsStatus          s;
     natsConnection      *nc = NULL;
@@ -18069,8 +17584,7 @@ _drainSubCompleteCB(void *closure)
     natsMutex_Unlock(arg->m);
 }
 
-static void
-test_DrainSubStops(void)
+void test_DrainSubStops(void)
 {
     natsStatus          s;
     natsConnection      *nc = NULL;
@@ -18187,8 +17701,7 @@ test_DrainSubStops(void)
     _stopServer(pid);
 }
 
-static void
-test_DrainSubRaceOnAutoUnsub(void)
+void test_DrainSubRaceOnAutoUnsub(void)
 {
     natsStatus          s;
     natsConnection      *nc = NULL;
@@ -18239,8 +17752,7 @@ test_DrainSubRaceOnAutoUnsub(void)
     _stopServer(pid);
 }
 
-static void
-test_DrainSubNotResentOnReconnect(void)
+void test_DrainSubNotResentOnReconnect(void)
 {
     natsStatus          s;
     natsConnection      *nc   = NULL;
@@ -18386,8 +17898,7 @@ _drainConnErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, 
     natsMutex_Unlock(args->m);
 }
 
-static void
-test_DrainConn(void)
+void test_DrainConn(void)
 {
     natsStatus          s;
     natsConnection      *nc     = NULL;
@@ -18672,8 +18183,7 @@ _noDoubleCbSubCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *
     natsMsg_Destroy(msg);
 }
 
-static void
-test_NoDoubleConnClosedOnDrain(void)
+void test_NoDoubleConnClosedOnDrain(void)
 {
     natsStatus          s;
     natsConnection      *nc     = NULL;
@@ -18736,8 +18246,7 @@ test_NoDoubleConnClosedOnDrain(void)
     _stopServer(pid);
 }
 
-static void
-test_GetClientID(void)
+void test_GetClientID(void)
 {
     natsStatus          s;
     natsPid             pid1    = NATS_INVALID_PID;
@@ -18863,8 +18372,7 @@ test_GetClientID(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_GetClientIP(void)
+void test_GetClientIP(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -18971,8 +18479,7 @@ test_GetClientIP(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_GetRTT(void)
+void test_GetRTT(void)
 {
     natsStatus          s;
     natsConnection      *nc       = NULL;
@@ -19014,8 +18521,7 @@ test_GetRTT(void)
     natsOptions_Destroy(opts);
 }
 
-static void
-test_GetLocalIPAndPort(void)
+void test_GetLocalIPAndPort(void)
 {
     natsStatus          s;
     natsConnection      *nc     = NULL;
@@ -19175,8 +18681,7 @@ _checkJWTAndSigCB(char *buffer)
     return NATS_OK;
 }
 
-static void
-test_UserCredsCallbacks(void)
+void test_UserCredsCallbacks(void)
 {
     natsStatus          s;
     natsConnection      *nc     = NULL;
@@ -19360,8 +18865,7 @@ test_UserCredsCallbacks(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_UserCredsFromMemory(void)
+void test_UserCredsFromMemory(void)
 {
     natsStatus          s       = NATS_OK;
     natsConnection      *nc     = NULL;
@@ -19469,8 +18973,7 @@ test_UserCredsFromMemory(void)
     natsOptions_Destroy(opts);
 }
 
-static void
-test_UserCredsFromFiles(void)
+void test_UserCredsFromFiles(void)
 {
     natsStatus          s       = NATS_OK;
     natsConnection      *nc     = NULL;
@@ -19594,7 +19097,7 @@ test_UserCredsFromFiles(void)
 
     // Use a file that contains no userJWT..
     test("UserOrChainedFile has no JWT: ");
-    s = natsOptions_SetUserCredentialsFromFiles(opts, "list.txt", NULL);
+    s = natsOptions_SetUserCredentialsFromFiles(opts, "list_test.txt", NULL);
     IFOK(s, natsConnection_Connect(&nc, opts));
     // Since we return the whole content of the file when we don't find
     // the key for the user, but we don't for seed, the error we'll get
@@ -19610,7 +19113,7 @@ test_UserCredsFromFiles(void)
 
     // Use a seed file that contains no seed..
     test("SeedFile has no seed: ");
-    s = natsOptions_SetUserCredentialsFromFiles(opts, ucfn, "list.txt");
+    s = natsOptions_SetUserCredentialsFromFiles(opts, ucfn, "list_test.txt");
     IFOK(s, natsConnection_Connect(&nc, opts));
     testCond((s == NATS_ERR)
                 && (strstr(nats_GetLastError(NULL), "no nkey user seed found") != NULL));
@@ -19710,8 +19213,7 @@ _checkNKeyAndSig(char *buffer)
     return NATS_OK;
 }
 
-static void
-test_NKey(void)
+void test_NKey(void)
 {
     natsStatus          s;
     natsOptions         *opts  = NULL;
@@ -19840,8 +19342,7 @@ _checkNKeyFromSeed(char *buffer)
     return NATS_OK;
 }
 
-static void
-test_NKeyFromSeed(void)
+void test_NKeyFromSeed(void)
 {
     natsStatus          s;
     natsOptions         *opts  = NULL;
@@ -19976,8 +19477,7 @@ test_NKeyFromSeed(void)
     remove("seed.file");
 }
 
-static void
-test_ConnSign(void)
+void test_ConnSign(void)
 {
     natsStatus          s;
     natsConnection      *nc     = NULL;
@@ -20054,8 +19554,7 @@ test_ConnSign(void)
     remove(ucfn);
 }
 
-static void
-test_WriteDeadline(void)
+void test_WriteDeadline(void)
 {
     natsStatus          s;
     natsOptions         *opts = NULL;
@@ -20137,8 +19636,7 @@ _publish(void *arg)
 
 }
 
-static void
-test_NoPartialOnReconnect(void)
+void test_NoPartialOnReconnect(void)
 {
     natsStatus          s;
     natsOptions         *opts = NULL;
@@ -20237,8 +19735,7 @@ test_NoPartialOnReconnect(void)
     _stopServer(pid);
 }
 
-static void
-test_ForcedReconnect(void)
+void test_ForcedReconnect(void)
 {
     natsStatus s;
     struct threadArg    arg;
@@ -20331,8 +19828,7 @@ _stopServerInThread(void *closure)
     _stopServer(pid);
 }
 
-static void
-test_ReconnectFailsPendingRequest(void)
+void test_ReconnectFailsPendingRequest(void)
 {
     natsStatus          s;
     natsOptions         *opts = NULL;
@@ -20386,8 +19882,7 @@ test_ReconnectFailsPendingRequest(void)
     }
 }
 
-static void
-test_HeadersNotSupported(void)
+void test_HeadersNotSupported(void)
 {
     natsStatus          s;
     natsConnection      *conn = NULL;
@@ -20459,8 +19954,7 @@ test_HeadersNotSupported(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_HeadersBasic(void)
+void test_HeadersBasic(void)
 {
     natsStatus          s;
     natsConnection      *nc     = NULL;
@@ -20569,8 +20063,7 @@ _msgFilterDropMsg(natsConnection *nc, natsMsg **msg, void *closure)
     natsConn_setFilter(nc, NULL);
 }
 
-static void
-test_natsMsgsFilter(void)
+void test_natsMsgsFilter(void)
 {
     natsStatus          s;
     natsConnection      *nc     = NULL;
@@ -20715,8 +20208,7 @@ _eventLoop(void *closure)
     }
 }
 
-static void
-test_EventLoop(void)
+void test_EventLoop(void)
 {
     natsStatus          s;
     natsConnection      *nc         = NULL;
@@ -20818,8 +20310,7 @@ test_EventLoop(void)
     _stopServer(pid);
 }
 
-static void
-test_EventLoopRetryOnFailedConnect(void)
+void test_EventLoopRetryOnFailedConnect(void)
 {
     natsStatus          s;
     natsConnection      *nc         = NULL;
@@ -20906,8 +20397,7 @@ test_EventLoopRetryOnFailedConnect(void)
     _stopServer(pid);
 }
 
-static void
-test_EventLoopTLS(void)
+void test_EventLoopTLS(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -20997,8 +20487,7 @@ test_EventLoopTLS(void)
 #endif
 }
 
-static void
-test_SSLBasic(void)
+void test_SSLBasic(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21066,8 +20555,7 @@ test_SSLBasic(void)
 #endif
 }
 
-static void
-test_SSLVerify(void)
+void test_SSLVerify(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21132,8 +20620,7 @@ test_SSLVerify(void)
 #endif
 }
 
-static void
-test_SSLLoadCAFromMemory(void)
+void test_SSLLoadCAFromMemory(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21213,8 +20700,7 @@ test_SSLLoadCAFromMemory(void)
 #endif
 }
 
-static void
-test_SSLCertAndKeyFromMemory(void)
+void test_SSLCertAndKeyFromMemory(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21307,8 +20793,7 @@ test_SSLCertAndKeyFromMemory(void)
 #endif
 }
 
-static void
-test_SSLVerifyHostname(void)
+void test_SSLVerifyHostname(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21386,8 +20871,7 @@ test_SSLVerifyHostname(void)
 #endif
 }
 
-static void
-test_SSLSkipServerVerification(void)
+void test_SSLSkipServerVerification(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21446,8 +20930,7 @@ test_SSLSkipServerVerification(void)
 #endif
 }
 
-static void
-test_SSLCiphers(void)
+void test_SSLCiphers(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21580,8 +21063,7 @@ _sslMT(void *closure)
 #define SSL_THREADS (3)
 #endif
 
-static void
-test_SSLMultithreads(void)
+void test_SSLMultithreads(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21648,8 +21130,7 @@ test_SSLMultithreads(void)
 #endif
 }
 
-static void
-test_SSLConnectVerboseOption(void)
+void test_SSLConnectVerboseOption(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21730,8 +21211,7 @@ static natsStatus
 _elDummyDetach(void *userData) { return NATS_OK; }
 #endif
 
-static void
-test_SSLSocketLeakWithEventLoop(void)
+void test_SSLSocketLeakWithEventLoop(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21774,8 +21254,7 @@ test_SSLSocketLeakWithEventLoop(void)
 #endif
 }
 
-static void
-test_SSLReconnectWithAuthError(void)
+void test_SSLReconnectWithAuthError(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21830,8 +21309,7 @@ test_SSLReconnectWithAuthError(void)
 #endif
 }
 
-static void
-test_SSLAvailable(void)
+void test_SSLAvailable(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
@@ -21990,8 +21468,7 @@ _createConfFile(char *buf, int bufLen, const char *content)
     fclose(f);
 }
 
-static void
-test_ReconnectImplicitUserInfo(void)
+void test_ReconnectImplicitUserInfo(void)
 {
     natsStatus          s;
     natsPid             pid1    = NATS_INVALID_PID;
@@ -22082,8 +21559,7 @@ test_ReconnectImplicitUserInfo(void)
     remove(conf);
 }
 
-static void
-test_JetStreamUnmarshalAccountInfo(void)
+void test_JetStreamUnmarshalAccountInfo(void)
 {
     natsStatus          s;
     nats_JSON           *json = NULL;
@@ -22206,8 +21682,7 @@ test_JetStreamUnmarshalAccountInfo(void)
     jsAccountInfo_Destroy(ai);
 }
 
-static void
-test_JetStreamUnmarshalStreamState(void)
+void test_JetStreamUnmarshalStreamState(void)
 {
     natsStatus          s;
     nats_JSON           *json = NULL;
@@ -22284,8 +21759,7 @@ test_JetStreamUnmarshalStreamState(void)
     nats_JSONDestroy(json);
 }
 
-static void
-test_JetStreamUnmarshalStreamConfig(void)
+void test_JetStreamUnmarshalStreamConfig(void)
 {
     natsStatus          s;
     nats_JSON           *json = NULL;
@@ -22435,8 +21909,7 @@ test_JetStreamUnmarshalStreamConfig(void)
     json = NULL;
 }
 
-static void
-test_JetStreamUnmarshalStreamInfo(void)
+void test_JetStreamUnmarshalStreamInfo(void)
 {
     natsStatus          s;
     nats_JSON           *json = NULL;
@@ -22533,8 +22006,7 @@ test_JetStreamUnmarshalStreamInfo(void)
     }
 }
 
-static void
-test_JetStreamMarshalStreamConfig(void)
+void test_JetStreamMarshalStreamConfig(void)
 {
     natsStatus          s;
     jsStreamConfig      sc;
@@ -22786,8 +22258,7 @@ test_JetStreamMarshalStreamConfig(void)
     testCond((s == NATS_INVALID_ARG) && (buf == NULL));
 }
 
-static void
-test_JetStreamUnmarshalConsumerInfo(void)
+void test_JetStreamUnmarshalConsumerInfo(void)
 {
     natsStatus          s;
     jsConsumerInfo      *ci     = NULL;
@@ -23031,8 +22502,7 @@ natsConnection_Destroy(nc); \
 _stopServer(pid);           \
 rmtree(datastore);
 
-static void
-test_JetStreamContext(void)
+void test_JetStreamContext(void)
 {
     natsStatus          s;
     natsConnection      *nc = NULL;
@@ -23208,8 +22678,7 @@ test_JetStreamContext(void)
     remove(confFile);
 }
 
-static void
-test_JetStreamContextDomain(void)
+void test_JetStreamContextDomain(void)
 {
     natsStatus          s;
     natsConnection      *nc = NULL;
@@ -23421,8 +22890,7 @@ _streamsNamesListReq(natsConnection *nc, natsMsg **msg, void *closure)
     }
 }
 
-static void
-test_JetStreamMgtStreams(void)
+void test_JetStreamMgtStreams(void)
 {
     natsStatus          s;
     jsCtx               *js2= NULL;
@@ -24196,8 +23664,7 @@ _consumerNamesListReq(natsConnection *nc, natsMsg **msg, void *closure)
     }
 }
 
-static void
-test_JetStreamMgtConsumers(void)
+void test_JetStreamMgtConsumers(void)
 {
     natsStatus              s;
     jsConsumerInfo          *ci = NULL;
@@ -25168,8 +24635,7 @@ test_JetStreamMgtConsumers(void)
     JS_TEARDOWN;
 }
 
-static void
-test_JetStreamPublish(void)
+void test_JetStreamPublish(void)
 {
     natsStatus          s;
     natsConnection      *nc = NULL;
@@ -25522,8 +24988,7 @@ _jsPubAckErrHandler(jsCtx *js, jsPubAckErr *pae, void *closure)
     natsMutex_Unlock(args->m);
 }
 
-static void
-test_JetStreamPublishAsync(void)
+void test_JetStreamPublishAsync(void)
 {
     natsStatus          s;
     natsSubscription    *sub= NULL;
@@ -26098,8 +25563,7 @@ _checkPubAckResult(natsStatus s, struct threadArg *args)
     return s;
 }
 
-static void
-test_JetStreamPublishAckHandler(void)
+void test_JetStreamPublishAckHandler(void)
 {
     natsStatus          s;
     jsOptions           o;
@@ -26298,8 +25762,7 @@ _jsDrainErrCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *c
     natsMutex_Unlock(args->m);
 }
 
-static void
-test_JetStreamSubscribe(void)
+void test_JetStreamSubscribe(void)
 {
     natsStatus          s;
     natsOptions         *ncOpts = NULL;
@@ -26973,8 +26436,7 @@ test_JetStreamSubscribe(void)
     _destroyDefaultThreadArgs(&args);
 }
 
-static void
-test_JetStreamSubscribeSync(void)
+void test_JetStreamSubscribeSync(void)
 {
     natsStatus          s;
     natsSubscription    *sub= NULL;
@@ -27475,8 +26937,7 @@ test_JetStreamSubscribeSync(void)
     JS_TEARDOWN;
 }
 
-static void
-test_JetStreamSubscribeConfigCheck(void)
+void test_JetStreamSubscribeConfigCheck(void)
 {
     natsStatus          s;
     natsSubscription    *sub= NULL;
@@ -27876,8 +27337,7 @@ _setMsgReply(natsConnection *nc, natsMsg **msg, void* closure)
     natsConn_setFilter(nc, NULL);
 }
 
-static void
-test_JetStreamSubscribeIdleHearbeat(void)
+void test_JetStreamSubscribeIdleHearbeat(void)
 {
     natsStatus          s;
     natsConnection      *nc = NULL;
@@ -28207,8 +27667,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     natsOptions_Destroy(opts);
 }
 
-static void
-test_JetStreamSubscribeFlowControl(void)
+void test_JetStreamSubscribeFlowControl(void)
 {
     natsStatus          s;
     natsSubscription    *sub= NULL;
@@ -28482,8 +27941,7 @@ _dropTimeoutProto(natsConnection *nc, natsMsg **msg, void* closure)
     *msg = NULL;
 }
 
-static void
-test_JetStreamSubscribePull(void)
+void test_JetStreamSubscribePull(void)
 {
     natsStatus          s;
     natsSubscription    *sub= NULL;
@@ -29028,8 +28486,7 @@ test_JetStreamSubscribePull(void)
     _destroyDefaultThreadArgs(&args);
 }
 
-static void
-test_JetStreamSubscribeHeadersOnly(void)
+void test_JetStreamSubscribeHeadersOnly(void)
 {
     natsStatus          s;
     natsSubscription    *sub= NULL;
@@ -29259,8 +28716,7 @@ _lastOnlyLoss(natsConnection *nc, natsMsg **msg, void* closure)
     }
 }
 
-static void
-test_JetStreamOrderedConsumer(void)
+void test_JetStreamOrderedConsumer(void)
 {
     natsStatus          s;
     natsSubscription    *sub= NULL;
@@ -29501,8 +28957,7 @@ _jsOrderedErrHandler(natsConnection *nc, natsSubscription *subscription, natsSta
     natsMutex_Unlock(args->m);
 }
 
-static void
-test_JetStreamOrderedConsumerWithErrors(void)
+void test_JetStreamOrderedConsumerWithErrors(void)
 {
     natsStatus          s;
     natsConnection      *nc = NULL;
@@ -29636,8 +29091,7 @@ _dropMsgFive(natsConnection *nc, natsMsg **msg, void* closure)
     }
 }
 
-static void
-test_JetStreamOrderedConsumerWithAutoUnsub(void)
+void test_JetStreamOrderedConsumerWithAutoUnsub(void)
 {
     natsStatus          s;
     natsConnection      *nc2= NULL;
@@ -29755,8 +29209,7 @@ test_JetStreamOrderedConsumerWithAutoUnsub(void)
     JS_TEARDOWN;
 }
 
-static void
-test_JetStreamOrderedConsSrvRestart(void)
+void test_JetStreamOrderedConsSrvRestart(void)
 {
     natsStatus          s;
     natsSubscription    *sub    = NULL;
@@ -29872,8 +29325,7 @@ test_JetStreamOrderedConsSrvRestart(void)
     JS_TEARDOWN;
 }
 
-static void
-test_JetStreamSubscribeWithFWC(void)
+void test_JetStreamSubscribeWithFWC(void)
 {
     natsStatus          s;
     natsSubscription    *sub= NULL;
@@ -29910,8 +29362,7 @@ test_JetStreamSubscribeWithFWC(void)
     JS_TEARDOWN;
 }
 
-static void
-test_JetStreamStreamsSealAndRollup(void)
+void test_JetStreamStreamsSealAndRollup(void)
 {
     natsStatus          s;
     jsStreamInfo        *si = NULL;
@@ -30079,8 +29530,7 @@ test_JetStreamStreamsSealAndRollup(void)
     JS_TEARDOWN;
 }
 
-static void
-test_JetStreamGetMsgAndLastMsg(void)
+void test_JetStreamGetMsgAndLastMsg(void)
 {
     natsStatus          s;
     natsMsg             *msg = NULL;
@@ -30194,8 +29644,7 @@ test_JetStreamGetMsgAndLastMsg(void)
     JS_TEARDOWN;
 }
 
-static void
-test_JetStreamConvertDirectMsg(void)
+void test_JetStreamConvertDirectMsg(void)
 {
     natsStatus  s;
     natsMsg     *msg = NULL;
@@ -30306,8 +29755,7 @@ _checkDirectGet(jsCtx *js, uint64_t seq, const char *nextBySubj, const char *las
     return s;
 }
 
-static void
-test_JetStreamDirectGetMsg(void)
+void test_JetStreamDirectGetMsg(void)
 {
     natsStatus              s;
     natsMsg                 *msg = NULL;
@@ -30402,8 +29850,7 @@ test_JetStreamDirectGetMsg(void)
     JS_TEARDOWN;
 }
 
-static void
-test_JetStreamNakWithDelay(void)
+void test_JetStreamNakWithDelay(void)
 {
     natsStatus          s;
     natsSubscription    *sub= NULL;
@@ -30480,8 +29927,7 @@ test_JetStreamNakWithDelay(void)
     JS_TEARDOWN;
 }
 
-static void
-test_JetStreamBackOffRedeliveries(void)
+void test_JetStreamBackOffRedeliveries(void)
 {
     natsStatus          s;
     natsSubscription    *sub= NULL;
@@ -30623,8 +30069,7 @@ _subjectsInfoReq(natsConnection *nc, natsMsg **msg, void *closure)
     }
 }
 
-static void
-test_JetStreamInfoWithSubjects(void)
+void test_JetStreamInfoWithSubjects(void)
 {
     natsStatus          s;
     jsStreamInfo        *si = NULL;
@@ -30791,8 +30236,7 @@ _checkJSClusterReady(const char *url)
     return s;
 }
 
-static void
-test_JetStreamInfoAlternates(void)
+void test_JetStreamInfoAlternates(void)
 {
     char                datastore1[256] = {'\0'};
     char                datastore2[256] = {'\0'};
@@ -30885,8 +30329,7 @@ test_JetStreamInfoAlternates(void)
     rmtree(datastore3);
 }
 
-static void
-test_KeyValueManager(void)
+void test_KeyValueManager(void)
 {
     natsStatus          s;
     kvStore             *kv = NULL;
@@ -31016,8 +30459,7 @@ test_KeyValueManager(void)
     JS_TEARDOWN;
 }
 
-static void
-test_KeyValueBasics(void)
+void test_KeyValueBasics(void)
 {
     natsStatus          s;
     kvStore             *kv = NULL;
@@ -31423,8 +30865,7 @@ _stopWatcher(void *closure)
     kvWatcher_Stop(w);
 }
 
-static void
-test_KeyValueWatch(void)
+void test_KeyValueWatch(void)
 {
     natsStatus          s;
     kvStore             *kv = NULL;
@@ -31570,8 +31011,7 @@ test_KeyValueWatch(void)
     JS_TEARDOWN;
 }
 
-static void
-test_KeyValueWatchMulti(void)
+void test_KeyValueWatchMulti(void)
 {
     natsStatus s;
     kvStore *kv = NULL;
@@ -31618,8 +31058,7 @@ test_KeyValueWatchMulti(void)
     JS_TEARDOWN;
 }
 
-static void
-test_KeyValueHistory(void)
+void test_KeyValueHistory(void)
 {
     natsStatus          s;
     kvStore             *kv = NULL;
@@ -31703,8 +31142,7 @@ test_KeyValueHistory(void)
     JS_TEARDOWN;
 }
 
-static void
-test_KeyValueKeys(void)
+void test_KeyValueKeys(void)
 {
     natsStatus          s;
     kvStore             *kv = NULL;
@@ -31806,8 +31244,7 @@ test_KeyValueKeys(void)
     JS_TEARDOWN;
 }
 
-static void
-test_KeyValueDeleteVsPurge(void)
+void test_KeyValueDeleteVsPurge(void)
 {
     natsStatus          s;
     kvStore             *kv = NULL;
@@ -31877,8 +31314,7 @@ test_KeyValueDeleteVsPurge(void)
     JS_TEARDOWN;
 }
 
-static void
-test_KeyValueDeleteTombstones(void)
+void test_KeyValueDeleteTombstones(void)
 {
     natsStatus          s;
     kvStore             *kv = NULL;
@@ -31947,8 +31383,7 @@ test_KeyValueDeleteTombstones(void)
     JS_TEARDOWN;
 }
 
-static void
-test_KeyValuePurgeDeletesMarkerThreshold(void)
+void test_KeyValuePurgeDeletesMarkerThreshold(void)
 {
     natsStatus          s;
     kvStore             *kv = NULL;
@@ -32008,8 +31443,7 @@ test_KeyValuePurgeDeletesMarkerThreshold(void)
     JS_TEARDOWN;
 }
 
-static void
-test_KeyValueCrossAccount(void)
+void test_KeyValueCrossAccount(void)
 {
     natsStatus          s;
     natsOptions         *opts= NULL;
@@ -32280,8 +31714,7 @@ _checkDiscard(jsCtx *js, jsDiscardPolicy expected, kvStore **newKV)
     return s;
 }
 
-static void
-test_KeyValueDiscardOldToNew(void)
+void test_KeyValueDiscardOldToNew(void)
 {
     kvStore             *kv = NULL;
     kvConfig            kvc;
@@ -32339,8 +31772,7 @@ test_KeyValueDiscardOldToNew(void)
     JS_TEARDOWN;
 }
 
-static void
-test_KeyValueRePublish(void)
+void test_KeyValueRePublish(void)
 {
     kvStore             *kv     = NULL;
     jsStreamInfo        *si     = NULL;
@@ -32411,8 +31843,7 @@ test_KeyValueRePublish(void)
     JS_TEARDOWN;
 }
 
-static void
-test_KeyValueMirrorDirectGet(void)
+void test_KeyValueMirrorDirectGet(void)
 {
     kvStore             *kv     = NULL;
     kvConfig            kvc;
@@ -32501,8 +31932,7 @@ _connectToHubAndCheckLeaf(natsConnection **hub, natsConnection *lnc)
     return s;
 }
 
-static void
-test_KeyValueMirrorCrossDomains(void)
+void test_KeyValueMirrorCrossDomains(void)
 {
     natsStatus          s;
     natsConnection      *nc = NULL;
@@ -32826,8 +32256,7 @@ test_KeyValueMirrorCrossDomains(void)
     remove(lconfFile);
 }
 
-static void
-test_MicroMatchEndpointSubject(void)
+void test_MicroMatchEndpointSubject(void)
 {
     // endpoint, actual, match
     const char *test_cases[] = {
@@ -33006,8 +32435,7 @@ typedef struct
     int expected_num_subjects;
 } add_service_test_case_t;
 
-static void
-test_MicroAddService(void)
+void test_MicroAddService(void)
 {
     natsStatus s = NATS_OK;
     microError *err = NULL;
@@ -33242,8 +32670,7 @@ test_MicroAddService(void)
     _stopServer(serverPid);
 }
 
-static void
-test_MicroGroups(void)
+void test_MicroGroups(void)
 {
     natsStatus s = NATS_OK;
     microError *err = NULL;
@@ -33352,8 +32779,7 @@ test_MicroGroups(void)
 
 #define NUM_MICRO_SERVICES 5
 
-static void
-test_MicroBasics(void)
+void test_MicroBasics(void)
 {
     natsStatus s = NATS_OK;
     microError *err = NULL;
@@ -33633,8 +33059,7 @@ test_MicroBasics(void)
     _stopServer(serverPid);
 }
 
-static void
-test_MicroStartStop(void)
+void test_MicroStartStop(void)
 {
     natsStatus s = NATS_OK;
     struct threadArg arg;
@@ -33702,8 +33127,7 @@ test_MicroStartStop(void)
     _stopServer(serverPid);
 }
 
-static void
-test_MicroServiceStopsOnClosedConn(void)
+void test_MicroServiceStopsOnClosedConn(void)
 {
     natsStatus s;
     natsConnection *nc = NULL;
@@ -33775,8 +33199,7 @@ test_MicroServiceStopsOnClosedConn(void)
     _stopServer(serverPid);
 }
 
-static void
-test_MicroServiceStopsWhenServerStops(void)
+void test_MicroServiceStopsWhenServerStops(void)
 {
     natsStatus s;
     natsConnection *nc = NULL;
@@ -33868,8 +33291,7 @@ _microAsyncErrorRequestHandler(microRequest *req)
     return NULL;
 }
 
-static void
-test_MicroAsyncErrorHandler_MaxPendingMsgs(void)
+void test_MicroAsyncErrorHandlerMaxPendingMsgs(void)
 {
     natsStatus          s;
     struct threadArg    arg;
@@ -33947,8 +33369,7 @@ test_MicroAsyncErrorHandler_MaxPendingMsgs(void)
     _stopServer(serverPid);
 }
 
-static void
-test_MicroAsyncErrorHandler_MaxPendingBytes(void)
+void test_MicroAsyncErrorHandlerMaxPendingBytes(void)
 {
     natsStatus          s;
     struct threadArg    arg;
@@ -34038,8 +33459,7 @@ _roundUp(int val)
     return ((val + (MEMALIGN-1))/MEMALIGN)*MEMALIGN;
 }
 
-static void
-test_StanPBufAllocator(void)
+void test_StanPBufAllocator(void)
 {
     natsPBufAllocator   *a = NULL;
     natsStatus          s;
@@ -34172,8 +33592,7 @@ _stanConnLostCB(stanConnection *sc, const char *errorTxt, void *closure)
     natsMutex_Unlock(arg->m);
 }
 
-static void
-test_StanConnOptions(void)
+void test_StanConnOptions(void)
 {
     natsStatus      s;
     stanConnOptions *opts = NULL;
@@ -34340,8 +33759,7 @@ test_StanConnOptions(void)
     stanConnOptions_Destroy(clone);
 }
 
-static void
-test_StanSubOptions(void)
+void test_StanSubOptions(void)
 {
     natsStatus      s;
     stanSubOptions  *opts = NULL;
@@ -34463,8 +33881,7 @@ test_StanSubOptions(void)
     stanSubOptions_Destroy(clone);
 }
 
-static void
-test_StanMsg(void)
+void test_StanMsg(void)
 {
     test("GetSequence with NULL msg: ");
     testCond(stanMsg_GetSequence(NULL) == 0);
@@ -34484,8 +33901,7 @@ test_StanMsg(void)
     stanMsg_Destroy(NULL);
 }
 
-static void
-test_StanServerNotReachable(void)
+void test_StanServerNotReachable(void)
 {
     natsStatus      s;
     stanConnection  *sc = NULL;
@@ -34524,8 +33940,7 @@ test_StanServerNotReachable(void)
     _stopServer(serverPid);
 }
 
-static void
-test_StanBasicConnect(void)
+void test_StanBasicConnect(void)
 {
     natsStatus      s;
     stanConnection  *sc = NULL;
@@ -34592,8 +34007,7 @@ test_StanBasicConnect(void)
     _stopServer(pid);
 }
 
-static void
-test_StanConnectError(void)
+void test_StanConnectError(void)
 {
     natsStatus          s;
     stanConnection      *sc = NULL;
@@ -34629,8 +34043,7 @@ test_StanConnectError(void)
 }
 
 
-static void
-test_StanBasicPublish(void)
+void test_StanBasicPublish(void)
 {
     natsStatus      s;
     stanConnection  *sc = NULL;
@@ -34673,8 +34086,7 @@ _stanPubAckHandler(const char *guid, const char *errTxt, void* closure)
     natsMutex_Unlock(args->m);
 }
 
-static void
-test_StanBasicPublishAsync(void)
+void test_StanBasicPublishAsync(void)
 {
     natsStatus          s;
     stanConnection      *sc = NULL;
@@ -34712,8 +34124,7 @@ test_StanBasicPublishAsync(void)
     _stopServer(pid);
 }
 
-static void
-test_StanPublishTimeout(void)
+void test_StanPublishTimeout(void)
 {
     natsStatus          s;
     stanConnection      *sc = NULL;
@@ -34789,8 +34200,7 @@ _stanPublishSyncThread(void *closure)
     stanConnection_Publish(sc, "foo", (const void*)"hello", 5);
 }
 
-static void
-test_StanPublishMaxAcksInflight(void)
+void test_StanPublishMaxAcksInflight(void)
 {
     natsStatus          s;
     stanConnection      *sc1 = NULL;
@@ -34938,8 +34348,7 @@ _stanMsgHandlerBumpSum(stanConnection *sc, stanSubscription *sub, const char *ch
     stanMsg_Destroy(msg);
 }
 
-static void
-test_StanBasicSubscription(void)
+void test_StanBasicSubscription(void)
 {
     natsStatus          s;
     stanConnection      *sc = NULL;
@@ -34982,8 +34391,7 @@ test_StanBasicSubscription(void)
     _stopServer(pid);
 }
 
-static void
-test_StanSubscriptionCloseAndUnsubscribe(void)
+void test_StanSubscriptionCloseAndUnsubscribe(void)
 {
     natsStatus          s;
     stanConnection      *sc = NULL;
@@ -35083,8 +34491,7 @@ test_StanSubscriptionCloseAndUnsubscribe(void)
     _stopServer(pid);
 }
 
-static void
-test_StanDurableSubscription(void)
+void test_StanDurableSubscription(void)
 {
     natsStatus          s;
     stanConnection      *sc = NULL;
@@ -35171,8 +34578,7 @@ test_StanDurableSubscription(void)
     _stopServer(pid);
 }
 
-static void
-test_StanBasicQueueSubscription(void)
+void test_StanBasicQueueSubscription(void)
 {
     natsStatus          s;
     stanConnection      *sc = NULL;
@@ -35235,8 +34641,7 @@ test_StanBasicQueueSubscription(void)
     _stopServer(pid);
 }
 
-static void
-test_StanDurableQueueSubscription(void)
+void test_StanDurableQueueSubscription(void)
 {
     natsStatus          s;
     stanConnection      *sc = NULL;
@@ -35346,8 +34751,7 @@ _stanCheckRecvStanMsg(stanConnection *sc, stanSubscription *sub, const char *cha
     natsMutex_Unlock(args->m);
 }
 
-static void
-test_StanCheckReceivedvMsg(void)
+void test_StanCheckReceivedMsg(void)
 {
     natsStatus          s;
     stanConnection      *sc = NULL;
@@ -35435,8 +34839,7 @@ _stanGetMsg(stanConnection *sc, stanSubscription *sub, const char *channel,
     natsMutex_Unlock(args->m);
 }
 
-static void
-test_StanSubscriptionAckMsg(void)
+void test_StanSubscriptionAckMsg(void)
 {
     natsStatus          s;
     stanConnection      *sc = NULL;
@@ -35556,8 +34959,7 @@ test_StanSubscriptionAckMsg(void)
     _stopServer(pid);
 }
 
-static void
-test_StanPings(void)
+void test_StanPings(void)
 {
     natsStatus          s;
     natsPid             pid = NATS_INVALID_PID;
@@ -35646,8 +35048,7 @@ test_StanPings(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_StanPingsNoResponder(void)
+void test_StanPingsNoResponder(void)
 {
     natsStatus          s;
     natsPid             nPid = NATS_INVALID_PID;
@@ -35702,8 +35103,7 @@ test_StanPingsNoResponder(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_StanConnectionLostHandlerNotSet(void)
+void test_StanConnectionLostHandlerNotSet(void)
 {
     natsStatus          s;
     natsPid             pid = NATS_INVALID_PID;
@@ -35764,8 +35164,7 @@ test_StanConnectionLostHandlerNotSet(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_StanPingsUnblockPubCalls(void)
+void test_StanPingsUnblockPubCalls(void)
 {
     natsStatus          s;
     natsPid             pid = NATS_INVALID_PID;
@@ -35847,8 +35246,7 @@ test_StanPingsUnblockPubCalls(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_StanGetNATSConnection(void)
+void test_StanGetNATSConnection(void)
 {
     natsStatus          s;
     natsPid             pid     = NATS_INVALID_PID;
@@ -35950,8 +35348,7 @@ test_StanGetNATSConnection(void)
     _stopServer(pid);
 }
 
-static void
-test_StanNoRetryOnFailedConnect(void)
+void test_StanNoRetryOnFailedConnect(void)
 {
     natsStatus      s;
     natsOptions     *opts  = NULL;
@@ -35980,8 +35377,7 @@ _subDlvThreadPooled(natsSubscription *sub)
     return pooled;
 }
 
-static void
-test_StanInternalSubsNotPooled(void)
+void test_StanInternalSubsNotPooled(void)
 {
     natsStatus          s;
     natsPid             pid         = NATS_INVALID_PID;
@@ -36079,8 +35475,7 @@ _stanSubOnCompleteMsgCB(stanConnection *sc, stanSubscription *sub, const char *c
     stanMsg_Destroy(msg);
 }
 
-static void
-test_StanSubOnComplete(void)
+void test_StanSubOnComplete(void)
 {
     natsStatus          s;
     natsPid             pid         = NATS_INVALID_PID;
@@ -36159,8 +35554,7 @@ test_StanSubOnComplete(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
-static void
-test_StanSubTimeout(void)
+void test_StanSubTimeout(void)
 {
     natsStatus          s;
     natsPid             pid         = NATS_INVALID_PID;
@@ -36243,363 +35637,6 @@ test_StanSubTimeout(void)
 
 #endif
 
-typedef void (*testFunc)(void);
-
-typedef struct __testInfo
-{
-    const char  *name;
-    testFunc    func;
-
-} testInfo;
-
-static testInfo allTests[] =
-{
-    // Building blocks
-    {"Version",                         test_Version},
-    {"VersionMatchesTag",               test_VersionMatchesTag},
-    {"OpenCloseAndWait",                test_OpenCloseAndWait},
-    {"natsNowAndSleep",                 test_natsNowAndSleep},
-    {"natsAllocSprintf",                test_natsAllocSprintf},
-    {"natsStrCaseStr",                  test_natsStrCaseStr},
-    {"natsSnprintf",                    test_natsSnprintf},
-    {"natsBuffer",                      test_natsBuffer},
-    {"natsParseInt64",                  test_natsParseInt64},
-    {"natsParseControl",                test_natsParseControl},
-    {"natsNormalizeErr",                test_natsNormalizeErr},
-    {"natsMutex",                       test_natsMutex},
-    {"natsThread",                      test_natsThread},
-    {"natsCondition",                   test_natsCondition},
-    {"natsTimer",                       test_natsTimer},
-    {"natsUrl",                         test_natsUrl},
-    {"natsCreateStringFromBuffer",      test_natsCreateStringFromBuffer},
-    {"natsHash",                        test_natsHash},
-    {"natsHashing",                     test_natsHashing},
-    {"natsStrHash",                     test_natsStrHash},
-    {"natsInbox",                       test_natsInbox},
-    {"natsOptions",                     test_natsOptions},
-    {"natsSock_ConnectTcp",             test_natsSock_ConnectTcp},
-    {"natsSock_ShuffleIPs",             test_natsSock_ShuffleIPs},
-    {"natsSock_IPOrder",                test_natsSock_IPOrder},
-    {"natsSock_ReadLine",               test_natsSock_ReadLine},
-    {"natsJSON",                        test_natsJSON},
-    {"natsEncodeTimeUTC",               test_natsEncodeTimeUTC},
-    {"natsErrWithLongText",             test_natsErrWithLongText},
-    {"natsErrStackMoreThanMaxFrames",   test_natsErrStackMoreThanMaxFrames},
-    {"natsMsg",                         test_natsMsg},
-    {"natsBase32",                      test_natsBase32Decode},
-    {"natsBase64",                      test_natsBase64Encode},
-    {"natsCRC16",                       test_natsCRC16},
-    {"natsKeys",                        test_natsKeys},
-    {"natsReadFile",                    test_natsReadFile},
-    {"natsGetJWTOrSeed",                test_natsGetJWTOrSeed},
-    {"natsHostIsIP",                    test_natsHostIsIP},
-    {"natsWaitReady",                   test_natsWaitReady},
-    {"natsSign",                        test_natsSign},
-    {"HeadersLift",                     test_natsMsgHeadersLift},
-    {"HeadersAPIs",                     test_natsMsgHeaderAPIs},
-    {"MsgIsJSControl",                  test_natsMsgIsJSCtrl},
-    {"SrvVersionAtLeast",               test_natsSrvVersionAtLeast},
-    {"FormatStringArray",               test_natsFormatStringArray},
-
-    // Package Level Tests
-
-    {"ReconnectServerStats",            test_ReconnectServerStats},
-    {"ParseStateReconnectFunctionality",test_ParseStateReconnectFunctionality},
-    {"ServersRandomize",                test_ServersRandomize},
-    {"SelectNextServer",                test_SelectNextServer},
-    {"ParserPing",                      test_ParserPing},
-    {"ParserErr",                       test_ParserErr},
-    {"ParserOK",                        test_ParserOK},
-    {"ParseINFO",                       test_ParseINFO},
-    {"ParserShouldFail",                test_ParserShouldFail},
-    {"ParserSplitMsg",                  test_ParserSplitMsg},
-    {"ProcessMsgArgs",                  test_ProcessMsgArgs},
-    {"LibMsgDelivery",                  test_LibMsgDelivery},
-    {"AsyncINFO",                       test_AsyncINFO},
-    {"RequestPool",                     test_RequestPool},
-    {"NoFlusherIfSendAsapOption",       test_NoFlusherIfSendAsap},
-    {"HeadersAndSubPendingBytes",       test_HeadersAndSubPendingBytes},
-
-    // Public API Tests
-
-    {"DefaultConnection",               test_DefaultConnection},
-    {"SimplifiedURLs",                  test_SimplifiedURLs},
-    {"IPResolutionOrder",               test_IPResolutionOrder},
-    {"UseDefaultURLIfNoServerSpecified",test_UseDefaultURLIfNoServerSpecified},
-    {"ConnectToWithMultipleURLs",       test_ConnectToWithMultipleURLs},
-    {"ConnectionWithNULLOptions",       test_ConnectionWithNullOptions},
-    {"ConnectionToWithNullURLs",        test_ConnectionToWithNullURLs},
-    {"ConnectionStatus",                test_ConnectionStatus},
-    {"ConnClosedCB",                    test_ConnClosedCB},
-    {"CloseDisconnectedCB",             test_CloseDisconnectedCB},
-    {"ServerStopDisconnectedCB",        test_ServerStopDisconnectedCB},
-    {"ClosedConnections",               test_ClosedConnections},
-    {"ConnectVerboseOption",            test_ConnectVerboseOption},
-    {"ReconnectThreadLeak",             test_ReconnectThreadLeak},
-    {"ReconnectTotalTime",              test_ReconnectTotalTime},
-    {"ReconnectDisallowedFlags",        test_ReconnectDisallowedFlags},
-    {"ReconnectAllowedFlags",           test_ReconnectAllowedFlags},
-    {"ConnCloseBreaksReconnectLoop",    test_ConnCloseBreaksReconnectLoop},
-    {"BasicReconnectFunctionality",     test_BasicReconnectFunctionality},
-    {"ExtendedReconnectFunctionality",  test_ExtendedReconnectFunctionality},
-    {"QueueSubsOnReconnect",            test_QueueSubsOnReconnect},
-    {"IsClosed",                        test_IsClosed},
-    {"IsReconnectingAndStatus",         test_IsReconnectingAndStatus},
-    {"ReconnectBufSize",                test_ReconnectBufSize},
-    {"RetryOnFailedConnect",            test_RetryOnFailedConnect},
-    {"NoPartialOnReconnect",            test_NoPartialOnReconnect},
-    {"ReconnectFailsPendingRequests",   test_ReconnectFailsPendingRequest},
-    {"ForcedReconnect",                 test_ForcedReconnect},
-
-    {"ErrOnConnectAndDeadlock",         test_ErrOnConnectAndDeadlock},
-    {"ErrOnMaxPayloadLimit",            test_ErrOnMaxPayloadLimit},
-
-    {"Auth",                            test_Auth},
-    {"AuthFailNoDisconnectCB",          test_AuthFailNoDisconnectCB},
-    {"AuthToken",                       test_AuthToken},
-    {"AuthTokenHandler",                test_AuthTokenHandler},
-    {"PermViolation",                   test_PermViolation},
-    {"AuthViolation",                   test_AuthViolation},
-    {"AuthenticationExpired",           test_AuthenticationExpired},
-    {"AuthenticationExpiredReconnect",  test_AuthenticationExpiredReconnect},
-    {"ConnectedServer",                 test_ConnectedServer},
-    {"MultipleClose",                   test_MultipleClose},
-    {"SimplePublish",                   test_SimplePublish},
-    {"SimplePublishNoData",             test_SimplePublishNoData},
-    {"PublishMsg",                      test_PublishMsg},
-    {"InvalidSubsArgs",                 test_InvalidSubsArgs},
-    {"AsyncSubscribe",                  test_AsyncSubscribe},
-    {"AsyncSubscribeTimeout",           test_AsyncSubscribeTimeout},
-    {"SyncSubscribe",                   test_SyncSubscribe},
-    {"PubSubWithReply",                 test_PubSubWithReply},
-    {"NoResponders",                    test_NoResponders},
-    {"Flush",                           test_Flush},
-    {"ConnCloseDoesFlush",              test_ConnCloseDoesFlush},
-    {"QueueSubscriber",                 test_QueueSubscriber},
-    {"ReplyArg",                        test_ReplyArg},
-    {"SyncReplyArg",                    test_SyncReplyArg},
-    {"Unsubscribe",                     test_Unsubscribe},
-    {"DoubleUnsubscribe",               test_DoubleUnsubscribe},
-    {"SubRemovedWhileProcessingMsg",    test_SubRemovedWhileProcessingMsg},
-    {"RequestTimeout",                  test_RequestTimeout},
-    {"Request",                         test_Request},
-    {"RequestNoBody",                   test_RequestNoBody},
-    {"RequestMuxWithMappedSubject",     test_RequestMuxWithMappedSubject},
-    {"OldRequest",                      test_OldRequest},
-    {"SimultaneousRequests",            test_SimultaneousRequest},
-    {"RequestClose",                    test_RequestClose},
-    {"CustomInbox",                     test_CustomInbox},
-    {"MessagePadding",                  test_MessageBufferPadding},
-    {"FlushInCb",                       test_FlushInCb},
-    {"ReleaseFlush",                    test_ReleaseFlush},
-    {"FlushErrOnDisconnect",            test_FlushErrOnDisconnect},
-    {"Inbox",                           test_Inbox},
-    {"Stats",                           test_Stats},
-    {"BadSubject",                      test_BadSubject},
-    {"SubBadSubjectAndQueueNames",      test_SubBadSubjectAndQueueName},
-    {"ClientAsyncAutoUnsub",            test_ClientAsyncAutoUnsub},
-    {"ClientSyncAutoUnsub",             test_ClientSyncAutoUnsub},
-    {"ClientAutoUnsubAndReconnect",     test_ClientAutoUnsubAndReconnect},
-    {"AutoUnsubNoUnsubOnDestroy",       test_AutoUnsubNoUnsubOnDestroy},
-    {"NextMsgOnClosedSub",              test_NextMsgOnClosedSub},
-    {"CloseSubRelease",                 test_CloseSubRelease},
-    {"IsValidSubscriber",               test_IsValidSubscriber},
-    {"SlowSubscriber",                  test_SlowSubscriber},
-    {"SlowAsyncSubscriber",             test_SlowAsyncSubscriber},
-    {"SlowConsumerCb",                  test_SlowConsumerCB},
-    {"PendingLimitsDeliveredAndDropped",test_PendingLimitsDeliveredAndDropped},
-    {"PendingLimitsWithSyncSub",        test_PendingLimitsWithSyncSub},
-    {"AsyncSubscriptionPending",        test_AsyncSubscriptionPending},
-    {"AsyncSubscriptionPendingDrain",   test_AsyncSubscriptionPendingDrain},
-    {"SyncSubscriptionPending",         test_SyncSubscriptionPending},
-    {"SyncSubscriptionPendingDrain",    test_SyncSubscriptionPendingDrain},
-    {"AsyncErrHandlerMaxPendingMsgs",   test_AsyncErrHandler_MaxPendingMsgs},
-    {"AsyncErrHandlerMaxPendingBytes",  test_AsyncErrHandler_MaxPendingBytes },
-    {"AsyncErrHandlerSubDestroyed",     test_AsyncErrHandlerSubDestroyed},
-    {"AsyncSubscriberStarvation",       test_AsyncSubscriberStarvation},
-    {"AsyncSubscriberOnClose",          test_AsyncSubscriberOnClose},
-    {"NextMsgCallOnAsyncSub",           test_NextMsgCallOnAsyncSub},
-    {"SubOnComplete",                   test_SubOnComplete},
-    {"GetLastError",                    test_GetLastError},
-    {"StaleConnection",                 test_StaleConnection},
-    {"ServerErrorClosesConnection",     test_ServerErrorClosesConnection},
-    {"NoEcho",                          test_NoEcho},
-    {"NoEchoOldServer",                 test_NoEchoOldServer},
-    {"DrainSub",                        test_DrainSub},
-    {"DrainSubStops",                   test_DrainSubStops},
-    {"DrainSubRaceOnAutoUnsub",         test_DrainSubRaceOnAutoUnsub},
-    {"DrainSubNotResentOnReconnect",    test_DrainSubNotResentOnReconnect},
-    {"DrainConn",                       test_DrainConn},
-    {"NoDoubleCloseCbOnDrain",          test_NoDoubleConnClosedOnDrain},
-    {"GetClientID",                     test_GetClientID},
-    {"GetClientIP",                     test_GetClientIP},
-    {"GetRTT",                          test_GetRTT},
-    {"GetLocalIPAndPort",               test_GetLocalIPAndPort},
-    {"UserCredsCallbacks",              test_UserCredsCallbacks},
-    {"UserCredsFromFiles",              test_UserCredsFromFiles},
-    {"UserCredsFromMemory",             test_UserCredsFromMemory},
-    {"NKey",                            test_NKey},
-    {"NKeyFromSeed",                    test_NKeyFromSeed},
-    {"ConnSign",                        test_ConnSign},
-    {"WriteDeadline",                   test_WriteDeadline},
-    {"HeadersNotSupported",             test_HeadersNotSupported},
-    {"HeadersBasic",                    test_HeadersBasic},
-    {"MsgsFilter",                      test_natsMsgsFilter},
-    {"EventLoop",                       test_EventLoop},
-    {"EventLoopRetryOnFailedConnect",   test_EventLoopRetryOnFailedConnect},
-    {"EventLoopTLS",                    test_EventLoopTLS},
-    {"SSLBasic",                        test_SSLBasic},
-    {"SSLVerify",                       test_SSLVerify},
-    {"SSLCAFromMemory",                 test_SSLLoadCAFromMemory},
-    {"SSLCertAndKeyFromMemory",         test_SSLCertAndKeyFromMemory},
-    {"SSLVerifyHostname",               test_SSLVerifyHostname},
-    {"SSLSkipServerVerification",       test_SSLSkipServerVerification},
-    {"SSLCiphers",                      test_SSLCiphers},
-    {"SSLMultithreads",                 test_SSLMultithreads},
-    {"SSLConnectVerboseOption",         test_SSLConnectVerboseOption},
-    {"SSLSocketLeakEventLoop",          test_SSLSocketLeakWithEventLoop},
-    {"SSLReconnectWithAuthError",       test_SSLReconnectWithAuthError},
-    {"SSLAvailable",                    test_SSLAvailable},
-
-    // Clusters Tests
-
-    {"ServersOption",                   test_ServersOption},
-    {"AuthServers",                     test_AuthServers},
-    {"AuthFailToReconnect",             test_AuthFailToReconnect},
-    {"ReconnectWithTokenHandler",       test_ReconnectWithTokenHandler},
-    {"BasicClusterReconnect",           test_BasicClusterReconnect},
-    {"HotSpotReconnect",                test_HotSpotReconnect},
-    {"ProperReconnectDelay",            test_ProperReconnectDelay},
-    {"ProperFalloutAfterMaxAttempts",   test_ProperFalloutAfterMaxAttempts},
-    {"StopReconnectAfterTwoAuthErr",    test_StopReconnectAfterTwoAuthErr},
-    {"TimeoutOnNoServer",               test_TimeoutOnNoServer},
-    {"PingReconnect",                   test_PingReconnect},
-    {"GetServers",                      test_GetServers},
-    {"GetDiscoveredServers",            test_GetDiscoveredServers},
-    {"DiscoveredServersCb",             test_DiscoveredServersCb},
-    {"IgnoreDiscoveredServers",         test_IgnoreDiscoveredServers},
-    {"INFOAfterFirstPONGisProcessedOK", test_ReceiveINFORightAfterFirstPONG},
-    {"ServerPoolUpdatedOnClusterUpdate",test_ServerPoolUpdatedOnClusterUpdate},
-    {"ReconnectJitter",                 test_ReconnectJitter},
-    {"CustomReconnectDelay",            test_CustomReconnectDelay},
-    {"LameDuckMode",                    test_LameDuckMode},
-    {"ReconnectImplicitUserInfo",       test_ReconnectImplicitUserInfo},
-
-    {"JetStreamUnmarshalAccInfo",       test_JetStreamUnmarshalAccountInfo},
-    {"JetStreamUnmarshalStreamState",   test_JetStreamUnmarshalStreamState},
-    {"JetStreamUnmarshalStreamCfg",     test_JetStreamUnmarshalStreamConfig},
-    {"JetStreamUnmarshalStreamInfo",    test_JetStreamUnmarshalStreamInfo},
-    {"JetStreamMarshalStreamCfg",       test_JetStreamMarshalStreamConfig},
-    {"JetStreamUnmarshalConsumerInfo",  test_JetStreamUnmarshalConsumerInfo},
-    {"JetStreamContext",                test_JetStreamContext},
-    {"JetStreamDomain",                 test_JetStreamContextDomain},
-    {"JetStreamMgtStreams",             test_JetStreamMgtStreams},
-    {"JetStreamMgtConsumers",           test_JetStreamMgtConsumers},
-    {"JetStreamPublish",                test_JetStreamPublish},
-    {"JetStreamPublishAsync",           test_JetStreamPublishAsync},
-    {"JetStreamPublishAckHandler",      test_JetStreamPublishAckHandler},
-    {"JetStreamSubscribe",              test_JetStreamSubscribe},
-    {"JetStreamSubscribeSync",          test_JetStreamSubscribeSync},
-    {"JetStreamSubscribeConfigCheck",   test_JetStreamSubscribeConfigCheck},
-    {"JetStreamSubscribeIdleHeartbeat", test_JetStreamSubscribeIdleHearbeat},
-    {"JetStreamSubscribeFlowControl",   test_JetStreamSubscribeFlowControl},
-    {"JetStreamSubscribePull",          test_JetStreamSubscribePull},
-    {"JetStreamSubscribeHeadersOnly",   test_JetStreamSubscribeHeadersOnly},
-    {"JetStreamOrderedCons",            test_JetStreamOrderedConsumer},
-    {"JetStreamOrderedConsWithErrors",  test_JetStreamOrderedConsumerWithErrors},
-    {"JetStreamOrderedConsAutoUnsub",   test_JetStreamOrderedConsumerWithAutoUnsub},
-    {"JetStreamOrderedConsSrvRestart",  test_JetStreamOrderedConsSrvRestart},
-    {"JetStreamSubscribeWithFWC",       test_JetStreamSubscribeWithFWC},
-    {"JetStreamStreamsSealAndRollup",   test_JetStreamStreamsSealAndRollup},
-    {"JetStreamGetMsgAndLastMsg",       test_JetStreamGetMsgAndLastMsg},
-    {"JetStreamConvertDirectMsg",       test_JetStreamConvertDirectMsg},
-    {"JetStreamDirectGetMsg",           test_JetStreamDirectGetMsg},
-    {"JetStreamNakWithDelay",           test_JetStreamNakWithDelay},
-    {"JetStreamBackOffRedeliveries",    test_JetStreamBackOffRedeliveries},
-    {"JetStreamInfoWithSubjects",       test_JetStreamInfoWithSubjects},
-    {"JetStreamInfoAlternates",         test_JetStreamInfoAlternates},
-
-    {"KeyValueManager",                 test_KeyValueManager},
-    {"KeyValueBasics",                  test_KeyValueBasics},
-    {"KeyValueWatch",                   test_KeyValueWatch},
-    {"KeyValueWatchMulti",              test_KeyValueWatchMulti},
-    {"KeyValueHistory",                 test_KeyValueHistory},
-    {"KeyValueKeys",                    test_KeyValueKeys},
-    {"KeyValueDeleteVsPurge",           test_KeyValueDeleteVsPurge},
-    {"KeyValueDeleteTombstones",        test_KeyValueDeleteTombstones},
-    {"KeyValueDeleteMarkerThreshold",   test_KeyValuePurgeDeletesMarkerThreshold},
-    {"KeyValueCrossAccount",            test_KeyValueCrossAccount},
-    {"KeyValueDiscardOldToNew",         test_KeyValueDiscardOldToNew},
-    {"KeyValueRePublish",               test_KeyValueRePublish},
-    {"KeyValueMirrorDirectGet",         test_KeyValueMirrorDirectGet},
-    {"KeyValueMirrorCrossDomains",      test_KeyValueMirrorCrossDomains},
-
-    {"MicroMatchEndpointSubject",       test_MicroMatchEndpointSubject},
-    {"MicroAddService",                 test_MicroAddService},
-    {"MicroGroups",                     test_MicroGroups},
-    {"MicroBasics",                     test_MicroBasics},
-    {"MicroStartStop",                  test_MicroStartStop},
-    {"MicroServiceStopsOnClosedConn",   test_MicroServiceStopsOnClosedConn},
-    {"MicroServiceStopsWhenServerStops", test_MicroServiceStopsWhenServerStops},
-    {"MicroAsyncErrorHandlerMaxPendingMsgs",    test_MicroAsyncErrorHandler_MaxPendingMsgs},
-    {"MicroAsyncErrorHandlerMaxPendingBytes",   test_MicroAsyncErrorHandler_MaxPendingBytes },
-
-#if defined(NATS_HAS_STREAMING)
-    {"StanPBufAllocator",               test_StanPBufAllocator},
-    {"StanConnOptions",                 test_StanConnOptions},
-    {"StanSubOptions",                  test_StanSubOptions},
-    {"StanMsg",                         test_StanMsg},
-    {"StanServerNotReachable",          test_StanServerNotReachable},
-    {"StanBasicConnect",                test_StanBasicConnect},
-    {"StanConnectError",                test_StanConnectError},
-    {"StanBasicPublish",                test_StanBasicPublish},
-    {"StanBasicPublishAsync",           test_StanBasicPublishAsync},
-    {"StanPublishTimeout",              test_StanPublishTimeout},
-    {"StanPublishMaxAcksInflight",      test_StanPublishMaxAcksInflight},
-    {"StanBasicSubscription",           test_StanBasicSubscription},
-    {"StanSubscriptionCloseAndUnsub",   test_StanSubscriptionCloseAndUnsubscribe},
-    {"StanDurableSubscription",         test_StanDurableSubscription},
-    {"StanBasicQueueSubscription",      test_StanBasicQueueSubscription},
-    {"StanDurableQueueSubscription",    test_StanDurableQueueSubscription},
-    {"StanCheckReceivedMsg",            test_StanCheckReceivedvMsg},
-    {"StanSubscriptionAckMsg",          test_StanSubscriptionAckMsg},
-    {"StanPings",                       test_StanPings},
-    {"StanPingsNoResponder",            test_StanPingsNoResponder},
-    {"StanConnectionLostHandlerNotSet", test_StanConnectionLostHandlerNotSet},
-    {"StanPingsUnblockPublishCalls",    test_StanPingsUnblockPubCalls},
-    {"StanGetNATSConnection",           test_StanGetNATSConnection},
-    {"StanNoRetryOnFailedConnect",      test_StanNoRetryOnFailedConnect},
-    {"StanInternalSubsNotPooled",       test_StanInternalSubsNotPooled},
-    {"StanSubOnComplete",               test_StanSubOnComplete},
-    {"StanSubTimeout",                  test_StanSubTimeout},
-
-#endif
-
-};
-
-static int  maxTests = (int) (sizeof(allTests)/sizeof(testInfo));
-
-static void
-generateList(void)
-{
-    FILE    *list = fopen("list.txt", "w");
-    int     i;
-
-    if (list == NULL)
-    {
-        printf("@@ Unable to create file 'list.txt': %d\n", errno);
-        return;
-    }
-
-    printf("Number of tests: %d\n", maxTests);
-
-    for (i=0; i<maxTests; i++)
-        fprintf(list, "%s\n", allTests[i].name);
-
-    fflush(list);
-    fclose(list);
-}
-
 #ifndef _WIN32
 static void _sigsegv_handler(int sig) {
   void *array[20];
@@ -36615,30 +35652,15 @@ static void _sigsegv_handler(int sig) {
 int main(int argc, char **argv)
 {
     const char *envStr;
-    int testStart   = 0;
-    int testEnd     = 0;
     int i;
+    const char *testName = NULL;
 
-    if (argc == 1)
+    if (argc != 2)
     {
-        generateList();
-        return 0;
-    }
-
-    if (argc == 3)
-    {
-        testStart = atoi(argv[1]);
-        testEnd   = atoi(argv[2]);
-    }
-
-    if ((argc != 3)
-        || (testStart < 0) || (testStart >= maxTests)
-        || (testEnd < 0) || (testEnd >= maxTests)
-        || (testStart > testEnd))
-    {
-        printf("@@ Usage: %s [start] [end] (0 .. %d)\n", argv[0], (maxTests - 1));
+        printf("@@ Usage: %s [testname]\n", argv[0]);
         return 1;
     }
+    testName = argv[1];
 
 #ifndef _WIN32
     signal(SIGSEGV, _sigsegv_handler);
@@ -36702,14 +35724,25 @@ int main(int argc, char **argv)
     }
 
     // Execute tests
-    for (i=testStart; (i<=testEnd) && !failed; i++)
+    testFunc f = NULL;
+    for (i = 0; i < (int)(sizeof(allTests) / sizeof(*allTests)); i++)
     {
+        if (strcmp(testName, allTests[i].name) != 0)
+            continue;
+
 #ifdef _WIN32
         printf("\n== %s ==\n", allTests[i].name);
 #else
         printf("\033[0;34m\n== %s ==\n\033[0;0m", allTests[i].name);
 #endif
-        (*(allTests[i].func))();
+        f = allTests[i].func;
+        f();
+        break;
+    }
+    if (f == NULL)
+    {
+        printf("@@ Test '%s' not found!\n", testName);
+        return 1;
     }
 
 #ifdef _WIN32

@@ -124,7 +124,7 @@ static microError *
 decode_and_dupe_rest_of_string(char **dup, int *i, const char *data, int data_len)
 {
     microError *err = NULL;
-    int start = *i;
+    int startPos = *i;
     int decoded_len = 0;
 
     err = decode_rest_of_string(NULL, &decoded_len, i, data, data_len);
@@ -138,7 +138,7 @@ decode_and_dupe_rest_of_string(char **dup, int *i, const char *data, int data_le
         return NULL;
     }
 
-    *i = start;
+    *i = startPos;
 
     *dup = calloc(decoded_len + 1, sizeof(char));
     if (*dup == NULL)

@@ -497,7 +497,7 @@ js_PublishMsg(jsPubAck **new_puback,jsCtx *js, natsMsg *msg,
     int64_t             ttl     = 0;
     nats_JSON           *json   = NULL;
     natsMsg             *resp   = NULL;
-    jsApiResponse   ar;
+    jsApiResponse       ar      = JS_EMPTY_API_RESPONSE;
 
     if (errCode != NULL)
         *errCode = 0;
@@ -1807,7 +1807,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     jsSub           *jsi     = NULL;
     natsMsg         *mhMsg   = NULL;
     char            *reqSubj = NULL;
-    bool            noWait;
+    bool            noWait   = false;
 
     if (list == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);

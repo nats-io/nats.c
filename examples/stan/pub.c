@@ -51,6 +51,7 @@ int main(int argc, char **argv)
     stanConnection  *sc       = NULL;
     int             len;
     bool            connLost = false;
+    natsOptions     *opts = NULL;
 
     opts = parseArgs(argc, argv, usage);
     len = (int) strlen(payload);

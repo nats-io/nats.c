@@ -113,6 +113,7 @@ int main(int argc, char **argv)
     stanConnection      *sc         = NULL;
     stanSubscription    *sub        = NULL;
     bool                connLost    = false;
+    natsOptions         *opts = NULL;
 
     opts = parseArgs(argc, argv, usage);
 

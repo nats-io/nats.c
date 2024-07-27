@@ -1705,7 +1705,7 @@ nats_Base32_Init(void)
     int         i;
 
     for (i=0; i<(int)sizeof(base32DecodeMap); i++)
-        base32DecodeMap[i] = (char) 0xFF;
+        base32DecodeMap[i] = '\xFF';
 
     for (i=0; i<alphaLen; i++)
         base32DecodeMap[(int)alphabet[i]] = (char) i;
@@ -1747,7 +1747,7 @@ nats_Base32_DecodeString(const char *src, char *dst, int dstMax, int *dstLen)
             dbuf[j] = base32DecodeMap[in];
             // If invalid character, report the position but as the number of character
             // since beginning, not array index.
-            if (dbuf[j] == (char) 0xFF)
+            if (dbuf[j] == '\xFF')
                 return nats_setError(NATS_ERR, "base32: invalid data at location %d", srcLen - remaining);
             j++;
         }
@@ -2238,11 +2238,11 @@ fmt_frac(char *buf, int w, uint64_t v, int prec, int *nw, uint64_t *nv)
     // Omit trailing zeros up to and including decimal point.
     bool print = false;
     int i;
-    int digit;
+    char digit;
 
     for (i = 0; i < prec; i++)
     {
-        digit = v % 10;
+        digit = (char)(v % 10);
         print = print || digit != 0;
         if (print)
         {
@@ -2574,9 +2574,9 @@ natsStatus nats_formatStringArray(char **out, const char **strings, int count)
         if (i > 0)
             len++; // For the ','
         if (strings[i] == NULL)
-            len += strlen("(null)");
+            len += (int)strlen("(null)");
         else
-            len += strlen(strings[i]);
+            len += (int)strlen(strings[i]);
     }
     len++; // For the ']'
     len++; // For the '\0'

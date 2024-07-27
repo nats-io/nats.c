@@ -39,13 +39,18 @@
 #include "js.h"
 #include "kv.h"
 #include "microp.h"
+
 #if defined(NATS_HAS_STREAMING)
+
 #include "stan/conn.h"
 #include "stan/pub.h"
 #include "stan/sub.h"
 #include "stan/copts.h"
 #include "stan/sopts.h"
-#endif
+
+static const char *clientName = "client";
+
+#endif // NATS_HAS_STREAMING
 
 typedef void (*testFunc)(void);
 

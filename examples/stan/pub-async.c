@@ -54,6 +54,7 @@ int main(int argc, char **argv)
     stanConnOptions *connOpts = NULL;
     stanConnection  *sc       = NULL;
     myPubMsgInfo    *pubMsg   = NULL;
+    natsOptions     *opts     = NULL;
 
     // This example demonstrates the use of the pubAckHandler closure
     // to correlate published messages and their acks.

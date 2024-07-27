@@ -143,7 +143,8 @@ void test_BenchSubscribeAsync_InjectSlow(void)
     // This test relies on nanosleep, not sure what the Windows equivalent is. Skip fr now.
     printf("Skipping BenchSubscribeAsync_InjectSlow on Windows\n");
     return;
-#endif
+
+#else
 
     threadConfig threads[] = {
         {false, 1}, // 1 is not used in this case, just to quiet nats_SetMessageDeliveryPoolSize
@@ -164,6 +165,7 @@ void test_BenchSubscribeAsync_InjectSlow(void)
     };
 
     RUN_MATRIX(threads, subs, 20 * 1000, &env);
+#endif // _WIN32
 }
 
 static void _benchMatrix(threadConfig *threadsVector, int lent, int *subsVector, int lens, int NMessages, ENV *env)
@@ -237,7 +239,7 @@ static natsStatus _bench(ENV *env, int *best, int *avg, int *worst)
     for (int i = 0; i < env->numSubs; i++)
         env->subs[i].env = env; // set the environment to access it in the callbacks.
 
-    int pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    natsPid pid = _startServer("nats://127.0.0.1:4222", NULL, true);
     if (pid == NATS_INVALID_PID)
         return NATS_ERR;
 
@@ -397,7 +399,7 @@ static natsStatus _inject(natsConnection *nc, const char *subject, ENV *env)
         {
             snprintf(buf, sizeof(buf), "%d", i);
 
-            s = natsMsg_Create(&m, subject, NULL, buf, strlen(buf));
+            s = natsMsg_Create(&m, subject, NULL, buf, (int)strlen(buf));
             IFOK(s, _enqueueToSub(env->subs[n].sub, m));
         }
     }

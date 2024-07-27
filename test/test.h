@@ -16,7 +16,6 @@
 
 #if defined(NATS_HAS_STREAMING)
 static const char *clusterName = "test-cluster";
-static const char *clientName = "client";
 #endif
 
 #ifdef _WIN32
@@ -147,7 +146,6 @@ _startServerImpl(const char *serverExe, const char *url, const char *cmdLineOpts
     HANDLE h;
     PROCESS_INFORMATION *pid;
     DWORD flags = 0;
-    BOOL createdOk = FALSE;
     BOOL hInheritance = FALSE;
     char *exeAndCmdLine = NULL;
     int ret;

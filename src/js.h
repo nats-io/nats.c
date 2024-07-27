@@ -205,6 +205,8 @@ typedef struct __jsApiResponse
 
 } jsApiResponse;
 
+#define JS_EMPTY_API_RESPONSE { NULL, { 0, 0, NULL } }
+
 // Sets the options in `resOpts` based on the given `opts` and defaults to the context
 // own options when some options are not specified.
 // Returns also the NATS connection to be used to send the request.

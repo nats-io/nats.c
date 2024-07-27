@@ -30199,43 +30199,6 @@ void test_JetStreamInfoWithSubjects(void)
     JS_TEARDOWN;
 }
 
-static natsStatus
-_checkJSClusterReady(const char *url)
-{
-    natsStatus          s   = NATS_OK;
-    natsConnection      *nc = NULL;
-    jsCtx               *js = NULL;
-    jsErrCode           jerr= 0;
-    int                 i;
-    jsOptions           jo;
-
-    jsOptions_Init(&jo);
-    jo.Wait = 1000;
-
-    s = natsConnection_ConnectTo(&nc, url);
-    IFOK(s, natsConnection_JetStream(&js, nc, &jo));
-    for (i=0; (s == NATS_OK) && (i<10); i++)
-    {
-        jsStreamInfo *si = NULL;
-
-        s = js_GetStreamInfo(&si, js, "CHECK_CLUSTER", &jo, &jerr);
-        if (jerr == JSStreamNotFoundErr)
-        {
-            nats_clearLastError();
-            s = NATS_OK;
-            break;
-        }
-        if ((s != NATS_OK) && (i < 9))
-        {
-            s = NATS_OK;
-            nats_Sleep(500);
-        }
-    }
-    jsCtx_Destroy(js);
-    natsConnection_Destroy(nc);
-    return s;
-}
-
 void test_JetStreamInfoAlternates(void)
 {
     char                datastore1[256] = {'\0'};
@@ -30251,6 +30214,7 @@ void test_JetStreamInfoAlternates(void)
     jsStreamConfig      sc;
     jsStreamSource      ss;
     natsStatus          s;
+    int                 i;
 
     ENSURE_JS_VERSION(2, 9, 0);
 
@@ -30271,10 +30235,6 @@ void test_JetStreamInfoAlternates(void)
     CHECK_SERVER_STARTED(pid1);
     testCond(true);
 
-    test("Check cluster: ");
-    s = _checkJSClusterReady("nats://127.0.0.1:4224");
-    testCond(s == NATS_OK);
-
     test("Connect: ");
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
     testCond(s == NATS_OK);
@@ -30288,7 +30248,18 @@ void test_JetStreamInfoAlternates(void)
     sc.Name = "TEST";
     sc.Subjects = (const char*[1]){"foo"};
     sc.SubjectsLen = 1;
-    s = js_AddStream(NULL, js, &sc, NULL, NULL);
+    // We will try up to 10 times to create the stream. It may fail if the cluster
+    // is not ready to accept the request.
+    for (i=0; (s == NATS_OK) && (i < 10); i++)
+    {
+        s = js_AddStream(NULL, js, &sc, NULL, NULL);
+        if ((s != NATS_OK) && (i < 9))
+        {
+            nats_clearLastError();
+            s = NATS_OK;
+            nats_Sleep(100);
+        }
+    }
     testCond(s == NATS_OK);
 
     test("Create mirror: ");

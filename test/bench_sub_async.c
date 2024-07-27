@@ -86,10 +86,10 @@ void test_BenchSubscribeAsync_Small(void)
     RUN_MATRIX(threads, subs, 500 * 1000, &env);
 }
 
-// This benchmark publishes messages ASAP (no rate limiting) and measures
-// message delivery to a few subscribers. This approach does not work well for a
-// large number of subscribers because the server will be overwhelmed having to
-// send too many messages at once.
+// This benchmark publishes messages, flushing the connection every now and then
+// to ensure the server is not overwhelmed, and measures message delivery to a
+// few subscribers. This approach works well for a large number of
+// subscribers, but can be too slow for a few subscriptions.
 void test_BenchSubscribeAsync_Large(void)
 {
     threadConfig threads[] = {

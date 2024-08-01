@@ -149,13 +149,12 @@ natsStatus nats_setMessageDispatcherPoolCap(int max)
 
 // no lock on sub->mu needed because we are called during subscription creation.
 natsStatus
-nats_assignSubToDispatch(natsSubscription *sub, bool forReplies)
+nats_assignSubToDispatch(natsSubscription *sub)
 {
     natsLib *lib = nats_lib();
     natsStatus s = NATS_OK;
     natsDispatcher *d = NULL;
-    natsDispatcherPool *pool = forReplies ? &lib->replyDispatchers : &lib->messageDispatchers;
-    void (*threadf)(void*) = forReplies ? nats_dispatchRepliesPoolThreadf : nats_dispatchMessagesPoolThreadf;
+    natsDispatcherPool *pool = &lib->messageDispatchers;
 
     natsMutex_Lock(pool->lock);
 
@@ -169,7 +168,7 @@ nats_assignSubToDispatch(natsSubscription *sub, bool forReplies)
         pool->useNext = (pool->useNext + 1) % pool->cap;
     }
     if ((s == NATS_OK) && (d->thread == NULL))
-        s = _startDispatcher(d, threadf);
+        s = _startDispatcher(d, nats_deliverMsgsPoolf);
 
     // Assign it to the sub.
     if (s == NATS_OK)

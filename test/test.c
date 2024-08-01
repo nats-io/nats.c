@@ -72,9 +72,8 @@ testInfo allTests[] =
 };
 #undef _TEST_LIST
 
-
 static int  tests  = 0;
-bool failed = false;
+bool        failed = false;
 
 bool keepServerOutput    = false;
 static bool valgrind            = false;
@@ -87,7 +86,7 @@ static const char *natsStreamingServerExe = "nats-streaming-server";
 natsMutex *slMu  = NULL;
 natsHash  *slMap = NULL;
 
-#define test(s)         { printf("#%02d ", ++tests);printf("%s\n", (s)); fflush(stdout); }
+#define test(s)         { printf("#%02d ", ++tests); printf("%s\n", (s)); fflush(stdout); }
 #define testf(s, ...)   { printf("#%02d ", ++tests); printf((s "\n"), __VA_ARGS__); fflush(stdout); }
 
 #ifdef _WIN32
@@ -11656,23 +11655,14 @@ void test_DoubleUnsubscribe(void)
 
 void test_SubRemovedWhileProcessingMsg(void)
 {
-    natsStatus          s;
-    natsConnection      *nc       = NULL;
-    natsOptions         *opts     = NULL;
-    natsSubscription    *sub      = NULL;
-    natsPid             serverPid = NATS_INVALID_PID;
-    struct threadArg arg;
+    natsStatus s;
+    natsConnection *nc = NULL;
+    natsOptions *opts = NULL;
+    natsSubscription *sub = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
 
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
-
-    s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
-
-    arg.status = NATS_OK;
-    arg.control = 12;
-    arg.N = 1;
 
     test("Connect and create sub: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
@@ -11710,49 +11700,28 @@ void test_SubRemovedWhileProcessingMsg(void)
 
     test("Connect and create sub: ");
     s = natsConnection_Connect(&nc, opts);
-    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, NULL));
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _dummyMsgHandler, NULL));
     testCond(s == NATS_OK);
 
-    natsMutex_Lock(sub->dispatcher->mu);
-    natsSub_Lock(sub);
+    nats_lockSubAndDispatcher(sub);
     test("Send message: ");
     s = natsConnection_PublishString(nc, "foo", "hello");
     testCond(s == NATS_OK);
 
-    test("Make sure the message is not enqueued yet: ");
-    testCond(sub->ownDispatcher.queue.msgs == 0);
-
     test("Close sub: ");
-    natsSub_Unlock(sub);
+    nats_unlockSubAndDispatcher(sub);
     natsSub_close(sub, false);
     testCond(s == NATS_OK);
 
-    test("The message is enqueued: ");
-    natsSub_Lock(sub);
-    testCond(sub->ownDispatcher.queue.msgs == 1);
-    natsSub_Unlock(sub);
-
-    test("Unlock the dispatcher to see what it does: ");
-    natsMutex_Unlock(sub->dispatcher->mu);
-    testCond(s == NATS_OK);
-
-    test("Check message is not given to callback, but is gone quickly: ");
-    natsMutex_Lock(arg.m);
-    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
-        s = natsCondition_TimedWait(arg.c, arg.m, 10);
-
-    natsSub_Lock(sub);
-    testCond((s == NATS_TIMEOUT) &&
-             (arg.msgReceived == false) &&
-             (sub->ownDispatcher.queue.msgs == 0));
-    natsMutex_Unlock(arg.m);
-    natsSub_Unlock(sub);
+    test("Check msg not given: ");
+    nats_lockSubAndDispatcher(sub);
+    testCond(sub->ownDispatcher.queue.msgs == 0);
+    nats_unlockSubAndDispatcher(sub);
 
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
 
-    _destroyDefaultThreadArgs(&arg);
     _stopServer(serverPid);
 }
 
@@ -27517,9 +27486,9 @@ void test_JetStreamSubscribeIdleHearbeat(void)
 
     test("Check HB received: ");
     nats_Sleep(300);
-    natsSub_Lock(sub);
+    nats_lockSubAndDispatcher(sub);
     s = (sub->jsi->mismatch.dseq == 1 ? NATS_OK : NATS_ERR);
-    natsSub_Unlock(sub);
+    nats_unlockSubAndDispatcher(sub);
     testCond(s == NATS_OK);
 
     test("Check HB is not given to app: ");
@@ -27559,10 +27528,10 @@ void test_JetStreamSubscribeIdleHearbeat(void)
     // server state.
 #define PUBLISH_FAKE_JS_MSG_WITH_SEQ(_reply, _msg)                         \
     {                                                                      \
-        natsSub_Lock(sub);                                                 \
+        nats_lockSubAndDispatcher(sub);                                    \
         inbox = sub->subject;                                              \
         sub->jsi->ackNone = true;                                          \
-        natsSub_Unlock(sub);                                               \
+        nats_unlockSubAndDispatcher(sub);                                  \
                                                                            \
         natsConn_setFilterWithClosure(nc, _setMsgReply, (void *)(_reply)); \
         s = natsConnection_PublishString(nc, inbox, (_msg));               \
@@ -27610,9 +27579,9 @@ void test_JetStreamSubscribeIdleHearbeat(void)
     // Send real message so that all clears up
     s = js_Publish(NULL, js, "foo", "msg3", 4, NULL, &jerr);
     nats_Sleep(300);
-    natsSub_Lock(sub);
+    nats_lockSubAndDispatcher(sub);
     s = (sub->jsi->ssmn == false ? NATS_OK : NATS_ERR);
-    natsSub_Unlock(sub);
+    nats_unlockSubAndDispatcher(sub);
     testCond(s == NATS_OK);
 
     test("Skip again: ");
@@ -27714,9 +27683,9 @@ void test_JetStreamSubscribeIdleHearbeat(void)
     // Send real message so that all clears up
     s = js_Publish(NULL, js, "foo", "msg4", 4, NULL, &jerr);
     nats_Sleep(300);
-    natsSub_Lock(sub);
+    nats_lockSubAndDispatcher(sub);
     s = (sub->jsi->ssmn == false && sub->jsi->sm == false ? NATS_OK : NATS_ERR);
-    natsSub_Unlock(sub);
+    nats_unlockSubAndDispatcher(sub);
     testCond(s == NATS_OK);
 
     test("Skip again: ");

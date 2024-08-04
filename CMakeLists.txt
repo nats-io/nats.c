@@ -7,6 +7,9 @@ include(FindPackageHandleStandardArgs)
 # Uncomment to have the build process verbose
 # set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 # Set output directories for libraries and executables.
 # This is important for Windows builds to have the DLLs in the same directory as the executables.
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -202,6 +205,14 @@ elseif(WIN32)
   set(NATS_EXTRA_LIB "ws2_32")
   set(NATS_OS "_WIN32")
   set(NATS_PLATFORM_INCLUDE "win")
+
+  # Warning control.
+  add_compile_options(/W4) # Set warning level to maximum, then disable:
+  add_compile_options(/wd4100) # unreferenced formal parameter
+  add_compile_options(/wd4200) # nonstandard extension used: zero-sized array in struct/union
+  add_compile_options(/wd4130) # logical operation on address of string constant
+  add_compile_options(/wd4127) # conditional expression is constant
+
   if(sodium_USE_STATIC_LIBS)
     add_definitions(
       -DSODIUM_STATIC

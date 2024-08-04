@@ -1,0 +1,4 @@
+_test(BenchSubscribeAsync_Large)
+_test(BenchSubscribeAsync_Small)
+_test(BenchSubscribeAsync_Inject)
+_test(BenchSubscribeAsync_InjectSlow)

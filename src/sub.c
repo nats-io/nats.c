@@ -360,14 +360,14 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
 
     natsConn_retain(nc);
 
-    sub->refs = 1;
-    sub->conn = nc;
-    sub->timeout = timeout;
-    sub->msgCb = cb;
-    sub->msgCbClosure = cbClosure;
-    sub->msgsLimit = nc->opts->maxPendingMsgs;
-    sub->bytesLimit = nc->opts->maxPendingBytes == -1 ? nc->opts->maxPendingMsgs * 1024 : nc->opts->maxPendingBytes;
-    sub->jsi = jsi;
+    sub->refs           = 1;
+    sub->conn           = nc;
+    sub->timeout        = timeout;
+    sub->msgCb          = cb;
+    sub->msgCbClosure   = cbClosure;
+    sub->msgsLimit      = nc->opts->maxPendingMsgs;
+    sub->bytesLimit     = nc->opts->maxPendingBytes == -1 ? nc->opts->maxPendingMsgs * 1024 : (int)nc->opts->maxPendingBytes;;
+    sub->jsi            = jsi;
 
     sub->subject = NATS_STRDUP(subj);
     if (sub->subject == NULL)

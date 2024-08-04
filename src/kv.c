@@ -1065,7 +1065,7 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOpti
 natsStatus
 kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int numKeys, kvWatchOptions *opts)
 {
-    natsStatus      s;
+    natsStatus      s = NATS_OK;
     kvWatcher       *w = NULL;
     jsSubOptions    so;
     char *singleSubject[1];

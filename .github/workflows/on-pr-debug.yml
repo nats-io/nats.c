@@ -1,4 +1,4 @@
-name: "Debug"
+name: "PR"
 on:
   pull_request:
 
@@ -29,7 +29,7 @@ jobs:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   coverage-pooled:
-    name: "Coverage"
+    name: "Coverage (pooled delivery)"
     uses: ./.github/workflows/build-test.yml
     with:
       coverage: ON
@@ -74,6 +74,14 @@ jobs:
       server_version: main
       lib_write_deadline: ON
 
+  bench:
+    name: "Benchmark"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      server_version: main
+      benchmark: ON
+      type: Release
+
   Windows:
     name: "Windows"
     runs-on: windows-latest
@@ -92,10 +100,38 @@ jobs:
         env:
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
         run: |
-          cmake -B build -S . -DCMAKE_C_FLAGS=/W4 -DNATS_BUILD_STREAMING=OFF
-          cmake --build build --config Debug
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DNATS_BUILD_STREAMING=OFF
+          cmake --build build
 
       - name: Test
+        shell: bash
         run: |
           cd build
-          ./bin/Debug/testsuite
+          # Download latest nats-server
+          rel="latest" # TODO: parameterize
+          if [ "$rel" = "latest" ]; then
+            rel=$(curl -s https://api.github.com/repos/nats-io/nats-server/releases/latest | jq -r '.tag_name')
+          fi
+          if [ "$rel" != "${rel#v}" ] && wget https://github.com/nats-io/nats-server/releases/download/$rel/nats-server-$rel-windows-amd64.tar.gz; then
+            tar -xzf nats-server-$rel-linux-amd64.tar.gz
+            cp nats-server-$rel-windows-amd64/nats-server.exe ../deps/nats-server/nats-server.exe
+          else
+            for c in 1 2 3 4 5
+            do
+              echo "Attempt $c to download binary for main"
+              rm -f ./nats-server
+              curl -sf "https://binaries.nats.dev/nats-io/nats-server/v2@$rel" | PREFIX=. sh
+              # We are sometimes getting nats-server of size 0. Make sure we have a
+              # working nats-server by making sure we get a version number.
+              mv ./nats-server ./nats-server.exe
+              v="$(./nats-server.exe -v)"
+              if [ "$v" != "" ]; then
+                break
+              fi
+            done
+            mkdir -p ../deps/nats-server
+            mv ./nats-server.exe ../deps/nats-server/nats-server.exe
+          fi
+          export PATH=../deps/nats-server:$PATH
+          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
+          ctest -L test -C Debug --timeout 60 --output-on-failure --repeat until-pass:3

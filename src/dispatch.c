@@ -32,15 +32,12 @@ void natsSub_enqueueMessage(natsSubscription *sub, natsMsg *msg)
         signal = true;
         msg->next = NULL;
         q->head = msg;
-        if (q->tail == NULL)
-            q->tail = msg;
     }
     else
     {
         q->tail->next = msg;
-        q->tail = msg;
     }
-
+    q->tail = msg;
     q->msgs++;
     q->bytes += natsMsg_dataAndHdrLen(msg);
 

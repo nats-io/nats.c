@@ -81,12 +81,12 @@ _initOwnDispatcher(natsSubscription *sub)
     natsStatus s = NATS_OK;
 
     if (sub->ownDispatcher.dedicatedTo != NULL)
-        return NATS_ILLEGAL_STATE; // already started
+        return nats_setDefaultError(NATS_ILLEGAL_STATE);
 
     sub->ownDispatcher.dedicatedTo = sub;
     sub->ownDispatcher.mu = sub->mu;
     s = natsCondition_Create(&sub->ownDispatcher.cond);
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static inline void _cleanupOwnDispatcher(natsSubscription *sub)
@@ -330,11 +330,11 @@ _runOwnDispatcher(natsSubscription *sub, bool forReplies)
 {
     natsStatus s = NATS_OK;
     if (sub->ownDispatcher.thread != NULL)
-        return NATS_ILLEGAL_STATE; // already running
+        return nats_setDefaultError(NATS_ILLEGAL_STATE); // already running
 
     sub->dispatcher = &sub->ownDispatcher;
     s = natsThread_Create(&sub->ownDispatcher.thread, natsSub_deliverMsgs, (void *) sub);
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 bool natsSub_setMax(natsSubscription *sub, uint64_t max)

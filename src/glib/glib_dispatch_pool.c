@@ -53,7 +53,7 @@ _startDispatcher(natsDispatcher *d, void (*threadf)(void *))
         _destroyDispatcher(d);
         natsLib_Release();
     }
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static natsStatus
@@ -82,7 +82,7 @@ _growPool(natsDispatcherPool *pool, int cap)
             pool->cap = cap;
         }
     }
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void nats_freeDispatcherPool(natsDispatcherPool *pool)
@@ -107,7 +107,7 @@ nats_initDispatcherPool(natsDispatcherPool *pool, int cap)
 
     if (s != NATS_OK)
         nats_freeDispatcherPool(pool);
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void nats_signalDispatcherPoolToShutdown(natsDispatcherPool *pool)
@@ -144,7 +144,7 @@ natsStatus nats_setMessageDispatcherPoolCap(int max)
     natsStatus s = _growPool(&lib->messageDispatchers, max);
     natsMutex_Unlock(lib->messageDispatchers.lock);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 // no lock on sub->mu needed because we are called during subscription creation.

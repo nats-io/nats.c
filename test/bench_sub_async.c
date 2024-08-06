@@ -414,7 +414,6 @@ static natsStatus _inject(natsConnection *nc, const char *subject, ENV *env)
 
             s = natsMsg_Create(&m, subject, NULL, buf, (int)strlen(buf));
             natsSubscription *sub = env->subs[n].sub;
-            m->sub = sub;
             nats_lockSubAndDispatcher(sub);
             IFOK(s, natsSub_enqueueUserMessage(sub, m));
             nats_unlockSubAndDispatcher(sub);

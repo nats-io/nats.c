@@ -2734,9 +2734,6 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
     if (!ctrlMsg)
     {
-        // Do this before we attempt to enqueue the message, even if it were to fail.
-        msg->sub = sub;
-
         s = natsSub_enqueueUserMessage(sub, msg);
         if (s == NATS_OK)
         {

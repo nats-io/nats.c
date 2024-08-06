@@ -839,7 +839,6 @@ _timeoutPubAsync(natsTimer *t, void *closure)
         if (natsMsg_Create(&m, pm->subject, NULL, NULL, 0) != NATS_OK)
             break;
 
-        m->sub = js->rsub;
         natsMsg_setTimeout(m);
 
         // Best attempt, ignore NATS_SLOW_CONSUMER errors which may be returned

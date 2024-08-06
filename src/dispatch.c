@@ -56,6 +56,8 @@ natsStatus natsSub_enqueueUserMessage(natsSubscription *sub, natsMsg *msg)
     int newMsgs = statsQ->msgs + 1;
     int newBytes = statsQ->bytes + natsMsg_dataAndHdrLen(msg);
 
+    msg->sub = sub;
+
     if (((sub->msgsLimit > 0) && (newMsgs > sub->msgsLimit)) ||
         ((sub->bytesLimit > 0) && (newBytes > sub->bytesLimit)))
     {

@@ -21336,8 +21336,11 @@ void test_SSLReconnectWithAuthError(void)
     IFOK(s, natsOptions_SetTimeout(opts, 250));
     IFOK(s, natsOptions_SetMaxReconnect(opts, 1000));
     IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
     IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &args));
     IFOK(s, natsOptions_SetServers(opts, (const char*[2]){"tls://user:pwd@127.0.0.1:4443", "tls://bad:pwd@127.0.0.1:4444"}, 2));
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetIgnoreDiscoveredServers(opts, true));
     if (opts == NULL)
         FAIL("Unable to create reconnect options!");
 

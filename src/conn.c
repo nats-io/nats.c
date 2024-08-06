@@ -1,4 +1,4 @@
-// Copyright 2015-2023 The NATS Authors
+// Copyright 2015-2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -35,6 +35,7 @@
 #include "nkeys.h"
 #include "crypto.h"
 #include "js.h"
+#include "glib/glib.h"
 
 #define DEFAULT_SCRATCH_SIZE    (512)
 #define MAX_INFO_MESSAGE_SIZE   (32768)
@@ -1136,31 +1137,19 @@ _resendSubscriptions(natsConnection *nc)
         sub = subs[i];
 
         adjustedMax = 0;
-        natsSub_Lock(sub);
-        if (sub->libDlvWorker != NULL)
-        {
-            natsMutex_Lock(sub->libDlvWorker->lock);
-        }
+        nats_lockSubAndDispatcher(sub);
         // If JS ordered consumer, trigger a reset. Don't check the error
         // condition here. If there is a failure, it will be retried
         // at the next HB interval.
         if ((sub->jsi != NULL) && (sub->jsi->ordered))
         {
             jsSub_resetOrderedConsumer(sub, sub->jsi->sseq+1);
-            if (sub->libDlvWorker != NULL)
-            {
-                natsMutex_Unlock(sub->libDlvWorker->lock);
-            }
-            natsSub_Unlock(sub);
+            nats_unlockSubAndDispatcher(sub);
             continue;
         }
         if (natsSub_drainStarted(sub))
         {
-            if (sub->libDlvWorker != NULL)
-            {
-                natsMutex_Unlock(sub->libDlvWorker->lock);
-            }
-            natsSub_Unlock(sub);
+            nats_unlockSubAndDispatcher(sub);
             continue;
         }
         if (sub->max > 0)
@@ -1172,11 +1161,7 @@ _resendSubscriptions(natsConnection *nc)
             // messages have reached the max, if so, unsubscribe.
             if (adjustedMax == 0)
             {
-                if (sub->libDlvWorker != NULL)
-                {
-                    natsMutex_Unlock(sub->libDlvWorker->lock);
-                }
-                natsSub_Unlock(sub);
+                nats_unlockSubAndDispatcher(sub);
                 s = natsConn_sendUnsubProto(nc, sub->sid, 0);
                 continue;
             }
@@ -1188,11 +1173,7 @@ _resendSubscriptions(natsConnection *nc)
 
         // Hold the lock up to that point so we are sure not to resend
         // any SUB/UNSUB for a subscription that is in draining mode.
-        if (sub->libDlvWorker != NULL)
-        {
-            natsMutex_Unlock(sub->libDlvWorker->lock);
-        }
-        natsSub_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
     }
 
     NATS_FREE(subs);
@@ -2667,11 +2648,8 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     natsStatus       s    = NATS_OK;
     natsSubscription *sub = NULL;
     natsMsg          *msg = NULL;
-    natsMsgDlvWorker *ldw = NULL;
     bool             sc   = false;
     bool             sm   = false;
-    nats_MsgList     *list = NULL;
-    natsCondition    *cond = NULL;
     // For JetStream cases
     jsSub            *jsi    = NULL;
     bool             ctrlMsg = false;
@@ -2717,32 +2695,15 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     // We need to retain the subscription since as soon as we release the
     // nc->subsMu lock, the subscription could be destroyed and we would
     // reference freed memory.
-    natsSubAndLdw_LockAndRetain(sub);
+    nats_lockRetainSubAndDispatcher(sub);
 
     natsMutex_Unlock(nc->subsMu);
 
     if (sub->closed || sub->drainSkip)
     {
-        natsSubAndLdw_UnlockAndRelease(sub);
+        nats_unlockReleaseSubAndDispatcher(sub);
         natsMsg_Destroy(msg);
         return NATS_OK;
-    }
-
-    // Pick condition variable and list based on if the sub is
-    // part of a global delivery thread pool or not.
-    // Note about `list`: this is used only to link messages, but
-    // sub->msgList needs to be used to update/check number of pending
-    // messages, since in case of delivery thread pool, `list` will have
-    // messages from many different subscriptions.
-    if ((ldw = sub->libDlvWorker) != NULL)
-    {
-        cond = ldw->cond;
-        list = &(ldw->msgList);
-    }
-    else
-    {
-        cond = sub->cond;
-        list = &(sub->msgList);
     }
 
     jsi = sub->jsi;
@@ -2764,7 +2725,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
             s = jsSub_checkOrderedMsg(sub, msg, &replaced);
             if ((s != NATS_OK) || replaced)
             {
-                natsSubAndLdw_UnlockAndRelease(sub);
+                nats_unlockReleaseSubAndDispatcher(sub);
                 natsMsg_Destroy(msg);
                 return s;
             }
@@ -2773,57 +2734,29 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
     if (!ctrlMsg)
     {
-        sub->msgList.msgs++;
-        sub->msgList.bytes += bufLen;
+        // Do this before we attempt to enqueue the message, even if it were to fail.
+        msg->sub = sub;
 
-        if (((sub->msgsLimit > 0) && (sub->msgList.msgs > sub->msgsLimit))
-            || ((sub->bytesLimit > 0) && (sub->msgList.bytes > sub->bytesLimit)))
+        s = natsSub_enqueueUserMessage(sub, msg);
+        if (s == NATS_OK)
         {
-            natsMsg_Destroy(msg);
-
-            sub->dropped++;
-
-            sc = !sub->slowConsumer;
-            sub->slowConsumer = true;
-
-            // Undo stats from above.
-            sub->msgList.msgs--;
-            sub->msgList.bytes -= bufLen;
-        }
-        else
-        {
-            bool signal= false;
-
-            if ((jsi != NULL) && jsi->ackNone)
-                natsMsg_setAcked(msg);
-
-            if (sub->msgList.msgs > sub->msgsMax)
-                sub->msgsMax = sub->msgList.msgs;
-
-            if (sub->msgList.bytes > sub->bytesMax)
-                sub->bytesMax = sub->msgList.bytes;
-
             sub->slowConsumer = false;
-
-            msg->sub = sub;
-
-            if (list->head == NULL)
-            {
-                list->head = msg;
-                signal = true;
-            }
-            else
-                list->tail->next = msg;
-
-            list->tail = msg;
-
-            if (signal)
-                natsCondition_Signal(cond);
 
             // Store the ACK metadata from the message to
             // compare later on with the received heartbeat.
             if (jsi != NULL)
                 s = jsSub_trackSequences(jsi, msg->reply);
+        }
+        else
+        {
+            // Slow consumer is the only reason to fail here. Handle it and
+            // reset the status, so we continue.
+            natsMsg_Destroy(msg);
+            sub->dropped++;
+            sc = !sub->slowConsumer;
+            sub->slowConsumer = true;
+
+            s = NATS_OK;
         }
     }
     else if ((jct == jsCtrlHeartbeat) && (msg->reply == NULL))
@@ -2848,9 +2781,9 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
     // If we are going to post to the error handler, do not release yet.
     if (sc || sm)
-        natsSubAndLdw_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
     else
-        natsSubAndLdw_UnlockAndRelease(sub);
+        nats_unlockReleaseSubAndDispatcher(sub);
 
     if ((s == NATS_OK) && fcReply)
         s = natsConnection_Publish(nc, fcReply, NULL, 0);

@@ -18,6 +18,7 @@
 #include "../asynccb.h"
 #include "../conn.h"
 #include "../sub.h"
+#include "../glib/glib.h"
 
 // Client send connID in ConnectRequest and PubMsg, and server
 // listens and responds to client PINGs. The validity of the

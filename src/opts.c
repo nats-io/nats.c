@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,6 +19,7 @@
 #include "opts.h"
 #include "util.h"
 #include "conn.h"
+#include "glib/glib.h"
 
 natsStatus
 natsOptions_SetURL(natsOptions *opts, const char* url)
@@ -306,7 +307,7 @@ _getSSLCtx(natsOptions *opts)
 {
     natsStatus s;
 
-    s = nats_sslInit();
+    s = nats_initSSL();
     if ((s == NATS_OK) && (opts->sslCtx != NULL))
     {
         bool createNew = false;
@@ -1044,7 +1045,7 @@ natsOptions_UseGlobalMessageDelivery(natsOptions *opts, bool global)
     // Sets if the subscriptions created from the connection will
     // create their own delivery thread or use the one(s) from
     // the library.
-    opts->libMsgDelivery = global;
+    opts->useSharedDispatcher = global;
 
     UNLOCK_OPTS(opts);
 
@@ -1515,7 +1516,8 @@ natsOptions_Create(natsOptions **newOpts)
     if (opts == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    if (natsMutex_Create(&(opts->mu)) != NATS_OK)
+    IFOK(s, natsMutex_Create(&opts->mu));
+    if(s != NATS_OK)
     {
         NATS_FREE(opts);
         return NATS_UPDATE_ERR_STACK(NATS_NO_MEMORY);
@@ -1531,12 +1533,13 @@ natsOptions_Create(natsOptions **newOpts)
     opts->maxPendingMsgs        = NATS_OPTS_DEFAULT_MAX_PENDING_MSGS;
     opts->maxPendingBytes       = -1;
     opts->timeout               = NATS_OPTS_DEFAULT_TIMEOUT;
-    opts->libMsgDelivery        = natsLib_isLibHandlingMsgDeliveryByDefault();
-    opts->writeDeadline         = natsLib_defaultWriteDeadline();
     opts->reconnectBufSize      = NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE;
     opts->reconnectJitter       = NATS_OPTS_DEFAULT_RECONNECT_JITTER;
     opts->reconnectJitterTLS    = NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS;
     opts->asyncErrCb            = natsConn_defaultErrHandler;
+
+    // Override with values from the config (or from environment variables)
+    nats_overrideDefaultOptionsWithConfig(opts);
 
     *newOpts = opts;
 

@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,32 +16,79 @@
 
 #include "natsp.h"
 
-#ifdef DEV_MODE
-// For type safety...
+#define SUB_DRAIN_STARTED ((uint8_t)1)
+#define SUB_DRAIN_COMPLETE ((uint8_t)2)
 
-void natsSub_Lock(natsSubscription *sub);
-void natsSub_Unlock(natsSubscription *sub);
-
-#else
-
-#define natsSub_Lock(s)      natsMutex_Lock((s)->mu)
-#define natsSub_Unlock(s)    natsMutex_Unlock((s)->mu)
-
-#endif // DEV_MODE
-
-#define SUB_DRAIN_STARTED     ((uint8_t) 1)
-#define SUB_DRAIN_COMPLETE    ((uint8_t) 2)
-
-#define natsSub_drainStarted(s)     (((s)->drainState & SUB_DRAIN_STARTED) != 0)
-#define natsSub_drainComplete(s)    (((s)->drainState & SUB_DRAIN_COMPLETE) != 0)
+#define natsSub_drainStarted(s) (((s)->drainState & SUB_DRAIN_STARTED) != 0)
+#define natsSub_drainComplete(s) (((s)->drainState & SUB_DRAIN_COMPLETE) != 0)
 
 extern bool testDrainAutoUnsubRace;
 
-void
-natsSub_retain(natsSubscription *sub);
+// lock/unlock sub
+static inline void natsSub_Lock(natsSubscription *sub)
+{
+    natsMutex_Lock(sub->mu);
+}
 
-void
-natsSub_release(natsSubscription *sub);
+static inline void natsSub_Unlock(natsSubscription *sub)
+{
+    natsMutex_Unlock(sub->mu);
+}
+
+// lock/unlock with retain/release
+static inline void natsSub_lockRetain(natsSubscription *sub)
+{
+    natsSub_Lock(sub);
+
+    sub->refs++;
+}
+void natsSub_unlockRelease(natsSubscription *sub);
+
+
+// retain/release, lock is obtained
+static inline void natsSub_retain(natsSubscription *sub)
+{
+    natsSub_lockRetain(sub);
+    natsSub_Unlock(sub);
+}
+void natsSub_release(natsSubscription *sub);
+
+// lock/unlock sub's dispatcher ONLY
+static inline void natsSub_lockDispatcher(natsSubscription *sub)
+{
+    if (sub->dispatcher != &sub->ownDispatcher)
+        nats_lockDispatcher(sub->dispatcher);
+}
+static inline void natsSub_unlockDispatcher(natsSubscription *sub)
+{
+    if (sub->dispatcher != &sub->ownDispatcher)
+        nats_unlockDispatcher(sub->dispatcher);
+}
+
+// lock/unlock sub and its dispatcher, together
+static inline void nats_lockSubAndDispatcher(natsSubscription *sub)
+{
+    natsSub_Lock(sub);
+    natsSub_lockDispatcher(sub);
+}
+static inline void nats_unlockSubAndDispatcher(natsSubscription *sub)
+{
+    natsSub_unlockDispatcher(sub);
+    natsSub_Unlock(sub);
+}
+
+// lock/unlock sub and its dispatcher, and retain/release the sub
+static inline void nats_lockRetainSubAndDispatcher(natsSubscription *sub)
+{
+    natsSub_lockRetain(sub);
+    natsSub_lockDispatcher(sub);
+}
+static inline void nats_unlockReleaseSubAndDispatcher(natsSubscription *sub)
+{
+    natsSub_unlockDispatcher(sub);
+    natsSub_unlockRelease(sub);
+}
+
 
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
@@ -73,18 +120,8 @@ natsStatus
 natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool pullSubInternal);
 
 void
-natsSubAndLdw_Lock(natsSubscription *sub);
-
-void
-natsSubAndLdw_Unlock(natsSubscription *sub);
-
-void
-natsSubAndLdw_LockAndRetain(natsSubscription *sub);
-
-void
-natsSubAndLdw_UnlockAndRelease(natsSubscription *sub);
-
-void
 natsSub_close(natsSubscription *sub, bool connectionClosed);
+
+natsStatus nats_createControlMessages(natsSubscription *sub);
 
 #endif /* SUB_H_ */

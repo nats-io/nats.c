@@ -1043,7 +1043,7 @@ typedef struct jsConsumerNamesList
  */
 typedef struct jsConsumerPauseResponse
 {
-        bool            Paused;        
+        bool            Paused;
         int64_t         PauseUntil;     ///< UTC time expressed as number of nanoseconds since epoch.
         int64_t         PauseRemaining; ///< Remaining time in nanoseconds.
 } jsConsumerPauseResponse;
@@ -2326,6 +2326,23 @@ natsOptions_SetName(natsOptions *opts, const char *name);
  */
 NATS_EXTERN natsStatus
 natsOptions_SetSecure(natsOptions *opts, bool secure);
+
+/** \brief Performs TLS handshake first.
+ *
+ * If the server is not configured to require the client to perform
+ * the TLS handshake first, the server sends an INFO protocol first.
+ * When receiving it, the client and server are then initiate the
+ * TLS handshake.
+ *
+ * If the server is configured to require the client to perform
+ * the TLS handshake first, the client will fail to connect if
+ * not setting this option. Conversely, if the client is configured
+ * with this option but the server is not, the connection will fail.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ */
+NATS_EXTERN natsStatus
+natsOptions_TLSHandshakeFirst(natsOptions *opts);
 
 /** \brief Loads the trusted CA certificates from a file.
  *
@@ -4039,7 +4056,7 @@ natsConnection_Connect(natsConnection **nc, natsOptions *options);
  * This means that all subscriptions and consumers should be resubscribed and
  * their work resumed after successful reconnect where all reconnect options are
  * respected.
- * 
+ *
  * @param nc the pointer to the #natsConnection object.
  */
 natsStatus

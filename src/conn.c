@@ -786,7 +786,12 @@ _checkForSecure(natsConnection *nc)
     }
 
     if ((s == NATS_OK) && nc->opts->secure)
-        s = _makeTLSConn(nc);
+    {
+        // If TLS handshake first is true, we have already done
+        // the handshake, so do it only if false.
+        if (!nc->opts->tlsHandshakeFirst)
+            s = _makeTLSConn(nc);
+    }
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -1968,8 +1973,14 @@ _processConnInit(natsConnection *nc)
 
     nc->status = NATS_CONN_STATUS_CONNECTING;
 
+    // If we need to have a TLS connection and want the TLS handshake to occur
+    // first, do it now.
+    if (nc->opts->secure && nc->opts->tlsHandshakeFirst)
+        s = _makeTLSConn(nc);
+
     // Process the INFO protocol that we should be receiving
-    s = _processExpectedInfo(nc);
+    if (s == NATS_OK)
+        s = _processExpectedInfo(nc);
 
     // Send the CONNECT and PING protocol, and wait for the PONG.
     if (s == NATS_OK)
@@ -3279,6 +3290,11 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     nc->refs        = 1;
     nc->sockCtx.fd  = NATS_SOCK_INVALID;
     nc->opts        = options;
+
+    // If the TLSHandshakeFirst option is specified, make sure that
+    // the Secure boolean is true.
+    if (nc->opts->tlsHandshakeFirst)
+        nc->opts->secure = true;
 
     nc->errStr[0] = '\0';
 

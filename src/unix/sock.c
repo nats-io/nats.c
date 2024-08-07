@@ -16,7 +16,7 @@
 #include "../comsock.h"
 
 void
-natsSys_Init(void)
+nats_initForOS(void)
 {
     // Would do anything that needs to be initialized when
     // the library loads, specific to unix.

@@ -413,80 +413,13 @@ static natsStatus _inject(natsConnection *nc, const char *subject, ENV *env)
             snprintf(buf, sizeof(buf), "%d", i);
 
             s = natsMsg_Create(&m, subject, NULL, buf, (int)strlen(buf));
-            IFOK(s, _enqueueToSub(env->subs[n].sub, m));
+            natsSubscription *sub = env->subs[n].sub;
+            nats_lockSubAndDispatcher(sub);
+            IFOK(s, natsSub_enqueueUserMessage(sub, m));
+            nats_unlockSubAndDispatcher(sub);
         }
     }
 
-    return s;
-}
-
-static natsStatus _enqueueToSub(natsSubscription *sub, natsMsg *m)
-{
-    natsStatus s = NATS_OK;
-    natsCondition *cond = NULL;
-    nats_MsgList *list = NULL;
-    natsMsgDlvWorker *ldw = NULL;
-
-    // Pick condition variable and list based on if the sub is
-    // part of a global delivery thread pool or not.
-    // Note about `list`: this is used only to link messages, but
-    // sub->msgList needs to be used to update/check number of pending
-    // messages, since in case of delivery thread pool, `list` will have
-    // messages from many different subscriptions.
-    if ((ldw = sub->libDlvWorker) != NULL)
-    {
-        cond = ldw->cond;
-        list = &(ldw->msgList);
-    }
-    else
-    {
-        cond = sub->cond;
-        list = &(sub->msgList);
-    }
-
-    natsSubAndLdw_LockAndRetain(sub);
-
-    sub->msgList.msgs++;
-    sub->msgList.bytes += natsMsg_GetDataLength(m);
-    if (((sub->msgsLimit > 0) && (sub->msgList.msgs > sub->msgsLimit)) || ((sub->bytesLimit > 0) && (sub->msgList.bytes > sub->bytesLimit)))
-    {
-        natsMsg_Destroy(m);
-
-        sub->dropped++;
-        sub->slowConsumer = true;
-
-        // Undo stats from above.
-        sub->msgList.msgs--;
-        sub->msgList.bytes -= natsMsg_GetDataLength(m);
-    }
-    else
-    {
-        bool signal = false;
-
-        if (sub->msgList.msgs > sub->msgsMax)
-            sub->msgsMax = sub->msgList.msgs;
-
-        if (sub->msgList.bytes > sub->bytesMax)
-            sub->bytesMax = sub->msgList.bytes;
-
-        sub->slowConsumer = false;
-
-        m->sub = sub;
-        if (list->head == NULL)
-        {
-            list->head = m;
-            signal = true;
-        }
-        else
-            list->tail->next = m;
-
-        list->tail = m;
-
-        if (signal)
-            natsCondition_Signal(cond);
-    }
-
-    natsSubAndLdw_UnlockAndRelease(sub);
     return s;
 }
 

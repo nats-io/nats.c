@@ -3,6 +3,7 @@
 #------------------------
 include_directories(include)
 include_directories(${NATS_PLATFORM_INCLUDE})
+include_directories(glib)
 
 if(NATS_BUILD_WITH_TLS)
   include_directories(${OPENSSL_INCLUDE_DIR})
@@ -24,6 +25,7 @@ endif(NATS_BUILD_USE_SODIUM)
 #---------------------------------------
 file(GLOB SOURCES "*.c")
 file(GLOB PS_SOURCES "${NATS_PLATFORM_INCLUDE}/*.c")
+file(GLOB GLIB_SOURCES "glib/*.c")
 
 # Add stan directory if building with Streaming support
 if(NATS_BUILD_STREAMING)
@@ -34,7 +36,7 @@ endif(NATS_BUILD_STREAMING)
 # Create the shared and static libraries
 # --------------------------------------
 if(NATS_BUILD_LIB_SHARED)
-  add_library(nats SHARED ${SOURCES} ${PS_SOURCES} ${S_SOURCES})
+  add_library(nats SHARED ${SOURCES} ${GLIB_SOURCES} ${PS_SOURCES} ${S_SOURCES})
   target_link_libraries(nats ${NATS_OPENSSL_LIBS} ${NATS_EXTRA_LIB} ${NATS_PROTOBUF_LIBRARIES} ${NATS_SODIUM_LIBRARIES})
   set_target_properties(nats PROPERTIES
     VERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR}.${NATS_VERSION_PATCH}
@@ -42,7 +44,7 @@ if(NATS_BUILD_LIB_SHARED)
 endif(NATS_BUILD_LIB_SHARED)
 
 if(NATS_BUILD_LIB_STATIC)
-  add_library(nats_static STATIC ${SOURCES} ${PS_SOURCES} ${S_SOURCES})
+  add_library(nats_static STATIC ${SOURCES} ${GLIB_SOURCES} ${PS_SOURCES} ${S_SOURCES})
   target_link_libraries(nats_static ${NATS_OPENSSL_LIBS} ${NATS_PROTOBUF_LIBRARIES} ${NATS_SODIUM_LIBRARIES})
   set_target_properties(nats_static PROPERTIES
     VERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR}.${NATS_VERSION_PATCH}

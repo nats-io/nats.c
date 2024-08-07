@@ -2614,7 +2614,8 @@ void test_natsOptions(void)
              && (opts->writeDeadline == natsLib_defaultWriteDeadline())
              && !opts->noEcho
              && !opts->retryOnFailedConnect
-             && !opts->ignoreDiscoveredServers)
+             && !opts->ignoreDiscoveredServers
+             && !opts->tlsHandshakeFirst);
 
     test("Add URL: ");
     s = natsOptions_SetURL(opts, "test");
@@ -2762,6 +2763,14 @@ void test_natsOptions(void)
     testCond((s == NATS_OK) && (opts->secure == false));
 #else
     testCond((s == NATS_ILLEGAL_STATE) && (opts->secure == false));
+#endif
+
+    test("Set TLSHandshakeFirst: ");
+    s = natsOptions_TLSHandshakeFirst(opts);
+#if defined(NATS_HAS_TLS)
+    testCond((s == NATS_OK) && (opts->tlsHandshakeFirst == true) && (opts->secure == true));
+#else
+    testCond((s == NATS_ILLEGAL_STATE) && (opts->secure == false) && (opts->tlsHandshakeFirst == false));
 #endif
 
     test("Set Pedantic: ");
@@ -21197,6 +21206,62 @@ void test_SSLConnectVerboseOption(void)
 #endif
 }
 
+void test_SSLHandshakeFirst(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsfirst.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Set options: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4443"));
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
+    testCond(s == NATS_OK);
+
+    test("Check that connect fails if option not set: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s != NATS_OK);
+    nats_clearLastError();
+
+    test("Set TLSHandshakeFirst option error: ");
+    s = natsOptions_TLSHandshakeFirst(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Set TLSHandshakeFirst option: ");
+    s = natsOptions_TLSHandshakeFirst(opts);
+    testCond(s == NATS_OK);
+
+    test("Check that connect succeeds: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    _stopServer(serverPid);
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check that connect fails if option is set but not in the server: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s != NATS_OK);
+    nats_clearLastError();
+
+    natsOptions_Destroy(opts);
+
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
 #if defined(NATS_HAS_TLS)
 static natsStatus
 _elDummyAttach(void **userData, void *loop, natsConnection *nc, natsSock socket) { return NATS_OK; }
@@ -21271,8 +21336,11 @@ void test_SSLReconnectWithAuthError(void)
     IFOK(s, natsOptions_SetTimeout(opts, 250));
     IFOK(s, natsOptions_SetMaxReconnect(opts, 1000));
     IFOK(s, natsOptions_SetReconnectWait(opts, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
     IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &args));
     IFOK(s, natsOptions_SetServers(opts, (const char*[2]){"tls://user:pwd@127.0.0.1:4443", "tls://bad:pwd@127.0.0.1:4444"}, 2));
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetIgnoreDiscoveredServers(opts, true));
     if (opts == NULL)
         FAIL("Unable to create reconnect options!");
 

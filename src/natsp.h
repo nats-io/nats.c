@@ -224,6 +224,7 @@ struct __natsOptions
     bool                    pedantic;
     bool                    allowReconnect;
     bool                    secure;
+    bool                    tlsHandshakeFirst;
     int                     ioBufSize;
     int                     maxReconnect;
     int64_t                 reconnectWait;

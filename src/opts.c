@@ -364,6 +364,21 @@ natsOptions_SetSecure(natsOptions *opts, bool secure)
 }
 
 natsStatus
+natsOptions_TLSHandshakeFirst(natsOptions *opts)
+{
+    natsStatus s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->tlsHandshakeFirst = true;
+    opts->secure            = true;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName)
 {
     natsStatus s = NATS_OK;
@@ -685,6 +700,12 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
 
 natsStatus
 natsOptions_SetSecure(natsOptions *opts, bool secure)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
+natsOptions_TLSHandshakeFirst(natsOptions *opts)
 {
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }

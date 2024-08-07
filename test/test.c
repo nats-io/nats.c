@@ -7847,7 +7847,7 @@ void test_AssignSubToDispatch(void)
         {
             testf("%d subs over %d threads: Verify that the dispatchers have been assigned: ", tc->numSubs, tc->expectedDispatchers);
             for (i = 0; (s == NATS_OK) && (i < tc->numSubs); i++)
-            {   
+            {
                 natsSub_Lock(subs[i]);
                 if (subs[i]->dispatcher != &pool->dispatchers[i % tc->expectedDispatchers])
                     s = NATS_ERR;
@@ -21288,6 +21288,16 @@ void test_SSLHandshakeFirst(void)
     natsConnection      *nc       = NULL;
     natsOptions         *opts     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
+
+    if (!serverVersionAtLeast(2, 10, 0))
+    {
+        char txt[200];
+
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.10.0, got %s: ", serverVersion);
+        test(txt);
+        testCond(true);
+        return;
+    }
 
     serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsfirst.conf", true);
     CHECK_SERVER_STARTED(serverPid);

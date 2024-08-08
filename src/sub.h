@@ -24,6 +24,7 @@
 
 extern bool testDrainAutoUnsubRace;
 
+// lock/unlock sub
 static inline void natsSub_Lock(natsSubscription *sub)
 {
     natsMutex_Lock(sub->mu);
@@ -34,21 +35,60 @@ static inline void natsSub_Unlock(natsSubscription *sub)
     natsMutex_Unlock(sub->mu);
 }
 
+// lock/unlock with retain/release
 static inline void natsSub_lockRetain(natsSubscription *sub)
 {
     natsSub_Lock(sub);
 
     sub->refs++;
 }
+void natsSub_unlockRelease(natsSubscription *sub);
 
+
+// retain/release, lock is obtained
 static inline void natsSub_retain(natsSubscription *sub)
 {
     natsSub_lockRetain(sub);
     natsSub_Unlock(sub);
 }
-
 void natsSub_release(natsSubscription *sub);
-void natsSub_unlockRelease(natsSubscription *sub);
+
+// lock/unlock sub's dispatcher ONLY
+static inline void natsSub_lockDispatcher(natsSubscription *sub)
+{
+    if (sub->dispatcher != &sub->ownDispatcher)
+        nats_lockDispatcher(sub->dispatcher);
+}
+static inline void natsSub_unlockDispatcher(natsSubscription *sub)
+{
+    if (sub->dispatcher != &sub->ownDispatcher)
+        nats_unlockDispatcher(sub->dispatcher);
+}
+
+// lock/unlock sub and its dispatcher, together
+static inline void nats_lockSubAndDispatcher(natsSubscription *sub)
+{
+    natsSub_Lock(sub);
+    natsSub_lockDispatcher(sub);
+}
+static inline void nats_unlockSubAndDispatcher(natsSubscription *sub)
+{
+    natsSub_unlockDispatcher(sub);
+    natsSub_Unlock(sub);
+}
+
+// lock/unlock sub and its dispatcher, and retain/release the sub
+static inline void nats_lockRetainSubAndDispatcher(natsSubscription *sub)
+{
+    natsSub_lockRetain(sub);
+    natsSub_lockDispatcher(sub);
+}
+static inline void nats_unlockReleaseSubAndDispatcher(natsSubscription *sub)
+{
+    natsSub_unlockDispatcher(sub);
+    natsSub_unlockRelease(sub);
+}
+
 
 natsStatus
 natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
@@ -81,19 +121,6 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
 
 void
 natsSub_close(natsSubscription *sub, bool connectionClosed);
-
-natsStatus
-natsSub_enqueueMsgImpl(natsSubscription *sub, natsMsg *msg, bool ctrl);
-
-static natsStatus natsSub_enqueueMsg(natsSubscription *sub, natsMsg *msg)
-{
-    return natsSub_enqueueMsgImpl(sub, msg, false);
-}
-
-static natsStatus natsSub_enqueueCtrlMsg(natsSubscription *sub, natsMsg *msg)
-{
-    return natsSub_enqueueMsgImpl(sub, msg, true);
-}
 
 natsStatus nats_createControlMessages(natsSubscription *sub);
 

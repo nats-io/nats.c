@@ -48,7 +48,11 @@ on:
         default: "OFF"
       verbose_make_output:
         type: string
-        default: "ON"
+        default: "OFF"
+      benchmark:
+        type: string
+        default: "OFF"
+
     secrets:
       CODECOV_TOKEN:
         description: "Codecov repo token"
@@ -129,15 +133,6 @@ jobs:
           cmake .. ${{ steps.cmake-flags.outputs.flags }}
           make rebuild_cache && make
 
-      - name: "Rebuild the list of tests to match the compile flags"
-        working-directory: ./build
-        run: |
-          ./bin/testsuite
-          if [[ $(diff list.txt ../test/list.txt; echo $?) != 0 ]]; then
-            mv list.txt ../test/list.txt
-            make rebuild_cache
-          fi
-
       # testing
 
       - name: "Download nats-server version ${{ inputs.server_version }}"
@@ -168,12 +163,13 @@ jobs:
           fi
 
       - name: "Test"
+        if: inputs.benchmark == 'OFF'
         working-directory: ./build
         run: |
           export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
           flags=""
-          ctest --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }}
+          ctest -L 'test' --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }}
 
       - name: Upload coverage reports to Codecov
         # PRs from external contributors fail: https://github.com/codecov/feedback/issues/301
@@ -184,3 +180,52 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
           # verbose: true
+
+      - name: "Cache for base benchmark for ${{ github.event.pull_request.base.ref }}"
+        id: cache-base-bench
+        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref
+        uses: actions/cache@v4
+        with:
+          key: bench-${{ github.event.pull_request.base.ref }}
+          path: ./build/bench-${{ github.event.pull_request.base.ref }}.log
+
+      - name: "Benchmark"
+        if: inputs.benchmark == 'ON'
+        working-directory: ./build
+        run: |
+          export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
+          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
+          flags=""
+          ctest -L 'bench' --timeout 600 -VV | tee bench.log
+
+      - name: "Checkout nats.c for ${{ github.event.pull_request.base.ref }}"
+        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref && steps.cache-base-bench.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          clean: false
+
+      - name: "Benchmark ${{ github.event.pull_request.base.ref }} for comparison"
+        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref && steps.cache-base-bench.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p build
+          cd build
+          rm -rf CMakeFiles CMakeCache.txt
+          cmake .. ${{ steps.cmake-flags.outputs.flags }}
+          make rebuild_cache && make
+          export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
+          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
+          flags=""
+          ctest -L 'bench' --timeout 600 -VV | tee bench-${{ github.event.pull_request.base.ref }}.log
+
+      - name: "Checkout HEAD ${{ github.event.pull_request.head.ref }}"
+        if: inputs.benchmark == 'ON' && github.event.pull_request.head.ref && steps.cache-base-bench.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: "Compare benchmark to ${{ github.event.pull_request.base.ref }}"
+        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref
+        run: |
+          cd build
+          go run ../test/diffstat_sub_async.go bench-${{ github.event.pull_request.base.ref }}.log bench.log

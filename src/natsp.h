@@ -225,6 +225,7 @@ struct __natsOptions
     bool                    pedantic;
     bool                    allowReconnect;
     bool                    secure;
+    bool                    tlsHandshakeFirst;
     int                     ioBufSize;
     int                     maxReconnect;
     int64_t                 reconnectWait;
@@ -529,7 +530,7 @@ typedef struct __natsSubscriptionControlMessages
     {
         natsMsg *expired;
         natsMsg *missedHeartbeat;
-    } fetch;
+    } batch;
 } natsSubscriptionControlMessages;
 
 struct __natsSubscription
@@ -541,20 +542,13 @@ struct __natsSubscription
     // This is non-zero when auto-unsubscribe is used.
     uint64_t                    max;
 
-    // This is updated in the delivery thread (or NextMsg) and indicates how
-    // many message have been presented to the callback (or returned from
-    // NextMsg). Together with the messages pending dispatch in
-    // dispatch->queue, this is also used to determine if we have reached the
-    // max number of messages.
-    uint64_t                    delivered;
-
     // We always have a dispatcher to keep track of things, even if the
     // subscription is sync. The dispatcher is set up at the subscription
     // creation time, and may point to a dedicated thread using sub's own
     // dispatchQueue, or a shared worker using its own dispatch queue, which
     // dispatcher->queue then points to.
-    natsDispatcher              *dispatcher; 
-    natsDispatcher              ownDispatcher;
+    natsDispatcher *dispatcher;
+    natsDispatcher ownDispatcher;
 
     // These are a signals to the sub's async dispatcher thread that something
     // happened - draining or closing the subscription, or some sort of a
@@ -562,6 +556,19 @@ struct __natsSubscription
     // async dispatcher.
     natsSubscriptionControlMessages *control;
 
+    // This is updated in the delivery thread (or NextMsg) and indicates how
+    // many message have been presented to the callback (or returned from
+    // NextMsg). Together with the messages pending dispatch in
+    // dispatch->queue, this is also used to determine if we have reached the
+    // max number of messages.
+    uint64_t                    delivered;
+    // True if ownDispatcher.queue.msgs is over pendingMax
+    bool                        slowConsumer;
+    // The subscriber is closed (or closing).
+    bool                        closed;
+
+    // Indicates if this subscription is actively draining.
+    bool                        draining;
     // This holds if draining has started and/or completed.
     uint8_t                     drainState;
     // Thread started to do the flush and wait for drain to complete.
@@ -570,7 +577,13 @@ struct __natsSubscription
     natsStatus                  drainStatus;
     // This is the timeout for the drain operation.
     int64_t                     drainTimeout;
+    // This is set if the flush failed and will prevent the connection for pushing further messages.
+    bool                        drainSkip;
     natsCondition               *drainCond;
+
+    // If true, the subscription is closed, but because the connection
+    // was closed, not because of subscription (auto-)unsubscribe.
+    bool                        connClosed;
 
     // Subscriber id. Assigned during the creation, does not change after that.
     int64_t                     sid;
@@ -607,28 +620,6 @@ struct __natsSubscription
 
     // For JetStream
     jsSub                       *jsi;
-
-    // Flags, groupped together to save space.
-
-    // True if msgList.count is over pendingMax
-    unsigned slowConsumer : 1;
-
-    // The subscriber is closed (or closing).
-    unsigned closed : 1;
-
-    // Indicates if this subscription is actively draining.
-    unsigned draining : 1;
-
-    // This is set if the flush failed and will prevent the connection for pushing further messages.
-    unsigned drainSkip : 1;
-
-    // If true, the subscription is closed, but because the connection
-    // was closed, not because of subscription (auto-)unsubscribe.
-    unsigned connClosed : 1;
-
-    unsigned timedOut : 1;
-
-    unsigned timeoutSuspended : 1;
 };
 
 typedef struct __natsPong
@@ -752,7 +743,7 @@ struct __natsConnection
     // New Request style
     char                respId[NATS_MAX_REQ_ID_LEN+1];
     int                 respIdPos;
-    int                 respIdVal;
+    char                respIdVal;
     char                *respSub;   // The wildcard subject
     natsSubscription    *respMux;   // A single response subscription
     natsStrHash         *respMap;   // Request map for the response msg
@@ -934,5 +925,7 @@ static inline void nats_unlockDispatcher(natsDispatcher *d)
     if (d->mu != NULL)
         natsMutex_Unlock(d->mu);
 }
+
+void nats_deliverMsgsPoolf(void *arg);
 
 #endif /* NATSP_H_ */

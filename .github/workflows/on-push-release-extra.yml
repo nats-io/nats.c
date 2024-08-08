@@ -5,7 +5,6 @@ on:
       - main
       - release_*
 
-
 permissions:
   contents: write # required by build-test to comment on coverage but not used here.
 
@@ -67,3 +66,11 @@ jobs:
       type: Debug
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  bench:
+    name: "Benchmark"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      server_version: main
+      benchmark: ON
+      type: Release

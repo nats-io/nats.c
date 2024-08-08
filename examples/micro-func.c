@@ -37,7 +37,7 @@ call_arithmetics(long double *result, natsConnection *nc, const char *subject, l
     natsMsg *response = NULL;
     microArgs *args = NULL;
     char buf[1024];
-    int len;
+    int len = 0;
 
     err = micro_NewClient(&client, nc, NULL);
     if (err == NULL)
@@ -132,7 +132,7 @@ handle_function_op(microRequest *req, functionHandler op)
     microError *err = NULL;
     microArgs *args = NULL;
     int n = 0;
-    long double result;
+    long double result = 0;
     char buf[1024];
     int len = 0;
 

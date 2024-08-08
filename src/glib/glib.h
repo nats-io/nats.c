@@ -21,7 +21,7 @@ typedef struct __natsDispatcherPool natsDispatcherPool;
 void natsLib_Retain(void);
 void natsLib_Release(void);
 
-natsStatus nats_assignSubToDispatch(natsSubscription *sub, bool forReplies);
+natsStatus nats_assignSubToDispatch(natsSubscription *sub);
 natsStatus nats_closeLib(bool wait, int64_t timeout);
 natsStatus nats_initSSL(void);
 natsStatus nats_openLib(natsClientConfig *config);

@@ -787,7 +787,12 @@ _checkForSecure(natsConnection *nc)
     }
 
     if ((s == NATS_OK) && nc->opts->secure)
-        s = _makeTLSConn(nc);
+    {
+        // If TLS handshake first is true, we have already done
+        // the handshake, so do it only if false.
+        if (!nc->opts->tlsHandshakeFirst)
+            s = _makeTLSConn(nc);
+    }
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -1137,19 +1142,19 @@ _resendSubscriptions(natsConnection *nc)
         sub = subs[i];
 
         adjustedMax = 0;
-        natsSub_Lock(sub);
+        nats_lockSubAndDispatcher(sub);
         // If JS ordered consumer, trigger a reset. Don't check the error
         // condition here. If there is a failure, it will be retried
         // at the next HB interval.
         if ((sub->jsi != NULL) && (sub->jsi->ordered))
         {
             jsSub_resetOrderedConsumer(sub, sub->jsi->sseq+1);
-            natsSub_Unlock(sub);
+            nats_unlockSubAndDispatcher(sub);
             continue;
         }
         if (natsSub_drainStarted(sub))
         {
-            natsSub_Unlock(sub);
+            nats_unlockSubAndDispatcher(sub);
             continue;
         }
         if (sub->max > 0)
@@ -1161,7 +1166,7 @@ _resendSubscriptions(natsConnection *nc)
             // messages have reached the max, if so, unsubscribe.
             if (adjustedMax == 0)
             {
-                natsSub_Unlock(sub);
+                nats_unlockSubAndDispatcher(sub);
                 s = natsConn_sendUnsubProto(nc, sub->sid, 0);
                 continue;
             }
@@ -1173,7 +1178,7 @@ _resendSubscriptions(natsConnection *nc)
 
         // Hold the lock up to that point so we are sure not to resend
         // any SUB/UNSUB for a subscription that is in draining mode.
-        natsSub_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
     }
 
     NATS_FREE(subs);
@@ -1949,8 +1954,14 @@ _processConnInit(natsConnection *nc)
 
     nc->status = NATS_CONN_STATUS_CONNECTING;
 
+    // If we need to have a TLS connection and want the TLS handshake to occur
+    // first, do it now.
+    if (nc->opts->secure && nc->opts->tlsHandshakeFirst)
+        s = _makeTLSConn(nc);
+
     // Process the INFO protocol that we should be receiving
-    s = _processExpectedInfo(nc);
+    if (s == NATS_OK)
+        s = _processExpectedInfo(nc);
 
     // Send the CONNECT and PING protocol, and wait for the PONG.
     if (s == NATS_OK)
@@ -2695,13 +2706,13 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     // We need to retain the subscription since as soon as we release the
     // nc->subsMu lock, the subscription could be destroyed and we would
     // reference freed memory.
-    natsSub_lockRetain(sub);
+    nats_lockRetainSubAndDispatcher(sub);
 
     natsMutex_Unlock(nc->subsMu);
 
     if (sub->closed || sub->drainSkip)
     {
-        natsSub_unlockRelease(sub);
+        nats_unlockReleaseSubAndDispatcher(sub);
         natsMsg_Destroy(msg);
         return NATS_OK;
     }
@@ -2725,7 +2736,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
             s = jsSub_checkOrderedMsg(sub, msg, &replaced);
             if ((s != NATS_OK) || replaced)
             {
-                natsSub_unlockRelease(sub);
+                nats_unlockReleaseSubAndDispatcher(sub);
                 natsMsg_Destroy(msg);
                 return s;
             }
@@ -2734,12 +2745,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
     if (!ctrlMsg)
     {
-        // Do this before we attempt to enqueue the message, even if it were to fail.
-        msg->sub = sub;
-        if ((jsi != NULL) && jsi->ackNone)
-            natsMsg_setAcked(msg);
-
-        s = natsSub_enqueueMsg(sub, msg);
+        s = natsSub_enqueueUserMessage(sub, msg);
         if (s == NATS_OK)
         {
             sub->slowConsumer = false;
@@ -2783,9 +2789,9 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
     // If we are going to post to the error handler, do not release yet.
     if (sc || sm)
-        natsSub_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
     else
-        natsSub_unlockRelease(sub);
+        nats_unlockReleaseSubAndDispatcher(sub);
 
     if ((s == NATS_OK) && fcReply)
         s = natsConnection_Publish(nc, fcReply, NULL, 0);
@@ -3213,6 +3219,11 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     nc->refs        = 1;
     nc->sockCtx.fd  = NATS_SOCK_INVALID;
     nc->opts        = options;
+
+    // If the TLSHandshakeFirst option is specified, make sure that
+    // the Secure boolean is true.
+    if (nc->opts->tlsHandshakeFirst)
+        nc->opts->secure = true;
 
     nc->errStr[0] = '\0';
 

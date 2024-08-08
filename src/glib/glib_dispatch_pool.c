@@ -53,7 +53,7 @@ _startDispatcher(natsDispatcher *d, void (*threadf)(void *))
         _destroyDispatcher(d);
         natsLib_Release();
     }
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 static natsStatus
@@ -82,7 +82,7 @@ _growPool(natsDispatcherPool *pool, int cap)
             pool->cap = cap;
         }
     }
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void nats_freeDispatcherPool(natsDispatcherPool *pool)
@@ -107,7 +107,7 @@ nats_initDispatcherPool(natsDispatcherPool *pool, int cap)
 
     if (s != NATS_OK)
         nats_freeDispatcherPool(pool);
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 void nats_signalDispatcherPoolToShutdown(natsDispatcherPool *pool)
@@ -144,18 +144,17 @@ natsStatus nats_setMessageDispatcherPoolCap(int max)
     natsStatus s = _growPool(&lib->messageDispatchers, max);
     natsMutex_Unlock(lib->messageDispatchers.lock);
 
-    return s;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 
 // no lock on sub->mu needed because we are called during subscription creation.
 natsStatus
-nats_assignSubToDispatch(natsSubscription *sub, bool forReplies)
+nats_assignSubToDispatch(natsSubscription *sub)
 {
     natsLib *lib = nats_lib();
     natsStatus s = NATS_OK;
     natsDispatcher *d = NULL;
-    natsDispatcherPool *pool = forReplies ? &lib->replyDispatchers : &lib->messageDispatchers;
-    void (*threadf)(void*) = forReplies ? nats_dispatchRepliesPoolThreadf : nats_dispatchMessagesPoolThreadf;
+    natsDispatcherPool *pool = &lib->messageDispatchers;
 
     natsMutex_Lock(pool->lock);
 
@@ -169,7 +168,7 @@ nats_assignSubToDispatch(natsSubscription *sub, bool forReplies)
         pool->useNext = (pool->useNext + 1) % pool->cap;
     }
     if ((s == NATS_OK) && (d->thread == NULL))
-        s = _startDispatcher(d, threadf);
+        s = _startDispatcher(d, nats_deliverMsgsPoolf);
 
     // Assign it to the sub.
     if (s == NATS_OK)

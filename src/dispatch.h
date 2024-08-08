@@ -35,26 +35,21 @@ typedef struct __natsDispatcher_s
     natsDispatchQueue queue;
 
     // Flags.
-    unsigned running : 1;
-    unsigned shutdown : 1;
+    bool running;
+    bool shutdown;
 } natsDispatcher;
-
-// Dispatcher main function with syntactic sugar for the callstack.
-void nats_dispatchMessages(natsDispatcher *d);
-static void nats_dispatchMessagesPoolThreadf(void *arg) { nats_dispatchMessages((natsDispatcher *)arg); }
-static void nats_dispatchMessagesOwnThreadf(void *arg) { nats_dispatchMessages((natsDispatcher *)arg); }
-static void nats_dispatchRepliesPoolThreadf(void *arg) { nats_dispatchMessages((natsDispatcher *)arg); }
-static void nats_dispatchRepliesOwnThreadf(void *arg) { nats_dispatchMessages((natsDispatcher *)arg); }
 
 static inline void nats_destroyQueuedMessages(natsDispatchQueue *queue)
 {
     natsMsg *next = NULL;
-    int n = 0;
-    for (natsMsg *msg = queue->head; msg != NULL; msg = next, n++)
+    for (natsMsg *msg = queue->head; msg != NULL; msg = next)
     {
         next = msg->next;
         natsMsg_Destroy(msg);
     }
 }
+
+void natsSub_enqueueMessage(natsSubscription *sub, natsMsg *msg);
+natsStatus natsSub_enqueueUserMessage(natsSubscription *sub, natsMsg *msg);
 
 #endif /* DISPATCH_H_ */

@@ -499,7 +499,7 @@ js_PublishMsg(jsPubAck **new_puback,jsCtx *js, natsMsg *msg,
     int64_t             ttl     = 0;
     nats_JSON           *json   = NULL;
     natsMsg             *resp   = NULL;
-    jsApiResponse   ar;
+    jsApiResponse       ar      = JS_EMPTY_API_RESPONSE;
 
     if (errCode != NULL)
         *errCode = 0;
@@ -839,14 +839,13 @@ _timeoutPubAsync(natsTimer *t, void *closure)
         if (natsMsg_Create(&m, pm->subject, NULL, NULL, 0) != NATS_OK)
             break;
 
-        m->sub = js->rsub;
         natsMsg_setTimeout(m);
 
         // Best attempt, ignore NATS_SLOW_CONSUMER errors which may be returned
         // here.
-        natsSub_Lock(js->rsub);
-        natsSub_enqueueMsg(js->rsub, m);
-        natsSub_Unlock(js->rsub);
+        nats_lockSubAndDispatcher(js->rsub);
+        natsSub_enqueueUserMessage(js->rsub, m);
+        nats_unlockSubAndDispatcher(js->rsub);
 
         js->pmHead = pm->next;
         _destroyPMInfo(pm);
@@ -1645,24 +1644,24 @@ natsSubscription_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscr
     if ((csm == NULL) || (sub == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    natsSub_Lock(sub);
+    nats_lockSubAndDispatcher(sub);
     if (sub->jsi == NULL)
     {
-        natsSub_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
         return nats_setError(NATS_INVALID_SUBSCRIPTION, "%s", jsErrNotAJetStreamSubscription);
     }
     jsi = sub->jsi;
     m = &jsi->mismatch;
     if (m->dseq == m->ldseq)
     {
-        natsSub_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
         return NATS_NOT_FOUND;
     }
     memset(csm, 0, sizeof(jsConsumerSequenceMismatch));
     csm->Stream = m->sseq;
     csm->ConsumerClient = m->dseq;
     csm->ConsumerServer = m->ldseq;
-    natsSub_Unlock(sub);
+    nats_unlockSubAndDispatcher(sub);
     return NATS_OK;
 }
 
@@ -1863,8 +1862,9 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     int             size     = 0;
     bool            sendReq  = true;
     jsSub           *jsi     = NULL;
-    bool            noWait;
-    uint64_t        fetchID  = 0;
+    natsMsg         *mhMsg   = NULL;
+    char            *reqSubj = NULL;
+    bool            noWait   = false;
 
     if (list == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1912,12 +1912,14 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
             sub->refs++;
             if (jsi->hbTimer == NULL)
             {
-                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _releaseSubWhenStopped, hbi * 2, (void *)sub);
+                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi * 2, (void *)sub);
                 if (s != NATS_OK)
                     sub->refs--;
             }
             else
                 natsTimer_Reset(jsi->hbTimer, hbi);
+
+            mhMsg = sub->control->batch.missedHeartbeat;
         }
     }
     natsSub_Unlock(sub);
@@ -2105,7 +2107,7 @@ _hbTimerFired(natsTimer *timer, void* closure)
     bool                oc   = false;
     natsStatus          s    = NATS_OK;
 
-    natsSub_Lock(sub);
+    nats_lockSubAndDispatcher(sub);
     alert = !jsi->active;
     oc = jsi->ordered;
     jsi->active = false;
@@ -2116,14 +2118,14 @@ _hbTimerFired(natsTimer *timer, void* closure)
         // we will check missed HBs again.
         if (sub->ownDispatcher.queue.msgs == 0)
         {
-            natsSub_enqueueCtrlMsg(sub, sub->control->fetch.missedHeartbeat);
+            natsSub_enqueueMessage(sub, sub->control->batch.missedHeartbeat);
             natsTimer_Stop(timer);
         }
-        natsSub_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
         return;
     }
     nc = sub->conn;
-    natsSub_Unlock(sub);
+    nats_unlockSubAndDispatcher(sub);
 
     if (!alert)
         return;
@@ -2131,14 +2133,14 @@ _hbTimerFired(natsTimer *timer, void* closure)
     // For ordered consumers, we will need to reset
     if (oc)
     {
-        natsSub_Lock(sub);
+        nats_lockSubAndDispatcher(sub);
         if (!sub->closed)
         {
             // If we fail in that call, we will report to async err callback
             // (if one is specified).
             s = jsSub_resetOrderedConsumer(sub, sub->jsi->sseq+1);
         }
-        natsSub_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
     }
 
     natsConn_Lock(nc);
@@ -2745,7 +2747,7 @@ PROCESS_INFO:
         else
         {
             maxap = info->Config->MaxAckPending;
-            natsSub_Lock(sub);
+            nats_lockSubAndDispatcher(sub);
             jsi->dc = true;
             jsi->pending = info->NumPending + info->Delivered.Consumer;
             // There may be a race in the case of an ordered consumer where by this
@@ -2762,7 +2764,7 @@ PROCESS_INFO:
                         s = nats_setDefaultError(NATS_NO_MEMORY);
                 }
             }
-            natsSub_Unlock(sub);
+            nats_unlockSubAndDispatcher(sub);
         }
     }
 

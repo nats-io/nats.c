@@ -1,5 +1,6 @@
 var group__library_group =
 [
+    [ "nats_OpenWithConfig", "group__library_group.html#gac6a49d5ba110ce79c97792fbed584587", null ],
     [ "nats_Open", "group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d", null ],
     [ "nats_GetVersion", "group__library_group.html#gafc09930d38dcf3dcee144e8d3ffc225d", null ],
     [ "nats_GetVersionNumber", "group__library_group.html#ga5fbbaa19b0290b654d2669a05bd512e8", null ],

@@ -1,5 +1,6 @@
 var annotated_dup =
 [
+    [ "__natsClientConfig", "struct____nats_client_config.html", "struct____nats_client_config" ],
     [ "jsAccountInfo", "structjs_account_info.html", "structjs_account_info" ],
     [ "jsAccountLimits", "structjs_account_limits.html", "structjs_account_limits" ],
     [ "jsAPIStats", "structjs_a_p_i_stats.html", "structjs_a_p_i_stats" ],

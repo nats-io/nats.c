@@ -92,6 +92,9 @@ $(document).ready(function(){initNavTree('group__library_group.html',''); initRe
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:gac6a49d5ba110ce79c97792fbed584587"><td class="memItemLeft" align="right" valign="top"><a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#gac6a49d5ba110ce79c97792fbed584587">nats_OpenWithConfig</a> (<a class="el" href="group__types_group.html#gad29b6af20b875a1b7890ab8f0675287d">natsClientConfig</a> *config)</td></tr>
+<tr class="memdesc:gac6a49d5ba110ce79c97792fbed584587"><td class="mdescLeft">&#160;</td><td class="mdescRight">Initializes the library.  <a href="group__library_group.html#gac6a49d5ba110ce79c97792fbed584587">More...</a><br /></td></tr>
+<tr class="separator:gac6a49d5ba110ce79c97792fbed584587"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga4a26d4caecb23348f6eee862c95fee7d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d">nats_Open</a> (int64_t lockSpinCount)</td></tr>
 <tr class="memdesc:ga4a26d4caecb23348f6eee862c95fee7d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Initializes the library.  <a href="group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d">More...</a><br /></td></tr>
 <tr class="separator:ga4a26d4caecb23348f6eee862c95fee7d"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -141,6 +144,33 @@ Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>Library and helper functions. </p>
 <h2 class="groupheader">Function Documentation</h2>
+<a id="gac6a49d5ba110ce79c97792fbed584587"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gac6a49d5ba110ce79c97792fbed584587">&#9670;&nbsp;</a></span>nats_OpenWithConfig()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> nats_OpenWithConfig </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gad29b6af20b875a1b7890ab8f0675287d">natsClientConfig</a> *&#160;</td>
+          <td class="paramname"><em>config</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This initializes the library, with more control over how threads and/or thread pools are used to deliver messages to the application.</p>
+<p>It is invoked automatically when creating a connection, with the default settings (same as nats_Open(-1)).</p>
+<dl class="section warning"><dt>Warning</dt><dd>You must not call <a class="el" href="group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d" title="Initializes the library.">nats_Open</a>[WithConfig] and <a class="el" href="group__library_group.html#gae75131e0ce4e5b89d0f82ea7892f112e" title="Tear down the library.">nats_Close</a> concurrently.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">config</td><td>points to a natsClientConfig. A copy of the settings is made, so the config can be freed after initializing the NATS client. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
 <a id="ga4a26d4caecb23348f6eee862c95fee7d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga4a26d4caecb23348f6eee862c95fee7d">&#9670;&nbsp;</a></span>nats_Open()</h2>
 

@@ -2993,7 +2993,7 @@ static bool _autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, vo
     req->Batch = want;
     // FIXME discuss in PR - this seems wrong, we don't know how many bytes we will have
     // received from what is already requested. Still, can serve as a safe
-    // upper bounday.
+    // upper boundary.
     req->MaxBytes = remainingBytes;
     return true;
 }

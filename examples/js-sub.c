@@ -187,7 +187,6 @@ int main(int argc, char **argv)
             // Uncomment to turn off AutoACK on delivered messages.            
             // so.ManualAck = true;
 
-            // FIXME: demo: set msg delivery pool and verify threads, on many subs
             s = js_PullSubscribeAsync(&sub, js, subj, durable, onMsg, NULL, &lifetime, &jsOpts, &so, &jerr);
         }
         else if (pull)

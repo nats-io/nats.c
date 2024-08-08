@@ -1209,6 +1209,8 @@ typedef struct jsFetchRequest
 /** \brief Callback used to indicate that the work of js_PullSubscribeAsync is
  * done.
  *
+ * @param nc - Connection to the NATS server
+ * @param sub - Subscription being used
  * @param s - Completion status code
  * - `NATS_OK` - should never happen here!
  * - `NATS_TIMEOUT` indicates that the fetch has reached its lifetime expiration
@@ -1232,7 +1234,7 @@ typedef void (*natsFetchCompleteHandler)(natsConnection *nc, natsSubscription *s
  * The library will invoke this callback when it may be time to request more
  * messages from the server.
  *
- * @return true to fetch more, false to skip. if true, req's attributes can be
+ * @return true to fetch more, false to skip. If true, req's attributes can be
  * overridden as needed.
  *
  * @see js_PullSubscribeAsync

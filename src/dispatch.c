@@ -280,8 +280,8 @@ void nats_dispatchThreadPool(void *arg)
             natsFetchCompleteHandler fetchCompleteCB = fetch->completeCB;
             void *fetchCompleteCBClosure = fetch->completeCBClosure;
 
-            // FIXME: handling missed heartbeat: user option on what to do?
-            // FIXME: ignore missed heartbeat if the sub is reconnecting? Or should this be done in the readloop?
+            // TODO: future: options for handling missed heartbeat, for now
+            // treat it as any other error and terminate.
 
             nats_unlockDispatcher(d);
             if (fetchCompleteCB != NULL)
@@ -472,9 +472,6 @@ void nats_dispatchThreadDedicated(void *arg)
             // in fetch. The last message will be delivered first.
             natsFetchCompleteHandler fetchCompleteCB = fetch->completeCB;
             void *fetchCompleteCBClosure = fetch->completeCBClosure;
-
-            // FIXME: handling missed heartbeat: user option on what to do?
-            // FIXME: ignore missed heartbeat if the sub is reconnecting? Or should this be done in the readloop?
 
             natsSub_Unlock(sub);
             if (fetchCompleteCB != NULL)

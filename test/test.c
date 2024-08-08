@@ -7847,7 +7847,7 @@ void test_AssignSubToDispatch(void)
         {
             testf("%d subs over %d threads: Verify that the dispatchers have been assigned: ", tc->numSubs, tc->expectedDispatchers);
             for (i = 0; (s == NATS_OK) && (i < tc->numSubs); i++)
-            {   
+            {
                 natsSub_Lock(subs[i]);
                 if (subs[i]->dispatcher != &pool->dispatchers[i % tc->expectedDispatchers])
                     s = NATS_ERR;
@@ -18352,7 +18352,7 @@ void test_GetClientID(void)
         testCond(true);
         return;
     }
-    pid1 = _startServer("nats://127.0.0.1:4222", "-cluster nats://127.0.0.1:6222 -cluster_name abc", true);
+    pid1 = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222 -cluster nats://127.0.0.1:6222 -cluster_name abc", true);
     CHECK_SERVER_STARTED(pid1);
 
     test("Create nc1: ");
@@ -18371,7 +18371,7 @@ void test_GetClientID(void)
     testCond((s == NATS_OK) && (cid != 0));
 
     test("Wait for discovered callback: ");
-    pid2 = _startServer("nats://127.0.0.1:4223", "-p 4223 -cluster nats://127.0.0.1:6223 -cluster_name abc -routes nats://127.0.0.1:6222", true);
+    pid2 = _startServer("nats://127.0.0.1:4223", "-a 127.0.0.1 -p 4223 -cluster nats://127.0.0.1:6223 -cluster_name abc -routes nats://127.0.0.1:6222", true);
     CHECK_SERVER_STARTED(pid2);
 
     natsMutex_Lock(arg.m);
@@ -21289,6 +21289,16 @@ void test_SSLHandshakeFirst(void)
     natsOptions         *opts     = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
 
+    if (!serverVersionAtLeast(2, 10, 0))
+    {
+        char txt[200];
+
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.10.0, got %s: ", serverVersion);
+        test(txt);
+        testCond(true);
+        return;
+    }
+
     serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsfirst.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
@@ -21411,18 +21421,15 @@ void test_SSLReconnectWithAuthError(void)
     IFOK(s, natsOptions_SetTimeout(opts, 250));
     IFOK(s, natsOptions_SetMaxReconnect(opts, 1000));
     IFOK(s, natsOptions_SetReconnectWait(opts, 100));
-    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
     IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &args));
     IFOK(s, natsOptions_SetServers(opts, (const char*[2]){"tls://user:pwd@127.0.0.1:4443", "tls://bad:pwd@127.0.0.1:4444"}, 2));
-    IFOK(s, natsOptions_SetNoRandomize(opts, true));
-    IFOK(s, natsOptions_SetIgnoreDiscoveredServers(opts, true));
     if (opts == NULL)
         FAIL("Unable to create reconnect options!");
 
-    pid1 = _startServer("nats://127.0.0.1:4443", "-p 4443 -cluster_name abc -cluster nats://127.0.0.1:6222 -tls -tlscert certs/server-cert.pem -tlskey certs/server-key.pem -tlscacert certs/ca.pem -user user -pass pwd", true);
+    pid1 = _startServer("nats://127.0.0.1:4443", "-a 127.0.0.1 -p 4443 -cluster_name abc -cluster nats://127.0.0.1:6222 -tls -tlscert certs/server-cert.pem -tlskey certs/server-key.pem -tlscacert certs/ca.pem -user user -pass pwd", true);
     CHECK_SERVER_STARTED(pid1);
 
-    pid2 = _startServer("nats://127.0.0.1:4444", "-p 4444 -cluster_name abc -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222 -tls -tlscert certs/server-cert.pem -tlskey certs/server-key.pem -tlscacert certs/ca.pem -user user -pass pwd", true);
+    pid2 = _startServer("nats://127.0.0.1:4444", "-a 127.0.0.1 -p 4444 -cluster_name abc -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222 -tls -tlscert certs/server-cert.pem -tlskey certs/server-key.pem -tlscacert certs/ca.pem -user user -pass pwd", true);
     CHECK_SERVER_STARTED(pid2);
 
     test("Connect to server1: ");
@@ -21636,7 +21643,7 @@ void test_ReconnectImplicitUserInfo(void)
     "}\n"\
     "no_auth_user: b\n");
     test("Start server1: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-cluster_name \"local\" -cluster nats://127.0.0.1:6222 -c %s", conf);
+    snprintf(cmdLine, sizeof(cmdLine), "-a 127.0.0.1 -p 4222 -cluster_name \"local\" -cluster nats://127.0.0.1:6222 -c %s", conf);
     pid1 = _startServer("nats://127.0.0.1:4222", cmdLine, true);
     CHECK_SERVER_STARTED(pid1);
     testCond(true);
@@ -21652,7 +21659,7 @@ void test_ReconnectImplicitUserInfo(void)
     testCond(s == NATS_OK);
 
     test("Start server2: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-p 4223 -cluster_name \"local\" -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222 -c %s", conf);
+    snprintf(cmdLine, sizeof(cmdLine), "-a 127.0.0.1 -p 4223 -cluster_name \"local\" -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222 -c %s", conf);
     pid2 = _startServer("nats://127.0.0.1:4223", cmdLine, true);
     CHECK_SERVER_STARTED(pid2);
     testCond(true);

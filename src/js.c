@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include <ctype.h>
+#include <limits.h>
 
 #include "js.h"
 #include "mem.h"

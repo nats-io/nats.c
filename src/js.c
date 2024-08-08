@@ -53,7 +53,7 @@ const int64_t    jsOrderedHBInterval     = NATS_SECONDS_TO_NANOS(5);
 
 // Forward declarations
 static void _hbTimerFired(natsTimer *timer, void* closure);
-static void _hbTimerStopped(natsTimer *timer, void* closure);
+static void _releaseSubWhenStopped(natsTimer *timer, void* closure);
 
 typedef struct __jsOrderedConsInfo
 {
@@ -1218,13 +1218,25 @@ _lookupStreamBySubject(const char **stream, natsConnection *nc, const char *subj
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-void
-jsSub_free(jsSub *jsi)
+static void _destroyFetch(jsFetch *fetch)
+{
+    if (fetch == NULL)
+        return;
+
+    if (fetch->expiresTimer != NULL)
+        natsTimer_Destroy(fetch->expiresTimer);
+
+    NATS_FREE(fetch);
+}
+
+void jsSub_free(jsSub *jsi)
 {
     jsCtx *js = NULL;
 
     if (jsi == NULL)
         return;
+
+    _destroyFetch(jsi->fetch);
 
     js = jsi->js;
     natsTimer_Destroy(jsi->hbTimer);
@@ -1683,34 +1695,79 @@ jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply)
     return NATS_OK;
 }
 
-static natsStatus
-_checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, natsMsg *mhMsg, const char* reqSubj)
+// returns the fetchID from subj, or -1 if not the fetch status subject for the
+// sub.
+static inline int64_t
+_fetchIDFromSubject(natsSubscription *sub, const char *subj)
+{
+    int len = NATS_DEFAULT_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1; // {INBOX}. but without the *
+    int64_t id = 0;
+
+    if (strncmp(sub->subject, subj, len) != 0)
+        return -1;
+
+    subj += len;
+    if (*subj == '\0')
+        return -1;
+
+    for (; *subj != '\0'; subj++)
+    {
+        if ((*subj < '0') || (*subj > '9'))
+            return -1;
+        id = (id * 10) + (*subj - '0');
+    }
+    return id;
+}
+
+// sub must be locked, and sub->jsi must be non-NULL. 
+//
+// returns the fetch status OK to continue, or an error to stop. Some errors
+// like NATS_TIMEOUT are valid exit codes.
+natsStatus
+js_checkFetchedMsg(natsSubscription *sub, natsMsg *msg, bool checkSts, bool *usrMsg)
 {
     natsStatus  s    = NATS_OK;
     const char  *val = NULL;
     const char  *desc= NULL;
 
-    // Check for missed heartbeat special message
-    if (msg == mhMsg)
+    // Check for synthetic fetch event messages.
+    if (sub->control != NULL)
     {
-        *usrMsg = false;
-        return NATS_MISSED_HEARTBEAT;
+        if (msg == sub->control->fetch.missedHeartbeat)
+        {
+            *usrMsg = false;
+            return NATS_MISSED_HEARTBEAT;
+        }
+        else if (msg == sub->control->fetch.expired)
+        {
+            *usrMsg = false;
+            return NATS_TIMEOUT;
+        }
     }
 
-    *usrMsg = true;
-
     if ((msg->dataLen > 0) || (msg->hdrLen <= 0))
+    {
+        // If we have data, or no header - user's
+        *usrMsg = true;
         return NATS_OK;
+    }
 
     s = natsMsgHeader_Get(msg, STATUS_HDR, &val);
-    // If no status header, this is still considered a user message, so OK.
     if (s == NATS_NOT_FOUND)
+    {
+        // If no status header, this is still considered a user message, so OK.
+        *usrMsg = true;
         return NATS_OK;
-    // If serious error, return it.
+    }
     else if (s != NATS_OK)
+    {
+        // If serious error, return it.
+        *usrMsg = false;
         return NATS_UPDATE_ERR_STACK(s);
+    }
 
-    // At this point, this is known to be a status message, not a user message.
+    // At this point, this is known to be a status message, not a user message,
+    // even if we don't recognize the status here.
     *usrMsg = false;
 
     // If we don't care about status, we are done.
@@ -1718,26 +1775,38 @@ _checkMsg(natsMsg *msg, bool checkSts, bool *usrMsg, natsMsg *mhMsg, const char*
         return NATS_OK;
 
     // 100 Idle hearbeat, return OK
-    if (strncmp(val, CTRL_STATUS, HDR_STATUS_LEN) == 0)
+    if (strncmp(val, HDR_STATUS_CTRL_100, HDR_STATUS_LEN) == 0)
         return NATS_OK;
 
     // Before checking for "errors", if the incoming status message is
     // for a previous request (message's subject is not reqSubj), then
     // simply return NATS_OK. The caller will destroy the message and
     // proceed as if nothing was received.
-    if (strcmp(natsMsg_GetSubject(msg), reqSubj) != 0)
+    int64_t id = _fetchIDFromSubject(sub, natsMsg_GetSubject(msg));
+    if (id != (int64_t) sub->jsi->fetchID)
         return NATS_OK;
 
     // 404 indicating that there are no messages.
-    if (strncmp(val, NOT_FOUND_STATUS, HDR_STATUS_LEN) == 0)
+    if (strncmp(val, HDR_STATUS_NOT_FOUND_404, HDR_STATUS_LEN) == 0)
         return NATS_NOT_FOUND;
 
     // 408 indicating request timeout
-    if (strncmp(val, REQ_TIMEOUT, HDR_STATUS_LEN) == 0)
+    if (strncmp(val, HDR_STATUS_TIMEOUT_408, HDR_STATUS_LEN) == 0)
         return NATS_TIMEOUT;
 
-    // The possible 503 is handled directly in natsSub_nextMsg(), so we
-    // would never get it here in this function.
+    // 409 indicating that MaxBytes has been reached, but it can come as other
+    // errors (e.g. "Exceeded MaxWaiting"), so set the last error.
+    if (strncmp(val, HDR_STATUS_MAX_BYTES_409, HDR_STATUS_LEN) == 0)
+    {
+        natsMsgHeader_Get(msg, DESCRIPTION_HDR, &desc);
+        return nats_setError(NATS_LIMIT_REACHED, "%s", (desc == NULL ? "error checking pull subscribe message" : desc));
+    }
+
+    // The possible 503 is handled directly in natsSub_nextMsg(), so we would
+    // never get it here in this function, but in PullSubscribeAsync. There, we
+    // want to use it as the exit code (not NATS_ERR).
+    if (strncmp(val, HDR_STATUS_NO_RESP_503, HDR_STATUS_LEN) == 0)
+        return NATS_NO_RESPONDERS;
 
     natsMsgHeader_Get(msg, DESCRIPTION_HDR, &desc);
     return nats_setError(NATS_ERR, "%s", (desc == NULL ? "error checking pull subscribe message" : desc));
@@ -1783,8 +1852,8 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     int             batch   = 0;
     natsConnection  *nc     = NULL;
     const char      *subj   = NULL;
-    const char      *rply   = NULL;
-    int             pmc     = 0;
+    char            rply[NATS_DEFAULT_INBOX_PRE_LEN + NUID_BUFFER_LEN + 32];
+    int             pmc = 0;
     char            buffer[64];
     natsBuffer      buf;
     int64_t         start    = 0;
@@ -1793,9 +1862,8 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     int             size     = 0;
     bool            sendReq  = true;
     jsSub           *jsi     = NULL;
-    natsMsg         *mhMsg   = NULL;
-    char            *reqSubj = NULL;
-    bool            noWait   = false;
+    bool            noWait;
+    uint64_t        fetchID  = 0;
 
     if (list == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1832,10 +1900,8 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     pmc  = (sub->ownDispatcher.queue.msgs > 0);
     jsi->inFetch = true;
     jsi->fetchID++;
-    if (nats_asprintf(&reqSubj, "%.*s%" PRIu64, (int) strlen(sub->subject)-1, sub->subject, jsi->fetchID) < 0)
-        s = nats_setDefaultError(NATS_NO_MEMORY);
-    else
-        rply = (const char*) reqSubj;
+    fetchID = jsi->fetchID;
+    snprintf(rply, sizeof(rply), "%.*s%" PRIu64, (int)strlen(sub->subject) - 1, sub->subject, fetchID);
     if ((s == NATS_OK) && req->Heartbeat)
     {
         s = nats_createControlMessages(sub);
@@ -1845,14 +1911,12 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
             sub->refs++;
             if (jsi->hbTimer == NULL)
             {
-                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi * 2, (void *)sub);
+                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _releaseSubWhenStopped, hbi * 2, (void *)sub);
                 if (s != NATS_OK)
                     sub->refs--;
             }
             else
                 natsTimer_Reset(jsi->hbTimer, hbi);
-
-            mhMsg = sub->control->batch.missedHeartbeat;
         }
     }
     natsSub_Unlock(sub);
@@ -1884,7 +1948,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
         {
             // Here we care only about user messages. We don't need to pass
             // the request subject since it is not even checked in this case.
-            s = _checkMsg(msg, false, &usrMsg, mhMsg, NULL);
+            s = js_checkFetchedMsg(sub, msg, false, &usrMsg);
             if ((s == NATS_OK) && usrMsg)
             {
                 msgs[count++] = msg;
@@ -1930,7 +1994,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
         IFOK(s, natsSub_nextMsg(&msg, sub, timeout, true));
         if (s == NATS_OK)
         {
-            s = _checkMsg(msg, true, &usrMsg, mhMsg, rply);
+            s = js_checkFetchedMsg(sub, msg, true, &usrMsg);
             if ((s == NATS_OK) && usrMsg)
             {
                 msgs[count++] = msg;
@@ -1980,8 +2044,6 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
         natsTimer_Stop(jsi->hbTimer);
     natsSub_Unlock(sub);
 
-    NATS_FREE(reqSubj);
-
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -2022,6 +2084,19 @@ natsSubscription_FetchRequest(natsMsgList *list, natsSubscription *sub, jsFetchR
 }
 
 static void
+_fetchExpiredFired(natsTimer *timer, void *closure)
+{
+    natsSubscription *sub = (natsSubscription *)closure;
+
+    // Let the dispatcher know that the fetch has expired. It will deliver all
+    // queued up messages, then do the right termination.
+    nats_lockSubAndDispatcher(sub);
+    natsSub_enqueueMessage(sub, sub->control->fetch.expired);
+    nats_unlockSubAndDispatcher(sub);
+    natsTimer_Stop(timer);
+}
+
+static void
 _hbTimerFired(natsTimer *timer, void* closure)
 {
     natsSubscription    *sub = (natsSubscription*) closure;
@@ -2042,7 +2117,7 @@ _hbTimerFired(natsTimer *timer, void* closure)
         // we will check missed HBs again.
         if (sub->ownDispatcher.queue.msgs == 0)
         {
-            natsSub_enqueueMessage(sub, sub->control->batch.missedHeartbeat);
+            natsSub_enqueueMessage(sub, sub->control->fetch.missedHeartbeat);
             natsTimer_Stop(timer);
         }
         nats_unlockSubAndDispatcher(sub);
@@ -2081,7 +2156,7 @@ _hbTimerFired(natsTimer *timer, void* closure)
 // client, timers will automatically fire again, so this callback is
 // invoked when the timer has been stopped (and we are ready to destroy it).
 static void
-_hbTimerStopped(natsTimer *timer, void* closure)
+_releaseSubWhenStopped(natsTimer *timer, void* closure)
 {
     natsSubscription *sub = (natsSubscription*) closure;
 
@@ -2634,7 +2709,7 @@ PROCESS_INFO:
         {
             natsSub_Lock(sub);
             sub->refs++;
-            s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi*2, (void*) sub);
+            s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _releaseSubWhenStopped, hbi*2, (void*) sub);
             if (s != NATS_OK)
                 sub->refs--;
             natsSub_Unlock(sub);
@@ -2825,6 +2900,219 @@ js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject, const c
 
     s = _subscribe(sub, js, subject, durable, NULL, NULL, true, jsOpts, opts, errCode);
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+// sub->mu must NOT be held.
+natsStatus
+js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
+{
+    jsFetchRequest req;
+    if (fetch->nextf == NULL)
+        return NATS_OK;
+
+    // Prepare the next fetch request
+    if (!fetch->nextf(&req, sub, fetch->nextClosure))
+        return NATS_OK;
+
+    // These are not changeable by the callback, only Batch and MaxBytes can be updated.
+    int64_t now = nats_Now();
+    req.Heartbeat = fetch->lifetime.Heartbeat;
+    req.Expires = fetch->lifetime.Expires - (now - fetch->startTimeMilli) * 10*1000*1000;
+    req.NoWait = fetch->lifetime.NoWait;
+
+    char buffer[128];
+    natsBuffer buf;
+    natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
+
+    natsSub_Lock(sub);
+
+    jsSub *jsi = sub->jsi;
+    jsi->inFetch = true;
+    jsi->fetchID++;
+    snprintf(fetch->replySubject, sizeof(fetch->replySubject), "%.*s%" PRIu64,
+             (int)strlen(sub->subject) - 1, sub->subject, // exclude the last '*'
+             jsi->fetchID);
+
+    natsStatus s = _sendPullRequest(sub->conn, jsi->nxtMsgSubj, fetch->replySubject, &buf, &req);
+    if (s == NATS_OK)
+    {
+        fetch->requestedMsgs += req.Batch;
+    }
+    natsSub_Unlock(sub);
+
+    natsBuf_Destroy(&buf);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static bool _autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, void *closure)
+{
+    jsFetch *fetch = (jsFetch *)closure;
+
+    int remainingUnrequested = 0;
+    int64_t remainingBytes = 0;
+    int want = 0;
+    bool maybeMore = true;
+
+    natsSub_Lock(sub);
+
+    int isAhead = fetch->requestedMsgs - fetch->deliveredMsgs;
+    int wantAhead = fetch->keepAhead;
+    if (isAhead > wantAhead)
+        maybeMore = false;
+
+    if (maybeMore)
+    {
+        // fetch->lifetime.Batch is always > 0
+        remainingUnrequested = fetch->lifetime.Batch - fetch->requestedMsgs;
+        if (remainingUnrequested <= 0)
+            maybeMore = false;
+    }
+
+    if (maybeMore && (fetch->lifetime.MaxBytes > 0))
+    {
+        remainingBytes = fetch->lifetime.MaxBytes - fetch->receivedBytes;
+        if (remainingBytes <= 0)
+            maybeMore = false;
+    }
+
+    if (maybeMore)
+    {
+        want = remainingUnrequested;
+        if (want > fetch->fetchSize)
+            want = fetch->fetchSize;
+
+        maybeMore = (want > 0);
+    }
+
+    natsSub_Unlock(sub);
+
+    if (!maybeMore)
+        return false;
+
+    *req = fetch->lifetime; // copy bytes, reading immutable data
+    req->Batch = want;
+    // FIXME discuss in PR - this seems wrong, we don't know how many bytes we will have
+    // received from what is already requested. Still, can serve as a safe
+    // upper boundary.
+    req->MaxBytes = remainingBytes;
+    return true;
+}
+
+natsStatus
+js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject, const char *durable,
+                      natsMsgHandler msgCB, void *msgCBClosure,
+                      jsFetchRequest *lifetime,
+                      jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s = NATS_OK;
+    natsSubscription *sub = NULL;
+    jsSub *jsi = NULL;
+    jsFetch *fetch = NULL;
+    jsFetchRequest defaultLifetime = {
+        .Batch = INT_MAX,     // no limit
+        .Expires = INT64_MAX, // never
+        .Heartbeat = 0,       // none
+        .MaxBytes = 0,        // no limit
+        .NoWait = false,      // wait forever
+    };
+
+    if ((newsub == NULL) || (msgCB == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if (lifetime == NULL)
+        lifetime = &defaultLifetime;
+
+    // Do a basic pull subscribe first, but with a callback so it is treated as
+    // "async" and assigned to a dispatcher. Since we don't fetch anything, it
+    // will not be active yet.
+    s = _subscribe(&sub, js, subject, durable, msgCB, msgCBClosure, true, jsOpts, opts, errCode);
+
+    IFOK(s, (fetch = NATS_CALLOC(1, sizeof(jsFetch))) == NULL ? NATS_NO_MEMORY : NATS_OK);
+
+    // Initialize fetch parameters.
+    if (s == NATS_OK)
+    {
+        fetch->startTimeMilli = nats_Now();
+        fetch->lifetime = *lifetime;
+
+        if (fetch->lifetime.Batch == 0)
+            fetch->lifetime.Batch = INT_MAX;
+
+        fetch->nextf = _autoNextFetchRequest;
+        fetch->nextClosure = (void *)fetch;
+        if (jsOpts != NULL)
+        {
+            fetch->fetchSize = jsOpts->PullSubscribeAsync.FetchSize;
+            fetch->keepAhead = jsOpts->PullSubscribeAsync.KeepAhead;
+            fetch->completeCB = jsOpts->PullSubscribeAsync.CompleteHandler;
+            fetch->completeCBClosure = jsOpts->PullSubscribeAsync.CompleteHandlerClosure;
+
+            if (jsOpts->PullSubscribeAsync.NextHandler != NULL)
+            {
+                fetch->nextf = jsOpts->PullSubscribeAsync.NextHandler;
+                fetch->nextClosure = jsOpts->PullSubscribeAsync.NextHandlerClosure;
+            }
+        }
+
+        if (fetch->fetchSize == 0)
+            fetch->fetchSize = NATS_DEFAULT_ASYNC_FETCH_SIZE;
+    }
+
+    // Set up the sub to process fetch results.
+    if (s == NATS_OK)
+    {
+        natsSub_Lock(sub);
+        jsi = sub->jsi;
+
+        // Set up the fetch options
+        jsi->fetch = fetch;
+        jsi->inFetch = true;
+
+        // Start the timers. They will live for the entire length of the
+        // subscription (the missed heartbeat timer may be reset as needed).
+        if (lifetime->Expires > 0)
+        {
+            sub->refs++;
+            s = natsTimer_Create(&fetch->expiresTimer, _fetchExpiredFired, _releaseSubWhenStopped,
+                                 lifetime->Expires, (void *)sub);
+            if (s != NATS_OK)
+                sub->refs--;
+        }
+
+        if ((s == NATS_OK) && (lifetime->Heartbeat > 0))
+        {
+            int64_t milli = (lifetime->Heartbeat / 1000000) * 2;
+            sub->refs++;
+            if (jsi->hbTimer == NULL)
+            {
+                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _releaseSubWhenStopped, milli, (void *)sub);
+                if (s != NATS_OK)
+                    sub->refs--;
+            }
+            else
+                natsTimer_Reset(jsi->hbTimer, milli);
+        }
+
+        natsSub_Unlock(sub);
+    }
+
+    if (s == NATS_OK)
+    {
+        // Send the first fetch request
+        s = js_maybeFetchMore(sub, fetch);
+    }
+
+    if (s != NATS_OK)
+    {
+        natsSubscription_Destroy(sub);
+        return NATS_UPDATE_ERR_STACK(s);
+    }
+
+    *newsub = sub;
+    return NATS_OK;
 }
 
 typedef struct __ackOpts
@@ -3043,7 +3331,7 @@ natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType)
     if ((*p == '\r') || (*p == '\n') || (*p == '\0'))
         return false;
 
-    if (strstr(p, CTRL_STATUS) != p)
+    if (strstr(p, HDR_STATUS_CTRL_100) != p)
         return false;
 
     p += HDR_STATUS_LEN;

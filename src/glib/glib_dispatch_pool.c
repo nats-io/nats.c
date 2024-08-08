@@ -168,7 +168,7 @@ nats_assignSubToDispatch(natsSubscription *sub)
         pool->useNext = (pool->useNext + 1) % pool->cap;
     }
     if ((s == NATS_OK) && (d->thread == NULL))
-        s = _startDispatcher(d, nats_deliverMsgsPoolf);
+        s = _startDispatcher(d, nats_dispatchThreadPool);
 
     // Assign it to the sub.
     if (s == NATS_OK)

@@ -898,7 +898,7 @@ natsMsg_IsNoResponders(natsMsg *m)
                 && (natsMsg_GetDataLength(m) == 0)
                 && (natsMsgHeader_Get(m, STATUS_HDR, &val) == NATS_OK)
                 && (val != NULL)
-                && (strncmp(val, NO_RESP_STATUS, HDR_STATUS_LEN) == 0));
+                && (strncmp(val, HDR_STATUS_NO_RESP_503, HDR_STATUS_LEN) == 0));
 }
 
 void

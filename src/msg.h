@@ -17,17 +17,18 @@
 #include "status.h"
 #include "gc.h"
 
-#define HDR_LINE_PRE        "NATS/1.0"
-#define HDR_LINE_PRE_LEN    (8)
-#define HDR_LINE            HDR_LINE_PRE _CRLF_
-#define HDR_LINE_LEN        (10)
-#define STATUS_HDR          "Status"
-#define DESCRIPTION_HDR     "Description"
-#define NO_RESP_STATUS      "503"
-#define NOT_FOUND_STATUS    "404"
-#define REQ_TIMEOUT         "408"
-#define CTRL_STATUS         "100"
-#define HDR_STATUS_LEN      (3)
+#define HDR_LINE_PRE                "NATS/1.0"
+#define HDR_LINE_PRE_LEN            (8)
+#define HDR_LINE                    HDR_LINE_PRE _CRLF_
+#define HDR_LINE_LEN                (10)
+#define STATUS_HDR                  "Status"
+#define DESCRIPTION_HDR             "Description"
+#define HDR_STATUS_NO_RESP_503      "503"
+#define HDR_STATUS_NOT_FOUND_404    "404"
+#define HDR_STATUS_TIMEOUT_408      "408"
+#define HDR_STATUS_MAX_BYTES_409    "409"
+#define HDR_STATUS_CTRL_100         "100"
+#define HDR_STATUS_LEN              (3)
 
 #define natsMsg_setNeedsLift(m)     ((m)->flags  |=  (1 << 0))
 #define natsMsg_needsLift(m)        (((m)->flags &   (1 << 0)) != 0)

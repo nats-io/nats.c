@@ -1,5 +1,14 @@
 var group__types_group =
 [
+    [ "__natsClientConfig", "struct____nats_client_config.html", [
+      [ "DefaultWriteDeadline", "struct____nats_client_config.html#a9a92a915d00d9f39592c407ad6b4a5d1", null ],
+      [ "LockSpinCount", "struct____nats_client_config.html#aa8e7db4bae066739c5af59a93d6b4ca0", null ],
+      [ "DefaultToThreadPool", "struct____nats_client_config.html#a9cfade80f1a92d2ce6821007a282d047", null ],
+      [ "ThreadPoolMax", "struct____nats_client_config.html#a7c9592d371e589faf41d5f493934b5c1", null ],
+      [ "DefaultRepliesToThreadPool", "struct____nats_client_config.html#a053db33a66e585ee3d5c4f9689db63bf", null ],
+      [ "UseSeparatePoolForReplies", "struct____nats_client_config.html#a11769afbb1dd577e63571e05fd579ddf", null ],
+      [ "ReplyThreadPoolMax", "struct____nats_client_config.html#a70f9a7d726a564fb1c3ef14c1bc6cd47", null ]
+    ] ],
     [ "natsMsgList", "structnats_msg_list.html", [
       [ "Msgs", "structnats_msg_list.html#aa123668879f1c9c11c9be7bd81a205c5", null ],
       [ "Count", "structnats_msg_list.html#a5c48bf6b9e7f1d889d7ad31694911750", null ]
@@ -374,6 +383,7 @@ var group__types_group =
     [ "natsMsg", "group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a", null ],
     [ "natsOptions", "group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e", null ],
     [ "natsInbox", "group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1", null ],
+    [ "natsClientConfig", "group__types_group.html#gad29b6af20b875a1b7890ab8f0675287d", null ],
     [ "natsMsgList", "group__types_group.html#gafd5523161ec3783e79719cb9a9a66b5b", null ],
     [ "natsMetadata", "group__types_group.html#ga3b454f3c6ac697a3cdc5bdd3c9ece12b", null ],
     [ "jsCtx", "group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1", null ],

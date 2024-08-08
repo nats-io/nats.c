@@ -33,6 +33,7 @@ var nats_8h =
     [ "natsMsg", "group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a", null ],
     [ "natsOptions", "group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e", null ],
     [ "natsInbox", "group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1", null ],
+    [ "natsClientConfig", "group__types_group.html#gad29b6af20b875a1b7890ab8f0675287d", null ],
     [ "natsMsgList", "group__types_group.html#gafd5523161ec3783e79719cb9a9a66b5b", null ],
     [ "natsMetadata", "group__types_group.html#ga3b454f3c6ac697a3cdc5bdd3c9ece12b", null ],
     [ "jsCtx", "group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1", null ],
@@ -161,6 +162,7 @@ var nats_8h =
       [ "kvOp_Delete", "group__types_group.html#gga89db3bd6bf11af3ac5eb3ab560d16332a4efb91331f3307128c75af5b23362f83", null ],
       [ "kvOp_Purge", "group__types_group.html#gga89db3bd6bf11af3ac5eb3ab560d16332aee19ab8144bf518e251ea2004309b657", null ]
     ] ],
+    [ "nats_OpenWithConfig", "group__library_group.html#gac6a49d5ba110ce79c97792fbed584587", null ],
     [ "nats_Open", "group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d", null ],
     [ "nats_GetVersion", "group__library_group.html#gafc09930d38dcf3dcee144e8d3ffc225d", null ],
     [ "nats_GetVersionNumber", "group__library_group.html#ga5fbbaa19b0290b654d2669a05bd512e8", null ],
@@ -190,6 +192,7 @@ var nats_8h =
     [ "natsOptions_SetTimeout", "group__opts_group.html#ga17cd7fe41176cd98aca1184fa9352ad9", null ],
     [ "natsOptions_SetName", "group__opts_group.html#ga1c529d347be0fe2eec17c7f4698e283e", null ],
     [ "natsOptions_SetSecure", "group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba", null ],
+    [ "natsOptions_TLSHandshakeFirst", "group__opts_group.html#gac530a5d4cc93158047fc17c79dac6812", null ],
     [ "natsOptions_LoadCATrustedCertificates", "group__opts_group.html#ga2cd6563694a439b3949a31fd81103099", null ],
     [ "natsOptions_SetCATrustedCertificates", "group__opts_group.html#gafb30794fc2ae74b9e0bd8fb609b901c8", null ],
     [ "natsOptions_LoadCertificatesChain", "group__opts_group.html#ga36943e2ba53d05407cdabc4e7e96484b", null ],

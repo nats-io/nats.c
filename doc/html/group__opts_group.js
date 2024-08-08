@@ -10,6 +10,7 @@ var group__opts_group =
     [ "natsOptions_SetTimeout", "group__opts_group.html#ga17cd7fe41176cd98aca1184fa9352ad9", null ],
     [ "natsOptions_SetName", "group__opts_group.html#ga1c529d347be0fe2eec17c7f4698e283e", null ],
     [ "natsOptions_SetSecure", "group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba", null ],
+    [ "natsOptions_TLSHandshakeFirst", "group__opts_group.html#gac530a5d4cc93158047fc17c79dac6812", null ],
     [ "natsOptions_LoadCATrustedCertificates", "group__opts_group.html#ga2cd6563694a439b3949a31fd81103099", null ],
     [ "natsOptions_SetCATrustedCertificates", "group__opts_group.html#gafb30794fc2ae74b9e0bd8fb609b901c8", null ],
     [ "natsOptions_LoadCertificatesChain", "group__opts_group.html#ga36943e2ba53d05407cdabc4e7e96484b", null ],

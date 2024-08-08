@@ -50,7 +50,7 @@
 
 // Comment/uncomment to replace some function calls with direct structure
 // access
-// #define DEV_MODE    (1)
+//#define DEV_MODE    (1)
 
 #define LIB_NATS_VERSION_STRING             NATS_VERSION_STRING
 #define LIB_NATS_VERSION_NUMBER             NATS_VERSION_NUMBER
@@ -407,6 +407,11 @@ typedef struct __jsSub
     char                *consumer;
     char                *psubj;
     char                *nxtMsgSubj;
+    bool                pull;
+    bool                inFetch;
+    bool                ordered;
+    bool                dc; // delete JS consumer in Unsub()/Drain()
+    bool                ackNone;
     uint64_t            fetchID;
     jsFetch             *fetch;
 
@@ -419,11 +424,24 @@ typedef struct __jsSub
     uint64_t            pending;
 
     int64_t             hbi;
+    bool                active;
     natsTimer           *hbTimer;
 
     char                *cmeta;
     uint64_t            sseq;
     uint64_t            dseq;
+    // Skip sequence mismatch notification. This is used for
+    // async subscriptions to notify the asyn err handler only
+    // once. Should the mismatch be resolved, this will be
+    // cleared so notification can happen again.
+    bool                ssmn;
+    // Sequence mismatch. This is for synchronous subscription
+    // so that they don't have to rely on async error callback.
+    // Calling NextMsg() when this is true will cause NextMsg()
+    // to return NATS_SLOW_CONSUMER, so that user can check
+    // the sequence mismatch report. Should the mismatch be
+    // resolved, this will be cleared.
+    bool                sm;
     // These are the mismatch seq info
     struct mismatch
     {
@@ -446,27 +464,6 @@ typedef struct __jsSub
 
     // When reseting an OrderedConsumer, need the original configuration.
     jsConsumerConfig    *ocCfg;
-
-    // Flags, at the end for compactness.
-    unsigned pull : 1;
-    unsigned inFetch : 1;
-    unsigned ordered : 1;
-    unsigned dc : 1; // delete JS consumer in Unsub()/Drain()
-    unsigned ackNone : 1;
-    unsigned active : 1;
-
-    // Skip sequence mismatch notification. This is used for
-    // async subscriptions to notify the asyn err handler only
-    // once. Should the mismatch be resolved, this will be
-    // cleared so notification can happen again.
-    unsigned ssmn : 1;
-    // Sequence mismatch. This is for synchronous subscription
-    // so that they don't have to rely on async error callback.
-    // Calling NextMsg() when this is true will cause NextMsg()
-    // to return NATS_SLOW_CONSUMER, so that user can check
-    // the sequence mismatch report. Should the mismatch be
-    // resolved, this will be cleared.
-    unsigned sm : 1;
 
 } jsSub;
 
@@ -530,7 +527,7 @@ typedef struct __natsSubscriptionControlMessages
     {
         natsMsg *expired;
         natsMsg *missedHeartbeat;
-    } batch;
+    } fetch;
 } natsSubscriptionControlMessages;
 
 struct __natsSubscription
@@ -606,6 +603,8 @@ struct __natsSubscription
 
     int64_t                     timeout;
     natsTimer                   *timeoutTimer;
+    bool                        timedOut;
+    bool                        timeoutSuspended;
 
     // Pending limits, etc..
     int                         msgsMax;
@@ -926,6 +925,7 @@ static inline void nats_unlockDispatcher(natsDispatcher *d)
         natsMutex_Unlock(d->mu);
 }
 
-void nats_deliverMsgsPoolf(void *arg);
+void nats_dispatchThreadPool(void *arg);
+void nats_dispatchThreadDedicated(void *arg);
 
 #endif /* NATSP_H_ */

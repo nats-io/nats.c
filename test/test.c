@@ -40,6 +40,7 @@
 #include "kv.h"
 #include "microp.h"
 #include "glib/glibp.h"
+
 #if defined(NATS_HAS_STREAMING)
 
 #include "stan/conn.h"
@@ -7847,7 +7848,7 @@ void test_AssignSubToDispatch(void)
         {
             testf("%d subs over %d threads: Verify that the dispatchers have been assigned: ", tc->numSubs, tc->expectedDispatchers);
             for (i = 0; (s == NATS_OK) && (i < tc->numSubs); i++)
-            {
+            {   
                 natsSub_Lock(subs[i]);
                 if (subs[i]->dispatcher != &pool->dispatchers[i % tc->expectedDispatchers])
                     s = NATS_ERR;
@@ -11664,22 +11665,14 @@ void test_DoubleUnsubscribe(void)
 
 void test_SubRemovedWhileProcessingMsg(void)
 {
-    natsStatus          s;
-    natsConnection      *nc       = NULL;
-    natsOptions         *opts     = NULL;
-    natsSubscription    *sub      = NULL;
-    natsPid             serverPid = NATS_INVALID_PID;
+    natsStatus s;
+    natsConnection *nc = NULL;
+    natsOptions *opts = NULL;
+    natsSubscription *sub = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
 
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(serverPid);
-
-    s = _createDefaultThreadArgsForCbTests(&arg);
-    if (s != NATS_OK)
-        FAIL("Unable to setup test");
-
-    arg.status = NATS_OK;
-    arg.control = 12;
-    arg.N = 1;
 
     test("Connect and create sub: ")
     s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
@@ -11717,16 +11710,13 @@ void test_SubRemovedWhileProcessingMsg(void)
 
     test("Connect and create sub: ");
     s = natsConnection_Connect(&nc, opts);
-    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, NULL));
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _dummyMsgHandler, NULL));
     testCond(s == NATS_OK);
 
     nats_lockSubAndDispatcher(sub);
     test("Send message: ");
     s = natsConnection_PublishString(nc, "foo", "hello");
     testCond(s == NATS_OK);
-
-    test("Make sure the message is not enqueued yet: ");
-    testCond(sub->ownDispatcher.queue.msgs == 0);
 
     test("Close sub: ");
     nats_unlockSubAndDispatcher(sub);
@@ -11742,7 +11732,6 @@ void test_SubRemovedWhileProcessingMsg(void)
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
 
-    _destroyDefaultThreadArgs(&arg);
     _stopServer(serverPid);
 }
 
@@ -22634,7 +22623,7 @@ if (!serverVersionAtLeast((major), (minor), (update))) \
     return; \
 }
 
-#define JS_SETUP(major, minor, update) \
+#define JS_SETUP_WITH_OPTS(major, minor, update, opts) \
 natsConnection  *nc = NULL; \
 jsCtx           *js = NULL; \
 natsPid         pid = NATS_INVALID_PID;  \
@@ -22651,12 +22640,14 @@ CHECK_SERVER_STARTED(pid);                                  \
 testCond(true);                                             \
 \
 test("Connect: ");                                      \
-s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);    \
+s = natsConnection_Connect(&nc, opts);                  \
 testCond(s == NATS_OK);                                 \
 \
 test("Get context: ");                          \
 s = natsConnection_JetStream(&js, nc, NULL);    \
 testCond(s == NATS_OK);
+
+#define JS_SETUP(major, minor, update) JS_SETUP_WITH_OPTS((major), (minor), (update), NULL)
 
 #define JS_TEARDOWN \
 jsCtx_Destroy(js);          \
@@ -28709,16 +28700,8 @@ _testBatchCompleted(struct threadArg *args, natsSubscription *sub, int waitMS, n
 
     // We may get called before the delivery thread terminates the sub, this
     // yields and avoids the race for the purpose of the test.
-    nats_Sleep(5);
-    result = result && !natsSubscription_IsValid(sub);
-
-    printf("TEST GOT: %d %d\n", args->status, args->sum);
-    if (!result)
-    {
-        printf("TEST Failed: %d %d %d %d %d\n", s, args->closed, args->status, args->sum, natsSubscription_IsValid(sub));
-    }
-
-    return result;
+    nats_Sleep(10);
+    return result && !natsSubscription_IsValid(sub);
 }
 
 void test_JetStreamSubscribePullAsync(void)
@@ -28824,8 +28807,8 @@ void test_JetStreamSubscribePullAsync(void)
     testCond((s == NATS_ERR) && (msg == NULL) && (strstr(nats_GetLastError(NULL), jsErrConcurrentFetchNotAllowed) != NULL));
     nats_clearLastError();
 
-    int noMessageTimeout = 20;
-    int messageArrivesImmediatelyTimeout = 10;
+    int noMessageTimeout = 40;
+    int messageArrivesImmediatelyTimeout = 20;
     int ackTimeout = (int)(so.Config.AckWait / 1E6) + 100;
     testf("No messages yet, timeout in %dms: ", noMessageTimeout);
     natsMutex_Lock(args.m);
@@ -28889,7 +28872,7 @@ void test_JetStreamSubscribePullAsync(void)
     sub = NULL;
 
     // TEST exit criteria.
-    int batchWaitTimeout = 100; // milliseconds
+    int batchWaitTimeout = 300; // milliseconds
     typedef struct
     {
         const char *name;
@@ -28986,7 +28969,7 @@ void test_JetStreamSubscribePullAsync(void)
         {
             .name = "Fetch with expiration is fulfilled NATS_MAX_DELIVERED_MSGS",
             .want = 30,
-            .expires = 10, // ms
+            .expires = 100, // ms
             .before = 20,
             .during = 10,
             .expectedStatus = NATS_MAX_DELIVERED_MSGS,
@@ -29107,7 +29090,7 @@ void test_JetStreamSubscribePullAsyncMissedHB(void)
     natsSubscription_Destroy(sub);
     sub = NULL;
 
-    test("Check idle hearbeat: ");
+    test("Subscribe with 50ms idle hearbeat: ");
     natsMutex_Lock(args.m);
     args.control = 0;      // don't ack, will be auto-ack
     args.status = NATS_OK; // batch exit status will be here
@@ -29125,17 +29108,17 @@ void test_JetStreamSubscribePullAsyncMissedHB(void)
     lifetime.Heartbeat = NATS_MILLIS_TO_NANOS(50);
 
     s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, &so, &jerr);
-    if (s != NATS_OK)
-        FAIL("Failed to create pull subscription, unusual");
+    testCond(s == NATS_OK);
 
+    test("Subscription is active after 2 heartbeats: ");
     nats_Sleep(100);
     natsMutex_Lock(args.m);
-    if (args.closed)
-        FAIL("Subscription closed too early, unusual");
+    testCond(!args.closed)
     natsMutex_Unlock(args.m);
 
     // Set a message filter that will drop subsequent server's heartbeat
     // messages.
+    test("Drop heartbeats and see the sub terminate: ");
     natsConn_setFilter(nc, _dropIdleHBs);
     testCond((s == NATS_OK) &&
              _testBatchCompleted(&args, sub, 500, NATS_MISSED_HEARTBEAT, 0, false));

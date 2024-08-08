@@ -1862,9 +1862,8 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     int             size     = 0;
     bool            sendReq  = true;
     jsSub           *jsi     = NULL;
-    natsMsg         *mhMsg   = NULL;
-    char            *reqSubj = NULL;
-    bool            noWait   = false;
+    bool            noWait;
+    uint64_t        fetchID  = 0;
 
     if (list == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1912,14 +1911,12 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
             sub->refs++;
             if (jsi->hbTimer == NULL)
             {
-                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi * 2, (void *)sub);
+                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _releaseSubWhenStopped, hbi * 2, (void *)sub);
                 if (s != NATS_OK)
                     sub->refs--;
             }
             else
                 natsTimer_Reset(jsi->hbTimer, hbi);
-
-            mhMsg = sub->control->batch.missedHeartbeat;
         }
     }
     natsSub_Unlock(sub);
@@ -2093,7 +2090,9 @@ _fetchExpiredFired(natsTimer *timer, void *closure)
 
     // Let the dispatcher know that the fetch has expired. It will deliver all
     // queued up messages, then do the right termination.
-    natsSub_enqueueCtrlMsg(sub, sub->control->fetch.expired);
+    nats_lockSubAndDispatcher(sub);
+    natsSub_enqueueMessage(sub, sub->control->fetch.expired);
+    nats_unlockSubAndDispatcher(sub);
     natsTimer_Stop(timer);
 }
 
@@ -2118,7 +2117,7 @@ _hbTimerFired(natsTimer *timer, void* closure)
         // we will check missed HBs again.
         if (sub->ownDispatcher.queue.msgs == 0)
         {
-            natsSub_enqueueMessage(sub, sub->control->batch.missedHeartbeat);
+            natsSub_enqueueMessage(sub, sub->control->fetch.missedHeartbeat);
             natsTimer_Stop(timer);
         }
         nats_unlockSubAndDispatcher(sub);
@@ -2918,7 +2917,7 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
     // These are not changeable by the callback, only Batch and MaxBytes can be updated.
     int64_t now = nats_Now();
     req.Heartbeat = fetch->lifetime.Heartbeat;
-    req.Expires = fetch->lifetime.Expires - (now - fetch->startTimeMilli) * 10E6;
+    req.Expires = fetch->lifetime.Expires - (now - fetch->startTimeMilli) * 10*1000*1000;
     req.NoWait = fetch->lifetime.NoWait;
 
     char buffer[128];

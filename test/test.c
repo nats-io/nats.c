@@ -28675,7 +28675,7 @@ _completePullAsync(natsConnection *nc, natsSubscription *sub, natsStatus exitSta
     arg->status = exitStatus;
     const char *le = nats_GetLastError(NULL);
     if (le != NULL)
-        strncpy(arg->lastErrorBuf, le, sizeof(arg->lastErrorBuf));
+        strncpy(arg->lastErrorBuf, le, sizeof(arg->lastErrorBuf)-1);
     natsCondition_Broadcast(arg->c);
     natsMutex_Unlock(arg->m);
 }

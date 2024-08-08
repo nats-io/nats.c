@@ -398,6 +398,11 @@ parseArgs(int argc, char **argv, const char *usage)
             async = false;
             pull  = true;
         }
+        else if (strcasecmp(argv[i], "-pull-async") == 0)
+        {
+            async = true;
+            pull = true;
+        }
         else if (strcasecmp(argv[i], "-fc") == 0)
         {
             flowctrl = true;

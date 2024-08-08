@@ -372,6 +372,34 @@ struct __jsCtx
     bool                closed;
 };
 
+typedef struct __jsFetch
+{
+    natsFetchCompleteHandler completeCB;
+    void *completeCBClosure;
+
+    // Lifetime control
+    jsFetchRequest lifetime;
+    int64_t startTimeMilli;
+    int receivedMsgs;
+    int64_t receivedBytes;
+    int deliveredMsgs;
+    int64_t deliveredBytes;
+    int requestedMsgs;
+
+    int keepAhead;
+    int fetchSize;
+
+    natsFetchNextHandler nextf;
+    void *nextClosure;
+
+    // Timer for the fetch expiration. We leverage the existing jsi->hbTimer for
+    // checking missed heartbeats.
+    natsTimer *expiresTimer;
+
+    // Matches jsi->fetchID
+    char replySubject[NATS_DEFAULT_INBOX_PRE_LEN + NUID_BUFFER_LEN + 32]; // big enough for {INBOX}.number
+} jsFetch;
+
 typedef struct __jsSub
 {
     jsCtx               *js;
@@ -385,6 +413,7 @@ typedef struct __jsSub
     bool                dc; // delete JS consumer in Unsub()/Drain()
     bool                ackNone;
     uint64_t            fetchID;
+    jsFetch             *fetch;
 
     // This is ConsumerInfo's Pending+Consumer.Delivered that we get from the
     // add consumer response. Note that some versions of the server gather the
@@ -498,7 +527,7 @@ typedef struct __natsSubscriptionControlMessages
     {
         natsMsg *expired;
         natsMsg *missedHeartbeat;
-    } batch;
+    } fetch;
 } natsSubscriptionControlMessages;
 
 struct __natsSubscription
@@ -896,6 +925,7 @@ static inline void nats_unlockDispatcher(natsDispatcher *d)
         natsMutex_Unlock(d->mu);
 }
 
-void nats_deliverMsgsPoolf(void *arg);
+void nats_dispatchThreadPool(void *arg);
+void nats_dispatchThreadDedicated(void *arg);
 
 #endif /* NATSP_H_ */

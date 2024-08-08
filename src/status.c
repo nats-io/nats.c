@@ -71,6 +71,7 @@ static const char *statusText[] = {
 
     "Mismatch",
     "Missed Server Heartbeat",
+    "Limit reached",
 };
 
 const char*

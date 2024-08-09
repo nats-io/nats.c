@@ -19,6 +19,9 @@ on:
       lib_write_deadline:
         type: string
         default: "OFF"
+      lib_force_host_verification:
+        type: string
+        default: "OFF"
       repeat:
         type: string
         default: "1"
@@ -115,6 +118,9 @@ jobs:
           fi
           if [[ "${{ inputs.lib_write_deadline }}" == "ON" ]]; then
             echo "NATS_DEFAULT_LIB_WRITE_DEADLINE=2000" >> $GITHUB_ENV
+          fi
+          if [[ "${{ inputs.lib_force_host_verification }}" == "ON" ]]; then
+            echo "NATS_FORCE_HOST_VERIFICATION=yes" >> $GITHUB_ENV
           fi
           echo "CC=${{ inputs.compiler }}" >> $GITHUB_ENV
 

@@ -20895,20 +20895,31 @@ void test_SSLVerifyHostname(void)
     serverPid = _startServer("nats://127.0.0.1:4443", "-config tls_noip.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
+#if defined(NATS_FORCE_HOST_VERIFICATION)
     test("Check that connect fails if url is IP: ");
+#else
+    test("Check that connect succeeds if url is IP: ");
+#endif
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
     IFOK(s, natsOptions_SetSecure(opts, true));
-    // For test purposes, we provide the CA trusted certs
     IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
     IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
     IFOK(s, natsConnection_Connect(&nc, opts));
+#if defined(NATS_FORCE_HOST_VERIFICATION)
     testCond(s == NATS_SSL_ERROR);
+    nats_clearLastError();
+#else
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+#endif
 
     test("Check that connect fails if wrong expected hostname: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
     IFOK(s, natsOptions_SetExpectedHostname(opts, "foo"));
     IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_SSL_ERROR);
+    nats_clearLastError();
 
     test("Check that connect succeeds if hostname ok and no expected hostname set: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");

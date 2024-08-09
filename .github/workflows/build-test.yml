@@ -21,7 +21,7 @@ on:
         default: "OFF"
       lib_force_host_verification:
         type: string
-        default: "OFF"
+        default: "ON"
       repeat:
         type: string
         default: "1"

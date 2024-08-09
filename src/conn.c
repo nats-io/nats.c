@@ -737,6 +737,13 @@ _makeTLSConn(natsConnection *nc)
                 SSL_set_verify(ssl, SSL_VERIFY_PEER, _collectSSLErr);
         }
     }
+#if defined(NATS_USE_OPENSSL_1_1)
+    // add the host name in the SNI extension
+    if ((s == NATS_OK) && (nc->cur != NULL) && (!SSL_set_tlsext_host_name(ssl, nc->cur->url->host)))
+    {
+        s = nats_setError(NATS_SSL_ERROR, "unable to set SNI extension for hostname '%s'", nc->cur->url->host);
+    }
+#endif
     if ((s == NATS_OK) && (SSL_do_handshake(ssl) != 1))
     {
         s = nats_setError(NATS_SSL_ERROR,

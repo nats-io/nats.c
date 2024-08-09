@@ -66,7 +66,7 @@ jobs:
       lib_msg_delivery: ${{ matrix.pooled_delivery }}
 
   sanitize-write-deadline:
-    name: "Sanitize address (lib_write_deadline)"
+    name: "Sanitize address (write_deadline)"
     uses: ./.github/workflows/build-test.yml
     with:
       type: RelWithDebInfo
@@ -75,7 +75,7 @@ jobs:
       lib_write_deadline: ON
 
   sanitize-no-host-verify:
-    name: "Sanitize address (lib_force_host_verification)"
+    name: "Sanitize address (NO force_host_verification)"
     uses: ./.github/workflows/build-test.yml
     with:
       type: RelWithDebInfo

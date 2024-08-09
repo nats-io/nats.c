@@ -74,14 +74,14 @@ jobs:
       server_version: main
       lib_write_deadline: ON
 
-  sanitize-host-verify:
+  sanitize-no-host-verify:
     name: "Sanitize address (lib_force_host_verification)"
     uses: ./.github/workflows/build-test.yml
     with:
       type: RelWithDebInfo
       sanitize: address
       server_version: main
-      lib_force_host_verification: ON
+      lib_force_host_verification: OFF
 
   bench:
     name: "Benchmark"

@@ -65,14 +65,23 @@ jobs:
       sanitize: ${{ matrix.sanitize }}
       lib_msg_delivery: ${{ matrix.pooled_delivery }}
 
-  san-addr-deadline:
+  sanitize-write-deadline:
     name: "Sanitize address (lib_write_deadline)"
     uses: ./.github/workflows/build-test.yml
     with:
-      type: Debug
+      type: RelWithDebInfo
       sanitize: address
       server_version: main
       lib_write_deadline: ON
+
+  sanitize-host-verify:
+    name: "Sanitize address (lib_force_host_verification)"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      type: RelWithDebInfo
+      sanitize: address
+      server_version: main
+      lib_force_host_verification: ON
 
   bench:
     name: "Benchmark"

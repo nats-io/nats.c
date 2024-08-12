@@ -21324,6 +21324,22 @@ void test_SSLHandshakeFirst(void)
     s = natsOptions_TLSHandshakeFirst(opts);
     testCond(s == NATS_OK);
 
+    test("Set TLSHandshakeFirst option without setting secure: ");
+    {
+        // we start with a new natsOptions struct so that we can test
+        // that it does not crash with a minimal config
+        natsOptions *no_secure_opts = NULL;
+        s = natsOptions_Create(&no_secure_opts);
+        IFOK(s, natsOptions_SetURL(no_secure_opts, "nats://127.0.0.1:4443"));
+        IFOK(s, natsOptions_SetTimeout(no_secure_opts, 500));
+        IFOK(s, natsOptions_TLSHandshakeFirst(no_secure_opts));
+        IFOK(s, natsConnection_Connect(&nc, no_secure_opts));
+        // expecting an error because cert valiation will fail; the goal here is to avoid a crash
+        testCond(s == NATS_SSL_ERROR);
+        natsOptions_Destroy(no_secure_opts);
+        nats_clearLastError();
+    }
+
     test("Check that connect succeeds: ");
     s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK);

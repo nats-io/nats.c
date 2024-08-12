@@ -13,15 +13,18 @@ on:
       dev_mode:
         type: string
         default: "OFF"
-      lib_msg_delivery:
+      pool_dispatch:
         type: string
-        default: "OFF"
-      lib_write_deadline:
+        default: "NO-pool"
+      write_deadline:
         type: string
-        default: "OFF"
-      lib_force_host_verification:
+        default: "NO-write_deadline"
+      tls:
         type: string
-        default: "ON"
+        default: "TLS"
+      verify_host:
+        type: string
+        default: "verify_host"
       repeat:
         type: string
         default: "1"
@@ -33,9 +36,6 @@ on:
         description: "nats-server version to test with"
         default: "latest"
       streaming:
-        type: string
-        default: "ON"
-      tls:
         type: string
         default: "ON"
       type:
@@ -88,11 +88,20 @@ jobs:
           flags: -DNATS_BUILD_ARCH=${{ inputs.arch }}
             -DCMAKE_BUILD_TYPE=${{ inputs.type }}
             -DNATS_BUILD_STREAMING=${{ inputs.streaming }}
-            -DNATS_BUILD_WITH_TLS=${{ inputs.tls }}
             -DNATS_PROTOBUF_DIR=${{ github.workspace}}/deps/pbuf
             -DNATS_BUILD_USE_SODIUM=ON
             -DNATS_SODIUM_DIR=${{ github.workspace}}/deps/sodium
         run: |
+          if [[ "${{ inputs.tls }}" == "TLS" ]]; then
+            flags="$flags -DNATS_BUILD_WITH_TLS=ON"
+            if [[ "${{ inputs.verify_host }}" == "verify_host" ]]; then
+              flags="$flags -DNATS_BUILD_TLS_FORCE_HOST_VERIFY=ON"
+            else
+              flags="$flags -DNATS_BUILD_TLS_FORCE_HOST_VERIFY=OFF"
+            fi
+          else
+            flags="$flags -DNATS_BUILD_WITH_TLS=OFF"
+          fi
           if [[ -n "${{ inputs.sanitize }}" ]]; then
             flags="$flags -DNATS_SANITIZE=ON -DCMAKE_C_FLAGS=-fsanitize=${{ inputs.sanitize }}"
           fi
@@ -113,14 +122,11 @@ jobs:
           if [[ -n "${{ inputs.sanitize }}" ]]; then
             echo "NATS_TEST_VALGRIND=yes" >> $GITHUB_ENV
           fi
-          if [[ "${{ inputs.lib_msg_delivery }}" == "ON" ]]; then
+          if [[ "${{ inputs.pool_dispatch }}" == "pool" ]]; then
             echo "NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes" >> $GITHUB_ENV
           fi
-          if [[ "${{ inputs.lib_write_deadline }}" == "ON" ]]; then
+          if [[ "${{ inputs.write_deadline }}" == "write_deadline" ]]; then
             echo "NATS_DEFAULT_LIB_WRITE_DEADLINE=2000" >> $GITHUB_ENV
-          fi
-          if [[ "${{ inputs.lib_force_host_verification }}" == "ON" ]]; then
-            echo "NATS_FORCE_HOST_VERIFICATION=yes" >> $GITHUB_ENV
           fi
           echo "CC=${{ inputs.compiler }}" >> $GITHUB_ENV
 

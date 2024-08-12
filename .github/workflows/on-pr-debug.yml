@@ -18,27 +18,6 @@ jobs:
       server_version: main
       type: Debug
 
-  coverage:
-    name: "Coverage"
-    uses: ./.github/workflows/build-test.yml
-    with:
-      coverage: ON
-      server_version: main
-      type: Debug
-    secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-  coverage-pooled:
-    name: "Coverage (pooled delivery)"
-    uses: ./.github/workflows/build-test.yml
-    with:
-      coverage: ON
-      server_version: main
-      type: Debug
-      lib_msg_delivery: ON
-    secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
   dev-mode:
     name: "DEV_MODE"
     uses: ./.github/workflows/build-test.yml
@@ -56,33 +35,61 @@ jobs:
       matrix:
         compiler: [gcc, clang]
         sanitize: [address, thread]
-        pooled_delivery: [ON, OFF]
+        pooled_dispatch: [pool, NO-pool]
     uses: ./.github/workflows/build-test.yml
     with:
       server_version: main
-      type: Debug
+      type: RelWithDebInfo
       compiler: ${{ matrix.compiler }}
       sanitize: ${{ matrix.sanitize }}
-      lib_msg_delivery: ${{ matrix.pooled_delivery }}
+      pool_dispatch: ${{ matrix.pooled_dispatch }}
 
-  sanitize-write-deadline:
-    name: "Sanitize address (write_deadline)"
+  coverage-TLS:
+    name: "Coverage: TLS"
+    strategy:
+      fail-fast: false
+      matrix:
+          pooled_dispatch: [pool, NO-pool]
+          write_deadline: [write_deadline, NO-write_deadline]
     uses: ./.github/workflows/build-test.yml
     with:
+      coverage: ON
       type: RelWithDebInfo
-      sanitize: address
       server_version: main
-      lib_write_deadline: ON
+      compiler: gcc
+      tls: TLS
+      verify_host: verify_host
+      pool_dispatch: ${{ matrix.pooled_dispatch }}
+      write_deadline: ${{ matrix.write_deadline }}
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-  sanitize-no-host-verify:
-    name: "Sanitize address (NO force_host_verification)"
+  coverage-NO-verify_host:
+    name: "Coverage: NO-verify_host"
     uses: ./.github/workflows/build-test.yml
     with:
+      coverage: ON
       type: RelWithDebInfo
-      sanitize: address
       server_version: main
-      lib_force_host_verification: OFF
-
+      compiler: gcc
+      tls: TLS
+      verify_host: NO-verify_host
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+  
+  coverage-NO-TLS:
+    name: "Coverage NO-TLS"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      coverage: ON
+      type: RelWithDebInfo
+      server_version: main
+      compiler: gcc
+      tls: NO-TLS
+      verify_host: NO-verify_host
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+  
   bench:
     name: "Benchmark"
     uses: ./.github/workflows/build-test.yml

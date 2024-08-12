@@ -21363,6 +21363,84 @@ void test_SSLHandshakeFirst(void)
 #endif
 }
 
+void test_SSLServerNameIndication(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s = NATS_OK;
+    natsSock            sock = NATS_SOCK_INVALID;
+    natsThread          *t = NULL;
+    struct threadArg    arg;
+    natsSockCtx         ctx;
+    static const char *server = "tls://localhost:4222";
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&(arg.opts)));
+    IFOK(s, natsOptions_SetSecure(arg.opts, true));
+    IFOK(s, natsOptions_TLSHandshakeFirst(arg.opts));
+    IFOK(s, natsOptions_SetServers(arg.opts, &server, 1));
+    if (s != NATS_OK)
+        FAIL("@@ Unable to setup test!");
+
+    test("Start server and connect client: ")
+
+    arg.control = 3;
+
+    s = _startMockupServer(&sock, "localhost", "4222");
+    
+    // Start the thread that will try to connect to our server...
+    IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
+
+    if ((s == NATS_OK)
+        && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+            || natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    
+    testCond((s == NATS_OK) && (ctx.fd > 0));
+
+    test("Read ClientHello from client: ");
+    char buffer[1024];
+    memset(buffer, 0, sizeof(buffer));
+
+    int size = recv(ctx.fd, buffer, sizeof(buffer), 0);
+    testCond(size > 0);
+
+    // remove all null chars to allow the use of strstr on the result
+    for (int i = 0; i < size; ++i) {
+        if (buffer[i] == 0)
+            buffer[i] = '0';
+    }
+
+    test("Check hostname is found in ClientHello: ");
+    bool found = strstr(buffer, "localhost");
+#if defined(NATS_USE_OPENSSL_1_1)
+    testCond(found == true);
+#else
+    testCond(found == false);
+#endif
+
+    // Need to close those for the client side to unblock.
+    natsSock_Close(ctx.fd);
+    natsSock_Close(sock);
+
+    // Wait for the client to finish.
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    _destroyDefaultThreadArgs(&arg);
+
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
 #if defined(NATS_HAS_TLS)
 static natsStatus
 _elDummyAttach(void **userData, void *loop, natsConnection *nc, natsSock socket) { return NATS_OK; }

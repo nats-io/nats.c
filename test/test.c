@@ -21367,11 +21367,11 @@ void test_SSLServerNameIndication(void)
     if (s != NATS_OK)
         FAIL("@@ Unable to setup test!");
 
-    test("Check that when initiating a TLS connection the SNI extension is set: ")
+    test("Start server and connect client: ")
 
     arg.control = 3;
 
-    _startMockupServer(&sock, "localhost", "4222");
+    s = _startMockupServer(&sock, "localhost", "4222");
     
     // Start the thread that will try to connect to our server...
     IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
@@ -21383,16 +21383,14 @@ void test_SSLServerNameIndication(void)
         s = NATS_SYS_ERROR;
     }
     
-    testCond(s == NATS_OK);
-    testCond(ctx.fd > 0);
+    testCond((s == NATS_OK) && (ctx.fd > 0));
 
+    test("Read ClientHello from client: ");
     char buffer[1024];
     memset(buffer, 0, sizeof(buffer));
 
     int size = recv(ctx.fd, buffer, sizeof(buffer), 0);
-    if (size <= 0)
-        FAIL("Cound not read from the client socket");
-
+    testCond(size > 0);
 
     // remove all null chars to allow the use of strstr on the result
     for (int i = 0; i < size; ++i) {
@@ -21400,6 +21398,7 @@ void test_SSLServerNameIndication(void)
             buffer[i] = '0';
     }
 
+    test("Check hostname is found in ClientHello: ");
     bool found = strstr(buffer, "localhost");
 #if defined(NATS_USE_OPENSSL_1_1)
     testCond(found == true);

@@ -367,10 +367,12 @@ natsOptions_SetSecure(natsOptions *opts, bool secure)
 natsStatus
 natsOptions_TLSHandshakeFirst(natsOptions *opts)
 {
+    natsStatus s = NATS_OK;
+
     LOCK_AND_CHECK_OPTIONS(opts, 0);
 
     opts->tlsHandshakeFirst = true;
-    natsStatus s = natsOptions_SetSecure(opts, true);
+    s = natsOptions_SetSecure(opts, true);
 
     UNLOCK_OPTS(opts);
 

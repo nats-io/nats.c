@@ -3031,8 +3031,12 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
     // "async" and assigned to a dispatcher. Since we don't fetch anything, it
     // will not be active yet.
     s = _subscribe(&sub, js, subject, durable, msgCB, msgCBClosure, true, jsOpts, opts, errCode);
-
-    IFOK(s, (fetch = NATS_CALLOC(1, sizeof(jsFetch))) == NULL ? NATS_NO_MEMORY : NATS_OK);
+    if(s == NATS_OK)
+    {
+        fetch = NATS_CALLOC(1, sizeof(jsFetch));
+        if (fetch == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
 
     // Initialize fetch parameters.
     if (s == NATS_OK)

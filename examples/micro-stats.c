@@ -51,16 +51,16 @@ handle_stats(microRequest *req)
     microServiceStats *stats = NULL;
     char buf[2048];
     service_state_t *service_state = microRequest_GetServiceState(req);
-    int total, custom, len;
+    int totalReq, custom, len;
 
     err = microService_GetStats(&stats, microRequest_GetService(req));
     if (err != NULL)
         return err;
 
-    total = (int) stats->Endpoints[0].NumRequests;
+    totalReq = (int) stats->Endpoints[0].NumRequests;
     custom = service_state->odd_count;
     len = snprintf(buf, sizeof(buf),
-                   "{\"total\":%d,\"odd\":%d}", total, custom);
+                   "{\"total\":%d,\"odd\":%d}", totalReq, custom);
     return microRequest_Respond(req, buf, len);
 }
 

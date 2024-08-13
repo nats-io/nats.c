@@ -110,6 +110,12 @@ int main(int argc, char **argv)
 
     s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);
 
+    // Uncomment to use the global thread pool for message delivery.
+    // if (s == NATS_OK)
+    //     s = natsOptions_UseGlobalMessageDelivery(opts, true);
+    // if (s == NATS_OK)
+    //     s = nats_SetMessageDeliveryPoolSize(1); // 1 thread for all subscriptions.
+
     if (s == NATS_OK)
         s = natsConnection_Connect(&conn, opts);
 
@@ -174,12 +180,15 @@ int main(int argc, char **argv)
             jsOpts.PullSubscribeAsync.FetchSize = 17;
             jsOpts.PullSubscribeAsync.KeepAhead = 7;
             jsOpts.PullSubscribeAsync.CompleteHandler = _completeFetchCb;
-            jsFetchRequest lifetime = {
-                .Batch = total,
-                .NoWait = true,
-                .Expires = 1 * HOUR_NANO,
-                // .Heartbeat = 1 * SECOND_NANO,
-            };
+
+            jsFetchRequest lifetime;
+            jsFetchRequest_Init(&lifetime);
+            lifetime.NoWait = true;
+            lifetime.Expires = 1 * HOUR_NANO;
+            lifetime.Batch = (int) total;
+
+            // Uncomment to use a 1 second heartbeat.
+            // lifetime.Heartbeat = 1 * SECOND_NANO;
 
             // Uncomment to provide custom control over next fetch size.
             // jsOpts.PullSubscribeAsync.NextHandler = nextFetchCb;
@@ -200,7 +209,7 @@ int main(int argc, char **argv)
     if ((s == NATS_OK) && async)
         s = natsSubscription_SetOnCompleteCB(sub, _completeSubCb, NULL);
     if ((s == NATS_OK) && async)
-        s = natsSubscription_AutoUnsubscribe(sub, total); // to get the sub closed callback
+        s = natsSubscription_AutoUnsubscribe(sub, (int) total); // to get the sub closed callback
     if (s == NATS_OK)
         s = natsSubscription_SetPendingLimits(sub, -1, -1);
 

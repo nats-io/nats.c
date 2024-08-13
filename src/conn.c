@@ -2795,6 +2795,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
 
     if ((s == NATS_OK) && fcReply)
         s = natsConnection_Publish(nc, fcReply, NULL, 0);
+
     if (ctrlMsg)
         natsMsg_Destroy(msg);
 

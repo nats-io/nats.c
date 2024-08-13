@@ -279,7 +279,7 @@ void
 js_destroyConsumerConfig(jsConsumerConfig *cc);
 
 natsStatus
-js_checkFetchedMsg(natsSubscription *sub, natsMsg *msg, bool checkSts, bool *usrMsg);
+js_checkFetchedMsg(natsSubscription *sub, natsMsg *msg, uint64_t fetchID, bool checkSts, bool *usrMsg);
 
 natsStatus
 js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch);

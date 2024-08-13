@@ -23,10 +23,11 @@
 #include "glib/glib.h"
 
 // sub and dispatcher locks must be held.
-void natsSub_enqueueMessage(natsSubscription *sub, natsMsg *msg)
+void
+natsSub_enqueueMessage(natsSubscription *sub, natsMsg *msg)
 {
-    bool signal = false;
-    natsDispatchQueue *q = &sub->dispatcher->queue;
+    bool                signal  = false;
+    natsDispatchQueue   *q      = &sub->dispatcher->queue;
 
     if (q->head == NULL)
     {
@@ -47,12 +48,13 @@ void natsSub_enqueueMessage(natsSubscription *sub, natsMsg *msg)
 }
 
 // sub and dispatcher locks must be held.
-natsStatus natsSub_enqueueUserMessage(natsSubscription *sub, natsMsg *msg)
+natsStatus
+natsSub_enqueueUserMessage(natsSubscription *sub, natsMsg *msg)
 {
-    natsDispatchQueue *toQ = &sub->dispatcher->queue;
-    natsDispatchQueue *statsQ = &sub->ownDispatcher.queue;
-    int newMsgs = statsQ->msgs + 1;
-    int newBytes = statsQ->bytes + natsMsg_dataAndHdrLen(msg);
+    natsDispatchQueue   *toQ        = &sub->dispatcher->queue;
+    natsDispatchQueue   *statsQ     = &sub->ownDispatcher.queue;
+    int                 newMsgs     = statsQ->msgs + 1;
+    int                 newBytes    = statsQ->bytes + natsMsg_dataAndHdrLen(msg);
 
     msg->sub = sub;
 
@@ -83,7 +85,9 @@ natsStatus natsSub_enqueueUserMessage(natsSubscription *sub, natsMsg *msg)
     return NATS_OK;
 }
 
-static inline void _removeFromDispatchQueue(natsDispatcher *d, natsMsg *msg)
+// Sub/dispatch locks must be held.
+static inline void
+_removeHeadMsg(natsDispatcher *d, natsMsg *msg)
 {
     d->queue.head = msg->next;
     if (d->queue.tail == msg)
@@ -91,8 +95,9 @@ static inline void _removeFromDispatchQueue(natsDispatcher *d, natsMsg *msg)
     msg->next = NULL;
 }
 
-// Returns fetch status
-static inline natsStatus _preProcessUserMessage(
+// Returns fetch status, sub/dispatch locks must be held.
+static inline natsStatus
+_preProcessUserMessage(
     natsSubscription *sub, jsSub *jsi, jsFetch *fetch, natsMsg *msg,
     bool *userMsg, bool *overLimit, bool *lastMessageInSub, bool *lastMessageInFetch, char **fcReply)
 {
@@ -108,8 +113,8 @@ static inline natsStatus _preProcessUserMessage(
     }
 
     // Fetch-specific handling of synthetic and header-only messages
-    if (fetch != NULL)
-        fetchStatus = js_checkFetchedMsg(sub, msg, true, userMsg);
+    if ((jsi != NULL) && (fetch != NULL))
+        fetchStatus = js_checkFetchedMsg(sub, msg, jsi->fetchID, true, userMsg);
 
     // Is it another kind of synthetic message?
     *userMsg = *userMsg && (msg->subject[0] != '\0');
@@ -163,7 +168,8 @@ static inline natsStatus _preProcessUserMessage(
 }
 
 // Thread main function for a thread pool of dispatchers.
-void nats_dispatchThreadPool(void *arg)
+void
+nats_dispatchThreadPool(void *arg)
 {
     natsDispatcher *d = (natsDispatcher *)arg;
 
@@ -171,15 +177,15 @@ void nats_dispatchThreadPool(void *arg)
 
     while (true)
     {
-        natsMsg *msg = NULL;
-        char *fcReply = NULL;
-        bool timerNeedReset = false;
-        bool userMsg = true;
-        bool timeout = false;
-        bool overLimit = false;
-        bool lastMessageInSub = false;
-        bool lastMessageInFetch = false;
-        natsStatus fetchStatus = NATS_OK;
+        natsMsg     *msg                = NULL;
+        char        *fcReply            = NULL;
+        bool        timerNeedReset      = false;
+        bool        userMsg             = true;
+        bool        timeout             = false;
+        bool        overLimit           = false;
+        bool        lastMessageInSub    = false;
+        bool        lastMessageInFetch  = false;
+        natsStatus  fetchStatus         = NATS_OK;
 
         while (((msg = d->queue.head) == NULL) && !d->shutdown)
             natsCondition_Wait(d->cond, d->mu);
@@ -190,21 +196,21 @@ void nats_dispatchThreadPool(void *arg)
             break;
         }
 
-        _removeFromDispatchQueue(d, msg);
+        _removeHeadMsg(d, msg);
 
         // Get subscription reference from message and capture values we need
         // while under lock.
-        natsSubscription *sub = msg->sub;
-        natsConnection *nc = sub->conn;
-        jsSub *jsi = sub->jsi;
-        jsFetch *fetch = (jsi != NULL) ? jsi->fetch : NULL;
-        natsMsgHandler messageCB = sub->msgCb;
-        void *messageClosure = sub->msgCbClosure;
-        natsOnCompleteCB completeCB = sub->onCompleteCB;
-        void *completeCBClosure = sub->onCompleteCBClosure;
-        natsSubscriptionControlMessages *ctrl = sub->control;
-        bool closed = sub->closed;
-        bool draining = sub->draining;
+        natsSubscription    *sub                = msg->sub;
+        natsConnection      *nc                 = sub->conn;
+        jsSub               *jsi                = sub->jsi;
+        jsFetch             *fetch              = (jsi != NULL) ? jsi->fetch : NULL;
+        natsMsgHandler      messageCB           = sub->msgCb;
+        void                *messageClosure     = sub->msgCbClosure;
+        natsOnCompleteCB    completeCB          = sub->onCompleteCB;
+        void                *completeCBClosure  = sub->onCompleteCBClosure;
+        bool                closed              = sub->closed;
+        bool                draining            = sub->draining;
+        natsSubscriptionControlMessages *ctrl   = sub->control;
 
         fetchStatus = _preProcessUserMessage(
             sub, jsi, fetch, msg,
@@ -304,19 +310,16 @@ void nats_dispatchThreadPool(void *arg)
             continue;
         }
 
-        // Need to check for closed subscription again here.
-        // The subscription could have been unsubscribed from a callback
-        // but there were already pending messages. The control message
-        // is queued up. Until it is processed, we need to simply
-        // discard the message and continue.
-        else if (sub->closed)
+        // Need to check for closed subscription again here. The subscription
+        // could have been unsubscribed from a callback but there were already
+        // pending messages. The control message is queued up. Until it is
+        // processed, we need to simply discard the message and continue.
+        //
+        // Other invalid states: same handling, discard the message and
+        // continue.
+        else if ((sub->closed) ||
+                 (msg->sub == NULL) || (msg->subject == NULL) || (strcmp(msg->subject, "") == 0))
         {
-            natsMsg_Destroy(msg);
-            continue;
-        }
-        else if ((msg->sub == NULL) || (msg->subject == NULL) || (strcmp(msg->subject, "") == 0))
-        {
-            // invalid state.
             natsMsg_Destroy(msg);
             continue;
         }
@@ -394,17 +397,18 @@ void nats_dispatchThreadPool(void *arg)
 }
 
 // Thread main function for a dedicated dispatcher.
-void nats_dispatchThreadDedicated(void *arg)
+void
+nats_dispatchThreadDedicated(void *arg)
 {
-    natsSubscription *sub = (natsSubscription *)arg;
-    bool rmSub = false;
+    natsSubscription    *sub = (natsSubscription *)arg;
+    bool                rmSub = false;
 
     // These are set at sub creation time and never change, no need to lock.
-    natsConnection *nc = sub->conn;
-    natsMsgHandler messageCB = sub->msgCb;
-    void *messageClosure = sub->msgCbClosure;
+    natsConnection *nc          = sub->conn;
+    natsMsgHandler messageCB    = sub->msgCb;
+    void *messageClosure        = sub->msgCbClosure;
     natsOnCompleteCB completeCB = NULL;
-    void *completeCBClosure = NULL;
+    void *completeCBClosure     = NULL;
 
     // This just serves as a barrier for the creation of this thread.
     natsConn_Lock(nc);
@@ -412,13 +416,13 @@ void nats_dispatchThreadDedicated(void *arg)
 
     while (true)
     {
-        natsStatus s = NATS_OK;
-        natsStatus fetchStatus = NATS_OK;
-        natsMsg *msg = NULL;
-        bool userMsg = true;
-        bool overLimit = false;
-        bool lastMessageInSub = false;
-        bool lastMessageInFetch = false;
+        natsStatus  s                   = NATS_OK;
+        natsStatus  fetchStatus         = NATS_OK;
+        natsMsg     *msg                = NULL;
+        bool        userMsg             = true;
+        bool        overLimit           = false;
+        bool        lastMessageInSub    = false;
+        bool        lastMessageInFetch  = false;
 
         natsSub_Lock(sub);
         int64_t timeout = sub->timeout;
@@ -456,7 +460,7 @@ void nats_dispatchThreadDedicated(void *arg)
             continue;
         }
 
-        _removeFromDispatchQueue(&sub->ownDispatcher, msg);
+        _removeHeadMsg(&sub->ownDispatcher, msg);
 
         jsSub *jsi = sub->jsi;
         jsFetch *fetch = (jsi != NULL) ? jsi->fetch : NULL;

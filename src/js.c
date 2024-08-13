@@ -1219,7 +1219,8 @@ _lookupStreamBySubject(const char **stream, natsConnection *nc, const char *subj
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static void _destroyFetch(jsFetch *fetch)
+static void
+_destroyFetch(jsFetch *fetch)
 {
     if (fetch == NULL)
         return;
@@ -1230,7 +1231,8 @@ static void _destroyFetch(jsFetch *fetch)
     NATS_FREE(fetch);
 }
 
-void jsSub_free(jsSub *jsi)
+void
+jsSub_free(jsSub *jsi)
 {
     jsCtx *js = NULL;
 
@@ -1701,8 +1703,8 @@ jsSub_scheduleFlowControlResponse(jsSub *jsi, const char *reply)
 static inline int64_t
 _fetchIDFromSubject(natsSubscription *sub, const char *subj)
 {
-    int len = NATS_DEFAULT_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1; // {INBOX}. but without the *
-    int64_t id = 0;
+    int     len = NATS_DEFAULT_INBOX_PRE_LEN + NUID_BUFFER_LEN + 1; // {INBOX}. but without the *
+    int64_t id  = 0;
 
     if (strncmp(sub->subject, subj, len) != 0)
         return -1;
@@ -1720,16 +1722,14 @@ _fetchIDFromSubject(natsSubscription *sub, const char *subj)
     return id;
 }
 
-// sub must be locked, and sub->jsi must be non-NULL. 
-//
 // returns the fetch status OK to continue, or an error to stop. Some errors
 // like NATS_TIMEOUT are valid exit codes.
 natsStatus
-js_checkFetchedMsg(natsSubscription *sub, natsMsg *msg, bool checkSts, bool *usrMsg)
+js_checkFetchedMsg(natsSubscription *sub, natsMsg *msg, uint64_t fetchID, bool checkSts, bool *usrMsg)
 {
-    natsStatus  s    = NATS_OK;
-    const char  *val = NULL;
-    const char  *desc= NULL;
+    natsStatus  s       = NATS_OK;
+    const char  *val    = NULL;
+    const char  *desc   = NULL;
 
     // Check for synthetic fetch event messages.
     if (sub->control != NULL)
@@ -1784,7 +1784,7 @@ js_checkFetchedMsg(natsSubscription *sub, natsMsg *msg, bool checkSts, bool *usr
     // simply return NATS_OK. The caller will destroy the message and
     // proceed as if nothing was received.
     int64_t id = _fetchIDFromSubject(sub, natsMsg_GetSubject(msg));
-    if (id != (int64_t) sub->jsi->fetchID)
+    if (id != (int64_t) fetchID)
         return NATS_OK;
 
     // 404 indicating that there are no messages.
@@ -1863,7 +1863,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     int             size     = 0;
     bool            sendReq  = true;
     jsSub           *jsi     = NULL;
-    bool            noWait;
+    bool            noWait   = false;
     uint64_t        fetchID  = 0;
 
     if (list == NULL)
@@ -1949,7 +1949,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
         {
             // Here we care only about user messages. We don't need to pass
             // the request subject since it is not even checked in this case.
-            s = js_checkFetchedMsg(sub, msg, false, &usrMsg);
+            s = js_checkFetchedMsg(sub, msg, fetchID, false, &usrMsg);
             if ((s == NATS_OK) && usrMsg)
             {
                 msgs[count++] = msg;
@@ -1995,7 +1995,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
         IFOK(s, natsSub_nextMsg(&msg, sub, timeout, true));
         if (s == NATS_OK)
         {
-            s = js_checkFetchedMsg(sub, msg, true, &usrMsg);
+            s = js_checkFetchedMsg(sub, msg, fetchID, true, &usrMsg);
             if ((s == NATS_OK) && usrMsg)
             {
                 msgs[count++] = msg;
@@ -2945,14 +2945,14 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static bool _autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, void *closure)
+static bool
+_autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, void *closure)
 {
-    jsFetch *fetch = (jsFetch *)closure;
-
-    int remainingUnrequested = 0;
-    int64_t remainingBytes = 0;
-    int want = 0;
-    bool maybeMore = true;
+    jsFetch *fetch                  = (jsFetch *)closure;
+    int     remainingUnrequested    = 0;
+    int64_t remainingBytes          = 0;
+    int     want                    = 0;
+    bool    maybeMore               = true;
 
     natsSub_Lock(sub);
 
@@ -3005,10 +3005,11 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
                       jsFetchRequest *lifetime,
                       jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {
-    natsStatus s = NATS_OK;
-    natsSubscription *sub = NULL;
-    jsSub *jsi = NULL;
-    jsFetch *fetch = NULL;
+    natsStatus          s       = NATS_OK;
+    natsSubscription    *sub    = NULL;
+    jsSub               *jsi    = NULL;
+    jsFetch             *fetch  = NULL;
+
     jsFetchRequest defaultLifetime = {
         .Batch = INT_MAX,     // no limit
         .Expires = INT64_MAX, // never

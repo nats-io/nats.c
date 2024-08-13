@@ -7848,7 +7848,7 @@ void test_AssignSubToDispatch(void)
         {
             testf("%d subs over %d threads: Verify that the dispatchers have been assigned: ", tc->numSubs, tc->expectedDispatchers);
             for (i = 0; (s == NATS_OK) && (i < tc->numSubs); i++)
-            {   
+            {
                 natsSub_Lock(subs[i]);
                 if (subs[i]->dispatcher != &pool->dispatchers[i % tc->expectedDispatchers])
                     s = NATS_ERR;
@@ -28807,8 +28807,8 @@ void test_JetStreamSubscribePullAsync(void)
     testCond((s == NATS_ERR) && (msg == NULL) && (strstr(nats_GetLastError(NULL), jsErrConcurrentFetchNotAllowed) != NULL));
     nats_clearLastError();
 
-    int noMessageTimeout = 40;
-    int messageArrivesImmediatelyTimeout = 20;
+    int noMessageTimeout = 80;
+    int messageArrivesImmediatelyTimeout = 40;
     int ackTimeout = (int)(so.Config.AckWait / 1E6) + 100;
     testf("No messages yet, timeout in %dms: ", noMessageTimeout);
     natsMutex_Lock(args.m);

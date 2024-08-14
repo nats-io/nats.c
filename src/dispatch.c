@@ -208,8 +208,6 @@ nats_dispatchThreadPool(void *arg)
         void                *messageClosure     = sub->msgCbClosure;
         natsOnCompleteCB    completeCB          = sub->onCompleteCB;
         void                *completeCBClosure  = sub->onCompleteCBClosure;
-        bool                closed              = sub->closed;
-        bool                draining            = sub->draining;
         natsSubscriptionControlMessages *ctrl   = sub->control;
 
         fetchStatus = _preProcessUserMessage(
@@ -267,7 +265,7 @@ nats_dispatchThreadPool(void *arg)
 
             nats_lockDispatcher(d);
 
-            if (!draining && !closed)
+            if (!sub->draining && !sub->closed)
             {
                 // Reset the timedOut boolean to allow for the
                 // subscription to timeout again, and reset the

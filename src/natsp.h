@@ -274,7 +274,7 @@ struct __natsOptions
     void                    *evLoop;
     natsEvLoopCallbacks     evCbs;
 
-    // If set to false, the client will start a per-subscription dedicated
+    // If set to false, the client will start a per-subscription "own"
     // thread to deliver messages to the user callbacks. If true, a shared
     // thread out of a thread pool is used. natsClientConfig controls the pool
     // size.
@@ -541,8 +541,8 @@ struct __natsSubscription
 
     // We always have a dispatcher to keep track of things, even if the
     // subscription is sync. The dispatcher is set up at the subscription
-    // creation time, and may point to a dedicated thread using sub's own
-    // dispatchQueue, or a shared worker using its own dispatch queue, which
+    // creation time, and may point to a dedicated thread that uses sub's own
+    // dispatchQueue, or a shared worker with a shared queue, which
     // dispatcher->queue then points to.
     natsDispatcher *dispatcher;
     natsDispatcher ownDispatcher;
@@ -926,6 +926,6 @@ static inline void nats_unlockDispatcher(natsDispatcher *d)
 }
 
 void nats_dispatchThreadPool(void *arg);
-void nats_dispatchThreadDedicated(void *arg);
+void nats_dispatchThreadOwn(void *arg);
 
 #endif /* NATSP_H_ */

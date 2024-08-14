@@ -36090,7 +36090,7 @@ _subDlvThreadPooled(natsSubscription *sub)
 {
     bool pooled;
     natsSub_Lock(sub);
-    pooled = (sub->dispatcher->dedicatedTo == NULL);
+    pooled = (sub->dispatcher->ownedBy == NULL);
     natsSub_Unlock(sub);
     return pooled;
 }

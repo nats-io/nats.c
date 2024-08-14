@@ -25,9 +25,8 @@ typedef struct __natsDispatchQueue_s
 typedef struct __natsDispatcher_s
 {
     // When created as a dedicated dispatcher for a subscription, we use the
-    // sub's mutex (for performance? TODO: benchmack), so there is special
-    // handling for mu in the code.
-    natsSubscription *dedicatedTo;
+    // sub's mutex, so there is special handling for mu in the code.
+    natsSubscription *ownedBy;
     natsMutex *mu;
 
     natsThread *thread;

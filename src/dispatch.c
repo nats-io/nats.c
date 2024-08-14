@@ -394,9 +394,9 @@ nats_dispatchThreadPool(void *arg)
     natsLib_Release();
 }
 
-// Thread main function for a dedicated dispatcher.
+// Thread main function for a subscription-owned dispatcher.
 void
-nats_dispatchThreadDedicated(void *arg)
+nats_dispatchThreadOwn(void *arg)
 {
     natsSubscription    *sub = (natsSubscription *)arg;
     bool                rmSub = false;

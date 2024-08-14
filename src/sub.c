@@ -80,10 +80,10 @@ _initOwnDispatcher(natsSubscription *sub)
 {
     natsStatus s = NATS_OK;
 
-    if (sub->ownDispatcher.dedicatedTo != NULL)
+    if (sub->ownDispatcher.ownedBy != NULL)
         return nats_setDefaultError(NATS_ILLEGAL_STATE);
 
-    sub->ownDispatcher.dedicatedTo = sub;
+    sub->ownDispatcher.ownedBy = sub;
     sub->ownDispatcher.mu = sub->mu;
     s = natsCondition_Create(&sub->ownDispatcher.cond);
     return NATS_UPDATE_ERR_STACK(s);
@@ -209,7 +209,7 @@ _runOwnDispatcher(natsSubscription *sub, bool forReplies)
         return NATS_ILLEGAL_STATE; // already running
 
     sub->dispatcher = &sub->ownDispatcher;
-    s = natsThread_Create(&sub->ownDispatcher.thread, nats_dispatchThreadDedicated, (void *) sub);
+    s = natsThread_Create(&sub->ownDispatcher.thread, nats_dispatchThreadOwn, (void *) sub);
     return s;
 }
 
@@ -1096,8 +1096,8 @@ natsSubscription_GetSubject(natsSubscription *sub)
     return subject;
 }
 
-// This works for both shared and dedicated dispatchers since we maintain the
-// per-sub stats.
+// This works for both shared and own dispatchers since we maintain the per-sub
+// stats.
 natsStatus
 natsSubscription_GetPending(natsSubscription *sub, int *msgs, int *bytes)
 {

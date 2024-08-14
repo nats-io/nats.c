@@ -20896,20 +20896,31 @@ void test_SSLVerifyHostname(void)
     serverPid = _startServer("nats://127.0.0.1:4443", "-config tls_noip.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
+#if defined(NATS_FORCE_HOST_VERIFICATION)
     test("Check that connect fails if url is IP: ");
+#else
+    test("Check that connect succeeds if url is IP: ");
+#endif
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
     IFOK(s, natsOptions_SetSecure(opts, true));
-    // For test purposes, we provide the CA trusted certs
     IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
     IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
     IFOK(s, natsConnection_Connect(&nc, opts));
+#if defined(NATS_FORCE_HOST_VERIFICATION)
     testCond(s == NATS_SSL_ERROR);
+    nats_clearLastError();
+#else
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+#endif
 
     test("Check that connect fails if wrong expected hostname: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
     IFOK(s, natsOptions_SetExpectedHostname(opts, "foo"));
     IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_SSL_ERROR);
+    nats_clearLastError();
 
     test("Check that connect succeeds if hostname ok and no expected hostname set: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
@@ -21325,6 +21336,22 @@ void test_SSLHandshakeFirst(void)
     s = natsOptions_TLSHandshakeFirst(opts);
     testCond(s == NATS_OK);
 
+    test("Set TLSHandshakeFirst option without setting secure: ");
+    {
+        // we start with a new natsOptions struct so that we can test
+        // that it does not crash with a minimal config
+        natsOptions *no_secure_opts = NULL;
+        s = natsOptions_Create(&no_secure_opts);
+        IFOK(s, natsOptions_SetURL(no_secure_opts, "nats://127.0.0.1:4443"));
+        IFOK(s, natsOptions_SetTimeout(no_secure_opts, 500));
+        IFOK(s, natsOptions_TLSHandshakeFirst(no_secure_opts));
+        IFOK(s, natsConnection_Connect(&nc, no_secure_opts));
+        // expecting an error because cert valiation will fail; the goal here is to avoid a crash
+        testCond(s == NATS_SSL_ERROR);
+        natsOptions_Destroy(no_secure_opts);
+        nats_clearLastError();
+    }
+
     test("Check that connect succeeds: ");
     s = natsConnection_Connect(&nc, opts);
     testCond(s == NATS_OK);
@@ -21341,6 +21368,84 @@ void test_SSLHandshakeFirst(void)
     nats_clearLastError();
 
     natsOptions_Destroy(opts);
+
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
+void test_SSLServerNameIndication(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s = NATS_OK;
+    natsSock            sock = NATS_SOCK_INVALID;
+    natsThread          *t = NULL;
+    struct threadArg    arg;
+    natsSockCtx         ctx;
+    static const char *server = "tls://localhost:4222";
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&(arg.opts)));
+    IFOK(s, natsOptions_SetSecure(arg.opts, true));
+    IFOK(s, natsOptions_TLSHandshakeFirst(arg.opts));
+    IFOK(s, natsOptions_SetServers(arg.opts, &server, 1));
+    if (s != NATS_OK)
+        FAIL("@@ Unable to setup test!");
+
+    test("Start server and connect client: ")
+
+    arg.control = 3;
+
+    s = _startMockupServer(&sock, "localhost", "4222");
+    
+    // Start the thread that will try to connect to our server...
+    IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
+
+    if ((s == NATS_OK)
+        && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+            || natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    
+    testCond((s == NATS_OK) && (ctx.fd > 0));
+
+    test("Read ClientHello from client: ");
+    char buffer[1024];
+    memset(buffer, 0, sizeof(buffer));
+
+    int size = recv(ctx.fd, buffer, sizeof(buffer), 0);
+    testCond(size > 0);
+
+    // remove all null chars to allow the use of strstr on the result
+    for (int i = 0; i < size; ++i) {
+        if (buffer[i] == 0)
+            buffer[i] = '0';
+    }
+
+    test("Check hostname is found in ClientHello: ");
+    bool found = strstr(buffer, "localhost");
+#if defined(NATS_USE_OPENSSL_1_1)
+    testCond(found == true);
+#else
+    testCond(found == false);
+#endif
+
+    // Need to close those for the client side to unblock.
+    natsSock_Close(ctx.fd);
+    natsSock_Close(sock);
+
+    // Wait for the client to finish.
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    _destroyDefaultThreadArgs(&arg);
 
 #else
     test("Skipped when built with no SSL support: ");

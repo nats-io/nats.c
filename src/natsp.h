@@ -376,6 +376,7 @@ typedef struct __jsFetch
 {
     natsFetchCompleteHandler completeCB;
     void *completeCBClosure;
+    natsStatus status;
 
     // Lifetime control
     jsFetchRequest lifetime;

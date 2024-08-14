@@ -247,6 +247,9 @@ nats_dispatchThreadPool(void *arg)
             // Call this in case the subscription was draining.
             natsSub_setDrainCompleteState(sub);
 
+            if ((fetch != NULL) && (fetch->completeCB != NULL))
+                fetch->completeCB(nc, sub, fetch->status, fetch->completeCBClosure);
+
             if (completeCB != NULL)
                 (*completeCB)(completeCBClosure);
 
@@ -279,17 +282,13 @@ nats_dispatchThreadPool(void *arg)
         // Fetch control messages
         else if ((fetchStatus != NATS_OK) && !lastMessageInFetch)
         {
-            // We drop here only if this is not already marked as last message
-            // in fetch. The last message will be delivered first.
-            natsFetchCompleteHandler fetchCompleteCB = fetch->completeCB;
-            void *fetchCompleteCBClosure = fetch->completeCBClosure;
+            // Finalize the fetch and the sub now. Need to store the fetch
+            // status, will call the user callback on close message.
+            fetch->status = fetchStatus;
 
             // TODO: future: options for handling missed heartbeat, for now
             // treat it as any other error and terminate.
-
             nats_unlockDispatcher(d);
-            if (fetchCompleteCB != NULL)
-                (*fetchCompleteCB)(nc, sub, fetchStatus, fetchCompleteCBClosure);
 
             // Call this blindly, it will be a no-op if the subscription
             // was not draining.
@@ -336,6 +335,9 @@ nats_dispatchThreadPool(void *arg)
                 timerNeedReset = true;
         }
 
+        if (lastMessageInFetch)
+            fetch->status = fetchStatus;
+
         nats_unlockDispatcher(d);
 
         // If we are fetching, see if we need to ask the server for more.
@@ -351,12 +353,6 @@ nats_dispatchThreadPool(void *arg)
         {
             natsConnection_Publish(nc, fcReply, NULL, 0);
             NATS_FREE(fcReply);
-        }
-
-        if (lastMessageInFetch)
-        {
-            if (fetch->completeCB != NULL)
-                fetch->completeCB(nc, sub, fetchStatus, fetch->completeCBClosure);
         }
 
         // If we have reached the sub's message max, we need to remove
@@ -402,11 +398,12 @@ nats_dispatchThreadOwn(void *arg)
     bool                rmSub = false;
 
     // These are set at sub creation time and never change, no need to lock.
-    natsConnection *nc          = sub->conn;
-    natsMsgHandler messageCB    = sub->msgCb;
-    void *messageClosure        = sub->msgCbClosure;
-    natsOnCompleteCB completeCB = NULL;
-    void *completeCBClosure     = NULL;
+    natsConnection      *nc                 = sub->conn;
+    natsMsgHandler      messageCB           = sub->msgCb;
+    void                *messageClosure     = sub->msgCbClosure;
+    natsOnCompleteCB    completeCB          = NULL;
+    void                *completeCBClosure  = NULL;
+    jsFetch             *fetch              = NULL;
 
     // This just serves as a barrier for the creation of this thread.
     natsConn_Lock(nc);
@@ -415,7 +412,6 @@ nats_dispatchThreadOwn(void *arg)
     while (true)
     {
         natsStatus  s                   = NATS_OK;
-        natsStatus  fetchStatus         = NATS_OK;
         natsMsg     *msg                = NULL;
         bool        userMsg             = true;
         bool        overLimit           = false;
@@ -436,7 +432,9 @@ nats_dispatchThreadOwn(void *arg)
         bool draining = sub->draining;
         completeCB = sub->onCompleteCB;
         completeCBClosure = sub->onCompleteCBClosure;
-
+        jsSub *jsi = sub->jsi;
+        
+        fetch = (jsi != NULL) ? jsi->fetch : NULL;
         if (sub->closed)
         {
             natsSub_Unlock(sub);
@@ -460,10 +458,8 @@ nats_dispatchThreadOwn(void *arg)
 
         _removeHeadMsg(&sub->ownDispatcher, msg);
 
-        jsSub *jsi = sub->jsi;
-        jsFetch *fetch = (jsi != NULL) ? jsi->fetch : NULL;
         char *fcReply = NULL;
-        fetchStatus = _preProcessUserMessage(
+        natsStatus fetchStatus = _preProcessUserMessage(
             sub, jsi, fetch, msg,
             &userMsg, &overLimit, &lastMessageInSub, &lastMessageInFetch, &fcReply);
 
@@ -471,14 +467,10 @@ nats_dispatchThreadOwn(void *arg)
         if ((fetchStatus != NATS_OK) && !lastMessageInFetch)
         {
             // We drop here only if this is not already marked as last message
-            // in fetch. The last message will be delivered first.
-            natsFetchCompleteHandler fetchCompleteCB = fetch->completeCB;
-            void *fetchCompleteCBClosure = fetch->completeCBClosure;
-
+            // in fetch. The last message will be delivered first. fetch can not
+            // be NULL here since fetchStatus is set.
+            fetch->status = fetchStatus;
             natsSub_Unlock(sub);
-            if (fetchCompleteCB != NULL)
-                (*fetchCompleteCB)(nc, sub, fetchStatus, fetchCompleteCBClosure);
-
             natsMsg_Destroy(msg); // may be an actual headers-only message
             rmSub = true;
             break;
@@ -492,6 +484,9 @@ nats_dispatchThreadOwn(void *arg)
             natsMsg_Destroy(msg);
             continue;
         }
+
+        if (lastMessageInFetch)
+            fetch->status = fetchStatus;
 
         natsSub_Unlock(sub);
 
@@ -510,12 +505,6 @@ nats_dispatchThreadOwn(void *arg)
             NATS_FREE(fcReply);
         }
 
-        if (lastMessageInFetch)
-        {
-            if (fetch->completeCB != NULL)
-                fetch->completeCB(nc, sub, fetchStatus, fetch->completeCBClosure);
-        }
-
         if (lastMessageInSub)
         {
             // If we have hit the max for delivered msgs, remove sub.
@@ -528,6 +517,11 @@ nats_dispatchThreadOwn(void *arg)
 
     if (rmSub)
         natsConn_removeSubscription(nc, sub);
+
+    // It's ok to access fetch->status without locking since it's only modified
+    // in this thread. completeCB and completeCBClosure are also safe to access.
+    if ((fetch != NULL) && (fetch->completeCB != NULL))
+        (*fetch->completeCB)(nc, sub, fetch->status, fetch->completeCBClosure);
 
     if (completeCB != NULL)
         (*completeCB)(completeCBClosure);

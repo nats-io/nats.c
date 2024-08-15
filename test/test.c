@@ -28745,6 +28745,63 @@ void test_JetStreamSubscribePull(void)
 }
 
 static void
+_jsPubReconnectThread(void *closure)
+{
+    jsCtx   *js = (jsCtx*) closure;
+
+    nats_Sleep(5);
+    js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
+    natsConnection_Flush(js->nc);
+
+    natsConnection_Reconnect(js->nc);
+    nats_Sleep(200);
+
+    js_Publish(NULL, js, "foo", "hell1", 5, NULL, NULL);
+    natsConnection_Flush(js->nc);
+}
+
+void test_JetStreamSubscribePull_Reconnect(void)
+{
+    natsStatus s;
+    JS_SETUP(2, 9, 2);
+
+    test("Create stream: ");
+    jsErrCode jerr = 0;
+    jsStreamConfig sc;
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char *[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Subscribe: ");
+    natsSubscription *sub = NULL;
+    s = js_PullSubscribe(&sub, js, "foo", "dur", NULL, NULL, &jerr);
+    testCond(s == NATS_OK);
+
+    test("Start thread to send: ");
+    natsThread *t = NULL;
+    s = natsThread_Create(&t, _jsPubReconnectThread, (void*) js);
+    testCond(s == NATS_OK);
+
+    test("Fetch request succeeds over a reconnect: ");
+    jsFetchRequest fr = {
+        .Batch = 2,
+        .Expires = NATS_SECONDS_TO_NANOS(10),
+    };
+    natsMsgList list;
+    s = natsSubscription_FetchRequest(&list, sub, &fr);
+    testCond((s == NATS_OK) && (list.Count == 2));
+    natsMsgList_Destroy(&list);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    natsSubscription_Destroy(sub);
+    JS_TEARDOWN;
+}
+
+static void
 _recvPullAsync(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
                 void *closure)
 {
@@ -28813,6 +28870,7 @@ _testBatchCompleted(struct threadArg *args, natsSubscription *sub, int waitMS, n
     // We may get called before the delivery thread terminates the sub, this
     // yields and avoids the race for the purpose of the test.
     nats_Sleep(1);
+
     return result && !natsSubscription_IsValid(sub);
 }
 
@@ -29113,7 +29171,6 @@ void test_JetStreamSubscribePullAsync(void)
         args.msgReceived = false;
         args.closed = false;
         args.sum = 0;
-        jsSubOptions_Init(&so);
         jsOptions_Init(&jsOpts);
         so.Config.MaxAckPending = 10;
         so.Config.AckWait = NATS_MILLIS_TO_NANOS(300);
@@ -29157,7 +29214,6 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     jsErrCode jerr = 0;
     jsStreamConfig sc;
     jsOptions jsOpts;
-    jsSubOptions so;
     struct threadArg args;
 
     JS_SETUP(2, 9, 2);
@@ -29181,7 +29237,6 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     args.msgReceived = false;
     args.closed = false;
     args.sum = 0;
-    jsSubOptions_Init(&so);
     jsOptions_Init(&jsOpts);
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
@@ -29192,7 +29247,7 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     };
     natsMutex_Unlock(args.m);
 
-    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, &so, &jerr);
+    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, NULL, &jerr);
     testCond((s == NATS_OK) && _testBatchCompleted(&args, sub, 100, NATS_ERR, 0, false));
 
     test("Check the error to be 'heartbeat value too large': ");
@@ -29209,7 +29264,6 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     args.msgReceived = false;
     args.closed = false;
     args.sum = 0;
-    jsSubOptions_Init(&so);
     jsOptions_Init(&jsOpts);
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
@@ -29219,7 +29273,7 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     lifetime.Expires = NATS_SECONDS_TO_NANOS(20);
     lifetime.Heartbeat = NATS_MILLIS_TO_NANOS(50);
 
-    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, &so, &jerr);
+    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, NULL, &jerr);
     testCond(s == NATS_OK);
 
     test("Subscription is active after 2 heartbeats: ");
@@ -29247,7 +29301,6 @@ void test_JetStreamSubscribePullAsync_Unsubscribe(void)
     jsErrCode jerr = 0;
     jsStreamConfig sc;
     jsOptions jsOpts;
-    jsSubOptions so;
     struct threadArg args;
 
     JS_SETUP(2, 9, 2);
@@ -29264,7 +29317,6 @@ void test_JetStreamSubscribePullAsync_Unsubscribe(void)
     s = js_AddStream(NULL, js, &sc, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
 
-
     test("Publish a few messages: ");
     s = js_Publish(NULL, js, "foo", "hell0", 5, NULL, &jerr);
     if (s == NATS_OK)
@@ -29280,7 +29332,6 @@ void test_JetStreamSubscribePullAsync_Unsubscribe(void)
     args.msgReceived = false;
     args.closed = false;
     args.sum = 0;
-    jsSubOptions_Init(&so);
     jsOptions_Init(&jsOpts);
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
@@ -29289,7 +29340,7 @@ void test_JetStreamSubscribePullAsync_Unsubscribe(void)
         .Batch = 100,
         .Expires = NATS_SECONDS_TO_NANOS(1),
     };
-    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, &so, &jerr);
+    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, NULL, &jerr);
     testCond(s == NATS_OK);
 
     test("Receive 1 message: ");
@@ -29312,6 +29363,149 @@ void test_JetStreamSubscribePullAsync_Unsubscribe(void)
     sub = NULL;
     JS_TEARDOWN;
     _destroyDefaultThreadArgs(&args);
+}
+
+void test_JetStreamSubscribePullAsync_Reconnect(void)
+{
+    natsStatus s;
+    JS_SETUP(2, 9, 2);
+
+    test("Create stream: ");
+    jsErrCode jerr = 0;
+    jsStreamConfig sc;
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char *[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Subscribe, expect 3 messsages, fetch size 2: ");
+    natsSubscription *sub = NULL;
+    jsOptions jsOpts;
+    struct threadArg args;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    natsMutex_Lock(args.m);
+    args.control = 2;      // no ack
+    args.status = NATS_OK; // batch exit status will be here
+    jsOptions_Init(&jsOpts);
+    jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
+    jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
+    jsOpts.PullSubscribeAsync.FetchSize = 2;
+    natsMutex_Unlock(args.m);
+    jsFetchRequest lifetime = {
+        .Batch = 3,
+        .Expires = NATS_SECONDS_TO_NANOS(10),
+    };
+    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, NULL, &jerr);
+    testCond(s == NATS_OK);
+
+    test("Send 1 message: ");
+    s = js_Publish(NULL, js, "foo", "hell0", 5, NULL, &jerr);
+    testCond(s == NATS_OK);
+
+    test("Receive 1 message: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.msgReceived)
+        s = natsCondition_TimedWait(args.c, args.m, 20);
+    testCond((s == NATS_OK) && args.msgReceived && (args.closed == false));
+    args.msgReceived = false;
+    natsMutex_Unlock(args.m);
+
+    test("Reconnect: ");
+    s = natsConnection_Flush(nc);
+    if (s == NATS_OK)
+        s = natsConnection_Reconnect(nc);
+    nats_Sleep(100);
+    testCond(s == NATS_OK);
+
+    test("Send 2 more messages: ");
+    s = js_Publish(NULL, js, "foo", "hell1", 5, NULL, &jerr);
+    if (s == NATS_OK)
+        s = js_Publish(NULL, js, "foo", "hell2", 5, NULL, &jerr);
+    testCond(s == NATS_OK);
+
+    test("Receive all expected messages: ");
+    testCond(_testBatchCompleted(&args, sub, 500, NATS_MAX_DELIVERED_MSGS, 3, false));
+
+    natsSubscription_Destroy(sub);
+    JS_TEARDOWN;
+    _destroyDefaultThreadArgs(&args);
+}
+
+void test_JetStreamSubscribePullAsync_Disconnect(void)
+{
+    natsStatus s;
+    natsOptions *opts = NULL;
+    s = natsOptions_Create(&opts);
+    if (s != NATS_OK)
+        FAIL("Unable to create options");
+    natsOptions_SetAllowReconnect(opts, false);
+    JS_SETUP_WITH_OPTS(2, 9, 2, opts);
+
+    test("Create stream: ");
+    jsErrCode jerr = 0;
+    jsStreamConfig sc;
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char *[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Subscribe, expect 2 messsages, fetch size 2: ");
+    natsSubscription *sub = NULL;
+    jsOptions jsOpts;
+    struct threadArg args;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    natsMutex_Lock(args.m);
+    args.control = 2;      // no ack
+    args.status = NATS_OK; // batch exit status will be here
+    jsOptions_Init(&jsOpts);
+    jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
+    jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
+    jsOpts.PullSubscribeAsync.FetchSize = 2;
+    natsMutex_Unlock(args.m);
+    jsFetchRequest lifetime = {
+        .Batch = 2,
+        .Expires = NATS_SECONDS_TO_NANOS(10),
+    };
+    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, NULL, &jerr);
+    testCond(s == NATS_OK);
+
+    test("Send 1 message: ");
+    s = js_Publish(NULL, js, "foo", "hell0", 5, NULL, &jerr);
+    testCond(s == NATS_OK);
+
+    test("Receive 1 message: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !args.msgReceived)
+        s = natsCondition_TimedWait(args.c, args.m, 20);
+    testCond((s == NATS_OK) && args.msgReceived && (args.closed == false));
+    args.msgReceived = false;
+    natsMutex_Unlock(args.m);
+
+    test("Disconnect: ");
+    natsConn_Lock(nc);
+    natsSock_Shutdown(nc->sockCtx.fd);
+    natsConn_Unlock(nc);
+    testCond(s == NATS_OK);
+
+    test("Check fetch completion, expect NATS_OK: ");
+    testCond(_testBatchCompleted(&args, sub, 500, NATS_OK, 1, false));
+
+    natsSubscription_Destroy(sub);
+    JS_TEARDOWN;
+    _destroyDefaultThreadArgs(&args);
+    natsOptions_Destroy(opts);
 }
 
 void test_JetStreamSubscribeHeadersOnly(void)

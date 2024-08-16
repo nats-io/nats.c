@@ -69,6 +69,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 
 There are several package managers with NATS C client library available. If you know one that is not in this list, please submit a PR to add it!
 
+- [conan](https://conan.io/center) The "cnats" recipe is [here](https://github.com/conan-io/conan-center-index/tree/master/recipes/cnats)
 - [Homebrew](https://github.com/Homebrew/homebrew-core) The "cnats" formula is [here](https://github.com/Homebrew/homebrew-core/blob/master/Formula/c/cnats.rb)
 - [vcpkg](https://vcpkg.io) The "cnats" port is [here](https://github.com/microsoft/vcpkg/tree/master/ports/cnats)
 

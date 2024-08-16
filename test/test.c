@@ -28871,7 +28871,29 @@ _testBatchCompleted(struct threadArg *args, natsSubscription *sub, int waitMS, n
     // yields and avoids the race for the purpose of the test.
     nats_Sleep(1);
 
-    return result && !natsSubscription_IsValid(sub);
+    result = result && !natsSubscription_IsValid(sub);
+    if (!result)
+    {
+        if (s != NATS_OK)
+            printf("FAILED: timed out: %d\n", s);
+        if (!args->closed)
+            printf("FAILED: onComplete has not been called\n");
+        if (args->status != expectedStatus)
+            printf("FAILED: status: %d, expected: %d\n", args->status, expectedStatus);
+        if (orFewer)
+        {
+            if (args->sum > expectedMsgs)
+                printf("FAILED: msgs: %d, expected at most: %d\n", args->sum, expectedMsgs);
+        }
+        else
+        {
+            if (args->sum != expectedMsgs)
+                printf("FAILED: msgs: %d, expected: %d\n", args->sum, expectedMsgs);
+        }
+        if (natsSubscription_IsValid(sub))
+            printf("FAILED: subscription is still valid\n");
+    }
+    return result;
 }
 
 void test_JetStreamSubscribePullAsync(void)
@@ -29147,11 +29169,11 @@ void test_JetStreamSubscribePullAsync(void)
         },
         {
             .name = "Fetch with a short expiration is partially fulfilled NATS_TIMEOUT",
-            .want = 100,
+            .want = 300,
             .expires = 1, // ms
-            .during = 100,
+            .during = 300,
             .expectedStatus = NATS_TIMEOUT,
-            .expectedN = 100,
+            .expectedN = 300,
             .orFewer = true,
         },
         {

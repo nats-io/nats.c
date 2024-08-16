@@ -7700,7 +7700,7 @@ static int _numRunningThreads(natsDispatcherPool *pool)
 {
     int i, n;
     for (n = 0, i = 0; i < pool->cap; i++)
-        n += (pool->dispatchers[i].thread != NULL);
+        n += (pool->dispatchers[i] != NULL);
     return n;
 }
 
@@ -7850,7 +7850,7 @@ void test_AssignSubToDispatch(void)
             for (i = 0; (s == NATS_OK) && (i < tc->numSubs); i++)
             {
                 natsSub_Lock(subs[i]);
-                if (subs[i]->dispatcher != &pool->dispatchers[i % tc->expectedDispatchers])
+                if (subs[i]->dispatcher != pool->dispatchers[i % tc->expectedDispatchers])
                     s = NATS_ERR;
                 natsSub_Unlock(subs[i]);
             }

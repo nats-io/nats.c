@@ -25930,10 +25930,18 @@ void test_JetStreamPublishAckHandler(void)
     _destroyDefaultThreadArgs(&args);
 }
 
+static void _destroyMessageLater(void *msg)
+{
+    nats_Sleep(500);
+    printf("DESTROY LATER %s\n", natsMsg_GetSubject((natsMsg*)msg));
+    natsMsg_Destroy((natsMsg*)msg);
+}
+
 static void
 _jsMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     struct threadArg *args = (struct threadArg*) closure;
+    bool callDestroy = true;
 
     natsMutex_Lock(args->m);
     args->sum++;
@@ -25950,11 +25958,22 @@ _jsMsgHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clo
             args->msgReceived = true;
         }
     }
+    else if (args->control == 4)
+    {
+        if (args->t == NULL) {
+            natsThread_Create(&args->t, _destroyMessageLater, (void*)msg);
+            callDestroy = false;
+        }
+    }
     if ((args->control != 2) || (args->sum == args->results[0]))
         natsCondition_Broadcast(args->c);
+    
     natsMutex_Unlock(args->m);
-
-    natsMsg_Destroy(msg);
+    
+    if (callDestroy)
+    {
+        natsMsg_Destroy(msg);
+    }
 }
 
 static void
@@ -26117,6 +26136,7 @@ void test_JetStreamSubscribe(void)
     testCond(s == NATS_OK);
 
     test("Subscribe, no options: ");
+    args.control = 4; // this will make the first message be destroyed slightly later
     s = js_Subscribe(&sub, js, "foo", _jsMsgHandler, &args, NULL, NULL, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
@@ -26124,8 +26144,12 @@ void test_JetStreamSubscribe(void)
     natsMutex_Lock(args.m);
     while ((s != NATS_TIMEOUT) && (args.sum != 3))
         s = natsCondition_TimedWait(args.c, args.m, 2000);
+
+    natsThread_Join(args.t);
+    natsThread_Destroy(args.t);
+
     natsMutex_Unlock(args.m);
-    testCond(s == NATS_OK);
+    testCond(args.t && s == NATS_OK);
 
     test("Check acks sent: ");
     // Sub should have its own autoAck CB, so usrCb should be != NULL

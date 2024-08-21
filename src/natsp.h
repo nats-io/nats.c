@@ -374,31 +374,38 @@ struct __jsCtx
 
 typedef struct __jsFetch
 {
-    natsFetchCompleteHandler completeCB;
-    void *completeCBClosure;
-    natsStatus status;
-
     // Lifetime control
-    jsFetchRequest lifetime;
-    int64_t startTimeMilli;
-    int receivedMsgs;
-    int64_t receivedBytes;
-    int deliveredMsgs;
-    int64_t deliveredBytes;
-    int requestedMsgs;
+    int64_t     timeoutMillis;
+    int         maxMessages;
+    int64_t     maxBytes;
+    bool        noWait;
 
-    int keepAhead;
-    int fetchSize;
+    // On complete
+    natsFetchCompleteHandler completeCB;
+    void        *completeCBClosure;
+    natsStatus  status;
 
+    // Flow control
     natsFetchNextHandler nextf;
-    void *nextClosure;
+    void        *nextClosure;
+    int         keepAhead;
+    int         fetchSize;
+    int64_t     heartbeatMillis;
+
+    // Stats
+    int64_t     startTimeMillis;
+    int         receivedMsgs;
+    int64_t     receivedBytes;
+    int         deliveredMsgs;
+    int64_t     deliveredBytes;
+    int         requestedMsgs;
 
     // Timer for the fetch expiration. We leverage the existing jsi->hbTimer for
     // checking missed heartbeats.
-    natsTimer *expiresTimer;
+    natsTimer   *expiresTimer;
 
     // Matches jsi->fetchID
-    char replySubject[NATS_DEFAULT_INBOX_PRE_LEN + NUID_BUFFER_LEN + 32]; // big enough for {INBOX}.number
+    char        replySubject[NATS_DEFAULT_INBOX_PRE_LEN + NUID_BUFFER_LEN + 32]; // big enough for {INBOX}.number
 } jsFetch;
 
 typedef struct __jsSub

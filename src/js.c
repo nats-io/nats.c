@@ -2917,9 +2917,10 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
 
     // These are not changeable by the callback, only Batch and MaxBytes can be updated.
     int64_t now = nats_Now();
-    req.Heartbeat = fetch->lifetime.Heartbeat;
-    req.Expires = fetch->lifetime.Expires - (now - fetch->startTimeMilli) * 10*1000*1000;
-    req.NoWait = fetch->lifetime.NoWait;
+    if (fetch->timeoutMillis != 0)
+        req.Expires = (fetch->timeoutMillis - (now - fetch->startTimeMillis)) * 1000 * 1000; // ns, go time.Duration
+    req.NoWait = fetch->noWait;
+    req.Heartbeat = fetch->heartbeatMillis * 1000 * 1000; // ns, go time.Duration
 
     char buffer[128];
     natsBuffer buf;
@@ -2945,6 +2946,7 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// Sets Batch and MaxBytes for the next fetch request.
 static bool
 _autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, void *closure)
 {
@@ -2963,15 +2965,15 @@ _autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, void *closure)
 
     if (maybeMore)
     {
-        // fetch->lifetime.Batch is always > 0
-        remainingUnrequested = fetch->lifetime.Batch - fetch->requestedMsgs;
+        // fetch->maxMessages is always > 0
+        remainingUnrequested = fetch->maxMessages - fetch->requestedMsgs;
         if (remainingUnrequested <= 0)
             maybeMore = false;
     }
 
-    if (maybeMore && (fetch->lifetime.MaxBytes > 0))
+    if (maybeMore && (fetch->maxBytes > 0))
     {
-        remainingBytes = fetch->lifetime.MaxBytes - fetch->receivedBytes;
+        remainingBytes = fetch->maxBytes - fetch->receivedBytes;
         if (remainingBytes <= 0)
             maybeMore = false;
     }
@@ -2990,7 +2992,6 @@ _autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, void *closure)
     if (!maybeMore)
         return false;
 
-    *req = fetch->lifetime; // copy bytes, reading immutable data
     req->Batch = want;
     // FIXME discuss in PR - this seems wrong, we don't know how many bytes we will have
     // received from what is already requested. Still, can serve as a safe
@@ -3002,7 +3003,6 @@ _autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, void *closure)
 natsStatus
 js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject, const char *durable,
                       natsMsgHandler msgCB, void *msgCBClosure,
-                      jsFetchRequest *lifetime,
                       jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode)
 {
     natsStatus          s       = NATS_OK;
@@ -3010,22 +3010,11 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
     jsSub               *jsi    = NULL;
     jsFetch             *fetch  = NULL;
 
-    jsFetchRequest defaultLifetime = {
-        .Batch = INT_MAX,     // no limit
-        .Expires = INT64_MAX, // never
-        .Heartbeat = 0,       // none
-        .MaxBytes = 0,        // no limit
-        .NoWait = false,      // wait forever
-    };
-
     if ((newsub == NULL) || (msgCB == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     if (errCode != NULL)
         *errCode = 0;
-
-    if (lifetime == NULL)
-        lifetime = &defaultLifetime;
 
     // Do a basic pull subscribe first, but with a callback so it is treated as
     // "async" and assigned to a dispatcher. Since we don't fetch anything, it
@@ -3041,30 +3030,22 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
     // Initialize fetch parameters.
     if (s == NATS_OK)
     {
-        fetch->startTimeMilli = nats_Now();
-        fetch->lifetime = *lifetime;
+        fetch->status = NATS_OK;
+        fetch->startTimeMillis = nats_Now();
 
-        if (fetch->lifetime.Batch == 0)
-            fetch->lifetime.Batch = INT_MAX;
-
-        fetch->nextf = _autoNextFetchRequest;
-        fetch->nextClosure = (void *)fetch;
-        if (jsOpts != NULL)
-        {
-            fetch->fetchSize = jsOpts->PullSubscribeAsync.FetchSize;
-            fetch->keepAhead = jsOpts->PullSubscribeAsync.KeepAhead;
-            fetch->completeCB = jsOpts->PullSubscribeAsync.CompleteHandler;
-            fetch->completeCBClosure = jsOpts->PullSubscribeAsync.CompleteHandlerClosure;
-
-            if (jsOpts->PullSubscribeAsync.NextHandler != NULL)
-            {
-                fetch->nextf = jsOpts->PullSubscribeAsync.NextHandler;
-                fetch->nextClosure = jsOpts->PullSubscribeAsync.NextHandlerClosure;
-            }
-        }
-
-        if (fetch->fetchSize == 0)
-            fetch->fetchSize = NATS_DEFAULT_ASYNC_FETCH_SIZE;
+#define _set(_f, _v, _nil, _def) fetch->_f = ((jsOpts != NULL) && (jsOpts->PullSubscribeAsync._v != _nil)) ? jsOpts->PullSubscribeAsync._v : _def
+        _set(completeCB, CompleteHandler, NULL, NULL);
+        _set(completeCBClosure, CompleteHandlerClosure, NULL, NULL);
+        _set(fetchSize, FetchSize, 0, NATS_DEFAULT_ASYNC_FETCH_SIZE);
+        _set(heartbeatMillis, HeartbeatMillis, 0, 0);
+        _set(keepAhead, KeepAhead, 0, 0);
+        _set(maxBytes, MaxBytes, 0, 0);
+        _set(maxMessages, MaxMessages, 0, INT_MAX);
+        _set(nextClosure, NextHandlerClosure, NULL, fetch);
+        _set(nextf, NextHandler, NULL, _autoNextFetchRequest);
+        _set(noWait, NoWait, false, false);
+        _set(timeoutMillis, TimeoutMillis, 0, INT64_MAX);
+#undef _set
     }
 
     // Set up the sub to process fetch results.
@@ -3079,27 +3060,27 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
 
         // Start the timers. They will live for the entire length of the
         // subscription (the missed heartbeat timer may be reset as needed).
-        if (lifetime->Expires > 0)
+        if (fetch->timeoutMillis > 0)
         {
             sub->refs++;
             s = natsTimer_Create(&fetch->expiresTimer, _fetchExpiredFired, _releaseSubWhenStopped,
-                                 lifetime->Expires, (void *)sub);
+                                 fetch->timeoutMillis, (void *)sub);
             if (s != NATS_OK)
                 sub->refs--;
         }
 
-        if ((s == NATS_OK) && (lifetime->Heartbeat > 0))
+        if ((s == NATS_OK) && (fetch->heartbeatMillis > 0))
         {
-            int64_t milli = (lifetime->Heartbeat / 1000000) * 2;
+            int64_t dur = fetch->heartbeatMillis * 2;
             sub->refs++;
             if (jsi->hbTimer == NULL)
             {
-                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _releaseSubWhenStopped, milli, (void *)sub);
+                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _releaseSubWhenStopped, dur, (void *)sub);
                 if (s != NATS_OK)
                     sub->refs--;
             }
             else
-                natsTimer_Reset(jsi->hbTimer, milli);
+                natsTimer_Reset(jsi->hbTimer, dur);
         }
 
         natsSub_Unlock(sub);

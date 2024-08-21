@@ -28926,22 +28926,22 @@ void test_JetStreamSubscribePullAsync(void)
     // TEST various error conditions.
 
     test("Create pull sub async (invalid args): ");
-    s = js_PullSubscribeAsync(NULL, js, "foo", "dur", _recvPullAsync, &args, NULL, NULL, NULL, &jerr);
+    s = js_PullSubscribeAsync(NULL, js, "foo", "dur", _recvPullAsync, &args, NULL, NULL, &jerr);
     if (s == NATS_INVALID_ARG)
-        s = js_PullSubscribeAsync(&sub, NULL, "foo", "dur", _recvPullAsync, &args, NULL, NULL, NULL, &jerr);
+        s = js_PullSubscribeAsync(&sub, NULL, "foo", "dur", _recvPullAsync, &args, NULL, NULL, &jerr);
     if (s == NATS_INVALID_ARG)
-        s = js_PullSubscribeAsync(&sub, js, NULL, "dur", _recvPullAsync, &args, NULL, NULL, NULL, &jerr);
+        s = js_PullSubscribeAsync(&sub, js, NULL, "dur", _recvPullAsync, &args, NULL, NULL, &jerr);
     if (s == NATS_INVALID_ARG)
-        s = js_PullSubscribeAsync(NULL, js, "", "dur", _recvPullAsync, &args, NULL, NULL, NULL, &jerr);
+        s = js_PullSubscribeAsync(NULL, js, "", "dur", _recvPullAsync, &args, NULL, NULL, &jerr);
     if (s == NATS_INVALID_ARG)
-        s = js_PullSubscribeAsync(&sub, js, "foo", "dur", NULL, &args, NULL, NULL, NULL, &jerr);
+        s = js_PullSubscribeAsync(&sub, js, "foo", "dur", NULL, &args, NULL, NULL, &jerr);
     testCond((s == NATS_INVALID_ARG) && (sub == NULL) && (jerr == 0));
     nats_clearLastError();
 
     test("AckNone ok: ");
     jsSubOptions_Init(&so);
     so.Config.AckPolicy = js_AckNone;
-    s = js_PullSubscribeAsync(&sub, js, "foo", "ackNone", _recvPullAsync, &args, NULL, NULL, &so, &jerr);
+    s = js_PullSubscribeAsync(&sub, js, "foo", "ackNone", _recvPullAsync, &args, NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
     natsSubscription_Unsubscribe(sub);
     natsSubscription_Destroy(sub);
@@ -28950,7 +28950,7 @@ void test_JetStreamSubscribePullAsync(void)
     test("AckAll ok: ");
     jsSubOptions_Init(&so);
     so.Config.AckPolicy = js_AckAll;
-    s = js_PullSubscribeAsync(&sub, js, "foo", "ackAll", _recvPullAsync, &args, NULL, NULL, &so, &jerr);
+    s = js_PullSubscribeAsync(&sub, js, "foo", "ackAll", _recvPullAsync, &args, NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
     natsSubscription_Unsubscribe(sub);
     natsSubscription_Destroy(sub);
@@ -28964,7 +28964,7 @@ void test_JetStreamSubscribePullAsync(void)
     testCond((s == NATS_OK) && (jerr == 0));
 
     test("Try create pull sub from push consumer: ");
-    s = js_PullSubscribeAsync(&sub, js, "foo", "push_dur", _recvPullAsync, &args, NULL, NULL, &so, &jerr);
+    s = js_PullSubscribeAsync(&sub, js, "foo", "push_dur", _recvPullAsync, &args, NULL, &so, &jerr);
     testCond((s == NATS_ERR) && (sub == NULL) && (jerr == 0) && (strstr(nats_GetLastError(NULL), jsErrPullSubscribeToPushConsumer) != NULL));
     nats_clearLastError();
 
@@ -28972,7 +28972,7 @@ void test_JetStreamSubscribePullAsync(void)
     jsSubOptions_Init(&so);
     so.Stream = "TEST";
     so.Consumer = "bar";
-    s = js_PullSubscribeAsync(&sub, js, "foo", "bar", _recvPullAsync, &args, NULL, NULL, &so, &jerr);
+    s = js_PullSubscribeAsync(&sub, js, "foo", "bar", _recvPullAsync, &args, NULL, &so, &jerr);
     testCond((s == NATS_NOT_FOUND) && (sub == NULL) && (jerr == JSConsumerNotFoundErr));
     nats_clearLastError();
 
@@ -28986,7 +28986,7 @@ void test_JetStreamSubscribePullAsync(void)
     so.Config.MaxAckPending = 10;
     so.Config.AckWait = NATS_MILLIS_TO_NANOS(300);
     so.ManualAck = true;
-    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, NULL, NULL, &so, &jerr);
+    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, NULL, &so, &jerr);
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
     test("Can't call NextMsg: ");
@@ -29064,7 +29064,7 @@ void test_JetStreamSubscribePullAsync(void)
     sub = NULL;
 
     // TEST exit criteria.
-    int batchWaitTimeout = 300; // milliseconds
+    int batchWaitTimeout = 1000; // milliseconds
     typedef struct
     {
         const char *name;
@@ -29161,7 +29161,7 @@ void test_JetStreamSubscribePullAsync(void)
         {
             .name = "Fetch with expiration is fulfilled NATS_MAX_DELIVERED_MSGS",
             .want = 30,
-            .expires = 100, // ms
+            .expires = 100,
             .before = 20,
             .during = 10,
             .expectedStatus = NATS_MAX_DELIVERED_MSGS,
@@ -29169,11 +29169,12 @@ void test_JetStreamSubscribePullAsync(void)
         },
         {
             .name = "Fetch with a short expiration is partially fulfilled NATS_TIMEOUT",
-            .want = 300,
-            .expires = 1, // ms
-            .during = 300,
+            .fetchSize = 11, // just to slow things down
+            .want = 200,
+            .expires = 5,
+            .during = 200,
             .expectedStatus = NATS_TIMEOUT,
-            .expectedN = 300,
+            .expectedN = 200,
             .orFewer = true,
         },
         {
@@ -29193,24 +29194,25 @@ void test_JetStreamSubscribePullAsync(void)
         args.msgReceived = false;
         args.closed = false;
         args.sum = 0;
-        jsOptions_Init(&jsOpts);
+        natsMutex_Unlock(args.m);
+
+        jsSubOptions_Init(&so);
         so.Config.MaxAckPending = 10;
         so.Config.AckWait = NATS_MILLIS_TO_NANOS(300);
         so.Config.MaxRequestMaxBytes = 777;
         so.ManualAck = false;
+
+        jsOptions_Init(&jsOpts);
         jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
         jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
         jsOpts.PullSubscribeAsync.FetchSize = tc->fetchSize;
-        jsFetchRequest lifetime = {
-            .Batch = tc->want,
-            .MaxBytes = tc->maxBytes,
-            .NoWait = tc->noWait,
-            .Expires = NATS_MILLIS_TO_NANOS(tc->expires),
-        };
-        s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, &so, &jerr);
+        jsOpts.PullSubscribeAsync.MaxMessages = tc->want;
+        jsOpts.PullSubscribeAsync.MaxBytes = tc->maxBytes;
+        jsOpts.PullSubscribeAsync.NoWait = tc->noWait;
+        jsOpts.PullSubscribeAsync.TimeoutMillis = tc->expires;
+        s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, &so, &jerr);
         if ((s != NATS_OK) && (sub == NULL) && (jerr != 0))
             FAIL("Failed to create pull subscription, unusual");
-        natsMutex_Unlock(args.m);
 
         for (int i = 0; (s == NATS_OK) && (i < tc->during); i++)
             s = js_Publish(NULL, js, "foo", "hello", 5, NULL, &jerr);
@@ -29259,17 +29261,17 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     args.msgReceived = false;
     args.closed = false;
     args.sum = 0;
+    natsMutex_Unlock(args.m);
+
+    // Heartbeat too large for the timeout
     jsOptions_Init(&jsOpts);
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
-    jsFetchRequest lifetime = {
-        .Batch = 100,
-        .Expires = NATS_MILLIS_TO_NANOS(1),
-        .Heartbeat = NATS_MILLIS_TO_NANOS(10),
-    };
-    natsMutex_Unlock(args.m);
+    jsOpts.PullSubscribeAsync.MaxMessages = 100;
+    jsOpts.PullSubscribeAsync.TimeoutMillis = 10;
+    jsOpts.PullSubscribeAsync.HeartbeatMillis = 100;
 
-    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, NULL, &jerr);
+    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
     testCond((s == NATS_OK) && _testBatchCompleted(&args, sub, 100, NATS_ERR, 0, false));
 
     test("Check the error to be 'heartbeat value too large': ");
@@ -29286,16 +29288,17 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     args.msgReceived = false;
     args.closed = false;
     args.sum = 0;
+    natsMutex_Unlock(args.m);
+
+    // Let's make it wait for 20 seconds, and have HBs every 50ms
     jsOptions_Init(&jsOpts);
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
-    natsMutex_Unlock(args.m);
-    // Let's make it wait for 20 seconds, and have HBs every 50ms
-    lifetime.Batch = 100;
-    lifetime.Expires = NATS_SECONDS_TO_NANOS(20);
-    lifetime.Heartbeat = NATS_MILLIS_TO_NANOS(50);
+    jsOpts.PullSubscribeAsync.MaxMessages = 100;
+    jsOpts.PullSubscribeAsync.TimeoutMillis = 20 * 1000;
+    jsOpts.PullSubscribeAsync.HeartbeatMillis = 50;
 
-    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, NULL, &jerr);
+    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
     testCond(s == NATS_OK);
 
     test("Subscription is active after 2 heartbeats: ");
@@ -29354,15 +29357,15 @@ void test_JetStreamSubscribePullAsync_Unsubscribe(void)
     args.msgReceived = false;
     args.closed = false;
     args.sum = 0;
+    natsMutex_Unlock(args.m);
+
     jsOptions_Init(&jsOpts);
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
-    natsMutex_Unlock(args.m);
-    jsFetchRequest lifetime = {
-        .Batch = 100,
-        .Expires = NATS_SECONDS_TO_NANOS(1),
-    };
-    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, NULL, &jerr);
+    jsOpts.PullSubscribeAsync.MaxMessages = 100;
+    jsOpts.PullSubscribeAsync.TimeoutMillis = 1000;
+
+    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
     testCond(s == NATS_OK);
 
     test("Receive 1 message: ");
@@ -29414,16 +29417,16 @@ void test_JetStreamSubscribePullAsync_Reconnect(void)
     natsMutex_Lock(args.m);
     args.control = 2;      // no ack
     args.status = NATS_OK; // batch exit status will be here
+    natsMutex_Unlock(args.m);
+
     jsOptions_Init(&jsOpts);
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
     jsOpts.PullSubscribeAsync.FetchSize = 2;
-    natsMutex_Unlock(args.m);
-    jsFetchRequest lifetime = {
-        .Batch = 3,
-        .Expires = NATS_SECONDS_TO_NANOS(10),
-    };
-    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, NULL, &jerr);
+    jsOpts.PullSubscribeAsync.MaxMessages = 3;
+    jsOpts.PullSubscribeAsync.TimeoutMillis = 10 * 1000;
+
+    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
     testCond(s == NATS_OK);
 
     test("Send 1 message: ");
@@ -29491,16 +29494,16 @@ void test_JetStreamSubscribePullAsync_Disconnect(void)
     natsMutex_Lock(args.m);
     args.control = 2;      // no ack
     args.status = NATS_OK; // batch exit status will be here
+    natsMutex_Unlock(args.m);
+
     jsOptions_Init(&jsOpts);
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
     jsOpts.PullSubscribeAsync.FetchSize = 2;
-    natsMutex_Unlock(args.m);
-    jsFetchRequest lifetime = {
-        .Batch = 2,
-        .Expires = NATS_SECONDS_TO_NANOS(10),
-    };
-    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &lifetime, &jsOpts, NULL, &jerr);
+    jsOpts.PullSubscribeAsync.MaxMessages = 2;
+    jsOpts.PullSubscribeAsync.TimeoutMillis = 10 * 1000;
+
+    s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
     testCond(s == NATS_OK);
 
     test("Send 1 message: ");

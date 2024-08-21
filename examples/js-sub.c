@@ -21,10 +21,6 @@ static const char *usage = ""\
 "-fc            enable flow control\n" \
 "-count         number of expected messages\n";
 
-#define SECOND_NANO (int64_t)1E9
-#define MINUTE_NANO (SECOND_NANO * 60)
-#define HOUR_NANO (MINUTE_NANO * 60)
-
 static bool fetchCompleteCalled = false;
 static bool subCompleteCalled = false;
 
@@ -177,18 +173,16 @@ int main(int argc, char **argv)
     {
         if (pull && async)
         {
+            jsOpts.PullSubscribeAsync.MaxMessages = (int) total;
+            jsOpts.PullSubscribeAsync.NoWait = true;
+            jsOpts.PullSubscribeAsync.TimeoutMillis = 3600 * 1000; // 1 hour
             jsOpts.PullSubscribeAsync.FetchSize = 17;
             jsOpts.PullSubscribeAsync.KeepAhead = 7;
             jsOpts.PullSubscribeAsync.CompleteHandler = _completeFetchCb;
-
-            jsFetchRequest lifetime;
-            jsFetchRequest_Init(&lifetime);
-            lifetime.NoWait = true;
-            lifetime.Expires = 1 * HOUR_NANO;
-            lifetime.Batch = (int) total;
+            jsOpts.PullSubscribeAsync.CompleteHandlerClosure = NULL;
 
             // Uncomment to use a 1 second heartbeat.
-            // lifetime.Heartbeat = 1 * SECOND_NANO;
+            // jsOpts.PullSubscribeAsync.HeartbeatMillis = 1000; // 1 second
 
             // Uncomment to provide custom control over next fetch size.
             // jsOpts.PullSubscribeAsync.NextHandler = nextFetchCb;
@@ -196,7 +190,7 @@ int main(int argc, char **argv)
             // Uncomment to turn off AutoACK on delivered messages.            
             // so.ManualAck = true;
 
-            s = js_PullSubscribeAsync(&sub, js, subj, durable, onMsg, NULL, &lifetime, &jsOpts, &so, &jerr);
+            s = js_PullSubscribeAsync(&sub, js, subj, durable, onMsg, NULL, &jsOpts, &so, &jerr);
         }
         else if (pull)
             s = js_PullSubscribe(&sub, js, subj, durable, &jsOpts, &so, &jerr);

@@ -1281,26 +1281,39 @@ typedef struct jsOptions
 
         struct jsOptionsSubscribePullAsync
         {
-                // Options to control automatic Fetch flow control.
-                //
-                // The number of messages to ask for in a single request, and if
-                // we should try to fetch ahead, KeepAhead more than we need to
-                // finish the current request. Fetch this many messages ahead of
-                // time.
-                int FetchSize;
-                int KeepAhead;
+                // Lifetime of the subscription (completes when any one of the
+                // targets is reached).
+                int64_t                 TimeoutMillis;
+                int                     MaxMessages;
+                int64_t                 MaxBytes;
 
-                // Manual fetch flow control. If provided gets called before
-                // each message is deliverered to msgCB, and overrides the
-                // default algorithm for sending Next requests.
-                natsFetchNextHandler NextHandler;
-                void *NextHandlerClosure;
+                // If NoWait is set, the subscription will receive the messages
+                // already stored on the server subject to the limits, but will
+                // not wait for more messages.
+                bool                    NoWait;
 
                 // Fetch complete handler that receives the exit status code,
                 // the subscription's Complete handler is also invoked, but does
                 // not have the status code.
                 natsFetchCompleteHandler CompleteHandler;
-                void *CompleteHandlerClosure;
+                void                    *CompleteHandlerClosure;
+
+                // Have server sends heartbeats to help detect communication failures.
+                int64_t                 HeartbeatMillis;
+
+                // Options to control automatic Fetch flow control. The number
+                // of messages to ask for in a single request, and if we should
+                // try to fetch ahead, KeepAhead more than we need to finish the
+                // current request. Fetch this many messages ahead of time.
+                int                     FetchSize;
+                int                     KeepAhead;
+
+                // Manual fetch flow control. If provided gets called before
+                // each message is deliverered to msgCB, and overrides the
+                // default algorithm for sending Next requests.
+                natsFetchNextHandler    NextHandler;
+                void                    *NextHandlerClosure;
+
         } PullSubscribeAsync;
 
         /**
@@ -6597,10 +6610,6 @@ jsFetchRequest_Init(jsFetchRequest *request);
  * @param durable the optional durable name.
  * @param msgCB the #natsMsgHandler callback.
  * @param msgCBClosure a pointer to an user defined object (can be `NULL`).
- * @param lifetime the pointer to the #jsFetchRequest configuration used to set
- * the sub's lifetime limits on messages, bytes, and elapsed time. It also
- * allows to specify the heartbeat frequency. The default behavior would be to
- * terminate the subscription if it fails. #jsOpts provides finer control.
  * @param jsOpts the pointer to the #jsOptions object, possibly `NULL`.
  * @param opts the subscribe options, possibly `NULL`.
  * @param errCode the location where to store the JetStream specific error code,
@@ -6608,7 +6617,7 @@ jsFetchRequest_Init(jsFetchRequest *request);
  */
 NATS_EXTERN natsStatus
 js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject, const char *durable,
-                      natsMsgHandler msgCB, void *msgCBClosure, jsFetchRequest *lifetime,
+                      natsMsgHandler msgCB, void *msgCBClosure,
                       jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode);
 
 /** \brief Fetches messages for a pull subscription with a complete request configuration

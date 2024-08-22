@@ -1234,13 +1234,12 @@ typedef void (*natsFetchCompleteHandler)(natsConnection *nc, natsSubscription *s
  * The library will invoke this callback when it may be time to request more
  * messages from the server.
  *
- * @return true to fetch more, false to skip. If true, req's attributes can be
- * overridden as needed.
+ * @return true to fetch more, false to skip. If true, @messages and @maxBytes
+ * should be set to the number of messages and max bytes to fetch.
  *
  * @see js_PullSubscribeAsync
  */
-typedef bool (*natsFetchNextHandler)(jsFetchRequest *req,
-                                     natsSubscription *sub, void *closure);
+typedef bool (*natsFetchNextHandler)(int *messages, int64_t *bytes, natsSubscription *sub, void *closure);
 
 /**
  * JetStream context options.

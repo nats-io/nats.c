@@ -29525,7 +29525,7 @@ void test_JetStreamSubscribePullAsync_Disconnect(void)
     testCond(s == NATS_OK);
 
     test("Check fetch completion, expect NATS_OK: ");
-    testCond(_testBatchCompleted(&args, sub, 500, NATS_OK, 1, false));
+    testCond(_testBatchCompleted(&args, sub, 500, NATS_CONNECTION_CLOSED, 1, false));
 
     natsSubscription_Destroy(sub);
     JS_TEARDOWN;

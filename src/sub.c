@@ -744,7 +744,7 @@ _unsubscribe(natsSubscription *sub, int max, bool drainMode, int64_t timeout)
     nc = sub->conn;
     _retain(sub);
 
-    if ((jsi = sub->jsi) != NULL)
+    if ((max == 0) && (jsi = sub->jsi) != NULL)
     {
         if (jsi->hbTimer != NULL)
             natsTimer_Stop(jsi->hbTimer);

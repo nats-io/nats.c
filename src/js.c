@@ -2903,16 +2903,16 @@ js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject, const c
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-// sub->mu must NOT be held.
+// Neither sub's nor dispatcher's lock must be held.
 natsStatus
 js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
 {
-    jsFetchRequest req;
+    jsFetchRequest req = {.Expires = 0};
     if (fetch->nextf == NULL)
         return NATS_OK;
 
     // Prepare the next fetch request
-    if (!fetch->nextf(&req, sub, fetch->nextClosure))
+    if (!fetch->nextf(&req.Batch, &req.MaxBytes, sub, fetch->nextClosure))
         return NATS_OK;
 
     // These are not changeable by the callback, only Batch and MaxBytes can be updated.
@@ -2926,7 +2926,7 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
     natsBuffer buf;
     natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
 
-    natsSub_Lock(sub);
+    nats_lockSubAndDispatcher(sub);
 
     jsSub *jsi = sub->jsi;
     jsi->inFetch = true;
@@ -2934,13 +2934,13 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
     snprintf(fetch->replySubject, sizeof(fetch->replySubject), "%.*s%" PRIu64,
              (int)strlen(sub->subject) - 1, sub->subject, // exclude the last '*'
              jsi->fetchID);
-
     natsStatus s = _sendPullRequest(sub->conn, jsi->nxtMsgSubj, fetch->replySubject, &buf, &req);
     if (s == NATS_OK)
     {
         fetch->requestedMsgs += req.Batch;
     }
-    natsSub_Unlock(sub);
+
+    nats_unlockSubAndDispatcher(sub);
 
     natsBuf_Destroy(&buf);
     return NATS_UPDATE_ERR_STACK(s);
@@ -2948,7 +2948,7 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
 
 // Sets Batch and MaxBytes for the next fetch request.
 static bool
-_autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, void *closure)
+_autoNextFetchRequest(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure)
 {
     jsFetch *fetch                  = (jsFetch *)closure;
     int     remainingUnrequested    = 0;
@@ -2956,7 +2956,7 @@ _autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, void *closure)
     int     want                    = 0;
     bool    maybeMore               = true;
 
-    natsSub_Lock(sub);
+    nats_lockSubAndDispatcher(sub);
 
     int isAhead = fetch->requestedMsgs - fetch->deliveredMsgs;
     int wantAhead = fetch->keepAhead;
@@ -2987,16 +2987,15 @@ _autoNextFetchRequest(jsFetchRequest *req, natsSubscription *sub, void *closure)
         maybeMore = (want > 0);
     }
 
-    natsSub_Unlock(sub);
+    nats_unlockSubAndDispatcher(sub);
 
     if (!maybeMore)
         return false;
 
-    req->Batch = want;
-    // FIXME discuss in PR - this seems wrong, we don't know how many bytes we will have
-    // received from what is already requested. Still, can serve as a safe
-    // upper boundary.
-    req->MaxBytes = remainingBytes;
+    // Since we do not allow keepAhead with MaxBytes, this is an accurate count
+    // of how many more bytes we expect.
+    *maxBytes = remainingBytes;
+    *messages = want;
     return true;
 }
 
@@ -3013,6 +3012,9 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
     if ((newsub == NULL) || (msgCB == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
+    if ((jsOpts != NULL) && (jsOpts->PullSubscribeAsync.MaxBytes > 0) && (jsOpts->PullSubscribeAsync.KeepAhead > 0))
+        return nats_setError(NATS_INVALID_ARG, "%s", "Can not use MaxBytes and KeepAhead together");
+
     if (errCode != NULL)
         *errCode = 0;
 
@@ -3026,71 +3028,69 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
         if (fetch == NULL)
             s = nats_setDefaultError(NATS_NO_MEMORY);
     }
-
-    // Initialize fetch parameters.
-    if (s == NATS_OK)
+    if (s != NATS_OK)
     {
-        fetch->status = NATS_OK;
-        fetch->startTimeMillis = nats_Now();
-
-#define _set(_f, _v, _nil, _def) fetch->_f = ((jsOpts != NULL) && (jsOpts->PullSubscribeAsync._v != _nil)) ? jsOpts->PullSubscribeAsync._v : _def
-        _set(completeCB, CompleteHandler, NULL, NULL);
-        _set(completeCBClosure, CompleteHandlerClosure, NULL, NULL);
-        _set(fetchSize, FetchSize, 0, NATS_DEFAULT_ASYNC_FETCH_SIZE);
-        _set(heartbeatMillis, HeartbeatMillis, 0, 0);
-        _set(keepAhead, KeepAhead, 0, 0);
-        _set(maxBytes, MaxBytes, 0, 0);
-        _set(maxMessages, MaxMessages, 0, INT_MAX);
-        _set(nextClosure, NextHandlerClosure, NULL, fetch);
-        _set(nextf, NextHandler, NULL, _autoNextFetchRequest);
-        _set(noWait, NoWait, false, false);
-        _set(timeoutMillis, TimeoutMillis, 0, INT64_MAX);
-#undef _set
+        natsSubscription_Destroy(sub);
+        return NATS_UPDATE_ERR_STACK(s);
     }
 
-    // Set up the sub to process fetch results.
-    if (s == NATS_OK)
+    // Initialize fetch parameters.
+    fetch->status = NATS_OK;
+    fetch->startTimeMillis = nats_Now();
+
+#define _set(_f, _v, _nil, _def) fetch->_f = ((jsOpts != NULL) && (jsOpts->PullSubscribeAsync._v != _nil)) ? jsOpts->PullSubscribeAsync._v : _def
+    _set(completeCB, CompleteHandler, NULL, NULL);
+    _set(completeCBClosure, CompleteHandlerClosure, NULL, NULL);
+    _set(fetchSize, FetchSize, 0, NATS_DEFAULT_ASYNC_FETCH_SIZE);
+    _set(heartbeatMillis, HeartbeatMillis, 0, 0);
+    _set(keepAhead, KeepAhead, 0, 0);
+    _set(maxBytes, MaxBytes, 0, 0);
+    _set(maxMessages, MaxMessages, 0, INT_MAX);
+    _set(nextClosure, NextHandlerClosure, NULL, fetch);
+    _set(nextf, NextHandler, NULL, _autoNextFetchRequest);
+    _set(noWait, NoWait, false, false);
+    _set(timeoutMillis, TimeoutMillis, 0, INT64_MAX);
+#undef _set
+
+    nats_lockSubAndDispatcher(sub);
+    jsi = sub->jsi;
+
+    // Set up the fetch options
+    jsi->fetch = fetch;
+    jsi->inFetch = true;
+
+    // Start the timers. They will live for the entire length of the
+    // subscription (the missed heartbeat timer may be reset as needed).
+    if (fetch->timeoutMillis > 0)
     {
-        natsSub_Lock(sub);
-        jsi = sub->jsi;
+        sub->refs++;
+        s = natsTimer_Create(&fetch->expiresTimer, _fetchExpiredFired, _releaseSubWhenStopped,
+                             fetch->timeoutMillis, (void *)sub);
+        if (s != NATS_OK)
+            sub->refs--;
+    }
 
-        // Set up the fetch options
-        jsi->fetch = fetch;
-        jsi->inFetch = true;
-
-        // Start the timers. They will live for the entire length of the
-        // subscription (the missed heartbeat timer may be reset as needed).
-        if (fetch->timeoutMillis > 0)
+    if ((s == NATS_OK) && (fetch->heartbeatMillis > 0))
+    {
+        int64_t dur = fetch->heartbeatMillis * 2;
+        sub->refs++;
+        if (jsi->hbTimer == NULL)
         {
-            sub->refs++;
-            s = natsTimer_Create(&fetch->expiresTimer, _fetchExpiredFired, _releaseSubWhenStopped,
-                                 fetch->timeoutMillis, (void *)sub);
+            s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _releaseSubWhenStopped, dur, (void *)sub);
             if (s != NATS_OK)
                 sub->refs--;
         }
-
-        if ((s == NATS_OK) && (fetch->heartbeatMillis > 0))
-        {
-            int64_t dur = fetch->heartbeatMillis * 2;
-            sub->refs++;
-            if (jsi->hbTimer == NULL)
-            {
-                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _releaseSubWhenStopped, dur, (void *)sub);
-                if (s != NATS_OK)
-                    sub->refs--;
-            }
-            else
-                natsTimer_Reset(jsi->hbTimer, dur);
-        }
-
-        natsSub_Unlock(sub);
+        else
+            natsTimer_Reset(jsi->hbTimer, dur);
     }
 
     if (s == NATS_OK)
     {
-        // Send the first fetch request
+        // Send the first fetch request.
         s = js_maybeFetchMore(sub, fetch);
     }
+
+    nats_unlockSubAndDispatcher(sub);
 
     if (s != NATS_OK)
     {

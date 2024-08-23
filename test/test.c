@@ -28754,7 +28754,7 @@ _jsPubReconnectThread(void *closure)
     natsConnection_Flush(js->nc);
 
     natsConnection_Reconnect(js->nc);
-    nats_Sleep(200);
+    nats_Sleep(500);
 
     js_Publish(NULL, js, "foo", "hell1", 5, NULL, NULL);
     natsConnection_Flush(js->nc);

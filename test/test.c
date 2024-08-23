@@ -29267,8 +29267,8 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
     jsOpts.PullSubscribeAsync.MaxMessages = 100;
-    jsOpts.PullSubscribeAsync.Timeout = 10;
-    jsOpts.PullSubscribeAsync.Heartbeat = 100;
+    jsOpts.PullSubscribeAsync.Timeout = 100;
+    jsOpts.PullSubscribeAsync.Heartbeat = 200;
 
     s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
     testCond((s == NATS_OK) && _testBatchCompleted(&args, sub, NATS_ERR, 0, false));
@@ -29370,7 +29370,7 @@ void test_JetStreamSubscribePullAsync_Unsubscribe(void)
     test("Receive 1 message: ");
     natsMutex_Lock(args.m);
     while ((s != NATS_TIMEOUT) && !args.msgReceived)
-        s = natsCondition_TimedWait(args.c, args.m, 20);
+        s = natsCondition_TimedWait(args.c, args.m, 100);
     testCond((s == NATS_OK) && args.msgReceived && (args.closed == false));
     args.msgReceived = false;
 

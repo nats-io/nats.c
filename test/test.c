@@ -29208,7 +29208,7 @@ void test_JetStreamSubscribePullAsync(void)
         jsOpts.PullSubscribeAsync.MaxMessages = tc->want;
         jsOpts.PullSubscribeAsync.MaxBytes = tc->maxBytes;
         jsOpts.PullSubscribeAsync.NoWait = tc->noWait;
-        jsOpts.PullSubscribeAsync.TimeoutMillis = tc->expires;
+        jsOpts.PullSubscribeAsync.Timeout = tc->expires;
         s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, &so, &jerr);
         if ((s != NATS_OK) && (sub == NULL) && (jerr != 0))
             FAIL("Failed to create pull subscription, unusual");
@@ -29267,8 +29267,8 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
     jsOpts.PullSubscribeAsync.MaxMessages = 100;
-    jsOpts.PullSubscribeAsync.TimeoutMillis = 10;
-    jsOpts.PullSubscribeAsync.HeartbeatMillis = 100;
+    jsOpts.PullSubscribeAsync.Timeout = 10;
+    jsOpts.PullSubscribeAsync.Heartbeat = 100;
 
     s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
     testCond((s == NATS_OK) && _testBatchCompleted(&args, sub, NATS_ERR, 0, false));
@@ -29294,8 +29294,8 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
     jsOpts.PullSubscribeAsync.MaxMessages = 100;
-    jsOpts.PullSubscribeAsync.TimeoutMillis = 20 * 1000;
-    jsOpts.PullSubscribeAsync.HeartbeatMillis = 50;
+    jsOpts.PullSubscribeAsync.Timeout = 20 * 1000;
+    jsOpts.PullSubscribeAsync.Heartbeat = 50;
 
     s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
     testCond(s == NATS_OK);
@@ -29362,7 +29362,7 @@ void test_JetStreamSubscribePullAsync_Unsubscribe(void)
     jsOpts.PullSubscribeAsync.CompleteHandler = _completePullAsync;
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
     jsOpts.PullSubscribeAsync.MaxMessages = 100;
-    jsOpts.PullSubscribeAsync.TimeoutMillis = 1000;
+    jsOpts.PullSubscribeAsync.Timeout = 1000;
 
     s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
     testCond(s == NATS_OK);
@@ -29423,7 +29423,7 @@ void test_JetStreamSubscribePullAsync_Reconnect(void)
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
     jsOpts.PullSubscribeAsync.FetchSize = 2;
     jsOpts.PullSubscribeAsync.MaxMessages = 3;
-    jsOpts.PullSubscribeAsync.TimeoutMillis = 10 * 1000;
+    jsOpts.PullSubscribeAsync.Timeout = 10 * 1000;
 
     s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
     testCond(s == NATS_OK);
@@ -29500,7 +29500,7 @@ void test_JetStreamSubscribePullAsync_Disconnect(void)
     jsOpts.PullSubscribeAsync.CompleteHandlerClosure = &args;
     jsOpts.PullSubscribeAsync.FetchSize = 2;
     jsOpts.PullSubscribeAsync.MaxMessages = 2;
-    jsOpts.PullSubscribeAsync.TimeoutMillis = 10 * 1000;
+    jsOpts.PullSubscribeAsync.Timeout = 10 * 1000;
 
     s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
     testCond(s == NATS_OK);

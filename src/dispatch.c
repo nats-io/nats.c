@@ -145,10 +145,10 @@ _preProcessUserMessage(
 
         if (fetch)
         {
-            bool overMaxBytes = ((fetch->maxBytes > 0) && ((fetch->deliveredBytes) > fetch->maxBytes));
-            bool overMaxFetch = ((fetch->deliveredMsgs >= fetch->maxMessages) || overMaxBytes);
+            bool overMaxBytes = ((fetch->opts.MaxBytes > 0) && ((fetch->deliveredBytes) > fetch->opts.MaxBytes));
+            bool overMaxFetch = ((fetch->deliveredMsgs >= fetch->opts.MaxMessages) || overMaxBytes);
 
-            *lastMessageInFetch = (fetch->deliveredMsgs == (fetch->maxMessages - 1) || overMaxBytes);
+            *lastMessageInFetch = (fetch->deliveredMsgs == (fetch->opts.MaxMessages - 1) || overMaxBytes);
 
             // See if we want to override fetch status based on our own data.
             if (fetchStatus == NATS_OK)
@@ -267,12 +267,12 @@ nats_dispatchThreadPool(void *arg)
             // It's ok to access fetch->status without locking since it's only
             // modified in this thread. completeCB and completeCBClosure are
             // also safe to access.
-            if ((fetch != NULL) && (fetch->completeCB != NULL))
+            if ((fetch != NULL) && (fetch->opts.CompleteHandler != NULL))
             {
                 fetchStatus = fetch->status;
                 if ((fetchStatus == NATS_OK) && connClosed)
                     fetchStatus = NATS_CONNECTION_CLOSED;
-                (*fetch->completeCB)(nc, sub, fetchStatus, fetch->completeCBClosure);
+                (*fetch->opts.CompleteHandler)(nc, sub, fetchStatus, fetch->opts.CompleteHandlerClosure);
             }
 
             if (completeCB != NULL)
@@ -574,12 +574,12 @@ nats_dispatchThreadOwn(void *arg)
 
     // It's ok to access fetch->status without locking since it's only modified
     // in this thread. completeCB and completeCBClosure are also safe to access.
-    if ((fetch != NULL) && (fetch->completeCB != NULL))
+    if ((fetch != NULL) && (fetch->opts.CompleteHandler != NULL))
     {
         natsStatus fetchStatus = fetch->status;
         if ((fetchStatus == NATS_OK) && connClosed)
             fetchStatus = NATS_CONNECTION_CLOSED;
-        (*fetch->completeCB)(nc, sub, fetchStatus, fetch->completeCBClosure);
+        (*fetch->opts.CompleteHandler)(nc, sub, fetchStatus, fetch->opts.CompleteHandlerClosure);
     }
 
     if (completeCB != NULL)

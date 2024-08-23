@@ -175,14 +175,14 @@ int main(int argc, char **argv)
         {
             jsOpts.PullSubscribeAsync.MaxMessages = (int) total;
             jsOpts.PullSubscribeAsync.NoWait = true;
-            jsOpts.PullSubscribeAsync.TimeoutMillis = 3600 * 1000; // 1 hour
+            jsOpts.PullSubscribeAsync.Timeout = 3600 * 1000; // 1 hour
             jsOpts.PullSubscribeAsync.FetchSize = 17;
             jsOpts.PullSubscribeAsync.KeepAhead = 7;
             jsOpts.PullSubscribeAsync.CompleteHandler = _completeFetchCb;
             jsOpts.PullSubscribeAsync.CompleteHandlerClosure = NULL;
 
             // Uncomment to use a 1 second heartbeat.
-            // jsOpts.PullSubscribeAsync.HeartbeatMillis = 1000; // 1 second
+            // jsOpts.PullSubscribeAsync.Heartbeat = 1000; // 1 second
 
             // Uncomment to provide custom control over next fetch size.
             // jsOpts.PullSubscribeAsync.NextHandler = nextFetchCb;

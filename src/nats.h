@@ -1241,6 +1241,44 @@ typedef void (*natsFetchCompleteHandler)(natsConnection *nc, natsSubscription *s
  */
 typedef bool (*natsFetchNextHandler)(int *messages, int64_t *bytes, natsSubscription *sub, void *closure);
 
+typedef struct jsOptionsPullSubscribeAsync
+{
+        // Lifetime of the subscription (completes when any one of the
+        // targets is reached).
+        int64_t                 Timeout; // in milliseconds
+        int                     MaxMessages;
+        int64_t                 MaxBytes;
+
+        // If NoWait is set, the subscription will receive the messages
+        // already stored on the server subject to the limits, but will
+        // not wait for more messages.
+        bool                    NoWait;
+
+        // Fetch complete handler that receives the exit status code,
+        // the subscription's Complete handler is also invoked, but does
+        // not have the status code.
+        natsFetchCompleteHandler CompleteHandler;
+        void                    *CompleteHandlerClosure;
+
+        // Have server sends heartbeats at this interval to help detect
+        // communication failures.
+        int64_t                 Heartbeat; // in milliseconds
+
+        // Options to control automatic Fetch flow control. The number
+        // of messages to ask for in a single request, and if we should
+        // try to fetch ahead, KeepAhead more than we need to finish the
+        // current request. Fetch this many messages ahead of time.
+        int                     FetchSize;
+        int                     KeepAhead;
+
+        // Manual fetch flow control. If provided gets called before
+        // each message is deliverered to msgCB, and overrides the
+        // default algorithm for sending Next requests.
+        natsFetchNextHandler    NextHandler;
+        void                    *NextHandlerClosure;
+
+} jsOptionsPullSubscribeAsync;
+
 /**
  * JetStream context options.
  *
@@ -1278,42 +1316,7 @@ typedef struct jsOptions
 
         } PublishAsync;
 
-        struct jsOptionsSubscribePullAsync
-        {
-                // Lifetime of the subscription (completes when any one of the
-                // targets is reached).
-                int64_t                 TimeoutMillis;
-                int                     MaxMessages;
-                int64_t                 MaxBytes;
-
-                // If NoWait is set, the subscription will receive the messages
-                // already stored on the server subject to the limits, but will
-                // not wait for more messages.
-                bool                    NoWait;
-
-                // Fetch complete handler that receives the exit status code,
-                // the subscription's Complete handler is also invoked, but does
-                // not have the status code.
-                natsFetchCompleteHandler CompleteHandler;
-                void                    *CompleteHandlerClosure;
-
-                // Have server sends heartbeats to help detect communication failures.
-                int64_t                 HeartbeatMillis;
-
-                // Options to control automatic Fetch flow control. The number
-                // of messages to ask for in a single request, and if we should
-                // try to fetch ahead, KeepAhead more than we need to finish the
-                // current request. Fetch this many messages ahead of time.
-                int                     FetchSize;
-                int                     KeepAhead;
-
-                // Manual fetch flow control. If provided gets called before
-                // each message is deliverered to msgCB, and overrides the
-                // default algorithm for sending Next requests.
-                natsFetchNextHandler    NextHandler;
-                void                    *NextHandlerClosure;
-
-        } PullSubscribeAsync;
+        jsOptionsPullSubscribeAsync PullSubscribeAsync;
 
         /**
          * Advanced stream options

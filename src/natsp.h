@@ -374,23 +374,9 @@ struct __jsCtx
 
 typedef struct __jsFetch
 {
-    // Lifetime control
-    int64_t     timeoutMillis;
-    int         maxMessages;
-    int64_t     maxBytes;
-    bool        noWait;
+    jsOptionsPullSubscribeAsync opts;
 
-    // On complete
-    natsFetchCompleteHandler completeCB;
-    void        *completeCBClosure;
     natsStatus  status;
-
-    // Flow control
-    natsFetchNextHandler nextf;
-    void        *nextClosure;
-    int         keepAhead;
-    int         fetchSize;
-    int64_t     heartbeatMillis;
 
     // Stats
     int64_t     startTimeMillis;

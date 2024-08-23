@@ -28850,12 +28850,12 @@ _completePullAsync(natsConnection *nc, natsSubscription *sub, natsStatus exitSta
 }
 
 static bool
-_testBatchCompleted(struct threadArg *args, natsSubscription *sub, int waitMS, natsStatus expectedStatus, int expectedMsgs, bool orFewer)
+_testBatchCompleted(struct threadArg *args, natsSubscription *sub, natsStatus expectedStatus, int expectedMsgs, bool orFewer)
 {
     natsStatus s = NATS_OK;
     natsMutex_Lock(args->m);
     while ((s != NATS_TIMEOUT) && !args->closed)
-        s = natsCondition_TimedWait(args->c, args->m, waitMS);
+        s = natsCondition_TimedWait(args->c, args->m, 1000); // 1 second should always be enough
 
     bool result = ((s == NATS_OK) &&
                    args->closed &&
@@ -29064,7 +29064,6 @@ void test_JetStreamSubscribePullAsync(void)
     sub = NULL;
 
     // TEST exit criteria.
-    int batchWaitTimeout = 1000; // milliseconds
     typedef struct
     {
         const char *name;
@@ -29221,7 +29220,7 @@ void test_JetStreamSubscribePullAsync(void)
 
         testf("%s: ", tc->name);
         testCond(_testBatchCompleted(
-            &args, sub, batchWaitTimeout, tc->expectedStatus, tc->expectedN, tc->orFewer));
+            &args, sub, tc->expectedStatus, tc->expectedN, tc->orFewer));
 
         natsSubscription_Destroy(sub);
         sub = NULL;
@@ -29272,7 +29271,7 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     jsOpts.PullSubscribeAsync.HeartbeatMillis = 100;
 
     s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
-    testCond((s == NATS_OK) && _testBatchCompleted(&args, sub, 100, NATS_ERR, 0, false));
+    testCond((s == NATS_OK) && _testBatchCompleted(&args, sub, NATS_ERR, 0, false));
 
     test("Check the error to be 'heartbeat value too large': ");
     natsMutex_Lock(args.m);
@@ -29312,7 +29311,7 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     test("Drop heartbeats and see the sub terminate: ");
     natsConn_setFilter(nc, _dropIdleHBs);
     testCond((s == NATS_OK) &&
-             _testBatchCompleted(&args, sub, 500, NATS_MISSED_HEARTBEAT, 0, false));
+             _testBatchCompleted(&args, sub,NATS_MISSED_HEARTBEAT, 0, false));
 
     natsSubscription_Destroy(sub);
     JS_TEARDOWN;
@@ -29382,7 +29381,7 @@ void test_JetStreamSubscribePullAsync_Unsubscribe(void)
     natsMutex_Unlock(args.m);
 
     testCond((s == NATS_OK) &&
-             _testBatchCompleted(&args, sub, 500, NATS_OK, 1, false));
+             _testBatchCompleted(&args, sub, NATS_OK, 1, false));
 
     natsSubscription_Destroy(sub);
     sub = NULL;
@@ -29455,7 +29454,7 @@ void test_JetStreamSubscribePullAsync_Reconnect(void)
     testCond(s == NATS_OK);
 
     test("Receive all expected messages: ");
-    testCond(_testBatchCompleted(&args, sub, 500, NATS_MAX_DELIVERED_MSGS, 3, false));
+    testCond(_testBatchCompleted(&args, sub, NATS_MAX_DELIVERED_MSGS, 3, false));
 
     natsSubscription_Destroy(sub);
     JS_TEARDOWN;
@@ -29525,7 +29524,7 @@ void test_JetStreamSubscribePullAsync_Disconnect(void)
     testCond(s == NATS_OK);
 
     test("Check fetch completion, expect NATS_OK: ");
-    testCond(_testBatchCompleted(&args, sub, 500, NATS_CONNECTION_CLOSED, 1, false));
+    testCond(_testBatchCompleted(&args, sub, NATS_CONNECTION_CLOSED, 1, false));
 
     natsSubscription_Destroy(sub);
     JS_TEARDOWN;

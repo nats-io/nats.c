@@ -269,7 +269,7 @@ nats_dispatchThreadPool(void *arg)
             // also safe to access.
             if ((fetch != NULL) && (fetch->completeCB != NULL))
             {
-                natsStatus fetchStatus = fetch->status;
+                fetchStatus = fetch->status;
                 if ((fetchStatus == NATS_OK) && connClosed)
                     fetchStatus = NATS_CONNECTION_CLOSED;
                 (*fetch->completeCB)(nc, sub, fetchStatus, fetch->completeCBClosure);

@@ -2951,7 +2951,7 @@ static bool
 _autoNextFetchRequest(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure)
 {
     jsFetch *fetch                  = (jsFetch *)closure;
-    int     remainingUnrequested    = 0;
+    int     remainingUnrequested    = INT_MAX;
     int64_t remainingBytes          = 0;
     int     want                    = 0;
     bool    maybeMore               = true;
@@ -2963,9 +2963,8 @@ _autoNextFetchRequest(int *messages, int64_t *maxBytes, natsSubscription *sub, v
     if (isAhead > wantAhead)
         maybeMore = false;
 
-    if (maybeMore)
+    if (maybeMore && (fetch->opts.MaxMessages > 0))
     {
-        // fetch->maxMessages is always > 0
         remainingUnrequested = fetch->opts.MaxMessages - fetch->requestedMsgs;
         if (remainingUnrequested <= 0)
             maybeMore = false;
@@ -3043,10 +3042,6 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
         fetch->opts = jsOpts->PullSubscribeAsync;
     if (fetch->opts.FetchSize == 0)
         fetch->opts.FetchSize = NATS_DEFAULT_ASYNC_FETCH_SIZE;
-    if (fetch->opts.MaxMessages == 0)
-        fetch->opts.MaxMessages = INT_MAX;
-    if (fetch->opts.Timeout == 0)
-        fetch->opts.Timeout = INT64_MAX;
     if (fetch->opts.NextHandler == NULL)
     {
         fetch->opts.NextHandler = _autoNextFetchRequest;

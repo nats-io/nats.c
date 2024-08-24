@@ -146,10 +146,13 @@ _preProcessUserMessage(
         if (fetch)
         {
             bool overMaxBytes = ((fetch->opts.MaxBytes > 0) && ((fetch->deliveredBytes) > fetch->opts.MaxBytes));
-            bool overMaxFetch = ((fetch->deliveredMsgs >= fetch->opts.MaxMessages) || overMaxBytes);
-
-            *lastMessageInFetch = (fetch->deliveredMsgs == (fetch->opts.MaxMessages - 1) || overMaxBytes);
-
+            bool overMaxFetch = overMaxBytes;
+            *lastMessageInFetch = overMaxBytes;
+            if (fetch->opts.MaxMessages > 0)
+            {
+                overMaxFetch |= (fetch->deliveredMsgs >= fetch->opts.MaxMessages);
+                *lastMessageInFetch |= (fetch->deliveredMsgs == (fetch->opts.MaxMessages - 1));
+            }
             // See if we want to override fetch status based on our own data.
             if (fetchStatus == NATS_OK)
             {

@@ -374,7 +374,7 @@ struct __jsCtx
 
 typedef struct __jsFetch
 {
-    jsOptionsPullSubscribeAsync opts;
+    struct jsOptionsPullSubscribeAsync opts;
 
     natsStatus  status;
 

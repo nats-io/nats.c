@@ -174,15 +174,16 @@ int main(int argc, char **argv)
         if (pull && async)
         {
             jsOpts.PullSubscribeAsync.MaxMessages = (int) total;
-            jsOpts.PullSubscribeAsync.NoWait = true;
-            jsOpts.PullSubscribeAsync.Timeout = 3600 * 1000; // 1 hour
-            jsOpts.PullSubscribeAsync.FetchSize = 17;
-            jsOpts.PullSubscribeAsync.KeepAhead = 7;
+
+            // Defalut values, change as needed.
+            jsOpts.PullSubscribeAsync.FetchSize = 128;  // ask for 128 messages at a time
+            jsOpts.PullSubscribeAsync.NoWait = false;
+            jsOpts.PullSubscribeAsync.Timeout = 0;      // for the entire subscription, in milliseconds
+            jsOpts.PullSubscribeAsync.KeepAhead = 0;
+            jsOpts.PullSubscribeAsync.Heartbeat = 0;    // in milliseconds
+
             jsOpts.PullSubscribeAsync.CompleteHandler = _completeFetchCb;
             jsOpts.PullSubscribeAsync.CompleteHandlerClosure = NULL;
-
-            // Uncomment to use a 1 second heartbeat.
-            // jsOpts.PullSubscribeAsync.Heartbeat = 1000; // 1 second
 
             // Uncomment to provide custom control over next fetch size.
             // jsOpts.PullSubscribeAsync.NextHandler = nextFetchCb;

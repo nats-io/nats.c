@@ -1289,6 +1289,10 @@ typedef struct jsOptions
                 // If NoWait is set, the subscription will receive the messages
                 // already stored on the server subject to the limits, but will
                 // not wait for more messages.
+                //
+                // Note that if Timeout is set we would still wait for first
+                // message to become available, even if there are currently any
+                // on the server
                 bool                    NoWait;
 
                 // Fetch complete handler that receives the exit status code,
@@ -1305,6 +1309,9 @@ typedef struct jsOptions
                 // of messages to ask for in a single request, and if we should
                 // try to fetch ahead, KeepAhead more than we need to finish the
                 // current request. Fetch this many messages ahead of time.
+                //
+                // KeepAhead can not be used in conjunction with MaxBytes or
+                // NoWait.
                 int                     FetchSize;
                 int                     KeepAhead;
 

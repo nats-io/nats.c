@@ -3011,9 +3011,14 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
     if ((newsub == NULL) || (msgCB == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if ((jsOpts != NULL) && (jsOpts->PullSubscribeAsync.MaxBytes > 0) && (jsOpts->PullSubscribeAsync.KeepAhead > 0))
-        return nats_setError(NATS_INVALID_ARG, "%s", "Can not use MaxBytes and KeepAhead together");
-
+    if ((jsOpts != NULL) && (jsOpts->PullSubscribeAsync.KeepAhead > 0))
+    {
+        if (jsOpts->PullSubscribeAsync.MaxBytes > 0)
+            return nats_setError(NATS_INVALID_ARG, "%s", "Can not use MaxBytes and KeepAhead together");
+        if (jsOpts->PullSubscribeAsync.NoWait)
+            return nats_setError(NATS_INVALID_ARG, "%s", "Can not use NoWait with KeepAhead together");
+    }
+    
     if (errCode != NULL)
         *errCode = 0;
 

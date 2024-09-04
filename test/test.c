@@ -31503,17 +31503,17 @@ void test_KeyValueKeysWithFilters(void)
     nats_clearLastError();
 
     test("Get keys with filters (bad args): filters is NULL");
-    s = kvStore_KeysWithFilters(&l, kv, NULL,NULL,0);
+    s = kvStore_KeysWithFilters(&l, kv, NULL, NULL,0);
     testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
 
     test("Get keys with filters (bad args): numFilters is 0");
-    s = kvStore_KeysWithFilters(&l, kv, NULL,defaultSubject,0);
+    s = kvStore_KeysWithFilters(&l, kv, NULL, defaultSubject,0);
     testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
 
     test("Get keys with filters (bad args): kv is NULL");
-    s = kvStore_KeysWithFilters(&l, NULL, NULL,defaultSubject,1);
+    s = kvStore_KeysWithFilters(&l, NULL, NULL, defaultSubject,1);
     testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
     kvKeysList_Destroy(&l);

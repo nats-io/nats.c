@@ -31503,17 +31503,28 @@ void test_KeyValueKeysWithFilters(void)
     nats_clearLastError();
 
     test("Get keys with filters (bad args): filters is NULL");
-    s = kvStore_KeysWithFilters(&l, kv, NULL, NULL,0);
+    s = kvStore_KeysWithFilters(&l, kv, NULL, NULL, 0);
     testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
 
     test("Get keys with filters (bad args): numFilters is 0");
-    s = kvStore_KeysWithFilters(&l, kv, NULL, defaultSubject,0);
+    s = kvStore_KeysWithFilters(&l, kv, NULL, defaultSubject, 0);
+    testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
+
+    test("Get keys with filters (bad args): numFilters is <0");
+    s = kvStore_KeysWithFilters(&l, kv, NULL, defaultSubject, -10);
+    testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
+
+    test("Get keys with filters (bad args): empty string");
+    const char **filter0 = (const char *[]){"a.*", "", "b.*"};
+    s = kvStore_KeysWithFilters(&l, kv, NULL, filter0, 3);
     testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
 
     test("Get keys with filters (bad args): kv is NULL");
-    s = kvStore_KeysWithFilters(&l, NULL, NULL, defaultSubject,1);
+    s = kvStore_KeysWithFilters(&l, NULL, NULL, defaultSubject, 1);
     testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
     kvKeysList_Destroy(&l);
@@ -31582,7 +31593,7 @@ void test_KeyValueKeysWithFilters(void)
 
     // Purge the key and check if returned after filtering
     test("Purge a.b:");
-    s = kvStore_Purge(kv, "a.d",NULL);
+    s = kvStore_Purge(kv, "a.d", NULL);
     testCond(s == NATS_OK);
 
     test("a.d should not be returned post purge")

@@ -1242,6 +1242,76 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+NATS_EXTERN natsStatus
+kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts,char **filters,int numFilters) {
+    natsStatus      s;
+    kvWatchOptions  o;
+    kvWatcher       *w = NULL;
+    int             count = 0;
+    KV_DEFINE_LIST;
+
+    if (list == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if(filters == NULL || numFilters == 0) {
+        return nats_setDefaultError(NATS_INVALID_ARG);
+    }
+
+    list->Keys = NULL;
+    list->Count = 0;
+
+    kvWatchOptions_Init(&o);
+    if (opts != NULL)
+        memcpy(&o, opts, sizeof(kvWatchOptions));
+
+    o.IgnoreDeletes = true;
+    o.MetaOnly = true;
+    o.IncludeHistory = false;
+    if (o.Timeout > 0)
+        timeout = o.Timeout;
+
+    s = kvStore_WatchMulti(&w, kv,filters,numFilters,&o);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    KV_GATHER_LIST;
+
+    // Don't need the watcher anymore.
+    kvWatcher_Destroy(w);
+    // On success, create the array of keys.
+    if ((s == NATS_OK) && (n > 0))
+    {
+        list->Keys = (char**) NATS_CALLOC(n, sizeof(char*));
+        if (list->Keys == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    // Transfer keys to the array (on success), and destroy
+    // the entries if there was an error.
+    for (i=0; h != NULL; i++)
+    {
+        e = h;
+        h = h->next;
+        if (s == NATS_OK && e->op == kvOp_Put)
+        {
+            DUP_STRING(s, list->Keys[i], e->key);
+            if (s == NATS_OK)
+                count++;
+        }
+        kvEntry_Destroy(e);
+    }
+    // Set the list's Count to `count`, not `n` since `count`
+    // will reflect the actual number of keys that have been
+    // properly strdup'ed.
+    list->Count = count;
+
+    // If there was a failure (especially when strdup'ing) keys,
+    // this will do the proper cleanup and re-initialize the list.
+    if (s != NATS_OK)
+        kvKeysList_Destroy(list);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 void
 kvKeysList_Destroy(kvKeysList *list)
 {

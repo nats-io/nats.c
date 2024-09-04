@@ -7172,6 +7172,9 @@ kvStore_WatchAll(kvWatcher **new_watcher, kvStore *kv, kvWatchOptions *opts);
 NATS_EXTERN natsStatus
 kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts);
 
+NATS_EXTERN natsStatus
+kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts,char **filters,int numFilters);
+
 /** \brief Destroys this list of KeyValue store key strings.
  *
  * This function iterates through the list of all key strings and free them.

@@ -7173,7 +7173,7 @@ NATS_EXTERN natsStatus
 kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts);
 
 NATS_EXTERN natsStatus
-kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts,char **filters,int numFilters);
+kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, kvWatchOptions *opts,char **filters,int numFilters);
 
 /** \brief Destroys this list of KeyValue store key strings.
  *

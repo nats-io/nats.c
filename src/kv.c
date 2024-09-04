@@ -1243,7 +1243,7 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
 }
 
 NATS_EXTERN natsStatus
-kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts,char **filters,int numFilters) {
+kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, kvWatchOptions *opts,char **filters,int numFilters) {
     natsStatus      s;
     kvWatchOptions  o;
     kvWatcher       *w = NULL;

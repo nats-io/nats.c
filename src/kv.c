@@ -1248,15 +1248,17 @@ _kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts, const char **
         h = h->next;
         if (s == NATS_OK)
         {
-            if(filters!=NULL && numFilters > 0) {
-                if(e->op == kvOp_Put) {
-                    DUP_STRING(s, list->Keys[i], e->key);
-                }
-            } else {
+            if(filters == NULL) {
                 DUP_STRING(s, list->Keys[i], e->key);
+                if (s == NATS_OK)
+                    count++;
+                continue;
             }
-            if (s == NATS_OK)
-                count++;
+            if(e->op == kvOp_Put) {
+                DUP_STRING(s, list->Keys[i], e->key);
+                if (s == NATS_OK)
+                    count++;
+            }
         }
         kvEntry_Destroy(e);
     }

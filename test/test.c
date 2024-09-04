@@ -31484,7 +31484,7 @@ void test_KeyValueKeysWithFilters(void)
 
     test("Create KV: ");
     kvConfig_Init(&kvc);
-    kvc.Bucket = "KVS";
+    kvc.Bucket = "KVSF";
     kvc.History = 2;
     s = js_CreateKeyValue(&kv, js, &kvc);
     testCond(s == NATS_OK);

@@ -7173,9 +7173,10 @@ NATS_EXTERN natsStatus
 kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts);
 
 /** \brief Returns all keys in the bucket which matches the list of subject like filters.
- *  Get a list of the keys in a bucket filtered by a
- *  subject-like string, for instance "key" or "key.foo.*" or "key.>"
- *  Any deleted or purged keys will not be returned.
+ *
+ * Get a list of the keys in a bucket filtered by a
+ * subject-like string, for instance "key" or "key.foo.*" or "key.>"
+ * Any deleted or purged keys will not be returned.
  *
  * \note Use #kvWatchOptions.Timeout to specify how long to wait (in milliseconds)
  * to gather all keys for this bucket. If the deadline is reached, this function
@@ -7188,11 +7189,11 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts);
  * @see kvKeysList_Destroy
  * @see kvStore_WatchMulti
  *
- * @param list list the pointer to a #kvKeysList that will be initialized and filled with resulting key strings.
+ * @param list the pointer to a #kvKeysList that will be initialized and filled with resulting key strings.
  * @param kv the pointer to the #kvStore object.
  * @param opts the history options, possibly `NULL`.
- * @param filters the list of subject like string filters: Cannot be `NULL`
- * @param numFilters number of filters: Cannot be 0
+ * @param filters the list of subject like string filters. Cannot be `NULL`.
+ * @param numFilters number of filters. Cannot be 0.
  */
 NATS_EXTERN natsStatus
 kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, kvWatchOptions *opts,char **filters,int numFilters);

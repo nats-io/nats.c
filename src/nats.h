@@ -7196,7 +7196,7 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts);
  * @param numFilters number of filters. Cannot be 0.
  */
 NATS_EXTERN natsStatus
-kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, kvWatchOptions *opts,char **filters,int numFilters);
+kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, kvWatchOptions *opts,const char **filters,int numFilters);
 
 /** \brief Destroys this list of KeyValue store key strings.
  *

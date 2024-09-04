@@ -1185,7 +1185,7 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
     if (list == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    return _kvStore_Keys(list,kv,opts,NULL,0);
+    return _kvStore_Keys(list, kv, opts, NULL, 0);
 }
 
 natsStatus
@@ -1194,7 +1194,7 @@ kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, kvWatchOptions *opts, con
     if (list == NULL || filters == NULL || numFilters == 0)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    return _kvStore_Keys(list,kv,opts,filters,numFilters);
+    return _kvStore_Keys(list, kv, opts, filters, numFilters);
 }
 
 static natsStatus
@@ -1223,7 +1223,7 @@ _kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts, const char **
     } else {
         // Deliver policy gets set to DeliverLastPerSubject
         o.IncludeHistory = false;
-        s = kvStore_WatchMulti(&w, kv, filters,numFilters,&o);
+        s = kvStore_WatchMulti(&w, kv, filters, numFilters, &o);
     }
 
     if (s != NATS_OK)

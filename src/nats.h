@@ -7191,12 +7191,12 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts);
  *
  * @param list the pointer to a #kvKeysList that will be initialized and filled with resulting key strings.
  * @param kv the pointer to the #kvStore object.
- * @param opts the history options, possibly `NULL`.
  * @param filters the list of subject filters. Cannot be `NULL`.
  * @param numFilters number of filters. Cannot be 0.
+ * @param opts the history options, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, kvWatchOptions *opts, const char **filters, int numFilters);
+kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, const char **filters, int numFilters, kvWatchOptions *opts);
 
 /** \brief Destroys this list of KeyValue store key strings.
  *

@@ -31498,75 +31498,75 @@ void test_KeyValueKeysWithFilters(void)
     testCond(s == NATS_OK);
 
     test("Get keys with filters (bad args): List is NULL");
-    s = kvStore_KeysWithFilters(NULL, kv, NULL, defaultSubject, 1);
+    s = kvStore_KeysWithFilters(NULL, kv, defaultSubject, 1, NULL);
     testCond(s == NATS_INVALID_ARG);
     nats_clearLastError();
 
     test("Get keys with filters (bad args): filters is NULL");
-    s = kvStore_KeysWithFilters(&l, kv, NULL, NULL, 0);
+    s = kvStore_KeysWithFilters(&l, kv, NULL, 0, NULL);
     testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
 
     test("Get keys with filters (bad args): numFilters is 0");
-    s = kvStore_KeysWithFilters(&l, kv, NULL, defaultSubject, 0);
+    s = kvStore_KeysWithFilters(&l, kv, defaultSubject, 0, NULL);
     testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
 
     test("Get keys with filters (bad args): numFilters is <0");
-    s = kvStore_KeysWithFilters(&l, kv, NULL, defaultSubject, -10);
+    s = kvStore_KeysWithFilters(&l, kv, defaultSubject, -10, NULL);
     testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
 
     test("Get keys with filters (bad args): empty string");
     const char **filter0 = (const char *[]){"a.*", "", "b.*"};
-    s = kvStore_KeysWithFilters(&l, kv, NULL, filter0, 3);
+    s = kvStore_KeysWithFilters(&l, kv, filter0, 3, NULL);
     testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
 
     test("Get keys with filters (bad args): kv is NULL");
-    s = kvStore_KeysWithFilters(&l, NULL, NULL, defaultSubject, 1);
+    s = kvStore_KeysWithFilters(&l, NULL, defaultSubject, 1, NULL);
     testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
     kvKeysList_Destroy(&l);
 
     test("filter: a.*");
     const char **filter1 = (const char *[]){"a.*"};
-    s = kvStore_KeysWithFilters(&l, kv, NULL, filter1, 1);
+    s = kvStore_KeysWithFilters(&l, kv, filter1, 1, NULL);
     testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 2));
     nats_clearLastError();
     kvKeysList_Destroy(&l);
 
     test("filter: *.a.*");
     const char **filter2 = (const char *[]){"*.a.*"};
-    s = kvStore_KeysWithFilters(&l, kv, NULL, filter2, 1);
+    s = kvStore_KeysWithFilters(&l, kv, filter2, 1, NULL);
     testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 1));
     nats_clearLastError();
     kvKeysList_Destroy(&l);
 
     test("filter: *.a");
     const char **filter3 = (const char *[]){"*.a"};
-    s = kvStore_KeysWithFilters(&l, kv, NULL, filter3, 1);
+    s = kvStore_KeysWithFilters(&l, kv, filter3, 1, NULL);
     testCond((s == NATS_OK) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
     kvKeysList_Destroy(&l);
 
     test("filter: e.a.f");
     const char **filter4 = (const char *[]){"e.a.f"};
-    s = kvStore_KeysWithFilters(&l, kv, NULL, filter4, 1);
+    s = kvStore_KeysWithFilters(&l, kv, filter4, 1, NULL);
     testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 1));
     nats_clearLastError();
     kvKeysList_Destroy(&l);
 
     test("filter: >");
     const char **filter5 = (const char *[]){">"};
-    s = kvStore_KeysWithFilters(&l, kv, NULL, filter5, 1);
+    s = kvStore_KeysWithFilters(&l, kv, filter5, 1, NULL);
     testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 5));
     nats_clearLastError();
     kvKeysList_Destroy(&l);
 
     test("filter: multiple overlapping filters");
     const char **filter6 = (const char *[]){"*.a","a.*","*.a.*"};
-    s = kvStore_KeysWithFilters(&l, kv, NULL, filter6, 3);
+    s = kvStore_KeysWithFilters(&l, kv, filter6, 3, NULL);
     // consumer subject filters cannot overlap
     testCond((s == NATS_ERR) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
@@ -31574,19 +31574,19 @@ void test_KeyValueKeysWithFilters(void)
 
     test("filter: multiple non overlapping filters");
     const char **filter7 = (const char *[]){"a.*","e.*"};
-    s = kvStore_KeysWithFilters(&l, kv, NULL, filter7, 2);
+    s = kvStore_KeysWithFilters(&l, kv, filter7, 2, NULL);
     testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 3));
     nats_clearLastError();
     kvKeysList_Destroy(&l);
 
     // Delete the key and check if returned after filtering
-    test("Delete a.b: ");
+    test("Delete a.b:");
     s = kvStore_Delete(kv, "a.b");
     testCond(s == NATS_OK);
 
     test("a.b should not be returned post deletion")
     const char **filter8 = (const char *[]){"a.b"};
-    s = kvStore_KeysWithFilters(&l, kv, NULL, filter8, 1);
+    s = kvStore_KeysWithFilters(&l, kv, filter8, 1, NULL);
     testCond((s == NATS_OK) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
     kvKeysList_Destroy(&l);
@@ -31598,7 +31598,7 @@ void test_KeyValueKeysWithFilters(void)
 
     test("a.d should not be returned post purge")
     const char **filter9 = (const char *[]){"a.d"};
-    s = kvStore_KeysWithFilters(&l, kv, NULL, filter9, 1);
+    s = kvStore_KeysWithFilters(&l, kv, filter9, 1, NULL);
     testCond((s == NATS_OK) && (l.Keys == NULL) && (l.Count == 0));
     nats_clearLastError();
     kvKeysList_Destroy(&l);

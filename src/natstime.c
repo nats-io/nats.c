@@ -85,3 +85,12 @@ natsDeadline_GetTimeout(natsDeadline *deadline)
 
     return timeout;
 }
+
+int64_t
+nats_setTargetTime(int64_t timeout)
+{
+    int64_t target = nats_Now() + timeout;
+    if (target < 0)
+        target = 0x7FFFFFFFFFFFFFFF;
+    return target;
+}

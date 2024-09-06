@@ -45,7 +45,7 @@ volatile int64_t elapsed = 0;
 bool             print   = false;
 int64_t          timeout = 10000; // 10 seconds.
 
-natsOptions      *opts   = NULL;
+natsOptions      *gOpts   = NULL;
 
 const char       *certFile = NULL;
 const char       *keyFile  = NULL;
@@ -154,7 +154,7 @@ printUsageAndExit(const char *progName, const char *usage)
                 "%s\n",
                 progName, usage);
 
-    natsOptions_Destroy(opts);
+    natsOptions_Destroy(gOpts);
     nats_Close();
 
     exit(1);
@@ -214,7 +214,7 @@ parseArgs(int argc, char **argv, const char *usage)
     bool        urlsSet = false;
     int         i;
 
-    if (natsOptions_Create(&opts) != NATS_OK)
+    if (natsOptions_Create(&gOpts) != NATS_OK)
         s = NATS_NO_MEMORY;
 
     for (i=1; (i<argc) && (s == NATS_OK); i++)
@@ -229,20 +229,20 @@ parseArgs(int argc, char **argv, const char *usage)
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            s = parseUrls(argv[++i], opts);
+            s = parseUrls(argv[++i], gOpts);
             if (s == NATS_OK)
                 urlsSet = true;
         }
         else if (strcasecmp(argv[i], "-tls") == 0)
         {
-            s = natsOptions_SetSecure(opts, true);
+            s = natsOptions_SetSecure(gOpts, true);
         }
         else if (strcasecmp(argv[i], "-tlscacert") == 0)
         {
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            s = natsOptions_LoadCATrustedCertificates(opts, argv[++i]);
+            s = natsOptions_LoadCATrustedCertificates(gOpts, argv[++i]);
         }
         else if (strcasecmp(argv[i], "-tlscert") == 0)
         {
@@ -263,18 +263,18 @@ parseArgs(int argc, char **argv, const char *usage)
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            s = natsOptions_SetCiphers(opts, argv[++i]);
+            s = natsOptions_SetCiphers(gOpts, argv[++i]);
         }
         else if (strcasecmp(argv[i], "-tlshost") == 0)
         {
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            s = natsOptions_SetExpectedHostname(opts, argv[++i]);
+            s = natsOptions_SetExpectedHostname(gOpts, argv[++i]);
         }
         else if (strcasecmp(argv[i], "-tlsskip") == 0)
         {
-            s = natsOptions_SkipServerVerification(opts, true);
+            s = natsOptions_SkipServerVerification(gOpts, true);
         }
         else if (strcasecmp(argv[i], "-sync") == 0)
         {
@@ -323,7 +323,7 @@ parseArgs(int argc, char **argv, const char *usage)
         }
         else if (strcasecmp(argv[i], "-gd") == 0)
         {
-            s = natsOptions_UseGlobalMessageDelivery(opts, true);
+            s = natsOptions_UseGlobalMessageDelivery(gOpts, true);
         }
         else if (strcasecmp(argv[i], "-c") == 0)
         {
@@ -377,14 +377,14 @@ parseArgs(int argc, char **argv, const char *usage)
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            s = natsOptions_SetUserCredentialsFromFiles(opts, argv[++i], NULL);
+            s = natsOptions_SetUserCredentialsFromFiles(gOpts, argv[++i], NULL);
         }
         else if (strcasecmp(argv[i], "-wd") == 0)
         {
             if (i + 1 == argc)
                 printUsageAndExit(argv[0], usage);
 
-            s = natsOptions_SetWriteDeadline(opts, atol(argv[++i]));
+            s = natsOptions_SetWriteDeadline(gOpts, atol(argv[++i]));
         }
         else if (strcasecmp(argv[i], "-stream") == 0)
         {
@@ -410,10 +410,10 @@ parseArgs(int argc, char **argv, const char *usage)
     }
 
     if ((s == NATS_OK) && ((certFile != NULL) || (keyFile != NULL)))
-        s = natsOptions_LoadCertificatesChain(opts, certFile, keyFile);
+        s = natsOptions_LoadCertificatesChain(gOpts, certFile, keyFile);
 
     if ((s == NATS_OK) && !urlsSet)
-        s = parseUrls(NATS_DEFAULT_URL, opts);
+        s = parseUrls(NATS_DEFAULT_URL, gOpts);
 
     if (s != NATS_OK)
     {
@@ -422,12 +422,12 @@ parseArgs(int argc, char **argv, const char *usage)
 
         nats_PrintLastErrorStack(stderr);
 
-        natsOptions_Destroy(opts);
+        natsOptions_Destroy(gOpts);
         nats_Close();
         exit(1);
     }
 
-    return opts;
+    return gOpts;
 }
 
 #endif /* EXAMPLES_H_ */

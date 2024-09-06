@@ -1517,7 +1517,7 @@ js_GetStreamInfo(jsStreamInfo **new_si, jsCtx *js, const char *stream, jsOptions
     bool                    done    = false;
     jsStreamInfo            *si     = NULL;
     jsStreamStateSubjects   *subjects = NULL;
-    apiPaged                page;
+    apiPaged                page = {0};
 
     if (errCode != NULL)
         *errCode = 0;
@@ -1879,7 +1879,7 @@ _getMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, const char *
     bool                freePfx = false;
     jsOptions           o;
     char                buffer[64];
-    natsBuffer          buf;
+    natsBuffer          buf     = NATS_EMPTY_BUFFER;
 
     if ((msg == NULL) || (js == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -2029,7 +2029,7 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
     bool                doLBS   = false;
     jsOptions           o;
     char                buffer[64];
-    natsBuffer          buf;
+    natsBuffer          buf = NATS_EMPTY_BUFFER;
 
     if ((msg == NULL) || (js == NULL) || (dgOpts == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -2108,7 +2108,7 @@ _deleteMsg(jsCtx *js, bool noErase, const char *stream, uint64_t seq, jsOptions 
     bool                success = false;
     jsOptions           o;
     char                buffer[64];
-    natsBuffer          buf;
+    natsBuffer          buf     = NATS_EMPTY_BUFFER;
 
     if (errCode != NULL)
         *errCode = 0;
@@ -2239,7 +2239,7 @@ js_Streams(jsStreamInfoList **new_list, jsCtx *js, jsOptions *opts, jsErrCode *e
     natsStrHash         *streams= NULL;
     jsStreamInfoList    *list   = NULL;
     jsOptions           o;
-    apiPaged            page;
+    apiPaged            page = {0};
 
     if (errCode != NULL)
         *errCode = 0;
@@ -2441,7 +2441,7 @@ js_StreamNames(jsStreamNamesList **new_list, jsCtx *js, jsOptions *opts, jsErrCo
     natsStrHash         *names  = NULL;
     jsStreamNamesList   *list   = NULL;
     jsOptions           o;
-    apiPaged            page;
+    apiPaged            page = {0};
 
     if (errCode != NULL)
         *errCode = 0;
@@ -3693,7 +3693,7 @@ js_Consumers(jsConsumerInfoList **new_list, jsCtx *js, const char *stream, jsOpt
     natsStrHash         *cons   = NULL;
     jsConsumerInfoList  *list   = NULL;
     jsOptions           o;
-    apiPaged            page;
+    apiPaged            page = {0};
 
     if (errCode != NULL)
         *errCode = 0;
@@ -3844,7 +3844,7 @@ js_ConsumerNames(jsConsumerNamesList **new_list, jsCtx *js, const char *stream, 
     natsStrHash         *names  = NULL;
     jsConsumerNamesList *list   = NULL;
     jsOptions           o;
-    apiPaged            page;
+    apiPaged            page = {0};
 
     if (errCode != NULL)
         *errCode = 0;

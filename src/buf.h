@@ -29,6 +29,8 @@ typedef struct __natsBuffer
 
 } natsBuffer;
 
+#define NATS_EMPTY_BUFFER       { NULL, NULL, 0, 0, false, false }
+
 #define natsBuf_Data(b)         ((b)->data)
 #define natsBuf_Capacity(b)     ((b)->capacity)
 #define natsBuf_Len(b)          ((b)->len)

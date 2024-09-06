@@ -10,12 +10,21 @@ on:
       coverage:
         type: string
         default: "OFF"
-      lib_msg_delivery:
+      dev_mode:
         type: string
         default: "OFF"
-      lib_write_deadline:
+      pool_dispatch:
         type: string
-        default: "OFF"
+        default: "NO-pool"
+      write_deadline:
+        type: string
+        default: "NO-write_deadline"
+      tls:
+        type: string
+        default: "TLS"
+      verify_host:
+        type: string
+        default: "verify_host"
       repeat:
         type: string
         default: "1"
@@ -29,9 +38,6 @@ on:
       streaming:
         type: string
         default: "ON"
-      tls:
-        type: string
-        default: "ON"
       type:
         type: string
         description: "Debug or Release."
@@ -40,6 +46,16 @@ on:
         type: string
         description: "Ubuntu version to use, e.g. '20.04'"
         default: "latest"
+      verbose_test_output:
+        type: string
+        default: "OFF"
+      verbose_make_output:
+        type: string
+        default: "OFF"
+      benchmark:
+        type: string
+        default: "OFF"
+
     secrets:
       CODECOV_TOKEN:
         description: "Codecov repo token"
@@ -72,16 +88,31 @@ jobs:
           flags: -DNATS_BUILD_ARCH=${{ inputs.arch }}
             -DCMAKE_BUILD_TYPE=${{ inputs.type }}
             -DNATS_BUILD_STREAMING=${{ inputs.streaming }}
-            -DNATS_BUILD_WITH_TLS=${{ inputs.tls }}
             -DNATS_PROTOBUF_DIR=${{ github.workspace}}/deps/pbuf
             -DNATS_BUILD_USE_SODIUM=ON
             -DNATS_SODIUM_DIR=${{ github.workspace}}/deps/sodium
         run: |
+          if [[ "${{ inputs.tls }}" == "TLS" ]]; then
+            flags="$flags -DNATS_BUILD_WITH_TLS=ON"
+            if [[ "${{ inputs.verify_host }}" == "verify_host" ]]; then
+              flags="$flags -DNATS_BUILD_TLS_FORCE_HOST_VERIFY=ON"
+            else
+              flags="$flags -DNATS_BUILD_TLS_FORCE_HOST_VERIFY=OFF"
+            fi
+          else
+            flags="$flags -DNATS_BUILD_WITH_TLS=OFF"
+          fi
           if [[ -n "${{ inputs.sanitize }}" ]]; then
             flags="$flags -DNATS_SANITIZE=ON -DCMAKE_C_FLAGS=-fsanitize=${{ inputs.sanitize }}"
           fi
           if [[ "${{ inputs.coverage }}" == "ON" ]]; then
             flags="$flags -DNATS_COVERAGE=ON"
+          fi
+          if [[ "${{ inputs.dev_mode }}" == "ON" ]]; then
+            flags="$flags -DDEV_MODE=ON"
+          fi
+          if [[ "${{ inputs.verbose_make_output }}" == "ON" ]]; then
+            flags="$flags -DCMAKE_VERBOSE_MAKEFILE=ON"
           fi
           echo "flags=$flags" >> $GITHUB_OUTPUT
 
@@ -91,10 +122,10 @@ jobs:
           if [[ -n "${{ inputs.sanitize }}" ]]; then
             echo "NATS_TEST_VALGRIND=yes" >> $GITHUB_ENV
           fi
-          if [[ "${{ inputs.lib_msg_delivery }}" == "ON" ]]; then
+          if [[ "${{ inputs.pool_dispatch }}" == "pool" ]]; then
             echo "NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes" >> $GITHUB_ENV
           fi
-          if [[ "${{ inputs.lib_write_deadline }}" == "ON" ]]; then
+          if [[ "${{ inputs.write_deadline }}" == "write_deadline" ]]; then
             echo "NATS_DEFAULT_LIB_WRITE_DEADLINE=2000" >> $GITHUB_ENV
           fi
           echo "CC=${{ inputs.compiler }}" >> $GITHUB_ENV
@@ -113,15 +144,6 @@ jobs:
           cd build
           cmake .. ${{ steps.cmake-flags.outputs.flags }}
           make rebuild_cache && make
-
-      - name: "Rebuild the list of tests to match the compile flags"
-        working-directory: ./build
-        run: |
-          ./bin/testsuite
-          if [[ $(diff list.txt ../test/list.txt; echo $?) != 0 ]]; then
-            mv list.txt ../test/list.txt
-            make rebuild_cache
-          fi
 
       # testing
 
@@ -153,21 +175,69 @@ jobs:
           fi
 
       - name: "Test"
+        if: inputs.benchmark == 'OFF'
         working-directory: ./build
         run: |
           export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
           flags=""
-          ctest --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }} 2>&1 | tee /tmp/out.txt
-          if [[ $(grep -q 'ThreadSanitizer: ' /tmp/out.txt; echo $?) == 0 ]]; then
-            echo "!!! ThreadSanitizer detected WARNING(s) !!!"
-            exit 1
-          fi
+          ctest -L 'test' --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }}
 
       - name: Upload coverage reports to Codecov
-        if: inputs.coverage == 'ON'
+        # PRs from external contributors fail: https://github.com/codecov/feedback/issues/301
+        # Only upload coverage reports for PRs from the same repo (not forks)
+        if: inputs.coverage == 'ON' && github.event.pull_request.head.repo.full_name == github.repository
         uses: codecov/codecov-action@v4
         with:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
           # verbose: true
+
+      - name: "Cache for base benchmark for ${{ github.event.pull_request.base.ref }}"
+        id: cache-base-bench
+        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref
+        uses: actions/cache@v4
+        with:
+          key: bench-${{ github.event.pull_request.base.ref }}
+          path: ./build/bench-${{ github.event.pull_request.base.ref }}.log
+
+      - name: "Benchmark"
+        if: inputs.benchmark == 'ON'
+        working-directory: ./build
+        run: |
+          export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
+          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
+          flags=""
+          ctest -L 'bench' --timeout 600 -VV | tee bench.log
+
+      - name: "Checkout nats.c for ${{ github.event.pull_request.base.ref }}"
+        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref && steps.cache-base-bench.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          clean: false
+
+      - name: "Benchmark ${{ github.event.pull_request.base.ref }} for comparison"
+        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref && steps.cache-base-bench.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p build
+          cd build
+          rm -rf CMakeFiles CMakeCache.txt
+          cmake .. ${{ steps.cmake-flags.outputs.flags }}
+          make rebuild_cache && make
+          export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
+          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
+          flags=""
+          ctest -L 'bench' --timeout 600 -VV | tee bench-${{ github.event.pull_request.base.ref }}.log
+
+      - name: "Checkout HEAD ${{ github.event.pull_request.head.ref }}"
+        if: inputs.benchmark == 'ON' && github.event.pull_request.head.ref && steps.cache-base-bench.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: "Compare benchmark to ${{ github.event.pull_request.base.ref }}"
+        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref
+        run: |
+          cd build
+          go run ../test/diffstat_sub_async.go bench-${{ github.event.pull_request.base.ref }}.log bench.log

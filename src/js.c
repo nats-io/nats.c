@@ -1,4 +1,4 @@
-// Copyright 2021-2022 The NATS Authors
+// Copyright 2021-2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,6 +19,8 @@
 #include "util.h"
 #include "opts.h"
 #include "sub.h"
+#include "dispatch.h"
+#include "glib/glib.h"
 
 #ifdef DEV_MODE
 // For type safety
@@ -497,7 +499,7 @@ js_PublishMsg(jsPubAck **new_puback,jsCtx *js, natsMsg *msg,
     int64_t             ttl     = 0;
     nats_JSON           *json   = NULL;
     natsMsg             *resp   = NULL;
-    jsApiResponse   ar;
+    jsApiResponse       ar      = JS_EMPTY_API_RESPONSE;
 
     if (errCode != NULL)
         *errCode = 0;
@@ -837,23 +839,13 @@ _timeoutPubAsync(natsTimer *t, void *closure)
         if (natsMsg_Create(&m, pm->subject, NULL, NULL, 0) != NATS_OK)
             break;
 
-        m->sub = js->rsub;
         natsMsg_setTimeout(m);
 
-        natsSub_Lock(js->rsub);
-        if (js->rsub->msgList.tail != NULL)
-        {
-            js->rsub->msgList.tail->next = m;
-        }
-        else
-        {
-            js->rsub->msgList.head = m;
-            natsCondition_Signal(js->rsub->cond);
-        }
-        js->rsub->msgList.tail = m;
-        js->rsub->msgList.msgs++;
-        js->rsub->msgList.bytes += natsMsg_dataAndHdrLen(m);
-        natsSub_Unlock(js->rsub);
+        // Best attempt, ignore NATS_SLOW_CONSUMER errors which may be returned
+        // here.
+        nats_lockSubAndDispatcher(js->rsub);
+        natsSub_enqueueUserMessage(js->rsub, m);
+        nats_unlockSubAndDispatcher(js->rsub);
 
         js->pmHead = pm->next;
         _destroyPMInfo(pm);
@@ -1236,11 +1228,7 @@ jsSub_free(jsSub *jsi)
 
     js = jsi->js;
     natsTimer_Destroy(jsi->hbTimer);
-    if (jsi->mhMsg != NULL)
-    {
-        natsMsg_clearNoDestroy(jsi->mhMsg);
-        natsMsg_Destroy(jsi->mhMsg);
-    }
+
     NATS_FREE(jsi->stream);
     NATS_FREE(jsi->consumer);
     NATS_FREE(jsi->nxtMsgSubj);
@@ -1644,24 +1632,24 @@ natsSubscription_GetSequenceMismatch(jsConsumerSequenceMismatch *csm, natsSubscr
     if ((csm == NULL) || (sub == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    natsSubAndLdw_Lock(sub);
+    nats_lockSubAndDispatcher(sub);
     if (sub->jsi == NULL)
     {
-        natsSubAndLdw_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
         return nats_setError(NATS_INVALID_SUBSCRIPTION, "%s", jsErrNotAJetStreamSubscription);
     }
     jsi = sub->jsi;
     m = &jsi->mismatch;
     if (m->dseq == m->ldseq)
     {
-        natsSubAndLdw_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
         return NATS_NOT_FOUND;
     }
     memset(csm, 0, sizeof(jsConsumerSequenceMismatch));
     csm->Stream = m->sseq;
     csm->ConsumerClient = m->dseq;
     csm->ConsumerServer = m->ldseq;
-    natsSubAndLdw_Unlock(sub);
+    nats_unlockSubAndDispatcher(sub);
     return NATS_OK;
 }
 
@@ -1807,7 +1795,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     jsSub           *jsi     = NULL;
     natsMsg         *mhMsg   = NULL;
     char            *reqSubj = NULL;
-    bool            noWait;
+    bool            noWait   = false;
 
     if (list == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1841,7 +1829,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
     natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
     nc   = sub->conn;
     subj = jsi->nxtMsgSubj;
-    pmc  = (sub->msgList.msgs > 0);
+    pmc  = (sub->ownDispatcher.queue.msgs > 0);
     jsi->inFetch = true;
     jsi->fetchID++;
     if (nats_asprintf(&reqSubj, "%.*s%" PRIu64, (int) strlen(sub->subject)-1, sub->subject, jsi->fetchID) < 0)
@@ -1850,23 +1838,22 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
         rply = (const char*) reqSubj;
     if ((s == NATS_OK) && req->Heartbeat)
     {
-        int64_t hbi = req->Heartbeat / 1000000;
-        sub->refs++;
-        if (jsi->hbTimer == NULL)
+        s = nats_createControlMessages(sub);
+        if (s == NATS_OK)
         {
-            s = natsMsg_create(&jsi->mhMsg, NULL, 0, NULL, 0, NULL, 0, -1);
-            if (s == NATS_OK)
+            int64_t hbi = req->Heartbeat / 1000000;
+            sub->refs++;
+            if (jsi->hbTimer == NULL)
             {
-                natsMsg_setNoDestroy(jsi->mhMsg);
-                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi*2, (void*) sub);
+                s = natsTimer_Create(&jsi->hbTimer, _hbTimerFired, _hbTimerStopped, hbi * 2, (void *)sub);
+                if (s != NATS_OK)
+                    sub->refs--;
             }
-            if (s != NATS_OK)
-                sub->refs--;
-        }
-        else
-            natsTimer_Reset(jsi->hbTimer, hbi);
+            else
+                natsTimer_Reset(jsi->hbTimer, hbi);
 
-        mhMsg = jsi->mhMsg;
+            mhMsg = sub->control->batch.missedHeartbeat;
+        }
     }
     natsSub_Unlock(sub);
 
@@ -2044,7 +2031,7 @@ _hbTimerFired(natsTimer *timer, void* closure)
     bool                oc   = false;
     natsStatus          s    = NATS_OK;
 
-    natsSub_Lock(sub);
+    nats_lockSubAndDispatcher(sub);
     alert = !jsi->active;
     oc = jsi->ordered;
     jsi->active = false;
@@ -2053,20 +2040,16 @@ _hbTimerFired(natsTimer *timer, void* closure)
         // If there are messages pending then we can't really consider
         // that we missed hearbeats. Wait for those to be processed and
         // we will check missed HBs again.
-        if (sub->msgList.msgs == 0)
+        if (sub->ownDispatcher.queue.msgs == 0)
         {
-            sub->msgList.msgs++;
-            sub->msgList.head = jsi->mhMsg;
-            sub->msgList.tail = jsi->mhMsg;
-            sub->msgList.bytes = natsMsg_dataAndHdrLen(jsi->mhMsg);
-            natsCondition_Signal(sub->cond);
+            natsSub_enqueueMessage(sub, sub->control->batch.missedHeartbeat);
             natsTimer_Stop(timer);
         }
-        natsSub_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
         return;
     }
     nc = sub->conn;
-    natsSub_Unlock(sub);
+    nats_unlockSubAndDispatcher(sub);
 
     if (!alert)
         return;
@@ -2074,14 +2057,14 @@ _hbTimerFired(natsTimer *timer, void* closure)
     // For ordered consumers, we will need to reset
     if (oc)
     {
-        natsSub_Lock(sub);
+        nats_lockSubAndDispatcher(sub);
         if (!sub->closed)
         {
             // If we fail in that call, we will report to async err callback
             // (if one is specified).
             s = jsSub_resetOrderedConsumer(sub, sub->jsi->sseq+1);
         }
-        natsSub_Unlock(sub);
+        nats_unlockSubAndDispatcher(sub);
     }
 
     natsConn_Lock(nc);
@@ -2688,7 +2671,7 @@ PROCESS_INFO:
         else
         {
             maxap = info->Config->MaxAckPending;
-            natsSub_Lock(sub);
+            nats_lockSubAndDispatcher(sub);
             jsi->dc = true;
             jsi->pending = info->NumPending + info->Delivered.Consumer;
             // There may be a race in the case of an ordered consumer where by this
@@ -2705,7 +2688,7 @@ PROCESS_INFO:
                         s = nats_setDefaultError(NATS_NO_MEMORY);
                 }
             }
-            natsSub_Unlock(sub);
+            nats_unlockSubAndDispatcher(sub);
         }
     }
 

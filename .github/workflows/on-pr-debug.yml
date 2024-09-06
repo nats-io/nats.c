@@ -1,4 +1,4 @@
-name: "Debug"
+name: "PR"
 on:
   pull_request:
 
@@ -18,46 +18,85 @@ jobs:
       server_version: main
       type: Debug
 
-  coverage:
-    name: "Coverage"
+  dev-mode:
+    name: "DEV_MODE"
+    uses: ./.github/workflows/build-test.yml
+    with:
+      dev_mode: ON
+      server_version: main
+      type: Debug
+      verbose_test_output: ON
+      verbose_make_output: ON
+
+  sanitize:
+    name: "Sanitize"
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        sanitize: [address, thread]
+        pooled_dispatch: [pool, NO-pool]
+    uses: ./.github/workflows/build-test.yml
+    with:
+      server_version: main
+      type: RelWithDebInfo
+      compiler: ${{ matrix.compiler }}
+      sanitize: ${{ matrix.sanitize }}
+      pool_dispatch: ${{ matrix.pooled_dispatch }}
+
+  coverage-TLS:
+    name: "Coverage: TLS"
+    strategy:
+      fail-fast: false
+      matrix:
+          pooled_dispatch: [pool, NO-pool]
+          write_deadline: [write_deadline, NO-write_deadline]
     uses: ./.github/workflows/build-test.yml
     with:
       coverage: ON
+      type: RelWithDebInfo
       server_version: main
-      type: Debug
+      compiler: gcc
+      tls: TLS
+      verify_host: verify_host
+      pool_dispatch: ${{ matrix.pooled_dispatch }}
+      write_deadline: ${{ matrix.write_deadline }}
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-  sanitize-addr:
-    name: "Sanitize address"
+  coverage-NO-verify_host:
+    name: "Coverage: NO-verify_host"
     uses: ./.github/workflows/build-test.yml
     with:
-      sanitize: address
+      coverage: ON
+      type: RelWithDebInfo
       server_version: main
-      type: Debug
-
-  sanitize-addr-lib-msg-delivery:
-    name: "Sanitize address (lib_msg_delivery)"
+      compiler: gcc
+      tls: TLS
+      verify_host: NO-verify_host
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+  
+  coverage-NO-TLS:
+    name: "Coverage NO-TLS"
     uses: ./.github/workflows/build-test.yml
     with:
-      sanitize: address
+      coverage: ON
+      type: RelWithDebInfo
       server_version: main
-      lib_msg_delivery: ON
-
-  san-addr:
-    name: "Sanitize address (lib_write_deadline)"
+      compiler: gcc
+      tls: NO-TLS
+      verify_host: NO-verify_host
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+  
+  bench:
+    name: "Benchmark"
     uses: ./.github/workflows/build-test.yml
     with:
-      sanitize: address
       server_version: main
-      lib_write_deadline: ON
-
-  san-thread:
-    name: "Sanitize thread"
-    uses: ./.github/workflows/build-test.yml
-    with:
-      sanitize: thread
-      server_version: main
+      benchmark: ON
+      type: Release
 
   Windows:
     name: "Windows"
@@ -77,21 +116,13 @@ jobs:
         env:
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
         run: |
-          cmake -B build -S . -DCMAKE_C_FLAGS=/W4
-          cmake --build build --config Debug
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DNATS_BUILD_STREAMING=OFF
+          cmake --build build
 
       - name: Test
         shell: bash
         run: |
           cd build
-          
-          ./bin/Debug/testsuite
-          mv list.txt ../test/list.txt
-          
-          # refresh the cache
-          cmake -S .. -B .
-          cmake --build . --config Debug
-
           # Download latest nats-server
           rel="latest" # TODO: parameterize
           if [ "$rel" = "latest" ]; then
@@ -117,43 +148,6 @@ jobs:
             mkdir -p ../deps/nats-server
             mv ./nats-server.exe ../deps/nats-server/nats-server.exe
           fi
-          
           export PATH=../deps/nats-server:$PATH
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
-
-          run_ctest() {
-            local extra_args="$@"
-            local current_set=$(set +o)
-            set +e
-            echo "Running ctest($extra_args)..."
-
-            ctest -C Debug --timeout 60 --output-on-failure $extra_args
-            
-            local result=$?
-            eval "$current_set"
-            return $result
-          }
-
-          run_ctest
-          result=$?
-      
-          # Retry if failed
-          MAX_RETRIES=10
-          retries=0
-          while [ $result -ne 0 ] && [ $retries -lt $MAX_RETRIES ]; do
-            tasklist | grep nats-server.exe | awk '{print $2}' | xargs -I {} taskkill /PID {} /F /T
-            sleep 3
-            echo "Tests failed. Retrying failed tests... ($((retries + 1))/$MAX_RETRIES)"
-            retries=$((retries + 1))
-            run_ctest --rerun-failed
-            result=$?
-          done
-          
-          # Check the final result
-          if [ $result -ne 0 ]; then
-            echo "Tests failed after $MAX_RETRIES retries."
-            exit 1
-          else
-            echo "All tests passed. (retried $retries times)"
-            exit 0
-          fi
+          ctest -L test -C Debug --timeout 60 --output-on-failure --repeat until-pass:3

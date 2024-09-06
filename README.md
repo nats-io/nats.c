@@ -69,6 +69,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 
 There are several package managers with NATS C client library available. If you know one that is not in this list, please submit a PR to add it!
 
+- [conan](https://conan.io/center) The "cnats" recipe is [here](https://github.com/conan-io/conan-center-index/tree/master/recipes/cnats)
 - [Homebrew](https://github.com/Homebrew/homebrew-core) The "cnats" formula is [here](https://github.com/Homebrew/homebrew-core/blob/master/Formula/c/cnats.rb)
 - [vcpkg](https://vcpkg.io) The "cnats" port is [here](https://github.com/microsoft/vcpkg/tree/master/ports/cnats)
 
@@ -241,38 +242,15 @@ ctest -T memcheck -V -I 1,4
 ```
 The above command would run the tests with `valgrind` (`-T memcheck`), with verbose output (`-V`), and run the tests from 1 to 4 (`-I 1,4`).
 
-If you add a test to `test/test.c`, you need to add it into the `allTests` array. Each entry contains a name, and the test function. You can add it anywhere into this array.
-Build you changes:
+If you add a test to `test/test.c`, you need to add it into the `list_test.txt`
+file. Each entry contains just the test name, the function must be named
+identically, with a `test_` prefix. The list is in alphabetical order, but it
+does not need to be, you can add anywhere.
 
-```
-make
-[ 44%] Built target nats
-[ 88%] Built target nats_static
-[ 90%] Built target nats-publisher
-[ 92%] Built target nats-queuegroup
-[ 94%] Built target nats-replier
-[ 96%] Built target nats-requestor
-[ 98%] Built target nats-subscriber
-Scanning dependencies of target testsuite
-[100%] Building C object test/CMakeFiles/testsuite.dir/test.c.o
-Linking C executable testsuite
-[100%] Built target testsuite
-```
+If you are adding a benchmark, it should be added to the `list_bench.txt`. These
+tests are labeled differently (`-L 'bench'`) and executed separately on CI.
 
-Now regenerate the list by invoking the test suite without any argument:
-
-```
-./test/testsuite
-Number of tests: 77
-```
-
-This list the number of tests added to the file `list.txt`. Move this file to the source's test directory.
-
-```
-mv list.txt ../test/
-```
-
-Then, refresh the build:
+You need to re-run `cmake` for the changes to take effect:
 
 ```
 cmake ..

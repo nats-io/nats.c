@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -11,29 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifdef _TEST_PROTO
+#undef _test
+#define _test(name) void test_##name(void);
+#endif
 
-#ifndef NATSTIME_H_
-#define NATSTIME_H_
+#ifdef _TEST_LIST
+#undef _test
+#define _test(name) {#name, test_##name},
+#endif
 
-#include "natsp.h"
+#include "list_test.txt"
+#include "list_bench.txt"
+#if defined(NATS_HAS_STREAMING)
+#include "list_stan.txt"
+#endif
 
-typedef struct __natsDeadline
-{
-    int64_t             absoluteTime;
-    bool                active;
-
-} natsDeadline;
-
-void
-natsDeadline_Init(natsDeadline *deadline, int64_t timeout);
-
-int
-natsDeadline_GetTimeout(natsDeadline *deadline);
-
-void
-natsDeadline_Clear(natsDeadline *deadline);
-
-int64_t
-nats_setTargetTime(int64_t timeout);
-
-#endif /* NATSTIME_H_ */
+#undef _test

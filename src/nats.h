@@ -1,4 +1,4 @@
-// Copyright 2015-2023 The NATS Authors
+// Copyright 2015-2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -185,6 +185,28 @@ typedef struct __natsOptions        natsOptions;
  * desired.
  */
 typedef char                        natsInbox;
+
+
+/** \brief An initial configuration for NATS client. Provides control over the
+ * threading model, and sets many default option values.
+ *
+ * @see natsOptions_Create
+ */
+typedef struct __natsClientConfig
+{
+        int64_t DefaultWriteDeadline;
+
+        int64_t LockSpinCount;
+
+        // Subscription message delivery thread control
+        bool DefaultToThreadPool;
+        int ThreadPoolMax;
+
+        // Reply message delivery thread control
+        bool DefaultRepliesToThreadPool;
+        bool UseSeparatePoolForReplies;
+        int ReplyThreadPoolMax;
+} natsClientConfig;
 
 /** \brief A list of NATS messages.
  *
@@ -1043,7 +1065,7 @@ typedef struct jsConsumerNamesList
  */
 typedef struct jsConsumerPauseResponse
 {
-        bool            Paused;        
+        bool            Paused;
         int64_t         PauseUntil;     ///< UTC time expressed as number of nanoseconds since epoch.
         int64_t         PauseRemaining; ///< Remaining time in nanoseconds.
 } jsConsumerPauseResponse;
@@ -1775,6 +1797,23 @@ typedef void (*stanConnectionLostHandler)(
 
 /** \brief Initializes the library.
  *
+ * This initializes the library, with more control over how threads and/or
+ * thread pools are used to deliver messages to the application.
+ *
+ * It is invoked automatically when creating a connection, with the default
+ * settings (same as nats_Open(-1)).
+ *
+ * \warning You must not call #nats_Open[WithConfig] and #nats_Close
+ * concurrently.
+ *
+ * @param config points to a natsClientConfig. A copy of the settings is made,
+ * so the config can be freed after initializing the NATS client.
+ */
+natsStatus
+nats_OpenWithConfig(natsClientConfig *config);
+
+/** \brief Initializes the library.
+ *
  * This initializes the library.
  *
  * It is invoked automatically when creating a connection, using a default
@@ -2326,6 +2365,23 @@ natsOptions_SetName(natsOptions *opts, const char *name);
  */
 NATS_EXTERN natsStatus
 natsOptions_SetSecure(natsOptions *opts, bool secure);
+
+/** \brief Performs TLS handshake first.
+ *
+ * If the server is not configured to require the client to perform
+ * the TLS handshake first, the server sends an INFO protocol first.
+ * When receiving it, the client and server are then initiate the
+ * TLS handshake.
+ *
+ * If the server is configured to require the client to perform
+ * the TLS handshake first, the client will fail to connect if
+ * not setting this option. Conversely, if the client is configured
+ * with this option but the server is not, the connection will fail.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ */
+NATS_EXTERN natsStatus
+natsOptions_TLSHandshakeFirst(natsOptions *opts);
 
 /** \brief Loads the trusted CA certificates from a file.
  *
@@ -4039,7 +4095,7 @@ natsConnection_Connect(natsConnection **nc, natsOptions *options);
  * This means that all subscriptions and consumers should be resubscribed and
  * their work resumed after successful reconnect where all reconnect options are
  * respected.
- * 
+ *
  * @param nc the pointer to the #natsConnection object.
  */
 natsStatus

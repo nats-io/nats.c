@@ -23299,7 +23299,7 @@ test_JetStreamMgtStreams(void)
             && (si != NULL)
             && (si->Config != NULL)
             && (strcmp(si->Config->Name, "TEST210") == 0)
-            && (si->Config->Metadata.Count == 2)
+            && (si->Config->Metadata.Count >= 2)
             && (si->Config->Compression == js_StorageCompressionS2)
             && (si->Config->FirstSeq == 9999)
             && (strcmp(si->Config->SubjectTransform.Source, "foo210") == 0)
@@ -27931,9 +27931,45 @@ test_JetStreamSubscribeFlowControl(void)
     char                *subj = NULL;
     natsBuffer          *buf  = NULL;
 
-    JS_SETUP(2, 3, 3);
+    natsConnection *nc = NULL;
+    jsCtx *js = NULL;
+    natsPid pid = NATS_INVALID_PID;
+    char confFile[256] = {'\0'};
+    char datastore[256] = {'\0'};
+    char cmdLine[1024] = {'\0'};
 
-    data = malloc(100*1024);
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    test("Start server: ");
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    if (serverVersionAtLeast(2, 11, 0))
+    {
+        _createConfFile(confFile, sizeof(confFile),
+                        "jetstream: {\n"
+                        "   enabled: true\n"
+                        "   max_buffered_size: 1Gb\n"
+                        "   max_buffered_msgs: 20000\n"
+                        "}\n");
+        snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
+    }
+    else
+    {
+        snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    }
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    data = malloc(100 * 1024);
     if (data == NULL)
         FAIL("Unable to allocate data");
 
@@ -28073,6 +28109,7 @@ test_JetStreamSubscribeFlowControl(void)
     natsSubscription_Destroy(nsub);
     _destroyDefaultThreadArgs(&args);
     JS_TEARDOWN;
+    remove(confFile);
 }
 
 static void

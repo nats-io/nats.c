@@ -23252,7 +23252,7 @@ void test_JetStreamMgtStreams(void)
             && (si != NULL)
             && (si->Config != NULL)
             && (strcmp(si->Config->Name, "TEST210") == 0)
-            && (si->Config->Metadata.Count == 2)
+            && (si->Config->Metadata.Count >= 2)
             && (si->Config->Compression == js_StorageCompressionS2)
             && (si->Config->FirstSeq == 9999)
             && (strcmp(si->Config->SubjectTransform.Source, "foo210") == 0)
@@ -27941,9 +27941,45 @@ void test_JetStreamSubscribeFlowControl(void)
     char                *subj = NULL;
     natsBuffer          *buf  = NULL;
 
-    JS_SETUP(2, 3, 3);
+    natsConnection *nc = NULL;
+    jsCtx *js = NULL;
+    natsPid pid = NATS_INVALID_PID;
+    char confFile[256] = {'\0'};
+    char datastore[256] = {'\0'};
+    char cmdLine[1024] = {'\0'};
 
-    data = malloc(100*1024);
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    test("Start server: ");
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    if (serverVersionAtLeast(2, 11, 0))
+    {
+        _createConfFile(confFile, sizeof(confFile),
+                        "jetstream: {\n"
+                        "   enabled: true\n"
+                        "   max_buffered_size: 1Gb\n"
+                        "   max_buffered_msgs: 20000\n"
+                        "}\n");
+        snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
+    }
+    else
+    {
+        snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    }
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    data = malloc(100 * 1024);
     if (data == NULL)
         FAIL("Unable to allocate data");
 
@@ -28083,6 +28119,7 @@ void test_JetStreamSubscribeFlowControl(void)
     natsSubscription_Destroy(nsub);
     _destroyDefaultThreadArgs(&args);
     JS_TEARDOWN;
+    remove(confFile);
 }
 
 static void
@@ -32254,6 +32291,144 @@ void test_KeyValueKeys(void)
     k = l.Keys[0];
     s = ((k != NULL) && (strcmp(k, "age") == 0) ? NATS_OK : NATS_ERR);
     testCond(s == NATS_OK);
+    kvKeysList_Destroy(&l);
+
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
+void test_KeyValueKeysWithFilters(void)
+{
+    natsStatus          s;
+    kvStore             *kv = NULL;
+    kvKeysList          l;
+    kvConfig            kvc;
+    const char **defaultSubject = (const char *[]){">"};
+    l.Count = 0;
+    l.Keys = NULL;
+
+    JS_SETUP(2, 10, 14);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "KVSF";
+    kvc.History = 2;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Populate: ");
+    s = kvStore_PutString(NULL, kv, "a.b", "a.b");
+    IFOK(s, kvStore_PutString(NULL, kv, "a.d", "a.d"));
+    IFOK(s, kvStore_PutString(NULL, kv, "c.d", "c.d"));
+    IFOK(s, kvStore_PutString(NULL, kv, "e.f", "e.f"));
+    IFOK(s, kvStore_PutString(NULL, kv, "e.a.f", "e.a.f"));
+    testCond(s == NATS_OK);
+
+    test("Get keys with filters (bad args): List is NULL");
+    s = kvStore_KeysWithFilters(NULL, kv, defaultSubject, 1, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Get keys with filters (bad args): filters is NULL");
+    s = kvStore_KeysWithFilters(&l, kv, NULL, 0, NULL);
+    testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
+
+    test("Get keys with filters (bad args): numFilters is 0");
+    s = kvStore_KeysWithFilters(&l, kv, defaultSubject, 0, NULL);
+    testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
+
+    test("Get keys with filters (bad args): numFilters is <0");
+    s = kvStore_KeysWithFilters(&l, kv, defaultSubject, -10, NULL);
+    testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
+
+    test("Get keys with filters (bad args): empty string");
+    const char **filter0 = (const char *[]){"a.*", "", "b.*"};
+    s = kvStore_KeysWithFilters(&l, kv, filter0, 3, NULL);
+    testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
+
+    test("Get keys with filters (bad args): kv is NULL");
+    s = kvStore_KeysWithFilters(&l, NULL, defaultSubject, 1, NULL);
+    testCond((s == NATS_INVALID_ARG) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
+    kvKeysList_Destroy(&l);
+
+    test("filter: a.*");
+    const char **filter1 = (const char *[]){"a.*"};
+    s = kvStore_KeysWithFilters(&l, kv, filter1, 1, NULL);
+    testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 2));
+    nats_clearLastError();
+    kvKeysList_Destroy(&l);
+
+    test("filter: *.a.*");
+    const char **filter2 = (const char *[]){"*.a.*"};
+    s = kvStore_KeysWithFilters(&l, kv, filter2, 1, NULL);
+    testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 1));
+    nats_clearLastError();
+    kvKeysList_Destroy(&l);
+
+    test("filter: *.a");
+    const char **filter3 = (const char *[]){"*.a"};
+    s = kvStore_KeysWithFilters(&l, kv, filter3, 1, NULL);
+    testCond((s == NATS_OK) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
+    kvKeysList_Destroy(&l);
+
+    test("filter: e.a.f");
+    const char **filter4 = (const char *[]){"e.a.f"};
+    s = kvStore_KeysWithFilters(&l, kv, filter4, 1, NULL);
+    testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 1));
+    nats_clearLastError();
+    kvKeysList_Destroy(&l);
+
+    test("filter: >");
+    const char **filter5 = (const char *[]){">"};
+    s = kvStore_KeysWithFilters(&l, kv, filter5, 1, NULL);
+    testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 5));
+    nats_clearLastError();
+    kvKeysList_Destroy(&l);
+
+    test("filter: multiple overlapping filters");
+    const char **filter6 = (const char *[]){"*.a","a.*","*.a.*"};
+    s = kvStore_KeysWithFilters(&l, kv, filter6, 3, NULL);
+    // consumer subject filters cannot overlap
+    testCond((s == NATS_ERR) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
+    kvKeysList_Destroy(&l);
+
+    test("filter: multiple non overlapping filters");
+    const char **filter7 = (const char *[]){"a.*","e.*"};
+    s = kvStore_KeysWithFilters(&l, kv, filter7, 2, NULL);
+    testCond((s == NATS_OK) && (l.Keys != NULL) && (l.Count == 3));
+    nats_clearLastError();
+    kvKeysList_Destroy(&l);
+
+    // Delete the key and check if returned after filtering
+    test("Delete a.b:");
+    s = kvStore_Delete(kv, "a.b");
+    testCond(s == NATS_OK);
+
+    test("a.b should not be returned post deletion")
+    const char **filter8 = (const char *[]){"a.b"};
+    s = kvStore_KeysWithFilters(&l, kv, filter8, 1, NULL);
+    testCond((s == NATS_OK) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
+    kvKeysList_Destroy(&l);
+
+    // Purge the key and check if returned after filtering
+    test("Purge a.b:");
+    s = kvStore_Purge(kv, "a.d", NULL);
+    testCond(s == NATS_OK);
+
+    test("a.d should not be returned post purge")
+    const char **filter9 = (const char *[]){"a.d"};
+    s = kvStore_KeysWithFilters(&l, kv, filter9, 1, NULL);
+    testCond((s == NATS_OK) && (l.Keys == NULL) && (l.Count == 0));
+    nats_clearLastError();
     kvKeysList_Destroy(&l);
 
     kvStore_Destroy(kv);

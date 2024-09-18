@@ -1,4 +1,4 @@
-// Copyright 2021 The NATS Authors
+// Copyright 2021-2024 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -28,6 +28,7 @@ void js_unlock(jsCtx *js);
 
 #endif // DEV_MODE
 
+#define NATS_DEFAULT_ASYNC_FETCH_SIZE 128 // messages
 
 extern const char*      jsDefaultAPIPrefix;
 extern const int64_t    jsDefaultRequestWait;
@@ -276,3 +277,9 @@ js_cloneConsumerConfig(jsConsumerConfig *org, jsConsumerConfig **clone);
 
 void
 js_destroyConsumerConfig(jsConsumerConfig *cc);
+
+natsStatus
+js_checkFetchedMsg(natsSubscription *sub, natsMsg *msg, uint64_t fetchID, bool checkSts, bool *usrMsg);
+
+natsStatus
+js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch);

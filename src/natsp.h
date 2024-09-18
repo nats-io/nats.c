@@ -274,7 +274,7 @@ struct __natsOptions
     void                    *evLoop;
     natsEvLoopCallbacks     evCbs;
 
-    // If set to false, the client will start a per-subscription dedicated
+    // If set to false, the client will start a per-subscription "own"
     // thread to deliver messages to the user callbacks. If true, a shared
     // thread out of a thread pool is used. natsClientConfig controls the pool
     // size.
@@ -372,6 +372,28 @@ struct __jsCtx
     bool                closed;
 };
 
+typedef struct __jsFetch
+{
+    struct jsOptionsPullSubscribeAsync opts;
+
+    natsStatus  status;
+
+    // Stats
+    int64_t     startTimeMillis;
+    int         receivedMsgs;
+    int64_t     receivedBytes;
+    int         deliveredMsgs;
+    int64_t     deliveredBytes;
+    int         requestedMsgs;
+
+    // Timer for the fetch expiration. We leverage the existing jsi->hbTimer for
+    // checking missed heartbeats.
+    natsTimer   *expiresTimer;
+
+    // Matches jsi->fetchID
+    char        replySubject[NATS_DEFAULT_INBOX_PRE_LEN + NUID_BUFFER_LEN + 32]; // big enough for {INBOX}.number
+} jsFetch;
+
 typedef struct __jsSub
 {
     jsCtx               *js;
@@ -385,6 +407,7 @@ typedef struct __jsSub
     bool                dc; // delete JS consumer in Unsub()/Drain()
     bool                ackNone;
     uint64_t            fetchID;
+    jsFetch             *fetch;
 
     // This is ConsumerInfo's Pending+Consumer.Delivered that we get from the
     // add consumer response. Note that some versions of the server gather the
@@ -498,7 +521,7 @@ typedef struct __natsSubscriptionControlMessages
     {
         natsMsg *expired;
         natsMsg *missedHeartbeat;
-    } batch;
+    } fetch;
 } natsSubscriptionControlMessages;
 
 struct __natsSubscription
@@ -512,8 +535,8 @@ struct __natsSubscription
 
     // We always have a dispatcher to keep track of things, even if the
     // subscription is sync. The dispatcher is set up at the subscription
-    // creation time, and may point to a dedicated thread using sub's own
-    // dispatchQueue, or a shared worker using its own dispatch queue, which
+    // creation time, and may point to a dedicated thread that uses sub's own
+    // dispatchQueue, or a shared worker with a shared queue, which
     // dispatcher->queue then points to.
     natsDispatcher *dispatcher;
     natsDispatcher ownDispatcher;
@@ -896,6 +919,7 @@ static inline void nats_unlockDispatcher(natsDispatcher *d)
         natsMutex_Unlock(d->mu);
 }
 
-void nats_deliverMsgsPoolf(void *arg);
+void nats_dispatchThreadPool(void *arg);
+void nats_dispatchThreadOwn(void *arg);
 
 #endif /* NATSP_H_ */

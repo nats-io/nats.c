@@ -17,18 +17,23 @@ static const char *usage = ""\
 "-gd            use global message delivery thread pool\n" \
 "-sync          receive synchronously (default is asynchronous)\n" \
 "-pull          use pull subscription\n" \
+"-pull-async    use an async pull subscription\n" \
 "-fc            enable flow control\n" \
 "-count         number of expected messages\n";
+
+static bool fetchCompleteCalled = false;
+static bool subCompleteCalled = false;
 
 static void
 onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     if (print)
-        printf("Received msg: %s - %.*s\n",
+    {
+        printf("Received msg: %s - '%.*s'\n",
                natsMsg_GetSubject(msg),
                natsMsg_GetDataLength(msg),
                natsMsg_GetData(msg));
-
+    }
     if (start == 0)
         start = nats_Now();
 
@@ -50,6 +55,34 @@ asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure
     natsSubscription_GetDropped(sub, (int64_t*) &dropped);
 }
 
+static void
+_completeFetchCb(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure)
+{
+    fetchCompleteCalled = true;
+
+    if (print)
+        printf("Fetch completed with status: %u - %s\n", s, natsStatus_GetText(s));
+}
+
+static void
+_completeSubCb(void *closure)
+{
+    subCompleteCalled = true;
+    if (print)
+        printf("Subscription completed\n");
+}
+
+static bool
+nextFetchCb(jsFetchRequest *req, natsSubscription *sub, void *closure)
+{
+    if (print)
+        printf("NextFetch: always ask for 1 message, 0 MaxBytes\n");
+
+    req->Batch = 1;
+    req->MaxBytes = 0;
+    return true;
+}
+
 int main(int argc, char **argv)
 {
     natsConnection      *conn  = NULL;
@@ -66,10 +99,18 @@ int main(int argc, char **argv)
 
     opts = parseArgs(argc, argv, usage);
 
-    printf("Created %s subscription on '%s'.\n",
-        (pull ? "pull" : (async ? "asynchronous" : "synchronous")), subj);
+    printf("Creating %s%s subscription on '%s'\n",
+            async ? "an asynchronous" : "a synchronous",
+            pull ? " pull" : "",
+            subj);
 
     s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);
+
+    // Uncomment to use the global thread pool for message delivery.
+    // if (s == NATS_OK)
+    //     s = natsOptions_UseGlobalMessageDelivery(opts, true);
+    // if (s == NATS_OK)
+    //     s = nats_SetMessageDeliveryPoolSize(1); // 1 thread for all subscriptions.
 
     if (s == NATS_OK)
         s = natsConnection_Connect(&conn, opts);
@@ -130,21 +171,49 @@ int main(int argc, char **argv)
 
     if (s == NATS_OK)
     {
-        if (pull)
+        if (pull && async)
+        {
+            jsOpts.PullSubscribeAsync.MaxMessages = (int) total;
+
+            // Defalut values, change as needed.
+            jsOpts.PullSubscribeAsync.FetchSize = 128;  // ask for 128 messages at a time
+            jsOpts.PullSubscribeAsync.NoWait = false;
+            jsOpts.PullSubscribeAsync.Timeout = 0;      // for the entire subscription, in milliseconds
+            jsOpts.PullSubscribeAsync.KeepAhead = 0;
+            jsOpts.PullSubscribeAsync.Heartbeat = 0;    // in milliseconds
+
+            jsOpts.PullSubscribeAsync.CompleteHandler = _completeFetchCb;
+            jsOpts.PullSubscribeAsync.CompleteHandlerClosure = NULL;
+
+            // Uncomment to provide custom control over next fetch size.
+            // jsOpts.PullSubscribeAsync.NextHandler = nextFetchCb;
+
+            // Uncomment to turn off AutoACK on delivered messages.            
+            // so.ManualAck = true;
+
+            s = js_PullSubscribeAsync(&sub, js, subj, durable, onMsg, NULL, &jsOpts, &so, &jerr);
+        }
+        else if (pull)
             s = js_PullSubscribe(&sub, js, subj, durable, &jsOpts, &so, &jerr);
         else if (async)
             s = js_Subscribe(&sub, js, subj, onMsg, NULL, &jsOpts, &so, &jerr);
         else
             s = js_SubscribeSync(&sub, js, subj, &jsOpts, &so, &jerr);
     }
+
+    if ((s == NATS_OK) && async)
+        s = natsSubscription_SetOnCompleteCB(sub, _completeSubCb, NULL);
+    if ((s == NATS_OK) && async)
+        s = natsSubscription_AutoUnsubscribe(sub, (int) total); // to get the sub closed callback
     if (s == NATS_OK)
         s = natsSubscription_SetPendingLimits(sub, -1, -1);
 
     if (s == NATS_OK)
         s = natsStatistics_Create(&stats);
 
-    if ((s == NATS_OK) && pull)
+    if ((s == NATS_OK) && pull && !async)
     {
+        // Pull mode, simple "Fetch" loop
         natsMsgList list;
         int         i;
 
@@ -166,16 +235,25 @@ int main(int argc, char **argv)
     }
     else if ((s == NATS_OK) && async)
     {
+        // All async modes (push and pull)
         while (s == NATS_OK)
         {
-            if (count + dropped == total)
-                break;
+            bool end = (count + dropped >= total);
 
-            nats_Sleep(1000);
+            if (end && subCompleteCalled)
+            {
+                if (!pull)
+                    break;
+                else if (fetchCompleteCalled)
+                    break;
+            }
+
+            nats_Sleep(500);
         }
     }
     else if (s == NATS_OK)
     {
+        // Sync mode
         for (count = 0; (s == NATS_OK) && (count < total); count++)
         {
             s = natsSubscription_NextMsg(&msg, sub, 5000);

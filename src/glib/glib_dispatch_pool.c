@@ -17,23 +17,23 @@
 static inline void
 _destroyDispatcher(natsDispatcher *d)
 {
-    if ((d == NULL) || !d->running)
+    if (d == NULL)
         return;
 
     natsThread_Destroy(d->thread);
     nats_destroyQueuedMessages(&d->queue); // there's NEVER anything there, remove?
     natsCondition_Destroy(d->cond);
     natsMutex_Destroy(d->mu);
-    memset(d, 0, sizeof(*d));
+    NATS_FREE(d);
 }
 
 static inline natsStatus
-_startDispatcher(natsDispatcher *d, void (*threadf)(void *))
+_newDispatcher(natsDispatcher **newDispatcher, void (*threadf)(void *))
 {
     natsStatus s = NATS_OK;
-
-    if (d->running)
-        return NATS_OK;
+    natsDispatcher *d = NATS_CALLOC(1, sizeof(natsDispatcher));
+    if (d == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
     s = natsMutex_Create(&d->mu);
     if (s != NATS_OK)
@@ -52,8 +52,11 @@ _startDispatcher(natsDispatcher *d, void (*threadf)(void *))
     {
         _destroyDispatcher(d);
         natsLib_Release();
+        return NATS_UPDATE_ERR_STACK(s);
     }
-    return NATS_UPDATE_ERR_STACK(s);
+
+    *newDispatcher = d;
+    return NATS_OK;
 }
 
 static natsStatus
@@ -68,7 +71,7 @@ _growPool(natsDispatcherPool *pool, int cap)
     // the pool in the future. Make it a no-op for now.
     if (cap > pool->cap)
     {
-        natsDispatcher *newDispatchers = NATS_CALLOC(cap, sizeof(natsDispatcher));
+        natsDispatcher **newDispatchers = NATS_CALLOC(cap, sizeof(natsDispatcher*));
         if (newDispatchers == NULL)
             s = nats_setDefaultError(NATS_NO_MEMORY);
         if (s == NATS_OK)
@@ -76,7 +79,7 @@ _growPool(natsDispatcherPool *pool, int cap)
             memcpy(
                 newDispatchers,
                 pool->dispatchers,
-                pool->cap * sizeof(*newDispatchers));
+                pool->cap * sizeof(natsDispatcher*));
             NATS_FREE(pool->dispatchers);
             pool->dispatchers = newDispatchers;
             pool->cap = cap;
@@ -88,7 +91,7 @@ _growPool(natsDispatcherPool *pool, int cap)
 void nats_freeDispatcherPool(natsDispatcherPool *pool)
 {
     for (int i = 0; i < pool->cap; i++)
-        _destroyDispatcher(&pool->dispatchers[i]);
+        _destroyDispatcher(pool->dispatchers[i]);
     natsMutex_Destroy(pool->lock);
     NATS_FREE(pool->dispatchers);
     memset(pool, 0, sizeof(*pool));
@@ -112,18 +115,17 @@ nats_initDispatcherPool(natsDispatcherPool *pool, int cap)
 
 void nats_signalDispatcherPoolToShutdown(natsDispatcherPool *pool)
 {
-    natsCondition *cond = NULL;
-
     for (int i = 0; i < pool->cap; i++)
     {
-        // These are no-ops for empty slots
-        nats_lockDispatcher(&pool->dispatchers[i]);
-        pool->dispatchers[i].shutdown = true;
-        cond = pool->dispatchers[i].cond;
-        if (cond != NULL)
-            natsCondition_Signal(cond);
+        natsDispatcher *d = pool->dispatchers[i];
+        if (d == NULL)
+            continue;
 
-        nats_unlockDispatcher(&pool->dispatchers[i]);
+        nats_lockDispatcher(d);
+        d->shutdown = true;
+        if (d->cond != NULL)
+            natsCondition_Signal(d->cond);
+        nats_unlockDispatcher(d);
     }
 }
 
@@ -131,8 +133,8 @@ void nats_waitForDispatcherPoolShutdown(natsDispatcherPool *pool)
 {
     for (int i = 0; i < pool->cap; i++)
     {
-        if (pool->dispatchers[i].thread != NULL)
-            natsThread_Join(pool->dispatchers[i].thread);
+        if (pool->dispatchers[i] != NULL)
+            natsThread_Join(pool->dispatchers[i]->thread);
     }
 }
 
@@ -153,7 +155,6 @@ nats_assignSubToDispatch(natsSubscription *sub)
 {
     natsLib *lib = nats_lib();
     natsStatus s = NATS_OK;
-    natsDispatcher *d = NULL;
     natsDispatcherPool *pool = &lib->messageDispatchers;
 
     natsMutex_Lock(pool->lock);
@@ -161,18 +162,15 @@ nats_assignSubToDispatch(natsSubscription *sub)
     if (pool->cap == 0)
         s = nats_setError(NATS_FAILED_TO_INITIALIZE, "%s", "No message dispatchers available, the pool is empty.");
 
-    if (s == NATS_OK)
-    {
-        // Get the next dispatcher
-        d = &pool->dispatchers[pool->useNext];
-        pool->useNext = (pool->useNext + 1) % pool->cap;
-    }
-    if ((s == NATS_OK) && (d->thread == NULL))
-        s = _startDispatcher(d, nats_deliverMsgsPoolf);
+    // Get the next dispatcher
+    if (pool->dispatchers[pool->useNext] == NULL)
+        s = _newDispatcher(&pool->dispatchers[pool->useNext], nats_dispatchThreadPool);
 
     // Assign it to the sub.
     if (s == NATS_OK)
-        sub->dispatcher = d;
+        sub->dispatcher = pool->dispatchers[pool->useNext];
+
+    pool->useNext = (pool->useNext + 1) % pool->cap;
 
     natsMutex_Unlock(pool->lock);
 

@@ -16,7 +16,7 @@
 #include "microp.h"
 #include "util.h"
 
-static microError *_dup_with_prefix(char **dst, const char *prefix, const char *src);
+static microError *_subjectWithGroupPrefix(char **dst, microGroup *g, const char *src);
 
 static void _handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 
@@ -24,7 +24,7 @@ static void _retain_endpoint(microEndpoint *ep, bool lock);
 static void _release_endpoint(microEndpoint *ep);
 
 microError *
-micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal)
+micro_new_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, microEndpointConfig *cfg, bool is_internal)
 {
     microError *err = NULL;
     microEndpoint *ep = NULL;
@@ -51,15 +51,40 @@ micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
     MICRO_CALL(err, micro_ErrorFromStatus(natsMutex_Create(&ep->endpoint_mu)));
     MICRO_CALL(err, micro_clone_endpoint_config(&ep->config, cfg));
     MICRO_CALL(err, micro_strdup(&ep->name, cfg->Name));
-    MICRO_CALL(err, _dup_with_prefix(&ep->subject, prefix, subj));
+    MICRO_CALL(err, _subjectWithGroupPrefix(&ep->subject, g, subj));
     if (err != NULL)
     {
         micro_free_endpoint(ep);
         return err;
     }
 
+    ep->group = g;
     *new_ep = ep;
     return NULL;
+}
+
+const char *
+micro_queue_group_for_endpoint(microEndpoint *ep)
+{
+    if (ep->config->NoQueueGroup)
+        return NULL;
+    else if (!nats_IsStringEmpty(ep->config->QueueGroup))
+        return ep->config->QueueGroup;
+
+    if (ep->group != NULL)
+    {
+        if(ep->group->config->NoQueueGroup)
+            return NULL;
+        else if (!nats_IsStringEmpty(ep->group->config->QueueGroup))
+            return ep->group->config->QueueGroup;
+    }
+
+    if (ep->m->cfg->NoQueueGroup)
+        return NULL;
+    else if(!nats_IsStringEmpty(ep->m->cfg->QueueGroup))
+        return ep->m->cfg->QueueGroup;
+
+    return MICRO_DEFAULT_QUEUE_GROUP;
 }
 
 microError *
@@ -75,10 +100,11 @@ micro_start_endpoint(microEndpoint *ep)
     // reset the stats.
     memset(&ep->stats, 0, sizeof(ep->stats));
 
-    if (ep->is_monitoring_endpoint)
+    const char *queueGroup = micro_queue_group_for_endpoint(ep);
+    if (ep->is_monitoring_endpoint || (queueGroup == NULL))
         s = natsConnection_Subscribe(&sub, ep->m->nc, ep->subject, _handle_request, ep);
     else
-        s = natsConnection_QueueSubscribe(&sub, ep->m->nc, ep->subject, MICRO_QUEUE_GROUP, _handle_request, ep);
+        s = natsConnection_QueueSubscribe(&sub, ep->m->nc, ep->subject, queueGroup, _handle_request, ep);
 
     if (s == NATS_OK)
     {
@@ -324,6 +350,7 @@ micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
 
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Name, cfg->Name));
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Subject, cfg->Subject));
+    MICRO_CALL(err, micro_strdup((char **)&new_cfg->QueueGroup, cfg->QueueGroup));
     MICRO_CALL(err, micro_ErrorFromStatus(
                         nats_cloneMetadata(&new_cfg->Metadata, cfg->Metadata)));
 
@@ -407,23 +434,23 @@ bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_sub
     }
 }
 
-static microError *_dup_with_prefix(char **dst, const char *prefix, const char *src)
+static microError *_subjectWithGroupPrefix(char **dst, microGroup *g, const char *src)
 {
     size_t len = strlen(src) + 1;
     char *p;
 
-    if (!nats_IsStringEmpty(prefix))
-        len += strlen(prefix) + 1;
+    if (g != NULL)
+        len += strlen(g->config->Prefix) + 1;
 
     *dst = NATS_CALLOC(1, len);
     if (*dst == NULL)
         return micro_ErrorOutOfMemory;
 
     p = *dst;
-    if (!nats_IsStringEmpty(prefix))
+    if (g != NULL)
     {
-        len = strlen(prefix);
-        memcpy(p, prefix, len);
+        len = strlen(g->config->Prefix);
+        memcpy(p, g->config->Prefix, len);
         p[len] = '.';
         p += len + 1;
     }

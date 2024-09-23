@@ -27,7 +27,7 @@
     if ((__err) == NULL)         \
         __block;
 
-#define MICRO_QUEUE_GROUP "q"
+#define MICRO_DEFAULT_QUEUE_GROUP "q"
 
 #define MICRO_DEFAULT_ENDPOINT_NAME "default"
 
@@ -58,6 +58,7 @@ struct micro_endpoint_s
     // Retained/released by the service that owns the endpoint to avoid race
     // conditions.
     microService *m;
+    microGroup *group;
 
     // Monitoring endpoints are different in a few ways. For now, express it as
     // a single flag but consider unbundling:
@@ -88,9 +89,9 @@ struct micro_endpoint_s
 
 struct micro_group_s
 {
+    struct micro_group_config_s *config;
     struct micro_service_s *m;
     struct micro_group_s *next;
-    char prefix[];
 };
 
 struct micro_service_s
@@ -138,12 +139,12 @@ struct micro_request_s
     microEndpoint *Endpoint;
 };
 
-microError *micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
+microError *micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, microEndpointConfig *cfg, bool is_internal);
 microError *micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg);
 microError *micro_init_monitoring(microService *m);
 microError *micro_is_error_message(natsStatus s, natsMsg *msg);
 microError *micro_new_control_subject(char **newSubject, const char *verb, const char *name, const char *id);
-microError *micro_new_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal);
+microError *micro_new_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, microEndpointConfig *cfg, bool is_internal);
 microError *micro_new_request(microRequest **new_request, microService *m, microEndpoint *ep, natsMsg *msg);
 microError *micro_start_endpoint(microEndpoint *ep);
 microError *micro_stop_endpoint(microEndpoint *ep);
@@ -155,6 +156,7 @@ void micro_release_endpoint(microEndpoint *ep);
 void micro_release_on_endpoint_complete(void *closure);
 void micro_retain_endpoint(microEndpoint *ep);
 void micro_update_last_error(microEndpoint *ep, microError *err);
+const char *micro_queue_group_for_endpoint(microEndpoint *ep);
 
 bool micro_is_valid_name(const char *name);
 bool micro_is_valid_subject(const char *subject);

@@ -7636,6 +7636,14 @@ typedef struct micro_error_s microError;
 typedef struct micro_group_s microGroup;
 
 /**
+ * @brief The Microservice endpoint *group* configuration object.
+ *
+ * @see micro_group_config_s for descriptions of the fields,
+ * micro_service_config_s, micro_service_config_s, microService_AddGroup
+ */
+typedef struct micro_group_config_s microGroupConfig;
+
+/**
  * @brief a request received by a microservice endpoint.
  *
  * @see micro_request_s for descriptions of the fields.
@@ -7781,7 +7789,19 @@ struct micro_endpoint_config_s
     const char *Subject;
 
     /**
-     * @briefMetadata for the endpoint, a JSON-encoded user-provided object,
+     * @brief overrides the default queue group for the service.
+     *
+     */
+    const char *QueueGroup;
+
+    /**
+     * @brief Disables the use of a queue group for the service.
+     *
+     */
+    bool NoQueueGroup;
+
+    /**
+     * @brief Metadata for the endpoint, a JSON-encoded user-provided object,
      * e.g. `{"key":"value"}`
      */
     natsMetadata Metadata;
@@ -7814,6 +7834,11 @@ struct micro_endpoint_info_s
     const char *Subject;
 
     /**
+     * @brief Endpoint's queue group, or omitted if no queue group is used.
+     */
+    const char *QueueGroup;
+
+    /**
      * @briefMetadata for the endpoint, a JSON-encoded user-provided object,
      * e.g. `{"key":"value"}`
      */
@@ -7827,6 +7852,11 @@ struct micro_endpoint_stats_s
 {
     const char *Name;
     const char *Subject;
+
+    /**
+     * @brief Endpoint's queue group, or omitted if no queue group is used.
+     */
+    const char *QueueGroup;
 
     /**
      * @brief The number of requests received by the endpoint.
@@ -7861,6 +7891,29 @@ struct micro_endpoint_stats_s
 };
 
 /**
+ * #brief The Microservice endpoint *group* configuration object.
+ */
+struct micro_group_config_s
+{
+    /**
+     * @brief The subject prefix for the group.
+     */
+    const char *Prefix;
+
+    /**
+     * @brief overrides the default queue group for the service.
+     *
+     */
+    const char *QueueGroup;
+
+    /**
+     * @brief Disables the use of a queue group for the service.
+     *
+     */
+    bool NoQueueGroup;
+};
+
+/**
  * @brief The Microservice top-level configuration object.
  *
  * The service is created with a clone of the config and all of its values, so
@@ -7886,7 +7939,20 @@ struct micro_service_config_s
     const char *Description;
 
     /**
-     * @brief Metadata for the service, a JSON-encoded user-provided object, e.g. `{"key":"value"}`
+     * @brief overrides the default queue group for the service ("q").
+     *
+     */
+    const char *QueueGroup;
+
+    /**
+     * @brief Disables the use of a queue group for the service.
+     *
+     */
+    bool NoQueueGroup;
+
+    /**
+     * @brief Immutable metadata for the service, a JSON-encoded user-provided
+     * object, e.g. `{"key":"value"}`
      */
     natsMetadata Metadata;
 
@@ -8147,15 +8213,14 @@ microService_AddEndpoint(microService *m, microEndpointConfig *config);
  * @param new_group the location where to store the pointer to the new
  * #microGroup object.
  * @param m the #microService that the group will be added to.
- * @param prefix a prefix to use on names and subjects of all endpoints in the
- * group.
+ * @param config group parameters.
  *
  * @return a #microError if an error occurred.
  *
  * @see #microGroup_AddGroup, #microGroup_AddEndpoint
  */
 NATS_EXTERN microError *
-microService_AddGroup(microGroup **new_group, microService *m, const char *prefix);
+microService_AddGroup(microGroup **new_group, microService *m, microGroupConfig *config);
 
 /** @brief Destroys a microservice, stopping it first if needed.
  *
@@ -8283,15 +8348,14 @@ NATS_EXTERN microError *microService_Stop(microService *m);
  * @param new_group the location where to store the pointer to the new
  * #microGroup object.
  * @param parent the #microGroup that the new group will be added to.
- * @param prefix a prefix to use on names and subjects of all endpoints in the
- * group.
+ * @param config group parameters.
  *
  * @return a #microError if an error occurred.
  *
  * @see #microGroup_AddGroup, #microGroup_AddEndpoint
  */
 NATS_EXTERN microError *
-microGroup_AddGroup(microGroup **new_group, microGroup *parent, const char *prefix);
+microGroup_AddGroup(microGroup **new_group, microGroup *parent, microGroupConfig *config);
 
 /** @brief Adds an endpoint to a #microGroup and starts listening for messages.
  *

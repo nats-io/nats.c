@@ -88,24 +88,6 @@ int main(int argc, char **argv)
     microGroup *g = NULL;
     char errorbuf[1024];
 
-    microServiceConfig cfg = {
-        .Description = "Arithmetic operations - NATS microservice example in C",
-        .Name = "c-arithmetics",
-        .Version = "1.0.0",
-    };
-    microEndpointConfig add_cfg = {
-        .Name = "add",
-        .Handler = handle_add,
-    };
-    microEndpointConfig divide_cfg = {
-        .Name = "divide",
-        .Handler = handle_divide,
-    };
-    microEndpointConfig multiply_cfg = {
-        .Name = "multiply",
-        .Handler = handle_multiply,
-    };
-
     // Connect to NATS server
     opts = parseArgs(argc, argv, "");
     s = natsConnection_Connect(&conn, opts);
@@ -118,17 +100,34 @@ int main(int argc, char **argv)
     }
 
     // Create the Microservice that listens on nc.
+    microServiceConfig cfg = {
+        .Description = "Arithmetic operations - NATS microservice example in C",
+        .Name = "c-arithmetics",
+        .Version = "1.0.0",
+    };
     err = micro_AddService(&m, conn, &cfg);
 
     // Add the endpoints for the functions.
     if (err == NULL)
-        microService_AddGroup(&g, m, "op");
+    {
+        microGroupConfig groupConfig = { .Prefix = "op" };
+        err = microService_AddGroup(&g, m, &groupConfig);
+    }
     if (err == NULL)
-        err = microGroup_AddEndpoint(g, &add_cfg);
+    {
+        microEndpointConfig addConfig = { .Name = "add", .Handler = handle_add };
+        err = microGroup_AddEndpoint(g, &addConfig);
+    }
     if (err == NULL)
-        err = microGroup_AddEndpoint(g, &multiply_cfg);
+    {
+        microEndpointConfig multiplyConfig = { .Name = "multiply", .Handler = handle_multiply };
+        err = microGroup_AddEndpoint(g, &multiplyConfig);
+    }
     if (err == NULL)
-        err = microGroup_AddEndpoint(g, &divide_cfg);
+    {
+        microEndpointConfig divideConfig = { .Name = "divide", .Handler = handle_divide };
+        err = microGroup_AddEndpoint(g, &divideConfig);
+    }
 
     // Run the service, until stopped.
     if (err == NULL)

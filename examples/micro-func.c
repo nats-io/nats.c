@@ -170,24 +170,6 @@ int main(int argc, char **argv)
     microGroup *g = NULL;
     char errorbuf[1024];
 
-    microServiceConfig cfg = {
-        .Description = "Functions - NATS microservice example in C",
-        .Name = "c-functions",
-        .Version = "1.0.0",
-    };
-    microEndpointConfig factorial_cfg = {
-        .Name = "factorial",
-        .Handler = handle_factorial,
-    };
-    microEndpointConfig fibonacci_cfg = {
-        .Name = "fibonacci",
-        .Handler = handle_fibonacci,
-    };
-    microEndpointConfig power2_cfg = {
-        .Name = "power2",
-        .Handler = handle_power2,
-    };
-
     // Connect to NATS server
     opts = parseArgs(argc, argv, "");
     s = natsConnection_Connect(&conn, opts);
@@ -200,17 +182,34 @@ int main(int argc, char **argv)
     }
 
     // Create the Microservice that listens on nc.
-    err = micro_AddService(&m, conn, &cfg);
+    microServiceConfig serviceConfig = {
+        .Description = "Functions - NATS microservice example in C",
+        .Name = "c-functions",
+        .Version = "1.0.0",
+    };
+    err = micro_AddService(&m, conn, &serviceConfig);
 
     // Add the endpoints for the functions.
     if (err == NULL)
-        err = microService_AddGroup(&g, m, "f");
+    {
+        microGroupConfig groupConfig = { .Prefix = "f" };
+        err = microService_AddGroup(&g, m, &groupConfig);
+    }
     if (err == NULL)
-        err = microGroup_AddEndpoint(g, &factorial_cfg);
+    {
+        microEndpointConfig factorialConfig = { .Name = "factorial", .Handler = handle_factorial };
+        err = microGroup_AddEndpoint(g, &factorialConfig);
+    }
     if (err == NULL)
-        err = microGroup_AddEndpoint(g, &fibonacci_cfg);
+    {
+        microEndpointConfig fibonacciConfig = { .Name = "fibonacci", .Handler = handle_fibonacci };
+        err = microGroup_AddEndpoint(g, &fibonacciConfig);
+    }
     if (err == NULL)
-        err = microGroup_AddEndpoint(g, &power2_cfg);
+    {
+        microEndpointConfig power2Config = { .Name = "power2", .Handler = handle_power2 };
+        err = microGroup_AddEndpoint(g, &power2Config);
+    }
 
     // Run the service, until stopped.
     if (err == NULL)

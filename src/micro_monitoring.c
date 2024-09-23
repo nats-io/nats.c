@@ -78,7 +78,7 @@ handle_info(microRequest *req)
 }
 
 static microError *
-handle_stats_internal(microRequest *req)
+handle_stats_default(microRequest *req)
 {
     microError *err = NULL;
     microService *m = microRequest_GetService(req);
@@ -108,7 +108,7 @@ handle_stats(microRequest *req)
     if (m->cfg->StatsHandler != NULL)
         return m->cfg->StatsHandler(req);
     else
-        return handle_stats_internal(req);
+        return handle_stats_default(req);
 }
 
 static microError *
@@ -188,7 +188,7 @@ add_internal_handler(microService *m, const char *verb, const char *kind,
         .Name = name,
         .Handler = handler,
     };
-    err = micro_add_endpoint(NULL, m, "", &cfg, true);
+    err = micro_add_endpoint(NULL, m, NULL, &cfg, true);
     NATS_FREE(subj);
     return err;
 }
@@ -272,6 +272,8 @@ marshal_info(natsBuffer **new_buf, microServiceInfo *info)
             IFOK_attr("name", info->Endpoints[i].Name, "");
             IFOK(s, nats_marshalMetadata(buf, true, "metadata", info->Endpoints[i].Metadata));
             IFOK(s, natsBuf_AppendByte(buf, ','));
+            if (!nats_IsStringEmpty(info->Endpoints[i].QueueGroup))
+                IFOK_attr("queue_group", info->Endpoints[i].QueueGroup, ",");
             IFOK_attr("subject", info->Endpoints[i].Subject, "");
             IFOK(s, natsBuf_AppendByte(buf, '}')); // end endpoint
             if (i != info->EndpointsLen - 1)
@@ -323,6 +325,8 @@ marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
             IFOK(s, natsBuf_AppendByte(buf, '{'));
             IFOK_attr("name", ep->Name, ",");
             IFOK_attr("subject", ep->Subject, ",");
+            if (!nats_IsStringEmpty(ep->QueueGroup))
+                IFOK_attr("queue_group", ep->QueueGroup, ",");
             IFOK(s, nats_marshalLong(buf, false, "num_requests", ep->NumRequests));
             IFOK(s, nats_marshalLong(buf, true, "num_errors", ep->NumErrors));
             IFOK(s, nats_marshalDuration(buf, true, "average_processing_time", ep->AverageProcessingTimeNanoseconds));

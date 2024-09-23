@@ -33876,10 +33876,6 @@ void test_MicroGroups(void)
     microServiceInfo *info = NULL;
     int i;
 
-    microEndpointConfig ep1_cfg = {
-        .Name = "ep1",
-        .Handler = _microHandleRequest42,
-    };
     microEndpointConfig ep2_cfg = {
         .Name = "ep2",
         .Handler = _microHandleRequest42,
@@ -33917,16 +33913,19 @@ void test_MicroGroups(void)
     _startMicroservice(&m, nc, &cfg, NULL, 0, &arg);
 
     test("AddEndpoint 1 to service: ");
+    microEndpointConfig ep1_cfg = { .Name = "ep1", .Handler = _microHandleRequest42 };
     testCond(NULL == microService_AddEndpoint(m, &ep1_cfg));
 
     test("AddGroup g1: ");
-    testCond(NULL == microService_AddGroup(&g1, m, "g1"));
+    microGroupConfig g1_cfg = { .Prefix = "g1" };
+    testCond(NULL == microService_AddGroup(&g1, m, &g1_cfg));
 
     test("AddEndpoint 1 to g1: ");
     testCond(NULL == microGroup_AddEndpoint(g1, &ep1_cfg));
 
     test("Add sub-Group g2: ");
-    testCond(NULL == microGroup_AddGroup(&g2, g1, "g2"));
+    microGroupConfig g2_cfg = { .Prefix = "g2" };
+    testCond(NULL == microGroup_AddGroup(&g2, g1, &g2_cfg));
 
     test("AddEndpoint 1 to g2: ");
     testCond(NULL == microGroup_AddEndpoint(g2, &ep1_cfg));
@@ -33966,6 +33965,113 @@ void test_MicroGroups(void)
 
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+void test_MicroQueueGroupForEndpoint(void)
+{
+    microError *err = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    natsOptions *opts = NULL;
+    natsConnection *nc = NULL;
+
+    microServiceConfig serviceConfig = { .Name = "testService", .Version = "1.0.0" };
+    microGroupConfig group1Config = { .Prefix = "testGroup1" };
+    microGroupConfig group2Config = { .Prefix = "testGroup2" };
+    microEndpointConfig epConfig = { .Name = "testEP", .Handler = _microHandleRequest42 };
+
+    typedef struct {
+        const char *name;
+
+        bool serviceNoQueueGroup;
+        const char *serviceQueueGroup;
+        bool group1NoQueueGroup;
+        const char *group1QueueGroup;
+        bool group2NoQueueGroup;
+        const char *group2QueueGroup;
+        bool epNoQueueGroup;
+        const char *epQueueGroup;
+
+        const char *expectedServiceLevel;
+        const char *expectedGroup1Level;
+        const char *expectedGroup2Level;
+    } TC;
+    TC tcs[] = {
+        {.name="default",
+            .expectedServiceLevel="q", .expectedGroup1Level="q", .expectedGroup2Level="q"},
+        {.name="service value override", .serviceQueueGroup="test",
+            .expectedServiceLevel="test", .expectedGroup1Level="test", .expectedGroup2Level="test"},
+        {.name="G1 value override", .group1QueueGroup="G1",
+            .expectedServiceLevel="q", .expectedGroup1Level="G1", .expectedGroup2Level="G1"},
+        {.name="service and G1 value overrides", .serviceQueueGroup="S", .group1QueueGroup="G1",
+            .expectedServiceLevel="S", .expectedGroup1Level="G1", .expectedGroup2Level="G1"},
+        {.name="service and G2 value overrides", .serviceQueueGroup="S", .group2QueueGroup="G2",
+            .expectedServiceLevel="S", .expectedGroup1Level="S", .expectedGroup2Level="G2"},
+        {.name="disabled", .serviceNoQueueGroup=true,
+            .expectedServiceLevel=NULL, .expectedGroup1Level=NULL, .expectedGroup2Level=NULL},
+        {.name="disabled for S, set for G1", .serviceNoQueueGroup=true, .group1QueueGroup="G1",
+            .expectedServiceLevel=NULL, .expectedGroup1Level="G1", .expectedGroup2Level="G1"},
+        {.name="disabled for G1", .group1NoQueueGroup=true,
+            .expectedServiceLevel="q", .expectedGroup1Level=NULL, .expectedGroup2Level=NULL},
+        {.name="disabled for G1, set for G2", .group1NoQueueGroup=true, .group2QueueGroup="G2",
+            .expectedServiceLevel="q", .expectedGroup1Level=NULL, .expectedGroup2Level="G2"},
+    };
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to server: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    for (int i = 0; i < (int)(sizeof(tcs) / sizeof(tcs[0])); i++)
+    {
+        TC tc = tcs[i];
+        microService *service = NULL;
+        microGroup *group1 = NULL, *group2 = NULL;
+        microServiceInfo *info = NULL;
+        microServiceStats *stats = NULL;
+
+        testf("%s: ", tc.name);
+
+        serviceConfig.NoQueueGroup = tc.serviceNoQueueGroup;
+        serviceConfig.QueueGroup = tc.serviceQueueGroup;
+        epConfig.NoQueueGroup = tc.epNoQueueGroup;
+        epConfig.QueueGroup = tc.epQueueGroup;
+        group1Config.NoQueueGroup = tc.group1NoQueueGroup;
+        group1Config.QueueGroup = tc.group1QueueGroup;
+        group2Config.NoQueueGroup = tc.group2NoQueueGroup;
+        group2Config.QueueGroup = tc.group2QueueGroup;
+
+        err = micro_AddService(&service, nc, &serviceConfig);
+        MICRO_CALL(err, microService_AddEndpoint(service, &epConfig));
+        MICRO_CALL(err, microService_AddGroup(&group1, service, &group1Config));
+        MICRO_CALL(err, microGroup_AddEndpoint(group1, &epConfig));
+        MICRO_CALL(err, microGroup_AddGroup(&group2, group1, &group2Config));
+        MICRO_CALL(err, microGroup_AddEndpoint(group2, &epConfig));
+        MICRO_CALL(err, microService_GetInfo(&info, service));
+        MICRO_CALL(err, microService_GetStats(&stats, service));
+
+#define _testQueueGroup(_expected, _actual) \
+        (_expected) == NULL ? (_actual) == NULL : strcmp((_expected), (_actual)) == 0
+
+        testCond((err == NULL) && 
+            (info != NULL) && (info->EndpointsLen == 3) &&
+            (stats != NULL) && (stats->EndpointsLen == 3) &&
+            (_testQueueGroup(tc.expectedServiceLevel, info->Endpoints[0].QueueGroup)) &&
+            (_testQueueGroup(tc.expectedServiceLevel, stats->Endpoints[0].QueueGroup)) &&
+            (_testQueueGroup(tc.expectedGroup1Level, stats->Endpoints[1].QueueGroup)) &&
+            (_testQueueGroup(tc.expectedGroup1Level, info->Endpoints[1].QueueGroup)) &&
+            (_testQueueGroup(tc.expectedGroup2Level, info->Endpoints[2].QueueGroup)) &&
+            (_testQueueGroup(tc.expectedGroup2Level, stats->Endpoints[2].QueueGroup)));
+
+        microService_Destroy(service);
+        microServiceInfo_Destroy(info);
+        microServiceStats_Destroy(stats);
+    }
+
+    test("Destroy the test connection: ");
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
     _stopServer(serverPid);
 }
 
@@ -34127,6 +34233,7 @@ void test_MicroBasics(void)
         testCond(
             (NATS_OK == nats_JSONGetStrPtr(array[0], "name", &str)) && (strcmp(str, "do") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(array[0], "subject", &str)) && (strcmp(str, "svc.do") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(array[0], "queue_group", &str)) && (strcmp(str, "q") == 0)
             && (NATS_OK == nats_JSONGetObject(array[0], "metadata", &md)) && (md == NULL)
         );
 
@@ -34135,6 +34242,7 @@ void test_MicroBasics(void)
         testCond(
             (NATS_OK == nats_JSONGetStrPtr(array[1], "name", &str)) && (strcmp(str, "unused") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(array[1], "subject", &str)) && (strcmp(str, "svc.unused") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(array[0], "queue_group", &str)) && (strcmp(str, "q") == 0)
             && (NATS_OK == nats_JSONGetObject(array[1], "metadata", &md))
             && (NATS_OK == nats_JSONGetStrPtr(md, "key1", &str)) && (strcmp(str, "value1") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(md, "key2", &str)) && (strcmp(str, "value2") == 0)
@@ -34434,8 +34542,8 @@ void test_MicroServiceStopsWhenServerStops(void)
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.microAllDone)
         s = natsCondition_TimedWait(arg.c, arg.m, 1000);
-    natsMutex_Unlock(arg.m);
     testCond(arg.microAllDone);
+    natsMutex_Unlock(arg.m);
 
     test("Test microservice is not running: ");
     testCond(microService_IsStopped(m))

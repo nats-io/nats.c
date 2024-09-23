@@ -39,6 +39,8 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
 
     if ((new_m == NULL) || (nc == NULL) || (cfg == NULL) || !micro_is_valid_name(cfg->Name) || nats_IsStringEmpty(cfg->Version))
         return micro_ErrorInvalidArg;
+    if ((cfg->QueueGroup != NULL) && nats_IsStringEmpty(cfg->QueueGroup))
+        return micro_ErrorInvalidArg;
 
     // Make a microservice object, with a reference to a natsConnection.
     err = _new_service(&m, nc);
@@ -68,7 +70,7 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
 }
 
 microError *
-micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, microEndpointConfig *cfg, bool is_internal)
+micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, microEndpointConfig *cfg, bool is_internal)
 {
     microError *err = NULL;
     microEndpoint *ptr = NULL;
@@ -81,7 +83,7 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
     if (cfg == NULL)
         return NULL;
 
-    err = micro_new_endpoint(&ep, m, prefix, cfg, is_internal);
+    err = micro_new_endpoint(&ep, m, g, cfg, is_internal);
     if (err != NULL)
         return microError_Wrapf(err, "failed to create endpoint %s", cfg->Name);
 
@@ -129,9 +131,9 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, const char *prefix, 
 
     if (prev_ep != NULL)
     {
-        // Rid of the previous endpoint with the same name, if any. If this
+        // Rid of the previous endpoint with the same subject, if any. If this
         // fails we can return the error, leave the newly added endpoint in the
-        // list, not started. A retry with the same name will clean it up.
+        // list, not started. A retry with the same subject will clean it up.
         if (err = micro_stop_endpoint(prev_ep), err != NULL)
             return err;
         micro_release_endpoint(prev_ep);
@@ -165,7 +167,7 @@ microGroup_AddEndpoint(microGroup *g, microEndpointConfig *cfg)
     if (g == NULL)
         return micro_ErrorInvalidArg;
 
-    return micro_add_endpoint(NULL, g->m, g->prefix, cfg, false);
+    return micro_add_endpoint(NULL, g->m, g, cfg, false);
 }
 
 microError *
@@ -406,23 +408,44 @@ _release_service(microService *m)
         _free_service(m);
 }
 
-static void
+static inline void
+_free_cloned_group_config(microGroupConfig *cfg)
+{
+    if (cfg == NULL)
+        return;
+
+    // the strings are declared const for the public, but in a clone these need
+    // to be freed.
+    NATS_FREE((char *)cfg->Prefix);
+    NATS_FREE((char *)cfg->QueueGroup);
+    NATS_FREE(cfg);
+}
+
+static inline void
+_free_group(microGroup *g)
+{
+    if (g == NULL)
+        return;
+
+    _free_cloned_group_config(g->config);
+    NATS_FREE(g);
+}
+
+static inline void
 _free_service(microService *m)
 {
-    microGroup *next = NULL;
-
     if (m == NULL)
         return;
 
     // destroy all groups.
     if (m->groups != NULL)
     {
-        microGroup *g = m->groups;
-        while (g != NULL)
+        microGroup *next = NULL;
+        microGroup *g;
+        for (g = m->groups; g != NULL; g = next)
         {
             next = g->next;
-            NATS_FREE(g);
-            g = next;
+            _free_group(g);
         }
     }
 
@@ -445,7 +468,7 @@ _clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
     microError *err = NULL;
     microServiceConfig *new_cfg = NULL;
 
-    if (out == NULL || cfg == NULL)
+    if ((out == NULL) || (cfg == NULL))
         return micro_ErrorInvalidArg;
 
     err = _new_service_config(&new_cfg);
@@ -458,6 +481,7 @@ _clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Name, cfg->Name));
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Version, cfg->Version));
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Description, cfg->Description));
+    MICRO_CALL(err, micro_strdup((char **)&new_cfg->QueueGroup, cfg->QueueGroup));
     MICRO_CALL(err, micro_ErrorFromStatus(
                         nats_cloneMetadata(&new_cfg->Metadata, cfg->Metadata)));
     MICRO_CALL(err, micro_clone_endpoint_config(&new_cfg->Endpoint, cfg->Endpoint));
@@ -482,6 +506,7 @@ _free_cloned_service_config(microServiceConfig *cfg)
     NATS_FREE((char *)cfg->Name);
     NATS_FREE((char *)cfg->Version);
     NATS_FREE((char *)cfg->Description);
+    NATS_FREE((char *)cfg->QueueGroup);
     nats_freeMetadata(&cfg->Metadata);
     micro_free_cloned_endpoint_config(cfg->Endpoint);
     NATS_FREE(cfg);
@@ -663,20 +688,86 @@ _wrap_connection_event_callbacks(microService *m)
     return microError_Wrapf(err, "failed to wrap connection event callbacks");
 }
 
-microError *
-microService_AddGroup(microGroup **new_group, microService *m, const char *prefix)
+static inline microError *
+_new_group_config(microGroupConfig **ptr)
 {
-    if ((m == NULL) || (new_group == NULL) || (prefix == NULL))
+    *ptr = NATS_CALLOC(1, sizeof(microGroupConfig));
+    return (*ptr == NULL) ? micro_ErrorOutOfMemory : NULL;
+}
+
+static inline microError *
+_clone_group_config(microGroupConfig **out, microGroupConfig *in, microGroup *parent)
+{
+    microError *err = NULL;
+    microGroupConfig *new_cfg = NULL;
+
+    if ((out == NULL) || (in == NULL))
         return micro_ErrorInvalidArg;
 
-    *new_group = NATS_CALLOC(1, sizeof(microGroup) +
-                                    strlen(prefix) + 1); // "prefix\0"
-    if (new_group == NULL)
+    err = _new_group_config(&new_cfg);
+    if (err == NULL)
     {
-        return micro_ErrorOutOfMemory;
+        memcpy(new_cfg, in, sizeof(microGroupConfig));
     }
 
-    memcpy((*new_group)->prefix, prefix, strlen(prefix) + 1);
+    // If the queue group is not explicitly set, copy from the parent.
+    if (err == NULL)
+    {
+        if (in->NoQueueGroup)
+            new_cfg->QueueGroup = NULL;
+        else if (!nats_IsStringEmpty(in->QueueGroup))
+            err = micro_strdup((char **)&new_cfg->QueueGroup, in->QueueGroup);
+        else if (parent != NULL)
+        {
+            new_cfg->NoQueueGroup = parent->config->NoQueueGroup;
+            err = micro_strdup((char **)&new_cfg->QueueGroup, parent->config->QueueGroup);
+        }
+    }
+
+    // prefix = parent_prefix.prefix
+    if (err == NULL)
+    {
+        size_t prefixSize = strlen(in->Prefix) + 1;
+        if (parent != NULL)
+            prefixSize += strlen(parent->config->Prefix) + 1;
+        new_cfg->Prefix = NATS_CALLOC(1, prefixSize);
+        if (new_cfg->Prefix != NULL)
+        {
+            if (parent != NULL)
+                snprintf((char *)new_cfg->Prefix, prefixSize, "%s.%s", parent->config->Prefix, in->Prefix);
+            else
+                memcpy((char *)new_cfg->Prefix, in->Prefix, prefixSize);
+        }
+        else
+            err = micro_ErrorOutOfMemory;
+    }
+
+    if (err != NULL)
+    {
+        _free_cloned_group_config(new_cfg);
+        return err;
+    }
+
+    *out = new_cfg;
+    return NULL;
+}
+
+static inline microError *
+_add_group(microGroup **new_group, microService *m, microGroup *parent, microGroupConfig *config)
+{
+
+    *new_group = NATS_CALLOC(1, sizeof(microGroup));
+    if (new_group == NULL)
+        return micro_ErrorOutOfMemory;
+
+    microError *err = NULL;
+    err =  _clone_group_config(&(*new_group)->config, config, parent);
+    if (err != NULL)
+    {
+        NATS_FREE(*new_group);
+        return err;
+    }
+
     (*new_group)->m = m;
     (*new_group)->next = m->groups;
     m->groups = *new_group;
@@ -685,33 +776,21 @@ microService_AddGroup(microGroup **new_group, microService *m, const char *prefi
 }
 
 microError *
-microGroup_AddGroup(microGroup **new_group, microGroup *parent, const char *prefix)
+microService_AddGroup(microGroup **new_group, microService *m, microGroupConfig *config)
 {
-    char *p;
-    size_t len;
-
-    if ((parent == NULL) || (new_group == NULL) || (prefix == NULL))
+    if ((m == NULL) || (new_group == NULL) || (config == NULL) || nats_IsStringEmpty(config->Prefix))
         return micro_ErrorInvalidArg;
 
-    *new_group = NATS_CALLOC(1, sizeof(microGroup) +
-                                    strlen(parent->prefix) + 1 + // "parent_prefix."
-                                    strlen(prefix) + 1);         // "prefix\0"
-    if (new_group == NULL)
-    {
-        return micro_ErrorOutOfMemory;
-    }
+    return _add_group(new_group, m, NULL, config);
+}
 
-    p = (*new_group)->prefix;
-    len = strlen(parent->prefix);
-    memcpy(p, parent->prefix, len);
-    p[len] = '.';
-    p += len + 1;
-    memcpy(p, prefix, strlen(prefix) + 1);
-    (*new_group)->m = parent->m;
-    (*new_group)->next = parent->m->groups;
-    parent->m->groups = *new_group;
+microError *
+microGroup_AddGroup(microGroup **new_group, microGroup *parent, microGroupConfig *config)
+{
+    if ((parent == NULL) || (new_group == NULL) || (config == NULL) || nats_IsStringEmpty(config->Prefix))
+        return micro_ErrorInvalidArg;
 
-    return NULL;
+    return _add_group(new_group, parent->m, parent, config);
 }
 
 natsConnection *
@@ -771,6 +850,7 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
             {
                 MICRO_CALL(err, micro_strdup((char **)&info->Endpoints[len].Name, ep->name));
                 MICRO_CALL(err, micro_strdup((char **)&info->Endpoints[len].Subject, ep->subject));
+                MICRO_CALL(err, micro_strdup((char **)&info->Endpoints[len].QueueGroup, micro_queue_group_for_endpoint(ep)));
                 MICRO_CALL(err, micro_ErrorFromStatus(
                                     nats_cloneMetadata(&info->Endpoints[len].Metadata, ep->config->Metadata)));
                 if (err == NULL)
@@ -805,6 +885,7 @@ void microServiceInfo_Destroy(microServiceInfo *info)
     {
         NATS_FREE((char *)info->Endpoints[i].Name);
         NATS_FREE((char *)info->Endpoints[i].Subject);
+        NATS_FREE((char *)info->Endpoints[i].QueueGroup);
         nats_freeMetadata(&info->Endpoints[i].Metadata);
     }
     NATS_FREE((char *)info->Endpoints);
@@ -868,6 +949,7 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
 
                 MICRO_CALL(err, micro_strdup((char **)&stats->Endpoints[len].Name, ep->name));
                 MICRO_CALL(err, micro_strdup((char **)&stats->Endpoints[len].Subject, ep->subject));
+                MICRO_CALL(err, micro_strdup((char **)&stats->Endpoints[len].QueueGroup, micro_queue_group_for_endpoint(ep)));
                 if (err == NULL)
                 {
                     avg = (long double)ep->stats.ProcessingTimeSeconds * 1000000000.0 + (long double)ep->stats.ProcessingTimeNanoseconds;
@@ -903,6 +985,7 @@ void microServiceStats_Destroy(microServiceStats *stats)
     {
         NATS_FREE((char *)stats->Endpoints[i].Name);
         NATS_FREE((char *)stats->Endpoints[i].Subject);
+        NATS_FREE((char *)stats->Endpoints[i].QueueGroup);
     }
     NATS_FREE(stats->Endpoints);
     NATS_FREE((char *)stats->Name);

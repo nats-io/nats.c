@@ -34026,10 +34026,14 @@ void test_MicroQueueGroupForEndpoint(void)
     for (int i = 0; i < (int)(sizeof(tcs) / sizeof(tcs[0])); i++)
     {
         TC tc = tcs[i];
+        struct threadArg arg;
         microService *service = NULL;
         microGroup *group1 = NULL, *group2 = NULL;
         microServiceInfo *info = NULL;
         microServiceStats *stats = NULL;
+
+        if(_createDefaultThreadArgsForCbTests(&arg) != NATS_OK)
+            FAIL("Unable to setup test args");
 
         testf("%s: ", tc.name);
 
@@ -34042,7 +34046,7 @@ void test_MicroQueueGroupForEndpoint(void)
         group2Config.NoQueueGroup = tc.group2NoQueueGroup;
         group2Config.QueueGroup = tc.group2QueueGroup;
 
-        err = micro_AddService(&service, nc, &serviceConfig);
+        err = _startMicroservice(&service, nc, &serviceConfig, NULL, 0, &arg);
         MICRO_CALL(err, microService_AddEndpoint(service, &epConfig));
         MICRO_CALL(err, microService_AddGroup(&group1, service, &group1Config));
         MICRO_CALL(err, microGroup_AddEndpoint(group1, &epConfig));
@@ -34065,11 +34069,12 @@ void test_MicroQueueGroupForEndpoint(void)
             (_testQueueGroup(tc.expectedGroup2Level, stats->Endpoints[2].QueueGroup)));
 
         microService_Destroy(service);
+        _waitForMicroservicesAllDone(&arg);
         microServiceInfo_Destroy(info);
         microServiceStats_Destroy(stats);
+        _destroyDefaultThreadArgs(&arg);
     }
 
-    test("Destroy the test connection: ");
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
     _stopServer(serverPid);

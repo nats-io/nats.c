@@ -89,13 +89,14 @@ _initOwnDispatcher(natsSubscription *sub)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static inline void _cleanupOwnDispatcher(natsSubscription *sub)
+static inline void
+_cleanupOwnDispatcher(natsSubscription *sub)
 {
     nats_destroyQueuedMessages(&sub->ownDispatcher.queue);
 
     if (sub->ownDispatcher.thread != NULL)
     {
-        natsThread_Join(sub->ownDispatcher.thread);
+        natsThread_Detach(sub->ownDispatcher.thread);
         natsThread_Destroy(sub->ownDispatcher.thread);
         sub->ownDispatcher.thread = NULL;
     }
@@ -103,7 +104,8 @@ static inline void _cleanupOwnDispatcher(natsSubscription *sub)
     natsCondition_Destroy(sub->ownDispatcher.cond);
 }
 
-void _freeSub(natsSubscription *sub)
+static inline void
+_freeSub(natsSubscription *sub)
 {
     if (sub == NULL)
         return;

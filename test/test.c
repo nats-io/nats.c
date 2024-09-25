@@ -33998,11 +33998,11 @@ void test_MicroQueueGroupForEndpoint(void)
     } TC;
     TC tcs[] = {
         {.name="default",
-            .expectedServiceLevel="q", .expectedGroup1Level="q", .expectedGroup2Level="q"},
+            .expectedServiceLevel=MICRO_DEFAULT_QUEUE_GROUP, .expectedGroup1Level=MICRO_DEFAULT_QUEUE_GROUP, .expectedGroup2Level=MICRO_DEFAULT_QUEUE_GROUP},
         {.name="service value override", .serviceQueueGroup="test",
             .expectedServiceLevel="test", .expectedGroup1Level="test", .expectedGroup2Level="test"},
         {.name="G1 value override", .group1QueueGroup="G1",
-            .expectedServiceLevel="q", .expectedGroup1Level="G1", .expectedGroup2Level="G1"},
+            .expectedServiceLevel=MICRO_DEFAULT_QUEUE_GROUP, .expectedGroup1Level="G1", .expectedGroup2Level="G1"},
         {.name="service and G1 value overrides", .serviceQueueGroup="S", .group1QueueGroup="G1",
             .expectedServiceLevel="S", .expectedGroup1Level="G1", .expectedGroup2Level="G1"},
         {.name="service and G2 value overrides", .serviceQueueGroup="S", .group2QueueGroup="G2",
@@ -34012,9 +34012,9 @@ void test_MicroQueueGroupForEndpoint(void)
         {.name="disabled for S, set for G1", .serviceNoQueueGroup=true, .group1QueueGroup="G1",
             .expectedServiceLevel=NULL, .expectedGroup1Level="G1", .expectedGroup2Level="G1"},
         {.name="disabled for G1", .group1NoQueueGroup=true,
-            .expectedServiceLevel="q", .expectedGroup1Level=NULL, .expectedGroup2Level=NULL},
+            .expectedServiceLevel=MICRO_DEFAULT_QUEUE_GROUP, .expectedGroup1Level=NULL, .expectedGroup2Level=NULL},
         {.name="disabled for G1, set for G2", .group1NoQueueGroup=true, .group2QueueGroup="G2",
-            .expectedServiceLevel="q", .expectedGroup1Level=NULL, .expectedGroup2Level="G2"},
+            .expectedServiceLevel=MICRO_DEFAULT_QUEUE_GROUP, .expectedGroup1Level=NULL, .expectedGroup2Level="G2"},
     };
 
     serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
@@ -34238,7 +34238,7 @@ void test_MicroBasics(void)
         testCond(
             (NATS_OK == nats_JSONGetStrPtr(array[0], "name", &str)) && (strcmp(str, "do") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(array[0], "subject", &str)) && (strcmp(str, "svc.do") == 0)
-            && (NATS_OK == nats_JSONGetStrPtr(array[0], "queue_group", &str)) && (strcmp(str, "q") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(array[0], "queue_group", &str)) && (strcmp(str, MICRO_DEFAULT_QUEUE_GROUP) == 0)
             && (NATS_OK == nats_JSONGetObject(array[0], "metadata", &md)) && (md == NULL)
         );
 
@@ -34247,7 +34247,7 @@ void test_MicroBasics(void)
         testCond(
             (NATS_OK == nats_JSONGetStrPtr(array[1], "name", &str)) && (strcmp(str, "unused") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(array[1], "subject", &str)) && (strcmp(str, "svc.unused") == 0)
-            && (NATS_OK == nats_JSONGetStrPtr(array[0], "queue_group", &str)) && (strcmp(str, "q") == 0)
+            && (NATS_OK == nats_JSONGetStrPtr(array[0], "queue_group", &str)) && (strcmp(str, MICRO_DEFAULT_QUEUE_GROUP) == 0)
             && (NATS_OK == nats_JSONGetObject(array[1], "metadata", &md))
             && (NATS_OK == nats_JSONGetStrPtr(md, "key1", &str)) && (strcmp(str, "value1") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(md, "key2", &str)) && (strcmp(str, "value2") == 0)

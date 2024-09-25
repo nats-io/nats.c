@@ -7789,7 +7789,7 @@ struct micro_endpoint_config_s
     const char *Subject;
 
     /**
-     * @brief overrides the default queue group for the service.
+     * @brief Overrides the default queue group for the service.
      *
      */
     const char *QueueGroup;
@@ -7834,7 +7834,8 @@ struct micro_endpoint_info_s
     const char *Subject;
 
     /**
-     * @brief Endpoint's queue group, or omitted if no queue group is used.
+     * @brief Endpoint's actual queue group (the default "q", or one explicitly
+     * set by the user), or omitted if NoQueueGroup was applied.
      */
     const char *QueueGroup;
 
@@ -7854,7 +7855,8 @@ struct micro_endpoint_stats_s
     const char *Subject;
 
     /**
-     * @brief Endpoint's queue group, or omitted if no queue group is used.
+     * @brief Endpoint's actual queue group (the default "q", or one explicitly
+     * set by the user), or omitted if NoQueueGroup was applied.
      */
     const char *QueueGroup;
 
@@ -7901,7 +7903,7 @@ struct micro_group_config_s
     const char *Prefix;
 
     /**
-     * @brief overrides the default queue group for the service.
+     * @brief Overrides the default queue group for the service.
      *
      */
     const char *QueueGroup;
@@ -7939,7 +7941,7 @@ struct micro_service_config_s
     const char *Description;
 
     /**
-     * @brief overrides the default queue group for the service ("q").
+     * @brief Overrides the default queue group for the service ("q").
      *
      */
     const char *QueueGroup;

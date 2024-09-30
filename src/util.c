@@ -2174,7 +2174,7 @@ nats_GetJWTOrSeed(char **val, const char *content, int item)
             if (_isLineAnHeader(line, lineLen))
             {
                 // Is this the item we were looking for?
-                if ((curItem == item) && (savedLen > 0))
+                if (curItem == item)
                 {
                     // Return a copy of the saved line
                     *val = NATS_CALLOC(savedLen + 1, 1);

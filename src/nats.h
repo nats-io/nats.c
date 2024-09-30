@@ -1234,12 +1234,12 @@ typedef void (*natsFetchCompleteHandler)(natsConnection *nc, natsSubscription *s
  * The library will invoke this callback when it may be time to request more
  * messages from the server.
  *
- * @return true to fetch more, false to skip. If true, @messages and @maxBytes
- * should be set to the number of messages and max bytes to fetch.
+ * @return true to fetch more, false to skip. If true, \p messages and \p
+ * maxBytes should be set to the number of messages and max bytes to fetch.
  *
  * @see js_PullSubscribeAsync
  */
-typedef bool (*natsFetchNextHandler)(int *messages, int64_t *bytes, natsSubscription *sub, void *closure);
+typedef bool (*natsFetchNextHandler)(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure);
 
 /**
  * JetStream context options.
@@ -6493,7 +6493,8 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
  * @param sub the location where to store the pointer to the newly created
  * #natsSubscription object.
  * @param js the pointer to the #jsCtx object.
- * @param subject the subject this subscription is created for.
+ * @param subjects the subject this subscription is created for.
+ * @param numSubjects the number of subjects for the subscription.
  * @param cb the #natsMsgHandler callback.
  * @param cbClosure a pointer to an user defined object (can be `NULL`). See
  * the #natsMsgHandler prototype.
@@ -6541,7 +6542,7 @@ js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
  */
 NATS_EXTERN natsStatus
 js_SubscribeSyncMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
-                      jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode);
+                      jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
 
 /** \brief Create a pull subscriber.
  *
@@ -7840,7 +7841,7 @@ struct micro_endpoint_info_s
     const char *QueueGroup;
 
     /**
-     * @briefMetadata for the endpoint, a JSON-encoded user-provided object,
+     * @brief Metadata for the endpoint, a JSON-encoded user-provided object,
      * e.g. `{"key":"value"}`
      */
     natsMetadata Metadata;
@@ -7893,7 +7894,7 @@ struct micro_endpoint_stats_s
 };
 
 /**
- * #brief The Microservice endpoint *group* configuration object.
+ * @brief The Microservice endpoint *group* configuration object.
  */
 struct micro_group_config_s
 {

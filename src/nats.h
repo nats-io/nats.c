@@ -1227,7 +1227,7 @@ typedef struct jsFetchRequest
  *
  * @see js_PullSubscribeAsync
  */
-typedef void (*natsFetchCompleteHandler)(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure);
+typedef void (*jsFetchCompleteHandler)(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure);
 
 /** \brief Callback used to customize flow control for js_PullSubscribeAsync.
  *
@@ -1298,7 +1298,7 @@ typedef struct jsOptions
                 // Fetch complete handler that receives the exit status code,
                 // the subscription's Complete handler is also invoked, but does
                 // not have the status code.
-                natsFetchCompleteHandler CompleteHandler;
+                jsFetchCompleteHandler  CompleteHandler;
                 void                    *CompleteHandlerClosure;
 
                 // Have server sends heartbeats at this interval to help detect

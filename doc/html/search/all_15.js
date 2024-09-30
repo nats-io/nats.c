@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['wait_937',['Wait',['../structjs_options.html#a7fd42e1f83da5861e716137c16f8b72f',1,'jsOptions']]],
-  ['wildcards_938',['Wildcards',['../group__wildcards_group.html',1,'']]]
+  ['useseparatepoolforreplies_964',['UseSeparatePoolForReplies',['../struct____nats_client_config.html#a11769afbb1dd577e63571e05fd579ddf',1,'__natsClientConfig']]]
 ];

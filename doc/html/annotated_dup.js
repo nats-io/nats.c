@@ -1,5 +1,6 @@
 var annotated_dup =
 [
+    [ "__natsClientConfig", "struct____nats_client_config.html", "struct____nats_client_config" ],
     [ "jsAccountInfo", "structjs_account_info.html", "structjs_account_info" ],
     [ "jsAccountLimits", "structjs_account_limits.html", "structjs_account_limits" ],
     [ "jsAPIStats", "structjs_a_p_i_stats.html", "structjs_a_p_i_stats" ],
@@ -46,6 +47,7 @@ var annotated_dup =
     [ "micro_endpoint_config_s", "structmicro__endpoint__config__s.html", "structmicro__endpoint__config__s" ],
     [ "micro_endpoint_info_s", "structmicro__endpoint__info__s.html", "structmicro__endpoint__info__s" ],
     [ "micro_endpoint_stats_s", "structmicro__endpoint__stats__s.html", "structmicro__endpoint__stats__s" ],
+    [ "micro_group_config_s", "structmicro__group__config__s.html", "structmicro__group__config__s" ],
     [ "micro_service_config_s", "structmicro__service__config__s.html", "structmicro__service__config__s" ],
     [ "micro_service_info_s", "structmicro__service__info__s.html", "structmicro__service__info__s" ],
     [ "micro_service_stats_s", "structmicro__service__stats__s.html", "structmicro__service__stats__s" ],

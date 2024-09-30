@@ -4759,7 +4759,7 @@ void test_natsGetJWTOrSeed(void)
     char        buf[256];
     const char  *valids[] = {
         "--- START JWT ---\nsome value\n--- END JWT ---\n",
-        "--- START JWT ---\r\nsome value\r\n--- END JWT ---\r\n",
+        "\r\n\r\n--- START JWT ---\r\nsome value\r\n--- END JWT ---\r\n",
         "--- ---\nsome value\n--- ---\n",
         "------\nsome value\n------\n",
         "---\nabc\n--\n---START---\nsome value\n---END---\n----\ndef\n--- ---\n",

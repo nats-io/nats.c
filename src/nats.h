@@ -4169,12 +4169,13 @@ stanMsg_Destroy(stanMsg *msg);
 NATS_EXTERN natsStatus
 natsConnection_Connect(natsConnection **nc, natsOptions *options);
 
-/** \brief Causes the client to drop the connection to the current server and
- * perform standard reconnection process.
+/** \brief Drop the connection to the current server and perform the standard
+ * reconnection process, including re-subscribing.
  *
- * This means that all subscriptions and consumers should be resubscribed and
- * their work resumed after successful reconnect where all reconnect options are
- * respected.
+ * Causes the client to drop the connection to the current server and perform
+ * the standard reconnection process. This means that all subscriptions and
+ * consumers will be resubscribed and their work resumed after successful
+ * reconnect where all reconnect options are respected.
  *
  * @param nc the pointer to the #natsConnection object.
  */

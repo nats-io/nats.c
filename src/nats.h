@@ -561,48 +561,46 @@ typedef struct jsStreamConfig {
         bool                    Sealed;         ///< Seal a stream so no messages can get our or in.
         bool                    DenyDelete;     ///< Restrict the ability to delete messages.
         bool                    DenyPurge;      ///< Restrict the ability to purge messages.
-        /**
-         * Allows messages to be placed into the system and purge
-         * all older messages using a special message header.
-         */
+
+        /// @brief Allow messages to be placed into the system and purge all
+        /// older messages using a special message header.
         bool                    AllowRollup;
 
-        // Allow republish of the message after being sequenced and stored.
+        /// @brief Allow republish of the message after being sequenced and
+        /// stored.
         jsRePublish             *RePublish;
 
-        // Allow higher performance, direct access to get individual messages. E.g. KeyValue
+        /// @brief Allow higher performance, direct access to get individual
+        /// messages. E.g. KeyValue
         bool                    AllowDirect;
-        // Allow higher performance and unified direct access for mirrors as well.
+
+        /// @brief Allow higher performance and unified direct access for
+        /// mirrors as well.
         bool                    MirrorDirect;
 
-        // Allow KV like semantics to also discard new on a per subject basis
+        /// @brief Allow KV like semantics to also discard new on a per subject
+        /// basis
         bool                    DiscardNewPerSubject;
 
-        /**
-         * @brief Configuration options introduced in 2.10
-         *
-         * - Metadata is a user-provided array of key/value pairs, encoded as a
-         *   string array [n1, v1, n2, v2, ...] representing key/value pairs
-         *   {n1:v1, n2:v2, ...}.
-         *
-         * - Compression: js_StorageCompressionNone (default) or
-         *   js_StorageCompressionS2
-         *
-         * - FirstSeq: the starting sequence number for the stream.
-         *
-         * - SubjectTransformConfig is for applying a subject transform (to
-         *   matching messages) before doing anything else when a new message is
-         *   received
-         *
-         * - ConsumerLimits is for setting the limits on certain options on all
-         *   consumers of the stream.
-         */
+        /// @brief A user-provided array of key/value pairs, encoded as a string
+        /// array [n1, v1, n2, v2, ...] representing key/value pairs {n1:v1,
+        /// n2:v2, ...}.
+        natsMetadata            Metadata;
 
-        natsMetadata Metadata;
-        jsStorageCompression Compression;
-        uint64_t FirstSeq;
+        /// @brief js_StorageCompressionNone (default) or
+        /// js_StorageCompressionS2.
+        jsStorageCompression    Compression;
+
+        /// @brief  the starting sequence number for the stream.
+        uint64_t                FirstSeq;
+
+        /// @brief Applies a subject transform (to matching messages) before
+        /// doing anything else when a new message is received.
         jsSubjectTransformConfig SubjectTransform;
-        jsStreamConsumerLimits ConsumerLimits;
+
+        /// @brief Sets the limits on certain options on all consumers of the
+        /// stream.
+        jsStreamConsumerLimits  ConsumerLimits;
 } jsStreamConfig;
 
 /**
@@ -1227,19 +1225,19 @@ typedef struct jsFetchRequest
  *
  * @see js_PullSubscribeAsync
  */
-typedef void (*natsFetchCompleteHandler)(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure);
+typedef void (*jsFetchCompleteHandler)(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure);
 
 /** \brief Callback used to customize flow control for js_PullSubscribeAsync.
  *
  * The library will invoke this callback when it may be time to request more
  * messages from the server.
  *
- * @return true to fetch more, false to skip. If true, @messages and @maxBytes
- * should be set to the number of messages and max bytes to fetch.
+ * @return true to fetch more, false to skip. If true, \p messages and \p
+ * maxBytes should be set to the number of messages and max bytes to fetch.
  *
  * @see js_PullSubscribeAsync
  */
-typedef bool (*natsFetchNextHandler)(int *messages, int64_t *bytes, natsSubscription *sub, void *closure);
+typedef bool (*jsFetchNextHandler)(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure);
 
 /**
  * JetStream context options.
@@ -1252,9 +1250,6 @@ typedef struct jsOptions
         const char              *Domain;                        ///< Domain changes the domain part of JetSteam API prefix.
         int64_t                 Wait;                           ///< Amount of time (in milliseconds) to wait for various JetStream API requests, default is 5000 ms (5 seconds).
 
-        /**
-         * Publish Async options
-         */
         struct jsOptionsPublishAsync
         {
                 int64_t                 MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
@@ -1276,52 +1271,56 @@ typedef struct jsOptions
 
                 int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.
 
-        } PublishAsync;
+        } PublishAsync; ///< extra options for #js_PublishAsync
 
         struct jsOptionsPullSubscribeAsync
         {
-                // Lifetime of the subscription (completes when any one of the
-                // targets is reached).
-                int64_t                 Timeout; // in milliseconds
-                int                     MaxMessages;
-                int64_t                 MaxBytes;
+                int64_t                 Timeout;        ///< Auto-unsubsribe after this many milliseconds.
+                int                     MaxMessages;    ///< Auto-unsubscribed after receiving this many messages.
+                int64_t                 MaxBytes;       ///< Auto-unsubscribe after receiving this many bytes.
 
-                // If NoWait is set, the subscription will receive the messages
-                // already stored on the server subject to the limits, but will
-                // not wait for more messages.
-                //
-                // Note that if Timeout is set we would still wait for first
-                // message to become available, even if there are currently any
-                // on the server
+                /// \brief If NoWait is set, the subscription will receive the
+                /// messages already stored on the server subject to the limits,
+                /// but will not wait for more messages.
+                ///
+                /// \note that if Timeout is set we would still wait for first
+                /// message to become available, even if there are currently any
+                /// on the server
                 bool                    NoWait;
 
-                // Fetch complete handler that receives the exit status code,
-                // the subscription's Complete handler is also invoked, but does
-                // not have the status code.
-                natsFetchCompleteHandler CompleteHandler;
+                /// \brief Fetch complete handler that receives the exit status
+                /// code, the subscription's Complete handler is also invoked,
+                /// but does not have the status code.
+                jsFetchCompleteHandler  CompleteHandler;
                 void                    *CompleteHandlerClosure;
 
-                // Have server sends heartbeats at this interval to help detect
-                // communication failures.
-                int64_t                 Heartbeat; // in milliseconds
+                /// \brief Have server sends heartbeats at this interval (in
+                /// milliseconds) to help detect communication failures.
+                int64_t                 Heartbeat;
 
-                // Options to control automatic Fetch flow control. The number
-                // of messages to ask for in a single request, and if we should
-                // try to fetch ahead, KeepAhead more than we need to finish the
-                // current request. Fetch this many messages ahead of time.
-                //
-                // KeepAhead can not be used in conjunction with MaxBytes or
-                // NoWait.
+                /// @brief When using the automatic Fetch flow control (default
+                /// NextHandler), this is the number of messages to ask for in a
+                /// single request.
                 int                     FetchSize;
+
+                /// @brief When using the automatic Fetch flow control (default
+                /// NextHandler), initiate the next fetch request (this many
+                /// messages) prior to the fulfillment of the current request.
+                ///
+                /// @note KeepAhead can not be used in conjunction with MaxBytes
+                /// or NoWait.
                 int                     KeepAhead;
 
-                // Manual fetch flow control. If provided gets called before
-                // each message is deliverered to msgCB, and overrides the
-                // default algorithm for sending Next requests.
-                natsFetchNextHandler    NextHandler;
+                /// @brief If set, switches to manual fetch flow control.
+                ///
+                /// If provided, this function gets called before each message
+                /// is deliverered to msgCB, and overrides the default algorithm
+                /// for sending Next fetch requests.
+                jsFetchNextHandler      NextHandler;
                 void                    *NextHandlerClosure;
 
-        } PullSubscribeAsync;
+        } PullSubscribeAsync; ///< extra options for #js_PullSubscribeAsync
+
 
         /**
          * Advanced stream options
@@ -2277,8 +2276,9 @@ natsOptions_Create(natsOptions **newOpts);
 
 /** \brief Sets the URL to connect to.
  *
- * Sets the URL of the `NATS Server` the client should try to connect to.
- * The URL can contain optional user name and password.
+ * Sets the URL of the `NATS Server` the client should try to connect to. The
+ * URL can contain optional user name and password. %-encoding is supported for
+ * entering special characters.
  *
  * Some valid URLS:
  *
@@ -2291,8 +2291,8 @@ natsOptions_Create(natsOptions **newOpts);
  * @see natsOptions_SetToken
  *
  * @param opts the pointer to the #natsOptions object.
- * @param url the string representing the URL the connection should use
- * to connect to the server.
+ * @param url the string representing the URL the connection should use to
+ * connect to the server.
  *
  */
 /*
@@ -4169,12 +4169,12 @@ stanMsg_Destroy(stanMsg *msg);
 NATS_EXTERN natsStatus
 natsConnection_Connect(natsConnection **nc, natsOptions *options);
 
-/** \brief Causes the client to drop the connection to the current server and
- * perform standard reconnection process.
+/** \brief Drops the current connection, reconnects including re-subscribing.
  *
- * This means that all subscriptions and consumers should be resubscribed and
- * their work resumed after successful reconnect where all reconnect options are
- * respected.
+ * Causes the client to drop the connection to the current server and to
+ * initiate the standard reconnection process. This means that all subscriptions
+ * and consumers will be resubscribed and their work resumed after successful
+ * reconnect where all reconnect options are respected.
  *
  * @param nc the pointer to the #natsConnection object.
  */
@@ -6493,7 +6493,8 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
  * @param sub the location where to store the pointer to the newly created
  * #natsSubscription object.
  * @param js the pointer to the #jsCtx object.
- * @param subject the subject this subscription is created for.
+ * @param subjects the subject this subscription is created for.
+ * @param numSubjects the number of subjects for the subscription.
  * @param cb the #natsMsgHandler callback.
  * @param cbClosure a pointer to an user defined object (can be `NULL`). See
  * the #natsMsgHandler prototype.
@@ -6541,7 +6542,7 @@ js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
  */
 NATS_EXTERN natsStatus
 js_SubscribeSyncMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
-                      jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode);
+                      jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
 
 /** \brief Create a pull subscriber.
  *
@@ -7840,7 +7841,7 @@ struct micro_endpoint_info_s
     const char *QueueGroup;
 
     /**
-     * @briefMetadata for the endpoint, a JSON-encoded user-provided object,
+     * @brief Metadata for the endpoint, a JSON-encoded user-provided object,
      * e.g. `{"key":"value"}`
      */
     natsMetadata Metadata;
@@ -7893,25 +7894,17 @@ struct micro_endpoint_stats_s
 };
 
 /**
- * #brief The Microservice endpoint *group* configuration object.
+ * @brief The Microservice endpoint *group* configuration object.
  */
 struct micro_group_config_s
 {
-    /**
-     * @brief The subject prefix for the group.
-     */
+    /// @brief The subject prefix for the group.
     const char *Prefix;
 
-    /**
-     * @brief Overrides the default queue group for the service.
-     *
-     */
+    /// @brief Overrides the default queue group for the service.
     const char *QueueGroup;
 
-    /**
-     * @brief Disables the use of a queue group for the service.
-     *
-     */
+    /// @brief Disables the use of a queue group for the service.
     bool NoQueueGroup;
 };
 

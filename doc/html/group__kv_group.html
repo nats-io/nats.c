@@ -155,6 +155,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga6030fc2a672ae868f7603587245b9d5a"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_group.html#ga6030fc2a672ae868f7603587245b9d5a">kvStore_Keys</a> (<a class="el" href="structkv_keys_list.html">kvKeysList</a> *list, <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *kv, <a class="el" href="structkv_watch_options.html">kvWatchOptions</a> *opts)</td></tr>
 <tr class="memdesc:ga6030fc2a672ae868f7603587245b9d5a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns all keys in the bucket.  <a href="group__kv_group.html#ga6030fc2a672ae868f7603587245b9d5a">More...</a><br /></td></tr>
 <tr class="separator:ga6030fc2a672ae868f7603587245b9d5a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gae1a017ca0ea67375b9d94dc426d47042"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_group.html#gae1a017ca0ea67375b9d94dc426d47042">kvStore_KeysWithFilters</a> (<a class="el" href="structkv_keys_list.html">kvKeysList</a> *list, <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *kv, const char **filters, int numFilters, <a class="el" href="structkv_watch_options.html">kvWatchOptions</a> *opts)</td></tr>
+<tr class="memdesc:gae1a017ca0ea67375b9d94dc426d47042"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns all keys in the bucket which matches the list of subject like filters.  <a href="group__kv_group.html#gae1a017ca0ea67375b9d94dc426d47042">More...</a><br /></td></tr>
+<tr class="separator:gae1a017ca0ea67375b9d94dc426d47042"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga02ccd58bc5062f6ce6f94bf05e3dfe45"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45">kvKeysList_Destroy</a> (<a class="el" href="structkv_keys_list.html">kvKeysList</a> *list)</td></tr>
 <tr class="memdesc:ga02ccd58bc5062f6ce6f94bf05e3dfe45"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys this list of KeyValue store key strings.  <a href="group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45">More...</a><br /></td></tr>
 <tr class="separator:ga02ccd58bc5062f6ce6f94bf05e3dfe45"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -979,6 +982,70 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">list</td><td>list the pointer to a <a class="el" href="structkv_keys_list.html" title="A list of KeyValue store keys.">kvKeysList</a> that will be initialized and filled with resulting key strings. </td></tr>
     <tr><td class="paramname">kv</td><td>the pointer to the <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> object. </td></tr>
+    <tr><td class="paramname">opts</td><td>the history options, possibly <code>NULL</code>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="gae1a017ca0ea67375b9d94dc426d47042"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gae1a017ca0ea67375b9d94dc426d47042">&#9670;&nbsp;</a></span>kvStore_KeysWithFilters()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> kvStore_KeysWithFilters </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="structkv_keys_list.html">kvKeysList</a> *&#160;</td>
+          <td class="paramname"><em>list</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *&#160;</td>
+          <td class="paramname"><em>kv</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char **&#160;</td>
+          <td class="paramname"><em>filters</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname"><em>numFilters</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="structkv_watch_options.html">kvWatchOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Get a list of the keys in a bucket filtered by a subject-like string, for instance "key" or "key.foo.*" or "key.&gt;" Any deleted or purged keys will not be returned.</p>
+<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait (in milliseconds) for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all keys for this bucket. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no keys.</dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd>The user should call <a class="el" href="group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45" title="Destroys this list of KeyValue store key strings.">kvKeysList_Destroy</a> to release memory allocated for the entries list.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__kv_group.html#ga762fd5de8cde683e46a6736a51e575f5" title="Initializes a KeyValue watcher options structure.">kvWatchOptions_Init</a> </dd>
+<dd>
+<a class="el" href="group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45" title="Destroys this list of KeyValue store key strings.">kvKeysList_Destroy</a> </dd>
+<dd>
+<a class="el" href="group__kv_group.html#ga409bfd787a87d0e37b69d3711fdb28f4" title="Returns a watcher for any updates to keys that match one of the keys argument.">kvStore_WatchMulti</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">list</td><td>the pointer to a <a class="el" href="structkv_keys_list.html" title="A list of KeyValue store keys.">kvKeysList</a> that will be initialized and filled with resulting key strings. </td></tr>
+    <tr><td class="paramname">kv</td><td>the pointer to the <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> object. </td></tr>
+    <tr><td class="paramname">filters</td><td>the list of subject filters. Cannot be <code>NULL</code>. </td></tr>
+    <tr><td class="paramname">numFilters</td><td>number of filters. Cannot be 0. </td></tr>
     <tr><td class="paramname">opts</td><td>the history options, possibly <code>NULL</code>. </td></tr>
   </table>
   </dd>

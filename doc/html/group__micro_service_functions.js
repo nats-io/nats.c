@@ -2,7 +2,7 @@ var group__micro_service_functions =
 [
     [ "micro_AddService", "group__micro_service_functions.html#gab238a5c3d44f03a32bf2ecae62e11c19", null ],
     [ "microService_AddEndpoint", "group__micro_service_functions.html#ga112ef90de06648f29330e191b5d613dc", null ],
-    [ "microService_AddGroup", "group__micro_service_functions.html#ga3a2724c53fb5d456ec911784190fdff3", null ],
+    [ "microService_AddGroup", "group__micro_service_functions.html#ga1e74f8d482ac32e9bcf29b0609d2ade6", null ],
     [ "microService_Destroy", "group__micro_service_functions.html#gad7da17f143822a5caa57c90505453a6d", null ],
     [ "microService_GetConnection", "group__micro_service_functions.html#ga348b4d33e070d9f9c991bd1165e45508", null ],
     [ "microService_GetInfo", "group__micro_service_functions.html#ga715dc8b99716d691c37baa510697e9d6", null ],

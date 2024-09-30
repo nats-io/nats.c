@@ -46,7 +46,8 @@ var status_8h =
       [ "NATS_INVALID_QUEUE_NAME", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a0d239cfdfa30fe730afea65941779b", null ],
       [ "NATS_NO_RESPONDERS", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80aab97324e40ccfe1360080c651c330e62", null ],
       [ "NATS_MISMATCH", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a22fa4802a34bac497f23e269a20a52f2", null ],
-      [ "NATS_MISSED_HEARTBEAT", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a37d80c8232775339a32805fe93e0ea7f", null ]
+      [ "NATS_MISSED_HEARTBEAT", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a37d80c8232775339a32805fe93e0ea7f", null ],
+      [ "NATS_LIMIT_REACHED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ac1eb33007d16930e74c2fa3b22761635", null ]
     ] ],
     [ "jsErrCode", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70", [
       [ "JSAccountResourcesExceededErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a26a33a6e2296eb0ac0370176fb08ed9a", null ],

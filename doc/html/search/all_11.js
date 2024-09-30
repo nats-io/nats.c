@@ -1,9 +1,5 @@
 var searchData=
 [
-  ['ratelimit_837',['RateLimit',['../structjs_consumer_config.html#a351b388a36ccb7978e6e85a6f4fc0816',1,'jsConsumerConfig']]],
-  ['replaypolicy_838',['ReplayPolicy',['../structjs_consumer_config.html#ade510daf7c5d67553d2cd20b64ab9939',1,'jsConsumerConfig']]],
-  ['replicas_839',['Replicas',['../structjs_stream_config.html#adbf2c948cf8091b149603b918ef49ffc',1,'jsStreamConfig::Replicas()'],['../structjs_cluster_info.html#a8dfcae3bc348a5b595b509e3f3d3500b',1,'jsClusterInfo::Replicas()'],['../structjs_consumer_config.html#acfba6d6ecb6323fd8ffe6c0bb4fbffae',1,'jsConsumerConfig::Replicas()'],['../structkv_config.html#a48f0f70383eff868321f9c94ae1a87cd',1,'kvConfig::Replicas()']]],
-  ['replicaslen_840',['ReplicasLen',['../structjs_cluster_info.html#a237a639579def1345e02f1490a510ed5',1,'jsClusterInfo']]],
-  ['republish_841',['RePublish',['../structjs_stream_config.html#a95ab0061b6e935b129a4a9c133e6b11c',1,'jsStreamConfig::RePublish()'],['../structkv_config.html#ae172d3e442eef1a57cd7cf266d9e8951',1,'kvConfig::RePublish()']]],
-  ['retention_842',['Retention',['../structjs_stream_config.html#a5ebc95b76afafa5e7a129953ba1bb3c7',1,'jsStreamConfig']]]
+  ['queue_861',['Queue',['../structjs_sub_options.html#aaf4b620d112a31f51a20389c5405805d',1,'jsSubOptions']]],
+  ['queuegroup_862',['QueueGroup',['../structmicro__endpoint__config__s.html#abf08a87593d4b7c3d1be7b7392f7fd67',1,'micro_endpoint_config_s::QueueGroup()'],['../structmicro__endpoint__info__s.html#ad07fba572478157b89a193ede7297d89',1,'micro_endpoint_info_s::QueueGroup()'],['../structmicro__endpoint__stats__s.html#a8172de70eeaec314af5728214d9cc230',1,'micro_endpoint_stats_s::QueueGroup()'],['../structmicro__group__config__s.html#a8a59fe960d1a8958807aa0bbc62be033',1,'micro_group_config_s::QueueGroup()'],['../structmicro__service__config__s.html#abdd93c544c7c368ae4793c4c479afc61',1,'micro_service_config_s::QueueGroup()']]]
 ];

@@ -96,7 +96,7 @@ Functions</h2></td></tr>
 <tr class="memdesc:ga740be1ba16a8570eb98ef6755ebf52ce"><td class="mdescLeft">&#160;</td><td class="mdescRight">Connects to a <code>NATS Server</code> using the provided options.  <a href="group__conn_mgt_group.html#ga740be1ba16a8570eb98ef6755ebf52ce">More...</a><br /></td></tr>
 <tr class="separator:ga740be1ba16a8570eb98ef6755ebf52ce"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gab189a6974024f58944cdaa5612d4587e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#gab189a6974024f58944cdaa5612d4587e">natsConnection_Reconnect</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
-<tr class="memdesc:gab189a6974024f58944cdaa5612d4587e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Causes the client to drop the connection to the current server and perform standard reconnection process.  <a href="group__conn_mgt_group.html#gab189a6974024f58944cdaa5612d4587e">More...</a><br /></td></tr>
+<tr class="memdesc:gab189a6974024f58944cdaa5612d4587e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drops the current connection, reconnects including re-subscribing.  <a href="group__conn_mgt_group.html#gab189a6974024f58944cdaa5612d4587e">More...</a><br /></td></tr>
 <tr class="separator:gab189a6974024f58944cdaa5612d4587e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaa89c06e30e19ff361125bfc9114d89a8"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#gaa89c06e30e19ff361125bfc9114d89a8">natsConnection_ProcessReadEvent</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
 <tr class="memdesc:gaa89c06e30e19ff361125bfc9114d89a8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Process a read event when using external event loop.  <a href="group__conn_mgt_group.html#gaa89c06e30e19ff361125bfc9114d89a8">More...</a><br /></td></tr>
@@ -238,7 +238,7 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>This means that all subscriptions and consumers should be resubscribed and their work resumed after successful reconnect where all reconnect options are respected.</p>
+<p>Causes the client to drop the connection to the current server and to initiate the standard reconnection process. This means that all subscriptions and consumers will be resubscribed and their work resumed after successful reconnect where all reconnect options are respected.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>

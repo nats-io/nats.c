@@ -8,6 +8,7 @@ var group__micro_types =
     [ "microEndpointStats", "group__micro_types.html#ga0a429a5ecfff69b212a3ba9abebcba53", null ],
     [ "microError", "group__micro_types.html#ga41ae4121cf2f8e326369bbc2e44e20d7", null ],
     [ "microGroup", "group__micro_types.html#ga2681ea21e9f5f6681b972bbb67e32133", null ],
+    [ "microGroupConfig", "group__micro_types.html#ga8ea3d2aa37d1e89fb9c6d87c10dfe603", null ],
     [ "microRequest", "group__micro_types.html#ga417ace5dc09fe8a2f6fd3882302a37c4", null ],
     [ "microService", "group__micro_types.html#gaf6f5aef8773b70746e84c100c2b19b28", null ],
     [ "microServiceConfig", "group__micro_types.html#ga1e46c0657cf42e83b366d224f380fb55", null ],

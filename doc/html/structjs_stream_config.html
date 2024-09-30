@@ -147,25 +147,34 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a575ffbaa85b0300032963296b090583a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Restrict the ability to purge messages.  <a href="structjs_stream_config.html#a575ffbaa85b0300032963296b090583a">More...</a><br /></td></tr>
 <tr class="separator:a575ffbaa85b0300032963296b090583a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aba71cdb342181f52bb9f7ff5f770a1fa"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#aba71cdb342181f52bb9f7ff5f770a1fa">AllowRollup</a></td></tr>
+<tr class="memdesc:aba71cdb342181f52bb9f7ff5f770a1fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allow messages to be placed into the system and purge all older messages using a special message header.  <a href="structjs_stream_config.html#aba71cdb342181f52bb9f7ff5f770a1fa">More...</a><br /></td></tr>
 <tr class="separator:aba71cdb342181f52bb9f7ff5f770a1fa"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a95ab0061b6e935b129a4a9c133e6b11c"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_re_publish.html">jsRePublish</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a95ab0061b6e935b129a4a9c133e6b11c">RePublish</a></td></tr>
+<tr class="memdesc:a95ab0061b6e935b129a4a9c133e6b11c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allow republish of the message after being sequenced and stored.  <a href="structjs_stream_config.html#a95ab0061b6e935b129a4a9c133e6b11c">More...</a><br /></td></tr>
 <tr class="separator:a95ab0061b6e935b129a4a9c133e6b11c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a28630f6f07ca02553c5d5718d7c29721"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a28630f6f07ca02553c5d5718d7c29721">AllowDirect</a></td></tr>
+<tr class="memdesc:a28630f6f07ca02553c5d5718d7c29721"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allow higher performance, direct access to get individual messages. E.g. KeyValue.  <a href="structjs_stream_config.html#a28630f6f07ca02553c5d5718d7c29721">More...</a><br /></td></tr>
 <tr class="separator:a28630f6f07ca02553c5d5718d7c29721"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a9d67ddcc7c54c345dd60ed5e59234f1e"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a9d67ddcc7c54c345dd60ed5e59234f1e">MirrorDirect</a></td></tr>
+<tr class="memdesc:a9d67ddcc7c54c345dd60ed5e59234f1e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allow higher performance and unified direct access for mirrors as well.  <a href="structjs_stream_config.html#a9d67ddcc7c54c345dd60ed5e59234f1e">More...</a><br /></td></tr>
 <tr class="separator:a9d67ddcc7c54c345dd60ed5e59234f1e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a3fb7d5e1a09829fe742749da880afe4a"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a3fb7d5e1a09829fe742749da880afe4a">DiscardNewPerSubject</a></td></tr>
+<tr class="memdesc:a3fb7d5e1a09829fe742749da880afe4a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allow KV like semantics to also discard new on a per subject basis.  <a href="structjs_stream_config.html#a3fb7d5e1a09829fe742749da880afe4a">More...</a><br /></td></tr>
 <tr class="separator:a3fb7d5e1a09829fe742749da880afe4a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a7aa4849b0f555c9de6b6da953929a565"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structnats_metadata.html">natsMetadata</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a7aa4849b0f555c9de6b6da953929a565">Metadata</a></td></tr>
-<tr class="memdesc:a7aa4849b0f555c9de6b6da953929a565"><td class="mdescLeft">&#160;</td><td class="mdescRight">Configuration options introduced in 2.10.  <a href="structjs_stream_config.html#a7aa4849b0f555c9de6b6da953929a565">More...</a><br /></td></tr>
+<tr class="memdesc:a7aa4849b0f555c9de6b6da953929a565"><td class="mdescLeft">&#160;</td><td class="mdescRight">A user-provided array of key/value pairs, encoded as a string array [n1, v1, n2, v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}.  <a href="structjs_stream_config.html#a7aa4849b0f555c9de6b6da953929a565">More...</a><br /></td></tr>
 <tr class="separator:a7aa4849b0f555c9de6b6da953929a565"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a406554aaf1e16eed4abade52f7ca5e61"><td class="memItemLeft" align="right" valign="top"><a class="el" href="group__types_group.html#ga10d2999dc673ed95e131e6ce5181f720">jsStorageCompression</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a406554aaf1e16eed4abade52f7ca5e61">Compression</a></td></tr>
+<tr class="memdesc:a406554aaf1e16eed4abade52f7ca5e61"><td class="mdescLeft">&#160;</td><td class="mdescRight">js_StorageCompressionNone (default) or js_StorageCompressionS2.  <a href="structjs_stream_config.html#a406554aaf1e16eed4abade52f7ca5e61">More...</a><br /></td></tr>
 <tr class="separator:a406554aaf1e16eed4abade52f7ca5e61"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a7ed5e8e5a8d367b25751b9708d0e395b"><td class="memItemLeft" align="right" valign="top">uint64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a7ed5e8e5a8d367b25751b9708d0e395b">FirstSeq</a></td></tr>
+<tr class="memdesc:a7ed5e8e5a8d367b25751b9708d0e395b"><td class="mdescLeft">&#160;</td><td class="mdescRight">the starting sequence number for the stream.  <a href="structjs_stream_config.html#a7ed5e8e5a8d367b25751b9708d0e395b">More...</a><br /></td></tr>
 <tr class="separator:a7ed5e8e5a8d367b25751b9708d0e395b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0ce1d0a7c1f0576151f505724ae393d1"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_subject_transform_config.html">jsSubjectTransformConfig</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a0ce1d0a7c1f0576151f505724ae393d1">SubjectTransform</a></td></tr>
+<tr class="memdesc:a0ce1d0a7c1f0576151f505724ae393d1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Applies a subject transform (to matching messages) before doing anything else when a new message is received.  <a href="structjs_stream_config.html#a0ce1d0a7c1f0576151f505724ae393d1">More...</a><br /></td></tr>
 <tr class="separator:a0ce1d0a7c1f0576151f505724ae393d1"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5ce51cb5a36febda30bb444a0f59c2d1"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_stream_consumer_limits.html">jsStreamConsumerLimits</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a5ce51cb5a36febda30bb444a0f59c2d1">ConsumerLimits</a></td></tr>
+<tr class="memdesc:a5ce51cb5a36febda30bb444a0f59c2d1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the limits on certain options on all consumers of the stream.  <a href="structjs_stream_config.html#a5ce51cb5a36febda30bb444a0f59c2d1">More...</a><br /></td></tr>
 <tr class="separator:a5ce51cb5a36febda30bb444a0f59c2d1"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
@@ -582,7 +591,6 @@ NATS server 2.10 added user-provided Metadata, storage Compression type, FirstSe
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Allows messages to be placed into the system and purge all older messages using a special message header. </p>
 
 </div>
 </div>
@@ -653,13 +661,6 @@ NATS server 2.10 added user-provided Metadata, storage Compression type, FirstSe
         </tr>
       </table>
 </div><div class="memdoc">
-<ul>
-<li>Metadata is a user-provided array of key/value pairs, encoded as a string array [n1, v1, n2, v2, ...] representing key/value pairs {n1:v1, n2:v2, ...}.</li>
-<li>Compression: js_StorageCompressionNone (default) or js_StorageCompressionS2</li>
-<li>FirstSeq: the starting sequence number for the stream.</li>
-<li>SubjectTransformConfig is for applying a subject transform (to matching messages) before doing anything else when a new message is received</li>
-<li>ConsumerLimits is for setting the limits on certain options on all consumers of the stream. </li>
-</ul>
 
 </div>
 </div>

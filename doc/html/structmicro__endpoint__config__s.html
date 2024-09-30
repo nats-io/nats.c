@@ -101,7 +101,14 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a6c58e0e9c1da670da4a38993a613eb7d"><td class="memItemLeft" align="right" valign="top">const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structmicro__endpoint__config__s.html#a6c58e0e9c1da670da4a38993a613eb7d">Subject</a></td></tr>
 <tr class="memdesc:a6c58e0e9c1da670da4a38993a613eb7d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The NATS subject the endpoint will listen on.  <a href="structmicro__endpoint__config__s.html#a6c58e0e9c1da670da4a38993a613eb7d">More...</a><br /></td></tr>
 <tr class="separator:a6c58e0e9c1da670da4a38993a613eb7d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:abf08a87593d4b7c3d1be7b7392f7fd67"><td class="memItemLeft" align="right" valign="top">const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structmicro__endpoint__config__s.html#abf08a87593d4b7c3d1be7b7392f7fd67">QueueGroup</a></td></tr>
+<tr class="memdesc:abf08a87593d4b7c3d1be7b7392f7fd67"><td class="mdescLeft">&#160;</td><td class="mdescRight">Overrides the default queue group for the service.  <a href="structmicro__endpoint__config__s.html#abf08a87593d4b7c3d1be7b7392f7fd67">More...</a><br /></td></tr>
+<tr class="separator:abf08a87593d4b7c3d1be7b7392f7fd67"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a920bf9f800a8b46227e4c52272e0c804"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structmicro__endpoint__config__s.html#a920bf9f800a8b46227e4c52272e0c804">NoQueueGroup</a></td></tr>
+<tr class="memdesc:a920bf9f800a8b46227e4c52272e0c804"><td class="mdescLeft">&#160;</td><td class="mdescRight">Disables the use of a queue group for the service.  <a href="structmicro__endpoint__config__s.html#a920bf9f800a8b46227e4c52272e0c804">More...</a><br /></td></tr>
+<tr class="separator:a920bf9f800a8b46227e4c52272e0c804"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a7aee4ab9e29512c0b6ee12ba233c0fb7"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structnats_metadata.html">natsMetadata</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structmicro__endpoint__config__s.html#a7aee4ab9e29512c0b6ee12ba233c0fb7">Metadata</a></td></tr>
+<tr class="memdesc:a7aee4ab9e29512c0b6ee12ba233c0fb7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Metadata for the endpoint, a JSON-encoded user-provided object, e.g. <code>{"key":"value"}</code>  <a href="structmicro__endpoint__config__s.html#a7aee4ab9e29512c0b6ee12ba233c0fb7">More...</a><br /></td></tr>
 <tr class="separator:a7aee4ab9e29512c0b6ee12ba233c0fb7"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a4a916af910a5eb88abf3f0aa60082667"><td class="memItemLeft" align="right" valign="top"><a class="el" href="group__micro_callbacks.html#ga95c185268f8eb44fa6ee16db4b33958e">microRequestHandler</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structmicro__endpoint__config__s.html#a4a916af910a5eb88abf3f0aa60082667">Handler</a></td></tr>
 <tr class="memdesc:a4a916af910a5eb88abf3f0aa60082667"><td class="mdescLeft">&#160;</td><td class="mdescRight">The request handler for the endpoint.  <a href="structmicro__endpoint__config__s.html#a4a916af910a5eb88abf3f0aa60082667">More...</a><br /></td></tr>
@@ -144,6 +151,34 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="abf08a87593d4b7c3d1be7b7392f7fd67"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abf08a87593d4b7c3d1be7b7392f7fd67">&#9670;&nbsp;</a></span>QueueGroup</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">const char* micro_endpoint_config_s::QueueGroup</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a920bf9f800a8b46227e4c52272e0c804"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a920bf9f800a8b46227e4c52272e0c804">&#9670;&nbsp;</a></span>NoQueueGroup</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool micro_endpoint_config_s::NoQueueGroup</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a7aee4ab9e29512c0b6ee12ba233c0fb7"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7aee4ab9e29512c0b6ee12ba233c0fb7">&#9670;&nbsp;</a></span>Metadata</h2>
 
@@ -155,7 +190,6 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>@briefMetadata for the endpoint, a JSON-encoded user-provided object, e.g. <code>{"key":"value"}</code> </p>
 
 </div>
 </div>

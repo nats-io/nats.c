@@ -122,6 +122,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gaa1f09416d443fa7a6af6b695da563eba"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba">natsOptions_SetSecure</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool secure)</td></tr>
 <tr class="memdesc:gaa1f09416d443fa7a6af6b695da563eba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the secure mode.  <a href="group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba">More...</a><br /></td></tr>
 <tr class="separator:gaa1f09416d443fa7a6af6b695da563eba"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gac530a5d4cc93158047fc17c79dac6812"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gac530a5d4cc93158047fc17c79dac6812">natsOptions_TLSHandshakeFirst</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts)</td></tr>
+<tr class="memdesc:gac530a5d4cc93158047fc17c79dac6812"><td class="mdescLeft">&#160;</td><td class="mdescRight">Performs TLS handshake first.  <a href="group__opts_group.html#gac530a5d4cc93158047fc17c79dac6812">More...</a><br /></td></tr>
+<tr class="separator:gac530a5d4cc93158047fc17c79dac6812"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga2cd6563694a439b3949a31fd81103099"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga2cd6563694a439b3949a31fd81103099">natsOptions_LoadCATrustedCertificates</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, const char *fileName)</td></tr>
 <tr class="memdesc:ga2cd6563694a439b3949a31fd81103099"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads the trusted CA certificates from a file.  <a href="group__opts_group.html#ga2cd6563694a439b3949a31fd81103099">More...</a><br /></td></tr>
 <tr class="separator:ga2cd6563694a439b3949a31fd81103099"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -319,7 +322,7 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Sets the URL of the <code>NATS Server</code> the client should try to connect to. The URL can contain optional user name and password.</p>
+<p>Sets the URL of the <code>NATS Server</code> the client should try to connect to. The URL can contain optional user name and password. %-encoding is supported for entering special characters.</p>
 <p>Some valid URLS:</p>
 <ul>
 <li>nats://localhost:4222</li>
@@ -673,6 +676,32 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
     <tr><td class="paramname">secure</td><td><code>true</code> for a secure connection, <code>false</code> otherwise. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="gac530a5d4cc93158047fc17c79dac6812"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gac530a5d4cc93158047fc17c79dac6812">&#9670;&nbsp;</a></span>natsOptions_TLSHandshakeFirst()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_TLSHandshakeFirst </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>If the server is not configured to require the client to perform the TLS handshake first, the server sends an INFO protocol first. When receiving it, the client and server are then initiate the TLS handshake.</p>
+<p>If the server is configured to require the client to perform the TLS handshake first, the client will fail to connect if not setting this option. Conversely, if the client is configured with this option but the server is not, the connection will fail.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
   </table>
   </dd>
 </dl>

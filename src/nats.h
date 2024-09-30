@@ -1237,7 +1237,7 @@ typedef void (*jsFetchCompleteHandler)(natsConnection *nc, natsSubscription *sub
  *
  * @see js_PullSubscribeAsync
  */
-typedef bool (*natsFetchNextHandler)(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure);
+typedef bool (*jsFetchNextHandler)(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure);
 
 /**
  * JetStream context options.
@@ -1250,9 +1250,6 @@ typedef struct jsOptions
         const char              *Domain;                        ///< Domain changes the domain part of JetSteam API prefix.
         int64_t                 Wait;                           ///< Amount of time (in milliseconds) to wait for various JetStream API requests, default is 5000 ms (5 seconds).
 
-        /**
-         * Publish Async options
-         */
         struct jsOptionsPublishAsync
         {
                 int64_t                 MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
@@ -1274,52 +1271,56 @@ typedef struct jsOptions
 
                 int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.
 
-        } PublishAsync;
+        } PublishAsync; ///< extra options for #js_PublishAsync
 
         struct jsOptionsPullSubscribeAsync
         {
-                // Lifetime of the subscription (completes when any one of the
-                // targets is reached).
-                int64_t                 Timeout; // in milliseconds
-                int                     MaxMessages;
-                int64_t                 MaxBytes;
+                int64_t                 Timeout;        ///< Auto-unsubsribe after this many milliseconds.
+                int                     MaxMessages;    ///< Auto-unsubscribed after receiving this many messages.
+                int64_t                 MaxBytes;       ///< Auto-unsubscribe after receiving this many bytes.
 
-                // If NoWait is set, the subscription will receive the messages
-                // already stored on the server subject to the limits, but will
-                // not wait for more messages.
-                //
-                // Note that if Timeout is set we would still wait for first
-                // message to become available, even if there are currently any
-                // on the server
+                /// \brief If NoWait is set, the subscription will receive the
+                /// messages already stored on the server subject to the limits,
+                /// but will not wait for more messages.
+                ///
+                /// \note that if Timeout is set we would still wait for first
+                /// message to become available, even if there are currently any
+                /// on the server
                 bool                    NoWait;
 
-                // Fetch complete handler that receives the exit status code,
-                // the subscription's Complete handler is also invoked, but does
-                // not have the status code.
+                /// \brief Fetch complete handler that receives the exit status
+                /// code, the subscription's Complete handler is also invoked,
+                /// but does not have the status code.
                 jsFetchCompleteHandler  CompleteHandler;
                 void                    *CompleteHandlerClosure;
 
-                // Have server sends heartbeats at this interval to help detect
-                // communication failures.
-                int64_t                 Heartbeat; // in milliseconds
+                /// \brief Have server sends heartbeats at this interval (in
+                /// milliseconds) to help detect communication failures.
+                int64_t                 Heartbeat;
 
-                // Options to control automatic Fetch flow control. The number
-                // of messages to ask for in a single request, and if we should
-                // try to fetch ahead, KeepAhead more than we need to finish the
-                // current request. Fetch this many messages ahead of time.
-                //
-                // KeepAhead can not be used in conjunction with MaxBytes or
-                // NoWait.
+                /// @brief When using the automatic Fetch flow control (default
+                /// NextHandler), this is the number of messages to ask for in a
+                /// single request.
                 int                     FetchSize;
+
+                /// @brief When using the automatic Fetch flow control (default
+                /// NextHandler), initiate the next fetch request (this many
+                /// messages) prior to the fulfillment of the current request.
+                ///
+                /// @note KeepAhead can not be used in conjunction with MaxBytes
+                /// or NoWait.
                 int                     KeepAhead;
 
-                // Manual fetch flow control. If provided gets called before
-                // each message is deliverered to msgCB, and overrides the
-                // default algorithm for sending Next requests.
-                natsFetchNextHandler    NextHandler;
+                /// @brief If set, switches to manual fetch flow control.
+                ///
+                /// If provided, this function gets called before each message
+                /// is deliverered to msgCB, and overrides the default algorithm
+                /// for sending Next fetch requests.
+                jsFetchNextHandler      NextHandler;
                 void                    *NextHandlerClosure;
 
-        } PullSubscribeAsync;
+        } PullSubscribeAsync; ///< extra options for #js_PullSubscribeAsync
+
 
         /**
          * Advanced stream options
@@ -7897,21 +7898,13 @@ struct micro_endpoint_stats_s
  */
 struct micro_group_config_s
 {
-    /**
-     * @brief The subject prefix for the group.
-     */
+    /// @brief The subject prefix for the group.
     const char *Prefix;
 
-    /**
-     * @brief Overrides the default queue group for the service.
-     *
-     */
+    /// @brief Overrides the default queue group for the service.
     const char *QueueGroup;
 
-    /**
-     * @brief Disables the use of a queue group for the service.
-     *
-     */
+    /// @brief Disables the use of a queue group for the service.
     bool NoQueueGroup;
 };
 

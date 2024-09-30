@@ -561,48 +561,46 @@ typedef struct jsStreamConfig {
         bool                    Sealed;         ///< Seal a stream so no messages can get our or in.
         bool                    DenyDelete;     ///< Restrict the ability to delete messages.
         bool                    DenyPurge;      ///< Restrict the ability to purge messages.
-        /**
-         * Allows messages to be placed into the system and purge
-         * all older messages using a special message header.
-         */
+
+        /// @brief Allow messages to be placed into the system and purge all
+        /// older messages using a special message header.
         bool                    AllowRollup;
 
-        // Allow republish of the message after being sequenced and stored.
+        /// @brief Allow republish of the message after being sequenced and
+        /// stored.
         jsRePublish             *RePublish;
 
-        // Allow higher performance, direct access to get individual messages. E.g. KeyValue
+        /// @brief Allow higher performance, direct access to get individual
+        /// messages. E.g. KeyValue
         bool                    AllowDirect;
-        // Allow higher performance and unified direct access for mirrors as well.
+
+        /// @brief Allow higher performance and unified direct access for
+        /// mirrors as well.
         bool                    MirrorDirect;
 
-        // Allow KV like semantics to also discard new on a per subject basis
+        /// @brief Allow KV like semantics to also discard new on a per subject
+        /// basis
         bool                    DiscardNewPerSubject;
 
-        /**
-         * @brief Configuration options introduced in 2.10
-         *
-         * - Metadata is a user-provided array of key/value pairs, encoded as a
-         *   string array [n1, v1, n2, v2, ...] representing key/value pairs
-         *   {n1:v1, n2:v2, ...}.
-         *
-         * - Compression: js_StorageCompressionNone (default) or
-         *   js_StorageCompressionS2
-         *
-         * - FirstSeq: the starting sequence number for the stream.
-         *
-         * - SubjectTransformConfig is for applying a subject transform (to
-         *   matching messages) before doing anything else when a new message is
-         *   received
-         *
-         * - ConsumerLimits is for setting the limits on certain options on all
-         *   consumers of the stream.
-         */
+        /// @brief A user-provided array of key/value pairs, encoded as a string
+        /// array [n1, v1, n2, v2, ...] representing key/value pairs {n1:v1,
+        /// n2:v2, ...}.
+        natsMetadata            Metadata;
 
-        natsMetadata Metadata;
-        jsStorageCompression Compression;
-        uint64_t FirstSeq;
+        /// @brief js_StorageCompressionNone (default) or
+        /// js_StorageCompressionS2.
+        jsStorageCompression    Compression;
+
+        /// @brief  the starting sequence number for the stream.
+        uint64_t                FirstSeq;
+
+        /// @brief Applies a subject transform (to matching messages) before
+        /// doing anything else when a new message is received.
         jsSubjectTransformConfig SubjectTransform;
-        jsStreamConsumerLimits ConsumerLimits;
+
+        /// @brief Sets the limits on certain options on all consumers of the
+        /// stream.
+        jsStreamConsumerLimits  ConsumerLimits;
 } jsStreamConfig;
 
 /**
@@ -4169,12 +4167,11 @@ stanMsg_Destroy(stanMsg *msg);
 NATS_EXTERN natsStatus
 natsConnection_Connect(natsConnection **nc, natsOptions *options);
 
-/** \brief Drop the connection to the current server and perform the standard
- * reconnection process, including re-subscribing.
+/** \brief Drops the current connection, reconnects including re-subscribing.
  *
- * Causes the client to drop the connection to the current server and perform
- * the standard reconnection process. This means that all subscriptions and
- * consumers will be resubscribed and their work resumed after successful
+ * Causes the client to drop the connection to the current server and to
+ * initiate the standard reconnection process. This means that all subscriptions
+ * and consumers will be resubscribed and their work resumed after successful
  * reconnect where all reconnect options are respected.
  *
  * @param nc the pointer to the #natsConnection object.

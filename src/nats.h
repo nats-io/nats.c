@@ -2275,8 +2275,9 @@ natsOptions_Create(natsOptions **newOpts);
 
 /** \brief Sets the URL to connect to.
  *
- * Sets the URL of the `NATS Server` the client should try to connect to.
- * The URL can contain optional user name and password.
+ * Sets the URL of the `NATS Server` the client should try to connect to. The
+ * URL can contain optional user name and password. %-encoding is supported for
+ * entering special characters.
  *
  * Some valid URLS:
  *
@@ -2289,8 +2290,8 @@ natsOptions_Create(natsOptions **newOpts);
  * @see natsOptions_SetToken
  *
  * @param opts the pointer to the #natsOptions object.
- * @param url the string representing the URL the connection should use
- * to connect to the server.
+ * @param url the string representing the URL the connection should use to
+ * connect to the server.
  *
  */
 /*

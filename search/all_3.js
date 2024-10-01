@@ -1,25 +1,8 @@
 var searchData=
 [
-  ['deleted_0',['Deleted',['../structjs_stream_state.html#abcf4d3c581c06d820f1ad21d640bef3f',1,'jsStreamState']]],
-  ['deleteddetails_1',['DeletedDetails',['../structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#a73f847afe18f56eaaf6788900270bef7',1,'jsOptions::jsOptionsStream::jsOptionsStreamInfo']]],
-  ['deletedlen_2',['DeletedLen',['../structjs_stream_state.html#a34a08a64c97269165630bf2e0c78c2c0',1,'jsStreamState']]],
-  ['deletemarkersolderthan_3',['DeleteMarkersOlderThan',['../structkv_purge_options.html#a47fed1e95073666cbe441aba7c149da6',1,'kvPurgeOptions']]],
-  ['delivered_4',['Delivered',['../structjs_consumer_info.html#a15f2d68fbf126acc1907ba9462ad9ee9',1,'jsConsumerInfo']]],
-  ['delivergroup_5',['DeliverGroup',['../structjs_consumer_config.html#ae0765f3b5effe365187d3cf809c6ed3c',1,'jsConsumerConfig']]],
-  ['deliverpolicy_6',['DeliverPolicy',['../structjs_consumer_config.html#a364127e68bf0d3bf13efdc0b416667f4',1,'jsConsumerConfig']]],
-  ['deliverprefix_7',['DeliverPrefix',['../structjs_external_stream.html#a26ca427f3c5be1cae579ddccc16432d3',1,'jsExternalStream']]],
-  ['deliversubject_8',['DeliverSubject',['../structjs_consumer_config.html#a95aa4184ed77f69b7674756572da1ded',1,'jsConsumerConfig']]],
-  ['denydelete_9',['DenyDelete',['../structjs_stream_config.html#af2d42dd29b9a35257937aeeb53c9f287',1,'jsStreamConfig']]],
-  ['denypurge_10',['DenyPurge',['../structjs_stream_config.html#a575ffbaa85b0300032963296b090583a',1,'jsStreamConfig']]],
-  ['deprecated_20list_11',['Deprecated List',['../deprecated.html',1,'']]],
-  ['description_12',['Description',['../structjs_stream_config.html#a4f9f422d2e9e7389860291ab19bd7f10',1,'jsStreamConfig::Description'],['../structjs_consumer_config.html#a36a14d666d99bdade87a5e21a25491d6',1,'jsConsumerConfig::Description'],['../structkv_config.html#a941e9cad2bab67f093bf4d9567b4749a',1,'kvConfig::Description'],['../structmicro__service__config__s.html#a090e884af689503d9c2fcb086a5478e6',1,'micro_service_config_s::Description'],['../structmicro__service__info__s.html#ad1b5706234217f33fdac3435ca920b39',1,'micro_service_info_s::Description']]],
-  ['destination_13',['Destination',['../structjs_re_publish.html#a662b2e57d237b171b2b61509f7e1023a',1,'jsRePublish::Destination'],['../structjs_subject_transform_config.html#a17ccd4ff50cbfdc3e077ea76fa1f0720',1,'jsSubjectTransformConfig::Destination']]],
-  ['discard_14',['Discard',['../structjs_stream_config.html#a0b44ea5251ef20bf5b5658bcfbea832d',1,'jsStreamConfig']]],
-  ['discardnewpersubject_15',['DiscardNewPerSubject',['../structjs_stream_config.html#a3fb7d5e1a09829fe742749da880afe4a',1,'jsStreamConfig']]],
-  ['documentation_16',['Other Documentation',['../index.html#other_doc_section',1,'']]],
-  ['domain_17',['Domain',['../structjs_stream_source.html#aa304239ee823ef87fcb53ebb0c077e7b',1,'jsStreamSource::Domain'],['../structjs_stream_alternate.html#a7c25ab1a427b78c4e1ba58ff7cdb5a8f',1,'jsStreamAlternate::Domain'],['../structjs_account_info.html#ab6ba03298e1863132550b9b08d06048c',1,'jsAccountInfo::Domain'],['../structjs_msg_meta_data.html#a388e38ccea591181436d199dc7c2f8ea',1,'jsMsgMetaData::Domain'],['../structjs_pub_ack.html#a0b73200c0b035db3c9c96421706d51b0',1,'jsPubAck::Domain'],['../structjs_options.html#ae4df6c9c01c0ea9ab0e6d5a6ec8af74e',1,'jsOptions::Domain']]],
-  ['donehandler_18',['DoneHandler',['../structmicro__service__config__s.html#ab349d30e0f637d449c0af865234a0985',1,'micro_service_config_s']]],
-  ['duplicate_19',['Duplicate',['../structjs_pub_ack.html#a0381a49ff62e8fac7a52cad6a5eb7243',1,'jsPubAck']]],
-  ['duplicates_20',['Duplicates',['../structjs_stream_config.html#a9e0ff10273d0182f885615b4f7d1cc20',1,'jsStreamConfig']]],
-  ['durable_21',['Durable',['../structjs_consumer_config.html#a36cf121162cf0b40edf051991d851ee0',1,'jsConsumerConfig']]]
+  ['backoff_15',['BackOff',['../structjs_consumer_config.html#aa2d0aff64a2c46122d0f0fe89e8ae011',1,'jsConsumerConfig']]],
+  ['backofflen_16',['BackOffLen',['../structjs_consumer_config.html#ad2f6ca3f2d0f977aedb8687c462c1cfc',1,'jsConsumerConfig']]],
+  ['batch_17',['Batch',['../structjs_fetch_request.html#a84f06b60e25decb2674996f0cb315f63',1,'jsFetchRequest']]],
+  ['bucket_18',['Bucket',['../structkv_config.html#a11b636da727c17566d5ab1274f69fee5',1,'kvConfig']]],
+  ['bytes_19',['Bytes',['../structjs_lost_stream_data.html#a841fcadca3f66e9170a51080dc1acf30',1,'jsLostStreamData::Bytes()'],['../structjs_stream_state.html#ae603fa6ecfb63c93b61272b7d1b8fb4d',1,'jsStreamState::Bytes()']]]
 ];

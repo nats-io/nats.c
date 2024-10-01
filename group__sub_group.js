@@ -6,7 +6,7 @@ var group__sub_group =
     [ "natsSubscription_AutoUnsubscribe", "group__sub_group.html#ga09f285de2746a6e27fc66efd60bd3116", null ],
     [ "natsSubscription_QueuedMsgs", "group__sub_group.html#ga8a37b2d5290da3aecc05483d79e7e254", null ],
     [ "natsSubscription_GetID", "group__sub_group.html#ga5a029a784c0a7f8b5800b48cc995db20", null ],
-    [ "natsSubscription_GetSubject", "group__sub_group.html#gadd4872b9fc5678a73f9ab04ce8428432", null ],
+    [ "natsSubscription_GetSubject", "group__sub_group.html#ga0f65b49a355530c05445a3b9ce15cecb", null ],
     [ "natsSubscription_SetPendingLimits", "group__sub_group.html#ga68a7cea89e75c529a7dd3bb77303dda4", null ],
     [ "natsSubscription_GetPendingLimits", "group__sub_group.html#ga786bb458981274fe717f266bd3b96d96", null ],
     [ "natsSubscription_GetPending", "group__sub_group.html#gaca6262e2ef842caa701a9f233db72707", null ],

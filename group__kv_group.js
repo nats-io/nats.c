@@ -18,11 +18,13 @@ var group__kv_group =
     [ "kvPurgeOptions_Init", "group__kv_group.html#ga243113fd7df34ce104850ab888f04021", null ],
     [ "kvStore_PurgeDeletes", "group__kv_group.html#ga34ab74b229ff88e64301ea53a274da69", null ],
     [ "kvStore_Watch", "group__kv_group.html#ga30feca870f580c7b9d2ad07a740505b2", null ],
+    [ "kvStore_WatchMulti", "group__kv_group.html#ga409bfd787a87d0e37b69d3711fdb28f4", null ],
     [ "kvStore_WatchAll", "group__kv_group.html#gaf011f1dd6813391c65664e982747602e", null ],
     [ "kvStore_Keys", "group__kv_group.html#ga6030fc2a672ae868f7603587245b9d5a", null ],
+    [ "kvStore_KeysWithFilters", "group__kv_group.html#gae1a017ca0ea67375b9d94dc426d47042", null ],
     [ "kvKeysList_Destroy", "group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45", null ],
     [ "kvStore_History", "group__kv_group.html#ga5aa57345313cee85b020e50c22023fb5", null ],
     [ "kvEntryList_Destroy", "group__kv_group.html#gae783352ab81e22aa3173057d117518e6", null ],
-    [ "kvStore_Bucket", "group__kv_group.html#gad28fdf9aae16bba308cda799fca13281", null ],
+    [ "kvStore_Bucket", "group__kv_group.html#ga8fd5aa9d1c7af511650f60863a21ee84", null ],
     [ "kvStore_Status", "group__kv_group.html#gadf75e99cc28bc9c2d6eac7c9f7398c27", null ]
 ];

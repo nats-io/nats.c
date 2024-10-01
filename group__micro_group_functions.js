@@ -1,5 +1,5 @@
 var group__micro_group_functions =
 [
-    [ "microGroup_AddGroup", "group__micro_group_functions.html#ga0bdc873f98dd1cb6c88b5c14974d74a0", null ],
-    [ "microGroup_AddEndpoint", "group__micro_group_functions.html#gabc9641ad7ee7775c388c864f2ffa6883", null ]
+    [ "microGroup_AddGroup", "group__micro_group_functions.html#gaa18fb57d08b18a2927704acfc1343625", null ],
+    [ "microGroup_AddEndpoint", "group__micro_group_functions.html#ga4d9bc96f6e349296c2038126c931f027", null ]
 ];

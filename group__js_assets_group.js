@@ -26,6 +26,8 @@ var group__js_assets_group =
     [ "js_UpdateConsumer", "group__js_assets_group.html#gad13ec256e24710bb237995814871e554", null ],
     [ "js_GetConsumerInfo", "group__js_assets_group.html#ga2dda04757b4ab27a794b64f8d727fe23", null ],
     [ "js_DeleteConsumer", "group__js_assets_group.html#ga52fbc61759b11494db91f348a733c490", null ],
+    [ "js_PauseConsumer", "group__js_assets_group.html#gabb1579300f501ba4611efce29d952b82", null ],
+    [ "jsConsumerPauseResponse_Destroy", "group__js_assets_group.html#ga7a3c0d2b1c98a4696e39d3c1ce111a25", null ],
     [ "jsConsumerInfo_Destroy", "group__js_assets_group.html#ga9c1d5ed2f24ba836c10e415231f80088", null ],
     [ "js_Consumers", "group__js_assets_group.html#gaf28097ede3e9ba9926fb00856e63ffd9", null ],
     [ "jsConsumerInfoList_Destroy", "group__js_assets_group.html#ga421de40d8e91658353111c3f2ea90ec8", null ],

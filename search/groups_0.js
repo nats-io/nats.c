@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['adapter_0',['Adapter',['../group__libevent_functions.html',1,'Libevent Adapter'],['../group__libuv_functions.html',1,'Libuv Adapter']]],
-  ['assets_20management_1',['JetStream Assets Management',['../group__js_assets_group.html',1,'']]]
+  ['callbacks_1933',['Callbacks',['../group__callbacks_group.html',1,'(Global Namespace)'],['../group__micro_callbacks.html',1,'(Global Namespace)']]],
+  ['connection_1934',['Connection',['../group__conn_group.html',1,'']]]
 ];

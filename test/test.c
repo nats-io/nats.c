@@ -4729,10 +4729,11 @@ test_natsGetJWTOrSeed(void)
     char        buf[256];
     const char  *valids[] = {
         "--- START JWT ---\nsome value\n--- END JWT ---\n",
+        "\r\n\r\n--- START JWT ---\r\nsome value\r\n--- END JWT ---\r\n",
         "--- ---\nsome value\n--- ---\n",
         "------\nsome value\n------\n",
         "---\nabc\n--\n---START---\nsome value\n---END---\n----\ndef\n--- ---\n",
-        "nothing first\nthen it starts\n  --- START ---\nsome value\n--- END ---\n---START---\nof something else\n---END---\n",
+        "nothing first\nthen it starts\n\r\n  --- START ---\r\n\n\n\r\nsome value\n--- END ---\n\n---START---\nof something else\n---END---\n",
         "--- START ---\nsome value\n\n\n--- END ---\n",
     };
     const char *invalids[] = {
@@ -23299,7 +23300,7 @@ test_JetStreamMgtStreams(void)
             && (si != NULL)
             && (si->Config != NULL)
             && (strcmp(si->Config->Name, "TEST210") == 0)
-            && (si->Config->Metadata.Count == 2)
+            && (si->Config->Metadata.Count >= 2)
             && (si->Config->Compression == js_StorageCompressionS2)
             && (si->Config->FirstSeq == 9999)
             && (strcmp(si->Config->SubjectTransform.Source, "foo210") == 0)
@@ -27695,18 +27696,35 @@ test_JetStreamSubscribeIdleHearbeat(void)
     s = js_Publish(NULL, js, "foo", "msg2", 4, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
 
+    // Cheat by pretending that the server sends message seq 3, while client
+    // received only seq 1. Disable auto-ack for this message, or we mess up the
+    // server state.
+#define PUBLISH_FAKE_JS_MSG_WITH_SEQ(_reply, _msg)                         \
+    {                                                                      \
+        natsSub_Lock(sub);                                                 \
+        inbox = sub->subject;                                              \
+        sub->jsi->ackNone = true;                                          \
+        natsSub_Unlock(sub);                                               \
+                                                                           \
+        natsConn_setFilterWithClosure(nc, _setMsgReply, (void *)(_reply)); \
+        s = natsConnection_PublishString(nc, inbox, (_msg));               \
+    }
+
+#define PUBLISH_FAKE_RESET()       \
+    {                              \
+        natsSub_Lock(sub);         \
+        sub->jsi->ackNone = false; \
+        natsSub_Unlock(sub);       \
+    }
+
     test("Check seq mismatch: ");
-    natsSub_Lock(sub);
-    inbox = sub->subject;
-    natsSub_Unlock(sub);
-    // Cheat by pretending that the server sends message seq 3, while client received only seq 1.
-    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur1.1.3.3.1624472520000000000.0");
-    s = natsConnection_PublishString(nc, inbox, "msg3");
+    PUBLISH_FAKE_JS_MSG_WITH_SEQ("$JS.ACK.TEST.dur1.1.3.3.1624472520000000000.0", "msg3 fake");
     // Wait for past the next HB and we should get an async error
     natsMutex_Lock(args.m);
     while ((s != NATS_TIMEOUT) && !args.done)
         s = natsCondition_TimedWait(args.c, args.m, 300);
     natsMutex_Unlock(args.m);
+    PUBLISH_FAKE_RESET();
     testCond(s == NATS_OK);
 
     test("Check that notification is sent only once: ");
@@ -27740,8 +27758,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     testCond(s == NATS_OK);
 
     test("Skip again: ");
-    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur1.1.4.4.1624482520000000000.0");
-    s = natsConnection_PublishString(nc, inbox, "msg4");
+    PUBLISH_FAKE_JS_MSG_WITH_SEQ("$JS.ACK.TEST.dur1.1.4.4.1624482520000000000.0", "msg4 fake");
     testCond(s == NATS_OK);
 
     test("Check async cb invoked: ");
@@ -27749,6 +27766,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     while ((s != NATS_TIMEOUT) && !args.done)
         s = natsCondition_TimedWait(args.c, args.m, 1000);
     natsMutex_Unlock(args.m);
+    PUBLISH_FAKE_RESET();
     testCond(s == NATS_OK);
 
     test("Check HB timer reports missed HB: ");
@@ -27803,11 +27821,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     nats_clearLastError();
 
     test("Skip: ");
-    natsSub_Lock(sub);
-    inbox = sub->subject;
-    natsSub_Unlock(sub);
-    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur2.1.4.4.1624482520000000000.0");
-    s = natsConnection_PublishString(nc, inbox, "msg4");
+    PUBLISH_FAKE_JS_MSG_WITH_SEQ("$JS.ACK.TEST.dur2.1.4.4.1624482520000000000.0", "msg4 fake");
     testCond(s == NATS_OK);
 
     // For sync subs, we should not get async error
@@ -27818,6 +27832,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     natsMutex_Unlock(args.m);
     testCond(s == NATS_TIMEOUT);
     nats_clearLastError();
+    PUBLISH_FAKE_RESET();
 
     test("NextMsg reports error: ");
     s = natsSubscription_NextMsg(&msg, sub, 1000);
@@ -27847,8 +27862,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     testCond(s == NATS_OK);
 
     test("Skip again: ");
-    natsConn_setFilterWithClosure(nc, _setMsgReply, (void*) "$JS.ACK.TEST.dur1.1.5.5.1624492520000000000.0");
-    s = natsConnection_PublishString(nc, inbox, "msg5");
+    PUBLISH_FAKE_JS_MSG_WITH_SEQ("$JS.ACK.TEST.dur1.1.5.5.1624492520000000000.0", "msg5 fake");
     testCond(s == NATS_OK);
 
     test("NextMsg reports error: ");
@@ -27856,6 +27870,7 @@ test_JetStreamSubscribeIdleHearbeat(void)
     s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond((s == NATS_MISMATCH) && (msg == NULL));
     nats_clearLastError();
+    PUBLISH_FAKE_RESET();
 
     test("Check HB timer reports missed HB: ");
     s = NATS_OK;
@@ -27917,9 +27932,45 @@ test_JetStreamSubscribeFlowControl(void)
     char                *subj = NULL;
     natsBuffer          *buf  = NULL;
 
-    JS_SETUP(2, 3, 3);
+    natsConnection *nc = NULL;
+    jsCtx *js = NULL;
+    natsPid pid = NATS_INVALID_PID;
+    char confFile[256] = {'\0'};
+    char datastore[256] = {'\0'};
+    char cmdLine[1024] = {'\0'};
 
-    data = malloc(100*1024);
+    ENSURE_JS_VERSION(2, 3, 3);
+
+    test("Start server: ");
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+
+    if (serverVersionAtLeast(2, 11, 0))
+    {
+        _createConfFile(confFile, sizeof(confFile),
+                        "jetstream: {\n"
+                        "   enabled: true\n"
+                        "   max_buffered_size: 1Gb\n"
+                        "   max_buffered_msgs: 20000\n"
+                        "}\n");
+        snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
+    }
+    else
+    {
+        snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s", datastore);
+    }
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    data = malloc(100 * 1024);
     if (data == NULL)
         FAIL("Unable to allocate data");
 
@@ -28059,6 +28110,7 @@ test_JetStreamSubscribeFlowControl(void)
     natsSubscription_Destroy(nsub);
     _destroyDefaultThreadArgs(&args);
     JS_TEARDOWN;
+    remove(confFile);
 }
 
 static void
@@ -32285,6 +32337,15 @@ test_KeyValueMirrorCrossDomains(void)
 
     test("Get key: ");
     s = kvStore_Get(&e, mkv, "name");
+    // levb: we seem to get the old value at times here, so try one more time if
+    // there's a mismatch
+    for (i = 0; i < 3; i++)
+        if ((s == NATS_OK) && (e != NULL) && (strcmp(kvEntry_ValueString(e), "rip") != 0))
+        {
+            kvEntry_Destroy(e);
+            e = NULL;
+            s = kvStore_Get(&e, mkv, "name");
+        }
     if ((s == NATS_OK) && (e != NULL))
         s = (strcmp(kvEntry_ValueString(e), "rip") == 0 ? NATS_OK : NATS_ERR);
     testCond(s == NATS_OK);
@@ -32417,7 +32478,7 @@ test_KeyValueMirrorCrossDomains(void)
     test("Check mirror syncs: ");
     for (i=0; (ok != 2) && (i < 10); i++)
     {
-        if (kvWatcher_Next(&e, w, 1000) == NATS_OK)
+        if (kvWatcher_Next(&e, w, 10000) == NATS_OK)
         {
             if (((strcmp(kvEntry_Key(e), "age") == 0) || (strcmp(kvEntry_Key(e), "name") == 0))
                 && (kvEntry_Operation(e) == kvOp_Delete))

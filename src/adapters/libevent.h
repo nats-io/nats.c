@@ -158,6 +158,17 @@ natsLibevent_Attach(void **userData, void *loop, natsConnection *nc, natsSock so
     return s;
 }
 
+static void
+_closeCb(evutil_socket_t fd, short event, void *arg)
+{
+    natsSock socket = (natsSock) fd;
+
+    // We have stopped polling for the "READ" event and are now in the
+    // event loop thread and invoke this so that the NATS C client
+    // library can proceed with the close of the socket/connection.
+    natsConnection_ProcessCloseEvent(&socket);
+}
+
 /** \brief Start or stop polling on READ events.
  *
  * This callback is invoked to notify that the event library should start
@@ -175,7 +186,16 @@ natsLibevent_Read(void *userData, bool add)
     if (add)
         res = event_add(nle->read, NULL);
     else
+    {
+        int socket = event_get_fd(nle->read);
         res = event_del_noblock(nle->read);
+        if (res == 0)
+        {
+            // This will schedule a one-time event that guarantees that the
+            // callback `_closeCb` will be invoked from the event loop thread.
+            res = event_base_once(nle->loop, socket, EV_TIMEOUT, _closeCb, (void*) nle, NULL);
+        }
+    }
 
     return (res == 0 ? NATS_OK : NATS_ERR);
 }

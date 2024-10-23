@@ -160,7 +160,7 @@ struct threadArg
 
     int              attached;
     int              detached;
-    bool             evStop;
+
     bool             doRead;
     bool             doWrite;
 
@@ -20230,6 +20230,11 @@ _evLoopRead(void *userData, bool add)
 
     natsMutex_Lock(arg->m);
     arg->doRead = add;
+    if (!add)
+    {
+        arg->closed = true;
+        arg->sock = NATS_SOCK_INVALID;
+    }
     natsCondition_Broadcast(arg->c);
     natsMutex_Unlock(arg->m);
 
@@ -20266,30 +20271,48 @@ static void
 _eventLoop(void *closure)
 {
     struct threadArg *arg = (struct threadArg *) closure;
-    natsSock         sock = NATS_SOCK_INVALID;
     natsConnection   *nc  = NULL;
     bool             read = false;
     bool             write= false;
     bool             stop = false;
+    bool             close= false;
+    natsSockCtx      ctx;
+
+    natsSock_Init(&ctx);
 
     while (!stop)
     {
-        nats_Sleep(100);
         natsMutex_Lock(arg->m);
-        while (!arg->evStop && ((sock = arg->sock) == NATS_SOCK_INVALID))
+        while (!arg->done && !arg->closed && (arg->sock == NATS_SOCK_INVALID))
             natsCondition_Wait(arg->c, arg->m);
-        stop = arg->evStop;
+        stop = arg->done;
         nc = arg->nc;
         read = arg->doRead;
         write = arg->doWrite;
+        close = arg->closed;
+        arg->closed = false;
+        if ((ctx.fd == NATS_SOCK_INVALID) && (arg->sock != NATS_SOCK_INVALID))
+            ctx.fd = arg->sock;
         natsMutex_Unlock(arg->m);
 
         if (!stop)
         {
             if (read)
-                natsConnection_ProcessReadEvent(nc);
+            {
+                natsStatus  s;
+
+                natsSock_InitDeadline(&ctx, 50);
+                s = natsSock_WaitReady(WAIT_FOR_READ, &ctx);
+                if (s == NATS_OK)
+                    natsConnection_ProcessReadEvent(nc);
+            }
             if (write)
                 natsConnection_ProcessWriteEvent(nc);
+            if (close)
+            {
+                natsConnection_ProcessCloseEvent(&ctx.fd);
+                close = false;
+            }
         }
     }
 }
@@ -20355,6 +20378,7 @@ void test_EventLoop(void)
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.reconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    arg.reconnected = false;
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
@@ -20366,6 +20390,29 @@ void test_EventLoop(void)
     s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond(s == NATS_OK);
     natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Explicit reconnect: ");
+    s = natsConnection_Reconnect(nc);
+    testCond(s == NATS_OK);
+
+    test("Wait for reconnect: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    arg.reconnected = false;
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Publish: ");
+    s = natsConnection_PublishString(nc, "foo", "bar");
+    testCond(s == NATS_OK);
+
+    test("Check msg received: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
 
     test("Close and wait for close cb: ");
     natsConnection_Close(nc);
@@ -20373,7 +20420,7 @@ void test_EventLoop(void)
     testCond(s == NATS_OK);
 
     natsMutex_Lock(arg.m);
-    arg.evStop = true;
+    arg.done = true;
     natsCondition_Broadcast(arg.c);
     natsMutex_Unlock(arg.m);
 
@@ -20382,7 +20429,7 @@ void test_EventLoop(void)
 
     test("Check ev loop: ");
     natsMutex_Lock(arg.m);
-    if (arg.attached != 2 || !arg.detached)
+    if (arg.attached != 3 || !arg.detached || (arg.sock != NATS_SOCK_INVALID))
         s = NATS_ERR;
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
@@ -20467,7 +20514,7 @@ void test_EventLoopRetryOnFailedConnect(void)
     testCond(s == NATS_OK);
 
     natsMutex_Lock(arg.m);
-    arg.evStop = true;
+    arg.done = true;
     natsCondition_Broadcast(arg.c);
     natsMutex_Unlock(arg.m);
 
@@ -20511,7 +20558,7 @@ void test_EventLoopTLS(void)
     testCond(s == NATS_OK);
 
     test("Start server: ");
-    pid = _startServer("nats://127.0.0.1:4443", "-config tls.conf -DV", true);
+    pid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
     CHECK_SERVER_STARTED(pid);
     testCond(s == NATS_OK);
 
@@ -20544,21 +20591,34 @@ void test_EventLoopTLS(void)
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.reconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    arg.reconnected = false;
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
-    test("Shutdown evLoop: ");
+    test("Explicit reconnect: ");
+    s = natsConnection_Reconnect(nc);
+    testCond(s == NATS_OK);
+
+    test("Wait for reconnect: ");
     natsMutex_Lock(arg.m);
-    arg.evStop = true;
-    natsCondition_Broadcast(arg.c);
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    arg.reconnected = false;
     natsMutex_Unlock(arg.m);
-    natsThread_Join(arg.t);
-    natsThread_Destroy(arg.t);
     testCond(s == NATS_OK);
 
     test("Close and wait for close cb: ");
     natsConnection_Close(nc);
     s = _waitForConnClosed(&arg);
+    testCond(s == NATS_OK);
+
+    test("Shutdown evLoop: ");
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Broadcast(arg.c);
+    natsMutex_Unlock(arg.m);
+    natsThread_Join(arg.t);
+    natsThread_Destroy(arg.t);
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);
@@ -21401,7 +21461,7 @@ void test_SSLServerNameIndication(void)
     arg.control = 3;
 
     s = _startMockupServer(&sock, "localhost", "4222");
-    
+
     // Start the thread that will try to connect to our server...
     IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
 
@@ -21411,7 +21471,7 @@ void test_SSLServerNameIndication(void)
     {
         s = NATS_SYS_ERROR;
     }
-    
+
     testCond((s == NATS_OK) && (ctx.fd > 0));
 
     test("Read ClientHello from client: ");
@@ -34059,7 +34119,7 @@ void test_MicroQueueGroupForEndpoint(void)
 #define _testQueueGroup(_expected, _actual) \
         (_expected) == NULL ? (_actual) == NULL : strcmp((_expected), (_actual)) == 0
 
-        testCond((err == NULL) && 
+        testCond((err == NULL) &&
             (info != NULL) && (info->EndpointsLen == 3) &&
             (stats != NULL) && (stats->EndpointsLen == 3) &&
             (_testQueueGroup(tc.expectedServiceLevel, info->Endpoints[0].QueueGroup)) &&

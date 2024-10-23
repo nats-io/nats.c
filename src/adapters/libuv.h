@@ -181,7 +181,16 @@ uvPollUpdate(natsLibuvEvents *nle, int eventType, bool add)
     if (nle->events)
         res = uv_poll_start(nle->handle, nle->events, natsLibuvPoll);
     else
+    {
         res = uv_poll_stop(nle->handle);
+        if (res == 0)
+        {
+            // We have stopped polling for events for this socket and are in
+            // the event loop thread, so we invoke this so that the NATS C
+            // client library can proceed with closing the socket.
+            natsConnection_ProcessCloseEvent(&(nle->socket));
+        }
+    }
 
     if (res != 0)
         return NATS_ERR;

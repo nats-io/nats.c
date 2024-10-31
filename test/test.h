@@ -33,6 +33,15 @@ static const char *clusterName = "test-cluster";
         return;                    \
     }
 
+#define FAILf(f, ...)              \
+    {                              \
+        printf("@@ ");             \
+        printf((f), __VA_ARGS__);  \
+        printf(" @@\n");           \
+        failed = true;             \
+        return;                    \
+    }
+
 #define CHECK_SERVER_STARTED(p)  \
     if ((p) == NATS_INVALID_PID) \
     FAIL("Unable to start or verify that the server was started!")

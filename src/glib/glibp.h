@@ -117,11 +117,6 @@ typedef struct __natsLib
 
     natsGCList gc;
 
-    // For micro services code
-    natsMutex *service_callback_mu;
-    // uses `microService*` as the key and the value.
-    natsHash *all_services_to_callback;
-
 } natsLib;
 
 natsLib *nats_lib(void);

@@ -119,8 +119,6 @@ _freeLib(void)
     nats_freeDispatcherPool(&gLib.replyDispatchers);
 
     natsNUID_free();
-    natsMutex_Destroy(gLib.service_callback_mu);
-    natsHash_Destroy(gLib.all_services_to_callback);
 
     natsCondition_Destroy(gLib.cond);
 
@@ -291,11 +289,6 @@ nats_openLib(natsClientConfig *config)
         s = nats_initDispatcherPool(&(gLib.replyDispatchers), config->ReplyThreadPoolMax);
 
     if (s == NATS_OK)
-        s = natsMutex_Create(&gLib.service_callback_mu);
-    if (s == NATS_OK)
-        s = natsHash_Create(&gLib.all_services_to_callback, 8);
-
-    if (s == NATS_OK)
         gLib.initialized = true;
 
     // In case of success or error, broadcast so that lib's threads
@@ -441,40 +434,6 @@ void nats_ReleaseThreadMemory(void)
         }
     }
     natsMutex_Unlock(gLib.lock);
-}
-
-natsStatus
-natsLib_startServiceCallbacks(microService *m)
-{
-    natsStatus s;
-
-    natsMutex_Lock(gLib.service_callback_mu);
-    s = natsHash_Set(gLib.all_services_to_callback, (int64_t)m, (void *)m, NULL);
-    natsMutex_Unlock(gLib.service_callback_mu);
-
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
-void natsLib_stopServiceCallbacks(microService *m)
-{
-    if (m == NULL)
-        return;
-
-    natsMutex_Lock(gLib.service_callback_mu);
-    natsHash_Remove(gLib.all_services_to_callback, (int64_t)m);
-    natsMutex_Unlock(gLib.service_callback_mu);
-}
-
-natsMutex *
-natsLib_getServiceCallbackMutex(void)
-{
-    return gLib.service_callback_mu;
-}
-
-natsHash *
-natsLib_getAllServicesToCallback(void)
-{
-    return gLib.all_services_to_callback;
 }
 
 natsClientConfig *nats_testInspectClientConfig(void)

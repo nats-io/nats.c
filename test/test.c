@@ -33584,7 +33584,7 @@ _startManyMicroservices(microService** svcs, int n, natsConnection *nc, microSer
 
 #define _waitForMicroservicesAllDone(_arg)                                              \
     {                                                                                   \
-        nats_Sleep(20);                                                                 \
+        nats_Sleep(50);                                                                 \
         natsMutex_Lock((_arg)->m);                                                      \
         testf("Wait for %d microservices to stop: ", (_arg)->microRunningServiceCount); \
         natsStatus waitStatus = NATS_OK;                                                \
@@ -34533,7 +34533,7 @@ void test_MicroServiceStopsWhenServerStops(void)
 
     _startMicroservice(&m, nc, &cfg, NULL, 0, &arg);
 
-    const int numEndpoints = 4;
+    const int numEndpoints = 50;
     for (int i=0; i < numEndpoints; i++)
     {
         char buf[32];

@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.13)
 project(cnats)
 include(CTest)
 include(FindPackageHandleStandardArgs)
+include(CMakePackageConfigHelpers)
 
 # Uncomment to have the build process verbose
 # set(CMAKE_VERBOSE_MAKEFILE TRUE)
@@ -257,6 +258,11 @@ set(NATS_VERSION_PATCH  0)
 set(NATS_VERSION_SUFFIX "-beta")
 
 set(NATS_VERSION_REQUIRED_NUMBER 0x030900)
+
+write_basic_package_version_file(
+  "${PROJECT_BINARY_DIR}/cnats-config-version.cmake"
+  COMPATIBILITY SameMinorVersion
+  VERSION ${NATS_VERSION_MAJOR}.${NATS_VERSION_MINOR}.${NATS_VERSION_PATCH}${NATS_VERSION_SUFFIX})
 
 if(NATS_UPDATE_VERSION OR NATS_UPDATE_DOC)
 configure_file(

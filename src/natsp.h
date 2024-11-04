@@ -701,6 +701,7 @@ struct __natsConnection
 
     microService        **services;
     int                 numServices;
+    natsMutex           *servicesMu;
 
     natsConnStatus      status;
     bool                initc; // true if the connection is performing the initial connect

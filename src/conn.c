@@ -204,6 +204,7 @@ _freeConn(natsConnection *nc)
     natsStrHash_Destroy(nc->respMap);
     natsCondition_Destroy(nc->reconnectCond);
     natsMutex_Destroy(nc->subsMu);
+    natsMutex_Destroy(nc->servicesMu);
     natsMutex_Destroy(nc->mu);
     NATS_FREE(nc->services);
 
@@ -3240,6 +3241,8 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     if (s == NATS_OK)
         s = natsMutex_Create(&(nc->subsMu));
     if (s == NATS_OK)
+        s = natsMutex_Create(&(nc->servicesMu));
+    if (s == NATS_OK)
         s = _setupServerPool(nc);
     if (s == NATS_OK)
         s = natsHash_Create(&(nc->subs), 8);
@@ -4466,70 +4469,4 @@ natsConn_defaultErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus
         fprintf(stderr, "Error %d - %s on connection [%" PRIu64 "]\n", err, errTxt, cid);
     }
     fflush(stderr);
-}
-
-int natsConn_getServices(microService ***services, natsConnection *nc)
-{
-    int numServices = 0;
-    natsConn_Lock(nc);
-    *services = nc->services;
-    numServices = nc->numServices;
-    natsConn_Unlock(nc);
-    return numServices;
-}
-
-bool natsConn_removeService(natsConnection *nc, microService *service)
-{
-    bool removed = false;
-    if (nc == NULL || service == NULL)
-        return false;
-
-    natsConn_Lock(nc);
-    for (int i = 0; i < nc->numServices; i++)
-    {
-        if (nc->services[i] == service)
-        {
-            for (int j = i; j < nc->numServices - 1; j++)
-            {
-                nc->services[j] = nc->services[j + 1];
-            }
-            nc->numServices--;
-            removed = true;
-            break;
-        }
-    }
-    natsConn_Unlock(nc);
-    return removed;
-}
-
-natsStatus natsConn_addService(natsConnection *nc, microService *service)
-{
-    natsStatus s = NATS_OK;
-    if (nc == NULL || service == NULL)
-        return nats_setDefaultError(NATS_INVALID_ARG);
-
-    natsConn_Lock(nc);
-    if (nc->services == NULL)
-    {
-        nc->services = NATS_CALLOC(1, sizeof(microService *));
-        if (nc->services == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-    }
-    else
-    {
-        microService **tmp = NATS_REALLOC(nc->services, (nc->numServices + 1) * sizeof(microService *));
-        if (tmp == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-        else
-            nc->services = tmp;
-    }
-
-    if (s == NATS_OK)
-    {
-        nc->services[nc->numServices] = service;
-        nc->numServices++;
-    }
-    natsConn_Unlock(nc);
-
-    return s;
 }

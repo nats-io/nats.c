@@ -33561,7 +33561,7 @@ _startMicroservice(microService** new_m, natsConnection *nc, microServiceConfig 
 static void
 _startMicroserviceOK(microService** new_m, natsConnection *nc, microServiceConfig *cfg, microEndpointConfig **eps, int num_eps, struct threadArg *arg)
 {
-    char buf[64];
+    char buf[256];
 
     snprintf(buf, sizeof(buf), "Start microservice %s: ", cfg->Name);
     test(buf);
@@ -33576,6 +33576,15 @@ _startManyMicroservices(microService** svcs, int n, natsConnection *nc, microSer
 
     for (i = 0; i < n; i++)
     {
+        char buf[64];
+        cfg->Version = "1.0.0";
+        cfg->Description = "returns 42";
+
+        if (nats_IsStringEmpty(cfg->Name))
+        {
+            snprintf(buf, sizeof(buf), "CoolService-%d", i);
+            cfg->Name = buf;
+        }
         _startMicroserviceOK(&(svcs[i]), nc, cfg, eps, num_eps, arg);
     }
 
@@ -33584,7 +33593,6 @@ _startManyMicroservices(microService** svcs, int n, natsConnection *nc, microSer
 
 #define _waitForMicroservicesAllDone(_arg)                                              \
     {                                                                                   \
-        nats_Sleep(50);                                                                 \
         natsMutex_Lock((_arg)->m);                                                      \
         testf("Wait for %d microservices to stop: ", (_arg)->microRunningServiceCount); \
         natsStatus waitStatus = NATS_OK;                                                \
@@ -34098,13 +34106,11 @@ void test_MicroBasics(void)
         &ep2_cfg,
     };
     microServiceConfig cfg = {
-        .Version = "1.0.0",
-        .Name = "CoolService",
-        .Description = "returns 42",
         .Metadata = (natsMetadata){
             .List = (const char *[]){"skey1", "svalue1", "skey2", "svalue2"},
             .Count = 2,
         },
+        .Name = "ManyServicesSameName",
         .Endpoint = NULL,
         .State = NULL,
     };
@@ -34162,7 +34168,7 @@ void test_MicroBasics(void)
         test(buf);
         err = microService_GetInfo(&info, svcs[i]);
         testCond((err == NULL) &&
-                 (strcmp(info->Name, "CoolService") == 0) &&
+                 (strcmp(info->Name, "ManyServicesSameName") == 0) &&
                  (strlen(info->Id) > 0) &&
                  (strcmp(info->Description, "returns 42") == 0) &&
                  (strcmp(info->Version, "1.0.0") == 0) &&
@@ -34173,7 +34179,7 @@ void test_MicroBasics(void)
     // Make sure we can request valid info with $SRV.INFO request.
     test("Create INFO inbox: ");
     testCond(NATS_OK == natsInbox_Create(&inbox));
-    micro_new_control_subject(&subject, MICRO_INFO_VERB, "CoolService", NULL);
+    micro_new_control_subject(&subject, MICRO_INFO_VERB, "ManyServicesSameName", NULL);
     test("Subscribe to INFO inbox: ");
     testCond(NATS_OK == natsConnection_SubscribeSync(&sub, nc, inbox));
     test("Publish INFO request: ");
@@ -34199,7 +34205,7 @@ void test_MicroBasics(void)
         snprintf(buf, sizeof(buf), "Validate INFO response strings#%d: ", i);
         test(buf);
         testCond(
-            (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) && (strcmp(str, "CoolService") == 0)
+            (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) && (strcmp(str, "ManyServicesSameName") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(js, "description", &str)) && (strcmp(str, "returns 42") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(js, "version", &str)) && (strcmp(str, "1.0.0") == 0)
             && (NATS_OK == nats_JSONGetStrPtr(js, "id", &str)) && (strlen(str) > 0)
@@ -34251,7 +34257,7 @@ void test_MicroBasics(void)
     // Make sure we can request SRV.PING.
     test("Create PING inbox: ");
     testCond(NATS_OK == natsInbox_Create(&inbox));
-    micro_new_control_subject(&subject, MICRO_PING_VERB, "CoolService", NULL);
+    micro_new_control_subject(&subject, MICRO_PING_VERB, "ManyServicesSameName", NULL);
     test("Subscribe to PING inbox: ");
     testCond(NATS_OK == natsConnection_SubscribeSync(&sub, nc, inbox));
     test("Publish PING request: ");
@@ -34273,7 +34279,7 @@ void test_MicroBasics(void)
         js = NULL;
         testCond((NATS_OK == nats_JSONParse(&js, reply->data, reply->dataLen)) &&
                  (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) &&
-                 (strcmp(str, "CoolService") == 0));
+                 (strcmp(str, "ManyServicesSameName") == 0));
         nats_JSONDestroy(js);
         natsMsg_Destroy(reply);
     }
@@ -34284,7 +34290,7 @@ void test_MicroBasics(void)
     // Get and validate $SRV.STATS from all service instances.
     test("Create STATS inbox: ");
     testCond(NATS_OK == natsInbox_Create(&inbox));
-    micro_new_control_subject(&subject, MICRO_STATS_VERB, "CoolService", NULL);
+    micro_new_control_subject(&subject, MICRO_STATS_VERB, "ManyServicesSameName", NULL);
     test("Subscribe to STATS inbox: ");
     testCond(NATS_OK == natsConnection_SubscribeSync(&sub, nc, inbox));
     test("Publish STATS request: ");
@@ -34368,9 +34374,6 @@ void test_MicroStartStop(void)
         .Handler = _microHandleRequest42,
     };
     microServiceConfig cfg = {
-        .Version = "1.0.0",
-        .Name = "CoolService",
-        .Description = "returns 42",
         .Endpoint = &ep_cfg,
     };
     natsMsg *reply = NULL;

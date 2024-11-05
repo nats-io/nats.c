@@ -307,8 +307,6 @@ _detach_service_from_connection(natsConnection *nc, microService *m)
         break;
     }
     natsMutex_Unlock(nc->servicesMu);
-
-    return;
 }
 
 static microError *

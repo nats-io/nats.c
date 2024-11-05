@@ -395,7 +395,7 @@ natsSub_create(natsSubscription **newSub, natsConnection *nc, const char *subj,
     {
         _retain(sub);
         if (!useAsyncThread)
-        {            
+        {
             sub->dispatcher = &sub->ownDispatcher;
             _release(sub);
         }

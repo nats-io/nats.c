@@ -67,7 +67,7 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
     if (err != NULL)
     {
         microError_Ignore(microService_Destroy(m));
-        return microError_Wrapf(err, "failed to add microservice %s", cfg->Name);
+        return microError_Wrapf(err, "failed to add microservice '%s'", cfg->Name);
     }
 
     *new_m = m;
@@ -107,9 +107,9 @@ _new_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, microEndpo
     if (cfg == NULL)
         return microError_Wrapf(micro_ErrorInvalidArg, "NULL endpoint config");
     if (!micro_is_valid_name(cfg->Name))
-        return microError_Wrapf(micro_ErrorInvalidArg, "invalid endpoint name %s", cfg->Name);
+        return microError_Wrapf(micro_ErrorInvalidArg, "invalid endpoint name '%s'", cfg->Name);
     if (cfg->Handler == NULL)
-        return microError_Wrapf(micro_ErrorInvalidArg, "NULL endpoint request handler for %s", cfg->Name);
+        return microError_Wrapf(micro_ErrorInvalidArg, "NULL endpoint request handler for '%s'", cfg->Name);
 
     ep = NATS_CALLOC(1, sizeof(microEndpoint));
     if (ep == NULL)
@@ -146,16 +146,16 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, micro
 
     char *fullSubject = NULL;
     if (err = _subjectWithGroupPrefix(&fullSubject, g, nats_IsStringEmpty(cfg->Subject) ? cfg->Name : cfg->Subject), err != NULL)
-        return microError_Wrapf(err, "failed to create full subject for endpoint %s", cfg->Name);
+        return microError_Wrapf(err, "failed to create full subject for endpoint '%s'", cfg->Name);
     if (!micro_is_valid_subject(fullSubject))
     {
         NATS_FREE(fullSubject);
-        return microError_Wrapf(micro_ErrorInvalidArg, "invalid subject %s for endpoint %s", fullSubject, cfg->Name);
+        return microError_Wrapf(micro_ErrorInvalidArg, "invalid subject '%s' for endpoint '%s'", fullSubject, cfg->Name);
     }
 
     _lock_service(m);
     if (m->stopped)
-        err = micro_Errorf("can't add an endpoint %s to service %s: the service is stopped", cfg->Name, m->cfg->Name);
+        err = micro_Errorf("can't add an endpoint '%s' to service '%s': the service is stopped", cfg->Name, m->cfg->Name);
 
     // See if there is already an endpoint with the same subject. ep->subject is
     // immutable after the EP's creation so we don't need to lock it.
@@ -167,9 +167,9 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, micro
             // it as long as we can re-use the existing subscription, which at
             // the moment means we can't change the queue group settings.
             if (cfg->NoQueueGroup != ep->config->NoQueueGroup)
-                err = micro_Errorf("can't change the queue group settings for endpoint %s", cfg->Name);
+                err = micro_Errorf("can't change the queue group settings for endpoint '%s'", cfg->Name);
             else if (!nats_StringEquals(cfg->QueueGroup, ep->config->QueueGroup))
-                err = micro_Errorf("can't change the queue group for endpoint %s", cfg->Name);
+                err = micro_Errorf("can't change the queue group for endpoint '%s'", cfg->Name);
             if (err == NULL)
             {
                 NATS_FREE(fullSubject);
@@ -219,7 +219,7 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, micro
 
     _unlock_service(m);
     if (err != NULL)
-        return microError_Wrapf(err, "can't add an endpoint %s to service %s", cfg->Name, m->cfg->Name);
+        return microError_Wrapf(err, "can't add an endpoint '%s' to service '%s'", cfg->Name, m->cfg->Name);
 
     if (new_ep != NULL)
         *new_ep = ep;
@@ -253,7 +253,7 @@ _attach_service_to_connection(natsConnection *nc, microService *service)
     if (natsConn_isClosed(nc) || natsConn_isDraining(nc))
     {
         natsConn_Unlock(nc);
-        return micro_Errorf("can't add service %s to a closed or draining connection", service->cfg->Name);
+        return micro_Errorf("can't add service '%s' to a closed or draining connection", service->cfg->Name);
     }
 
     // Wrap the connection callbacks before we subscribe to anything.
@@ -628,7 +628,7 @@ _on_service_error(microService *m, const char *subject, natsStatus s)
     if (found == NULL)
         return false;
     
-    err = microError_Wrapf(micro_ErrorFromStatus(s), "NATS error on endpoint %s", subject);
+    err = microError_Wrapf(micro_ErrorFromStatus(s), "NATS error on endpoint '%s'", subject);
     micro_update_last_error(found, err);
     microError_Destroy(err);
 

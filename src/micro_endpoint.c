@@ -279,7 +279,7 @@ micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
     microEndpointConfig *new_cfg = NULL;
 
     if (out == NULL)
-        return microError_Wrapf(err, "failed to clone endpoint config: %s", cfg->Name);
+        return microError_Wrapf(err, "failed to clone endpoint config: '%s'", cfg->Name);
 
     if (cfg == NULL)
     {
@@ -302,7 +302,7 @@ micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
     if (err != NULL)
     {
         micro_free_cloned_endpoint_config(new_cfg);
-        return microError_Wrapf(err, "failed to clone endpoint config: %s", cfg->Name);
+        return microError_Wrapf(err, "failed to clone endpoint config: '%s'", cfg->Name);
         return err;
     }
 

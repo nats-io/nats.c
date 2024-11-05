@@ -53,7 +53,7 @@ struct micro_endpoint_s
 
     // A copy of the config provided to add_endpoint.
     microEndpointConfig *config;
-    
+
     // Retained/released by the service that owns the endpoint to avoid race
     // conditions.
     microService *m;

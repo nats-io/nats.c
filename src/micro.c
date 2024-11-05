@@ -301,7 +301,7 @@ _detach_service_from_connection(natsConnection *nc, microService *m)
     {
         if (nc->services[i] != m)
             continue;
-        
+
         nc->services[i] = nc->services[nc->numServices - 1];
         nc->numServices--;
         break;
@@ -372,7 +372,7 @@ _detach_endpoint_from_service(microService *m, microEndpoint *toRemove)
        ;
     if (ep == NULL)
         return;
-    
+
     m->numEndpoints--;
     if (prev_ep == NULL)
         m->first_ep = ep->next;
@@ -627,14 +627,14 @@ _on_service_error(microService *m, const char *subject, natsStatus s)
 
     if (found == NULL)
         return false;
-    
+
     err = microError_Wrapf(micro_ErrorFromStatus(s), "NATS error on endpoint '%s'", subject);
     micro_update_last_error(found, err);
     microError_Destroy(err);
 
     if (m->cfg->ErrHandler != NULL)
         (*m->cfg->ErrHandler)(m, found, s);
-    
+
     micro_release_endpoint(found);
     return true;
 }

@@ -4194,6 +4194,20 @@ natsConnection_Reconnect(natsConnection *nc);
 NATS_EXTERN void
 natsConnection_ProcessReadEvent(natsConnection *nc);
 
+/** \brief Process a socket close event when using external event loop.
+ *
+ * When using an external event loop, and the library wants to close
+ * the connection, the event loop adapter will ensure that the event
+ * loop library stops polling, and then will invoke this function
+ * so that the socket can be safely closed.
+ *
+ * @param socket the pointer to the #natsSock object.
+ *
+ * \warning This API is reserved for external event loop adapters.
+ */
+NATS_EXTERN void
+natsConnection_ProcessCloseEvent(natsSock *socket);
+
 /** \brief Process a write event when using external event loop.
  *
  * When using an external event loop, and the callback indicating that

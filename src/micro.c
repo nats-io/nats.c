@@ -302,8 +302,7 @@ _detach_service_from_connection(natsConnection *nc, microService *m)
         if (nc->services[i] != m)
             continue;
         
-        for (int j = i; j < nc->numServices - 1; j++)
-            nc->services[j] = nc->services[j + 1];
+        nc->services[i] = nc->services[nc->numServices - 1];
         nc->numServices--;
         break;
     }

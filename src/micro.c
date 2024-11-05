@@ -276,15 +276,16 @@ _attach_service_to_connection(natsConnection *nc, microService *service)
             else
                 nc->services = tmp;
         }
+
+        if (s == NATS_OK)
+        {
+            service->refs++; // no lock needed, called from the constructor
+            nc->services[nc->numServices] = service;
+            nc->numServices++;
+        }
+        natsMutex_Unlock(nc->servicesMu);
     }
 
-    if (s == NATS_OK)
-    {
-        service->refs++; // no lock needed, called from the constructor
-        nc->services[nc->numServices] = service;
-        nc->numServices++;
-    }
-    natsMutex_Unlock(nc->servicesMu);
     natsConn_Unlock(nc);
 
     return micro_ErrorFromStatus(s);

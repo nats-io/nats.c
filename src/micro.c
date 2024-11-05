@@ -184,15 +184,15 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, micro
     {
         if (update)
         {
-                // If the endpoint already exists, update its config and stats.
-                // This will make it use the new handler for subsequent
-                // requests.
-                micro_lock_endpoint(ep);
-                micro_free_cloned_endpoint_config(ep->config);
-                err = micro_clone_endpoint_config(&ep->config, cfg);
-                if (err == NULL)
-                    memset(&ep->stats, 0, sizeof(ep->stats));
-                micro_unlock_endpoint(ep);
+            // If the endpoint already exists, update its config and stats.
+            // This will make it use the new handler for subsequent
+            // requests.
+            micro_lock_endpoint(ep);
+            micro_free_cloned_endpoint_config(ep->config);
+            err = micro_clone_endpoint_config(&ep->config, cfg);
+            if (err == NULL)
+                memset(&ep->stats, 0, sizeof(ep->stats));
+            micro_unlock_endpoint(ep);
         }
         else
         {

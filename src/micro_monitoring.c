@@ -161,7 +161,7 @@ micro_new_control_subject(char **newSubject, const char *verb, const char *name,
 {
     if (nats_IsStringEmpty(name) && !nats_IsStringEmpty(id))
     {
-        return micro_Errorf("service name is required when id is provided: %s", id);
+        return micro_Errorf("service name is required when id is provided: '%s'", id);
     }
 
     else if (nats_IsStringEmpty(name) && nats_IsStringEmpty(id))

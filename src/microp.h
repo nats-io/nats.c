@@ -49,12 +49,11 @@ struct micro_endpoint_s
 {
     // The name and subject that the endpoint is listening on (may be different
     // from one specified in config).
-    char *name;
     char *subject;
 
     // A copy of the config provided to add_endpoint.
     microEndpointConfig *config;
-    
+
     // Retained/released by the service that owns the endpoint to avoid race
     // conditions.
     microService *m;
@@ -75,7 +74,6 @@ struct micro_endpoint_s
     // Mutex for starting/stopping the endpoint, and for updating the stats.
     natsMutex *endpoint_mu;
     int refs;
-    bool is_draining;
 
     // The subscription for the endpoint. If NULL, the endpoint is stopped.
     natsSubscription *sub;
@@ -110,7 +108,9 @@ struct micro_service_s
     natsMutex *service_mu;
     int refs;
 
+    // a linked list of endpoints.
     struct micro_endpoint_s *first_ep;
+    int numEndpoints;
 
     int64_t started; // UTC time expressed as number of nanoseconds since epoch.
     bool stopped;
@@ -153,7 +153,7 @@ void micro_free_cloned_endpoint_config(microEndpointConfig *cfg);
 void micro_free_endpoint(microEndpoint *ep);
 void micro_free_request(microRequest *req);
 void micro_release_endpoint(microEndpoint *ep);
-void micro_release_on_endpoint_complete(void *closure);
+void micro_release_endpoint_when_unsubscribed(void *closure);
 void micro_retain_endpoint(microEndpoint *ep);
 void micro_update_last_error(microEndpoint *ep, microError *err);
 const char *micro_queue_group_for_endpoint(microEndpoint *ep);

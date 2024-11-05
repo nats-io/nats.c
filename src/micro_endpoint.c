@@ -16,52 +16,10 @@
 #include "microp.h"
 #include "util.h"
 
-static microError *_subjectWithGroupPrefix(char **dst, microGroup *g, const char *src);
-
 static void _handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 
 static void _retain_endpoint(microEndpoint *ep, bool lock);
 static void _release_endpoint(microEndpoint *ep);
-
-microError *
-micro_new_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, microEndpointConfig *cfg, bool is_internal)
-{
-    microError *err = NULL;
-    microEndpoint *ep = NULL;
-    const char *subj;
-
-    if (cfg == NULL)
-        return microError_Wrapf(micro_ErrorInvalidArg, "NULL endpoint config");
-    if (!micro_is_valid_name(cfg->Name))
-        return microError_Wrapf(micro_ErrorInvalidArg, "invalid endpoint name %s", cfg->Name);
-    if (cfg->Handler == NULL)
-        return microError_Wrapf(micro_ErrorInvalidArg, "NULL endpoint request handler for %s", cfg->Name);
-
-    if ((cfg->Subject != NULL) && !micro_is_valid_subject(cfg->Subject))
-        return micro_ErrorInvalidArg;
-
-    subj = nats_IsStringEmpty(cfg->Subject) ? cfg->Name : cfg->Subject;
-
-    ep = NATS_CALLOC(1, sizeof(microEndpoint));
-    if (ep == NULL)
-        return micro_ErrorOutOfMemory;
-    ep->is_monitoring_endpoint = is_internal;
-    ep->m = m;
-
-    MICRO_CALL(err, micro_ErrorFromStatus(natsMutex_Create(&ep->endpoint_mu)));
-    MICRO_CALL(err, micro_clone_endpoint_config(&ep->config, cfg));
-    MICRO_CALL(err, micro_strdup(&ep->name, cfg->Name));
-    MICRO_CALL(err, _subjectWithGroupPrefix(&ep->subject, g, subj));
-    if (err != NULL)
-    {
-        micro_free_endpoint(ep);
-        return err;
-    }
-
-    ep->group = g;
-    *new_ep = ep;
-    return NULL;
-}
 
 const char *
 micro_queue_group_for_endpoint(microEndpoint *ep)
@@ -113,10 +71,9 @@ micro_start_endpoint(microEndpoint *ep)
         micro_lock_endpoint(ep);
         ep->refs++;
         ep->sub = sub;
-        ep->is_draining = false;
         micro_unlock_endpoint(ep);
 
-        natsSubscription_SetOnCompleteCB(sub, micro_release_on_endpoint_complete, ep);
+        natsSubscription_SetOnCompleteCB(sub, micro_release_endpoint_when_unsubscribed, ep);
     }
     else
     {
@@ -132,31 +89,20 @@ micro_stop_endpoint(microEndpoint *ep)
     natsStatus s = NATS_OK;
     natsSubscription *sub = NULL;
 
-    if ((ep == NULL) || (ep->m == NULL))
+    if (ep == NULL)
         return NULL;
 
     micro_lock_endpoint(ep);
     sub = ep->sub;
-
-    if (ep->is_draining || natsConnection_IsClosed(ep->m->nc) || !natsSubscription_IsValid(sub))
-    {
-        // If stopping, _release_on_endpoint_complete will take care of
-        // finalizing, nothing else to do. In other cases
-        // _release_on_endpoint_complete has already been called.
-        micro_unlock_endpoint(ep);
-        return NULL;
-    }
-
-    ep->is_draining = true;
     micro_unlock_endpoint(ep);
+    if (sub == NULL)
+        return NULL;
 
-    // When the drain is complete, will release the final ref on ep.
+    // When the drain is complete, the callback will free ep. We may get an
+    // NATS_INVALID_SUBSCRIPTION if the subscription is already closed.
     s = natsSubscription_Drain(sub);
-    if (s != NATS_OK)
-    {
-        return microError_Wrapf(micro_ErrorFromStatus(s),
-                                "failed to stop endpoint %s: failed to drain subscription", ep->name);
-    }
+    if ((s != NATS_OK) && (s != NATS_INVALID_SUBSCRIPTION))
+        return microError_Wrapf(micro_ErrorFromStatus(s), "failed to drain subscription");
 
     return NULL;
 }
@@ -195,7 +141,6 @@ void micro_free_endpoint(microEndpoint *ep)
     if (ep == NULL)
         return;
 
-    NATS_FREE(ep->name);
     NATS_FREE(ep->subject);
     natsSubscription_Destroy(ep->sub);
     natsMutex_Destroy(ep->endpoint_mu);
@@ -334,7 +279,7 @@ micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
     microEndpointConfig *new_cfg = NULL;
 
     if (out == NULL)
-        return micro_ErrorInvalidArg;
+        return microError_Wrapf(micro_ErrorInvalidArg, "failed to clone endpoint config: '%s'", cfg->Name);
 
     if (cfg == NULL)
     {
@@ -357,7 +302,7 @@ micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
     if (err != NULL)
     {
         micro_free_cloned_endpoint_config(new_cfg);
-        return err;
+        return microError_Wrapf(err, "failed to clone endpoint config: '%s'", cfg->Name);
     }
 
     *out = new_cfg;
@@ -434,26 +379,3 @@ bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_sub
     }
 }
 
-static microError *_subjectWithGroupPrefix(char **dst, microGroup *g, const char *src)
-{
-    size_t len = strlen(src) + 1;
-    char *p;
-
-    if (g != NULL)
-        len += strlen(g->config->Prefix) + 1;
-
-    *dst = NATS_CALLOC(1, len);
-    if (*dst == NULL)
-        return micro_ErrorOutOfMemory;
-
-    p = *dst;
-    if (g != NULL)
-    {
-        len = strlen(g->config->Prefix);
-        memcpy(p, g->config->Prefix, len);
-        p[len] = '.';
-        p += len + 1;
-    }
-    memcpy(p, src, strlen(src) + 1);
-    return NULL;
-}

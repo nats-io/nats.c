@@ -699,6 +699,10 @@ struct __natsConnection
     natsHash            *subs;
     natsMutex           *subsMu;
 
+    microService        **services;
+    int                 numServices;
+    natsMutex           *servicesMu;
+
     natsConnStatus      status;
     bool                initc; // true if the connection is performing the initial connect
     bool                ar;    // abort reconnect attempts
@@ -777,18 +781,6 @@ nats_sslRegisterThreadForCleanup(void);
 
 void
 nats_setNATSThreadKey(void);
-
-natsStatus
-natsLib_startServiceCallbacks(microService *m);
-
-void
-natsLib_stopServiceCallbacks(microService *m);
-
-natsMutex*
-natsLib_getServiceCallbackMutex(void);
-
-natsHash*
-natsLib_getAllServicesToCallback(void);
 
 //
 // Threads

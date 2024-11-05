@@ -24,7 +24,7 @@ static inline void _unlock_service(microService *m) { natsMutex_Unlock(m->servic
 static microError *_clone_service_config(microServiceConfig **out, microServiceConfig *cfg);
 static microError *_new_service(microService **ptr, natsConnection *nc);
 static void _on_connection_closed(natsConnection *nc, void *ignored);
-static void _on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *not_used);
+static void _on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *ignored);
 
 static void _free_cloned_service_config(microServiceConfig *cfg);
 static void _free_service(microService *m);
@@ -632,7 +632,7 @@ _on_service_error(microService *m, const char *subject, natsStatus s)
 }
 
 static void
-_on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *not_used)
+_on_error(natsConnection *nc, natsSubscription *sub, natsStatus s, void *ignored)
 {
     const char *subject = NULL;
 

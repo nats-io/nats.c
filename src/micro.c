@@ -57,11 +57,6 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
 
     // Add the service to the connection.
     MICRO_CALL(err, _attach_service_to_connection(m->nc, m));
-    MICRO_CALL(err, (m->refs++, NULL));
-
-    // Wrap the connection callbacks before we subscribe to anything.
-    MICRO_CALL(err, micro_ErrorFromStatus(
-                        natsOptions_setMicroCallbacks(m->nc->opts, _on_connection_closed, _on_error)));
 
     // Initialize the monitoring endpoints.
     MICRO_CALL(err, micro_init_monitoring(m));
@@ -253,28 +248,44 @@ _attach_service_to_connection(natsConnection *nc, microService *service)
     if (nc == NULL || service == NULL)
         return micro_ErrorInvalidArg;
 
-    natsMutex_Lock(nc->servicesMu);
-    if (nc->services == NULL)
+    natsConn_Lock(nc);
+
+    if (natsConn_isClosed(nc) || natsConn_isDraining(nc))
     {
-        nc->services = NATS_CALLOC(1, sizeof(microService *));
-        if (nc->services == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
+        natsConn_Unlock(nc);
+        return micro_Errorf("can't add service %s to a closed or draining connection", service->cfg->Name);
     }
-    else
+
+    // Wrap the connection callbacks before we subscribe to anything.
+    s = natsOptions_setMicroCallbacks(nc->opts, _on_connection_closed, _on_error);
+
+    if (s == NATS_OK)
     {
-        microService **tmp = NATS_REALLOC(nc->services, (nc->numServices + 1) * sizeof(microService *));
-        if (tmp == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
+        natsMutex_Lock(nc->servicesMu);
+        if (nc->services == NULL)
+        {
+            nc->services = NATS_CALLOC(1, sizeof(microService *));
+            if (nc->services == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+        }
         else
-            nc->services = tmp;
+        {
+            microService **tmp = NATS_REALLOC(nc->services, (nc->numServices + 1) * sizeof(microService *));
+            if (tmp == NULL)
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+            else
+                nc->services = tmp;
+        }
     }
 
     if (s == NATS_OK)
     {
+        service->refs++; // no lock needed, called from the constructor
         nc->services[nc->numServices] = service;
         nc->numServices++;
     }
     natsMutex_Unlock(nc->servicesMu);
+    natsConn_Unlock(nc);
 
     return micro_ErrorFromStatus(s);
 }

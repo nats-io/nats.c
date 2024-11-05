@@ -2609,7 +2609,7 @@ natsStatus nats_formatStringArray(char **out, const char **strings, int count)
 
     IFOK(s, natsBuf_AppendByte(&buf, ']'));
     IFOK(s, natsBuf_AppendByte(&buf, '\0'));
-    
+
     if (s != NATS_OK)
     {
         natsBuf_Cleanup(&buf);

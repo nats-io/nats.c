@@ -3018,7 +3018,7 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
         if (jsOpts->PullSubscribeAsync.NoWait)
             return nats_setError(NATS_INVALID_ARG, "%s", "Can not use NoWait with KeepAhead together");
     }
-    
+
     if (errCode != NULL)
         *errCode = 0;
 

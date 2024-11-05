@@ -95,7 +95,7 @@ natsStatus
 nats_Open(int64_t lockSpinCount)
 {
     bool defaultToSharedDispatchers = (getenv("NATS_DEFAULT_TO_LIB_MSG_DELIVERY") != NULL ? true : false);
-    
+
     natsClientConfig config = {
         .LockSpinCount = lockSpinCount,
         .DefaultToThreadPool = defaultToSharedDispatchers,

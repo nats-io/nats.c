@@ -477,7 +477,7 @@ nats_dispatchThreadOwn(void *arg)
         completeCBClosure = sub->onCompleteCBClosure;
         jsSub *jsi = sub->jsi;
         connClosed = sub->connClosed;
-        
+
         fetch = (jsi != NULL) ? jsi->fetch : NULL;
         if (sub->closed)
         {
@@ -560,7 +560,7 @@ nats_dispatchThreadOwn(void *arg)
             unsub = true;
             break;
         }
-        if (lastMessageInSub) 
+        if (lastMessageInSub)
         {
             // If we have hit the max for delivered msgs, just remove sub.
             rmSub = true;

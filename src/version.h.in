@@ -26,11 +26,11 @@ extern "C" {
 #define NATS_VERSION_PATCH  @NATS_VERSION_PATCH@
 
 #define NATS_VERSION_STRING "@NATS_VERSION_MAJOR@.@NATS_VERSION_MINOR@.@NATS_VERSION_PATCH@@NATS_VERSION_SUFFIX@"
-			 				  
+
 #define NATS_VERSION_NUMBER ((NATS_VERSION_MAJOR << 16) | \
                              (NATS_VERSION_MINOR <<  8) | \
                              NATS_VERSION_PATCH)
-                             
+
 #define NATS_VERSION_REQUIRED_NUMBER @NATS_VERSION_REQUIRED_NUMBER@
 
 #ifdef __cplusplus

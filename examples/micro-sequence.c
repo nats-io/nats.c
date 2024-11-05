@@ -139,7 +139,7 @@ static microError *handle_sequence(microRequest *req)
         result_len = snprintf(result, sizeof(result), "%Lf", value);
     if (err == NULL)
         err = microRequest_Respond(req, result, result_len);
-    
+
     microArgs_Destroy(args);
     return err;
 }

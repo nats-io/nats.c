@@ -204,7 +204,9 @@ _freeConn(natsConnection *nc)
     natsStrHash_Destroy(nc->respMap);
     natsCondition_Destroy(nc->reconnectCond);
     natsMutex_Destroy(nc->subsMu);
+    natsMutex_Destroy(nc->servicesMu);
     natsMutex_Destroy(nc->mu);
+    NATS_FREE(nc->services);
 
     NATS_FREE(nc);
 
@@ -3256,6 +3258,8 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     s = natsMutex_Create(&(nc->mu));
     if (s == NATS_OK)
         s = natsMutex_Create(&(nc->subsMu));
+    if (s == NATS_OK)
+        s = natsMutex_Create(&(nc->servicesMu));
     if (s == NATS_OK)
         s = _setupServerPool(nc);
     if (s == NATS_OK)

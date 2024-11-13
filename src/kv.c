@@ -1135,6 +1135,8 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
         {
             if (opts->MetaOnly)
                 so.Config.HeadersOnly = true;
+            if (opts->UpdatesOnly)
+                so.Config.DeliverPolicy = js_DeliverNew;
             if (opts->IgnoreDeletes)
                 w->ignoreDel = true;
         }
@@ -1148,10 +1150,17 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
             natsSubscription *sub = w->sub;
 
             natsSub_Lock(sub);
-            if ((sub->jsi != NULL) && (sub->jsi->pending == 0))
+            if ((opts == NULL) || !opts->UpdatesOnly)
+            {
+                if ((sub->jsi != NULL) && (sub->jsi->pending == 0))
+                {
+                    w->initDone = true;
+                    w->retMarker = true;
+                }
+            }
+            else
             {
                 w->initDone = true;
-                w->retMarker = true;
             }
             natsSub_Unlock(sub);
         }

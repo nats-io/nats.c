@@ -32121,6 +32121,17 @@ void test_KeyValueWatch(void)
     natsThread_Join(t);
     natsThread_Destroy(t);
     kvWatcher_Destroy(w);
+    w = NULL;
+
+    // Now try with UpdatesOnly and make sure we don't get the initial values.
+    test("Create watcher with UpdatesOnly: ");
+    kvWatchOptions o = {.UpdatesOnly = true};
+    s = kvStore_Watch(&w, kv, "t.*", &o);
+    testCond(s == NATS_OK);
+
+    IFOK(s, kvStore_PutString(NULL, kv, "t.age", "57"));
+    testCond(_expectUpdate(w, "t.age", "57", 11));
+    kvWatcher_Destroy(w);
     kvStore_Destroy(kv);
 
     JS_TEARDOWN;

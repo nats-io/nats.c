@@ -1426,6 +1426,7 @@ typedef struct kvWatchOptions
         bool            IncludeHistory;
         bool            MetaOnly;
         int64_t         Timeout;        ///< How long to wait (in milliseconds) for some operations to complete.
+        bool            UpdatesOnly;    ///< Only receive updates, no initial snapshot.
 
 } kvWatchOptions;
 

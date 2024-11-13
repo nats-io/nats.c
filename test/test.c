@@ -32121,6 +32121,7 @@ void test_KeyValueWatch(void)
     natsThread_Join(t);
     natsThread_Destroy(t);
     kvWatcher_Destroy(w);
+    w = NULL;
 
     // Now try with UpdatesOnly and make sure we don't get the initial values.
     test("Create watcher with UpdatesOnly: ");

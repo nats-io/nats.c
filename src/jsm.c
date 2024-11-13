@@ -691,7 +691,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     jsStreamConfig      *cfg        = NULL;
     nats_JSON           **sources   = NULL;
     int                 sourcesLen  = 0;
-    nats_JSON           *obj        = NULL; 
+    nats_JSON           *obj        = NULL;
     natsStatus          s;
 
     if (fieldName != NULL)

@@ -365,6 +365,24 @@ natsOptions_SetSecure(natsOptions *opts, bool secure)
 }
 
 natsStatus
+natsOptions_SetCertificateValidationCB(natsOptions *opts, CertificateValidationCB certificateValidationCB)
+{
+    natsStatus s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    s = natsOptions_SetSecure(opts, true);
+    if (s == NATS_OK)
+    {
+        opts->sslCtx->certificateValidationCB = certificateValidationCB;
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 natsOptions_TLSHandshakeFirst(natsOptions *opts)
 {
     natsStatus s = NATS_OK;
@@ -704,6 +722,12 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
 
 natsStatus
 natsOptions_SetSecure(natsOptions *opts, bool secure)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
+natsOptions_SetCertificateValidationCB(natsOptions *opts, CertificateValidationCB certificateValidationCB)
 {
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }

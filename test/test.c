@@ -40,6 +40,7 @@
 #include "kv.h"
 #include "microp.h"
 #include "glib/glibp.h"
+#include "cert.h"
 
 #if defined(NATS_HAS_STREAMING)
 
@@ -21079,6 +21080,74 @@ void test_SSLSkipServerVerification(void)
     natsOptions_Destroy(opts);
 
     _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
+static bool
+_certificateValidationCB(int preverify_ok, natsCert *cert, natsCertChain *chain)
+{
+    time_t now;
+    time_t notAfter;
+
+    if (cert == NULL)
+        return preverify_ok == 1;
+    if (chain == NULL)
+        return preverify_ok == 1;
+
+    time(&now);
+    notAfter = mktime(&(cert->tmNotAfter));
+
+    if (notAfter > now)
+    {
+        if (strstr(cert->issuerName, "Synadia"))
+        {
+            return true;
+        }
+        else
+        {
+            return preverify_ok == 1;
+        }
+    }
+    else
+    {
+        return false;
+    }
+}
+
+void test_SSLCertificateValidationCB(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection* nc = NULL;
+    natsOptions* opts = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    args;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if (opts == NULL)
+        FAIL("Unable to create reconnect options!");
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check that connect fails due to server verification: ");
+    s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_SSL_ERROR);
+
+    test("Check that connect succeeds with validation callback: ");
+    s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
+    IFOK(s, natsOptions_SetCertificateValidationCB(opts, _certificateValidationCB));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
 
     _stopServer(serverPid);
 #else

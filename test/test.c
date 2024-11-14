@@ -40,6 +40,7 @@
 #include "kv.h"
 #include "microp.h"
 #include "glib/glibp.h"
+#include "cert.h"
 
 #if defined(NATS_HAS_STREAMING)
 
@@ -21079,6 +21080,130 @@ void test_SSLSkipServerVerification(void)
     natsOptions_Destroy(opts);
 
     _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
+static void
+_logCert(natsCert *cert)
+{
+    char buf[32];
+    char *notBefore;
+    char *notAfter;
+
+    if (cert == NULL)
+        return;
+
+    strftime(buf, sizeof(buf), "%F %T", &cert->tmNotBefore);
+    notBefore = NATS_STRDUP(buf);
+    strftime(buf, sizeof(buf), "%F %T", &cert->tmNotAfter);
+    notAfter = NATS_STRDUP(buf);
+    testf("cert: subject: %s, issuer: %s, notBefore: %s, notAfter: %s\n", cert->subjectName, cert->issuerName, notBefore, notAfter);
+    NATS_FREE(notBefore);
+    NATS_FREE(notAfter);
+}
+
+static void
+_logChain(natsCertChain *chain)
+{
+    natsCertChain   *temp;
+    int             level = 0;
+
+    if (chain == NULL)
+       return;
+
+    while (chain != NULL)
+    {
+        temp = chain;
+        chain = chain->next;
+        testf("chain level: %d\n", ++level);
+        _logCert(temp->cert);
+    }
+}
+
+static bool
+_certificateValidationCB(int preverify_ok, natsCert *cert, natsCertChain *chain)
+{
+    time_t now;
+    time_t notAfter;
+
+    testf("preverify_ok: %d\n", preverify_ok);
+
+    if (cert == NULL)
+    {
+        test("no cert\n");
+        return preverify_ok == 1;
+    }
+    else
+    {
+        _logCert(cert);
+    }
+
+    if (chain == NULL)
+    {
+        test("no chain\n");
+    }
+    else
+    {
+        _logChain(chain);
+    }
+
+    time(&now);
+    notAfter = mktime(&(cert->tmNotAfter));
+
+    if (notAfter > now)
+    {
+        if (strstr(cert->issuerName, "Synadia"))
+        {
+            test("Cert validated\n")
+            return true;
+        }
+        else
+        {
+            return preverify_ok == 1;
+        }
+    }
+    else
+    {
+        return false;
+    }
+}
+
+void test_SSLCertificateValidationCB(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection* nc = NULL;
+    natsOptions* opts = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    args;
+
+    opts = _createReconnectOptions();
+    if (opts == NULL)
+        FAIL("Unable to create reconnect options!");
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check that connect fails due to server verification: ");
+    s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_SSL_ERROR);
+    natsConnection_Destroy(nc);
+
+    test("Check that connect succeeds with validation callback:\n");
+    s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
+    IFOK(s, natsOptions_SetCertificateValidationCB(opts, _certificateValidationCB));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+
+    natsOptions_Destroy(opts);
 
     _stopServer(serverPid);
 #else

@@ -36,6 +36,7 @@
 #include "crypto.h"
 #include "js.h"
 #include "glib/glib.h"
+#include "cert.h"
 
 #define DEFAULT_SCRATCH_SIZE    (512)
 #define MAX_INFO_MESSAGE_SIZE   (32768)
@@ -620,10 +621,15 @@ static int
 _collectSSLErr(int preverifyOk, X509_STORE_CTX* ctx)
 {
     SSL             *ssl  = NULL;
-    X509            *cert = X509_STORE_CTX_get_current_cert(ctx);
-    int             depth = X509_STORE_CTX_get_error_depth(ctx);
-    int             err   = X509_STORE_CTX_get_error(ctx);
-    natsConnection  *nc   = NULL;
+    X509            *x509Cert   = X509_STORE_CTX_get_current_cert(ctx);
+    int             depth       = X509_STORE_CTX_get_error_depth(ctx);
+    int             err         = X509_STORE_CTX_get_error(ctx);
+    natsConnection  *nc         = NULL;
+    natsCert        *cert       = NULL;
+    bool            certValid;
+    STACK_OF(X509)  *x509Chain;
+    natsStatus      s           = NATS_OK;
+    natsCertChain   *chain      = NULL;
 
     // Retrieve the SSL object, then our connection...
     ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
@@ -633,11 +639,33 @@ _collectSSLErr(int preverifyOk, X509_STORE_CTX* ctx)
     if (nc->opts->sslCtx->skipVerify)
         return 1;
 
+    if (nc->opts->sslCtx->certificateValidationCB != NULL)
+    {
+        s = natsCert_create(&cert, x509Cert);
+        if (s == NATS_OK)
+        {
+            x509Chain = SSL_get_peer_cert_chain(ssl);
+            if (x509Chain != NULL)
+            {
+                s = natsCertChain_create(&chain, x509Chain);
+            }
+
+            if (s == NATS_OK)
+            {
+                certValid = nc->opts->sslCtx->certificateValidationCB(preverifyOk, cert, chain);
+                natsCert_free(cert);
+                natsCertChain_free(chain);
+                nc->opts->sslCtx->certificateValidationResult = certValid;
+                return certValid ? 1 : 0;
+            }
+        }
+    }
+
     if (!preverifyOk)
     {
         char certName[256]= {0};
 
-        X509_NAME_oneline(X509_get_subject_name(cert), certName, sizeof(certName));
+        X509_NAME_oneline(X509_get_subject_name(x509Cert), certName, sizeof(certName));
 
         if (err == X509_V_ERR_HOSTNAME_MISMATCH)
         {
@@ -649,7 +677,7 @@ _collectSSLErr(int preverifyOk, X509_STORE_CTX* ctx)
         {
             char issuer[256]  = {0};
 
-            X509_NAME_oneline(X509_get_issuer_name(cert), issuer, sizeof(issuer));
+            X509_NAME_oneline(X509_get_issuer_name(x509Cert), issuer, sizeof(issuer));
 
             snprintf_truncate(nc->errStr, sizeof(nc->errStr), "%d:%s:depth=%d:cert=%s:issuer=%s",
                               err, X509_verify_cert_error_string(err), depth,
@@ -704,6 +732,8 @@ _makeTLSConn(natsConnection *nc)
     }
     if (s == NATS_OK)
     {
+        nc->opts->sslCtx->certificateValidationResult = false;
+
         if (nc->opts->sslCtx->skipVerify)
         {
             SSL_set_verify(ssl, SSL_VERIFY_NONE, NULL);
@@ -746,7 +776,7 @@ _makeTLSConn(natsConnection *nc)
         s = nats_setError(NATS_SSL_ERROR, "unable to set SNI extension for hostname '%s'", nc->cur->url->host);
     }
 #endif
-    if ((s == NATS_OK) && (SSL_do_handshake(ssl) != 1))
+    if ((s == NATS_OK) && (SSL_do_handshake(ssl) != 1) && !nc->opts->sslCtx->certificateValidationResult)
     {
         s = nats_setError(NATS_SSL_ERROR,
                           "SSL handshake error: %s",

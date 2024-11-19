@@ -14,7 +14,7 @@
 #include "examples.h"
 
 static const char *usage = ""\
-"-stream        stream name (default is 'foo')\n" \
+"-stream        stream name (required)\n" \
 "-txt           text to send (default is 'hello')\n" \
 "-count         number of messages to send\n" \
 "-sync          publish synchronously (default is async)\n";

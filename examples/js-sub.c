@@ -15,6 +15,8 @@
 
 static const char *usage = ""\
 "-gd            use global message delivery thread pool\n" \
+"-stream        stream name (required)\n" \
+"-durable       durable name (default is to create an ephemeral consumer)\n"
 "-sync          receive synchronously (default is asynchronous)\n" \
 "-pull          use pull subscription\n" \
 "-pull-async    use an async pull subscription\n" \

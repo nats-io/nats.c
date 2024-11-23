@@ -31106,7 +31106,7 @@ void test_JetStreamBackOffRedeliveries(void)
     so.Config.AckPolicy = js_AckExplicit;
     so.Config.DeliverPolicy = js_DeliverAll;
     so.Config.DeliverSubject = inbox;
-    so.Config.MaxDeliver = 2;
+    so.Config.MaxDeliver = 1;
     so.Config.BackOff = (int64_t[]){NATS_MILLIS_TO_NANOS(50), NATS_MILLIS_TO_NANOS(250)};
     so.Config.BackOffLen = 2;
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);

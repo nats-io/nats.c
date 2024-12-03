@@ -9,7 +9,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 [![License Apache 2](https://img.shields.io/badge/License-Apache2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Build Status](https://travis-ci.com/nats-io/nats.c.svg?branch=main)](https://travis-ci.com/github/nats-io/nats.c)
 [![Coverage Status](https://coveralls.io/repos/github/nats-io/nats.c/badge.svg?branch=main)](https://coveralls.io/github/nats-io/nats.c?branch=main)
-[![Release](https://img.shields.io/badge/release-v3.8.2-blue.svg?style=flat)](https://github.com/nats-io/nats.c/releases/tag/v3.8.2)
+[![Release](https://img.shields.io/badge/release-v3.9.0-blue.svg?style=flat)](https://github.com/nats-io/nats.c/releases/tag/v3.9.0)
 [![Documentation](https://img.shields.io/badge/doc-Doxygen-brightgreen.svg?style=flat)](http://nats-io.github.io/nats.c)
 
 # Table of Contents

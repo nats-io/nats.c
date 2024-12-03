@@ -154,6 +154,7 @@ Enumerations</h2></td></tr>
 , <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a22fa4802a34bac497f23e269a20a52f2">NATS_MISMATCH</a>
 , <br />
 &#160;&#160;<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a37d80c8232775339a32805fe93e0ea7f">NATS_MISSED_HEARTBEAT</a>
+, <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ac1eb33007d16930e74c2fa3b22761635">NATS_LIMIT_REACHED</a>
 <br />
  }</td></tr>
 <tr class="memdesc:a36c934157b663b7b5fb5d6609c897c80"><td class="mdescLeft">&#160;</td><td class="mdescRight">Status returned by most of the APIs.  <a href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">More...</a><br /></td></tr>
@@ -442,6 +443,8 @@ Enumerations</h2></td></tr>
 <tr><td class="fieldname"><a id="a36c934157b663b7b5fb5d6609c897c80a22fa4802a34bac497f23e269a20a52f2"></a>NATS_MISMATCH&#160;</td><td class="fielddoc"><p>For JetStream subscriptions, it means that a consumer sequence mismatch was discovered. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="a36c934157b663b7b5fb5d6609c897c80a37d80c8232775339a32805fe93e0ea7f"></a>NATS_MISSED_HEARTBEAT&#160;</td><td class="fielddoc"><p>For JetStream subscriptions, it means that the library detected that server heartbeats have been missed. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a36c934157b663b7b5fb5d6609c897c80ac1eb33007d16930e74c2fa3b22761635"></a>NATS_LIMIT_REACHED&#160;</td><td class="fielddoc"><p>Attempt to receive messages than allowed by the byte limit, for instance in <a class="el" href="group__js_sub_group.html#ga938d410675ab09fa8c21896ab61bed0a" title="Starts a Pull based JetStream subscription, and delivers messages to a user callback asynchronously.">js_PullSubscribeAsync()</a>. </p>
 </td></tr>
 </table>
 

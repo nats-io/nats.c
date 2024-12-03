@@ -204,7 +204,9 @@ _freeConn(natsConnection *nc)
     natsStrHash_Destroy(nc->respMap);
     natsCondition_Destroy(nc->reconnectCond);
     natsMutex_Destroy(nc->subsMu);
+    natsMutex_Destroy(nc->servicesMu);
     natsMutex_Destroy(nc->mu);
+    NATS_FREE(nc->services);
 
     NATS_FREE(nc);
 
@@ -2146,9 +2148,21 @@ _evStopPolling(natsConnection *nc)
 
     nc->sockCtx.useEventLoop = false;
     nc->el.writeAdded = false;
-    s = nc->opts->evCbs.read(nc->el.data, NATS_EVENT_ACTION_REMOVE);
+    // The "write" event is added and removed as we write, however, we always
+    // have the "read" event added to the event loop. Removing it signals that
+    // the connection is closed and so the event loop adapter can then invoke
+    // natsConnection_ProcessCloseEvent() when the event loop is done polling
+    // the event. So we will remove "write" first, then finish with "read".
+    s = nc->opts->evCbs.write(nc->el.data, NATS_EVENT_ACTION_REMOVE);
     if (s == NATS_OK)
-        s = nc->opts->evCbs.write(nc->el.data, NATS_EVENT_ACTION_REMOVE);
+        s = nc->opts->evCbs.read(nc->el.data, NATS_EVENT_ACTION_REMOVE);
+    if (s == NATS_OK)
+    {
+        // We can't close the socket here, but we will mark as invalid and
+        // clear SSL object if applicable.
+        nc->sockCtx.fd = NATS_SOCK_INVALID;
+        _clearSSL(nc);
+    }
 
     return s;
 }
@@ -2187,6 +2201,7 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
             SET_WRITE_DEADLINE(nc);
             natsConn_bufferFlush(nc);
 
+            // Shutdown the socket to stop any read/write operations.
             natsSock_Shutdown(nc->sockCtx.fd);
             nc->sockCtx.fdActive = false;
         }
@@ -2195,12 +2210,10 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
         // on the socket since we are going to reconnect.
         if (nc->el.attached)
         {
+            // This will take care of invalidating the socket and clear SSL,
+            // but the actual socket close will be done from the event loop
+            // adapter by calling natsConnection_ProcessCloseEvent().
             ls = _evStopPolling(nc);
-            natsSock_Close(nc->sockCtx.fd);
-            nc->sockCtx.fd = NATS_SOCK_INVALID;
-
-            // We need to cleanup some things if the connection was SSL.
-            _clearSSL(nc);
         }
 
         // Fail pending flush requests.
@@ -2579,13 +2592,20 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
         {
             // If event loop attached, stop polling...
             if (nc->el.attached)
+            {
+                // This will take care of invalidating the socket and clear SSL,
+                // but the actual socket close will be done from the event loop
+                // adapter by calling natsConnection_ProcessCloseEvent().
                 _evStopPolling(nc);
+            }
+            else
+            {
+                natsSock_Close(nc->sockCtx.fd);
+                nc->sockCtx.fd = NATS_SOCK_INVALID;
 
-            natsSock_Close(nc->sockCtx.fd);
-            nc->sockCtx.fd = NATS_SOCK_INVALID;
-
-            // We need to cleanup some things if the connection was SSL.
-            _clearSSL(nc);
+                // We need to cleanup some things if the connection was SSL.
+                _clearSSL(nc);
+            }
         }
         else
         {
@@ -3239,6 +3259,8 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     if (s == NATS_OK)
         s = natsMutex_Create(&(nc->subsMu));
     if (s == NATS_OK)
+        s = natsMutex_Create(&(nc->servicesMu));
+    if (s == NATS_OK)
         s = _setupServerPool(nc);
     if (s == NATS_OK)
         s = natsHash_Create(&(nc->subs), 8);
@@ -3411,6 +3433,7 @@ natsConnection_Reconnect(natsConnection *nc)
     natsSock_Shutdown(nc->sockCtx.fd);
 
     natsConn_Unlock(nc);
+
     return NATS_OK;
 }
 
@@ -4098,13 +4121,16 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
     buffer = nc->el.buffer;
     size   = nc->opts->ioBufSize;
 
-    natsConn_Unlock(nc);
-
     // Do not try to read again here on success. If more than one connection
     // is attached to the same loop, and there is a constant stream of data
     // coming for the first connection, this would starve the second connection.
     // So return and we will be called back later by the event loop.
+
+    // This needs to be protected by the connection lock. We are here because
+    // there is a read event, so we will gather some data in natsSock_Read()
+    // but not wait there.
     s = natsSock_Read(&(nc->sockCtx), buffer, size, &n);
+    natsConn_Unlock(nc);
     if (s == NATS_OK)
         s = natsParser_Parse(nc, buffer, n);
 
@@ -4159,8 +4185,16 @@ natsConnection_ProcessWriteEvent(natsConnection *nc)
 
     if (s != NATS_OK)
         _processOpError(nc, s, false);
+}
 
-    (void) NATS_UPDATE_ERR_STACK(s);
+void
+natsConnection_ProcessCloseEvent(natsSock *socket)
+{
+    if ((socket == NULL) || (*socket == NATS_SOCK_INVALID))
+        return;
+
+    natsSock_Close(*socket);
+    *socket = NATS_SOCK_INVALID;
 }
 
 natsStatus

@@ -21,6 +21,7 @@ var group__kv_group =
     [ "kvStore_WatchMulti", "group__kv_group.html#ga409bfd787a87d0e37b69d3711fdb28f4", null ],
     [ "kvStore_WatchAll", "group__kv_group.html#gaf011f1dd6813391c65664e982747602e", null ],
     [ "kvStore_Keys", "group__kv_group.html#ga6030fc2a672ae868f7603587245b9d5a", null ],
+    [ "kvStore_KeysWithFilters", "group__kv_group.html#gae1a017ca0ea67375b9d94dc426d47042", null ],
     [ "kvKeysList_Destroy", "group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45", null ],
     [ "kvStore_History", "group__kv_group.html#ga5aa57345313cee85b020e50c22023fb5", null ],
     [ "kvEntryList_Destroy", "group__kv_group.html#gae783352ab81e22aa3173057d117518e6", null ],

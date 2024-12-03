@@ -2064,10 +2064,9 @@ nats_HostIsIP(const char *host)
 }
 
 static bool
-_isLineAnHeader(const char *ptr)
+_isLineAnHeader(const char *ptr, int len)
 {
     char    *last   = NULL;
-    int     len     = 0;
     int     count   = 0;
     bool    done    = false;
 
@@ -2075,7 +2074,6 @@ _isLineAnHeader(const char *ptr)
     // the strict requirement is that it ends with at least 3 consecutive
     // `-` characters. It must also have 3 consecutive `-` before that.
     // So the minimum size would be 6.
-    len = (int) strlen(ptr);
     if (len < 6)
         return false;
 
@@ -2118,61 +2116,72 @@ _isLineAnHeader(const char *ptr)
     return false;
 }
 
+// Finds the next entire line in next, sets start to the beginning of the line,
+// updates next to point to the remaining bytes, and returns the line's length.
+// If there are no more non-empty lines, returns 0.
+static inline int
+_scan_line(const char **start, const char **next)
+{
+    const char  *ptr    = *next;
+    int         n       = 0;
+
+    // skip empty lines in the beginning
+    while (*ptr == '\r' || *ptr == '\n')
+        ptr++;
+    *start = ptr;
+
+    // Consume until we reach the end of the line
+    while (*ptr != '\r' && *ptr != '\n' && *ptr != '\0')
+    {
+        ptr++;
+        n++;
+    }
+
+    if (n == 0)
+        return 0;
+
+    // skip the subsequent empty lines, 'cause why not?
+    while (*ptr == '\r' || *ptr == '\n')
+        ptr++;
+    *next = ptr;
+
+    return n;
+}
+
 natsStatus
 nats_GetJWTOrSeed(char **val, const char *content, int item)
 {
-    natsStatus  s       = NATS_OK;
-    char        *pch    = NULL;
-    char        *str    = NULL;
-    char        *saved  = NULL;
-    int         curItem = 0;
-    int         orgLen  = 0;
-    char        *nt     = NULL;
+    natsStatus  s           = NATS_OK;
+    const char  *next       = content;
+    const char  *line       = NULL;
+    int         lineLen     = 0;
+    int         curItem     = 0;
+    const char  *saved      = NULL;
+    int         savedLen    = 0;
 
-    // First, make a copy of the original content since
-    // we are going to call strtok on it, which alters it.
-    str = NATS_STRDUP(content);
-    if (str == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
-
-    orgLen = (int) strlen(str);
-
-    pch = nats_strtok(str, "\n", &nt);
-    while (pch != NULL)
+    while ((lineLen = _scan_line(&line, &next)) > 0)
     {
-        if (_isLineAnHeader(pch))
+        if (_isLineAnHeader(line, lineLen))
         {
             // We got the start of the section. Save the next line
             // as the possible returned value if the following line
             // is a header too.
-            pch = nats_strtok(NULL, "\n", &nt);
-            saved = pch;
+            savedLen = _scan_line(&saved, &next);
+            if (savedLen == 0)
+                break; // premature end of file?
 
-            while (pch != NULL)
-            {
-                pch = nats_strtok(NULL, "\n", &nt);
-                if (pch == NULL)
-                    break;
-
-                // We tolerate empty string(s).
-                if (*pch == '\0')
-                    continue;
-
-                break;
-            }
-            if (pch == NULL)
-                break;
-
-            if (_isLineAnHeader(pch))
+            lineLen = _scan_line(&line, &next);
+            if (_isLineAnHeader(line, lineLen))
             {
                 // Is this the item we were looking for?
                 if (curItem == item)
                 {
                     // Return a copy of the saved line
-                    *val = NATS_STRDUP(saved);
+                    *val = NATS_CALLOC(savedLen + 1, 1);
                     if (*val == NULL)
                         s = nats_setDefaultError(NATS_NO_MEMORY);
-
+                    else
+                        memcpy(*val, saved, savedLen);
                     break;
                 }
                 else if (++curItem > 1)
@@ -2181,11 +2190,7 @@ nats_GetJWTOrSeed(char **val, const char *content, int item)
                 }
             }
         }
-        pch = nats_strtok(NULL, "\n", &nt);
     }
-
-    memset(str, 0, orgLen);
-    NATS_FREE(str);
 
     // Nothing was found, return NATS_NOT_FOUND but don't set the stack error.
     if ((s == NATS_OK) && (*val == NULL))
@@ -2604,7 +2609,7 @@ natsStatus nats_formatStringArray(char **out, const char **strings, int count)
 
     IFOK(s, natsBuf_AppendByte(&buf, ']'));
     IFOK(s, natsBuf_AppendByte(&buf, '\0'));
-    
+
     if (s != NATS_OK)
     {
         natsBuf_Cleanup(&buf);

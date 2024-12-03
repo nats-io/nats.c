@@ -94,6 +94,9 @@ $(document).ready(function(){initNavTree('group__types_group.html',''); initResi
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="nested-classes"></a>
 Classes</h2></td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="struct____nats_client_config.html">__natsClientConfig</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">An initial configuration for NATS client. Provides control over the threading model, and sets many default option values.  <a href="struct____nats_client_config.html#details">More...</a><br /></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structnats_msg_list.html">natsMsgList</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A list of NATS messages.  <a href="structnats_msg_list.html#details">More...</a><br /></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -209,6 +212,9 @@ Typedefs</h2></td></tr>
 <tr class="memitem:ga206c3d4d6f4f6f96fd2cae53a3df31c1"><td class="memItemLeft" align="right" valign="top">typedef char&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1">natsInbox</a></td></tr>
 <tr class="memdesc:ga206c3d4d6f4f6f96fd2cae53a3df31c1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Unique subject often used for point-to-point communication.  <a href="group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1">More...</a><br /></td></tr>
 <tr class="separator:ga206c3d4d6f4f6f96fd2cae53a3df31c1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gad29b6af20b875a1b7890ab8f0675287d"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="struct____nats_client_config.html">__natsClientConfig</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gad29b6af20b875a1b7890ab8f0675287d">natsClientConfig</a></td></tr>
+<tr class="memdesc:gad29b6af20b875a1b7890ab8f0675287d"><td class="mdescLeft">&#160;</td><td class="mdescRight">An initial configuration for NATS client. Provides control over the threading model, and sets many default option values.  <a href="group__types_group.html#gad29b6af20b875a1b7890ab8f0675287d">More...</a><br /></td></tr>
+<tr class="separator:gad29b6af20b875a1b7890ab8f0675287d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gafd5523161ec3783e79719cb9a9a66b5b"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structnats_msg_list.html">natsMsgList</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gafd5523161ec3783e79719cb9a9a66b5b">natsMsgList</a></td></tr>
 <tr class="memdesc:gafd5523161ec3783e79719cb9a9a66b5b"><td class="mdescLeft">&#160;</td><td class="mdescRight">A list of NATS messages.  <a href="group__types_group.html#gafd5523161ec3783e79719cb9a9a66b5b">More...</a><br /></td></tr>
 <tr class="separator:gafd5523161ec3783e79719cb9a9a66b5b"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -291,6 +297,12 @@ Typedefs</h2></td></tr>
 <tr class="separator:ga85123afa00d522a249a5b2a8abd7e063"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaf11e6664c1f335a5287af71c703935fa"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_fetch_request.html">jsFetchRequest</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gaf11e6664c1f335a5287af71c703935fa">jsFetchRequest</a></td></tr>
 <tr class="separator:gaf11e6664c1f335a5287af71c703935fa"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaa17c5b961bcaa3c5907f48366b6e75c4"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gaa17c5b961bcaa3c5907f48366b6e75c4">jsFetchCompleteHandler</a>) (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> s, void *closure)</td></tr>
+<tr class="memdesc:gaa17c5b961bcaa3c5907f48366b6e75c4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to indicate that the work of js_PullSubscribeAsync is done.  <a href="group__types_group.html#gaa17c5b961bcaa3c5907f48366b6e75c4">More...</a><br /></td></tr>
+<tr class="separator:gaa17c5b961bcaa3c5907f48366b6e75c4"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga617d3ea9036a7ef05dd3868fa56abafc"><td class="memItemLeft" align="right" valign="top">typedef bool(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga617d3ea9036a7ef05dd3868fa56abafc">jsFetchNextHandler</a>) (int *messages, int64_t *maxBytes, <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, void *closure)</td></tr>
+<tr class="memdesc:ga617d3ea9036a7ef05dd3868fa56abafc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to customize flow control for js_PullSubscribeAsync.  <a href="group__types_group.html#ga617d3ea9036a7ef05dd3868fa56abafc">More...</a><br /></td></tr>
+<tr class="separator:ga617d3ea9036a7ef05dd3868fa56abafc"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga0e3a3b7cf89e7dfa955f0f8f3f1eb6e5"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_options.html">jsOptions</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga0e3a3b7cf89e7dfa955f0f8f3f1eb6e5">jsOptions</a></td></tr>
 <tr class="separator:ga0e3a3b7cf89e7dfa955f0f8f3f1eb6e5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga054c05493dd3cfc5c3e7a665a424e54a"><td class="memItemLeft" align="right" valign="top">typedef struct __kvStore&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a></td></tr>
@@ -465,6 +477,21 @@ Enumerations</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>This can be used as the reply for a request. Inboxes are meant to be unique so that replies can be sent to a specific subscriber. That being said, inboxes can be shared across multiple subscribers if desired. </p>
+
+</div>
+</div>
+<a id="gad29b6af20b875a1b7890ab8f0675287d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gad29b6af20b875a1b7890ab8f0675287d">&#9670;&nbsp;</a></span>natsClientConfig</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="struct____nats_client_config.html">__natsClientConfig</a> <a class="el" href="group__types_group.html#gad29b6af20b875a1b7890ab8f0675287d">natsClientConfig</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga61d4a0cf2fbf7d13cc910e5a00c575be" title="Creates a natsOptions object.">natsOptions_Create</a> </dd></dl>
 
 </div>
 </div>
@@ -1218,6 +1245,55 @@ NATS server 2.10 added consumer Metadata which contains user-provided string nam
       </table>
 </div><div class="memdoc">
 <p>Options for the <a class="el" href="group__js_sub_group.html#ga676292505e7fde8688cfd886b79a10ed" title="Fetches messages for a pull subscription with a complete request configuration.">natsSubscription_FetchRequest()</a> call, which is similar to <a class="el" href="group__js_sub_group.html#gafc5e0d2269bd23b4d5fb7f3b05278e50" title="Fetches messages for a pull subscription.">natsSubscription_Fetch()</a> but gives more control in the configuration of the fetch. </p>
+
+</div>
+</div>
+<a id="gaa17c5b961bcaa3c5907f48366b6e75c4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaa17c5b961bcaa3c5907f48366b6e75c4">&#9670;&nbsp;</a></span>jsFetchCompleteHandler</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef void(* jsFetchCompleteHandler) (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> s, void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">nc</td><td>- Connection to the NATS server </td></tr>
+    <tr><td class="paramname">sub</td><td>- Subscription being used </td></tr>
+    <tr><td class="paramname">s</td><td>- Completion status code<ul>
+<li><code>NATS_OK</code> - should never happen here!</li>
+<li><code>NATS_TIMEOUT</code> indicates that the fetch has reached its lifetime expiration time, or had NoWait set and there are no more messages.</li>
+<li><code>NATS_NOT_FOUND</code> is returned when the server has no messages to deliver at the beginning of a specific request. It may be returned for NoWait subscriptions, effectively the same meaning as NATS_TIMEOUT - early termination for NoWait.</li>
+<li><code>NATS_MAX_DELIVERED_MSGS</code> indicates that lifetime <code>Batch</code> message limit has been reached.</li>
+<li><code>NATS_LIMIT_REACHED</code> is returned when the lifetime byte limit is reached.</li>
+<li>Other status values represent error conditions. </li>
+</ul>
+</td></tr>
+    <tr><td class="paramname">closure</td><td>completeClosure that was passed to js_PullSubscribeAsync</td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__js_sub_group.html#ga938d410675ab09fa8c21896ab61bed0a" title="Starts a Pull based JetStream subscription, and delivers messages to a user callback asynchronously.">js_PullSubscribeAsync</a> </dd></dl>
+
+</div>
+</div>
+<a id="ga617d3ea9036a7ef05dd3868fa56abafc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga617d3ea9036a7ef05dd3868fa56abafc">&#9670;&nbsp;</a></span>jsFetchNextHandler</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef bool(* jsFetchNextHandler) (int *messages, int64_t *maxBytes, <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>The library will invoke this callback when it may be time to request more messages from the server.</p>
+<dl class="section return"><dt>Returns</dt><dd>true to fetch more, false to skip. If true, <code>messages</code> and <code>maxBytes</code> should be set to the number of messages and max bytes to fetch.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__js_sub_group.html#ga938d410675ab09fa8c21896ab61bed0a" title="Starts a Pull based JetStream subscription, and delivers messages to a user callback asynchronously.">js_PullSubscribeAsync</a> </dd></dl>
 
 </div>
 </div>

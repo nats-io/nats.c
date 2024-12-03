@@ -1135,6 +1135,8 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
         {
             if (opts->MetaOnly)
                 so.Config.HeadersOnly = true;
+            if (opts->UpdatesOnly)
+                so.Config.DeliverPolicy = js_DeliverNew;
             if (opts->IgnoreDeletes)
                 w->ignoreDel = true;
         }
@@ -1148,10 +1150,17 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
             natsSubscription *sub = w->sub;
 
             natsSub_Lock(sub);
-            if ((sub->jsi != NULL) && (sub->jsi->pending == 0))
+            if ((opts == NULL) || !opts->UpdatesOnly)
+            {
+                if ((sub->jsi != NULL) && (sub->jsi->pending == 0))
+                {
+                    w->initDone = true;
+                    w->retMarker = true;
+                }
+            }
+            else
             {
                 w->initDone = true;
-                w->retMarker = true;
             }
             natsSub_Unlock(sub);
         }
@@ -1176,8 +1185,8 @@ kvStore_WatchAll(kvWatcher **new_watcher, kvStore *kv, kvWatchOptions *opts)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-natsStatus
-kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
+static natsStatus
+_kvStore_Keys(kvKeysList *list, kvStore *kv, const char **filters, int numFilters, kvWatchOptions *opts)
 {
     natsStatus      s;
     kvWatchOptions  o;
@@ -1200,7 +1209,11 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
     if (o.Timeout > 0)
         timeout = o.Timeout;
 
-    s = kvStore_WatchAll(&w, kv, &o);
+    if (numFilters > 0)
+        s = kvStore_WatchMulti(&w, kv, filters, numFilters, &o);
+    else
+        s = kvStore_WatchAll(&w, kv, &o);
+
     if (s != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
 
@@ -1239,6 +1252,23 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
     if (s != NATS_OK)
         kvKeysList_Destroy(list);
 
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
+{
+    natsStatus s = _kvStore_Keys(list, kv, NULL, 0, opts);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, const char **filters, int numFilters, kvWatchOptions *opts)
+{
+    if ((filters == NULL) || (numFilters <= 0))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsStatus s = _kvStore_Keys(list, kv, filters, numFilters, opts);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

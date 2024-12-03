@@ -561,48 +561,46 @@ typedef struct jsStreamConfig {
         bool                    Sealed;         ///< Seal a stream so no messages can get our or in.
         bool                    DenyDelete;     ///< Restrict the ability to delete messages.
         bool                    DenyPurge;      ///< Restrict the ability to purge messages.
-        /**
-         * Allows messages to be placed into the system and purge
-         * all older messages using a special message header.
-         */
+
+        /// @brief Allow messages to be placed into the system and purge all
+        /// older messages using a special message header.
         bool                    AllowRollup;
 
-        // Allow republish of the message after being sequenced and stored.
+        /// @brief Allow republish of the message after being sequenced and
+        /// stored.
         jsRePublish             *RePublish;
 
-        // Allow higher performance, direct access to get individual messages. E.g. KeyValue
+        /// @brief Allow higher performance, direct access to get individual
+        /// messages. E.g. KeyValue
         bool                    AllowDirect;
-        // Allow higher performance and unified direct access for mirrors as well.
+
+        /// @brief Allow higher performance and unified direct access for
+        /// mirrors as well.
         bool                    MirrorDirect;
 
-        // Allow KV like semantics to also discard new on a per subject basis
+        /// @brief Allow KV like semantics to also discard new on a per subject
+        /// basis
         bool                    DiscardNewPerSubject;
 
-        /**
-         * @brief Configuration options introduced in 2.10
-         *
-         * - Metadata is a user-provided array of key/value pairs, encoded as a
-         *   string array [n1, v1, n2, v2, ...] representing key/value pairs
-         *   {n1:v1, n2:v2, ...}.
-         *
-         * - Compression: js_StorageCompressionNone (default) or
-         *   js_StorageCompressionS2
-         *
-         * - FirstSeq: the starting sequence number for the stream.
-         *
-         * - SubjectTransformConfig is for applying a subject transform (to
-         *   matching messages) before doing anything else when a new message is
-         *   received
-         *
-         * - ConsumerLimits is for setting the limits on certain options on all
-         *   consumers of the stream.
-         */
+        /// @brief A user-provided array of key/value pairs, encoded as a string
+        /// array [n1, v1, n2, v2, ...] representing key/value pairs {n1:v1,
+        /// n2:v2, ...}.
+        natsMetadata            Metadata;
 
-        natsMetadata Metadata;
-        jsStorageCompression Compression;
-        uint64_t FirstSeq;
+        /// @brief js_StorageCompressionNone (default) or
+        /// js_StorageCompressionS2.
+        jsStorageCompression    Compression;
+
+        /// @brief  the starting sequence number for the stream.
+        uint64_t                FirstSeq;
+
+        /// @brief Applies a subject transform (to matching messages) before
+        /// doing anything else when a new message is received.
         jsSubjectTransformConfig SubjectTransform;
-        jsStreamConsumerLimits ConsumerLimits;
+
+        /// @brief Sets the limits on certain options on all consumers of the
+        /// stream.
+        jsStreamConsumerLimits  ConsumerLimits;
 } jsStreamConfig;
 
 /**
@@ -1206,6 +1204,41 @@ typedef struct jsFetchRequest
 
 } jsFetchRequest;
 
+/** \brief Callback used to indicate that the work of js_PullSubscribeAsync is
+ * done.
+ *
+ * @param nc - Connection to the NATS server
+ * @param sub - Subscription being used
+ * @param s - Completion status code
+ * - `NATS_OK` - should never happen here!
+ * - `NATS_TIMEOUT` indicates that the fetch has reached its lifetime expiration
+ *   time, or had NoWait set and there are no more messages.
+ * - `NATS_NOT_FOUND` is returned when the server has no messages to deliver at
+ *   the beginning of a specific request. It may be returned for NoWait
+ *   subscriptions, effectively the same meaning as NATS_TIMEOUT - early
+ *   termination for NoWait.
+ * - `NATS_MAX_DELIVERED_MSGS` indicates that lifetime `Batch` message limit has
+ *   been reached.
+ * - `NATS_LIMIT_REACHED` is returned when the lifetime byte limit is reached.
+ * - Other status values represent error conditions.
+ * @param closure completeClosure that was passed to js_PullSubscribeAsync
+ *
+ * @see js_PullSubscribeAsync
+ */
+typedef void (*jsFetchCompleteHandler)(natsConnection *nc, natsSubscription *sub, natsStatus s, void *closure);
+
+/** \brief Callback used to customize flow control for js_PullSubscribeAsync.
+ *
+ * The library will invoke this callback when it may be time to request more
+ * messages from the server.
+ *
+ * @return true to fetch more, false to skip. If true, \p messages and \p
+ * maxBytes should be set to the number of messages and max bytes to fetch.
+ *
+ * @see js_PullSubscribeAsync
+ */
+typedef bool (*jsFetchNextHandler)(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure);
+
 /**
  * JetStream context options.
  *
@@ -1217,9 +1250,6 @@ typedef struct jsOptions
         const char              *Domain;                        ///< Domain changes the domain part of JetSteam API prefix.
         int64_t                 Wait;                           ///< Amount of time (in milliseconds) to wait for various JetStream API requests, default is 5000 ms (5 seconds).
 
-        /**
-         * Publish Async options
-         */
         struct jsOptionsPublishAsync
         {
                 int64_t                 MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
@@ -1241,7 +1271,56 @@ typedef struct jsOptions
 
                 int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.
 
-        } PublishAsync;
+        } PublishAsync; ///< extra options for #js_PublishAsync
+
+        struct jsOptionsPullSubscribeAsync
+        {
+                int64_t                 Timeout;        ///< Auto-unsubsribe after this many milliseconds.
+                int                     MaxMessages;    ///< Auto-unsubscribed after receiving this many messages.
+                int64_t                 MaxBytes;       ///< Auto-unsubscribe after receiving this many bytes.
+
+                /// \brief If NoWait is set, the subscription will receive the
+                /// messages already stored on the server subject to the limits,
+                /// but will not wait for more messages.
+                ///
+                /// \note that if Timeout is set we would still wait for first
+                /// message to become available, even if there are currently any
+                /// on the server
+                bool                    NoWait;
+
+                /// \brief Fetch complete handler that receives the exit status
+                /// code, the subscription's Complete handler is also invoked,
+                /// but does not have the status code.
+                jsFetchCompleteHandler  CompleteHandler;
+                void                    *CompleteHandlerClosure;
+
+                /// \brief Have server sends heartbeats at this interval (in
+                /// milliseconds) to help detect communication failures.
+                int64_t                 Heartbeat;
+
+                /// @brief When using the automatic Fetch flow control (default
+                /// NextHandler), this is the number of messages to ask for in a
+                /// single request.
+                int                     FetchSize;
+
+                /// @brief When using the automatic Fetch flow control (default
+                /// NextHandler), initiate the next fetch request (this many
+                /// messages) prior to the fulfillment of the current request.
+                ///
+                /// @note KeepAhead can not be used in conjunction with MaxBytes
+                /// or NoWait.
+                int                     KeepAhead;
+
+                /// @brief If set, switches to manual fetch flow control.
+                ///
+                /// If provided, this function gets called before each message
+                /// is deliverered to msgCB, and overrides the default algorithm
+                /// for sending Next fetch requests.
+                jsFetchNextHandler      NextHandler;
+                void                    *NextHandlerClosure;
+
+        } PullSubscribeAsync; ///< extra options for #js_PullSubscribeAsync
+
 
         /**
          * Advanced stream options
@@ -1347,6 +1426,7 @@ typedef struct kvWatchOptions
         bool            IncludeHistory;
         bool            MetaOnly;
         int64_t         Timeout;        ///< How long to wait (in milliseconds) for some operations to complete.
+        bool            UpdatesOnly;    ///< Only receive updates, no initial snapshot.
 
 } kvWatchOptions;
 
@@ -2197,8 +2277,9 @@ natsOptions_Create(natsOptions **newOpts);
 
 /** \brief Sets the URL to connect to.
  *
- * Sets the URL of the `NATS Server` the client should try to connect to.
- * The URL can contain optional user name and password.
+ * Sets the URL of the `NATS Server` the client should try to connect to. The
+ * URL can contain optional user name and password. %-encoding is supported for
+ * entering special characters.
  *
  * Some valid URLS:
  *
@@ -2211,8 +2292,8 @@ natsOptions_Create(natsOptions **newOpts);
  * @see natsOptions_SetToken
  *
  * @param opts the pointer to the #natsOptions object.
- * @param url the string representing the URL the connection should use
- * to connect to the server.
+ * @param url the string representing the URL the connection should use to
+ * connect to the server.
  *
  */
 /*
@@ -4089,12 +4170,12 @@ stanMsg_Destroy(stanMsg *msg);
 NATS_EXTERN natsStatus
 natsConnection_Connect(natsConnection **nc, natsOptions *options);
 
-/** \brief Causes the client to drop the connection to the current server and
- * perform standard reconnection process.
+/** \brief Drops the current connection, reconnects including re-subscribing.
  *
- * This means that all subscriptions and consumers should be resubscribed and
- * their work resumed after successful reconnect where all reconnect options are
- * respected.
+ * Causes the client to drop the connection to the current server and to
+ * initiate the standard reconnection process. This means that all subscriptions
+ * and consumers will be resubscribed and their work resumed after successful
+ * reconnect where all reconnect options are respected.
  *
  * @param nc the pointer to the #natsConnection object.
  */
@@ -4113,6 +4194,20 @@ natsConnection_Reconnect(natsConnection *nc);
  */
 NATS_EXTERN void
 natsConnection_ProcessReadEvent(natsConnection *nc);
+
+/** \brief Process a socket close event when using external event loop.
+ *
+ * When using an external event loop, and the library wants to close
+ * the connection, the event loop adapter will ensure that the event
+ * loop library stops polling, and then will invoke this function
+ * so that the socket can be safely closed.
+ *
+ * @param socket the pointer to the #natsSock object.
+ *
+ * \warning This API is reserved for external event loop adapters.
+ */
+NATS_EXTERN void
+natsConnection_ProcessCloseEvent(natsSock *socket);
 
 /** \brief Process a write event when using external event loop.
  *
@@ -6413,7 +6508,8 @@ js_Subscribe(natsSubscription **sub, jsCtx *js, const char *subject,
  * @param sub the location where to store the pointer to the newly created
  * #natsSubscription object.
  * @param js the pointer to the #jsCtx object.
- * @param subject the subject this subscription is created for.
+ * @param subjects the subject this subscription is created for.
+ * @param numSubjects the number of subjects for the subscription.
  * @param cb the #natsMsgHandler callback.
  * @param cbClosure a pointer to an user defined object (can be `NULL`). See
  * the #natsMsgHandler prototype.
@@ -6461,7 +6557,7 @@ js_SubscribeSync(natsSubscription **sub, jsCtx *js, const char *subject,
  */
 NATS_EXTERN natsStatus
 js_SubscribeSyncMulti(natsSubscription **sub, jsCtx *js, const char **subjects, int numSubjects,
-                      jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode);
+                      jsOptions *opts, jsSubOptions *subOpts, jsErrCode *errCode);
 
 /** \brief Create a pull subscriber.
  *
@@ -6518,6 +6614,34 @@ natsSubscription_Fetch(natsMsgList *list, natsSubscription *sub, int batch, int6
  */
 NATS_EXTERN natsStatus
 jsFetchRequest_Init(jsFetchRequest *request);
+
+/** \brief Starts a Pull based JetStream subscription, and delivers messages to
+ * a user callback asynchronously.
+ *
+ * The subscription can be set up to run indefinitely, and issue pull requests
+ * as needed, or it can be set up to auto-terminate when certain conditions
+ * (like max messages, or a time-based expiration) are met. `lifetime` is used
+ * to control the basic limits, and whether to use server Heartbeats to detect
+ * connection failures. jsOpts->PullSubscribeAsync is used to control the pulling
+ * parameters, provide extra event callbacks and hooks, and to tune the handling
+ * of missing heartbets.
+ *
+ * @param newsub the location where to store the pointer to the newly created
+ * #natsSubscription object.
+ * @param js the pointer to the #jsCtx object.
+ * @param subject the subject this subscription is created for.
+ * @param durable the optional durable name.
+ * @param msgCB the #natsMsgHandler callback.
+ * @param msgCBClosure a pointer to an user defined object (can be `NULL`).
+ * @param jsOpts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param opts the subscribe options, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code,
+ * or `NULL` if not needed.
+ */
+NATS_EXTERN natsStatus
+js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject, const char *durable,
+                      natsMsgHandler msgCB, void *msgCBClosure,
+                      jsOptions *jsOpts, jsSubOptions *opts, jsErrCode *errCode);
 
 /** \brief Fetches messages for a pull subscription with a complete request configuration
  *
@@ -7172,6 +7296,32 @@ kvStore_WatchAll(kvWatcher **new_watcher, kvStore *kv, kvWatchOptions *opts);
 NATS_EXTERN natsStatus
 kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts);
 
+/** \brief Returns all keys in the bucket which matches the list of subject like filters.
+ *
+ * Get a list of the keys in a bucket filtered by a
+ * subject-like string, for instance "key" or "key.foo.*" or "key.>"
+ * Any deleted or purged keys will not be returned.
+ *
+ * \note Use #kvWatchOptions.Timeout to specify how long to wait (in milliseconds)
+ * to gather all keys for this bucket. If the deadline is reached, this function
+ * will return #NATS_TIMEOUT and no keys.
+ *
+ * \warning The user should call #kvKeysList_Destroy to release memory allocated
+ * for the entries list.
+ *
+ * @see kvWatchOptions_Init
+ * @see kvKeysList_Destroy
+ * @see kvStore_WatchMulti
+ *
+ * @param list the pointer to a #kvKeysList that will be initialized and filled with resulting key strings.
+ * @param kv the pointer to the #kvStore object.
+ * @param filters the list of subject filters. Cannot be `NULL`.
+ * @param numFilters number of filters. Cannot be 0.
+ * @param opts the history options, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, const char **filters, int numFilters, kvWatchOptions *opts);
+
 /** \brief Destroys this list of KeyValue store key strings.
  *
  * This function iterates through the list of all key strings and free them.
@@ -7502,6 +7652,14 @@ typedef struct micro_error_s microError;
 typedef struct micro_group_s microGroup;
 
 /**
+ * @brief The Microservice endpoint *group* configuration object.
+ *
+ * @see micro_group_config_s for descriptions of the fields,
+ * micro_service_config_s, micro_service_config_s, microService_AddGroup
+ */
+typedef struct micro_group_config_s microGroupConfig;
+
+/**
  * @brief a request received by a microservice endpoint.
  *
  * @see micro_request_s for descriptions of the fields.
@@ -7647,7 +7805,19 @@ struct micro_endpoint_config_s
     const char *Subject;
 
     /**
-     * @briefMetadata for the endpoint, a JSON-encoded user-provided object,
+     * @brief Overrides the default queue group for the service.
+     *
+     */
+    const char *QueueGroup;
+
+    /**
+     * @brief Disables the use of a queue group for the service.
+     *
+     */
+    bool NoQueueGroup;
+
+    /**
+     * @brief Metadata for the endpoint, a JSON-encoded user-provided object,
      * e.g. `{"key":"value"}`
      */
     natsMetadata Metadata;
@@ -7680,7 +7850,13 @@ struct micro_endpoint_info_s
     const char *Subject;
 
     /**
-     * @briefMetadata for the endpoint, a JSON-encoded user-provided object,
+     * @brief Endpoint's actual queue group (the default "q", or one explicitly
+     * set by the user), or omitted if NoQueueGroup was applied.
+     */
+    const char *QueueGroup;
+
+    /**
+     * @brief Metadata for the endpoint, a JSON-encoded user-provided object,
      * e.g. `{"key":"value"}`
      */
     natsMetadata Metadata;
@@ -7693,6 +7869,12 @@ struct micro_endpoint_stats_s
 {
     const char *Name;
     const char *Subject;
+
+    /**
+     * @brief Endpoint's actual queue group (the default "q", or one explicitly
+     * set by the user), or omitted if NoQueueGroup was applied.
+     */
+    const char *QueueGroup;
 
     /**
      * @brief The number of requests received by the endpoint.
@@ -7727,6 +7909,21 @@ struct micro_endpoint_stats_s
 };
 
 /**
+ * @brief The Microservice endpoint *group* configuration object.
+ */
+struct micro_group_config_s
+{
+    /// @brief The subject prefix for the group.
+    const char *Prefix;
+
+    /// @brief Overrides the default queue group for the service.
+    const char *QueueGroup;
+
+    /// @brief Disables the use of a queue group for the service.
+    bool NoQueueGroup;
+};
+
+/**
  * @brief The Microservice top-level configuration object.
  *
  * The service is created with a clone of the config and all of its values, so
@@ -7752,7 +7949,20 @@ struct micro_service_config_s
     const char *Description;
 
     /**
-     * @brief Metadata for the service, a JSON-encoded user-provided object, e.g. `{"key":"value"}`
+     * @brief Overrides the default queue group for the service ("q").
+     *
+     */
+    const char *QueueGroup;
+
+    /**
+     * @brief Disables the use of a queue group for the service.
+     *
+     */
+    bool NoQueueGroup;
+
+    /**
+     * @brief Immutable metadata for the service, a JSON-encoded user-provided
+     * object, e.g. `{"key":"value"}`
      */
     natsMetadata Metadata;
 
@@ -8013,15 +8223,14 @@ microService_AddEndpoint(microService *m, microEndpointConfig *config);
  * @param new_group the location where to store the pointer to the new
  * #microGroup object.
  * @param m the #microService that the group will be added to.
- * @param prefix a prefix to use on names and subjects of all endpoints in the
- * group.
+ * @param config group parameters.
  *
  * @return a #microError if an error occurred.
  *
  * @see #microGroup_AddGroup, #microGroup_AddEndpoint
  */
 NATS_EXTERN microError *
-microService_AddGroup(microGroup **new_group, microService *m, const char *prefix);
+microService_AddGroup(microGroup **new_group, microService *m, microGroupConfig *config);
 
 /** @brief Destroys a microservice, stopping it first if needed.
  *
@@ -8149,15 +8358,14 @@ NATS_EXTERN microError *microService_Stop(microService *m);
  * @param new_group the location where to store the pointer to the new
  * #microGroup object.
  * @param parent the #microGroup that the new group will be added to.
- * @param prefix a prefix to use on names and subjects of all endpoints in the
- * group.
+ * @param config group parameters.
  *
  * @return a #microError if an error occurred.
  *
  * @see #microGroup_AddGroup, #microGroup_AddEndpoint
  */
 NATS_EXTERN microError *
-microGroup_AddGroup(microGroup **new_group, microGroup *parent, const char *prefix);
+microGroup_AddGroup(microGroup **new_group, microGroup *parent, microGroupConfig *config);
 
 /** @brief Adds an endpoint to a #microGroup and starts listening for messages.
  *

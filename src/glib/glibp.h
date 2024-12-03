@@ -81,7 +81,7 @@ struct __natsDispatcherPool
     int useNext; // index of next dispatcher to use
     int cap;     // maximum number of concurrent dispatchers allowed
 
-    natsDispatcher *dispatchers;
+    natsDispatcher **dispatchers;
 
 };
 
@@ -116,11 +116,6 @@ typedef struct __natsLib
     natsCondition *cond;
 
     natsGCList gc;
-
-    // For micro services code
-    natsMutex *service_callback_mu;
-    // uses `microService*` as the key and the value.
-    natsHash *all_services_to_callback;
 
 } natsLib;
 

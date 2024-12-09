@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.9.0-beta</span>
+   &#160;<span id="projectnumber">3.10.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -101,6 +101,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gaa89c06e30e19ff361125bfc9114d89a8"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#gaa89c06e30e19ff361125bfc9114d89a8">natsConnection_ProcessReadEvent</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
 <tr class="memdesc:gaa89c06e30e19ff361125bfc9114d89a8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Process a read event when using external event loop.  <a href="group__conn_mgt_group.html#gaa89c06e30e19ff361125bfc9114d89a8">More...</a><br /></td></tr>
 <tr class="separator:gaa89c06e30e19ff361125bfc9114d89a8"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga9b0b13505d2dc85f49a5554c8a164876"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#ga9b0b13505d2dc85f49a5554c8a164876">natsConnection_ProcessCloseEvent</a> (<a class="el" href="nats_8h.html#af798865ac824e5959987de0fe8d07383">natsSock</a> *socket)</td></tr>
+<tr class="memdesc:ga9b0b13505d2dc85f49a5554c8a164876"><td class="mdescLeft">&#160;</td><td class="mdescRight">Process a socket close event when using external event loop.  <a href="group__conn_mgt_group.html#ga9b0b13505d2dc85f49a5554c8a164876">More...</a><br /></td></tr>
+<tr class="separator:ga9b0b13505d2dc85f49a5554c8a164876"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gad81b603b84c0180aefc6d5ebad7f2a47"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#gad81b603b84c0180aefc6d5ebad7f2a47">natsConnection_ProcessWriteEvent</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
 <tr class="memdesc:gad81b603b84c0180aefc6d5ebad7f2a47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Process a write event when using external event loop.  <a href="group__conn_mgt_group.html#gad81b603b84c0180aefc6d5ebad7f2a47">More...</a><br /></td></tr>
 <tr class="separator:gad81b603b84c0180aefc6d5ebad7f2a47"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -267,6 +270,32 @@ Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object.</td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section warning"><dt>Warning</dt><dd>This API is reserved for external event loop adapters. </dd></dl>
+
+</div>
+</div>
+<a id="ga9b0b13505d2dc85f49a5554c8a164876"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga9b0b13505d2dc85f49a5554c8a164876">&#9670;&nbsp;</a></span>natsConnection_ProcessCloseEvent()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void natsConnection_ProcessCloseEvent </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="nats_8h.html#af798865ac824e5959987de0fe8d07383">natsSock</a> *&#160;</td>
+          <td class="paramname"><em>socket</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>When using an external event loop, and the library wants to close the connection, the event loop adapter will ensure that the event loop library stops polling, and then will invoke this function so that the socket can be safely closed.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">socket</td><td>the pointer to the <a class="el" href="nats_8h.html#af798865ac824e5959987de0fe8d07383">natsSock</a> object.</td></tr>
   </table>
   </dd>
 </dl>

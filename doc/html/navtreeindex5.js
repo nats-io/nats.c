@@ -1,5 +1,7 @@
 var NAVTREEINDEX5 =
 {
+"status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a9eef13e3281a879f36a30e246fb6021b":[4,0,3,2,12],
+"status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aa023de74e8bedf88c2f5e4b21e62ea4b":[4,0,3,2,39],
 "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aa0ca5a2e539cec9d33f433f28f2780fe":[4,0,3,2,100],
 "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aa0eb191886a17e917f2fa0eaa81d4b61":[4,0,3,2,116],
 "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aa1242d9e6509f08c01c3373d0e66dc96":[4,0,3,2,109],
@@ -247,7 +249,5 @@ var NAVTREEINDEX5 =
 "structjs_options_1_1js_options_stream.html":[2,0,40,2],
 "structjs_options_1_1js_options_stream.html#a2ca89c298b4df1f5e3e0a44e205c789c":[2,0,40,2,3],
 "structjs_options_1_1js_options_stream.html#afe680264223b434ca6959f9e122af029":[2,0,40,2,2],
-"structjs_options_1_1js_options_stream_1_1js_options_stream_info.html":[2,0,40,2,0],
-"structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#a73f847afe18f56eaaf6788900270bef7":[2,0,40,2,0,0],
-"structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#af874e0f5aa15fb2a41504631ed786e6d":[2,0,40,2,0,1]
+"structjs_options_1_1js_options_stream_1_1js_options_stream_info.html":[2,0,40,2,0]
 };

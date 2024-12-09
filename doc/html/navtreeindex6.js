@@ -1,5 +1,7 @@
 var NAVTREEINDEX6 =
 {
+"structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#a73f847afe18f56eaaf6788900270bef7":[2,0,40,2,0,0],
+"structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#af874e0f5aa15fb2a41504631ed786e6d":[2,0,40,2,0,1],
 "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html":[2,0,40,2,1],
 "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html#a0d61e5d3c9c518f455549086ababe7f6":[2,0,40,2,1,1],
 "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html#a882c1ce1e636817450893caa72aa4eda":[2,0,40,2,1,2],

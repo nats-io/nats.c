@@ -1,5 +1,7 @@
 var NAVTREEINDEX6 =
 {
+"structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#a73f847afe18f56eaaf6788900270bef7":[2,0,40,2,0,0],
+"structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#af874e0f5aa15fb2a41504631ed786e6d":[2,0,40,2,0,1],
 "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html":[2,0,40,2,1],
 "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html#a0d61e5d3c9c518f455549086ababe7f6":[2,0,40,2,1,1],
 "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html#a882c1ce1e636817450893caa72aa4eda":[2,0,40,2,1,2],
@@ -179,6 +181,7 @@ var NAVTREEINDEX6 =
 "structkv_watch_options.html#a0535edd21b26affc0057575bafc21a07":[2,0,42,0],
 "structkv_watch_options.html#a08274f08ae96e14d9ded326e4e665649":[2,0,42,1],
 "structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66":[2,0,42,3],
+"structkv_watch_options.html#a82cd6bcb7167e7f798b6f912c1fa29c9":[2,0,42,4],
 "structkv_watch_options.html#ac9094bce4f3c6513431ba32fb49e5605":[2,0,42,2],
 "structmicro__endpoint__config__s.html":[2,3,2,0],
 "structmicro__endpoint__config__s.html#a1a47fe3be59a271217bcb4341cddecae":[2,3,2,0,0],

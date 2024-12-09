@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['natsmetadata_1024',['natsMetadata',['../structnats_metadata.html',1,'']]],
-  ['natsmsglist_1025',['natsMsgList',['../structnats_msg_list.html',1,'']]]
+  ['natsmetadata_1026',['natsMetadata',['../structnats_metadata.html',1,'']]],
+  ['natsmsglist_1027',['natsMsgList',['../structnats_msg_list.html',1,'']]]
 ];

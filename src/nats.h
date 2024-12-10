@@ -177,6 +177,18 @@ typedef struct __natsMsg            natsMsg;
  */
 typedef struct __natsOptions        natsOptions;
 
+/** \brief A wrapper for an X509 certificate.
+ *
+ * A #natsCert represents an X509 certificate.
+ */
+typedef struct __natsCert               natsCert;
+
+/** \brief A wrapper for an X509 certificate chain.
+ *
+ * A #natsCertChain represents an X509 certificate chain.
+ */
+typedef struct __natsCertChainElement   natsCertChain;
+
 /** \brief Unique subject often used for point-to-point communication.
  *
  * This can be used as the reply for a request. Inboxes are meant to be
@@ -2446,6 +2458,31 @@ natsOptions_SetName(natsOptions *opts, const char *name);
  */
 NATS_EXTERN natsStatus
 natsOptions_SetSecure(natsOptions *opts, bool secure);
+
+/** \brief Callback used to verify the SSL certificate
+ *
+ * When set, this callback will be invoked to allow for custom SSL certificate validation.
+ *
+ * @see natsOptions_SetCertificateValidationCB()
+ * @see https://docs.openssl.org/master/man3/SSL_CTX_set_verify/
+ *
+ * @param preverify_ok indicates, whether the verification of the certificate in question was passed (preverify_ok=1) or not (preverify_ok=0)
+ * @param cert is a pointer to an object containing information about the certificate
+ * @param chain is a pointer to an object containing information about the certificate chain
+ *
+ * @return a boolean value that determines whether the specified certificate is accepted for authentication.
+ */
+ typedef bool (*CertificateValidationCB)(int preverify_ok, natsCert *cert, natsCertChain *chain);
+
+/** \brief Sets the certificate validation callback.
+ *
+ * Sets a callback used to verify the SSL certificate.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param verifyCallback the callback to invoke to fetch the user JWT.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetCertificateValidationCB(natsOptions *opts, CertificateValidationCB certificateValidationCB);
 
 /** \brief Performs TLS handshake first.
  *

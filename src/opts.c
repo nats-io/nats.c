@@ -693,7 +693,35 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
 
     s = _getSSLCtx(opts);
     if (s == NATS_OK)
+    {
         opts->sslCtx->skipVerify = skip;
+        if (skip)
+        {
+            opts->sslCtx->callback = NULL;
+        }
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return s;
+}
+
+natsStatus
+natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback)
+{
+    natsStatus s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    s = _getSSLCtx(opts);
+    if (s == NATS_OK)
+    {
+        opts->sslCtx->callback = callback;
+        if (callback != NULL)
+        {
+            opts->sslCtx->skipVerify = false;
+        }
+    }
 
     UNLOCK_OPTS(opts);
 
@@ -754,6 +782,12 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname)
 
 natsStatus
 natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
+natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback)
 {
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }

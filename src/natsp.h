@@ -182,11 +182,12 @@ typedef struct __natsServerInfo
 
 typedef struct __natsSSLCtx
 {
-    natsMutex   *lock;
-    int         refs;
-    SSL_CTX     *ctx;
-    char        *expectedHostname;
-    bool        skipVerify;
+    natsMutex       *lock;
+    int             refs;
+    SSL_CTX         *ctx;
+    char            *expectedHostname;
+    bool            skipVerify;
+    SSL_verify_cb   callback;
 
 } natsSSLCtx;
 

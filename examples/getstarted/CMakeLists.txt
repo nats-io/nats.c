@@ -13,6 +13,10 @@ if(NOT NATS_BUILD_STATIC_EXAMPLES)
   add_definitions(-Dnats_IMPORTS)
 endif()
 
+if(NATS_BUILD_WITH_TLS)
+  include_directories(${OPENSSL_INCLUDE_DIR})
+endif(NATS_BUILD_WITH_TLS)
+
 # For each file...
 foreach(examples_src ${EXAMPLES_SOURCES})
 

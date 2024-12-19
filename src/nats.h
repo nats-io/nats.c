@@ -27,6 +27,14 @@ extern "C" {
 #include "status.h"
 #include "version.h"
 
+#if defined(NATS_HAS_TLS)
+#include <openssl/ssl.h>
+#include <openssl/x509v3.h>
+#else
+#define X509_STORE_CTX void
+typedef int (*SSL_verify_cb)(int preverify_ok, X509_STORE_CTX* x509_ctx);
+#endif
+
 /** \def NATS_EXTERN
  *  \brief Needed for shared library.
  *
@@ -2603,9 +2611,6 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
  */
 NATS_EXTERN natsStatus
 natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
-
-typedef struct x509_store_ctx_st X509_STORE_CTX;
-typedef int (*SSL_verify_cb)(int preverify_ok, X509_STORE_CTX *x509_ctx);
 
 /** \brief Sets the certificate validation callback.
  *

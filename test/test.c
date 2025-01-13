@@ -33940,6 +33940,7 @@ void test_MicroGroups(void)
     microGroup *g2 = NULL;
     microServiceInfo *info = NULL;
     int i;
+    char buf[1024];
 
     microEndpointConfig ep2_cfg = {
         .Name = "ep2",
@@ -33976,6 +33977,13 @@ void test_MicroGroups(void)
     testCond(NATS_OK == natsConnection_Connect(&nc, opts));
 
     _startMicroservice(&m, nc, &cfg, NULL, 0, &arg);
+
+    test("AddEnpoint with invalid subject: ");
+    microEndpointConfig invalid_subject_ep_cfg = { .Name = "invalidsubject", .Handler = _microHandleRequest42, .Subject = "foo bar" };
+    err = microService_AddEndpoint(m, &invalid_subject_ep_cfg);
+    testCond((err != NULL) && (strstr(microError_String(err, buf, sizeof(buf)), "invalid subject 'foo bar'") != NULL));
+    microError_Destroy(err);
+    err = NULL;
 
     test("AddEndpoint 1 to service: ");
     microEndpointConfig ep1_cfg = { .Name = "ep1", .Handler = _microHandleRequest42 };

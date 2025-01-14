@@ -1240,6 +1240,59 @@ typedef void (*jsFetchCompleteHandler)(natsConnection *nc, natsSubscription *sub
 typedef bool (*jsFetchNextHandler)(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure);
 
 /**
+ * Async pull subscriber options.
+ *
+ * Part of #jsOptions.
+ */
+typedef struct jsOptionsPullSubscribeAsync
+{
+        int64_t                 Timeout;        ///< Auto-unsubsribe after this many milliseconds.
+        int                     MaxMessages;    ///< Auto-unsubscribed after receiving this many messages.
+        int64_t                 MaxBytes;       ///< Auto-unsubscribe after receiving this many bytes.
+
+        /// \brief If NoWait is set, the subscription will receive the
+        /// messages already stored on the server subject to the limits,
+        /// but will not wait for more messages.
+        ///
+        /// \note that if Timeout is set we would still wait for first
+        /// message to become available, even if there are currently any
+        /// on the server
+        bool                    NoWait;
+
+        /// \brief Fetch complete handler that receives the exit status
+        /// code, the subscription's Complete handler is also invoked,
+        /// but does not have the status code.
+        jsFetchCompleteHandler  CompleteHandler;
+        void                    *CompleteHandlerClosure;
+
+        /// \brief Have server sends heartbeats at this interval (in
+        /// milliseconds) to help detect communication failures.
+        int64_t                 Heartbeat;
+
+        /// @brief When using the automatic Fetch flow control (default
+        /// NextHandler), this is the number of messages to ask for in a
+        /// single request.
+        int                     FetchSize;
+
+        /// @brief When using the automatic Fetch flow control (default
+        /// NextHandler), initiate the next fetch request (this many
+        /// messages) prior to the fulfillment of the current request.
+        ///
+        /// @note KeepAhead can not be used in conjunction with MaxBytes
+        /// or NoWait.
+        int                     KeepAhead;
+
+        /// @brief If set, switches to manual fetch flow control.
+        ///
+        /// If provided, this function gets called before each message
+        /// is deliverered to msgCB, and overrides the default algorithm
+        /// for sending Next fetch requests.
+        jsFetchNextHandler      NextHandler;
+        void                    *NextHandlerClosure;
+
+} jsOptionsPullSubscribeAsync;
+
+/**
  * JetStream context options.
  *
  * Initialize the object with #jsOptions_Init.
@@ -1273,53 +1326,7 @@ typedef struct jsOptions
 
         } PublishAsync; ///< extra options for #js_PublishAsync
 
-        struct jsOptionsPullSubscribeAsync
-        {
-                int64_t                 Timeout;        ///< Auto-unsubsribe after this many milliseconds.
-                int                     MaxMessages;    ///< Auto-unsubscribed after receiving this many messages.
-                int64_t                 MaxBytes;       ///< Auto-unsubscribe after receiving this many bytes.
-
-                /// \brief If NoWait is set, the subscription will receive the
-                /// messages already stored on the server subject to the limits,
-                /// but will not wait for more messages.
-                ///
-                /// \note that if Timeout is set we would still wait for first
-                /// message to become available, even if there are currently any
-                /// on the server
-                bool                    NoWait;
-
-                /// \brief Fetch complete handler that receives the exit status
-                /// code, the subscription's Complete handler is also invoked,
-                /// but does not have the status code.
-                jsFetchCompleteHandler  CompleteHandler;
-                void                    *CompleteHandlerClosure;
-
-                /// \brief Have server sends heartbeats at this interval (in
-                /// milliseconds) to help detect communication failures.
-                int64_t                 Heartbeat;
-
-                /// @brief When using the automatic Fetch flow control (default
-                /// NextHandler), this is the number of messages to ask for in a
-                /// single request.
-                int                     FetchSize;
-
-                /// @brief When using the automatic Fetch flow control (default
-                /// NextHandler), initiate the next fetch request (this many
-                /// messages) prior to the fulfillment of the current request.
-                ///
-                /// @note KeepAhead can not be used in conjunction with MaxBytes
-                /// or NoWait.
-                int                     KeepAhead;
-
-                /// @brief If set, switches to manual fetch flow control.
-                ///
-                /// If provided, this function gets called before each message
-                /// is deliverered to msgCB, and overrides the default algorithm
-                /// for sending Next fetch requests.
-                jsFetchNextHandler      NextHandler;
-                void                    *NextHandlerClosure;
-
-        } PullSubscribeAsync; ///< extra options for #js_PullSubscribeAsync
+        jsOptionsPullSubscribeAsync PullSubscribeAsync; ///< extra options for #js_PullSubscribeAsync
 
 
         /**

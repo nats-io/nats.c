@@ -76,7 +76,7 @@ foreach(examples_src ${EXAMPLES_SOURCES})
 
     if(buildExample)
       # Build the executable
-      add_executable(${exampleexe} ${PROJECT_SOURCE_DIR}/examples/${examples_src})
+      add_executable(${exampleexe} ${PROJECT_SOURCE_DIR}/examples/${examples_src} check_cpp.cpp)
 
       # Link
       if(NATS_BUILD_STATIC_EXAMPLES)

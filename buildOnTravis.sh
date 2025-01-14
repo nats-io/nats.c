@@ -73,6 +73,14 @@ if [ $res -ne 0 ]; then
   exit $res
 fi
 
+echo "Test C++ compiler compatibility"
+# There is mo need to run check, just make sure it's compiled
+bin/check_cpp
+res=$?
+if [ $res -ne 0 ]; then
+  exit $res
+fi
+
 export NATS_TEST_TRAVIS=yes
 echo "Using NATS server version: $NATS_TEST_SERVER_VERSION"
 ctest -L 'test' --timeout 60 --output-on-failure $4

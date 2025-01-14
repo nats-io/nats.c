@@ -307,4 +307,5 @@ if(NATS_BUILD_STREAMING)
 endif()
 add_subdirectory(test)
 add_subdirectory(test/dylib)
+add_subdirectory(test/check_cpp)
 #----------------------------

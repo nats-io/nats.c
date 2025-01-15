@@ -1240,124 +1240,139 @@ typedef void (*jsFetchCompleteHandler)(natsConnection *nc, natsSubscription *sub
 typedef bool (*jsFetchNextHandler)(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure);
 
 /**
+ * Async pull subscriber options.
+ *
+ * Part of #jsOptions.
+ */
+typedef struct jsOptionsPullSubscribeAsync
+{
+        int64_t                 Timeout;        ///< Auto-unsubsribe after this many milliseconds.
+        int                     MaxMessages;    ///< Auto-unsubscribed after receiving this many messages.
+        int64_t                 MaxBytes;       ///< Auto-unsubscribe after receiving this many bytes.
+
+        /// \brief If NoWait is set, the subscription will receive the
+        /// messages already stored on the server subject to the limits,
+        /// but will not wait for more messages.
+        ///
+        /// \note that if Timeout is set we would still wait for first
+        /// message to become available, even if there are currently any
+        /// on the server
+        bool                    NoWait;
+
+        /// \brief Fetch complete handler that receives the exit status
+        /// code, the subscription's Complete handler is also invoked,
+        /// but does not have the status code.
+        jsFetchCompleteHandler  CompleteHandler;
+        void                    *CompleteHandlerClosure;
+
+        /// \brief Have server sends heartbeats at this interval (in
+        /// milliseconds) to help detect communication failures.
+        int64_t                 Heartbeat;
+
+        /// @brief When using the automatic Fetch flow control (default
+        /// NextHandler), this is the number of messages to ask for in a
+        /// single request.
+        int                     FetchSize;
+
+        /// @brief When using the automatic Fetch flow control (default
+        /// NextHandler), initiate the next fetch request (this many
+        /// messages) prior to the fulfillment of the current request.
+        ///
+        /// @note KeepAhead can not be used in conjunction with MaxBytes
+        /// or NoWait.
+        int                     KeepAhead;
+
+        /// @brief If set, switches to manual fetch flow control.
+        ///
+        /// If provided, this function gets called before each message
+        /// is deliverered to msgCB, and overrides the default algorithm
+        /// for sending Next fetch requests.
+        jsFetchNextHandler      NextHandler;
+        void                    *NextHandlerClosure;
+
+} jsOptionsPullSubscribeAsync;
+
+/**
+ * Async pull options.
+ *
+ * Part of #jsOptions.
+ */
+typedef struct jsOptionsPublishAsync
+{
+        int64_t                 MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
+
+        // If jsPubAckHandler is specified, the callback will be invoked
+        // for every asynchronous published message, either as a positive
+        // result, or with the error encountered when publishing that
+        // message. If this callback is specified, ErrHandler (see below)
+        // will be ignored.
+        jsPubAckHandler         AckHandler;             ///< Callback invoked for each asynchronous published message.
+        void                    *AckHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckHandler callback.
+
+        // This callback is invoked for messages published asynchronously
+        // when an error is returned by the server or if the library has
+        // timed-out waiting for an acknowledgment back from the server
+        // (if publish uses the jsPubOptions.MaxWait).
+        jsPubAckErrHandler      ErrHandler;             ///< Callback invoked when error encountered publishing a given message.
+        void                    *ErrHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckErrHandler callback.
+
+        int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.
+
+} jsOptionsPublishAsync;
+
+/**
+ * Advanced stream purge options
+ *
+ * * `Subject` will filter the purge request to only messages that match the subject, which can have wildcards.<br>
+ * * `Sequence` will purge up to but not including this sequence and can be combined with subject filtering.<br>
+ * * `Keep` will specify how many messages to keep and can be combined with subject filtering.<br>
+ *
+ * \note `Sequence` and `Keep` are mutually exclusive, so both can not be set at the same time.
+ */
+typedef struct jsOptionsStreamPurge
+{
+        const char      *Subject;       ///< This is the subject to match against messages for the purge command.
+        uint64_t        Sequence;       ///< Purge up to but not including sequence.
+        uint64_t        Keep;           ///< Number of messages to keep.
+
+} jsOptionsStreamPurge;
+
+/**
+ * Advance stream information retrieval options
+ */
+typedef struct jsOptionsStreamInfo
+{
+        bool            DeletedDetails;         ///< Get the list of deleted message sequences.
+        const char      *SubjectsFilter;        ///< Get the list of subjects in this stream.
+
+} jsOptionsStreamInfo;
+
+/**
+ * Advanced stream options
+ *
+ * * `Purge` for advanced purge options.
+ * * `Info` for advanced information retrieval options.
+ */
+typedef struct jsOptionsStream
+{
+        jsOptionsStreamPurge Purge;                                ///< Optional stream purge options.
+        jsOptionsStreamInfo Info;                                 ///< Optional stream information retrieval options.
+
+} jsOptionsStream;
+
+/**
  * JetStream context options.
  *
  * Initialize the object with #jsOptions_Init.
  */
 typedef struct jsOptions
 {
-        const char              *Prefix;                        ///< JetStream prefix, default is "$JS.API"
-        const char              *Domain;                        ///< Domain changes the domain part of JetSteam API prefix.
-        int64_t                 Wait;                           ///< Amount of time (in milliseconds) to wait for various JetStream API requests, default is 5000 ms (5 seconds).
-
-        struct jsOptionsPublishAsync
-        {
-                int64_t                 MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
-
-                // If jsPubAckHandler is specified, the callback will be invoked
-                // for every asynchronous published message, either as a positive
-                // result, or with the error encountered when publishing that
-                // message. If this callback is specified, ErrHandler (see below)
-                // will be ignored.
-                jsPubAckHandler         AckHandler;             ///< Callback invoked for each asynchronous published message.
-                void                    *AckHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckHandler callback.
-
-                // This callback is invoked for messages published asynchronously
-                // when an error is returned by the server or if the library has
-                // timed-out waiting for an acknowledgment back from the server
-                // (if publish uses the jsPubOptions.MaxWait).
-                jsPubAckErrHandler      ErrHandler;             ///< Callback invoked when error encountered publishing a given message.
-                void                    *ErrHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckErrHandler callback.
-
-                int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.
-
-        } PublishAsync; ///< extra options for #js_PublishAsync
-
-        struct jsOptionsPullSubscribeAsync
-        {
-                int64_t                 Timeout;        ///< Auto-unsubsribe after this many milliseconds.
-                int                     MaxMessages;    ///< Auto-unsubscribed after receiving this many messages.
-                int64_t                 MaxBytes;       ///< Auto-unsubscribe after receiving this many bytes.
-
-                /// \brief If NoWait is set, the subscription will receive the
-                /// messages already stored on the server subject to the limits,
-                /// but will not wait for more messages.
-                ///
-                /// \note that if Timeout is set we would still wait for first
-                /// message to become available, even if there are currently any
-                /// on the server
-                bool                    NoWait;
-
-                /// \brief Fetch complete handler that receives the exit status
-                /// code, the subscription's Complete handler is also invoked,
-                /// but does not have the status code.
-                jsFetchCompleteHandler  CompleteHandler;
-                void                    *CompleteHandlerClosure;
-
-                /// \brief Have server sends heartbeats at this interval (in
-                /// milliseconds) to help detect communication failures.
-                int64_t                 Heartbeat;
-
-                /// @brief When using the automatic Fetch flow control (default
-                /// NextHandler), this is the number of messages to ask for in a
-                /// single request.
-                int                     FetchSize;
-
-                /// @brief When using the automatic Fetch flow control (default
-                /// NextHandler), initiate the next fetch request (this many
-                /// messages) prior to the fulfillment of the current request.
-                ///
-                /// @note KeepAhead can not be used in conjunction with MaxBytes
-                /// or NoWait.
-                int                     KeepAhead;
-
-                /// @brief If set, switches to manual fetch flow control.
-                ///
-                /// If provided, this function gets called before each message
-                /// is deliverered to msgCB, and overrides the default algorithm
-                /// for sending Next fetch requests.
-                jsFetchNextHandler      NextHandler;
-                void                    *NextHandlerClosure;
-
-        } PullSubscribeAsync; ///< extra options for #js_PullSubscribeAsync
-
-
-        /**
-         * Advanced stream options
-         *
-         * * `Purge` for advanced purge options.
-         * * `Info` for advanced information retrieval options.
-         */
-        struct jsOptionsStream
-        {
-                /**
-                 * Advanced stream purge options
-                 *
-                 * * `Subject` will filter the purge request to only messages that match the subject, which can have wildcards.<br>
-                 * * `Sequence` will purge up to but not including this sequence and can be combined with subject filtering.<br>
-                 * * `Keep` will specify how many messages to keep and can be combined with subject filtering.<br>
-                 *
-                 * \note `Sequence` and `Keep` are mutually exclusive, so both can not be set at the same time.
-                 */
-                struct jsOptionsStreamPurge
-                {
-                        const char      *Subject;       ///< This is the subject to match against messages for the purge command.
-                        uint64_t        Sequence;       ///< Purge up to but not including sequence.
-                        uint64_t        Keep;           ///< Number of messages to keep.
-
-                } Purge;                                ///< Optional stream purge options.
-
-                /**
-                 * Advance stream information retrieval options
-                 */
-                struct jsOptionsStreamInfo
-                {
-                        bool            DeletedDetails;         ///< Get the list of deleted message sequences.
-                        const char      *SubjectsFilter;        ///< Get the list of subjects in this stream.
-
-                } Info;                                 ///< Optional stream information retrieval options.
-
-        } Stream;                                       ///< Optional stream options.
+        const char                      *Prefix;                ///< JetStream prefix, default is "$JS.API"
+        const char                      *Domain;                ///< Domain changes the domain part of JetSteam API prefix.
+        int64_t                         Wait;                   ///< Amount of time (in milliseconds) to wait for various JetStream API requests, default is 5000 ms (5 seconds).
+        jsOptionsPublishAsync           PublishAsync;           ///< extra options for #js_PublishAsync
+        jsOptionsPullSubscribeAsync     PullSubscribeAsync;     ///< extra options for #js_PullSubscribeAsync
+        jsOptionsStream                 Stream;                 ///< Optional stream options.
 
 } jsOptions;
 

@@ -37033,12 +37033,22 @@ void test_StanSubTimeout(void)
 
 #ifndef _WIN32
 static void _sigsegv_handler(int sig) {
+
+// Android doesn't support backtrace before API Level 33.
+// Because this is for tests it's good enough to check
+// for Android only, until there is need for a better solution.
+#ifndef ANDROID
   void *array[20];
   int size = backtrace(array, 20);
+#endif // ANDROID
 
   // print out all the frames to stderr
   fprintf(stderr, "Error: signal %d:\n", sig);
+
+#ifndef ANDROID
   backtrace_symbols_fd(array, size, STDERR_FILENO);
+#endif // ANDROID
+
   exit(1);
 }
 #endif // _WIN32

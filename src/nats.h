@@ -1367,12 +1367,12 @@ typedef struct jsOptionsStream
  */
 typedef struct jsOptions
 {
-        const char              *Prefix;                        ///< JetStream prefix, default is "$JS.API"
-        const char              *Domain;                        ///< Domain changes the domain part of JetSteam API prefix.
-        int64_t                 Wait;                           ///< Amount of time (in milliseconds) to wait for various JetStream API requests, default is 5000 ms (5 seconds).
-        jsOptionsPublishAsync PublishAsync;                     ///< extra options for #js_PublishAsync
-        jsOptionsPullSubscribeAsync PullSubscribeAsync;         ///< extra options for #js_PullSubscribeAsync
-        jsOptionsStream Stream;                                 ///< Optional stream options.
+        const char                      *Prefix;                ///< JetStream prefix, default is "$JS.API"
+        const char                      *Domain;                ///< Domain changes the domain part of JetSteam API prefix.
+        int64_t                         Wait;                   ///< Amount of time (in milliseconds) to wait for various JetStream API requests, default is 5000 ms (5 seconds).
+        jsOptionsPublishAsync           PublishAsync;           ///< extra options for #js_PublishAsync
+        jsOptionsPullSubscribeAsync     PullSubscribeAsync;     ///< extra options for #js_PullSubscribeAsync
+        jsOptionsStream                 Stream;                 ///< Optional stream options.
 
 } jsOptions;
 

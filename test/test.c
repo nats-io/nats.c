@@ -21087,6 +21087,163 @@ void test_SSLSkipServerVerification(void)
 #endif
 }
 
+#if defined(NATS_HAS_TLS)
+static void
+_logCert(X509 *cert)
+{
+    char    buf[32];
+    char    *subjectName;
+    char    *issuerName;
+    const   ASN1_TIME* asn1NotBefore;
+    const   ASN1_TIME* asn1NotAfter;
+    struct  tm tmNotBefore;
+    struct  tm tmNotAfter;
+    char    *notBefore;
+    char    *notAfter;
+
+    if (cert == NULL)
+        return;
+
+    subjectName = X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);
+    issuerName = X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
+
+    asn1NotBefore = X509_get0_notBefore(cert);
+    ASN1_TIME_to_tm(asn1NotBefore, &tmNotBefore);
+    strftime(buf, sizeof(buf), "%F %T", &tmNotBefore);
+    notBefore = NATS_STRDUP(buf);
+
+    asn1NotAfter = X509_get0_notAfter(cert);
+    ASN1_TIME_to_tm(asn1NotAfter, &tmNotAfter);
+    strftime(buf, sizeof(buf), "%F %T", &tmNotAfter);
+    notAfter = NATS_STRDUP(buf);
+
+    testf("cert: subject: %s, issuer: %s, notBefore: %s, notAfter: %s\n", subjectName, issuerName, notBefore, notAfter);
+
+    OPENSSL_free(subjectName);
+    OPENSSL_free(issuerName);
+    NATS_FREE(notBefore);
+    NATS_FREE(notAfter);
+}
+
+static void
+_logChain(STACK_OF(X509) *chain)
+{
+    int     numElements;
+    int     level = 0;
+    X509    *cert;
+
+    if (chain == NULL)
+        return;
+
+    numElements = sk_X509_num(chain);
+    for (int i = 0; i < numElements; i++)
+    {
+        cert = sk_X509_value(chain, i);
+        testf("chain level: %d\n", ++level);
+        _logCert(cert);
+    }
+}
+
+static int
+_sslVerifyCallback(int preverify_ok, X509_STORE_CTX *ctx)
+{
+    X509                *cert               = X509_STORE_CTX_get_current_cert(ctx);
+    SSL                 *ssl                = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
+    STACK_OF(X509)      *chain              = SSL_get_peer_cert_chain(ssl);
+    const ASN1_TIME     *asn1NotAfter;
+    struct              tm tmNotAfter;
+    char                *issuerName;
+    bool                result;
+    time_t              notAfter;
+    time_t              now;
+
+    testf("preverify_ok: %d\n", preverify_ok);
+    
+    if (cert == NULL)
+    {
+        test("no cert\n");
+        return 0;
+    }
+    else
+    {
+        _logCert(cert);
+    }
+
+    if (chain == NULL)
+    {
+        test("no chain\n");
+    }
+    else
+    {
+        _logChain(chain);
+    }
+
+    asn1NotAfter = X509_get0_notAfter(cert);
+    ASN1_TIME_to_tm(asn1NotAfter, &tmNotAfter);
+    notAfter = mktime(&tmNotAfter);
+    time(&now);
+    issuerName = X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
+
+    if (notAfter > now)
+    {
+        if (strstr(issuerName, "Synadia"))
+        {
+            result = 1;
+        }
+        else
+        {
+            result = preverify_ok;
+        }
+    }
+    else
+    {
+        result = 0;
+    }
+
+    OPENSSL_free(issuerName);
+    testf("verfiy result: %d\n", result);
+    return result;
+}
+#endif // NATS_HAS_TLS
+
+void test_SSLVerificationCallback(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc         = NULL;
+    natsOptions         *opts       = NULL;
+    natsPid             serverPid   = NATS_INVALID_PID;
+
+    opts = _createReconnectOptions();
+    if (opts == NULL)
+        FAIL("Unable to create reconnect options!");
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check that connect fails due to server verification: ");
+    s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_SSL_ERROR);
+    natsConnection_Destroy(nc);
+
+    test("Check that connect succeeds with validation callback:\n");
+    s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
+    IFOK(s, natsOptions_SetSSLVerificationCallback(opts, _sslVerifyCallback));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+
+    natsOptions_Destroy(opts);
+
+    _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
 void test_SSLCiphers(void)
 {
 #if defined(NATS_HAS_TLS)

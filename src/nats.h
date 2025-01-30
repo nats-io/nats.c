@@ -27,6 +27,14 @@ extern "C" {
 #include "status.h"
 #include "version.h"
 
+#if defined(NATS_HAS_TLS)
+#include <openssl/ssl.h>
+#include <openssl/x509v3.h>
+#else
+#define X509_STORE_CTX void
+typedef int (*SSL_verify_cb)(int preverify_ok, X509_STORE_CTX* x509_ctx);
+#endif
+
 /** \def NATS_EXTERN
  *  \brief Needed for shared library.
  *
@@ -2609,6 +2617,8 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
  * By default, the server certificate is verified. You can disable the verification
  * by passing <c>true</c> to this function.
  *
+ * \note Setting this to true will clear SSL verfication callback set via natsOptions_SetSSLVerificationCallback().
+ *
  * \warning This is fine for tests but use with caution since this is not secure.
  *
  * @param opts the pointer to the #natsOptions object.
@@ -2616,6 +2626,18 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
  */
 NATS_EXTERN natsStatus
 natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
+
+/** \brief Sets the certificate validation callback.
+ *
+ * Sets a callback used to verify the SSL certificate.
+ *
+ * \note Setting a callback will enable SSL verification if disabled via natsOptions_SkipServerVerification().
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param callback the custom SSL verification handler to invoke. see https://docs.openssl.org/master/man3/SSL_CTX_set_verify/
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback);
 
 /** \brief Sets the verbose mode.
  *

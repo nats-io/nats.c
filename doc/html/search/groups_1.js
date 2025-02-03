@@ -1,5 +1,7 @@
 var searchData=
 [
-  ['environment_20variables_1935',['Environment Variables',['../group__env_variables_group.html',1,'']]],
-  ['experimental_20_2d_20microservices_1936',['EXPERIMENTAL - Microservices',['../group__micro_group.html',1,'']]]
+  ['callbacks_0',['callbacks',['../group__callbacks_group.html',1,'Callbacks'],['../group__micro_callbacks.html',1,'Callbacks']]],
+  ['connection_1',['connection',['../group__conn_group.html',1,'Connection'],['../group__stan_conn_group.html',1,'Streaming Connection']]],
+  ['connection_20options_2',['Streaming Connection Options',['../group__stan_conn_opts_group.html',1,'']]],
+  ['constants_3',['Public constants',['../group__micro_constants.html',1,'']]]
 ];

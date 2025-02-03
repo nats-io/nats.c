@@ -2908,6 +2908,7 @@ natsStatus
 js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
 {
     jsFetchRequest req = {.Expires = 0};
+
     if (fetch->opts.NextHandler == NULL)
         return NATS_OK;
 
@@ -2922,6 +2923,11 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
     req.NoWait = fetch->opts.NoWait;
     req.Heartbeat = fetch->opts.Heartbeat * 1000 * 1000; // ns, go time.Duration
 
+    size_t replySubjectSize = 1 + strlen(sub->subject) + 20;
+    char *replySubject = NATS_MALLOC(replySubjectSize);
+    if (replySubject == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
     char buffer[128];
     natsBuffer buf;
     natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
@@ -2930,12 +2936,12 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
     jsSub *jsi = sub->jsi;
     jsi->inFetch = true;
     jsi->fetchID++;
-    snprintf(fetch->replySubject, sizeof(fetch->replySubject), "%.*s%" PRIu64,
+    snprintf(replySubject, replySubjectSize, "%.*s%" PRIu64,
              (int)strlen(sub->subject) - 1, sub->subject, // exclude the last '*'
              jsi->fetchID);
     nats_unlockSubAndDispatcher(sub);
 
-    natsStatus s = _publishPullRequest(sub->conn, jsi->nxtMsgSubj, fetch->replySubject, &buf, &req);
+    natsStatus s = _publishPullRequest(sub->conn, jsi->nxtMsgSubj, replySubject, &buf, &req);
     if (s == NATS_OK)
     {
         nats_lockSubAndDispatcher(sub);
@@ -2943,8 +2949,8 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
         nats_unlockSubAndDispatcher(sub);
     }
 
-
     natsBuf_Destroy(&buf);
+    NATS_FREE(replySubject);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -3087,13 +3093,13 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
             natsTimer_Reset(jsi->hbTimer, dur);
     }
 
+    nats_unlockSubAndDispatcher(sub);
+
     if (s == NATS_OK)
     {
         // Send the first fetch request.
         s = js_maybeFetchMore(sub, fetch);
     }
-
-    nats_unlockSubAndDispatcher(sub);
 
     if (s != NATS_OK)
     {

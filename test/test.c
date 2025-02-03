@@ -28933,6 +28933,13 @@ _recvPullAsync(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
 }
 
 static void
+_recvPullAsyncNoop(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
+                void *closure)
+{
+    natsMsg_Destroy(msg);
+}
+
+static void
 _completePullAsync(natsConnection *nc, natsSubscription *sub, natsStatus exitStatus,
                 void *closure)
 {
@@ -28993,6 +29000,82 @@ _testBatchCompleted(struct threadArg *args, natsSubscription *sub, natsStatus ex
     }
     return result;
 }
+
+
+static bool _GH823_nextHandler(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure)
+{
+    *messages = 5;
+    return true;   
+}
+
+void test_JetStream_GH823(void)
+{
+    natsStatus          s       = NATS_OK;
+    jsErrCode           jerr    = 0;
+    jsStreamConfig      sc;
+    struct threadArg    args;
+    const int           numMsgs = 5000;
+    natsConnection      *ncSub = NULL;
+    jsCtx               *jsSub = NULL;
+
+    JS_SETUP(2, 9, 2);
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Create stream for foo, bar: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char *[2]){"foo","bar"};
+    sc.SubjectsLen = 2;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Publish thousands of test messages: ");
+    for (int i=0; i<numMsgs; i++)
+    {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "hello-foo-%d", i);
+        s = js_Publish(NULL, js, "foo", buf, (int) strlen(buf), NULL, &jerr);
+        if (s != NATS_OK)
+            break;
+        snprintf(buf, sizeof(buf), "hello-bar-%d", i);
+        s = js_Publish(NULL, js, "bar", buf, (int) strlen(buf), NULL, &jerr);
+        if (s != NATS_OK)
+            break;
+    }
+    testCond(s == NATS_OK);
+
+    test("Make a separate connection for subscribers: ");
+    s = natsConnection_Connect(&ncSub, NULL);
+    if (s == NATS_OK)
+        s = natsConnection_JetStream(&jsSub, ncSub, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create the first async pull subscriber and start receiving: ");
+    natsSubscription *sub1 = NULL;
+    jsOptions so;
+    jsOptions_Init(&so);
+    so.PullSubscribeAsync.NextHandler = _GH823_nextHandler;
+    s = js_PullSubscribeAsync(&sub1, jsSub, "foo", NULL, _recvPullAsyncNoop, &args, &so, NULL, &jerr);
+    testCond(s == NATS_OK);
+
+    test("Create the second async pull subscriber and start receiving: ");
+    natsSubscription *sub2 = NULL;
+    s = js_PullSubscribeAsync(&sub2, jsSub, "bar", NULL, _recvPullAsyncNoop, &args, &so, NULL, &jerr);
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub1);
+    natsSubscription_Destroy(sub2);
+    jsCtx_Destroy(jsSub);
+    natsConnection_Destroy(ncSub);
+
+    JS_TEARDOWN
+    _destroyDefaultThreadArgs(&args);
+}
+
+
 
 void test_JetStreamSubscribePullAsync(void)
 {

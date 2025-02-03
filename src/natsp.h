@@ -389,9 +389,6 @@ typedef struct __jsFetch
     // Timer for the fetch expiration. We leverage the existing jsi->hbTimer for
     // checking missed heartbeats.
     natsTimer   *expiresTimer;
-
-    // Matches jsi->fetchID
-    char        replySubject[NATS_DEFAULT_INBOX_PRE_LEN + NUID_BUFFER_LEN + 32]; // big enough for {INBOX}.number
 } jsFetch;
 
 typedef struct __jsSub

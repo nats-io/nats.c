@@ -1912,7 +1912,7 @@ typedef void (*stanConnectionLostHandler)(
  * @param config points to a natsClientConfig. A copy of the settings is made,
  * so the config can be freed after initializing the NATS client.
  */
-natsStatus
+NATS_EXTERN natsStatus
 nats_OpenWithConfig(natsClientConfig *config);
 
 /** \brief Initializes the library.
@@ -1964,7 +1964,8 @@ nats_GetVersionNumber(void);
  * @see nats_GetVersion
  * @see nats_GetVersionNumber
  */
-NATS_EXTERN bool nats_CheckCompatibility(void);
+NATS_EXTERN bool
+nats_CheckCompatibility(void);
 #else
 
 #define nats_CheckCompatibility() nats_CheckCompatibilityImpl(NATS_VERSION_REQUIRED_NUMBER, \
@@ -4216,7 +4217,7 @@ natsConnection_Connect(natsConnection **nc, natsOptions *options);
  *
  * @param nc the pointer to the #natsConnection object.
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_Reconnect(natsConnection *nc);
 
 /** \brief Process a read event when using external event loop.
@@ -8377,7 +8378,8 @@ microService_Run(microService *m);
  *
  * @see #micro_AddService, #microService_Run
  */
-NATS_EXTERN microError *microService_Stop(microService *m);
+NATS_EXTERN microError *
+microService_Stop(microService *m);
 
 /** @} */ // end of microServiceFunctions
 

@@ -81,12 +81,8 @@ static microError *
 handle_stats_default(microRequest *req)
 {
     microError *err = NULL;
-    microService *m = microRequest_GetService(req);
     microServiceStats *stats = NULL;
     natsBuffer *buf = NULL;
-
-    if ((m == NULL) || (m == NULL))
-        return micro_ErrorInvalidArg; // Should not happen
 
     MICRO_CALL(err, microService_GetStats(&stats, req->Service));
     MICRO_CALL(err, marshal_stats(&buf, stats));

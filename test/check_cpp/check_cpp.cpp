@@ -11,7 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <iostream>
 #include <nats.h>
 
 // Check C++ compiler compatibility of structs in
@@ -24,6 +23,6 @@ int main(int argc, char **argv)
     jsFetch fetch;
     fetch.opts.Timeout = 1;
 
-    std::cout << "OK" << std::endl;
+    printf("OK\n");
     return 0;
 }

@@ -6881,18 +6881,12 @@ natsMsg_GetTime(natsMsg *msg);
  *
  * A KeyValue store is a materialized view of JetStream.
  *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
- *
  *  @{
  */
 
 /** \defgroup kvGroupMgt KeyValue store management
  *
  * These functions allow to create, get or delete a KeyValue store.
- *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
  *
  *  @{
  */
@@ -6970,9 +6964,6 @@ kvStore_Destroy(kvStore *kv);
 /** \defgroup kvEntry KeyValue store entries
  *
  * These functions allow to inspect a the value, or entry, of a given key.
- *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
  *
  *  @{
  */
@@ -7443,9 +7434,6 @@ kvStore_Status(kvStatus **new_status, kvStore *kv);
  *
  * These functions allow to receive updates for key(s) on a given bucket.
  *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
- *
  *  @{
  */
 
@@ -7493,9 +7481,6 @@ kvWatcher_Destroy(kvWatcher *w);
 /** \defgroup kvStatus KeyValue store status
  *
  * These functions allow to inspect the status of a bucket.
- *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
  *
  *  @{
  */

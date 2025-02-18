@@ -656,12 +656,15 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
     if (s == NATS_OK)
     {
         msg = sub->ownDispatcher.queue.head;
-        if ((msg == NULL) && sub->draining)
+        if (msg == NULL)
         {
-            removeSub = true;
-            s = NATS_TIMEOUT;
+            if (sub->draining)
+            {
+                removeSub = true;
+                s = NATS_TIMEOUT;
+            }
         }
-        else if (msg != NULL)
+        else
         {
             sub->ownDispatcher.queue.head = msg->next;
 

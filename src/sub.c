@@ -661,7 +661,7 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
             removeSub = true;
             s = NATS_TIMEOUT;
         }
-        else
+        else if (msg != NULL)
         {
             sub->ownDispatcher.queue.head = msg->next;
 

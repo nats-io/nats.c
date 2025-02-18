@@ -1500,7 +1500,7 @@ nats_JSONArrayAsStrings(nats_JSONArray *arr, char ***array, int *arraySize)
         int j;
 
         for (j=0; j<i; j++)
-            NATS_FREE(values[i]);
+            NATS_FREE(values[j]);
 
         NATS_FREE(values);
     }

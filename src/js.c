@@ -3533,13 +3533,12 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq)
 
         s = natsThread_Create(&oci->thread, _recreateOrderedCons, (void*) oci);
         if (s != NATS_OK)
-        {
-            NATS_FREE(oci->ndlv);
             natsSub_release(sub);
-        }
     }
-    if ((s != NATS_OK) && (oci != NULL))
+    if (s != NATS_OK)
     {
+        if (oci != NULL)
+            NATS_FREE(oci->ndlv);
         NATS_FREE(oci);
     }
     return s;

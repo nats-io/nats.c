@@ -3454,8 +3454,10 @@ _recreateOrderedCons(void *closure)
 
     NATS_FREE(oci->ndlv);
     NATS_FREE(oci);
-    natsThread_Detach(t);
-    natsThread_Destroy(t);
+    if (t != NULL) {
+        natsThread_Detach(t);
+        natsThread_Destroy(t);
+    }
     natsSub_release(sub);
 }
 

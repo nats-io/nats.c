@@ -580,7 +580,7 @@ _processInfo(natsConnection *nc, char *info, int len)
             tlsName = (const char*) nc->cur->url->host;
 
         s = natsSrvPool_addNewURLs(nc->srvPool,
-                                   nc->cur->url,
+                                   nc->cur ? nc->cur->url : NULL,
                                    nc->info.connectURLs,
                                    nc->info.connectURLsCount,
                                    tlsName,
@@ -3352,7 +3352,8 @@ _processUrlString(natsOptions *opts, const char *urls)
 
     serverUrls = (char**) NATS_CALLOC(count + 1, sizeof(char*));
     if (serverUrls == NULL)
-        s = NATS_NO_MEMORY;
+        return NATS_NO_MEMORY;
+    
     if (s == NATS_OK)
     {
         urlsCopy = NATS_STRDUP(urls);

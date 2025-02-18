@@ -3535,10 +3535,9 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq)
         if (s != NATS_OK)
             natsSub_release(sub);
     }
-    if (s != NATS_OK)
+    if ((s != NATS_OK) && (oci != NULL))
     {
-        if (oci != NULL)
-            NATS_FREE(oci->ndlv);
+        NATS_FREE(oci->ndlv);
         NATS_FREE(oci);
     }
     return s;

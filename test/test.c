@@ -35108,7 +35108,6 @@ void test_ConnReadLastError(void)
     testCond((s == NATS_ILLEGAL_STATE) && (strcmp(buf, "test error: illegal state") == 0));
 
     natsConnection_Destroy(nc);
-    natsOptions_Destroy(opts);
 }
 
 #if defined(NATS_HAS_STREAMING)

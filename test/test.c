@@ -35072,6 +35072,42 @@ void test_MicroAsyncErrorHandlerMaxPendingBytes(void)
     _stopServer(serverPid);
 }
 
+void test_ConnReadLastError(void)
+{
+    natsStatus      s   = NATS_OK;
+    natsOptions     *opts = NULL;
+    natsConnection  *nc = NULL;
+    char            buf[256];
+
+    test("Create a test connection: ");
+    s = natsOptions_Create(&opts);
+    if (s == NATS_OK)
+        s = natsConn_create(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Set last error, code only: ");
+    natsConn_Lock(nc);
+    nc->err = NATS_ILLEGAL_STATE;
+    natsConn_Unlock(nc);
+
+    test("Verify the default error text: ");
+    s = natsConnection_ReadLastError(nc, buf, sizeof(buf));
+    testCond((s == NATS_ILLEGAL_STATE) && (strcmp(buf, "Illegal State") == 0));
+
+    test("Verify that error text gets truncated: ");
+    s = natsConnection_ReadLastError(nc, buf, 11);
+    testCond((s == NATS_ILLEGAL_STATE) && (strcmp(buf, "Illegal...") == 0));
+
+    test("Set last error, code and test: ");
+    natsConn_Lock(nc);
+    strncpy(nc->errStr, "test error: illegal state", sizeof(nc->errStr));
+    natsConn_Unlock(nc);
+
+    test("Verify the custom error text: ");
+    s = natsConnection_ReadLastError(nc, buf, sizeof(buf));
+    testCond((s == NATS_ILLEGAL_STATE) && (strcmp(buf, "test error: illegal state") == 0));
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int

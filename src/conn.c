@@ -4049,11 +4049,11 @@ natsConnection_ReadLastError(natsConnection *nc, char *buf, size_t n)
 
     if ((buf != NULL) && (n > 0))
     {
-        size_t errLen = strlen(nc->errStr);
-        strncpy(buf, nc->errStr, n-1);
+        size_t errLen = strlen(nc->errStr) + 1;
+        memcpy(buf, nc->errStr, (errLen < n ? errLen : n));
         buf[n-1] = '\0';
 
-        bool truncate = ((errLen > (n-1)) && (n > 4));
+        bool truncate = ((errLen > n) && (n > 4));
         if (truncate)
         {
             buf[n-2] = '.';

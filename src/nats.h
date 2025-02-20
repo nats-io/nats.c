@@ -2006,7 +2006,7 @@ nats_Sleep(int64_t sleepTime);
  *
  * Returns the calling thread's last known error. This can be useful when
  * #natsConnection_Connect fails. Since no connection object is returned,
- * you would not be able to call #natsConnection_GetLastError.
+ * you would not be able to call #natsConnection_ReadLastError.
  *
  * @param status if not `NULL`, this function will store the last error status
  * in there.
@@ -4465,15 +4465,44 @@ natsConnection_GetDiscoveredServers(natsConnection *nc, char ***servers, int *co
  * Returns the last known error as a 'natsStatus' and the location to the
  * null-terminated error string.
  *
- * \warning The returned string is owned by the connection object and
- * must not be freed.
+ * \deprecated Returns an internal pointer, with potential for race conditions.
+ * Please use natsConnection_ReadLastError instead.
+ *
+ * \warning The returned string is owned by the connection object and must not
+ * be freed.
  *
  * @param nc the pointer to the #natsConnection object.
  * @param lastError the location where the pointer to the connection's last
  * error string is copied.
  */
+
 NATS_EXTERN natsStatus
 natsConnection_GetLastError(natsConnection *nc, const char **lastError);
+
+/** \brief Read the last connection error into a user provided buffer.
+ *
+ * Returns the last known error as a 'natsStatus' and copies the description
+ * into a user-provided buffer. If the buffer is too small, the error is
+ * truncated.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param buf buffer to receive the error string. If NULL, nothing will be
+ * copied, only the status returned
+ * @param n size of the buffer. If 0, nothing will be copied, only the status
+ * returned
+ *
+ * \note This deprecates #natsConnection_GetLastError.
+ *
+ * \note If n is greater than 0, the buffer will be null-terminated. If the
+ * message does not fit in the buffer, the last 3 characters will be replaced
+ * with "..."".
+ *
+ * \note We recommend a buffer size of at least 256 bytes. There is currently no
+ * way for the user to obtain the length of the full error string, without
+ * suppling a buffer large enough to fit it.
+ */
+NATS_EXTERN natsStatus
+natsConnection_ReadLastError(natsConnection *nc, char *buf, size_t n);
 
 /** \brief Gets the current client ID assigned by the server.
  *

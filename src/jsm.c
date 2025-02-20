@@ -4019,8 +4019,9 @@ js_cloneConsumerConfig(jsConsumerConfig *org, jsConsumerConfig **clone)
         for (int i = 0; (s == NATS_OK) && (i < org->FilterSubjectsLen); i++)
         {
             IF_OK_DUP_STRING(s, c->FilterSubjects[i], org->FilterSubjects[i]);
+            if (s == NATS_OK)
+                c->FilterSubjectsLen++;
         }
-        c->FilterSubjectsLen = org->FilterSubjectsLen;
     }
     IFOK(s, nats_cloneMetadata(&(c->Metadata), org->Metadata));
     if (s == NATS_OK)

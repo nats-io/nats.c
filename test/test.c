@@ -6876,6 +6876,7 @@ void test_ParserSplitMsg(void)
     s = natsParser_Create(&(nc->ps)); \
     if (s != NATS_OK) \
         FAIL("Unable to setup test"); \
+    le[0] = '\0'; \
 
 void test_ProcessMsgArgs(void)
 {
@@ -6883,7 +6884,7 @@ void test_ProcessMsgArgs(void)
     natsOptions     *opts = NULL;
     natsStatus      s;
     char            buf[2048];
-    const char*     le = NULL;
+    char            le[256];
 
     s = natsOptions_Create(&opts);
     IFOK(s, natsConn_create(&nc, opts));
@@ -6898,13 +6899,12 @@ void test_ProcessMsgArgs(void)
     natsParser_Parse(nc, buf, 5);
     // parse the rest..
     natsParser_Parse(nc, buf + 5, 10);
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
                 && (nc->ps->ma.subject == NULL)
                 && (nc->ps->ma.reply == NULL)
-                && (le != NULL)
                 && (strstr(le, "wrong number of arguments") != NULL));
 
     RECREATE_PARSER;
@@ -6912,13 +6912,12 @@ void test_ProcessMsgArgs(void)
     snprintf(buf, sizeof(buf), "%s", "MSG foo 1\r\n");
     test("Parsing MSG with not enough arguments: ")
     natsParser_Parse(nc, buf, (int) strlen(buf));
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
                 && (nc->ps->ma.subject == NULL)
                 && (nc->ps->ma.reply == NULL)
-                && (le != NULL)
                 && (strstr(le, "wrong number of arguments") != NULL));
 
     RECREATE_PARSER;
@@ -6926,13 +6925,12 @@ void test_ProcessMsgArgs(void)
     snprintf(buf, sizeof(buf), "%s", "MSG foo abc 2\r\n");
     test("Parsing MSG with bad sid: ")
     natsParser_Parse(nc, buf, (int) strlen(buf));
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
                 && (nc->ps->ma.subject == NULL)
                 && (nc->ps->ma.reply == NULL)
-                && (le != NULL)
                 && (strstr(le, "Bad or Missing Sid") != NULL));
 
     RECREATE_PARSER;
@@ -6940,25 +6938,23 @@ void test_ProcessMsgArgs(void)
     snprintf(buf, sizeof(buf), "%s", "MSG foo 1 abc\r\n");
     test("Parsing MSG with bad size: ")
     natsParser_Parse(nc, buf, (int) strlen(buf));
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
                 && (nc->ps->ma.subject == NULL)
                 && (nc->ps->ma.reply == NULL)
-                && (le != NULL)
                 && (strstr(le, "Bad or Missing Size") != NULL));
 
     snprintf(buf, sizeof(buf), "%s", "MSG foo 1 bar abc\r\n");
     test("Parsing MSG with bad size (with reply): ")
     natsParser_Parse(nc, buf, (int) strlen(buf));
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
                 && (nc->ps->ma.subject == NULL)
                 && (nc->ps->ma.reply == NULL)
-                && (le != NULL)
                 && (strstr(le, "Bad or Missing Size") != NULL));
 
     // Test extra spaces first without reply
@@ -7064,13 +7060,12 @@ void test_ProcessMsgArgs(void)
     snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 3\r\n");
     test("Parsing HMSG not enough args: ");
     natsParser_Parse(nc, buf, (int) strlen(buf));
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
                 && (nc->ps->ma.subject == NULL)
                 && (nc->ps->ma.reply == NULL)
-                && (le != NULL)
                 && (strstr(le, "wrong number of arguments") != NULL));
 
     RECREATE_PARSER;
@@ -7078,14 +7073,12 @@ void test_ProcessMsgArgs(void)
     snprintf(buf, sizeof(buf), "%s", "HMSG a b c d e f\r\n");
     test("Parsing HMSG too many args: ");
     natsParser_Parse(nc, buf, (int) strlen(buf));
-    s = natsConnection_GetLastError(nc, &le);
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
                 && (nc->ps->ma.subject == NULL)
                 && (nc->ps->ma.reply == NULL)
-                && (le != NULL)
                 && (strstr(le, "wrong number of arguments") != NULL));
 
     RECREATE_PARSER;
@@ -7093,13 +7086,12 @@ void test_ProcessMsgArgs(void)
     snprintf(buf, sizeof(buf), "%s", "HMSG foo abc 2 4\r\n");
     test("Parsing HMSG with bad sid: ");
     natsParser_Parse(nc, buf, (int) strlen(buf));
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
                 && (nc->ps->ma.subject == NULL)
                 && (nc->ps->ma.reply == NULL)
-                && (le != NULL)
                 && (strstr(le, "Bad or Missing Sid") != NULL));
 
     RECREATE_PARSER;
@@ -7107,13 +7099,12 @@ void test_ProcessMsgArgs(void)
     snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 baz 10\r\n");
     test("Parsing HMSG with bad header size: ");
     natsParser_Parse(nc, buf, (int) strlen(buf));
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
                 && (nc->ps->ma.subject == NULL)
                 && (nc->ps->ma.reply == NULL)
-                && (le != NULL)
                 && (strstr(le, "Bad or Missing Header Size") != NULL));
 
     RECREATE_PARSER;
@@ -7121,13 +7112,12 @@ void test_ProcessMsgArgs(void)
     snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 bar baz 10\r\n");
     test("Parsing HMSG with bad header size (with reply): ");
     natsParser_Parse(nc, buf, (int) strlen(buf));
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
                 && (nc->ps->ma.subject == NULL)
                 && (nc->ps->ma.reply == NULL)
-                && (le != NULL)
                 && (strstr(le, "Bad or Missing Header Size") != NULL));
 
     RECREATE_PARSER;
@@ -7135,7 +7125,7 @@ void test_ProcessMsgArgs(void)
     snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 10 4\r\n");
     test("Parsing HMSG with bad header size (out of range): ");
     natsParser_Parse(nc, buf, (int) strlen(buf));
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
@@ -7149,7 +7139,7 @@ void test_ProcessMsgArgs(void)
     snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 bar 10 4\r\n");
     test("Parsing HMSG with bad header size (out of range with reply): ");
     natsParser_Parse(nc, buf, (int) strlen(buf));
-    s = natsConnection_GetLastError(nc, &le);
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
     testCond((s == NATS_PROTOCOL_ERROR)
                 && (nc->ps->argBuf == NULL)
                 && (nc->ps->msgBuf == NULL)
@@ -9596,9 +9586,9 @@ _connectToMockupServer(void *closure)
             natsMutex_Unlock(arg->m);
             if (s == NATS_OK)
             {
-                const char* lastErr = NULL;
+                char lastErr[256];
 
-                s = natsConnection_GetLastError(nc, &lastErr);
+                s = natsConnection_ReadLastError(nc, lastErr, sizeof(lastErr));
                 if (strcmp(lastErr, arg->string) != 0)
                     s = NATS_ILLEGAL_STATE;
             }
@@ -10000,7 +9990,7 @@ static void
 _permsViolationHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
     struct threadArg *args      = (struct threadArg*) closure;
-    const char       *lastError = NULL;
+    char             lastError[256];
 
     // Technically, there is no guarantee that the connection's last error
     // be still the one that is given to this callback.
@@ -10010,7 +10000,7 @@ _permsViolationHandler(natsConnection *nc, natsSubscription *sub, natsStatus err
 
         // So consider ok if currently not the same or if the same, the
         // error string is as expected.
-        if (natsConnection_GetLastError(nc, &lastError) == NATS_NOT_PERMITTED)
+        if (natsConnection_ReadLastError(nc, lastError, sizeof(lastError)) == NATS_NOT_PERMITTED)
             ok = (nats_strcasestr(lastError, args->string) != NULL ? true : false);
 
         if (ok)
@@ -10095,7 +10085,7 @@ static void
 _authViolationHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
     struct threadArg *args      = (struct threadArg*) closure;
-    const char       *lastError = NULL;
+    char             lastError[256];
 
     // Technically, there is no guarantee that the connection's last error
     // be still the one that is given to this callback.
@@ -10105,8 +10095,8 @@ _authViolationHandler(natsConnection *nc, natsSubscription *sub, natsStatus err,
 
         // So consider ok if currently not the same or if the same, the
         // error string is as expected.
-        if (natsConnection_GetLastError(nc, &lastError) == NATS_CONNECTION_AUTH_FAILED)
-            ok = (nats_strcasestr(nc->errStr, AUTHORIZATION_ERR) != NULL ? true : false);
+        if (natsConnection_ReadLastError(nc, lastError, sizeof(lastError)) == NATS_CONNECTION_AUTH_FAILED)
+            ok = (nats_strcasestr(lastError, AUTHORIZATION_ERR) != NULL ? true : false);
         if (ok)
         {
             natsMutex_Lock(args->m);
@@ -10291,7 +10281,7 @@ static void
 _authExpiredHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
     struct threadArg *args      = (struct threadArg*) closure;
-    const char       *lastError = NULL;
+    char             lastError[256];
 
     // Technically, there is no guarantee that the connection's last error
     // be still the one that is given to this callback.
@@ -10303,12 +10293,12 @@ _authExpiredHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, v
 
         // So consider ok if currently not the same or if the same, the
         // error string is as expected.
-        if (natsConnection_GetLastError(nc, &lastError) == NATS_CONNECTION_AUTH_FAILED)
+        if (natsConnection_ReadLastError(nc, lastError, sizeof(lastError)) == NATS_CONNECTION_AUTH_FAILED)
         {
             if (args->control == 1)
-                ok = (nats_strcasestr(nc->errStr, AUTHENTICATION_EXPIRED_ERR) != NULL ? true : false);
+                ok = (nats_strcasestr(lastError, AUTHENTICATION_EXPIRED_ERR) != NULL ? true : false);
             else
-                ok = (nats_strcasestr(nc->errStr, AUTHORIZATION_ERR) != NULL ? true : false);
+                ok = (nats_strcasestr(lastError, AUTHORIZATION_ERR) != NULL ? true : false);
         }
         if (ok)
         {
@@ -10467,7 +10457,7 @@ void test_AuthenticationExpiredReconnect(void)
     struct threadArg    arg;
     natsSockCtx         ctx;
     int                 i;
-    const char          *lastErr = NULL;
+    char                lastErr[256];
 
     memset(&ctx, 0, sizeof(natsSockCtx));
 
@@ -10524,7 +10514,7 @@ void test_AuthenticationExpiredReconnect(void)
 
     // Check last error is cleared
     test("Check last error cleared: ");
-    s = natsConnection_GetLastError(nc, &lastErr);
+    s = natsConnection_ReadLastError(nc, lastErr, sizeof(lastErr));
     testCond((s == NATS_OK) && (lastErr[0] == '\0'));
 
     test("Close: ");
@@ -13246,7 +13236,6 @@ void test_SlowAsyncSubscriber(void)
     natsConnection      *nc       = NULL;
     natsSubscription    *sub      = NULL;
     natsOptions         *opts     = NULL;
-    const char          *lastErr  = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
     int64_t             start, end;
@@ -13303,7 +13292,7 @@ void test_SlowAsyncSubscriber(void)
 
     test("Last Error should be SlowConsumer: ");
     testCond((s == NATS_OK)
-             && natsConnection_GetLastError(nc, &lastErr) == NATS_SLOW_CONSUMER);
+             && natsConnection_ReadLastError(nc, NULL, 0) == NATS_SLOW_CONSUMER);
 
     // Release the sub
     natsMutex_Lock(arg.m);
@@ -13413,7 +13402,6 @@ void test_PendingLimitsDeliveredAndDropped(void)
     natsStatus          s;
     natsConnection      *nc       = NULL;
     natsSubscription    *sub      = NULL;
-    const char          *lastErr  = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
     int                 total     = 100;
     int                 sent      = total + 20;
@@ -13513,7 +13501,7 @@ void test_PendingLimitsDeliveredAndDropped(void)
 
     test("Last Error should be SlowConsumer: ");
     testCond((s == NATS_OK)
-             && natsConnection_GetLastError(nc, &lastErr) == NATS_SLOW_CONSUMER);
+             && natsConnection_ReadLastError(nc, NULL, 0) == NATS_SLOW_CONSUMER);
 
     // Check the pending values
     test("Check pending values, NULL sub: ");
@@ -17964,16 +17952,16 @@ static void
 _drainConnErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
     struct threadArg *args = (struct threadArg*) closure;
-    const char       *lastError = NULL;
+    char             lastError[256];
     natsStatus       s = NATS_OK;
 
     natsMutex_Lock(args->m);
     // Since error handler is async, there is no guarantee that
-    // natsConnection_GetLastError() returns the error we expect.
+    // natsConnection_ReadLastError() returns the error we expect.
     // Only check if the error matches `err`.
     if (err == NATS_TIMEOUT)
     {
-        s = natsConnection_GetLastError(nc, &lastError);
+        s = natsConnection_ReadLastError(nc, lastError, sizeof(lastError));
         if ((s != NATS_TIMEOUT)
                 || (strstr(lastError, args->string) != NULL))
         {
@@ -19802,8 +19790,7 @@ void test_NoPartialOnReconnect(void)
 
     test("Check no proto error: ");
     {
-        const char *le = NULL;
-        s = natsConnection_GetLastError(nc, &le);
+        s = natsConnection_ReadLastError(nc, NULL, 0);
     }
     testCond(s == NATS_OK);
 

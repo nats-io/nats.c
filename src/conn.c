@@ -4007,6 +4007,7 @@ natsConnection_GetDiscoveredServers(natsConnection *nc, char ***servers, int *co
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// DEPRECATED
 natsStatus
 natsConnection_GetLastError(natsConnection *nc, const char **lastError)
 {
@@ -4029,6 +4030,43 @@ natsConnection_GetLastError(natsConnection *nc, const char **lastError)
 
     return s;
 }
+
+natsStatus
+natsConnection_ReadLastError(natsConnection *nc, char *buf, size_t n)
+{
+    natsStatus  s;
+
+    if (nc == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+
+    s = nc->err;
+    if (s == NATS_OK)
+        nc->errStr[0] = '\0';
+    else if (nc->errStr[0] == '\0')
+        snprintf(nc->errStr, sizeof(nc->errStr), "%s", natsStatus_GetText(s));
+
+    if ((buf != NULL) && (n > 0))
+    {
+        size_t errLen = strlen(nc->errStr);
+        strncpy(buf, nc->errStr, n-1);
+        buf[n-1] = '\0';
+
+        bool truncate = ((errLen > (n-1)) && (n > 4));
+        if (truncate)
+        {
+            buf[n-2] = '.';
+            buf[n-3] = '.';
+            buf[n-4] = '.';
+        }
+    }
+
+    natsConn_Unlock(nc);
+
+    return s;
+}
+
 
 void
 natsConn_close(natsConnection *nc)
@@ -4469,9 +4507,9 @@ natsConn_setFilterWithClosure(natsConnection *nc, natsMsgFilter f, void* closure
 void
 natsConn_defaultErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
+    char        errBuf[256];
     uint64_t    cid      = 0;
-    const char  *lastErr = NULL;
-    const char  *errTxt  = NULL;
+    const char  *errTxt  = errBuf;
 
     natsConn_Lock(nc);
     cid = nc->info.CID;
@@ -4479,8 +4517,9 @@ natsConn_defaultErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus
 
     // Get possibly more detailed error message. If empty, we will print the default
     // error status text.
-    natsConnection_GetLastError(nc, &lastErr);
-    errTxt = (nats_IsStringEmpty(lastErr) ? natsStatus_GetText(err) : lastErr);
+    natsConnection_ReadLastError(nc, errBuf, sizeof(errBuf));
+    if (nats_IsStringEmpty(errBuf))
+        errTxt = natsStatus_GetText(err);
     // If there is a subscription, check if it is a JetStream one and if so, take
     // the "public" subject (the one that was provided to the subscribe call).
     if (sub != NULL)

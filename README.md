@@ -1378,7 +1378,7 @@ connection user has no permission to create this subscription for instance.
 Instead, the server sends an error message that is asynchronously received by the client library.
 Calling natsConnection_Flush() on the same connection that created the subscription ensures
 that the server has processed the subscription and if there was an error has sent that error back
-before the `PONG`. It is then possible to check the natsConnection_GetLastError()
+before the `PONG`. It is then possible to check the natsConnection_ReadLastError()
 to figure out if the subscription was successfully registered or not.
 
 <b>How is data and protocols received from the server?</b>

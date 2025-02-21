@@ -7587,10 +7587,7 @@ kvStatus_Destroy(kvStatus *sts);
 // Microservices.
 //
 
-/** \defgroup microGroup EXPERIMENTAL - Microservices
- *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
+/** \defgroup microGroup - Microservices
  *
  * ### NATS Microservices.
  *

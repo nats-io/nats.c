@@ -536,8 +536,6 @@ js_DeleteStream(js, "ORDERS", NULL, &jerr);
 
 ## KeyValue
 
-**EXPERIMENTAL FEATURE! We reserve the right to change the API without necessarily bumping the major version of the library.**
-
 A KeyValue store is a materialized view based on JetStream. A bucket is a stream and keys are subjects within that stream.
 
 Some features require NATS Server `v2.6.2`, so we recommend that you use the latest NATS Server release to have a better experience.

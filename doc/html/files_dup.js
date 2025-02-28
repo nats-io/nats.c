@@ -1,7 +1,4 @@
 var files_dup =
 [
-    [ "libevent.h", "libevent_8h.html", "libevent_8h" ],
-    [ "libuv.h", "libuv_8h.html", "libuv_8h" ],
-    [ "nats.h", "nats_8h.html", "nats_8h" ],
-    [ "status.h", "status_8h.html", "status_8h" ]
+    [ "src", "dir_68267d1309a1af8e8297ef4c3efbcdba.html", "dir_68267d1309a1af8e8297ef4c3efbcdba" ]
 ];

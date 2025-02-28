@@ -335,7 +335,7 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, in
             s = _addURLToPool(pool, url, true, tlsName);
         }
         natsStrHashIter_Done(&iter);
-        if ((s == NATS_OK) && added && pool->randomize)
+        if ((s == NATS_OK) && *added && pool->randomize)
             _shufflePool(pool, 1);
     }
 

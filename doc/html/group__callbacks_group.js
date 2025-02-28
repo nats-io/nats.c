@@ -9,7 +9,7 @@ var group__callbacks_group =
     [ "natsEvLoop_Detach", "group__callbacks_group.html#gab63dee7f7012ba11ae20b76dbc36f2d0", null ],
     [ "natsUserJWTHandler", "group__callbacks_group.html#ga258b30458134be90f17315c037f34b7b", null ],
     [ "natsSignatureHandler", "group__callbacks_group.html#gab786ffd670c86de0563559351305080b", null ],
-    [ "natsTokenHandler", "group__callbacks_group.html#ga7d93a74068ac6e5f4406d70b7c1f0094", null ],
+    [ "natsTokenHandler", "group__callbacks_group.html#ga4b02de70fe9380d184fd01d87527f499", null ],
     [ "natsOnCompleteCB", "group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a", null ],
     [ "natsCustomReconnectDelayHandler", "group__callbacks_group.html#ga3353d4b92851c52121f65aaf0684cba4", null ],
     [ "jsPubAckErrHandler", "group__callbacks_group.html#ga954768cc1d3388bb6ab723e777647992", null ],

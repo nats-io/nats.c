@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['inboxes_1938',['Inboxes',['../group__inbox_group.html',1,'']]]
+  ['functions_0',['functions',['../group__func_group.html',1,'Functions'],['../group__micro_functions.html',1,'Functions']]]
 ];

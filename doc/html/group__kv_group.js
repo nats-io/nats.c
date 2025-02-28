@@ -25,6 +25,6 @@ var group__kv_group =
     [ "kvKeysList_Destroy", "group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45", null ],
     [ "kvStore_History", "group__kv_group.html#ga5aa57345313cee85b020e50c22023fb5", null ],
     [ "kvEntryList_Destroy", "group__kv_group.html#gae783352ab81e22aa3173057d117518e6", null ],
-    [ "kvStore_Bucket", "group__kv_group.html#ga8fd5aa9d1c7af511650f60863a21ee84", null ],
+    [ "kvStore_Bucket", "group__kv_group.html#gad28fdf9aae16bba308cda799fca13281", null ],
     [ "kvStore_Status", "group__kv_group.html#gadf75e99cc28bc9c2d6eac7c9f7398c27", null ]
 ];

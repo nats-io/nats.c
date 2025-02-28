@@ -317,47 +317,47 @@ var group__types_group =
       [ "NoWait", "structjs_fetch_request.html#ae251eebb1998a39fe3b898302b58293d", null ],
       [ "Heartbeat", "structjs_fetch_request.html#ae8e73c7cc2e2a2d2502407c9b1522496", null ]
     ] ],
+    [ "jsOptionsPullSubscribeAsync", "structjs_options_pull_subscribe_async.html", [
+      [ "Timeout", "structjs_options_pull_subscribe_async.html#a3dcad3cffbee77d14ceaa392dfa377c5", null ],
+      [ "MaxMessages", "structjs_options_pull_subscribe_async.html#a1f7da5b5cd38f3a8ebb729d4a1ffd0f8", null ],
+      [ "MaxBytes", "structjs_options_pull_subscribe_async.html#a1355dfc02b1e66bb6d0edba751265e24", null ],
+      [ "NoWait", "structjs_options_pull_subscribe_async.html#a858afc43e24572377214d072d5bff318", null ],
+      [ "CompleteHandler", "structjs_options_pull_subscribe_async.html#a6224bf50d314a83ed2df2c84a6966055", null ],
+      [ "CompleteHandlerClosure", "structjs_options_pull_subscribe_async.html#aa5437f766db36d61595cc0471b2b65c2", null ],
+      [ "Heartbeat", "structjs_options_pull_subscribe_async.html#a6583dfdee172d82b6877d9e6ff4e845c", null ],
+      [ "FetchSize", "structjs_options_pull_subscribe_async.html#a1bf6fa8ddd19698bd82f4c27ddb06a9f", null ],
+      [ "KeepAhead", "structjs_options_pull_subscribe_async.html#ae50d78c4012666aca20b7a01341d8d07", null ],
+      [ "NextHandler", "structjs_options_pull_subscribe_async.html#a591cac37de66ace6a96f7c73fc305661", null ],
+      [ "NextHandlerClosure", "structjs_options_pull_subscribe_async.html#a1c3835372d48eeec930ce7203f058791", null ]
+    ] ],
+    [ "jsOptionsPublishAsync", "structjs_options_publish_async.html", [
+      [ "MaxPending", "structjs_options_publish_async.html#a5e84f14913542da5bc117d8145be9dfb", null ],
+      [ "AckHandler", "structjs_options_publish_async.html#aa2fbf2bcc101f030b68f1f847780167d", null ],
+      [ "AckHandlerClosure", "structjs_options_publish_async.html#a74dc7d05212bd5c76bc3dbd521c67909", null ],
+      [ "ErrHandler", "structjs_options_publish_async.html#ab972b57962698158fc67adb646f67c3b", null ],
+      [ "ErrHandlerClosure", "structjs_options_publish_async.html#abeace04ae0ba949b9707070f85a0fb13", null ],
+      [ "StallWait", "structjs_options_publish_async.html#ad43a5ebb3ea73813e13ffb24412f27ae", null ]
+    ] ],
+    [ "jsOptionsStreamPurge", "structjs_options_stream_purge.html", [
+      [ "Subject", "structjs_options_stream_purge.html#a24646c78a30763aa58cc64fe69cf0579", null ],
+      [ "Sequence", "structjs_options_stream_purge.html#a9af7fca7c27deed5434cf7e8dd641c18", null ],
+      [ "Keep", "structjs_options_stream_purge.html#a224dc8575479119cc0a62db78d1ff1c1", null ]
+    ] ],
+    [ "jsOptionsStreamInfo", "structjs_options_stream_info.html", [
+      [ "DeletedDetails", "structjs_options_stream_info.html#a1011ce57c6cc05123471f416b36e761c", null ],
+      [ "SubjectsFilter", "structjs_options_stream_info.html#ae4f02dbf37ad392b5263c5beb58b0b49", null ]
+    ] ],
+    [ "jsOptionsStream", "structjs_options_stream.html", [
+      [ "Purge", "structjs_options_stream.html#ac95ec5ccbac73396a0af503abc99ec01", null ],
+      [ "Info", "structjs_options_stream.html#a3e5a97e246efc74b834a86924d7595f1", null ]
+    ] ],
     [ "jsOptions", "structjs_options.html", [
-      [ "jsOptionsPublishAsync", "structjs_options_1_1js_options_publish_async.html", [
-        [ "MaxPending", "structjs_options_1_1js_options_publish_async.html#add8dd21cbab2d5df19688c26365fe4d1", null ],
-        [ "AckHandler", "structjs_options_1_1js_options_publish_async.html#a508140119f40a2c056d4ee8c0cd55df9", null ],
-        [ "AckHandlerClosure", "structjs_options_1_1js_options_publish_async.html#a60c95f10797c04ea2e625759c6936ec9", null ],
-        [ "ErrHandler", "structjs_options_1_1js_options_publish_async.html#a0a180995c49990ca277e449b7d43616b", null ],
-        [ "ErrHandlerClosure", "structjs_options_1_1js_options_publish_async.html#a784a0029c30e82ff37c39ae6c276bc81", null ],
-        [ "StallWait", "structjs_options_1_1js_options_publish_async.html#ada58fefe0ed40157b5f5d44b9dd175f9", null ]
-      ] ],
-      [ "jsOptionsPullSubscribeAsync", "structjs_options_1_1js_options_pull_subscribe_async.html", [
-        [ "Timeout", "structjs_options_1_1js_options_pull_subscribe_async.html#ac103bcfa6982dbd201b511d488b2ce0a", null ],
-        [ "MaxMessages", "structjs_options_1_1js_options_pull_subscribe_async.html#a3764380946087ba94d76ed8ab939c52f", null ],
-        [ "MaxBytes", "structjs_options_1_1js_options_pull_subscribe_async.html#a0917f86c64293e9abfb6643de219eda4", null ],
-        [ "NoWait", "structjs_options_1_1js_options_pull_subscribe_async.html#a2a1d9185656fa87de3e75bebc5ab2f8a", null ],
-        [ "CompleteHandler", "structjs_options_1_1js_options_pull_subscribe_async.html#aba9c4dd2abadffd5830cf55b0bc445da", null ],
-        [ "CompleteHandlerClosure", "structjs_options_1_1js_options_pull_subscribe_async.html#aeb22dc426a7b8c99ea4ed1f91b27d0a4", null ],
-        [ "Heartbeat", "structjs_options_1_1js_options_pull_subscribe_async.html#a30244e22126c588b4a18c6dc23a146d9", null ],
-        [ "FetchSize", "structjs_options_1_1js_options_pull_subscribe_async.html#a3f6f91deb357cc43d0d32c1dad7afd9b", null ],
-        [ "KeepAhead", "structjs_options_1_1js_options_pull_subscribe_async.html#afd980b44d5bf03ef7abc7fbdd47beca2", null ],
-        [ "NextHandler", "structjs_options_1_1js_options_pull_subscribe_async.html#a7b3dfaccb41ffb464df0f3c606313894", null ],
-        [ "NextHandlerClosure", "structjs_options_1_1js_options_pull_subscribe_async.html#ab6f9872cd840bafa3a8d73b267ffdeb9", null ]
-      ] ],
-      [ "jsOptionsStream", "structjs_options_1_1js_options_stream.html", [
-        [ "jsOptionsStreamInfo", "structjs_options_1_1js_options_stream_1_1js_options_stream_info.html", [
-          [ "DeletedDetails", "structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#a73f847afe18f56eaaf6788900270bef7", null ],
-          [ "SubjectsFilter", "structjs_options_1_1js_options_stream_1_1js_options_stream_info.html#af874e0f5aa15fb2a41504631ed786e6d", null ]
-        ] ],
-        [ "jsOptionsStreamPurge", "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html", [
-          [ "Subject", "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html#aa99e6ee3bef1c22243f01544181315fe", null ],
-          [ "Sequence", "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html#a0d61e5d3c9c518f455549086ababe7f6", null ],
-          [ "Keep", "structjs_options_1_1js_options_stream_1_1js_options_stream_purge.html#a882c1ce1e636817450893caa72aa4eda", null ]
-        ] ],
-        [ "Purge", "structjs_options_1_1js_options_stream.html#afe680264223b434ca6959f9e122af029", null ],
-        [ "Info", "structjs_options_1_1js_options_stream.html#a2ca89c298b4df1f5e3e0a44e205c789c", null ]
-      ] ],
       [ "Prefix", "structjs_options.html#ab06e45296fccf0fe6152e083e38d916f", null ],
       [ "Domain", "structjs_options.html#ae4df6c9c01c0ea9ab0e6d5a6ec8af74e", null ],
       [ "Wait", "structjs_options.html#a7fd42e1f83da5861e716137c16f8b72f", null ],
-      [ "PublishAsync", "structjs_options.html#a5ce5c11cc9b9df2b6bc47cd77d7b1dc4", null ],
-      [ "PullSubscribeAsync", "structjs_options.html#a4b45e29dc5065528595bea3fd3b9d818", null ],
-      [ "Stream", "structjs_options.html#ae50544ee0ef8dd7d02ef9802805807ae", null ]
+      [ "PublishAsync", "structjs_options.html#a817c4199ff9825808769cceb048c7081", null ],
+      [ "PullSubscribeAsync", "structjs_options.html#a0cccdfa48473ddf17e00a422235b8c31", null ],
+      [ "Stream", "structjs_options.html#ac8f3f6ecde11ea6505b3ccbcc90bae78", null ]
     ] ],
     [ "kvConfig", "structkv_config.html", [
       [ "Bucket", "structkv_config.html#a11b636da727c17566d5ab1274f69fee5", null ],
@@ -377,7 +377,8 @@ var group__types_group =
       [ "IgnoreDeletes", "structkv_watch_options.html#a0535edd21b26affc0057575bafc21a07", null ],
       [ "IncludeHistory", "structkv_watch_options.html#a08274f08ae96e14d9ded326e4e665649", null ],
       [ "MetaOnly", "structkv_watch_options.html#ac9094bce4f3c6513431ba32fb49e5605", null ],
-      [ "Timeout", "structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66", null ]
+      [ "Timeout", "structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66", null ],
+      [ "UpdatesOnly", "structkv_watch_options.html#a82cd6bcb7167e7f798b6f912c1fa29c9", null ]
     ] ],
     [ "kvPurgeOptions", "structkv_purge_options.html", [
       [ "Timeout", "structkv_purge_options.html#a245c2def0f3aabe617219772cf7680a8", null ],
@@ -440,6 +441,11 @@ var group__types_group =
     [ "jsFetchRequest", "group__types_group.html#gaf11e6664c1f335a5287af71c703935fa", null ],
     [ "jsFetchCompleteHandler", "group__types_group.html#gaa17c5b961bcaa3c5907f48366b6e75c4", null ],
     [ "jsFetchNextHandler", "group__types_group.html#ga617d3ea9036a7ef05dd3868fa56abafc", null ],
+    [ "jsOptionsPullSubscribeAsync", "group__types_group.html#gab95e91e52f6ac008983ac46043f6d0ce", null ],
+    [ "jsOptionsPublishAsync", "group__types_group.html#gadce1d31b8609e6a5846e494b4709b038", null ],
+    [ "jsOptionsStreamPurge", "group__types_group.html#ga1211ad06fbed5ae556731234a84331f4", null ],
+    [ "jsOptionsStreamInfo", "group__types_group.html#ga7e9253d6a25dd87765cc43622058d0d8", null ],
+    [ "jsOptionsStream", "group__types_group.html#ga0801f894d749d82c62db8b21437cdf0e", null ],
     [ "jsOptions", "group__types_group.html#ga0e3a3b7cf89e7dfa955f0f8f3f1eb6e5", null ],
     [ "kvStore", "group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a", null ],
     [ "kvEntry", "group__types_group.html#gad489fb4074f27427560ca71797db6191", null ],

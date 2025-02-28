@@ -263,7 +263,7 @@ set(NATS_VERSION_MINOR  11)
 set(NATS_VERSION_PATCH  0)
 set(NATS_VERSION_SUFFIX "-beta")
 
-set(NATS_VERSION_REQUIRED_NUMBER 0x030B00)
+set(NATS_VERSION_REQUIRED_NUMBER 0x030A00)
 
 write_basic_package_version_file(
   "${PROJECT_BINARY_DIR}/cnats-config-version.cmake"

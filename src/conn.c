@@ -736,7 +736,12 @@ _makeTLSConn(natsConnection *nc)
                     s = nats_setError(NATS_SSL_ERROR, "unable to set expected hostname '%s'", nc->tlsName);
             }
             if (s == NATS_OK)
-                SSL_set_verify(ssl, SSL_VERIFY_PEER, nc->opts->sslCtx->callback != NULL ? nc->opts->sslCtx->callback : _collectSSLErr);
+            {
+                if (nc->opts->sslCtx->callback != NULL)
+                    nc->opts->sslCtx->callback(ssl);
+                else
+                    SSL_set_verify(ssl, SSL_VERIFY_PEER, _collectSSLErr);
+            }
         }
     }
 #if defined(NATS_USE_OPENSSL_1_1)

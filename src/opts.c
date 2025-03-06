@@ -707,7 +707,7 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
 }
 
 natsStatus
-natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback)
+natsOptions_SetSSLCallback(natsOptions *opts, natsCustomSSLHandler callback)
 {
     natsStatus s = NATS_OK;
 

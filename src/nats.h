@@ -27,13 +27,6 @@ extern "C" {
 #include "status.h"
 #include "version.h"
 
-#if defined(NATS_HAS_TLS)
-#include <openssl/ssl.h>
-#include <openssl/x509v3.h>
-#else
-#define X509_STORE_CTX void
-typedef int (*SSL_verify_cb)(int preverify_ok, X509_STORE_CTX* x509_ctx);
-#endif
 
 /** \def NATS_EXTERN
  *  \brief Needed for shared library.
@@ -1768,6 +1761,33 @@ typedef void (*natsOnCompleteCB)(void *closure);
  */
 typedef int64_t (*natsCustomReconnectDelayHandler)(natsConnection *nc, int attempts, void *closure);
 
+/** \brief Callback used to setup SSL on connection.
+ *
+ * This callback is used to allow the user to customize the SSL setup for a connection
+ * typically to set up custom certificate verification. The user should cast the
+ * ssl pointer to the appropriate SSL type and then set up the additional SSL
+ * callbacks as needed.
+ *
+ * \code{.unparsed}
+ * #include <openssl/ssl.h>
+ *
+ * int _sslVerifyCallback(int preverify_ok, X509_STORE_CTX *ctx)
+ * {
+ *     // Custom verification code here...
+ * }
+ *
+ * void _sslCallback(void *ssl)
+ * {
+ *     SSL_set_verify((SSL *)ssl, SSL_VERIFY_PEER, _sslVerifyCallback);
+ * }
+ * \endcode
+ *
+ * see also https://docs.openssl.org/master/man3/SSL_CTX_set_verify/
+ *
+ * @param ssl the pointer to the SSL struct. Must be cast to the SSL type.
+ */
+typedef void (*natsCustomSSLHandler)(void *ssl);
+
 #ifdef BUILD_IN_DOXYGEN
 /** \brief Callback used to process asynchronous publish errors from JetStream.
  *
@@ -2628,17 +2648,18 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
 NATS_EXTERN natsStatus
 natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
 
-/** \brief Sets the certificate validation callback.
+/** \brief Sets the SSL callback.
  *
- * Sets a callback used to verify the SSL certificate.
+ * Sets a callback used to create additional SSL setup for the connection such as
+ * setting up custom certificate verification.
  *
  * \note Setting a callback will enable SSL verification if disabled via natsOptions_SkipServerVerification().
  *
  * @param opts the pointer to the #natsOptions object.
- * @param callback the custom SSL verification handler to invoke. see https://docs.openssl.org/master/man3/SSL_CTX_set_verify/
+ * @param callback the custom SSL handler to invoke. See the #natsCustomSSLHandler prototype.
  */
 NATS_EXTERN natsStatus
-natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback);
+natsOptions_SetSSLCallback(natsOptions *opts, natsCustomSSLHandler callback);
 
 /** \brief Sets the verbose mode.
  *

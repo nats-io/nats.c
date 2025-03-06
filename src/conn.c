@@ -738,7 +738,7 @@ _makeTLSConn(natsConnection *nc)
             if (s == NATS_OK)
             {
                 if (nc->opts->sslCtx->callback != NULL)
-                    nc->opts->sslCtx->callback(ssl);
+                    nc->opts->sslCtx->callback((void*)ssl);
                 else
                     SSL_set_verify(ssl, SSL_VERIFY_PEER, _collectSSLErr);
             }

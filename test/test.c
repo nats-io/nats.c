@@ -21191,6 +21191,13 @@ _sslVerifyCallback(int preverify_ok, X509_STORE_CTX *ctx)
     testf("verfiy result: %d\n", result);
     return result;
 }
+
+static void
+_sslCallback(void *ssl)
+{
+    SSL_set_verify((SSL *)ssl, SSL_VERIFY_PEER, _sslVerifyCallback);
+}
+
 #endif // NATS_HAS_TLS
 
 void test_SSLVerificationCallback(void)
@@ -21217,7 +21224,7 @@ void test_SSLVerificationCallback(void)
 
     test("Check that connect succeeds with validation callback:\n");
     s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
-    IFOK(s, natsOptions_SetSSLVerificationCallback(opts, _sslVerifyCallback));
+    IFOK(s, natsOptions_SetSSLCallback(opts, _sslCallback));
     IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
     natsConnection_Destroy(nc);

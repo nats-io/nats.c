@@ -1814,7 +1814,7 @@ js_checkFetchedMsg(natsSubscription *sub, natsMsg *msg, uint64_t fetchID, bool c
 }
 
 static natsStatus
-_sendPullRequest(natsConnection *nc, const char *subj, const char *rply,
+_publishPullRequest(natsConnection *nc, const char *subj, const char *rply,
                  natsBuffer *buf, jsFetchRequest *req)
 {
     natsStatus  s;
@@ -1990,7 +1990,7 @@ _fetch(natsMsgList *list, natsSubscription *sub, jsFetchRequest *req, bool simpl
             req->Batch = req->Batch - count;
             req->Expires = NATS_MILLIS_TO_NANOS(timeout);
             req->NoWait = noWait;
-            s = _sendPullRequest(nc, subj, rply, &buf, req);
+            s = _publishPullRequest(nc, subj, rply, &buf, req);
         }
         IFOK(s, natsSub_nextMsg(&msg, sub, timeout, true));
         if (s == NATS_OK)
@@ -2908,6 +2908,7 @@ natsStatus
 js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
 {
     jsFetchRequest req = {.Expires = 0};
+
     if (fetch->opts.NextHandler == NULL)
         return NATS_OK;
 
@@ -2922,27 +2923,34 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
     req.NoWait = fetch->opts.NoWait;
     req.Heartbeat = fetch->opts.Heartbeat * 1000 * 1000; // ns, go time.Duration
 
+    size_t replySubjectSize = 1 + strlen(sub->subject) + 20;
+    char *replySubject = NATS_MALLOC(replySubjectSize);
+    if (replySubject == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
     char buffer[128];
     natsBuffer buf;
     natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
 
     nats_lockSubAndDispatcher(sub);
-
     jsSub *jsi = sub->jsi;
     jsi->inFetch = true;
     jsi->fetchID++;
-    snprintf(fetch->replySubject, sizeof(fetch->replySubject), "%.*s%" PRIu64,
+    snprintf(replySubject, replySubjectSize, "%.*s%" PRIu64,
              (int)strlen(sub->subject) - 1, sub->subject, // exclude the last '*'
              jsi->fetchID);
-    natsStatus s = _sendPullRequest(sub->conn, jsi->nxtMsgSubj, fetch->replySubject, &buf, &req);
-    if (s == NATS_OK)
-    {
-        fetch->requestedMsgs += req.Batch;
-    }
-
     nats_unlockSubAndDispatcher(sub);
 
+    natsStatus s = _publishPullRequest(sub->conn, jsi->nxtMsgSubj, replySubject, &buf, &req);
+    if (s == NATS_OK)
+    {
+        nats_lockSubAndDispatcher(sub);
+        fetch->requestedMsgs += req.Batch;
+        nats_unlockSubAndDispatcher(sub);
+    }
+
     natsBuf_Destroy(&buf);
+    NATS_FREE(replySubject);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -3085,13 +3093,13 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
             natsTimer_Reset(jsi->hbTimer, dur);
     }
 
+    nats_unlockSubAndDispatcher(sub);
+
     if (s == NATS_OK)
     {
         // Send the first fetch request.
         s = js_maybeFetchMore(sub, fetch);
     }
-
-    nats_unlockSubAndDispatcher(sub);
 
     if (s != NATS_OK)
     {
@@ -3446,8 +3454,10 @@ _recreateOrderedCons(void *closure)
 
     NATS_FREE(oci->ndlv);
     NATS_FREE(oci);
-    natsThread_Detach(t);
-    natsThread_Destroy(t);
+    if (t != NULL) {
+        natsThread_Detach(t);
+        natsThread_Destroy(t);
+    }
     natsSub_release(sub);
 }
 
@@ -3525,10 +3535,7 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq)
 
         s = natsThread_Create(&oci->thread, _recreateOrderedCons, (void*) oci);
         if (s != NATS_OK)
-        {
-            NATS_FREE(oci);
             natsSub_release(sub);
-        }
     }
     if ((s != NATS_OK) && (oci != NULL))
     {

@@ -42,11 +42,11 @@ connectedCB(natsConnection *nc, void *closure)
 static void
 closedCB(natsConnection *nc, void *closure)
 {
-    bool        *closed = (bool*)closure;
-    const char  *err    = NULL;
+    bool    *closed = (bool*)closure;
+    char    errbuf[256];
 
-    natsConnection_GetLastError(nc, &err);
-    printf("Connect failed: %s\n", err);
+    natsConnection_ReadLastError(nc, errbuf, sizeof(errbuf));
+    printf("Connect failed: %s\n", errbuf);
     *closed = true;
 }
 

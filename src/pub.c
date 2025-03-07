@@ -279,10 +279,12 @@ natsConnection_PublishString(natsConnection *nc, const char *subj,
 natsStatus
 natsConnection_PublishMsg(natsConnection *nc, natsMsg *msg)
 {
-    const char *reply = (msg != NULL ? msg->reply : NULL);
     natsStatus s;
 
-    s = _publishMsg(nc, msg, reply);
+    if (nc == NULL || msg == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _publishMsg(nc, msg, NULL);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

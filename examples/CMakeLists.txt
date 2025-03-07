@@ -18,6 +18,10 @@ if(NATS_BUILD_LIBEVENT_EXAMPLE AND LIBEVENT_DIR)
   include_directories(${LIBEVENT_DIR}/include)
 endif()
 
+if(NATS_BUILD_WITH_TLS)
+  include_directories(${OPENSSL_INCLUDE_DIR})
+endif(NATS_BUILD_WITH_TLS)
+
 if(WIN32)
   set(LIB_SUFFIX ${CMAKE_STATIC_LIBRARY_SUFFIX})
 else()

@@ -27,6 +27,14 @@ extern "C" {
 #include "status.h"
 #include "version.h"
 
+#if defined(NATS_HAS_TLS)
+#include <openssl/ssl.h>
+#include <openssl/x509v3.h>
+#else
+#define X509_STORE_CTX void
+typedef int (*SSL_verify_cb)(int preverify_ok, X509_STORE_CTX* x509_ctx);
+#endif
+
 /** \def NATS_EXTERN
  *  \brief Needed for shared library.
  *
@@ -1240,124 +1248,139 @@ typedef void (*jsFetchCompleteHandler)(natsConnection *nc, natsSubscription *sub
 typedef bool (*jsFetchNextHandler)(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure);
 
 /**
+ * Async pull subscriber options.
+ *
+ * Part of #jsOptions.
+ */
+typedef struct jsOptionsPullSubscribeAsync
+{
+        int64_t                 Timeout;        ///< Auto-unsubsribe after this many milliseconds.
+        int                     MaxMessages;    ///< Auto-unsubscribed after receiving this many messages.
+        int64_t                 MaxBytes;       ///< Auto-unsubscribe after receiving this many bytes.
+
+        /// \brief If NoWait is set, the subscription will receive the
+        /// messages already stored on the server subject to the limits,
+        /// but will not wait for more messages.
+        ///
+        /// \note that if Timeout is set we would still wait for first
+        /// message to become available, even if there are currently any
+        /// on the server
+        bool                    NoWait;
+
+        /// \brief Fetch complete handler that receives the exit status
+        /// code, the subscription's Complete handler is also invoked,
+        /// but does not have the status code.
+        jsFetchCompleteHandler  CompleteHandler;
+        void                    *CompleteHandlerClosure;
+
+        /// \brief Have server sends heartbeats at this interval (in
+        /// milliseconds) to help detect communication failures.
+        int64_t                 Heartbeat;
+
+        /// @brief When using the automatic Fetch flow control (default
+        /// NextHandler), this is the number of messages to ask for in a
+        /// single request.
+        int                     FetchSize;
+
+        /// @brief When using the automatic Fetch flow control (default
+        /// NextHandler), initiate the next fetch request (this many
+        /// messages) prior to the fulfillment of the current request.
+        ///
+        /// @note KeepAhead can not be used in conjunction with MaxBytes
+        /// or NoWait.
+        int                     KeepAhead;
+
+        /// @brief If set, switches to manual fetch flow control.
+        ///
+        /// If provided, this function gets called before each message
+        /// is deliverered to msgCB, and overrides the default algorithm
+        /// for sending Next fetch requests.
+        jsFetchNextHandler      NextHandler;
+        void                    *NextHandlerClosure;
+
+} jsOptionsPullSubscribeAsync;
+
+/**
+ * Async pull options.
+ *
+ * Part of #jsOptions.
+ */
+typedef struct jsOptionsPublishAsync
+{
+        int64_t                 MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
+
+        // If jsPubAckHandler is specified, the callback will be invoked
+        // for every asynchronous published message, either as a positive
+        // result, or with the error encountered when publishing that
+        // message. If this callback is specified, ErrHandler (see below)
+        // will be ignored.
+        jsPubAckHandler         AckHandler;             ///< Callback invoked for each asynchronous published message.
+        void                    *AckHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckHandler callback.
+
+        // This callback is invoked for messages published asynchronously
+        // when an error is returned by the server or if the library has
+        // timed-out waiting for an acknowledgment back from the server
+        // (if publish uses the jsPubOptions.MaxWait).
+        jsPubAckErrHandler      ErrHandler;             ///< Callback invoked when error encountered publishing a given message.
+        void                    *ErrHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckErrHandler callback.
+
+        int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.
+
+} jsOptionsPublishAsync;
+
+/**
+ * Advanced stream purge options
+ *
+ * * `Subject` will filter the purge request to only messages that match the subject, which can have wildcards.<br>
+ * * `Sequence` will purge up to but not including this sequence and can be combined with subject filtering.<br>
+ * * `Keep` will specify how many messages to keep and can be combined with subject filtering.<br>
+ *
+ * \note `Sequence` and `Keep` are mutually exclusive, so both can not be set at the same time.
+ */
+typedef struct jsOptionsStreamPurge
+{
+        const char      *Subject;       ///< This is the subject to match against messages for the purge command.
+        uint64_t        Sequence;       ///< Purge up to but not including sequence.
+        uint64_t        Keep;           ///< Number of messages to keep.
+
+} jsOptionsStreamPurge;
+
+/**
+ * Advance stream information retrieval options
+ */
+typedef struct jsOptionsStreamInfo
+{
+        bool            DeletedDetails;         ///< Get the list of deleted message sequences.
+        const char      *SubjectsFilter;        ///< Get the list of subjects in this stream.
+
+} jsOptionsStreamInfo;
+
+/**
+ * Advanced stream options
+ *
+ * * `Purge` for advanced purge options.
+ * * `Info` for advanced information retrieval options.
+ */
+typedef struct jsOptionsStream
+{
+        jsOptionsStreamPurge Purge;                                ///< Optional stream purge options.
+        jsOptionsStreamInfo Info;                                 ///< Optional stream information retrieval options.
+
+} jsOptionsStream;
+
+/**
  * JetStream context options.
  *
  * Initialize the object with #jsOptions_Init.
  */
 typedef struct jsOptions
 {
-        const char              *Prefix;                        ///< JetStream prefix, default is "$JS.API"
-        const char              *Domain;                        ///< Domain changes the domain part of JetSteam API prefix.
-        int64_t                 Wait;                           ///< Amount of time (in milliseconds) to wait for various JetStream API requests, default is 5000 ms (5 seconds).
-
-        struct jsOptionsPublishAsync
-        {
-                int64_t                 MaxPending;             ///< Maximum outstanding asynchronous publishes that can be inflight at one time.
-
-                // If jsPubAckHandler is specified, the callback will be invoked
-                // for every asynchronous published message, either as a positive
-                // result, or with the error encountered when publishing that
-                // message. If this callback is specified, ErrHandler (see below)
-                // will be ignored.
-                jsPubAckHandler         AckHandler;             ///< Callback invoked for each asynchronous published message.
-                void                    *AckHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckHandler callback.
-
-                // This callback is invoked for messages published asynchronously
-                // when an error is returned by the server or if the library has
-                // timed-out waiting for an acknowledgment back from the server
-                // (if publish uses the jsPubOptions.MaxWait).
-                jsPubAckErrHandler      ErrHandler;             ///< Callback invoked when error encountered publishing a given message.
-                void                    *ErrHandlerClosure;     ///< Closure (or user data) passed to #jsPubAckErrHandler callback.
-
-                int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.
-
-        } PublishAsync; ///< extra options for #js_PublishAsync
-
-        struct jsOptionsPullSubscribeAsync
-        {
-                int64_t                 Timeout;        ///< Auto-unsubsribe after this many milliseconds.
-                int                     MaxMessages;    ///< Auto-unsubscribed after receiving this many messages.
-                int64_t                 MaxBytes;       ///< Auto-unsubscribe after receiving this many bytes.
-
-                /// \brief If NoWait is set, the subscription will receive the
-                /// messages already stored on the server subject to the limits,
-                /// but will not wait for more messages.
-                ///
-                /// \note that if Timeout is set we would still wait for first
-                /// message to become available, even if there are currently any
-                /// on the server
-                bool                    NoWait;
-
-                /// \brief Fetch complete handler that receives the exit status
-                /// code, the subscription's Complete handler is also invoked,
-                /// but does not have the status code.
-                jsFetchCompleteHandler  CompleteHandler;
-                void                    *CompleteHandlerClosure;
-
-                /// \brief Have server sends heartbeats at this interval (in
-                /// milliseconds) to help detect communication failures.
-                int64_t                 Heartbeat;
-
-                /// @brief When using the automatic Fetch flow control (default
-                /// NextHandler), this is the number of messages to ask for in a
-                /// single request.
-                int                     FetchSize;
-
-                /// @brief When using the automatic Fetch flow control (default
-                /// NextHandler), initiate the next fetch request (this many
-                /// messages) prior to the fulfillment of the current request.
-                ///
-                /// @note KeepAhead can not be used in conjunction with MaxBytes
-                /// or NoWait.
-                int                     KeepAhead;
-
-                /// @brief If set, switches to manual fetch flow control.
-                ///
-                /// If provided, this function gets called before each message
-                /// is deliverered to msgCB, and overrides the default algorithm
-                /// for sending Next fetch requests.
-                jsFetchNextHandler      NextHandler;
-                void                    *NextHandlerClosure;
-
-        } PullSubscribeAsync; ///< extra options for #js_PullSubscribeAsync
-
-
-        /**
-         * Advanced stream options
-         *
-         * * `Purge` for advanced purge options.
-         * * `Info` for advanced information retrieval options.
-         */
-        struct jsOptionsStream
-        {
-                /**
-                 * Advanced stream purge options
-                 *
-                 * * `Subject` will filter the purge request to only messages that match the subject, which can have wildcards.<br>
-                 * * `Sequence` will purge up to but not including this sequence and can be combined with subject filtering.<br>
-                 * * `Keep` will specify how many messages to keep and can be combined with subject filtering.<br>
-                 *
-                 * \note `Sequence` and `Keep` are mutually exclusive, so both can not be set at the same time.
-                 */
-                struct jsOptionsStreamPurge
-                {
-                        const char      *Subject;       ///< This is the subject to match against messages for the purge command.
-                        uint64_t        Sequence;       ///< Purge up to but not including sequence.
-                        uint64_t        Keep;           ///< Number of messages to keep.
-
-                } Purge;                                ///< Optional stream purge options.
-
-                /**
-                 * Advance stream information retrieval options
-                 */
-                struct jsOptionsStreamInfo
-                {
-                        bool            DeletedDetails;         ///< Get the list of deleted message sequences.
-                        const char      *SubjectsFilter;        ///< Get the list of subjects in this stream.
-
-                } Info;                                 ///< Optional stream information retrieval options.
-
-        } Stream;                                       ///< Optional stream options.
+        const char                      *Prefix;                ///< JetStream prefix, default is "$JS.API"
+        const char                      *Domain;                ///< Domain changes the domain part of JetSteam API prefix.
+        int64_t                         Wait;                   ///< Amount of time (in milliseconds) to wait for various JetStream API requests, default is 5000 ms (5 seconds).
+        jsOptionsPublishAsync           PublishAsync;           ///< extra options for #js_PublishAsync
+        jsOptionsPullSubscribeAsync     PullSubscribeAsync;     ///< extra options for #js_PullSubscribeAsync
+        jsOptionsStream                 Stream;                 ///< Optional stream options.
 
 } jsOptions;
 
@@ -1889,7 +1912,7 @@ typedef void (*stanConnectionLostHandler)(
  * @param config points to a natsClientConfig. A copy of the settings is made,
  * so the config can be freed after initializing the NATS client.
  */
-natsStatus
+NATS_EXTERN natsStatus
 nats_OpenWithConfig(natsClientConfig *config);
 
 /** \brief Initializes the library.
@@ -1941,7 +1964,8 @@ nats_GetVersionNumber(void);
  * @see nats_GetVersion
  * @see nats_GetVersionNumber
  */
-NATS_EXTERN bool nats_CheckCompatibility(void);
+NATS_EXTERN bool
+nats_CheckCompatibility(void);
 #else
 
 #define nats_CheckCompatibility() nats_CheckCompatibilityImpl(NATS_VERSION_REQUIRED_NUMBER, \
@@ -1982,7 +2006,7 @@ nats_Sleep(int64_t sleepTime);
  *
  * Returns the calling thread's last known error. This can be useful when
  * #natsConnection_Connect fails. Since no connection object is returned,
- * you would not be able to call #natsConnection_GetLastError.
+ * you would not be able to call #natsConnection_ReadLastError.
  *
  * @param status if not `NULL`, this function will store the last error status
  * in there.
@@ -2594,6 +2618,8 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
  * By default, the server certificate is verified. You can disable the verification
  * by passing <c>true</c> to this function.
  *
+ * \note Setting this to true will clear SSL verfication callback set via natsOptions_SetSSLVerificationCallback().
+ *
  * \warning This is fine for tests but use with caution since this is not secure.
  *
  * @param opts the pointer to the #natsOptions object.
@@ -2601,6 +2627,18 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
  */
 NATS_EXTERN natsStatus
 natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
+
+/** \brief Sets the certificate validation callback.
+ *
+ * Sets a callback used to verify the SSL certificate.
+ *
+ * \note Setting a callback will enable SSL verification if disabled via natsOptions_SkipServerVerification().
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param callback the custom SSL verification handler to invoke. see https://docs.openssl.org/master/man3/SSL_CTX_set_verify/
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback);
 
 /** \brief Sets the verbose mode.
  *
@@ -4179,7 +4217,7 @@ natsConnection_Connect(natsConnection **nc, natsOptions *options);
  *
  * @param nc the pointer to the #natsConnection object.
  */
-natsStatus
+NATS_EXTERN natsStatus
 natsConnection_Reconnect(natsConnection *nc);
 
 /** \brief Process a read event when using external event loop.
@@ -4427,15 +4465,44 @@ natsConnection_GetDiscoveredServers(natsConnection *nc, char ***servers, int *co
  * Returns the last known error as a 'natsStatus' and the location to the
  * null-terminated error string.
  *
- * \warning The returned string is owned by the connection object and
- * must not be freed.
+ * \deprecated Returns an internal pointer, with potential for race conditions.
+ * Please use natsConnection_ReadLastError instead.
+ *
+ * \warning The returned string is owned by the connection object and must not
+ * be freed.
  *
  * @param nc the pointer to the #natsConnection object.
  * @param lastError the location where the pointer to the connection's last
  * error string is copied.
  */
+
 NATS_EXTERN natsStatus
 natsConnection_GetLastError(natsConnection *nc, const char **lastError);
+
+/** \brief Read the last connection error into a user provided buffer.
+ *
+ * Returns the last known error as a 'natsStatus' and copies the description
+ * into a user-provided buffer. If the buffer is too small, the error is
+ * truncated.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param buf buffer to receive the error string. If NULL, nothing will be
+ * copied, only the status returned
+ * @param n size of the buffer. If 0, nothing will be copied, only the status
+ * returned
+ *
+ * \note This deprecates #natsConnection_GetLastError.
+ *
+ * \note If n is greater than 0, the buffer will be null-terminated. If the
+ * message does not fit in the buffer, the last 3 characters will be replaced
+ * with "..."".
+ *
+ * \note We recommend a buffer size of at least 256 bytes. There is currently no
+ * way for the user to obtain the length of the full error string, without
+ * suppling a buffer large enough to fit it.
+ */
+NATS_EXTERN natsStatus
+natsConnection_ReadLastError(natsConnection *nc, char *buf, size_t n);
 
 /** \brief Gets the current client ID assigned by the server.
  *
@@ -6843,18 +6910,12 @@ natsMsg_GetTime(natsMsg *msg);
  *
  * A KeyValue store is a materialized view of JetStream.
  *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
- *
  *  @{
  */
 
 /** \defgroup kvGroupMgt KeyValue store management
  *
  * These functions allow to create, get or delete a KeyValue store.
- *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
  *
  *  @{
  */
@@ -6932,9 +6993,6 @@ kvStore_Destroy(kvStore *kv);
 /** \defgroup kvEntry KeyValue store entries
  *
  * These functions allow to inspect a the value, or entry, of a given key.
- *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
  *
  *  @{
  */
@@ -7405,9 +7463,6 @@ kvStore_Status(kvStatus **new_status, kvStore *kv);
  *
  * These functions allow to receive updates for key(s) on a given bucket.
  *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
- *
  *  @{
  */
 
@@ -7455,9 +7510,6 @@ kvWatcher_Destroy(kvWatcher *w);
 /** \defgroup kvStatus KeyValue store status
  *
  * These functions allow to inspect the status of a bucket.
- *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
  *
  *  @{
  */
@@ -7535,10 +7587,7 @@ kvStatus_Destroy(kvStatus *sts);
 // Microservices.
 //
 
-/** \defgroup microGroup EXPERIMENTAL - Microservices
- *
- * \warning EXPERIMENTAL FEATURE! We reserve the right to change the API without
- * necessarily bumping the major version of the library.
+/** \defgroup microGroup - Microservices
  *
  * ### NATS Microservices.
  *
@@ -8340,7 +8389,8 @@ microService_Run(microService *m);
  *
  * @see #micro_AddService, #microService_Run
  */
-NATS_EXTERN microError *microService_Stop(microService *m);
+NATS_EXTERN microError *
+microService_Stop(microService *m);
 
 /** @} */ // end of microServiceFunctions
 

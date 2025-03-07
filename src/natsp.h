@@ -113,7 +113,7 @@ static inline bool nats_StringEquals(const char *s1, const char *s2)
     if (s2 == NULL)
         return false;
 
-    return strcmp(s1, s2);
+    return strcmp(s1, s2) == 0;
 }
 
 #define DUP_STRING(s, s1, s2) \
@@ -182,11 +182,12 @@ typedef struct __natsServerInfo
 
 typedef struct __natsSSLCtx
 {
-    natsMutex   *lock;
-    int         refs;
-    SSL_CTX     *ctx;
-    char        *expectedHostname;
-    bool        skipVerify;
+    natsMutex       *lock;
+    int             refs;
+    SSL_CTX         *ctx;
+    char            *expectedHostname;
+    bool            skipVerify;
+    SSL_verify_cb   callback;
 
 } natsSSLCtx;
 
@@ -389,9 +390,6 @@ typedef struct __jsFetch
     // Timer for the fetch expiration. We leverage the existing jsi->hbTimer for
     // checking missed heartbeats.
     natsTimer   *expiresTimer;
-
-    // Matches jsi->fetchID
-    char        replySubject[NATS_DEFAULT_INBOX_PRE_LEN + NUID_BUFFER_LEN + 32]; // big enough for {INBOX}.number
 } jsFetch;
 
 typedef struct __jsSub

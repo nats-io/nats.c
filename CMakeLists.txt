@@ -215,11 +215,16 @@ elseif(WIN32)
   set(NATS_PLATFORM_INCLUDE "win")
 
   # Warning control.
-  add_compile_options(/W4) # Set warning level to maximum, then disable:
-  add_compile_options(/wd4100) # unreferenced formal parameter
-  add_compile_options(/wd4200) # nonstandard extension used: zero-sized array in struct/union
-  add_compile_options(/wd4130) # logical operation on address of string constant
-  add_compile_options(/wd4127) # conditional expression is constant
+  if(MSVC)
+    # Set warning level to maximum, then disable:
+    # /wd4100 unreferenced formal parameter
+    # /wd4200 nonstandard extension used: zero-sized array in struct/union
+    # /wd4130 logical operation on address of string constant
+    # /wd4127 conditional expression is constant
+    add_compile_options(/W4 /wd4100 /wd4200 /wd4130 /wd4127)
+  else()
+    add_compile_options(-Wall -Wextra -Wno-unused-parameter -Wno-pedantic -Wno-address -Wno-constant-conditional)
+  endif()
 
   if(sodium_USE_STATIC_LIBS)
     add_definitions(
@@ -253,6 +258,7 @@ if(NATS_BUILD_WITH_TLS)
   if(NATS_BUILD_TLS_FORCE_HOST_VERIFY)
     add_definitions(-DNATS_FORCE_HOST_VERIFICATION)
   endif(NATS_BUILD_TLS_FORCE_HOST_VERIFY)
+  set(NATS_DOC_INCLUDE_TLS "NATS_HAS_TLS")
 endif(NATS_BUILD_WITH_TLS)
 
 
@@ -260,11 +266,11 @@ endif(NATS_BUILD_WITH_TLS)
 # Versionning and Doc
 
 set(NATS_VERSION_MAJOR  3)
-set(NATS_VERSION_MINOR  10)
+set(NATS_VERSION_MINOR  11)
 set(NATS_VERSION_PATCH  0)
 set(NATS_VERSION_SUFFIX "-beta")
 
-set(NATS_VERSION_REQUIRED_NUMBER 0x030900)
+set(NATS_VERSION_REQUIRED_NUMBER 0x030A00)
 
 write_basic_package_version_file(
   "${PROJECT_BINARY_DIR}/cnats-config-version.cmake"
@@ -309,4 +315,5 @@ if(NATS_BUILD_STREAMING)
 endif()
 add_subdirectory(test)
 add_subdirectory(test/dylib)
+add_subdirectory(test/check_cpp)
 #----------------------------

@@ -580,7 +580,7 @@ _processInfo(natsConnection *nc, char *info, int len)
             tlsName = (const char*) nc->cur->url->host;
 
         s = natsSrvPool_addNewURLs(nc->srvPool,
-                                   nc->cur->url,
+                                   nc->cur ? nc->cur->url : NULL,
                                    nc->info.connectURLs,
                                    nc->info.connectURLsCount,
                                    tlsName,
@@ -736,7 +736,7 @@ _makeTLSConn(natsConnection *nc)
                     s = nats_setError(NATS_SSL_ERROR, "unable to set expected hostname '%s'", nc->tlsName);
             }
             if (s == NATS_OK)
-                SSL_set_verify(ssl, SSL_VERIFY_PEER, _collectSSLErr);
+                SSL_set_verify(ssl, SSL_VERIFY_PEER, nc->opts->sslCtx->callback != NULL ? nc->opts->sslCtx->callback : _collectSSLErr);
         }
     }
 #if defined(NATS_USE_OPENSSL_1_1)
@@ -3352,7 +3352,8 @@ _processUrlString(natsOptions *opts, const char *urls)
 
     serverUrls = (char**) NATS_CALLOC(count + 1, sizeof(char*));
     if (serverUrls == NULL)
-        s = NATS_NO_MEMORY;
+        return NATS_NO_MEMORY;
+    
     if (s == NATS_OK)
     {
         urlsCopy = NATS_STRDUP(urls);
@@ -4006,6 +4007,7 @@ natsConnection_GetDiscoveredServers(natsConnection *nc, char ***servers, int *co
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// DEPRECATED
 natsStatus
 natsConnection_GetLastError(natsConnection *nc, const char **lastError)
 {
@@ -4028,6 +4030,43 @@ natsConnection_GetLastError(natsConnection *nc, const char **lastError)
 
     return s;
 }
+
+natsStatus
+natsConnection_ReadLastError(natsConnection *nc, char *buf, size_t n)
+{
+    natsStatus  s;
+
+    if (nc == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+
+    s = nc->err;
+    if (s == NATS_OK)
+        nc->errStr[0] = '\0';
+    else if (nc->errStr[0] == '\0')
+        snprintf(nc->errStr, sizeof(nc->errStr), "%s", natsStatus_GetText(s));
+
+    if ((buf != NULL) && (n > 0))
+    {
+        size_t errLen = strlen(nc->errStr) + 1;
+        memcpy(buf, nc->errStr, (errLen < n ? errLen : n));
+        buf[n-1] = '\0';
+
+        bool truncate = ((errLen > n) && (n > 4));
+        if (truncate)
+        {
+            buf[n-2] = '.';
+            buf[n-3] = '.';
+            buf[n-4] = '.';
+        }
+    }
+
+    natsConn_Unlock(nc);
+
+    return s;
+}
+
 
 void
 natsConn_close(natsConnection *nc)
@@ -4468,9 +4507,9 @@ natsConn_setFilterWithClosure(natsConnection *nc, natsMsgFilter f, void* closure
 void
 natsConn_defaultErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
+    char        errBuf[256];
     uint64_t    cid      = 0;
-    const char  *lastErr = NULL;
-    const char  *errTxt  = NULL;
+    const char  *errTxt  = errBuf;
 
     natsConn_Lock(nc);
     cid = nc->info.CID;
@@ -4478,8 +4517,9 @@ natsConn_defaultErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus
 
     // Get possibly more detailed error message. If empty, we will print the default
     // error status text.
-    natsConnection_GetLastError(nc, &lastErr);
-    errTxt = (nats_IsStringEmpty(lastErr) ? natsStatus_GetText(err) : lastErr);
+    natsConnection_ReadLastError(nc, errBuf, sizeof(errBuf));
+    if (nats_IsStringEmpty(errBuf))
+        errTxt = natsStatus_GetText(err);
     // If there is a subscription, check if it is a JetStream one and if so, take
     // the "public" subject (the one that was provided to the subscribe call).
     if (sub != NULL)

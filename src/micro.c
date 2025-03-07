@@ -149,8 +149,9 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, micro
         return microError_Wrapf(err, "failed to create full subject for endpoint '%s'", cfg->Name);
     if (!micro_is_valid_subject(fullSubject))
     {
+        err = microError_Wrapf(micro_ErrorInvalidArg, "invalid subject '%s' for endpoint '%s'", fullSubject, cfg->Name);
         NATS_FREE(fullSubject);
-        return microError_Wrapf(micro_ErrorInvalidArg, "invalid subject '%s' for endpoint '%s'", fullSubject, cfg->Name);
+        return err;
     }
 
     _lock_service(m);

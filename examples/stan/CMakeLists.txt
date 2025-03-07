@@ -9,6 +9,10 @@ include_directories(${PROJECT_SOURCE_DIR}/examples/stan)
 # Get all the .c files in the examples directory
 file(GLOB EXAMPLES_SOURCES RELATIVE ${PROJECT_SOURCE_DIR}/examples/stan *.c)
 
+if(NATS_BUILD_WITH_TLS)
+  include_directories(${OPENSSL_INCLUDE_DIR})
+endif(NATS_BUILD_WITH_TLS)
+
 # For each file...
 foreach(examples_src ${EXAMPLES_SOURCES})
 

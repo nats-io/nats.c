@@ -9,7 +9,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 [![License Apache 2](https://img.shields.io/badge/License-Apache2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Build Status](https://travis-ci.com/nats-io/nats.c.svg?branch=main)](https://travis-ci.com/github/nats-io/nats.c)
 [![Coverage Status](https://coveralls.io/repos/github/nats-io/nats.c/badge.svg?branch=main)](https://coveralls.io/github/nats-io/nats.c?branch=main)
-[![Release](https://img.shields.io/badge/release-v3.9.0-blue.svg?style=flat)](https://github.com/nats-io/nats.c/releases/tag/v3.9.0)
+[![Release](https://img.shields.io/badge/release-v3.9.2-blue.svg?style=flat)](https://github.com/nats-io/nats.c/releases/tag/v3.9.2)
 [![Documentation](https://img.shields.io/badge/doc-Doxygen-brightgreen.svg?style=flat)](http://nats-io.github.io/nats.c)
 
 # Table of Contents
@@ -535,8 +535,6 @@ js_DeleteStream(js, "ORDERS", NULL, &jerr);
 ```
 
 ## KeyValue
-
-**EXPERIMENTAL FEATURE! We reserve the right to change the API without necessarily bumping the major version of the library.**
 
 A KeyValue store is a materialized view based on JetStream. A bucket is a stream and keys are subjects within that stream.
 
@@ -1378,7 +1376,7 @@ connection user has no permission to create this subscription for instance.
 Instead, the server sends an error message that is asynchronously received by the client library.
 Calling natsConnection_Flush() on the same connection that created the subscription ensures
 that the server has processed the subscription and if there was an error has sent that error back
-before the `PONG`. It is then possible to check the natsConnection_GetLastError()
+before the `PONG`. It is then possible to check the natsConnection_ReadLastError()
 to figure out if the subscription was successfully registered or not.
 
 <b>How is data and protocols received from the server?</b>

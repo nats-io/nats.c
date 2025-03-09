@@ -1992,6 +1992,18 @@ nats_Now(void);
 NATS_EXTERN int64_t
 nats_NowInNanoSeconds(void);
 
+/** \brief Gives the current time in nanoseconds using monotonic timer.
+ *
+ * Gives the current time in nanoseconds. When such granularity is not
+ * available, the time returned is still expressed in nanoseconds.
+ * Using monotonic timer is more reliable than using the real time
+ * when measuring time intervals.
+ *
+ * \note On Windows platforms, this function uses the QueryPerformanceCounter.
+ */
+NATS_EXTERN int64_t
+nats_NowMonotonicInNanoSeconds(void);
+
 /** \brief Sleeps for a given number of milliseconds.
  *
  * Causes the current thread to be suspended for at least the number of

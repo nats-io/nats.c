@@ -4446,12 +4446,9 @@ natsConnection_GetRTT(natsConnection *nc, int64_t *rtt)
     {
 
         start = nats_NowMonotonicInNanoSeconds();
-        // start = nats_NowInNanoSeconds();
         s = _flushTimeout(nc, DEFAULT_FLUSH_TIMEOUT);
-        if (s == NATS_OK) {
+        if (s == NATS_OK)
             *rtt = nats_NowMonotonicInNanoSeconds()-start;
-            // *rtt = nats_NowInNanoSeconds()-start;
-        }
     }
     natsConn_Unlock(nc);
 

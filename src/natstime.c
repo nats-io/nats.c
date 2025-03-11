@@ -64,24 +64,16 @@ nats_NowMonotonicInNanoSeconds(void)
 #ifdef _WIN32
     LARGE_INTEGER frequency;
     LARGE_INTEGER counter;
-    if (!QueryPerformanceFrequency(&frequency) || !QueryPerformanceCounter(&counter))
-        abort();
-    return (int64_t)(counter.QuadPart * 1000000000ULL / frequency.QuadPart);
+    if (QueryPerformanceFrequency(&frequency) && QueryPerformanceCounter(&counter))
+        return (int64_t)(counter.QuadPart * 1000000000ULL / frequency.QuadPart);
+    return nats_NowInNanoSeconds();
 #elif defined CLOCK_MONOTONIC
     struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-        abort();
-    return ((int64_t) ts.tv_sec) * 1000000000L + ((int64_t) ts.tv_nsec);
-#elif defined CLOCK_REALTIME
-    struct timespec ts;
-    if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
-        abort();
-    return ((int64_t)ts.tv_sec) * 1000000000L + ((int64_t)ts.tv_nsec);
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return ((int64_t) ts.tv_sec) * 1000000000L + ((int64_t) ts.tv_nsec);
+    return nats_NowInNanoSeconds();
 #else
-    struct timeval tv;
-    if (gettimeofday(&tv, NULL) != 0)
-        abort();
-    return ((int64_t)tv.tv_sec) * 1000000000L + (((int64_t)tv.tv_usec) * 1000);
+    return nats_NowInNanoSeconds();
 #endif
 }
 

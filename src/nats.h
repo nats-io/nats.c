@@ -29,7 +29,6 @@ extern "C" {
 
 #ifdef NATS_WITH_EXPERIMENTAL
 
-// natsOptions_SetSSLVerificationCallback 
 #if !defined(NATS_HAS_TLS)
 #error "natsOptions_SetSSLVerificationCallback requires NATS_HAS_TLS to be defined"
 #endif

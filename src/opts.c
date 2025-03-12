@@ -696,7 +696,8 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
     {
         opts->sslCtx->skipVerify = skip;
 #ifdef NATS_WITH_EXPERIMENTAL
-        opts->sslCtx->callback = NULL;
+        if (skip)
+            opts->sslCtx->callback = NULL;
 #endif // NATS_WITH_EXPERIMENTAL
     }
 

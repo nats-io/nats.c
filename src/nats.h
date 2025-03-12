@@ -27,13 +27,16 @@ extern "C" {
 #include "status.h"
 #include "version.h"
 
-#if defined(NATS_HAS_TLS)
+#ifdef NATS_WITH_EXPERIMENTAL
+
+// natsOptions_SetSSLVerificationCallback 
+#if !defined(NATS_HAS_TLS)
+#error "natsOptions_SetSSLVerificationCallback requires NATS_HAS_TLS to be defined"
+#endif
 #include <openssl/ssl.h>
 #include <openssl/x509v3.h>
-#else
-#define X509_STORE_CTX void
-typedef int (*SSL_verify_cb)(int preverify_ok, X509_STORE_CTX* x509_ctx);
-#endif
+
+#endif // NATS_WITH_EXPERIMENTAL
 
 /** \def NATS_EXTERN
  *  \brief Needed for shared library.
@@ -2628,17 +2631,28 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
 NATS_EXTERN natsStatus
 natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
 
-/** \brief Sets the certificate validation callback.
+#ifdef NATS_WITH_EXPERIMENTAL
+
+/** \brief EXPERIMENTAL Sets the certificate validation callback.
  *
  * Sets a callback used to verify the SSL certificate.
  *
- * \note Setting a callback will enable SSL verification if disabled via natsOptions_SkipServerVerification().
+ * \note Setting a callback will enable SSL verification if disabled via
+ * natsOptions_SkipServerVerification().
+ *
+ * \warning This is an experimental API and is subject to change in future
+ * versions. To use this API compile the client code with
+ * `-DNATS_WITH_EXPERIMENTAL -DNATS_HAS_TLS`. `openssl` library must be
+ * installed and added to the include/link paths.
  *
  * @param opts the pointer to the #natsOptions object.
- * @param callback the custom SSL verification handler to invoke. see https://docs.openssl.org/master/man3/SSL_CTX_set_verify/
+ * @param callback the custom SSL verification handler to invoke. see
+ * https://docs.openssl.org/master/man3/SSL_CTX_set_verify/
  */
 NATS_EXTERN natsStatus
 natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback);
+
+#endif // NATS_WITH_EXPERIMENTAL
 
 /** \brief Sets the verbose mode.
  *

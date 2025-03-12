@@ -21195,7 +21195,8 @@ _sslVerifyCallback(int preverify_ok, X509_STORE_CTX *ctx)
 
 void test_SSLVerificationCallback(void)
 {
-#if defined(NATS_HAS_TLS)
+#ifdef NATS_WITH_EXPERIMENTAL
+#ifdef NATS_HAS_TLS
     natsStatus          s;
     natsConnection      *nc         = NULL;
     natsOptions         *opts       = NULL;
@@ -21228,7 +21229,8 @@ void test_SSLVerificationCallback(void)
 #else
     test("Skipped when built with no SSL support: ");
     testCond(true);
-#endif
+#endif // NATS_HAS_TLS
+#endif // NATS_WITH_EXPERIMENTAL
 }
 
 void test_SSLCiphers(void)

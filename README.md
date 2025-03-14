@@ -18,6 +18,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 - [Building](#building)
 	* [TLS Support](#tls-support)
         * [Link statically](#link-statically)
+    * [Building with EXPERIMENTAL API support](#building-with-experimental-API-support)
     * [Building with Streaming](#building-with-streaming)
     * [Building with Libsodium](#building-with-libsodium)
     * [Testing](#testing)
@@ -176,6 +177,18 @@ rm CMakeCache.txt
 cmake .. <build options that you may already use> -DNATS_BUILD_OPENSSL_STATIC_LIBS=ON
 ```
 Then call `make` (or equivalent depending on your platform) and this should ensure that the library (and examples and/or test suite executable) are linked against the OpenSSL library, if it was found by CMake.
+
+## Building with EXPERIMENTAL API support
+
+At times we may introduce APIs that are not stable yet. To build with them, define NATS_WITH_EXPERIMENTAL:
+```
+# cd ./build
+rm CMakeCache.txt
+cmake .. <build options that you may already use> -DNATS_WITH_EXPERIMENTALON
+make
+```
+
+Note that experimental APIs may have other dependencies (like SSL).
 
 ## Building with Streaming
 

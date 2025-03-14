@@ -1,6 +1,5 @@
 var NAVTREEINDEX3 =
 {
-"status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aa88122abfaf173f0411a3642803aac04":[4,0,0,2,2,37],
 "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aaa5d8be08323568b5f7295feb10d73b4":[4,0,0,2,2,69],
 "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aaad93c7c34cd3283df7369479d4cdb7c":[4,0,0,2,2,29],
 "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aab479befe55dfbc113b128367ea3739e":[4,0,0,2,2,124],
@@ -249,5 +248,6 @@ var NAVTREEINDEX3 =
 "structjs_options_stream_purge.html":[2,0,42],
 "structjs_options_stream_purge.html#a224dc8575479119cc0a62db78d1ff1c1":[2,0,42,2],
 "structjs_options_stream_purge.html#a24646c78a30763aa58cc64fe69cf0579":[2,0,42,0],
-"structjs_options_stream_purge.html#a9af7fca7c27deed5434cf7e8dd641c18":[2,0,42,1]
+"structjs_options_stream_purge.html#a9af7fca7c27deed5434cf7e8dd641c18":[2,0,42,1],
+"structjs_peer_info.html":[2,0,15]
 };

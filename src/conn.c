@@ -4444,10 +4444,10 @@ natsConnection_GetRTT(natsConnection *nc, int64_t *rtt)
         s = nats_setDefaultError(NATS_CONNECTION_DISCONNECTED);
     else
     {
-        start = nats_NowInNanoSeconds();
+        start = nats_NowMonotonicInNanoSeconds();
         s = _flushTimeout(nc, DEFAULT_FLUSH_TIMEOUT);
         if (s == NATS_OK)
-            *rtt = nats_NowInNanoSeconds()-start;
+            *rtt = nats_NowMonotonicInNanoSeconds()-start;
     }
     natsConn_Unlock(nc);
 

@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.10.0</span>
+   &#160;<span id="projectnumber">3.10.1</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -156,9 +156,6 @@ Functions</h2></td></tr>
 <tr class="memitem:ga6f804ec44adc299989fe623570679da3" id="r_ga6f804ec44adc299989fe623570679da3"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga6f804ec44adc299989fe623570679da3">natsOptions_SkipServerVerification</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool skip)</td></tr>
 <tr class="memdesc:ga6f804ec44adc299989fe623570679da3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Switch server certificate verification.  <br /></td></tr>
 <tr class="separator:ga6f804ec44adc299989fe623570679da3"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:gaa2268dcf2f380b18ddb0e985a6ff7541" id="r_gaa2268dcf2f380b18ddb0e985a6ff7541"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gaa2268dcf2f380b18ddb0e985a6ff7541">natsOptions_SetSSLVerificationCallback</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, SSL_verify_cb callback)</td></tr>
-<tr class="memdesc:gaa2268dcf2f380b18ddb0e985a6ff7541"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the certificate validation callback.  <br /></td></tr>
-<tr class="separator:gaa2268dcf2f380b18ddb0e985a6ff7541"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaa16bfd09ef318af18c27a0e199681b69" id="r_gaa16bfd09ef318af18c27a0e199681b69"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gaa16bfd09ef318af18c27a0e199681b69">natsOptions_SetVerbose</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool verbose)</td></tr>
 <tr class="memdesc:gaa16bfd09ef318af18c27a0e199681b69"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the verbose mode.  <br /></td></tr>
 <tr class="separator:gaa16bfd09ef318af18c27a0e199681b69"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1034,49 +1031,12 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>By default, the server certificate is verified. You can disable the verification by passing <code>true</code> to this function.</p>
-<dl class="section note"><dt>Note</dt><dd>Setting this to true will clear SSL verfication callback set via <a class="el" href="group__opts_group.html#gaa2268dcf2f380b18ddb0e985a6ff7541" title="Sets the certificate validation callback.">natsOptions_SetSSLVerificationCallback()</a>.</dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Setting this to true will clear SSL verfication callback set via natsOptions_SetSSLVerificationCallback().</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>This is fine for tests but use with caution since this is not secure.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
     <tr><td class="paramname">skip</td><td>set it to <code>true</code> to disable - or skip - server certificate verification. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-</div>
-</div>
-<a id="gaa2268dcf2f380b18ddb0e985a6ff7541" name="gaa2268dcf2f380b18ddb0e985a6ff7541"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#gaa2268dcf2f380b18ddb0e985a6ff7541">&#9670;&#160;</a></span>natsOptions_SetSSLVerificationCallback()</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetSSLVerificationCallback </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
-          <td class="paramname"><em>opts</em>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">SSL_verify_cb&#160;</td>
-          <td class="paramname"><em>callback</em>&#160;</td>
-        </tr>
-        <tr>
-          <td></td>
-          <td>)</td>
-          <td></td><td></td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-<p>Sets a callback used to verify the SSL certificate.</p>
-<dl class="section note"><dt>Note</dt><dd>Setting a callback will enable SSL verification if disabled via <a class="el" href="group__opts_group.html#ga6f804ec44adc299989fe623570679da3" title="Switch server certificate verification.">natsOptions_SkipServerVerification()</a>.</dd></dl>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
-    <tr><td class="paramname">callback</td><td>the custom SSL verification handler to invoke. see <a href="https://docs.openssl.org/master/man3/SSL_CTX_set_verify/">https://docs.openssl.org/master/man3/SSL_CTX_set_verify/</a> </td></tr>
   </table>
   </dd>
 </dl>

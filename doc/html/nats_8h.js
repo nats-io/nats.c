@@ -205,7 +205,6 @@ var nats_8h =
     [ "natsOptions_SetCipherSuites", "group__opts_group.html#ga2b7f144b011d8ce62941b608a8f324f0", null ],
     [ "natsOptions_SetExpectedHostname", "group__opts_group.html#ga0ba43ba9930df385e4781b12be9f2851", null ],
     [ "natsOptions_SkipServerVerification", "group__opts_group.html#ga6f804ec44adc299989fe623570679da3", null ],
-    [ "natsOptions_SetSSLVerificationCallback", "group__opts_group.html#gaa2268dcf2f380b18ddb0e985a6ff7541", null ],
     [ "natsOptions_SetVerbose", "group__opts_group.html#gaa16bfd09ef318af18c27a0e199681b69", null ],
     [ "natsOptions_SetPedantic", "group__opts_group.html#ga26f166af20de98bec67bc6cc916f769e", null ],
     [ "natsOptions_SetPingInterval", "group__opts_group.html#gae68fb615835364c0809555e8dc93f57e", null ],

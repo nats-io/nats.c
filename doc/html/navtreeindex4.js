@@ -1,6 +1,5 @@
 var NAVTREEINDEX4 =
 {
-"structjs_peer_info.html":[2,0,15],
 "structjs_peer_info.html#a3f3e09c5996858ec5faca2dc7fa5224e":[2,0,15,2],
 "structjs_peer_info.html#a49a2623963dad653a6d7996c750056c9":[2,0,15,4],
 "structjs_peer_info.html#a8441d023932c388953197f7ea39402fe":[2,0,15,3],

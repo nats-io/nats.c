@@ -2528,7 +2528,7 @@ natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName);
  * You can get extra information by calling #nats_GetLastError.
  *
  * @param opts the pointer to the #natsOptions object.
- * @param path the file containing the CA certificates.
+ * @param path the path containing the CA certificates.
  *
  */
 NATS_EXTERN natsStatus

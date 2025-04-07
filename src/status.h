@@ -268,6 +268,39 @@ typedef enum {
     JSConsumerCreateFilterSubjectMismatchErr = 10131,   ///< Consumer create request did not match filtered subject from create subject
     JSConsumerCreateDurableAndNameMismatchErr = 10132,  ///< Consumer Durable and Name have to be equal if both are provided
     JSReplicasCountCannotBeNegativeErr = 10133,         ///< Replicas count cannot be negative
+    JSConsumerReplicasShouldMatchStreamErr = 10134,     ///< Consumer config replicas must match interest retention stream's replicas
+    JSConsumerMetadataLengthErr = 10135,                ///< Consumer metadata exceeds maximum size 
+    JSConsumerDuplicateFilterSubjectsErr = 10136,       ///< Consumer cannot have both FilterSubject and FilterSubjects specified
+    JSConsumerMultipleFiltersNotAllowedErr = 10137,     ///< Consumer with multiple subject filters cannot use subject based API
+    JSConsumerOverlappingSubjectFiltersErr = 10138,     ///< Consumer subject filters cannot overlap
+    JSConsumerEmptyFilterErr = 10139,                   ///< Consumer filter in FilterSubjects cannot be empty
+    JSSourceDuplicateDetectedErr = 10140,               ///< Source stream, filter and transform (plus external if present) must form a unique combination
+    JSSourceInvalidStreamNameErr = 10141,               ///< Sourced stream name is invalid
+    JSMirrorInvalidStreamNameErr = 10142,               ///< Mirrored stream name is invalid
+    JSSourceMultipleFiltersNotAllowedErr = 10144,       ///< Source with multiple subject transforms cannot also have a single subject filter
+    JSSourceInvalidSubjectFilterErr = 10145,            ///< Source transform source error
+    JSSourceInvalidTransformDestinationErr = 10146,     ///< Source transform error
+    JSSourceOverlappingSubjectFiltersErr = 10147,       ///< Source subject filters cannot overlap
+    JSConsumerAlreadyExistsErr = 10148,                 ///< Action CREATE is used for a existing consumer with a different config
+    JSConsumerDoesNotExistErr = 10149,                  ///< Action UPDATE is used for a non-existing consumer
+    JSMirrorMultipleFiltersNotAllowedErr = 10150,       ///< Mirror with multiple subject transforms cannot also have a single subject filter
+    JSMirrorInvalidSubjectFilterErr = 10151,            ///< Mirror transform source error
+    JSMirrorOverlappingSubjectFiltersErr = 10152,       ///< Mirror subject filters cannot overlap
+    JSConsumerInactiveThresholdExcessErr = 10153,       ///< Consumer inactive threshold exceeds system limit
+    JSMirrorInvalidTransformDestinationErr = 10154,     ///< Mirror transform error
+    JSStreamTransformInvalidSourceErr = 10155,          ///< Stream transform source error
+    JSStreamTransformInvalidDestinationErr = 10156,     ///< Stream transform destination error
+    JSPedanticErr = 10157,                              ///< Pedantic mode error
+    JSStreamDuplicateMessageConflictErr = 10158,        ///< Duplicate message id is in process
+    JSConsumerPriorityPolicyWithoutGroupErr = 10159,    ///< Setting PriorityPolicy requires at least one PriorityGroup to be set
+    JSConsumerInvalidPriorityGroupErr = 10160,          ///< Provided priority group does not exist for this consumer"
+    JSConsumerEmptyGroupNameErr = 10161,                ///< Group name cannot be an empty string
+    JSConsumerInvalidGroupNameErr = 10162,              ///< Valid priority group name must match A-Z, a-z, 0-9, -_/=)+ and may not exceed 16 characters
+    JSStreamExpectedLastSeqPerSubjectNotReadyErr = 10163, ///< Expected last sequence per subject temporarily unavailable
+    JSStreamWrongLastSequenceConstantErr = 10164,       ///< Wrong last sequence
+    JSMessageTTLInvalidErr = 10165,                     ///< Invalid per-message TTL
+    JSMessageTTLDisabledErr = 10166,                    ///< Per-message TTL is disabled
+    JSStreamTooManyRequestsErr = 10167,                 ///< Too many requests
 
 } jsErrCode;
 

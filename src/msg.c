@@ -213,7 +213,10 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
     start = ptr;
     if (*ptr == '\r')
     {
-        if ((++ptr == endPtr) || ((*ptr == '\n') && (++ptr == endPtr)))
+        if ((++ptr == endPtr) ||
+            ((*ptr == '\n') && (++ptr == endPtr)) ||
+            ((*ptr == '\r') && (++ptr == endPtr)) ||
+            ((*ptr == '\n') && (++ptr == endPtr)))
         {
             *pPtr = ptr;
             return NATS_OK;

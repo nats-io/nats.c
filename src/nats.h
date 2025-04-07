@@ -295,6 +295,7 @@ typedef struct jsPubOptions
         uint64_t        ExpectLastSeq;          ///< Expected last message sequence in the stream.
         uint64_t        ExpectLastSubjectSeq;   ///< Expected last message sequence for the subject in the stream.
         bool            ExpectNoMessage;        ///< Expected no message (that is, sequence == 0) for the subject in the stream.
+        int64_t         MsgTTL;                 ///< Message time to live (TTL) in milliseconds, used by the server to expire the message.
 
 } jsPubOptions;
 
@@ -611,6 +612,14 @@ typedef struct jsStreamConfig {
         /// @brief Sets the limits on certain options on all consumers of the
         /// stream.
         jsStreamConsumerLimits  ConsumerLimits;
+
+        /// @brief Allow the message to be sent with a time to live (TTL) value.
+        bool                    AllowMsgTTL;
+
+        /// @brief Enables and sets a duration for adding server markers for
+        /// delete, purge and max age limits.
+        int64_t                 SubjectDeleteMarkerTTL;
+
 } jsStreamConfig;
 
 /**

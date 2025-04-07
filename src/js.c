@@ -476,6 +476,15 @@ _setHeadersFromOptions(natsMsg *msg, jsPubOptions *opts)
             s = natsMsgHeader_Set(msg, jsExpectedLastSubjSeqHdr, temp);
         }
     }
+    if ((s == NATS_OK) && (opts->MsgTTL != 0))
+    {
+        if (opts->MsgTTL < 0)
+            s = nats_setError(NATS_INVALID_ARG, "option 'MsgTTL' (%" PRId64 ") cannot be negative", opts->MsgTTL);
+        if (s == NATS_OK)
+        {
+            s = natsMsgHeader_Set(msg, jsMsgTTLHdr, nats_formatDurationMilli(temp, opts->MsgTTL));
+        }
+    }
 
     return NATS_UPDATE_ERR_STACK(s);
 }

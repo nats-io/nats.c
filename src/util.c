@@ -2287,17 +2287,22 @@ fmt_int(char *buf, int w, uint64_t v)
     return w;
 }
 
-natsStatus
-nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, int64_t d)
+// Converts a number of nanoseconds to a go duration string.
+// Note: buf must be at least 32 bytes long.
+// This is the maximum size of a duration string.
+// The format is: "2540400h10m10.000000000s".
+// Returns the pointer to the beginning of the string (in buf).
+char *
+nats_formatDuration(char *buf, int64_t d)
 {
-    // Largest time is 2540400h10m10.000000000s
-    char buf[32];
-    int w = 32;
     bool neg = d < 0;
     uint64_t u = (uint64_t) (neg ? -d : d);
     int prec;
-    natsStatus s = NATS_OK;
-    const char *start = (comma ? ",\"" : "\"");
+
+    // Largest time is 2540400h10m10.000000000s
+    int w = 32;
+    w--;
+    buf[w] = '\0';
 
     if (u < 1000000000)
     {
@@ -2307,12 +2312,7 @@ nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, in
         buf[w] = 's';
         w--;
         if (u == 0)
-        {
-            s = natsBuf_Append(out_buf, start, -1);
-            IFOK(s, natsBuf_Append(out_buf, field_name, -1));
-            IFOK(s, natsBuf_Append(out_buf, "\":\"0s\"", -1));
-            return NATS_UPDATE_ERR_STACK(s);
-        }
+            return buf+w;
         else if (u < 1000)
         {
             // print nanoseconds
@@ -2373,10 +2373,23 @@ nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, in
         buf[w] = '-';
     }
 
+    return buf+w;
+}
+
+natsStatus
+nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, int64_t d)
+{
+    // Largest time is 2540400h10m10.000000000s
+    char buf[32];
+    natsStatus s = NATS_OK;
+    const char *start = (comma ? ",\"" : "\"");
+
+    char *dur = nats_formatDuration(buf, d);
+
     s = natsBuf_Append(out_buf, start, -1);
     IFOK(s, natsBuf_Append(out_buf, field_name, -1));
     IFOK(s, natsBuf_Append(out_buf, "\":\"", -1));
-    IFOK(s, natsBuf_Append(out_buf, buf + w, sizeof(buf) - w));
+    IFOK(s, natsBuf_Append(out_buf, dur, -1));
     IFOK(s, natsBuf_Append(out_buf, "\"", -1));
     return NATS_UPDATE_ERR_STACK(s);
 }

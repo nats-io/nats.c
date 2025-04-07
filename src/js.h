@@ -34,6 +34,7 @@ extern const char*      jsDefaultAPIPrefix;
 extern const int64_t    jsDefaultRequestWait;
 
 #define jsMsgIdHdr                  "Nats-Msg-Id"
+#define jsMsgTTLHdr                 "Nats-TTL"
 #define jsExpectedStreamHdr         "Nats-Expected-Stream"
 #define jsExpectedLastSeqHdr        "Nats-Expected-Last-Sequence"
 #define jsExpectedLastSubjSeqHdr    "Nats-Expected-Last-Subject-Sequence"

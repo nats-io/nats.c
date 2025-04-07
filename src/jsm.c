@@ -763,6 +763,8 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     obj = NULL;
     IFOK(s, nats_JSONGetObject(jcfg, "consumer_limits", &obj));
     IFOK(s, _unmarshalStreamConsumerLimits(obj, &(cfg->ConsumerLimits)));
+    IFOK(s, nats_JSONGetLong(jcfg, "subject_delete_marker_ttl", &(cfg->SubjectDeleteMarkerTTL)));
+    IFOK(s, nats_JSONGetBool(jcfg, "allow_msg_ttl", &(cfg->AllowMsgTTL)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -890,6 +892,11 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
     IFOK(s, nats_marshalULong(buf, true, "first_seq", cfg->FirstSeq));
     IFOK(s, _marshalSubjectTransformConfig(&cfg->SubjectTransform, buf));
     IFOK(s, _marshalStreamConsumerLimits(&cfg->ConsumerLimits, buf));
+
+    if ((s == NATS_OK) && cfg->AllowMsgTTL)
+        s = natsBuf_Append(buf, ",\"allow_msg_ttl\":true", -1);
+    if ((s == NATS_OK) && cfg->SubjectDeleteMarkerTTL > 0)
+        s = nats_marshalLong(buf, true, "subject_delete_marker_ttl", cfg->SubjectDeleteMarkerTTL);
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 

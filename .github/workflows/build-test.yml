@@ -44,7 +44,7 @@ on:
         default: "Release"
       ubuntu_version:
         type: string
-        description: "Ubuntu version to use, e.g. '20.04'"
+        description: "Ubuntu version to use, e.g. '22.04'"
         default: "latest"
       verbose_make_output:
         type: string

@@ -2940,24 +2940,20 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         IFOK(s, natsBuf_AppendByte(buf, '"'));
     }
     if ((s == NATS_OK) && (cfg->FilterSubjectsLen > 0))
-    {
-        int i;
-
-        s = natsBuf_Append(buf, ",\"filter_subjects\":[", -1);
-        for (i = 0; (s == NATS_OK) && (i < cfg->FilterSubjectsLen); i++)
-        {
-            if (i > 0)
-                s = natsBuf_AppendByte(buf, ',');
-            IFOK(s, natsBuf_AppendByte(buf, '"'));
-            IFOK(s, natsBuf_Append(buf, cfg->FilterSubjects[i], -1));
-            IFOK(s, natsBuf_AppendByte(buf, '"'));
-        }
-
-        IFOK(s, natsBuf_AppendByte(buf, ']'));
-    }
+        nats_marshalStringArray(buf, true, "filter_subjects", cfg->FilterSubjects, cfg->FilterSubjectsLen);
     IFOK(s, nats_marshalMetadata(buf, true, "metadata", cfg->Metadata));
     if ((s == NATS_OK) && (cfg->PauseUntil > 0))
         s = _marshalTimeUTC(buf, true, "pause_until", cfg->PauseUntil);
+    if ((s == NATS_OK) && !nats_IsStringEmpty(cfg->PriorityPolicy))
+    {
+        s = natsBuf_Append(buf, ",\"priority_policy\":\"", -1);
+        IFOK(s, natsBuf_Append(buf, cfg->PriorityPolicy, -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+    }
+    if ((s == NATS_OK) && (cfg->PinnedTTL > 0))
+        s = nats_marshalLong(buf, true, "priority_timeout", cfg->PinnedTTL);
+    if ((s == NATS_OK) && (cfg->PriorityGroups != NULL) && (cfg->PriorityGroupsLen > 0))
+        nats_marshalStringArray(buf, true, "priority_groups", cfg->PriorityGroups, cfg->PriorityGroupsLen);
     IFOK(s, _marshalReplayPolicy(buf, cfg->ReplayPolicy))
     if ((s == NATS_OK) && (cfg->RateLimit > 0))
         s = nats_marshalULong(buf, true, "rate_limit_bps", cfg->RateLimit);
@@ -3030,10 +3026,14 @@ js_destroyConsumerConfig(jsConsumerConfig *cc)
     NATS_FREE((char*) cc->FilterSubject);
     for (i = 0; i < cc->FilterSubjectsLen; i++)
         NATS_FREE((char *)cc->FilterSubjects[i]);
-    nats_freeMetadata(&(cc->Metadata));
     NATS_FREE((char *)cc->FilterSubjects);
+    nats_freeMetadata(&(cc->Metadata));
     NATS_FREE((char *)cc->SampleFrequency);
     NATS_FREE(cc->BackOff);
+    NATS_FREE((char *)cc->PriorityPolicy);
+    for (i = 0; i < cc->PriorityGroupsLen; i++)
+        NATS_FREE((char *)cc->PriorityGroups[i]);
+    NATS_FREE((char *)cc->PriorityGroups);
     NATS_FREE(cc);
 }
 
@@ -3156,6 +3156,10 @@ _unmarshalConsumerConfig(nats_JSON *json, const char *fieldName, jsConsumerConfi
         IFOK(s, nats_JSONGetLong(cjson, "num_replicas", &(cc->Replicas)));
         IFOK(s, nats_JSONGetBool(cjson, "mem_storage", &(cc->MemoryStorage)));
         IFOK(s, nats_unmarshalMetadata(cjson, "metadata", &(cc->Metadata)));
+        IFOK(s, nats_JSONGetTime(cjson, "pause_until", &(cc->PauseUntil)));
+        IFOK(s, nats_JSONGetStr(cjson, "priority_policy", (char**) &(cc->PriorityPolicy)));
+        IFOK(s, nats_JSONGetLong(cjson, "priority_timeout", &(cc->PinnedTTL)));
+        IFOK(s, nats_JSONGetArrayStr(cjson, "priority_groups", (char ***)&(cc->PriorityGroups), &(cc->PriorityGroupsLen)));
     }
 
     if (s == NATS_OK)
@@ -3187,6 +3191,8 @@ js_unmarshalConsumerInfo(nats_JSON *json, jsConsumerInfo **new_ci)
 {
     natsStatus          s   = NATS_OK;
     jsConsumerInfo      *ci = NULL;
+    nats_JSON           **priorityGroups = NULL;
+    int                 priorityGroupsLen = 0;
 
     ci = (jsConsumerInfo*) NATS_CALLOC(1, sizeof(jsConsumerInfo));
     if (ci == NULL)
@@ -3206,6 +3212,26 @@ js_unmarshalConsumerInfo(nats_JSON *json, jsConsumerInfo **new_ci)
     IFOK(s, nats_JSONGetBool(json, "push_bound", &(ci->PushBound)));
     IFOK(s, nats_JSONGetBool(json, "paused", &(ci->Paused)));
     IFOK(s, nats_JSONGetLong(json, "pause_remaining", &(ci->PauseRemaining)));
+
+    IFOK(s, nats_JSONGetArrayObject(json, "priority_groups", &priorityGroups, &priorityGroupsLen));
+    if ((s == NATS_OK) && (priorityGroups != NULL))
+    {
+        ci->PriorityGroups = (jsPriorityGroupState*) NATS_CALLOC(priorityGroupsLen, sizeof(jsPriorityGroupState));
+        if (ci->PriorityGroups == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+            ci->PriorityGroupsLen = priorityGroupsLen;
+        
+        for (int i=0; (s == NATS_OK) && (i<priorityGroupsLen); i++)
+        {
+            s = nats_JSONGetStr(priorityGroups[i], "group", (char**) &(ci->PriorityGroups[i].Group));
+            IFOK(s, nats_JSONGetStr(priorityGroups[i], "pinned_client_id", (char**) &(ci->PriorityGroups[i].PinnedClientID)));
+            IFOK(s, nats_JSONGetTime(priorityGroups[i], "pinned_ts", &(ci->PriorityGroups[i].PinnedTS)));
+        }
+        // Free the array of JSON objects that was allocated by nats_JSONGetArrayObject.
+        NATS_FREE(priorityGroups);
+    }
+
     if (s == NATS_OK)
         *new_ci = ci;
     else
@@ -3603,6 +3629,60 @@ js_PauseConsumer(jsConsumerPauseResponse **new_cpr, jsCtx *js,
 }
 
 natsStatus
+js_UnpinConsumer(jsCtx *js, const char *stream, const char *consumer, const char *group,
+                  jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus          s       = NATS_OK;
+    char                *subj   = NULL;
+    bool                freePfx = false;
+    natsConnection      *nc     = NULL;
+    natsMsg             *resp   = NULL;
+    bool                success = false;
+    jsOptions           o;
+    char                jsonBuf[64];
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if (js == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _checkStreamName(stream);
+    IFOK(s, js_checkConsName(consumer, false));
+    IFOK(s, nats_validateLimitedTerm("group", group));
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    s = js_setOpts(&nc, &freePfx, js, opts, &o);
+    if (s == NATS_OK)
+    {
+        if (nats_asprintf(&subj, jsApiConsumerUnpinT,
+                          js_lenWithoutTrailingDot(o.Prefix), o.Prefix,
+                          stream, consumer) < 0 )
+        {
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        }
+        if (freePfx)
+            NATS_FREE((char*) o.Prefix);
+    }
+
+    snprintf(jsonBuf, sizeof(jsonBuf), "{\"group\":\"%s\"}", group);
+
+    // Send the request
+    IFOK_JSR(s, natsConnection_RequestString(&resp, nc, subj, jsonBuf, o.Wait));
+
+    // If we got a response, check for error and success result.
+    IFOK(s, _unmarshalSuccessResp(&success, resp, errCode));
+    if ((s == NATS_OK) && !success)
+        s = nats_setError(s, "failed to unpin group '%s' at consumer '%s'", group, consumer);
+
+    NATS_FREE(subj);
+    natsMsg_Destroy(resp);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 jsConsumerConfig_Init(jsConsumerConfig *cc)
 {
     if (cc == NULL)
@@ -3625,6 +3705,14 @@ jsConsumerInfo_Destroy(jsConsumerInfo *ci)
     NATS_FREE(ci->Name);
     js_destroyConsumerConfig(ci->Config);
     _destroyClusterInfo(ci->Cluster);
+
+    // Destroy any priority groups
+    for (int i = 0; i < ci->PriorityGroupsLen; i++)
+    {
+        NATS_FREE(ci->PriorityGroups[i].Group);
+        NATS_FREE(ci->PriorityGroups[i].PinnedClientID);
+    }
+    NATS_FREE(ci->PriorityGroups);
     NATS_FREE(ci);
 }
 

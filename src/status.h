@@ -133,6 +133,9 @@ typedef enum
     NATS_LIMIT_REACHED,                 ///< Attempt to receive messages than allowed by the byte limit, for
                                         ///  instance in js_PullSubscribeAsync().
 
+    NATS_PIN_ID_MISMATCH,               ///< Pin ID sent in the request does not match the currently pinned 
+                                        ///  consumer subscriber ID on the server.
+
 } natsStatus;
 
 typedef enum {

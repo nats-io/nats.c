@@ -272,4 +272,10 @@ nats_parseTime(char *str, int64_t *timeUTC);
 natsStatus
 nats_formatStringArray(char **out, const char **strings, int count);
 
+natsStatus
+nats_marshalStringArray(natsBuffer *buf, bool comma, const char *fieldName, const char **values, int len);
+
+natsStatus
+nats_validateLimitedTerm(const char *name, const char *term);
+
 #endif /* UTIL_H_ */

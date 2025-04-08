@@ -1235,6 +1235,7 @@ _destroyFetch(jsFetch *fetch)
     if (fetch->expiresTimer != NULL)
         natsTimer_Destroy(fetch->expiresTimer);
 
+    NATS_FREE(fetch->pinID);
     NATS_FREE(fetch);
 }
 
@@ -1816,6 +1817,17 @@ js_checkFetchedMsg(natsSubscription *sub, natsMsg *msg, uint64_t fetchID, bool c
     if (strncmp(val, HDR_STATUS_NO_RESP_503, HDR_STATUS_LEN) == 0)
         return NATS_NO_RESPONDERS;
 
+    // Pull consumer pin ID mismatch
+    if (strncmp(val, HDR_STATUS_PIN_ID_MISMATCH, HDR_STATUS_LEN) == 0)
+        return NATS_PIN_ID_MISMATCH;
+
+    if (strncmp(val, HDR_STATUS_BAD_REQUEST, HDR_STATUS_LEN) == 0)
+    {
+        // This is a bad request, so we return the error.
+        natsMsgHeader_Get(msg, DESCRIPTION_HDR, &desc);
+        return nats_setError(NATS_INVALID_ARG, "%s", (desc == NULL ? "error checking pull subscribe message" : desc));
+    }
+
     natsMsgHeader_Get(msg, DESCRIPTION_HDR, &desc);
     return nats_setError(NATS_ERR, "%s", (desc == NULL ? "error checking pull subscribe message" : desc));
 }
@@ -1842,6 +1854,22 @@ _publishPullRequest(natsConnection *nc, const char *subj, const char *rply,
         s = nats_marshalLong(buf, true, "idle_heartbeat", req->Heartbeat);
     if ((s == NATS_OK) && req->NoWait)
         s = natsBuf_Append(buf, ",\"no_wait\":true", -1);
+    if ((s == NATS_OK) && !nats_IsStringEmpty(req->Group))
+    {
+        s = natsBuf_Append(buf, ",\"group\":\"", -1);
+        IFOK(s, natsBuf_Append(buf, req->Group, -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+    }
+    if ((s == NATS_OK) && (req->MinPending > 0))
+        s = nats_marshalLong(buf, true, "min_pending", req->MinPending);
+    if ((s == NATS_OK) && (req->MinAckPending > 0))
+        s = nats_marshalLong(buf, true, "min_ack_pending", req->MinAckPending);
+    if ((s == NATS_OK) && !nats_IsStringEmpty(req->ID))
+    {
+        s = natsBuf_Append(buf, ",\"id\":\"", -1);
+        IFOK(s, natsBuf_Append(buf, req->ID, -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+    }
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
     // Sent the request to get more messages.
@@ -2929,6 +2957,10 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch)
         req.Expires = (fetch->opts.Timeout - (now - fetch->startTimeMillis)) * 1000 * 1000; // ns, go time.Duration
     req.NoWait = fetch->opts.NoWait;
     req.Heartbeat = fetch->opts.Heartbeat * 1000 * 1000; // ns, go time.Duration
+    req.Group = fetch->opts.Group;
+    req.MinPending = fetch->opts.MinPending;
+    req.MinAckPending = fetch->opts.MinAckPending;
+    req.ID = fetch->pinID;
 
     size_t replySubjectSize = 1 + strlen(sub->subject) + 20;
     char *replySubject = NATS_MALLOC(replySubjectSize);
@@ -3032,6 +3064,32 @@ js_PullSubscribeAsync(natsSubscription **newsub, jsCtx *js, const char *subject,
             return nats_setError(NATS_INVALID_ARG, "%s", "Can not use MaxBytes and KeepAhead together");
         if (jsOpts->PullSubscribeAsync.NoWait)
             return nats_setError(NATS_INVALID_ARG, "%s", "Can not use NoWait with KeepAhead together");
+
+        // TODO: this validation should really be done against the consumerinfo
+        // once it's obtained, but it's hidden deep in _subscribe. This would
+        // only execute if the user's intent is to create a new consumer as part
+        // of the call.
+        if ((opts != NULL) && (opts->Config.PriorityGroupsLen != 0))
+        {
+            if (nats_IsStringEmpty(jsOpts->PullSubscribeAsync.Group))
+                return nats_setError(NATS_INVALID_ARG, "%s", "Group is required for a priority group consumer");
+
+            bool valid = false;
+            for (int i = 0; i < opts->Config.PriorityGroupsLen; i++)
+            {
+                if (strcmp(opts->Config.PriorityGroups[i], jsOpts->PullSubscribeAsync.Group) != 0)
+                    continue;
+                valid = true;
+                break;
+            }
+            if (!valid)
+                return nats_setError(NATS_INVALID_ARG, "%s", "Group is not part of the priority group consumer");
+        }
+        else
+        {
+            if (!nats_IsStringEmpty(jsOpts->PullSubscribeAsync.Group))
+                return nats_setError(NATS_INVALID_ARG, "%s", "Group is not supported for a non-priority group consumer");
+        }
     }
 
     if (errCode != NULL)

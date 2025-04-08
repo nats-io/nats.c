@@ -48,7 +48,7 @@ jobs:
     uses: ./.github/workflows/build-test.yml
     name: "Older compilers"
     with:
-      ubuntu_version: 20.04
+      ubuntu_version: 22.04
       compiler: ${{ matrix.compiler }}
 
   no-streaming:

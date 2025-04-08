@@ -1,4 +1,4 @@
-// Copyright 2015-2024 The NATS Authors
+// Copyright 2015-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -295,6 +295,7 @@ typedef struct jsPubOptions
         uint64_t        ExpectLastSeq;          ///< Expected last message sequence in the stream.
         uint64_t        ExpectLastSubjectSeq;   ///< Expected last message sequence for the subject in the stream.
         bool            ExpectNoMessage;        ///< Expected no message (that is, sequence == 0) for the subject in the stream.
+        int64_t         MsgTTL;                 ///< Message time to live (TTL) in milliseconds, used by the server to expire the message. Requires nats-server v2.11.0 or later.
 
 } jsPubOptions;
 
@@ -555,7 +556,7 @@ typedef struct jsStreamConfig {
         int64_t                 MaxConsumers;
         int64_t                 MaxMsgs;
         int64_t                 MaxBytes;
-        int64_t                 MaxAge;
+        int64_t                 MaxAge;         ///< Max age of messages in nanoseconds.
         int64_t                 MaxMsgsPerSubject;
         int32_t                 MaxMsgSize;
         jsDiscardPolicy         Discard;
@@ -611,6 +612,16 @@ typedef struct jsStreamConfig {
         /// @brief Sets the limits on certain options on all consumers of the
         /// stream.
         jsStreamConsumerLimits  ConsumerLimits;
+
+        /// @brief Allow the message to be sent with a time to live (TTL) value.
+        /// Requires nats-server v2.11.0 or later.
+        bool                    AllowMsgTTL;
+
+        /// @brief Enables and sets a duration for adding server markers for
+        /// delete, purge and max age limits. In nanoseconds. Requires
+        /// nats-server v2.11.0 or later.
+        int64_t                 SubjectDeleteMarkerTTL;
+
 } jsStreamConfig;
 
 /**

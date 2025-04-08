@@ -1,4 +1,4 @@
-// Copyright 2021-2024 The NATS Authors
+// Copyright 2021-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -34,6 +34,7 @@ extern const char*      jsDefaultAPIPrefix;
 extern const int64_t    jsDefaultRequestWait;
 
 #define jsMsgIdHdr                  "Nats-Msg-Id"
+#define jsMsgTTLHdr                 "Nats-TTL"
 #define jsExpectedStreamHdr         "Nats-Expected-Stream"
 #define jsExpectedLastSeqHdr        "Nats-Expected-Last-Sequence"
 #define jsExpectedLastSubjSeqHdr    "Nats-Expected-Last-Subject-Sequence"

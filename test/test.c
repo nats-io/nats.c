@@ -1,4 +1,4 @@
-// Copyright 2015-2024 The NATS Authors
+// Copyright 2015-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -25383,6 +25383,155 @@ void test_JetStreamPublish(void)
     JS_TEARDOWN;
     remove(confFile);
 }
+
+void test_JetStreamPublishTTL(void)
+{
+    natsStatus          s;
+    jsStreamConfig      cfg;
+    jsPubOptions        opts;
+    jsErrCode           jerr    = 0;
+    jsPubAck            *pa     = NULL;
+    natsMsg             *msg    = NULL;
+    const char          *hvalue = NULL;
+
+    JS_SETUP(2, 11, 0);
+
+    test("Init: ");
+    s = jsStreamConfig_Init(&cfg);
+    IFOK(s, jsPubOptions_Init(&opts));
+    testCond(s == NATS_OK);
+
+    test("Disabled per-msg TTL - error: ");
+    cfg.Name = "DISABLED";
+    cfg.Subjects = (const char*[1]){"bar"};
+    cfg.SubjectsLen = 1;
+    cfg.AllowMsgTTL = false;
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    if (s == NATS_OK)
+    {
+        opts.MsgTTL = 1000;
+        s = js_Publish(NULL, js, "bar", "hello", 5, &opts, &jerr);
+    }
+    testCond((s == NATS_ERR)
+        && (jerr == JSMessageTTLDisabledErr)
+        && (strstr(nats_GetLastError(NULL), "per-message TTL is disabled") != NULL));
+
+    test("Add enabled stream: ");
+    cfg.Name = "TEST";
+    cfg.Subjects = (const char*[1]){"foo"};
+    cfg.SubjectsLen = 1;
+    cfg.AllowMsgTTL = true;
+    
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Publish message with a negative TTL - error: ");
+    opts.MsgTTL = -1000;
+    s = js_Publish(&pa, js, "foo", "hello", 5, &opts, &jerr);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Publish message with a TTL too small - error: ");
+    opts.MsgTTL = 1;
+    s = js_Publish(&pa, js, "foo", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_ERR)
+                && (jerr == JSMessageTTLInvalidErr)
+                && (strstr(nats_GetLastError(NULL), "invalid per-message TTL") != NULL));
+
+    test("Publish message with a 1s TTL: ");
+    opts.MsgTTL = 1000; // the server would not allow less than 1s
+    s = js_Publish(&pa, js, "foo", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (pa != NULL));
+
+    test("Get the message back immediately: ");
+    s = js_GetMsg(&msg, js, "TEST", pa->Sequence, NULL, &jerr);
+
+    testCond((s == NATS_OK) && (jerr == 0) && (msg != NULL)
+                && (natsMsgHeader_Get(msg, "Nats-TTL", &hvalue) == NATS_OK)
+                && (hvalue != NULL)
+                && (strcmp(hvalue, "1s") == 0)
+                && (strcmp(natsMsg_GetData(msg), "hello") == 0)
+            );
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Publish an Async message with a 1s TTL: ");
+    s = js_PublishAsync(js, "foo", "goodbye", 7, &opts);
+    IFOK(s, js_PublishAsyncComplete(js, &opts));
+
+    test("Get the async (last) message back immediately: ");
+    s = js_GetLastMsg(&msg, js, "TEST", "foo", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0) && (msg != NULL)
+                && (natsMsgHeader_Get(msg, "Nats-TTL", &hvalue) == NATS_OK)
+                && (hvalue != NULL)
+                && (strcmp(hvalue, "1s") == 0)
+                && (strcmp(natsMsg_GetData(msg), "goodbye") == 0)
+            );
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Sleep 1.5 seconds to exceed the TTL and try again: ");
+    nats_Sleep(1500);
+    s = js_GetMsg(&msg, js, "TEST", pa->Sequence, NULL, &jerr);
+    testCond((s = NATS_NOT_FOUND) && (jerr == JSNoMessageFoundErr));
+
+    test("Get the async (last) message back immediately: ");
+    s = js_GetLastMsg(&msg, js, "TEST", "foo", NULL, &jerr);
+    testCond((s = NATS_NOT_FOUND) && (jerr == JSNoMessageFoundErr));
+
+    jsPubAck_Destroy(pa);
+    pa = NULL;
+    JS_TEARDOWN;
+}
+
+void test_JetStreamMsgDeleteMarkerMaxAge(void)
+{
+    natsStatus          s;
+    jsStreamConfig      cfg;
+    jsErrCode           jerr = 0;
+    natsMsg             *msg = NULL;
+    const char          *hvalue = NULL;
+
+    JS_SETUP(2, 11, 0);
+
+    test("Stream config init: ");
+    s = jsStreamConfig_Init(&cfg);
+    testCond(s == NATS_OK);
+
+    test("Add stream: ");
+    cfg.Name = "TEST";
+    cfg.Subjects = (const char*[2]){"foo", "bar"};
+    cfg.SubjectsLen = 2;
+    cfg.AllowMsgTTL = true;
+    cfg.SubjectDeleteMarkerTTL = NATS_SECONDS_TO_NANOS(50);
+    cfg.MaxAge = NATS_SECONDS_TO_NANOS(1);
+
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Publish message with a TTL: ");
+    s = js_Publish(NULL, js, "foo", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Sleep and check last message: ");
+    nats_Sleep(1500);
+    s = js_GetLastMsg(&msg, js, "TEST", "foo", NULL, &jerr);
+
+    testCond((s == NATS_OK)
+        && (jerr == 0)
+        && (msg != NULL)
+        && (natsMsg_GetDataLength(msg) == 0)
+        && (natsMsgHeader_Get(msg, "Nats-Marker-Reason", &hvalue) == NATS_OK)
+        && (hvalue != NULL)
+        && (strcmp(hvalue, "MaxAge") == 0)
+        && (natsMsgHeader_Get(msg, "Nats-TTL", &hvalue) == NATS_OK)
+        && (hvalue != NULL)
+        && (strcmp(hvalue, "50s") == 0));
+
+    natsMsg_Destroy(msg);
+
+    JS_TEARDOWN;
+}
+
 
 static void
 _jsPubAckErrHandler(jsCtx *js, jsPubAckErr *pae, void *closure)

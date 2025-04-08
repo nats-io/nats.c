@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -213,7 +213,9 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
     start = ptr;
     if (*ptr == '\r')
     {
-        if ((++ptr == endPtr) || ((*ptr == '\n') && (++ptr == endPtr)))
+        if ((++ptr == endPtr) ||                     // case: "\r"
+            ((*ptr == '\n') && ((++ptr == endPtr) || // case: "\r\n"
+            ((*ptr == '\r') && (++ptr < endPtr) && (*ptr == '\n') && (++ptr == endPtr))))) // case: "\r\n\r\n"
         {
             *pPtr = ptr;
             return NATS_OK;

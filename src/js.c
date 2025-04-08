@@ -1,4 +1,4 @@
-// Copyright 2021-2024 The NATS Authors
+// Copyright 2021-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -475,6 +475,13 @@ _setHeadersFromOptions(natsMsg *msg, jsPubOptions *opts)
             snprintf(temp, sizeof(temp), "%" PRIu64, opts->ExpectLastSubjectSeq);
             s = natsMsgHeader_Set(msg, jsExpectedLastSubjSeqHdr, temp);
         }
+    }
+    if ((s == NATS_OK) && (opts->MsgTTL != 0))
+    {
+        if (opts->MsgTTL < 0)
+            s = nats_setError(NATS_INVALID_ARG, "option 'MsgTTL' (%" PRId64 ") cannot be negative", opts->MsgTTL);
+        else
+            s = natsMsgHeader_Set(msg, jsMsgTTLHdr, nats_formatDurationMilli(temp, opts->MsgTTL));
     }
 
     return NATS_UPDATE_ERR_STACK(s);

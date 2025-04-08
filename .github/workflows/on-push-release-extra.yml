@@ -40,17 +40,6 @@ jobs:
     with:
       tls: OFF
 
-  older-cc:
-    strategy:
-      fail-fast: false
-      matrix:
-        compiler: [gcc-7, gcc-8, clang-8]
-    uses: ./.github/workflows/build-test.yml
-    name: "Older compilers"
-    with:
-      ubuntu_version: 22.04
-      compiler: ${{ matrix.compiler }}
-
   no-streaming:
     uses: ./.github/workflows/build-test.yml
     name: "No Streaming"

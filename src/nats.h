@@ -556,7 +556,7 @@ typedef struct jsStreamConfig {
         int64_t                 MaxConsumers;
         int64_t                 MaxMsgs;
         int64_t                 MaxBytes;
-        int64_t                 MaxAge;
+        int64_t                 MaxAge;         ///< Max age of messages in nanoseconds.
         int64_t                 MaxMsgsPerSubject;
         int32_t                 MaxMsgSize;
         jsDiscardPolicy         Discard;
@@ -617,7 +617,7 @@ typedef struct jsStreamConfig {
         bool                    AllowMsgTTL;
 
         /// @brief Enables and sets a duration for adding server markers for
-        /// delete, purge and max age limits.
+        /// delete, purge and max age limits. In nanoseconds.
         int64_t                 SubjectDeleteMarkerTTL;
 
 } jsStreamConfig;

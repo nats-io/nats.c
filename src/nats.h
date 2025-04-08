@@ -2518,6 +2518,22 @@ natsOptions_TLSHandshakeFirst(natsOptions *opts);
 NATS_EXTERN natsStatus
 natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName);
 
+/** \brief Loads the trusted CA certificates from a directory.
+ *
+ * Loads the trusted CA certificates from a directory.
+ *
+ * Note that the certificates are added to a SSL context for this #natsOptions
+ * object at the time of this call, so possible errors while loading the
+ * certificates will be reported now instead of when a connection is created.
+ * You can get extra information by calling #nats_GetLastError.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param path the path containing the CA certificates.
+ *
+ */
+NATS_EXTERN natsStatus
+natsOptions_LoadCATrustedCertificatesPath(natsOptions *opts, const char *path);
+
 /** \brief Sets the trusted CA certificates from memory.
  *
  * Similar to #natsOptions_LoadCATrustedCertificates expect that instead

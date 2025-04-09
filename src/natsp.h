@@ -20,6 +20,10 @@
 # include "include/n-unix.h"
 #endif
 
+#if defined(NATS_HAS_WOLFSSL)
+#include <wolfssl/options.h>
+#endif
+
 #if defined(NATS_HAS_TLS)
 #include <openssl/ssl.h>
 #include <openssl/err.h>

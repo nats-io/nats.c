@@ -34,7 +34,6 @@ extern "C" {
 #endif
 #include <openssl/ssl.h>
 #include <openssl/x509v3.h>
-
 #endif // NATS_WITH_EXPERIMENTAL
 
 /** \def NATS_EXTERN

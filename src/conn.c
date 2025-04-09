@@ -44,6 +44,10 @@
 #define NATS_EVENT_ACTION_ADD       (true)
 #define NATS_EVENT_ACTION_REMOVE    (false)
 
+#ifdef NATS_HAS_WOLFSSL
+typedef int (*SSL_verify_cb)(int preverify_ok, X509_STORE_CTX *x509_ctx);
+#endif
+
 #ifdef DEV_MODE
 // For type safety
 
@@ -725,7 +729,9 @@ _makeTLSConn(natsConnection *nc)
 #endif
             if (nc->tlsName != NULL)
             {
-#if defined(NATS_USE_OPENSSL_1_1)
+// the SSL_set_hostflags function is not available in the
+// wolfSSL OpenSSL compatibility layer, so use the new function instead
+#if defined(NATS_USE_OPENSSL_1_1) && !defined(NATS_HAS_WOLFSSL)
                 SSL_set_hostflags(ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
                 if (!SSL_set1_host(ssl, nc->tlsName))
 #else

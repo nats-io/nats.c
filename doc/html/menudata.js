@@ -99,6 +99,6 @@ var menudata={children:[
 {text:"Enumerations",url:"globals_enum.html"},
 {text:"Enumerator",url:"globals_eval.html",children:[
 {text:"j",url:"globals_eval.html#index_j"},
-{text:"k",url:"globals_eval.html#index_k"},
-{text:"n",url:"globals_eval.html#index_n"}]},
+{text:"k",url:"globals_eval_k.html#index_k"},
+{text:"n",url:"globals_eval_n.html#index_n"}]},
 {text:"Macros",url:"globals_defs.html"}]}]}]}

@@ -117,5 +117,6 @@ var searchData=
   ['msg_114',['Msg',['../structjs_pub_ack_err.html#a156ca2f779d132ffa8c519124cf9739b',1,'jsPubAckErr']]],
   ['msgid_115',['MsgId',['../structjs_pub_options.html#ac8708487360b784f7dd5d7a21e5617c0',1,'jsPubOptions']]],
   ['msgs_116',['msgs',['../structnats_msg_list.html#aa123668879f1c9c11c9be7bd81a205c5',1,'natsMsgList::Msgs'],['../structjs_lost_stream_data.html#a5d2e87697526033c842a7f955776dfda',1,'jsLostStreamData::Msgs'],['../structjs_stream_state_subject.html#a8b9b2edc5afe82b7b3bc7dbdd67a4384',1,'jsStreamStateSubject::Msgs'],['../structjs_stream_state.html#a495269fe83c6bbf2023cca94add0a888',1,'jsStreamState::Msgs']]],
-  ['msgslen_117',['MsgsLen',['../structjs_lost_stream_data.html#abdc373ed7fc9b7cf161c13da1913fc9a',1,'jsLostStreamData']]]
+  ['msgslen_117',['MsgsLen',['../structjs_lost_stream_data.html#abdc373ed7fc9b7cf161c13da1913fc9a',1,'jsLostStreamData']]],
+  ['msgttl_118',['MsgTTL',['../structjs_pub_options.html#a07c8ec214966ef7ce0bd48a8e8008f9d',1,'jsPubOptions']]]
 ];

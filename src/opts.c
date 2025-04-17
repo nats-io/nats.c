@@ -409,6 +409,32 @@ natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName)
 }
 
 natsStatus
+natsOptions_LoadCATrustedCertificatesPath(natsOptions *opts, const char *path)
+{
+    natsStatus s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, ((path == NULL) || (path[0] == '\0')));
+
+    s = _getSSLCtx(opts);
+    if (s == NATS_OK)
+    {
+        nats_sslRegisterThreadForCleanup();
+
+        if (SSL_CTX_load_verify_locations(opts->sslCtx->ctx, NULL, path) != 1)
+        {
+            s = nats_setError(NATS_SSL_ERROR,
+                              "Error loading trusted certificates in path '%s': %s",
+                              path,
+                              NATS_SSL_ERR_REASON_STRING);
+        }
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return s;
+}
+
+natsStatus
 natsOptions_SetCATrustedCertificates(natsOptions *opts, const char *certs)
 {
     natsStatus s = NATS_OK;
@@ -695,16 +721,18 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
     if (s == NATS_OK)
     {
         opts->sslCtx->skipVerify = skip;
+#ifdef NATS_WITH_EXPERIMENTAL
         if (skip)
-        {
             opts->sslCtx->callback = NULL;
-        }
+#endif // NATS_WITH_EXPERIMENTAL
     }
 
     UNLOCK_OPTS(opts);
 
     return s;
 }
+
+#ifdef NATS_WITH_EXPERIMENTAL
 
 natsStatus
 natsOptions_SetSSLCallback(natsOptions *opts, natsCustomSSLHandler callback)
@@ -727,6 +755,8 @@ natsOptions_SetSSLCallback(natsOptions *opts, natsCustomSSLHandler callback)
 
     return s;
 }
+
+#endif // NATS_WITH_EXPERIMENTAL
 
 #else
 
@@ -786,11 +816,16 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }
 
+
+#ifdef NATS_WITH_EXPERIMENTAL
+
 natsStatus
 natsOptions_SetSSLCallback(natsOptions *opts, natsCustomSSLHandler callback)
 {
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }
+
+#endif // NATS_WITH_EXPERIMENTAL
 
 #endif
 

@@ -58,6 +58,23 @@ nats_NowInNanoSeconds(void)
 #endif
 }
 
+int64_t
+nats_NowMonotonicInNanoSeconds(void)
+{
+    int64_t now = 0;
+#ifdef _WIN32
+    LARGE_INTEGER frequency;
+    LARGE_INTEGER counter;
+    if (QueryPerformanceFrequency(&frequency) && QueryPerformanceCounter(&counter))
+        now = (int64_t)(counter.QuadPart * 1000000000ULL / frequency.QuadPart);
+#elif defined CLOCK_MONOTONIC
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        now = ((int64_t) ts.tv_sec) * 1000000000L + ((int64_t) ts.tv_nsec);
+#endif
+    return now != 0 ? now : nats_NowInNanoSeconds();
+}
+
 void
 natsDeadline_Init(natsDeadline *deadline, int64_t timeout)
 {

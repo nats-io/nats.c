@@ -41,11 +41,19 @@ option(NATS_BUILD_EXAMPLES "Build examples" ON)
 option(NATS_BUILD_LIBUV_EXAMPLE "Build libuv examples" OFF)
 option(NATS_BUILD_LIBEVENT_EXAMPLE "Build libevent examples" OFF)
 option(NATS_BUILD_STATIC_EXAMPLES "Statically link examples" OFF)
-option(NATS_BUILD_STREAMING "Build NATS Streaming" ON)
+
+# Streaming is deprecated, but we still support it for now.
+# We will remove it in the future. If you are starting a new project,
+# please use JetStream. Another reason for disabling this is that
+# building with streaming requires protobuf-c and building on Windows
+# is not as straightforward as building without it.
+option(NATS_BUILD_STREAMING "Build NATS Streaming" OFF)
+
 option(NATS_BUILD_NO_PREFIX_CONNSTS "No prefix for connection status enum" OFF)
 option(NATS_BUILD_LIB_STATIC "Build static library" ON)
 option(NATS_BUILD_LIB_SHARED "Build shared library" ON)
 option(NATS_COMPILER_HARDENING "Compiler hardening flags" OFF)
+option(NATS_WITH_EXPERIMENTAL "Build with EXPERIMENTAL API support" OFF)
 if(UNIX AND APPLE)
   option(CMAKE_MACOSX_RPATH "Build with macOS RPath" ON)
 endif()
@@ -148,6 +156,10 @@ endif(NATS_BUILD_USE_SODIUM)
 if(NATS_BUILD_NO_PREFIX_CONNSTS)
   add_definitions(-DNATS_CONN_STATUS_NO_PREFIX)
 endif(NATS_BUILD_NO_PREFIX_CONNSTS)
+
+if(NATS_WITH_EXPERIMENTAL)
+  add_definitions(-DNATS_WITH_EXPERIMENTAL)
+endif(NATS_WITH_EXPERIMENTAL)
 
 # Platform specific settings
 if(UNIX)

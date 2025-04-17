@@ -4,6 +4,9 @@ on:
       arch:
         type: string
         default: "64"
+      benchmark:
+        type: string
+        default: "OFF"
       compiler:
         type: string
         default: "gcc"
@@ -13,18 +16,12 @@ on:
       dev_mode:
         type: string
         default: "OFF"
+      experimental:
+        type: string
+        default: "OFF"
       pool_dispatch:
         type: string
         default: "NO-pool"
-      write_deadline:
-        type: string
-        default: "NO-write_deadline"
-      tls:
-        type: string
-        default: "TLS"
-      verify_host:
-        type: string
-        default: "verify_host"
       repeat:
         type: string
         default: "1"
@@ -38,23 +35,29 @@ on:
       streaming:
         type: string
         default: "ON"
+      tls:
+        type: string
+        default: "TLS"
       type:
         type: string
         description: "Debug or Release."
         default: "Release"
       ubuntu_version:
         type: string
-        description: "Ubuntu version to use, e.g. '20.04'"
+        description: "Ubuntu version to use, e.g. '22.04'"
         default: "latest"
-      verbose_test_output:
-        type: string
-        default: "OFF"
       verbose_make_output:
         type: string
         default: "OFF"
-      benchmark:
+      verbose_test_output:
         type: string
         default: "OFF"
+      verify_host:
+        type: string
+        default: "verify_host"
+      write_deadline:
+        type: string
+        default: "NO-write_deadline"
 
     secrets:
       CODECOV_TOKEN:
@@ -88,8 +91,8 @@ jobs:
           flags: -DNATS_BUILD_ARCH=${{ inputs.arch }}
             -DCMAKE_BUILD_TYPE=${{ inputs.type }}
             -DNATS_BUILD_STREAMING=${{ inputs.streaming }}
-            -DNATS_PROTOBUF_DIR=${{ github.workspace}}/deps/pbuf
             -DNATS_BUILD_USE_SODIUM=ON
+            -DNATS_PROTOBUF_DIR=${{ github.workspace}}/deps/pbuf
             -DNATS_SODIUM_DIR=${{ github.workspace}}/deps/sodium
         run: |
           if [[ "${{ inputs.tls }}" == "TLS" ]]; then
@@ -102,14 +105,17 @@ jobs:
           else
             flags="$flags -DNATS_BUILD_WITH_TLS=OFF"
           fi
-          if [[ -n "${{ inputs.sanitize }}" ]]; then
-            flags="$flags -DNATS_SANITIZE=ON -DCMAKE_C_FLAGS=-fsanitize=${{ inputs.sanitize }}"
-          fi
           if [[ "${{ inputs.coverage }}" == "ON" ]]; then
             flags="$flags -DNATS_COVERAGE=ON"
           fi
           if [[ "${{ inputs.dev_mode }}" == "ON" ]]; then
             flags="$flags -DDEV_MODE=ON"
+          fi
+          if [[ "${{ inputs.experimental }}" == "ON" ]]; then
+            flags="$flags -DNATS_EXPERIMENTAL=ON"
+          fi
+          if [[ -n "${{ inputs.sanitize }}" ]]; then
+            flags="$flags -DNATS_SANITIZE=ON -DCMAKE_C_FLAGS=-fsanitize=${{ inputs.sanitize }}"
           fi
           if [[ "${{ inputs.verbose_make_output }}" == "ON" ]]; then
             flags="$flags -DCMAKE_VERBOSE_MAKEFILE=ON"

@@ -17,6 +17,7 @@ jobs:
       compiler: ${{ matrix.compiler }}
       server_version: main
       type: Debug
+      experimental: ON
 
   dev-mode:
     name: "DEV_MODE"
@@ -27,6 +28,7 @@ jobs:
       type: Debug
       verbose_test_output: ON
       verbose_make_output: ON
+      experimental: ON
 
   sanitize:
     name: "Sanitize"
@@ -43,6 +45,7 @@ jobs:
       compiler: ${{ matrix.compiler }}
       sanitize: ${{ matrix.sanitize }}
       pool_dispatch: ${{ matrix.pooled_dispatch }}
+      experimental: ON
 
   coverage-TLS:
     name: "Coverage: TLS"
@@ -61,6 +64,7 @@ jobs:
       verify_host: verify_host
       pool_dispatch: ${{ matrix.pooled_dispatch }}
       write_deadline: ${{ matrix.write_deadline }}
+      experimental: ON
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
@@ -74,6 +78,7 @@ jobs:
       compiler: gcc
       tls: TLS
       verify_host: NO-verify_host
+      experimental: ON
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   
@@ -116,7 +121,7 @@ jobs:
         env:
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
         run: |
-          cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DNATS_BUILD_STREAMING=OFF
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DNATS_BUILD_STREAMING=OFF -DNATS_WITH_EXPERIMENTAL=ON
           cmake --build build
 
       - name: Test
@@ -124,7 +129,7 @@ jobs:
         run: |
           cd build
           # Download latest nats-server
-          rel="latest" # TODO: parameterize
+          rel="main" # TODO: parameterize
           if [ "$rel" = "latest" ]; then
             rel=$(curl -s https://api.github.com/repos/nats-io/nats-server/releases/latest | jq -r '.tag_name')
           fi

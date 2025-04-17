@@ -1,4 +1,4 @@
-// Copyright 2015-2024 The NATS Authors
+// Copyright 2015-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -286,6 +286,7 @@ typedef struct jsPubOptions
         uint64_t        ExpectLastSeq;          ///< Expected last message sequence in the stream.
         uint64_t        ExpectLastSubjectSeq;   ///< Expected last message sequence for the subject in the stream.
         bool            ExpectNoMessage;        ///< Expected no message (that is, sequence == 0) for the subject in the stream.
+        int64_t         MsgTTL;                 ///< Message time to live (TTL) in milliseconds, used by the server to expire the message. Requires nats-server v2.11.0 or later.
 
 } jsPubOptions;
 
@@ -546,7 +547,7 @@ typedef struct jsStreamConfig {
         int64_t                 MaxConsumers;
         int64_t                 MaxMsgs;
         int64_t                 MaxBytes;
-        int64_t                 MaxAge;
+        int64_t                 MaxAge;         ///< Max age of messages in nanoseconds.
         int64_t                 MaxMsgsPerSubject;
         int32_t                 MaxMsgSize;
         jsDiscardPolicy         Discard;
@@ -602,6 +603,16 @@ typedef struct jsStreamConfig {
         /// @brief Sets the limits on certain options on all consumers of the
         /// stream.
         jsStreamConsumerLimits  ConsumerLimits;
+
+        /// @brief Allow the message to be sent with a time to live (TTL) value.
+        /// Requires nats-server v2.11.0 or later.
+        bool                    AllowMsgTTL;
+
+        /// @brief Enables and sets a duration for adding server markers for
+        /// delete, purge and max age limits. In nanoseconds. Requires
+        /// nats-server v2.11.0 or later.
+        int64_t                 SubjectDeleteMarkerTTL;
+
 } jsStreamConfig;
 
 /**
@@ -2012,6 +2023,18 @@ nats_Now(void);
 NATS_EXTERN int64_t
 nats_NowInNanoSeconds(void);
 
+/** \brief Gives the current time in nanoseconds using monotonic timer.
+ *
+ * Gives the current time in nanoseconds. When such granularity is not
+ * available, the time returned is still expressed in nanoseconds.
+ * Using monotonic timer is more reliable than using the real time
+ * when measuring time intervals.
+ *
+ * \note On Windows platforms, this function uses the QueryPerformanceCounter.
+ */
+NATS_EXTERN int64_t
+nats_NowMonotonicInNanoSeconds(void);
+
 /** \brief Sleeps for a given number of milliseconds.
  *
  * Causes the current thread to be suspended for at least the number of
@@ -2524,6 +2547,22 @@ natsOptions_TLSHandshakeFirst(natsOptions *opts);
 NATS_EXTERN natsStatus
 natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName);
 
+/** \brief Loads the trusted CA certificates from a directory.
+ *
+ * Loads the trusted CA certificates from a directory.
+ *
+ * Note that the certificates are added to a SSL context for this #natsOptions
+ * object at the time of this call, so possible errors while loading the
+ * certificates will be reported now instead of when a connection is created.
+ * You can get extra information by calling #nats_GetLastError.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param path the path containing the CA certificates.
+ *
+ */
+NATS_EXTERN natsStatus
+natsOptions_LoadCATrustedCertificatesPath(natsOptions *opts, const char *path);
+
 /** \brief Sets the trusted CA certificates from memory.
  *
  * Similar to #natsOptions_LoadCATrustedCertificates expect that instead
@@ -2648,18 +2687,28 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
 NATS_EXTERN natsStatus
 natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
 
-/** \brief Sets the SSL callback.
+#ifdef NATS_WITH_EXPERIMENTAL
+
+/** \brief EXPERIMENTAL Sets the SSL callback.
  *
  * Sets a callback used to create additional SSL setup for the connection such as
  * setting up custom certificate verification.
  *
- * \note Setting a callback will enable SSL verification if disabled via natsOptions_SkipServerVerification().
+ * \note Setting a callback will enable SSL verification if disabled via
+ * natsOptions_SkipServerVerification().
+ *
+ * \warning This is an experimental API and is subject to change in future
+ * versions. To use this API compile the client code with
+ * `-DNATS_WITH_EXPERIMENTAL -DNATS_HAS_TLS`. `openssl` library must be
+ * installed and added to the include/link paths.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param callback the custom SSL handler to invoke. See the #natsCustomSSLHandler prototype.
  */
 NATS_EXTERN natsStatus
 natsOptions_SetSSLCallback(natsOptions *opts, natsCustomSSLHandler callback);
+
+#endif // NATS_WITH_EXPERIMENTAL
 
 /** \brief Sets the verbose mode.
  *

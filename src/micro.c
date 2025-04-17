@@ -738,7 +738,7 @@ _add_group(microGroup **new_group, microService *m, microGroup *parent, microGro
 {
 
     *new_group = NATS_CALLOC(1, sizeof(microGroup));
-    if (new_group == NULL)
+    if (*new_group == NULL)
         return micro_ErrorOutOfMemory;
 
     microError *err = NULL;

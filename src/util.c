@@ -2458,7 +2458,7 @@ nats_validateLimitedTerm(const char *name, const char *term)
 {
 
     if (nats_IsStringEmpty(term))
-        return nats_setError(NATS_INVALID_ARG, "%s must not be be empty", name);
+        return nats_setError(NATS_INVALID_ARG, "%s must not be empty", name);
 
     for (int i=0; term[i] != '\0'; ++i) {
         if (i >= 16)

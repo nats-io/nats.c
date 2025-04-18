@@ -133,7 +133,7 @@ typedef enum
     NATS_LIMIT_REACHED,                 ///< Attempt to receive messages than allowed by the byte limit, for
                                         ///  instance in js_PullSubscribeAsync().
 
-    NATS_PIN_ID_MISMATCH,               ///< Pin ID sent in the request does not match the currently pinned 
+    NATS_PIN_ID_MISMATCH,               ///< Pin ID sent in the request does not match the currently pinned
                                         ///  consumer subscriber ID on the server.
 
 } natsStatus;
@@ -272,7 +272,7 @@ typedef enum {
     JSConsumerCreateDurableAndNameMismatchErr = 10132,  ///< Consumer Durable and Name have to be equal if both are provided
     JSReplicasCountCannotBeNegativeErr = 10133,         ///< Replicas count cannot be negative
     JSConsumerReplicasShouldMatchStreamErr = 10134,     ///< Consumer config replicas must match interest retention stream's replicas
-    JSConsumerMetadataLengthErr = 10135,                ///< Consumer metadata exceeds maximum size 
+    JSConsumerMetadataLengthErr = 10135,                ///< Consumer metadata exceeds maximum size
     JSConsumerDuplicateFilterSubjectsErr = 10136,       ///< Consumer cannot have both FilterSubject and FilterSubjects specified
     JSConsumerMultipleFiltersNotAllowedErr = 10137,     ///< Consumer with multiple subject filters cannot use subject based API
     JSConsumerOverlappingSubjectFiltersErr = 10138,     ///< Consumer subject filters cannot overlap

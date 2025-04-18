@@ -1046,7 +1046,6 @@ typedef struct jsSequenceInfo
 /**
  * Describes the configuration of priority groups in a pull consumer.
  */
-
  typedef struct jsPriorityGroupState
  {
         char *Group;
@@ -1075,7 +1074,7 @@ typedef struct jsConsumerInfo
         jsClusterInfo           *Cluster;
         bool                    PushBound;
         bool                    Paused;
-        int64_t                 PauseRemaining;        ///< Remaining time in nanoseconds.
+        int64_t                 PauseRemaining;         ///< Remaining time in nanoseconds.
         jsPriorityGroupState    *PriorityGroups;        ///< Priority groups for the (pull) consumer.
         int                     PriorityGroupsLen;      ///< Number of priority groups.
 } jsConsumerInfo;
@@ -6838,7 +6837,7 @@ natsSubscription_FetchRequest(natsMsgList *list, natsSubscription *sub, jsFetchR
 /** \brief Un-pins a consumer priority group from a specific subscription.
  *
  * Un-pins a consumer priority group from a specific subscription. This applies
- * exclusively to js_PullSubscribeAsync subscriptions, and causes the consumer
+ * exclusively to #js_PullSubscribeAsync subscriptions, and causes the consumer
  * (on the server) to un-pin the currently pinned subscription in the priority
  * group, and choose a new one. See
  * https://github.com/nats-io/nats-architecture-and-design/blob/main/adr/ADR-42.md#pinning

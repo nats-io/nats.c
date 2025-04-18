@@ -165,6 +165,8 @@ natsBuf_Append(natsBuffer *buf, const char* data, int dataLen)
 
     if (dataLen == -1)
         dataLen = (int) strlen(data);
+    if (dataLen == 0)
+        return NATS_OK; // nothing to do
 
     n = (int64_t) buf->len + dataLen;
 

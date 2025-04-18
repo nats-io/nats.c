@@ -21145,7 +21145,7 @@ _sslVerifyCallback(int preverify_ok, X509_STORE_CTX *ctx)
     time_t              now;
 
     testf("preverify_ok: %d\n", preverify_ok);
-    
+
     if (cert == NULL)
     {
         test("no cert\n");
@@ -25421,7 +25421,7 @@ void test_JetStreamPublishTTL(void)
     cfg.Subjects = (const char*[1]){"foo"};
     cfg.SubjectsLen = 1;
     cfg.AllowMsgTTL = true;
-    
+
     s = js_AddStream(NULL, js, &cfg, NULL, NULL);
     testCond(s == NATS_OK);
 
@@ -29300,7 +29300,7 @@ _testBatchCompleted(struct threadArg *args, natsSubscription *sub, natsStatus ex
 static bool _GH823_nextHandler(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure)
 {
     *messages = 5;
-    return true;   
+    return true;
 }
 
 void test_JetStream_GH823(void)
@@ -30036,7 +30036,7 @@ void test_JetStreamSubscribePullAsync_Pinned(void)
     // .msgReceived = false;
     // .closed = false;
     // .sum = 0;
-    
+
     test("Create the test stream: ");
     jsStreamConfig_Init(&sc);
     sc.Name = "TEST";
@@ -30092,7 +30092,7 @@ void test_JetStreamSubscribePullAsync_Pinned(void)
     oUnpinned.PullSubscribeAsync.Group = "A";
     oUnpinned.PullSubscribeAsync.MaxMessages = secondBatch; // the second batch
     s = js_PullSubscribeAsync(&unpinned, js, "foo", "pinned", _recvPullAsync, &argsUnpinned, &oUnpinned, &so, &jerr);
-    testCond((s == NATS_OK) && (unpinned != NULL) && (jerr == 0));    
+    testCond((s == NATS_OK) && (unpinned != NULL) && (jerr == 0));
 
     testf("Receive %d messages on the pinned sub (will auto-unsubscribe): ", firstBatch);
     testCond(_testBatchCompleted(&argsPinned, pinned, NATS_MAX_DELIVERED_MSGS, firstBatch, false));
@@ -30330,7 +30330,7 @@ void test_JetStreamSubscribePullAsync_Overflow(void)
     testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
 
     test("Not getting messages yet since there no unacknowledged yet: ");
-    nats_Sleep(100); 
+    nats_Sleep(100);
     natsMutex_Lock(args.m);
     sum = args.sum;
     natsMutex_Unlock(args.m);

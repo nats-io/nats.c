@@ -2940,7 +2940,7 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
         IFOK(s, natsBuf_AppendByte(buf, '"'));
     }
     if ((s == NATS_OK) && (cfg->FilterSubjectsLen > 0))
-        nats_marshalStringArray(buf, true, "filter_subjects", cfg->FilterSubjects, cfg->FilterSubjectsLen);
+        s = nats_marshalStringArray(buf, true, "filter_subjects", cfg->FilterSubjects, cfg->FilterSubjectsLen);
     IFOK(s, nats_marshalMetadata(buf, true, "metadata", cfg->Metadata));
     if ((s == NATS_OK) && (cfg->PauseUntil > 0))
         s = _marshalTimeUTC(buf, true, "pause_until", cfg->PauseUntil);
@@ -2953,7 +2953,7 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
     if ((s == NATS_OK) && (cfg->PinnedTTL > 0))
         s = nats_marshalLong(buf, true, "priority_timeout", cfg->PinnedTTL);
     if ((s == NATS_OK) && (cfg->PriorityGroups != NULL) && (cfg->PriorityGroupsLen > 0))
-        nats_marshalStringArray(buf, true, "priority_groups", cfg->PriorityGroups, cfg->PriorityGroupsLen);
+        s = nats_marshalStringArray(buf, true, "priority_groups", cfg->PriorityGroups, cfg->PriorityGroupsLen);
     IFOK(s, _marshalReplayPolicy(buf, cfg->ReplayPolicy))
     if ((s == NATS_OK) && (cfg->RateLimit > 0))
         s = nats_marshalULong(buf, true, "rate_limit_bps", cfg->RateLimit);
@@ -3221,7 +3221,7 @@ js_unmarshalConsumerInfo(nats_JSON *json, jsConsumerInfo **new_ci)
             s = nats_setDefaultError(NATS_NO_MEMORY);
         else
             ci->PriorityGroupsLen = priorityGroupsLen;
-        
+
         for (int i=0; (s == NATS_OK) && (i<priorityGroupsLen); i++)
         {
             s = nats_JSONGetStr(priorityGroups[i], "group", (char**) &(ci->PriorityGroups[i].Group));
@@ -3666,7 +3666,10 @@ js_UnpinConsumer(jsCtx *js, const char *stream, const char *consumer, const char
             NATS_FREE((char*) o.Prefix);
     }
 
-    snprintf(jsonBuf, sizeof(jsonBuf), "{\"group\":\"%s\"}", group);
+    // 'group' is already verified to be no more than 16 characters, so the
+    // buffer is always sufficient.
+    if (s == NATS_OK)
+        snprintf(jsonBuf, sizeof(jsonBuf), "{\"group\":\"%s\"}", group);
 
     // Send the request
     IFOK_JSR(s, natsConnection_RequestString(&resp, nc, subj, jsonBuf, o.Wait));

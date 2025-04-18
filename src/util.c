@@ -2473,13 +2473,11 @@ static const uint8_t _limited_term_allowed_bitmap[16] = {
 natsStatus
 nats_validateLimitedTerm(const char *name, const char *term)
 {
-    int i = 0;
-    int len = (int) strlen(term);
 
-    if (len == 0)
+    if (nats_IsStringEmpty(term))
         return nats_setError(NATS_INVALID_ARG, "%s must not be be empty", name);
 
-    for (; term[i] != '\0'; ++i) {
+    for (int i=0; term[i] != '\0'; ++i) {
         if (i >= 16)
             return nats_setError(NATS_INVALID_ARG, "%s must not be longer than 16 characters", name);
 
@@ -2676,6 +2674,6 @@ nats_marshalStringArray(natsBuffer *buf, bool comma, const char *fieldName, cons
     }
 
     IFOK(s, natsBuf_AppendByte(buf, ']'));
-    return NATS_OK;
+    return NATS_UPDATE_ERR_STACK(s);
 }
 

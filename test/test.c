@@ -791,6 +791,48 @@ void test_natsNormalizeErr(void)
     testCond(error[0] == '\0');
 }
 
+void test_natsValidateLimitedTerm(void)
+{
+    natsStatus s;
+    char       buf[100];
+    char       valid[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_/=";
+
+    test("Check with NULL: ");
+    s = nats_validateLimitedTerm("", NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check with empty: ");
+    s = nats_validateLimitedTerm("", "");
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check with too long: ");
+    s = nats_validateLimitedTerm("", "abcdefghijklmnopqrst");
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check with valid: ");
+    s = NATS_OK;
+    for (unsigned int i=0; (s == NATS_OK) && (i<sizeof(valid)-1); i++)
+    {
+        buf[0] = valid[i];
+        buf[1] = '\0';
+        s = nats_validateLimitedTerm("", buf);
+    }
+    testCond(s == NATS_OK);
+
+    test("Check with invalid: ");
+    s = NATS_INVALID_ARG;
+    for (int i=0; (s == NATS_INVALID_ARG) && (i<255); i++)
+    {
+        if (strchr(valid, i) != NULL)
+            continue;
+
+        buf[0] = (char) i;
+        buf[1] = '\0';
+        s = nats_validateLimitedTerm("", buf);
+    }
+    testCond(s == NATS_INVALID_ARG);
+}
+
 void test_natsMutex(void)
 {
     natsStatus  s;

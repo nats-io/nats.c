@@ -2447,6 +2447,30 @@ bool nats_IsSubjectValid(const char *subject, bool wcAllowed)
     return true;
 }
 
+// Bitmap of allowed ASCII characters (0–127)
+// Allowed: A–Z, a–z, 0–9, '-', '_', '/', '='
+static const uint8_t _limited_term_allowed_bitmap[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0xa0, 0xff, 0x23, 0xfe, 0xff, 0xff, 0x87, 0xfe, 0xff, 0xff, 0x07};
+
+// Validates limited_term, see
+// https://github.com/nats-io/nats-architecture-and-design/blob/8693d2263e137e23748e3df583fd58247e4e48b7/adr/ADR-6.md?plain=1#L48
+natsStatus
+nats_validateLimitedTerm(const char *name, const char *term)
+{
+
+    if (nats_IsStringEmpty(term))
+        return nats_setError(NATS_INVALID_ARG, "%s must not be empty", name);
+
+    for (int i=0; term[i] != '\0'; ++i) {
+        if (i >= 16)
+            return nats_setError(NATS_INVALID_ARG, "%s must not be longer than 16 characters", name);
+
+        unsigned char c = (unsigned char)term[i];
+        if ((c >= 128) || !(_limited_term_allowed_bitmap[c / 8] & (1 << (c % 8))))
+            return nats_setError(NATS_INVALID_ARG, "%s must contain only [A-Za-z0-9-_/=]", name);
+    }
+    return NATS_OK;
+}
+
 natsStatus
 nats_marshalMetadata(natsBuffer *buf, bool comma, const char *fieldName, natsMetadata md)
 {
@@ -2581,48 +2605,11 @@ nats_freeMetadata(natsMetadata *md)
 natsStatus nats_formatStringArray(char **out, const char **strings, int count)
 {
     natsStatus s = NATS_OK;
-    natsBuffer buf;
-    int len = 0;
-    int  i;
+    natsBuffer buf = { 0 };
 
-    len++; // For the '['
-    for (i = 0; i < count; i++)
-    {
-        len += 2; // For the quotes
-        if (i > 0)
-            len++; // For the ','
-        if (strings[i] == NULL)
-            len += (int)strlen("(null)");
-        else
-            len += (int)strlen(strings[i]);
-    }
-    len++; // For the ']'
-    len++; // For the '\0'
-
-    s = natsBuf_Init(&buf, len);
-
-    natsBuf_AppendByte(&buf, '[');
-    for (i = 0; (s == NATS_OK) && (i < count); i++)
-    {
-        if (i > 0)
-        {
-            IFOK(s, natsBuf_AppendByte(&buf, ','));
-        }
-        IFOK(s, natsBuf_AppendByte(&buf, '"'));
-        if (strings[i] == NULL)
-        {
-            IFOK(s, natsBuf_Append(&buf, "(null)", -1));
-        }
-        else
-        {
-            IFOK(s, natsBuf_Append(&buf, strings[i], -1));
-        }
-        IFOK(s, natsBuf_AppendByte(&buf, '"'));
-    }
-
-    IFOK(s, natsBuf_AppendByte(&buf, ']'));
+    s = natsBuf_Init(&buf, 128);
+    IFOK(s, nats_marshalStringArray(&buf, false, NULL, strings, count));
     IFOK(s, natsBuf_AppendByte(&buf, '\0'));
-
     if (s != NATS_OK)
     {
         natsBuf_Cleanup(&buf);
@@ -2632,3 +2619,44 @@ natsStatus nats_formatStringArray(char **out, const char **strings, int count)
     *out = natsBuf_Data(&buf);
     return NATS_OK;
 }
+
+// note: does not JSON-escape the strings
+natsStatus
+nats_marshalStringArray(natsBuffer *buf, bool comma, const char *fieldName, const char **values, int len)
+{
+    natsStatus s = NATS_OK;
+    int  i;
+    const char *sep = (comma ? "," : "");
+
+    if (!nats_IsStringEmpty(fieldName))
+    {
+        s = natsBuf_Append(buf, sep, -1);
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+        IFOK(s, natsBuf_Append(buf, fieldName, -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+        IFOK(s, natsBuf_AppendByte(buf, ':'));
+    }
+
+    natsBuf_AppendByte(buf, '[');
+    for (i = 0; (s == NATS_OK) && (i < len); i++)
+    {
+        if (i > 0)
+        {
+            IFOK(s, natsBuf_AppendByte(buf, ','));
+        }
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+        if (values[i] == NULL)
+        {
+            IFOK(s, natsBuf_Append(buf, "(null)", -1));
+        }
+        else
+        {
+            IFOK(s, natsBuf_Append(buf, values[i], -1));
+        }
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
+    }
+
+    IFOK(s, natsBuf_AppendByte(buf, ']'));
+    return NATS_UPDATE_ERR_STACK(s);
+}
+

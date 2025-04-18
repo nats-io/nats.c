@@ -1,4 +1,4 @@
-// Copyright 2015-2024 The NATS Authors
+// Copyright 2015-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -24,9 +24,11 @@
 #define STATUS_HDR                  "Status"
 #define DESCRIPTION_HDR             "Description"
 #define HDR_STATUS_NO_RESP_503      "503"
+#define HDR_STATUS_BAD_REQUEST      "400"
 #define HDR_STATUS_NOT_FOUND_404    "404"
 #define HDR_STATUS_TIMEOUT_408      "408"
 #define HDR_STATUS_MAX_BYTES_409    "409"
+#define HDR_STATUS_PIN_ID_MISMATCH  "423"
 #define HDR_STATUS_CTRL_100         "100"
 #define HDR_STATUS_LEN              (3)
 

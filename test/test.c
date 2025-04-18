@@ -791,6 +791,48 @@ void test_natsNormalizeErr(void)
     testCond(error[0] == '\0');
 }
 
+void test_natsValidateLimitedTerm(void)
+{
+    natsStatus s;
+    char       buf[100];
+    char       valid[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_/=";
+
+    test("Check with NULL: ");
+    s = nats_validateLimitedTerm("", NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check with empty: ");
+    s = nats_validateLimitedTerm("", "");
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check with too long: ");
+    s = nats_validateLimitedTerm("", "abcdefghijklmnopqrst");
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Check with valid: ");
+    s = NATS_OK;
+    for (unsigned int i=0; (s == NATS_OK) && (i<sizeof(valid)-1); i++)
+    {
+        buf[0] = valid[i];
+        buf[1] = '\0';
+        s = nats_validateLimitedTerm("", buf);
+    }
+    testCond(s == NATS_OK);
+
+    test("Check with invalid: ");
+    s = NATS_INVALID_ARG;
+    for (int i=0; (s == NATS_INVALID_ARG) && (i<255); i++)
+    {
+        if (strchr(valid, i) != NULL)
+            continue;
+
+        buf[0] = (char) i;
+        buf[1] = '\0';
+        s = nats_validateLimitedTerm("", buf);
+    }
+    testCond(s == NATS_INVALID_ARG);
+}
+
 void test_natsMutex(void)
 {
     natsStatus  s;
@@ -21145,7 +21187,7 @@ _sslVerifyCallback(int preverify_ok, X509_STORE_CTX *ctx)
     time_t              now;
 
     testf("preverify_ok: %d\n", preverify_ok);
-    
+
     if (cert == NULL)
     {
         test("no cert\n");
@@ -25421,7 +25463,7 @@ void test_JetStreamPublishTTL(void)
     cfg.Subjects = (const char*[1]){"foo"};
     cfg.SubjectsLen = 1;
     cfg.AllowMsgTTL = true;
-    
+
     s = js_AddStream(NULL, js, &cfg, NULL, NULL);
     testCond(s == NATS_OK);
 
@@ -29113,7 +29155,7 @@ void test_JetStreamSubscribePull(void)
     fr.Expires = NATS_SECONDS_TO_NANOS(1);
     fr.Heartbeat = NATS_SECONDS_TO_NANOS(10);
     s = natsSubscription_FetchRequest(&list, sub, &fr);
-    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "too large") != NULL));
+    testCond((s == NATS_INVALID_ARG) && (strstr(nats_GetLastError(NULL), "too large") != NULL));
     nats_clearLastError();
 
     test("Check idle hearbeat: ");
@@ -29279,7 +29321,7 @@ _testBatchCompleted(struct threadArg *args, natsSubscription *sub, natsStatus ex
         if (!args->closed)
             printf("FAILED: onComplete has not been called\n");
         if (args->status != expectedStatus)
-            printf("FAILED: status: %d, expected: %d\n", args->status, expectedStatus);
+            printf("FAILED: status: %d (%s), expected: %d\n", args->status, nats_GetLastError(NULL), expectedStatus);
         if (orFewer)
         {
             if (args->sum > expectedMsgs)
@@ -29300,7 +29342,7 @@ _testBatchCompleted(struct threadArg *args, natsSubscription *sub, natsStatus ex
 static bool _GH823_nextHandler(int *messages, int64_t *maxBytes, natsSubscription *sub, void *closure)
 {
     *messages = 5;
-    return true;   
+    return true;
 }
 
 void test_JetStream_GH823(void)
@@ -29369,8 +29411,6 @@ void test_JetStream_GH823(void)
     JS_TEARDOWN
     _destroyDefaultThreadArgs(&args);
 }
-
-
 
 void test_JetStreamSubscribePullAsync(void)
 {
@@ -29747,7 +29787,7 @@ void test_JetStreamSubscribePullAsync_MissedHB(void)
     jsOpts.PullSubscribeAsync.Heartbeat = 200;
 
     s = js_PullSubscribeAsync(&sub, js, "foo", "dur", _recvPullAsync, &args, &jsOpts, NULL, &jerr);
-    testCond((s == NATS_OK) && _testBatchCompleted(&args, sub, NATS_ERR, 0, false));
+    testCond((s == NATS_OK) && _testBatchCompleted(&args, sub, NATS_INVALID_ARG, 0, false));
 
     test("Check the error to be 'heartbeat value too large': ");
     natsMutex_Lock(args.m);
@@ -30006,6 +30046,362 @@ void test_JetStreamSubscribePullAsync_Disconnect(void)
     JS_TEARDOWN;
     _destroyDefaultThreadArgs(&args);
     natsOptions_Destroy(opts);
+}
+
+void test_JetStreamSubscribePullAsync_Pinned(void)
+{
+    natsStatus s;
+    natsSubscription *pinned = NULL, *unpinned = NULL, *subInError = NULL;
+    jsErrCode jerr = 0;
+    jsStreamConfig sc;
+    jsConsumerConfig cc;
+    jsOptions oPinned, oUnpinned, oError;
+    jsSubOptions so;
+    struct threadArg argsPinned, argsUnpinned, argsError;
+    const char *groups[] = {"A"};
+
+    const int firstBatch = 1000;
+    const int secondBatch = 100;
+
+    JS_SETUP(2, 11, 0);
+
+    s = _createDefaultThreadArgsForCbTests(&argsPinned);
+    IFOK(s, _createDefaultThreadArgsForCbTests(&argsUnpinned));
+    IFOK(s, _createDefaultThreadArgsForCbTests(&argsError));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    // The default state of both args is OK.
+    //
+    // .control = 0;      // don't ack, will be auto-ack
+    // .status = NATS_OK; // batch exit status will be here
+    // .msgReceived = false;
+    // .closed = false;
+    // .sum = 0;
+
+    test("Create the test stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char *[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Create the test consumer configured with 'pinned_client': ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "pinned";
+    cc.PriorityPolicy = jsPriorityPolicyPinnedClientStr;
+    cc.PinnedTTL = NATS_SECONDS_TO_NANOS(1);
+    cc.PriorityGroups = groups;
+    cc.PriorityGroupsLen = 1;
+    s = js_AddConsumer(NULL, js, "TEST", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    testf("Publish %d messages: ", firstBatch);
+    for (int i = 0; (s == NATS_OK) && (i < firstBatch); i++)
+        s = js_Publish(NULL, js, "foo", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Initialize shared options: ");
+    jsSubOptions_Init(&so);
+    so.Stream = "TEST";
+    so.Consumer = "pinned";
+    testCond(true);
+
+    // See the relevant comment in js_PullSubscribeAsync - we do not currently
+    // validate upfront, so the error comes as a callback/fetch status.
+    test("A sub without group returns an error: ");
+    jsOptions_Init(&oError);
+    oError.PullSubscribeAsync.CompleteHandler = _completePullAsync;
+    oError.PullSubscribeAsync.CompleteHandlerClosure = &argsError;
+    oError.PullSubscribeAsync.Group = NULL;
+    s = js_PullSubscribeAsync(&subInError, js, "foo", "pinned", _recvPullAsync, &argsError, &oError, &so, &jerr);
+    testCond((s == NATS_OK) && _testBatchCompleted(&argsError, subInError, NATS_INVALID_ARG, 0, false));
+
+    test("Create pull subscription that will get pinned: ");
+    jsOptions_Init(&oPinned);
+    oPinned.PullSubscribeAsync.CompleteHandler = _completePullAsync;
+    oPinned.PullSubscribeAsync.CompleteHandlerClosure = &argsPinned;
+    oPinned.PullSubscribeAsync.Group = "A";
+    oPinned.PullSubscribeAsync.MaxMessages = firstBatch;
+    s = js_PullSubscribeAsync(&pinned, js, "foo", "pinned", _recvPullAsync, &argsPinned, &oPinned, &so, &jerr);
+    testCond((s == NATS_OK) && (pinned != NULL) && (jerr == 0));
+
+    test("Create a second pull subscription that will not get pinned: ");
+    jsOptions_Init(&oUnpinned);
+    oUnpinned.PullSubscribeAsync.CompleteHandler = _completePullAsync;
+    oUnpinned.PullSubscribeAsync.CompleteHandlerClosure = &argsUnpinned;
+    oUnpinned.PullSubscribeAsync.Group = "A";
+    oUnpinned.PullSubscribeAsync.MaxMessages = secondBatch; // the second batch
+    s = js_PullSubscribeAsync(&unpinned, js, "foo", "pinned", _recvPullAsync, &argsUnpinned, &oUnpinned, &so, &jerr);
+    testCond((s == NATS_OK) && (unpinned != NULL) && (jerr == 0));
+
+    testf("Receive %d messages on the pinned sub (will auto-unsubscribe): ", firstBatch);
+    testCond(_testBatchCompleted(&argsPinned, pinned, NATS_MAX_DELIVERED_MSGS, firstBatch, false));
+
+    test("Make sure unpinned sub received nothing: ");
+    natsMutex_Lock(argsUnpinned.m);
+    int sum = argsUnpinned.sum;
+    natsMutex_Unlock(argsUnpinned.m);
+    testCond(sum == 0);
+
+    testf("Publish %d more messages: ", secondBatch);
+    for (int i = 0; (s == NATS_OK) && (i < secondBatch); i++)
+        s = js_Publish(NULL, js, "foo", "goodbye", 7, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Receive 100 messages on the unpinned sub: ");
+    testCond(_testBatchCompleted(&argsUnpinned, unpinned, NATS_MAX_DELIVERED_MSGS, secondBatch, false));
+
+    natsSubscription_Destroy(pinned);
+    natsSubscription_Destroy(unpinned);
+    natsSubscription_Destroy(subInError);
+    JS_TEARDOWN;
+    _destroyDefaultThreadArgs(&argsPinned);
+    _destroyDefaultThreadArgs(&argsUnpinned);
+    _destroyDefaultThreadArgs(&argsError);
+}
+
+void test_JetStreamSubscribePullAsync_Unpin(void)
+{
+    natsStatus s;
+    natsSubscription *pinned = NULL, *unpinned = NULL;
+    jsErrCode jerr = 0;
+    jsStreamConfig sc;
+    jsConsumerConfig cc;
+    jsOptions oPinned, oUnpinned;
+    jsSubOptions so;
+    struct threadArg argsPinned, argsUnpinned;
+    const char *groups[] = {"A"};
+
+    JS_SETUP(2, 11, 0);
+
+    s = _createDefaultThreadArgsForCbTests(&argsPinned);
+    IFOK(s, _createDefaultThreadArgsForCbTests(&argsUnpinned));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    // The default state of both args is OK.
+    //
+    // .control = 0;      // don't ack, will be auto-ack
+    // .status = NATS_OK; // batch exit status will be here
+    // .msgReceived = false;
+    // .closed = false;
+    // .sum = 0;
+
+    test("Create the test stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char *[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Create the test consumer configured with 'pinned_client': ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "pinned";
+    cc.PriorityPolicy = jsPriorityPolicyPinnedClientStr;
+    cc.PinnedTTL = NATS_SECONDS_TO_NANOS(1);
+    cc.PriorityGroups = groups;
+    cc.PriorityGroupsLen = 1;
+    s = js_AddConsumer(NULL, js, "TEST", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Publish 100 messages: ");
+    for (int i = 0; (s == NATS_OK) && (i < 100); i++)
+        s = js_Publish(NULL, js, "foo", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Initialize shared options: ");
+    jsSubOptions_Init(&so);
+    so.Stream = "TEST";
+    so.Consumer = "pinned";
+    testCond(true);
+
+    test("Create pull subscription that will get pinned: ");
+    jsOptions_Init(&oPinned);
+    oPinned.PullSubscribeAsync.CompleteHandler = _completePullAsync;
+    oPinned.PullSubscribeAsync.CompleteHandlerClosure = &argsPinned;
+    oPinned.PullSubscribeAsync.Group = "A";
+    oPinned.PullSubscribeAsync.FetchSize = 5; // will slow it down, so we can easily unpin while still fetching
+    s = js_PullSubscribeAsync(&pinned, js, "foo", "pinned", _recvPullAsync, &argsPinned, &oPinned, &so, &jerr);
+    testCond((s == NATS_OK) && (pinned != NULL) && (jerr == 0));
+
+    test("Create a second pull subscription that will not get pinned: ");
+    jsOptions_Init(&oUnpinned);
+    oUnpinned.PullSubscribeAsync.CompleteHandler = _completePullAsync;
+    oUnpinned.PullSubscribeAsync.CompleteHandlerClosure = &argsUnpinned;
+    oUnpinned.PullSubscribeAsync.Group = "A";
+    s = js_PullSubscribeAsync(&unpinned, js, "foo", "pinned", _recvPullAsync, &argsUnpinned, &oUnpinned, &so, &jerr);
+    testCond((s == NATS_OK) && (unpinned != NULL) && (jerr == 0));
+
+    nats_Sleep(100); // let the pinned sub get a few messages
+
+    test("Ensure that the pinned sub received some, and the unpinned none: ");
+    natsMutex_Lock(argsPinned.m);
+    int pinnedSum = argsPinned.sum;
+    natsMutex_Unlock(argsPinned.m);
+    natsMutex_Lock(argsUnpinned.m);
+    int unpinnedSum = argsUnpinned.sum;
+    natsMutex_Unlock(argsUnpinned.m);
+    testCond((pinnedSum > 0) && (unpinnedSum == 0));
+
+    test("Unpin the pinned sub: ");
+    s = js_UnpinConsumer(js, "TEST", "pinned", "A", NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Publish more messages in case we already drained everything: ");
+    for (int i = 0; (s == NATS_OK) && (i < 100); i++)
+        s = js_Publish(NULL, js, "foo", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Ensure that pinning changed, and all messages are delivered: ");
+    nats_Sleep(500); // should be enough even on windows!!!
+    natsMutex_Lock(argsPinned.m);
+    int previouslyPinnedSum = argsPinned.sum;
+    natsMutex_Unlock(argsPinned.m);
+    natsMutex_Lock(argsUnpinned.m);
+    int newPinnedSum = argsUnpinned.sum;
+    natsMutex_Unlock(argsUnpinned.m);
+    testCond((previouslyPinnedSum >= pinnedSum) // the previously pinned may still receive a few messages that are queued for processing
+        && (newPinnedSum > 0) // "new" messages should go to the other sub
+        && ((previouslyPinnedSum + newPinnedSum) == 200)); // between the 2, they get all messages
+
+    natsSubscription_Destroy(pinned);
+    natsSubscription_Destroy(unpinned);
+    JS_TEARDOWN;
+    _destroyDefaultThreadArgs(&argsPinned);
+    _destroyDefaultThreadArgs(&argsUnpinned);
+}
+
+void test_JetStreamSubscribePullAsync_Overflow(void)
+{
+    natsStatus s;
+    natsSubscription *sub = NULL;
+    jsErrCode jerr = 0;
+    jsStreamConfig sc;
+    jsConsumerConfig cc;
+    jsOptions o;
+    jsSubOptions so;
+    struct threadArg args;
+    const char *groups[] = {"A"};
+
+    JS_SETUP(2, 11, 0);
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    // The default state of args is OK.
+    //
+    // .control = 0;      // don't ack, will be auto-ack
+    // .status = NATS_OK; // batch exit status will be here
+    // .msgReceived = false;
+    // .closed = false;
+    // .sum = 0;
+
+    test("Create the test stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char *[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Create the test consumer configured with 'overflow': ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "overflow";
+    cc.PriorityPolicy = jsPriorityPolicyOverflowStr;
+    cc.PriorityGroups = groups;
+    cc.PriorityGroupsLen = 1;
+    s = js_AddConsumer(NULL, js, "TEST", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Publish 100 messages: ");
+    for (int i = 0; (s == NATS_OK) && (i < 100); i++)
+        s = js_Publish(NULL, js, "foo", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Initialize shared options: ");
+    jsSubOptions_Init(&so);
+    so.Stream = "TEST";
+    so.Consumer = "overflow";
+    testCond(true);
+
+    test("Create pull async subscription with MinPending=110, greater than 100 published: ");
+    jsOptions_Init(&o);
+    o.PullSubscribeAsync.CompleteHandler = _completePullAsync;
+    o.PullSubscribeAsync.CompleteHandlerClosure = &args;
+    o.PullSubscribeAsync.Group = "A";
+    o.PullSubscribeAsync.MinPending = 110;
+    o.PullSubscribeAsync.MaxMessages = 91; // we will only get 91, after 200 messages are published
+    s = js_PullSubscribeAsync(&sub, js, "foo", "overflow", _recvPullAsync, &args, &o, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Not getting messages yet, not enough pending: ");
+    nats_Sleep(100);
+    natsMutex_Lock(args.m);
+    int sum = args.sum;
+    natsMutex_Unlock(args.m);
+    testCond(sum == 0);
+
+    test("Publish 100 more messages: ");
+    for (int i = 0; (s == NATS_OK) && (i < 100); i++)
+        s = js_Publish(NULL, js, "foo", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Get 91 messages, until we drop below min pending of 110: ");
+    testCond(_testBatchCompleted(&args, sub, NATS_MAX_DELIVERED_MSGS, 91, false));
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Subscribe again, this time with MinAckPending of 5: ");
+    natsMutex_Lock(args.m);
+    args.sum = 0;
+    args.closed = false;
+    args.msgReceived = false;
+    args.status = NATS_OK; // batch exit status will be here
+    natsMutex_Unlock(args.m);
+    jsOptions_Init(&o);
+    o.PullSubscribeAsync.CompleteHandler = _completePullAsync;
+    o.PullSubscribeAsync.CompleteHandlerClosure = &args;
+    o.PullSubscribeAsync.Group = "A";
+    o.PullSubscribeAsync.MinAckPending = 5;
+    o.PullSubscribeAsync.MaxMessages = 99; // 200 - 91 - 10
+    s = js_PullSubscribeAsync(&sub, js, "foo", "overflow", _recvPullAsync, &args, &o, &so, &jerr);
+    testCond((s == NATS_OK) && (sub != NULL) && (jerr == 0));
+
+    test("Not getting messages yet since there no unacknowledged yet: ");
+    nats_Sleep(100);
+    natsMutex_Lock(args.m);
+    sum = args.sum;
+    natsMutex_Unlock(args.m);
+    testCond(sum == 0);
+
+    test("Receive but not ACK 10 messages with a separate subscription: ");
+    so.ManualAck = true;
+    struct threadArg args2;
+    natsSubscription *sub2 = NULL;
+    s = _createDefaultThreadArgsForCbTests(&args2);
+    if (s == NATS_OK)
+    {
+        jsOptions_Init(&o);
+        o.PullSubscribeAsync.CompleteHandler = _completePullAsync;
+        o.PullSubscribeAsync.CompleteHandlerClosure = &args2;
+        o.PullSubscribeAsync.Group = "A";
+        o.PullSubscribeAsync.MaxMessages = 10;
+        s = js_PullSubscribeAsync(&sub2, js, "foo", "overflow", _recvPullAsync, &args2, &o, &so, &jerr);
+    }
+    testCond((s == NATS_OK) && (sub2 != NULL) && (jerr == 0) && _testBatchCompleted(&args2, sub2, NATS_MAX_DELIVERED_MSGS, 10, false));
+    natsSubscription_Destroy(sub2);
+    _destroyDefaultThreadArgs(&args2);
+
+    test("Get the remaining 99 messages (200 - 91 - 10): ");
+    testCond(_testBatchCompleted(&args, sub, NATS_MAX_DELIVERED_MSGS, 99, false));
+
+    natsSubscription_Destroy(sub);
+    JS_TEARDOWN;
+    _destroyDefaultThreadArgs(&args);
 }
 
 void test_JetStreamSubscribeHeadersOnly(void)

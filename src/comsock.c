@@ -152,6 +152,9 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     int64_t         totalTimeout  = 0;
     int64_t         timeoutPerIP  = 0;
     struct addrinfo *tmpStorage[64];
+    bool            hasProxyConnectCb = false;
+
+    hasProxyConnectCb = (ctx->proxyConnectCb != NULL);
 
     if (phost == NULL)
         return nats_setError(NATS_ADDRESS_MISSING, "%s", "No host specified");
@@ -170,69 +173,79 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
 
     snprintf(sport, sizeof(sport), "%d", port);
 
-    if ((ctx->orderIP == 46) || (ctx->orderIP == 64))
-        max = 2;
-
     start = nats_Now();
-
-    for (i=0; i<max; i++)
+    // Call the proxy connect callback if provided
+    if (hasProxyConnectCb)
     {
-        struct addrinfo hints;
-        struct addrinfo *servinfo = NULL;
-        int             count     = 0;
-        struct addrinfo *p;
+        // Invoke the callback.
+        ctx->fd = ctx->proxyConnectCb(host, port);
+        if (ctx->fd == NATS_SOCK_INVALID)
+	        s = nats_setError(NATS_SYS_ERROR, "proxy socket error: %d", NATS_SOCK_GET_ERROR);
+    }
+    else
+    {
+        if ((ctx->orderIP == 46) || (ctx->orderIP == 64))
+            max = 2;
 
-        memset(&hints,0,sizeof(hints));
-        hints.ai_socktype = SOCK_STREAM;
-
-        switch (ctx->orderIP)
+        for (i = 0; i < max; i++)
         {
+            struct addrinfo hints;
+            struct addrinfo* servinfo = NULL;
+            int             count = 0;
+            struct addrinfo* p;
+
+            memset(&hints, 0, sizeof(hints));
+            hints.ai_socktype = SOCK_STREAM;
+
+            switch (ctx->orderIP)
+            {
             case  4: hints.ai_family = AF_INET; break;
             case  6: hints.ai_family = AF_INET6; break;
             case 46: hints.ai_family = (i == 0 ? AF_INET : AF_INET6); break;
             case 64: hints.ai_family = (i == 0 ? AF_INET6 : AF_INET); break;
             default: hints.ai_family = AF_UNSPEC;
-        }
+            }
 
-        if ((res = getaddrinfo(host, sport, &hints, &servinfo)) != 0)
+            if ((res = getaddrinfo(host, sport, &hints, &servinfo)) != 0)
+            {
+                s = nats_setError(NATS_SYS_ERROR, "getaddrinfo error: %s",
+                    gai_strerror(res));
+                continue;
+            }
+            servInfos[numServInfo] = servinfo;
+            for (p = servinfo; (p != NULL); p = p->ai_next)
+            {
+                count++;
+                numIPs++;
+            }
+            natsSock_ShuffleIPs(ctx, tmpStorage, sizeof(tmpStorage), &(servInfos[numServInfo]), count);
+            numServInfo++;
+        }
+        // If we got a getaddrinfo() and there is no servInfos to try to connect to
+        // bail out now.
+        if ((s != NATS_OK) && (numServInfo == 0))
+            return NATS_UPDATE_ERR_STACK(s);
+
+        // I don't think it can be the case if s == OK and/or numServInfo >= 1...
+        if (numIPs == 0)
         {
-            s = nats_setError(NATS_SYS_ERROR, "getaddrinfo error: %s",
-                              gai_strerror(res));
-            continue;
+            for (i = 0; i < numServInfo; i++)
+                nats_FreeAddrInfo(servInfos[i]);
+
+            return NATS_UPDATE_ERR_STACK(NATS_NO_SERVER);
         }
-        servInfos[numServInfo] = servinfo;
-        for (p = servinfo; (p != NULL); p = p->ai_next)
+
+        // Check if there has been a deadline set.
+        totalTimeout = natsDeadline_GetTimeout(&(ctx->writeDeadline));
+        if (totalTimeout > 0)
         {
-            count++;
-            numIPs++;
+            // If so, compute a timeout based on the number of IPs we are going
+            // to possibly try to connect to.
+            timeoutPerIP = totalTimeout / numIPs;
+            // If really small, give at least a 10ms timeout
+            if (timeoutPerIP < 10)
+                timeoutPerIP = 10;
         }
-        natsSock_ShuffleIPs(ctx, tmpStorage, sizeof(tmpStorage), &(servInfos[numServInfo]), count);
-        numServInfo++;
-    }
-    // If we got a getaddrinfo() and there is no servInfos to try to connect to
-    // bail out now.
-    if ((s != NATS_OK) && (numServInfo == 0))
-        return NATS_UPDATE_ERR_STACK(s);
-
-    // I don't think it can be the case if s == OK and/or numServInfo >= 1...
-    if (numIPs == 0)
-    {
-        for (i=0; i<numServInfo; i++)
-            nats_FreeAddrInfo(servInfos[i]);
-
-        return NATS_UPDATE_ERR_STACK(NATS_NO_SERVER);
-    }
-
-    // Check if there has been a deadline set.
-    totalTimeout = natsDeadline_GetTimeout(&(ctx->writeDeadline));
-    if (totalTimeout > 0)
-    {
-        // If so, compute a timeout based on the number of IPs we are going
-        // to possibly try to connect to.
-        timeoutPerIP = totalTimeout / numIPs;
-        // If really small, give at least a 10ms timeout
-        if (timeoutPerIP < 10)
-            timeoutPerIP = 10;
     }
 
     for (i=0; i<numServInfo; i++)
@@ -287,7 +300,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
                 s = natsSock_SetCommonTcpOptions(ctx->fd);
                 // We have connected OK and completed setting options, so we are done.
                 if (s == NATS_OK)
-                    break;
+                break;
             }
 
             _closeFd(ctx->fd);

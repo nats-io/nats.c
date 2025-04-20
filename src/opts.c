@@ -735,7 +735,7 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
 #ifdef NATS_WITH_EXPERIMENTAL
 
 natsStatus
-natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback)
+natsOptions_SetSSLCallback(natsOptions *opts, natsCustomSSLHandler callback)
 {
     natsStatus s = NATS_OK;
 
@@ -820,7 +820,7 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
 #ifdef NATS_WITH_EXPERIMENTAL
 
 natsStatus
-natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback)
+natsOptions_SetSSLCallback(natsOptions *opts, natsCustomSSLHandler callback)
 {
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }

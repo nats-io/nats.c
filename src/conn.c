@@ -737,12 +737,10 @@ _makeTLSConn(natsConnection *nc)
             }
             if (s == NATS_OK)
             {
-                SSL_verify_cb cb = _collectSSLErr;
-#ifdef NATS_WITH_EXPERIMENTAL
                 if (nc->opts->sslCtx->callback != NULL)
-                    cb = nc->opts->sslCtx->callback;
-#endif // NATS_WITH_EXPERIMENTAL
-                SSL_set_verify(ssl, SSL_VERIFY_PEER, cb);
+                    nc->opts->sslCtx->callback((void*)ssl);
+                else
+                    SSL_set_verify(ssl, SSL_VERIFY_PEER, _collectSSLErr);
             }
         }
     }

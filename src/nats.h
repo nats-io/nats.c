@@ -2959,9 +2959,9 @@ natsOptions_SetMaxPendingMsgs(natsOptions *opts, int maxPending);
 NATS_EXTERN natsStatus
 natsOptions_SetMaxPendingBytes(natsOptions* opts, int64_t maxPending);
 
-/** \brief Sets the proxy connection handler for asynchronous events.
+/** \brief Sets the proxy connection handler.
  *
- * Specifies the callback to invoke for proxy connection.
+ * Specifies the callback to invoke for proxy connection returning the socket to use.
  *
  * @see natsProxyConnHandler
  *

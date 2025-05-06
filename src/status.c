@@ -72,6 +72,8 @@ static const char *statusText[] = {
     "Mismatch",
     "Missed Server Heartbeat",
     "Limit reached",
+
+    "Jetstream Consumer PinID Mismatch",
 };
 
 const char*

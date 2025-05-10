@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <assert.h>
+
 #include "natsp.h"
 
 static const char *statusText[] = {
@@ -72,7 +74,11 @@ static const char *statusText[] = {
     "Mismatch",
     "Missed Server Heartbeat",
     "Limit reached",
+
+    "Jetstream Consumer PinID Mismatch",
 };
+
+static_assert(NATS_MAX_STATUS_VALUE_ == sizeof(statusText)/sizeof(statusText[0]), "Incorrect array size");
 
 const char*
 natsStatus_GetText(natsStatus s) {

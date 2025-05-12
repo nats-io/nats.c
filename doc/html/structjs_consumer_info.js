@@ -13,5 +13,7 @@ var structjs_consumer_info =
     [ "Cluster", "structjs_consumer_info.html#a6f4401563a9fd102226d82cdc6136e32", null ],
     [ "PushBound", "structjs_consumer_info.html#a31282cdc72000a91af03f89899740bfa", null ],
     [ "Paused", "structjs_consumer_info.html#a13f80f4b24da173ef2da051e69f216d7", null ],
-    [ "PauseRemaining", "structjs_consumer_info.html#a86501e735531929add3e161d40479c44", null ]
+    [ "PauseRemaining", "structjs_consumer_info.html#a86501e735531929add3e161d40479c44", null ],
+    [ "PriorityGroups", "structjs_consumer_info.html#a1b93a87ac24c171319a7d8350355c1ef", null ],
+    [ "PriorityGroupsLen", "structjs_consumer_info.html#a5deb4de557d4520772ef6a1319c7e67c", null ]
 ];

@@ -5129,6 +5129,12 @@ void test_HeadersLift(void)
     snprintf(buf, sizeof(buf), "%sk: a\r\n   bc\r\n def\r\n\r\n", HDR_LINE);
     _testHeader("Multiline values: ", buf, NATS_OK, "", "k", "a bc def");
 
+    snprintf(buf, sizeof(buf), "%sk:\r\n\r\n", HDR_LINE);
+    _testHeader("No value: ", buf, NATS_OK, "no value found for key", "k", "");
+
+    snprintf(buf, sizeof(buf), "%sk:       \r\n\r\n", HDR_LINE);
+    _testHeader("No value (extra spaces): ", buf, NATS_OK, "no value found for key", "k", "");
+
     snprintf(buf, sizeof(buf), "%s", "NATS\r\nk:v\r\n\r\n");
     _testHeader("NATS header missing: ", buf, NATS_PROTOCOL_ERROR, "header prefix missing", NULL, NULL);
 
@@ -5143,12 +5149,6 @@ void test_HeadersLift(void)
 
     snprintf(buf, sizeof(buf), "%sk\r\n\r\n", HDR_LINE);
     _testHeader("Column missing: ", buf, NATS_PROTOCOL_ERROR, "column delimiter not found", NULL, NULL);
-
-    snprintf(buf, sizeof(buf), "%sk:\r\n\r\n", HDR_LINE);
-    _testHeader("No value: ", buf, NATS_PROTOCOL_ERROR, "no value found for key", NULL, NULL);
-
-    snprintf(buf, sizeof(buf), "%sk:       \r\n\r\n", HDR_LINE);
-    _testHeader("No value (extra spaces): ", buf, NATS_PROTOCOL_ERROR, "no value found for key", NULL, NULL);
 
     // Check status description in header line prefix...
 
@@ -20109,6 +20109,12 @@ void test_HeadersBasic(void)
     IFOK(s, natsMsgHeader_Set(msg, "Headers", "Hello Headers!"))
     testCond(s == NATS_OK);
 
+    IFOK(s, natsMsgHeader_Add(msg, "NULL header", NULL))
+    testCond(s == NATS_OK);
+
+    IFOK(s, natsMsgHeader_Add(msg, "Whitespace header", "  "))
+    testCond(s == NATS_OK);
+
     test("Publish with headers ok: ");
     s = natsConnection_PublishMsg(nc, msg);
     testCond(s == NATS_OK);
@@ -20133,6 +20139,15 @@ void test_HeadersBasic(void)
                 && (val != NULL) && (strcmp(val, "Hello Headers!") == 0)
                 && (natsMsg_GetDataLength(rmsg) == 4)
                 && (strncmp(natsMsg_GetData(msg), "body", 4) == 0));
+
+    s = natsMsgHeader_Get(rmsg, "NULL header", &val);
+    testCond((s == NATS_OK)
+                && (val != NULL) && *val == '\0');
+
+
+    s = natsMsgHeader_Get(rmsg, "Whitespace header", &val);
+    testCond((s == NATS_OK)
+                && (val != NULL) && *val == '\0');
 
     natsMsg_Destroy(rmsg);
     rmsg = NULL;

@@ -20072,12 +20072,14 @@ void test_HeadersNotSupported(void)
 void test_HeadersBasic(void)
 {
     natsStatus          s;
-    natsConnection      *nc     = NULL;
-    natsPid             pid     = NATS_INVALID_PID;
-    natsMsg             *msg    = NULL;
-    natsMsg             *rmsg   = NULL;
-    natsSubscription    *sub    = NULL;
-    const char          *val    = NULL;
+    natsConnection      *nc      = NULL;
+    natsPid             pid      = NATS_INVALID_PID;
+    natsMsg             *msg     = NULL;
+    natsMsg             *rmsg    = NULL;
+    natsSubscription    *sub     = NULL;
+    const char          *val     = NULL;
+    int                 count    = 0;
+    const char          **values = NULL;
 
     if (!serverVersionAtLeast(2, 2, 0))
     {
@@ -20109,10 +20111,22 @@ void test_HeadersBasic(void)
     IFOK(s, natsMsgHeader_Set(msg, "Headers", "Hello Headers!"))
     testCond(s == NATS_OK);
 
+    test("Add NULL header: ");
     IFOK(s, natsMsgHeader_Add(msg, "NULL header", NULL))
     testCond(s == NATS_OK);
 
+    test("Add empty header: ");
+    IFOK(s, natsMsgHeader_Add(msg, "Empty header", ""))
+    testCond(s == NATS_OK);
+
+    test("Add whitespace header: ");
     IFOK(s, natsMsgHeader_Add(msg, "Whitespace header", "  "))
+    testCond(s == NATS_OK);
+
+    test("Add NULL, empty, and whitespace values under same header: ");
+    IFOK(s, natsMsgHeader_Add(msg, "Special-Headers", NULL))
+    IFOK(s, natsMsgHeader_Add(msg, "Special-Headers", ""))
+    IFOK(s, natsMsgHeader_Add(msg, "Special-Headers", "  "))
     testCond(s == NATS_OK);
 
     test("Publish with headers ok: ");
@@ -20140,14 +20154,30 @@ void test_HeadersBasic(void)
                 && (natsMsg_GetDataLength(rmsg) == 4)
                 && (strncmp(natsMsg_GetData(msg), "body", 4) == 0));
 
+    test("Check NULL header: ");
     s = natsMsgHeader_Get(rmsg, "NULL header", &val);
     testCond((s == NATS_OK)
                 && (val != NULL) && *val == '\0');
 
+    test("Check empty header: ");
+    s = natsMsgHeader_Get(rmsg, "Empty header", &val);
+    testCond((s == NATS_OK)
+                && (val != NULL) && *val == '\0');
 
+    test("Check whitespace header: ");
     s = natsMsgHeader_Get(rmsg, "Whitespace header", &val);
     testCond((s == NATS_OK)
                 && (val != NULL) && *val == '\0');
+
+    test("Check getting values from special header: ");
+    s = natsMsgHeader_Values(rmsg, "Special-Headers", &values, &count);
+    testCond((s == NATS_OK) && (count == 3)
+                && (values != NULL)
+                && (*values[0] == '\0')
+                && (*values[1] == '\0')
+                && (*values[2] == '\0'));
+    free(values);
+    values = NULL;
 
     natsMsg_Destroy(rmsg);
     rmsg = NULL;

@@ -248,6 +248,25 @@ void test_natsNowAndSleep(void)
     testCond(((end - start) >= 990) && ((end - start) <= 1010));
 }
 
+void test_natsStatusText(void)
+{
+    int     i;
+    int     ok = true;
+
+    test("Check text exists for all status values: ");
+    for (i=0; ok && (i<NATS_MAX_STATUS_VALUE); i++)
+    {
+        // Make sure we don't crash, or that we have a text.
+        const char *text = natsStatus_GetText((natsStatus)i);
+        if (nats_IsStringEmpty(text))
+        {
+            fprintf(stderr, "\nStatus %d failed\n", i);
+            ok = false;
+        }
+    }
+    testCond(ok);
+}
+
 void test_natsAllocSprintf(void)
 {
     char smallStr[20];
@@ -33802,12 +33821,20 @@ void test_KeyValueDiscardOldToNew(void)
     kvStore             *kv = NULL;
     kvConfig            kvc;
     natsStatus          s;
+    int                 ma, mi, up;
 
     JS_SETUP(2, 7, 2);
+
+    // We will wait for the INFO in response to CONNECT to arrive before
+    // changing the server versions.
+    nats_Sleep(250);
 
     // Change the server version in the connection to
     // create as-if we were connecting to a v2.7.1 server.
     natsConn_Lock(nc);
+    ma = nc->srvVersion.ma;
+    mi = nc->srvVersion.mi;
+    up = nc->srvVersion.up;
     nc->srvVersion.ma = 2;
     nc->srvVersion.mi = 7;
     nc->srvVersion.up = 1;
@@ -33821,9 +33848,9 @@ void test_KeyValueDiscardOldToNew(void)
 
     // Now change version to 2.7.2
     natsConn_Lock(nc);
-    nc->srvVersion.ma = 2;
-    nc->srvVersion.mi = 7;
-    nc->srvVersion.up = 2;
+    nc->srvVersion.ma = ma;
+    nc->srvVersion.mi = mi;
+    nc->srvVersion.up = up;
     natsConn_Unlock(nc);
 
     test("Check discard (old, no auto-update): ");

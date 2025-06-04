@@ -53,7 +53,7 @@ natsMsgHeader_encodedLen(natsMsg *msg)
         for (c = v; c != NULL; c = c->next)
         {
             hl += (int) strlen(key) + 2; // 2 for ": "
-            hl += (int) strlen(c->value) + _CRLF_LEN_;
+            hl += (int) (c->value == NULL ? 0 : strlen(c->value)) + _CRLF_LEN_;
         }
     }
     natsStrHashIter_Done(&iter);
@@ -98,7 +98,7 @@ natsMsgHeader_encode(natsBuffer *buf, natsMsg *msg)
                     s = natsBuf_Append(buf, ": ", 2);
                 if (s == NATS_OK)
                 {
-                    int vl  = (int) strlen(c->value);
+                    int vl  = (c->value == NULL ? 0 : (int) strlen(c->value));
                     int pos = natsBuf_Len(buf);
 
                     s = natsBuf_Append(buf, (const char*) c->value, vl);
@@ -209,6 +209,8 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
     bool            ml   = false;
     char            *start;
     char            *endval;
+    bool            isNullVal = false;
+    bool            tmpCarRet = false;
 
     start = ptr;
     if (*ptr == '\r')
@@ -243,7 +245,19 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
     }
 
     while ((ptr != endPtr) && (isspace((unsigned char) *ptr)))
+    {
+        if (tmpCarRet && (*ptr == '\n'))
+        {
+            // Value was NULL, or only whitespaces. Set pointer to before
+            // \r\n for further processing.
+            isNullVal = true;
+            ptr--;
+            break;
+        }
+
+        tmpCarRet = *ptr == '\r';
         ptr++;
+    }
 
     if (ptr == endPtr)
         return nats_setError(NATS_PROTOCOL_ERROR, "no value found for key %s", key);
@@ -254,16 +268,26 @@ _processKeyValue(int line, natsMsg *msg, char *endPtr, char **pPtr, char **lastK
     if (ptr == endPtr)
         return nats_setError(NATS_PROTOCOL_ERROR, "no CRLF found for value of key %s", key);
 
-    // Trim right spaces and set to \0 to terminate the value string.
-    endval = ptr;
-    // Backtrack to \r and any space characters. Make sure we don't go
-    // past the beginning of the value pointer.
-    endval--;
-    if (*endval == '\r')
+    if (isNullVal)
+    {
+        // For NULL or all-whitespace values, set the end value to the \r
+        // at the end.
+        endval = val;
+    }
+    else
+    {
+        // Trim right spaces and set to \0 to terminate the value string.
+        endval = ptr;
+        // Backtrack to \r and any space characters. Make sure we don't go
+        // past the beginning of the value pointer.
         endval--;
-    while ((endval != val) && (isspace((unsigned char) *endval)))
-        endval--;
-    endval++;
+        if (*endval == '\r')
+            endval--;
+        while ((endval != val) && (isspace((unsigned char)*endval)))
+            endval--;
+        endval++;
+    }
+
     *(endval) = '\0';
 
     if (ml)

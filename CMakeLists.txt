@@ -34,6 +34,7 @@ option(NATS_UPDATE_DOC "Update the doc template file" OFF)
 option(NATS_COVERAGE "Code coverage" OFF)
 option(NATS_BUILD_NO_SPIN "Enable if spin code does not compile on your arch" OFF)
 option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
+option(NATS_BUILD_WITH_WOLFSSL "Use wolfSSL as TLS backend" OFF)
 option(NATS_BUILD_TLS_FORCE_HOST_VERIFY "Forces hostname verification" ON)
 option(NATS_BUILD_TLS_USE_OPENSSL_1_1_API "Build for OpenSSL 1.1+" ON)
 option(NATS_BUILD_USE_SODIUM "Build using libsodium library" OFF)
@@ -70,10 +71,46 @@ if(NATS_COVERAGE)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
 endif(NATS_COVERAGE)
 
-if(NATS_BUILD_WITH_TLS)
+if(NATS_BUILD_WITH_TLS AND NOT NATS_BUILD_WITH_WOLFSSL)
   set(OPENSSL_USE_STATIC_LIBS ${NATS_BUILD_OPENSSL_STATIC_LIBS})
   find_package(OpenSSL REQUIRED)
-endif(NATS_BUILD_WITH_TLS)
+endif(NATS_BUILD_WITH_TLS AND NOT NATS_BUILD_WITH_WOLFSSL)
+
+if(NATS_BUILD_WITH_WOLFSSL)
+  if(DEFINED ENV{NATS_WOLFSSL_DIR})
+    set(NATS_WOLFSSL_DIR "$ENV{NATS_WOLFSSL_DIR}")
+  endif()
+  find_path(
+          NATS_WOLFSSL_INCLUDE_DIR
+          wolfssl/options.h
+          HINTS
+          ${NATS_WOLFSSL_DIR}
+  )
+  find_library(NATS_WOLFSSL_LIBRARY
+          NAMES libwolfssl.so libwolfssl.dylib libwolfssl.a wolfssl.lib wolfssl.dll
+          HINTS ${NATS_WOLFSSL_DIR}
+  )
+  find_package_handle_standard_args(libwolfssl DEFAULT_MSG
+          NATS_WOLFSSL_INCLUDE_DIR
+          NATS_WOLFSSL_LIBRARY
+  )
+  if(libwolfssl_FOUND)
+    set(NATS_WOLFSSL_INCLUDE_DIRS ${NATS_WOLFSSL_INCLUDE_DIR}/wolfssl)
+    set(NATS_WOLFSSL_LIBRARIES ${NATS_WOLFSSL_LIBRARY})
+    mark_as_advanced(
+            NATS_WOLFSSL_LIBRARY
+            NATS_WOLFSSL_INCLUDE_DIR
+            NATS_WOLFSSL_DIR
+    )
+    add_definitions(-DNATS_HAS_WOLFSSL)
+  else()
+    set(NATS_WOLFSSL_DIR "" CACHE STRING
+            "An optional hint to a directory for finding `libwolfssl`"
+    )
+    message(FATAL_ERROR
+            "Could not find libwolfssl package.")
+  endif()
+endif(NATS_BUILD_WITH_WOLFSSL)
 
 set(LIBUV_DIR "" CACHE PATH "Libuv install directory")
 set(LIBEVENT_DIR "" CACHE PATH "Libevent install directory")
@@ -253,9 +290,11 @@ if(UNIX)
     endif(NATS_BUILD_NO_SPIN)
   endif(APPLE)
 endif(UNIX)
+
 add_definitions(-D${NATS_OS})
 add_definitions(-D_REENTRANT)
-if(NATS_BUILD_WITH_TLS)
+
+if(NATS_BUILD_WITH_TLS OR NATS_BUILD_WITH_WOLFSSL)
   add_definitions(-DNATS_HAS_TLS)
   if(NATS_BUILD_TLS_USE_OPENSSL_1_1_API)
     add_definitions(-DNATS_USE_OPENSSL_1_1)
@@ -264,7 +303,7 @@ if(NATS_BUILD_WITH_TLS)
     add_definitions(-DNATS_FORCE_HOST_VERIFICATION)
   endif(NATS_BUILD_TLS_FORCE_HOST_VERIFY)
   set(NATS_DOC_INCLUDE_TLS "NATS_HAS_TLS")
-endif(NATS_BUILD_WITH_TLS)
+endif(NATS_BUILD_WITH_TLS OR NATS_BUILD_WITH_WOLFSSL)
 
 
 #------------

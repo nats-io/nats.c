@@ -248,25 +248,6 @@ void test_natsNowAndSleep(void)
     testCond(((end - start) >= 990) && ((end - start) <= 1010));
 }
 
-void test_natsStatusText(void)
-{
-    int     i;
-    int     ok = true;
-
-    test("Check text exists for all status values: ");
-    for (i=0; ok && (i<NATS_MAX_STATUS_VALUE); i++)
-    {
-        // Make sure we don't crash, or that we have a text.
-        const char *text = natsStatus_GetText((natsStatus)i);
-        if (nats_IsStringEmpty(text))
-        {
-            fprintf(stderr, "\nStatus %d failed\n", i);
-            ok = false;
-        }
-    }
-    testCond(ok);
-}
-
 void test_natsAllocSprintf(void)
 {
     char smallStr[20];

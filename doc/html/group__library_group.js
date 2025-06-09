@@ -7,6 +7,7 @@ var group__library_group =
     [ "nats_CheckCompatibility", "group__library_group.html#ga8c2ad4df801bd9d11564587ed3a7081e", null ],
     [ "nats_Now", "group__library_group.html#gaa3c10ba3ae001595007ad0dc5dccc15e", null ],
     [ "nats_NowInNanoSeconds", "group__library_group.html#gacf5e423920d6a647df3bbf7de39d5223", null ],
+    [ "nats_NowMonotonicInNanoSeconds", "group__library_group.html#gaaca06768e23df2a1261316f57cc66543", null ],
     [ "nats_Sleep", "group__library_group.html#gad5040264cd4b1404956babf3c03a4f09", null ],
     [ "nats_GetLastError", "group__library_group.html#gadecfd49a58b581dbba40da77b195fd85", null ],
     [ "nats_GetLastErrorStack", "group__library_group.html#gaca24172e1b97ca01cee29ca437f5702e", null ],

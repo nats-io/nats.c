@@ -78,7 +78,7 @@ static const char *statusText[] = {
     "Jetstream Consumer PinID Mismatch",
 };
 
-static_assert(NATS_MAX_STATUS_VALUE_ == sizeof(statusText)/sizeof(statusText[0]), "Incorrect array size");
+NATS_GLOBAL_STATIC_ASSERT(NATS_MAX_STATUS_VALUE == sizeof(statusText)/sizeof(statusText[0]), Incorrect_array_size);
 
 const char*
 natsStatus_GetText(natsStatus s) {

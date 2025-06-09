@@ -148,6 +148,15 @@ static inline bool nats_StringEquals(const char *s1, const char *s2)
 #define NATS_MILLIS_TO_NANOS(d)     (((int64_t)d)*(int64_t)1E6)
 #define NATS_SECONDS_TO_NANOS(d)    (((int64_t)d)*(int64_t)1E9)
 
+#if __STDC_VERSION__ >= 201112L
+#define NATS_GLOBAL_STATIC_ASSERT(_cond, _message_as_id) \
+    _Static_assert(_cond, #_message_as_id)
+#else
+// for C99 we define explicitly
+#define NATS_GLOBAL_STATIC_ASSERT(_cond, _message_as_id) \
+    typedef char static_assertion_##_message_as_id[(_cond) ? 1 : -1]
+#endif
+
 extern int64_t gLockSpinCount;
 
 typedef void (*natsInitOnceCb)(void);

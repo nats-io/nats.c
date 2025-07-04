@@ -3360,7 +3360,7 @@ _processUrlString(natsOptions *opts, const char *urls)
     serverUrls = (char**) NATS_CALLOC(count + 1, sizeof(char*));
     if (serverUrls == NULL)
         return NATS_NO_MEMORY;
-    
+
     if (s == NATS_OK)
     {
         urlsCopy = NATS_STRDUP(urls);

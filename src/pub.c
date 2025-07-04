@@ -474,7 +474,7 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     if (nc->respMux == NULL)
         s = natsConn_initResp(nc, _respHandler);
     if (s == NATS_OK)
-        s = natsConn_addRespInfo(&resp, nc, respInbox, sizeof(respInbox));
+        s = natsConn_addRespInfo(&resp, nc, respInbox);
 
     natsConn_Unlock(nc);
 

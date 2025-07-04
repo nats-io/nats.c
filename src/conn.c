@@ -1328,7 +1328,7 @@ natsConn_destroyRespPool(natsConnection *nc)
 // subject (that is set in respInbox). The respInfo object is returned.
 // Connection's lock is held on entry.
 natsStatus
-natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox, int respInboxSize)
+natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox)
 {
     respInfo    *resp  = NULL;
     natsStatus  s      = NATS_OK;
@@ -3360,7 +3360,7 @@ _processUrlString(natsOptions *opts, const char *urls)
     serverUrls = (char**) NATS_CALLOC(count + 1, sizeof(char*));
     if (serverUrls == NULL)
         return NATS_NO_MEMORY;
-    
+
     if (s == NATS_OK)
     {
         urlsCopy = NATS_STRDUP(urls);

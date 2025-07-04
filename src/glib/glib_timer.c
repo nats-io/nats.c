@@ -1,4 +1,4 @@
-// Copyright 2015-2024 The NATS Authors
+// Copyright 2015-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -25,9 +25,32 @@ void nats_freeTimers(natsLib *lib)
 static void
 _insertTimer(natsTimer *t)
 {
-    natsTimer *cur  = nats_lib()->timers.timers;
-    natsTimer *prev = NULL;
+    natsLibTimers   *timers = &(nats_lib()->timers);
+    natsTimer       *tail   = timers->tail;
+    natsTimer       *cur    = NULL;
+    natsTimer       *prev   = NULL;
 
+    // Can we insert as the last in the list?
+    if ((tail != NULL) && (tail->absoluteTime <= t->absoluteTime))
+    {
+        t->prev = tail;
+        t->next = NULL;
+        // If there was a previous tail, then link to `t`.
+        if (tail != NULL)
+            tail->next = t;
+        else
+        {
+            // There was no tail, so no head either.
+            timers->head = t;
+        }
+        // This is the new tail.
+        timers->tail = t;
+        // We are done
+        return;
+    }
+
+    // Find the spot. Start at the beginning.
+    cur = timers->head;
     while ((cur != NULL) && (cur->absoluteTime <= t->absoluteTime))
     {
         prev = cur;
@@ -51,7 +74,9 @@ _insertTimer(natsTimer *t)
     }
 
     if (prev == NULL)
-        nats_lib()->timers.timers = t;
+        timers->head = t;
+    if (t->next == NULL)
+        timers->tail = t;
 }
 
 // Locks must be held before entering this function
@@ -69,9 +94,14 @@ _removeTimer(natsLib *lib, natsTimer *t)
             t->prev->next = t->next;
         if (t->next != NULL)
             t->next->prev = t->prev;
-
-        if (t == lib->timers.timers)
-            lib->timers.timers = t->next;
+        else
+        {
+            // The timer had no "next", so it was the tail. Move back the tail.
+            lib->timers.tail = t->prev;
+        }
+        // If we removed the first, move the head.
+        if (t == lib->timers.head)
+            lib->timers.head = t->next;
 
         t->prev = NULL;
         t->next = NULL;
@@ -183,7 +213,7 @@ nats_getTimersCountInList(void)
 
     natsMutex_Lock(lib->timers.lock);
 
-    t = lib->timers.timers;
+    t = lib->timers.head;
     while (t != NULL)
     {
         count++;
@@ -211,7 +241,7 @@ void nats_timerThreadf(void *arg)
     while (!(timers->shutdown))
     {
         // Take the first timer that needs to fire.
-        t = timers->timers;
+        t = timers->head;
 
         if (t == NULL)
         {
@@ -244,9 +274,11 @@ void nats_timerThreadf(void *arg)
         natsMutex_Lock(t->mu);
 
         // Remove timer from the list:
-        timers->timers = t->next;
+        timers->head = t->next;
         if (t->next != NULL)
             t->next->prev = NULL;
+        else
+            timers->tail = NULL;
 
         t->prev = NULL;
         t->next = NULL;
@@ -298,7 +330,7 @@ void nats_timerThreadf(void *arg)
 
     // Process the timers that were left in the list (not stopped) when the
     // library is shutdown.
-    while ((t = timers->timers) != NULL)
+    while ((t = timers->head) != NULL)
     {
         natsMutex_Lock(t->mu);
 

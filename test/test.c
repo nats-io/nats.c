@@ -1237,9 +1237,20 @@ void test_natsTimer(void)
     natsTimer           *t = NULL;
     struct threadArg    tArg;
     int                 refs;
+    int                 numTimers = 100000;
+    natsTimer           **timers;
+    int                 i;
+    int64_t             start = 0;
+    int64_t             dur   = 0;
 
     test("Setup test: ");
     s = _createDefaultThreadArgsForCbTests(&tArg);
+    if (s == NATS_OK)
+    {
+        timers = (natsTimer**) calloc(numTimers, sizeof(natsTimer*));
+        if (timers == NULL)
+            s = NATS_ERR;
+    }
     testCond(s == NATS_OK);
 
     tArg.control      = 0;
@@ -1443,6 +1454,99 @@ void test_natsTimer(void)
     natsTimer_Release(t);
 
     _destroyDefaultThreadArgs(&tArg);
+
+    // Test insert code and make sure timers are added in the proper order.
+    test("Add as first: ");
+    s = natsTimer_Create(&(timers[0]), _dummyTimerCB, NULL, 10000, NULL);
+    testCond(s == NATS_OK);
+
+    test("Add to the end: ");
+    s = natsTimer_Create(&(timers[1]), _dummyTimerCB, NULL, 20000, NULL);
+    testCond(s == NATS_OK);
+
+    test("Add to the end again: ");
+    s = natsTimer_Create(&(timers[2]), _dummyTimerCB, NULL, 30000, NULL);
+    testCond(s == NATS_OK);
+
+    test("Add as first again: ");
+    s = natsTimer_Create(&(timers[3]), _dummyTimerCB, NULL, 1000, NULL);
+    testCond(s == NATS_OK);
+
+    test("Insert in between: ");
+    s = natsTimer_Create(&(timers[4]), _dummyTimerCB, NULL, 15000, NULL);
+    testCond(s == NATS_OK);
+
+    test("Verify count: ");
+    testCond(nats_getTimersCountInList() == 5);
+
+    test("Verify order: ");
+    {
+        natsLibTimers   *timers = &(nats_lib()->timers);
+        natsTimer       *cur    = NULL;
+        int             idx     = 0;
+
+        s = NATS_OK;
+        natsMutex_Lock(timers->lock);
+        cur = timers->head;
+        while ((s == NATS_OK) && (cur != NULL))
+        {
+            switch (idx)
+            {
+                case 0:
+                    s = (cur->interval == 1000 ? NATS_OK : NATS_ERR);
+                    break;
+                case 1:
+                    s = (cur->interval == 10000 ? NATS_OK : NATS_ERR);
+                    break;
+                case 2:
+                    s = (cur->interval == 15000 ? NATS_OK : NATS_ERR);
+                    break;
+                case 3:
+                    s = (cur->interval == 20000 ? NATS_OK : NATS_ERR);
+                    break;
+                case 4:
+                    s = (cur->interval == 30000 ? NATS_OK : NATS_ERR);
+                    break;
+                default:
+                    s = NATS_ERR;
+            }
+            cur = cur->next;
+            idx++;
+        }
+        natsMutex_Unlock(timers->lock);
+    }
+    testCond(s == NATS_OK);
+
+    for (i=0; i<5; i++)
+    {
+        natsTimer_Destroy(timers[i]);
+        timers[i] = NULL;
+    }
+
+    test("Create performance: ");
+    s = NATS_OK;
+    start = nats_NowInNanoSeconds();
+    for (i=0; (s == NATS_OK) && (i<numTimers); i++)
+        s = natsTimer_Create(&(timers[i]), _dummyTimerCB, NULL, 10000+i, NULL);
+    if (s == NATS_OK)
+        dur = nats_NowInNanoSeconds() - start;
+    testCond((s == NATS_OK) && (dur < NATS_SECONDS_TO_NANOS(1)));
+
+    test("Verify count: ");
+    testCond(nats_getTimersCountInList() == numTimers);
+
+    test("Destroy performance: ");
+    start = nats_NowInNanoSeconds();
+    for (i=0; i<numTimers; i++)
+        natsTimer_Destroy(timers[i]);
+    dur = nats_NowInNanoSeconds() - start;
+    testCond(dur < NATS_SECONDS_TO_NANOS(1));
+
+    test("Verify count: ");
+    testCond(nats_getTimersCountInList() == 0);
+
+    free(timers);
+    timers = NULL;
 
     // Create a timer that will not be stopped here to exercise
     // code that cleans up timers when library is unloaded.

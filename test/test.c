@@ -12391,23 +12391,45 @@ void test_CustomInbox(void)
         nats_clearLastError();
     }
 
-    test("Good prefix: ");
-    s = natsOptions_SetCustomInboxPrefix(opts, "my.prefix");
-    testCond((s == NATS_OK) && (opts->inboxPfx != NULL)
-                && (strcmp(opts->inboxPfx, "my.prefix.") == 0));
-
     arg.string = "I will help you";
     arg.control= 4;
 
-    for (mode=0; mode<2; mode++)
+    for (mode=0; mode<4; mode++)
     {
-        test("Set old request style: ");
-        s = natsOptions_UseOldRequestStyle(opts, true);
-        testCond(s == NATS_OK);
+        const char  *smallPrefix = "prefix.small";
+        const char  *bigPrefix   = "prefix.that.is.very.very.very.very.very.very.big.to.make.sure.that.we.do.proper.memory.allocation";
+        const char  *prefix      = (mode < 2 ? smallPrefix : bigPrefix);
+
+        if (mode < 2)
+        {
+            test("Set small prefix: ");
+        }
+        else
+        {
+            test("Set big prefix: ");
+        }
+        s = natsOptions_SetCustomInboxPrefix(opts, prefix);
+        testCond((s == NATS_OK) && (opts->inboxPfx != NULL)
+                    && (strstr(opts->inboxPfx, prefix) == opts->inboxPfx)
+                    && (strlen(opts->inboxPfx) == strlen(prefix) + 1)
+                    && (opts->inboxPfx[strlen(opts->inboxPfx)-1] == '.'));
+
+        if (mode % 2 == 0)
+        {
+            test("Set old request style: ");
+            s = natsOptions_UseOldRequestStyle(opts, true);
+            testCond(s == NATS_OK);
+        }
+        else
+        {
+            test("Use new request style: ");
+            s = natsOptions_UseOldRequestStyle(opts, false);
+            testCond(s == NATS_OK);
+        }
 
         test("Connect and setup sub: ");
         s = natsConnection_Connect(&nc, opts);
-        IFOK(s, natsConnection_SubscribeSync(&sub1, nc, "my.prefix.>"));
+        IFOK(s, natsConnection_SubscribeSync(&sub1, nc, "prefix.>"));
         IFOK(s, natsConnection_Subscribe(&sub2, nc, "foo", _recvTestString, (void*) &arg));
         testCond(s == NATS_OK);
 
@@ -12420,7 +12442,7 @@ void test_CustomInbox(void)
         test("Check custom inbox: ");
         s = natsSubscription_NextMsg(&msg, sub1, 500);
         testCond((s == NATS_OK) && (msg != NULL)
-                    && (strstr(natsMsg_GetSubject(msg), "my.prefix.") == natsMsg_GetSubject(msg)));
+                    && (strstr(natsMsg_GetSubject(msg), prefix) == natsMsg_GetSubject(msg)));
         natsMsg_Destroy(msg);
         msg = NULL;
 

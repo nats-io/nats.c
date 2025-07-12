@@ -111,7 +111,7 @@ void
 natsConn_processAsyncINFO(natsConnection *nc, char *buf, int len);
 
 natsStatus
-natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox, int respInboxSize);
+natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox);
 
 void
 natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock);

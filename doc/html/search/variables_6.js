@@ -1,7 +1,4 @@
 var searchData=
 [
-  ['handler_0',['Handler',['../structmicro__endpoint__config__s.html#a4a916af910a5eb88abf3f0aa60082667',1,'micro_endpoint_config_s']]],
-  ['headersonly_1',['headersonly',['../structjs_re_publish.html#a16ebc4cdae4a407cf4e32aad212888db',1,'jsRePublish::HeadersOnly'],['../structjs_consumer_config.html#a30d4142bac47ab6dc583c5ee193704e6',1,'jsConsumerConfig::HeadersOnly']]],
-  ['heartbeat_2',['heartbeat',['../structjs_consumer_config.html#ac439828c3bedb8826a1e92de13280d53',1,'jsConsumerConfig::Heartbeat'],['../structjs_fetch_request.html#ae8e73c7cc2e2a2d2502407c9b1522496',1,'jsFetchRequest::Heartbeat'],['../structjs_options_pull_subscribe_async.html#a6583dfdee172d82b6877d9e6ff4e845c',1,'jsOptionsPullSubscribeAsync::Heartbeat']]],
-  ['history_3',['History',['../structkv_config.html#a0ec6b3afbfdaa33436e2ae748e986e98',1,'kvConfig']]]
+  ['group_0',['group',['../structjs_priority_group_state.html#a0f8811c8712134d885f13f0f0b70b2a3',1,'jsPriorityGroupState::Group'],['../structjs_fetch_request.html#a298e98d26850e1105833689c280e4f5e',1,'jsFetchRequest::Group'],['../structjs_options_pull_subscribe_async.html#ad133f4ce6e9147f991ba837fc40ed538',1,'jsOptionsPullSubscribeAsync::Group']]]
 ];

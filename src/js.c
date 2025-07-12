@@ -842,19 +842,23 @@ _timeoutPubAsync(natsTimer *t, void *closure)
 
     while (((pm = js->pmHead) != NULL) && (pm->deadline <= now))
     {
-        natsMsg *m = NULL;
+        // Check if the corresponding message is still in the hashtable.
+        char *id = (pm->subject+js->rpreLen);
+        if (natsStrHash_Get(js->pm, id) != NULL)
+        {
+            natsMsg *m = NULL;
 
-        if (natsMsg_Create(&m, pm->subject, NULL, NULL, 0) != NATS_OK)
-            break;
+            if (natsMsg_Create(&m, pm->subject, NULL, NULL, 0) == NATS_OK)
+            {
+                natsMsg_setTimeout(m);
 
-        natsMsg_setTimeout(m);
-
-        // Best attempt, ignore NATS_SLOW_CONSUMER errors which may be returned
-        // here.
-        nats_lockSubAndDispatcher(js->rsub);
-        natsSub_enqueueUserMessage(js->rsub, m);
-        nats_unlockSubAndDispatcher(js->rsub);
-
+                // Best attempt, ignore NATS_SLOW_CONSUMER errors which may be returned here.
+                nats_lockSubAndDispatcher(js->rsub);
+                natsSub_enqueueUserMessage(js->rsub, m);
+                nats_unlockSubAndDispatcher(js->rsub);
+            }
+        }
+        // Remove from the list.
         js->pmHead = pm->next;
         _destroyPMInfo(pm);
     }

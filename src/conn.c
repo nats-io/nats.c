@@ -737,12 +737,14 @@ _makeTLSConn(natsConnection *nc)
             }
             if (s == NATS_OK)
             {
-                SSL_verify_cb cb = _collectSSLErr;
 #ifdef NATS_WITH_EXPERIMENTAL
+                SSL_verify_cb cb = _collectSSLErr;
                 if (nc->opts->sslCtx->callback != NULL)
                     cb = nc->opts->sslCtx->callback;
-#endif // NATS_WITH_EXPERIMENTAL
                 SSL_set_verify(ssl, SSL_VERIFY_PEER, cb);
+#else
+                SSL_set_verify(ssl, SSL_VERIFY_PEER, _collectSSLErr);
+#endif // NATS_WITH_EXPERIMENTAL
             }
         }
     }
@@ -3360,7 +3362,7 @@ _processUrlString(natsOptions *opts, const char *urls)
     serverUrls = (char**) NATS_CALLOC(count + 1, sizeof(char*));
     if (serverUrls == NULL)
         return NATS_NO_MEMORY;
-    
+
     if (s == NATS_OK)
     {
         urlsCopy = NATS_STRDUP(urls);

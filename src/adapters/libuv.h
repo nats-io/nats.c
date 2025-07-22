@@ -250,6 +250,8 @@ uvFinalCloseCb(uv_handle_t* handle)
     free(nle->scheduler);
     uv_mutex_destroy(nle->lock);
     free(nle->lock);
+    // This will release the connection that is retained by the library on the first attach.
+    natsConnection_Destroy(nle->nc);
     free(nle);
 }
 
@@ -420,6 +422,10 @@ natsLibuv_Read(void *userData, bool add)
     natsLibuvEvents *nle = (natsLibuvEvents*) userData;
     natsStatus      s    = NATS_OK;
     bool            sched;
+
+    // If we remove, first stop polling immediately, then proceed as usual.
+    if (!add)
+        uv_poll_stop(nle->handle);
 
     sched = ((uv_key_get(&uvLoopThreadKey) != nle->loop) ? true : false);
 

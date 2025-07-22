@@ -771,6 +771,7 @@ struct __natsConnection
     {
         bool            attached;
         bool            writeAdded;
+        bool            retained;   // Will be set to true at the very first successful attach.
         void            *buffer;
         void            *data;
     } el;

@@ -2013,6 +2013,10 @@ _processConnInit(natsConnection *nc)
             // event just after this call returns.
             nc->sockCtx.useEventLoop = true;
 
+            // For the very first attach, we will retain the connection.
+            if (!nc->el.retained)
+                _retain(nc);
+
             s = nc->opts->evCbs.attach(&(nc->el.data),
                                        nc->opts->evLoop,
                                        nc,
@@ -2020,10 +2024,16 @@ _processConnInit(natsConnection *nc)
             if (s == NATS_OK)
             {
                 nc->el.attached = true;
+                nc->el.retained = true;
             }
             else
             {
                 nc->sockCtx.useEventLoop = false;
+
+                // If this was the very first attach and we failed, release the connection
+                // to compensate for the retain above.
+                if (!nc->el.retained)
+                    _release(nc);
 
                 nats_setError(s,
                               "Error attaching to the event loop: %d - %s",
@@ -4164,8 +4174,6 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
         }
     }
 
-    _retain(nc);
-
     buffer = nc->el.buffer;
     size   = nc->opts->ioBufSize;
 
@@ -4184,8 +4192,6 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
 
     if (s != NATS_OK)
         _processOpError(nc, s, false);
-
-    natsConn_release(nc);
 }
 
 void

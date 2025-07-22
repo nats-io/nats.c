@@ -240,6 +240,8 @@ _freeCb(evutil_socket_t ignoredSocket, short ignoredEvent, void *arg)
         event_active(nle->keepActive, 0, 0);
         event_free(nle->keepActive);
     }
+    // This will release the connection that is retained by the library on the first attach.
+    natsConnection_Destroy(nle->nc);
     free(nle);
 }
 

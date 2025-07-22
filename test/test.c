@@ -20457,7 +20457,13 @@ _evLoopWrite(void *userData, bool add)
 static natsStatus
 _evLoopDetach(void *userData)
 {
-    struct threadArg *arg = (struct threadArg *) userData;
+    struct threadArg    *arg = (struct threadArg *) userData;
+    natsConnection      *nc  = NULL;
+
+    natsMutex_Lock(arg->m);
+    nc = arg->nc;
+    natsMutex_Unlock(arg->m);
+    natsConnection_Destroy(nc);
 
     natsMutex_Lock(arg->m);
     arg->detached++;
@@ -20541,6 +20547,8 @@ void test_EventLoop(void)
     IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg));
     IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
     testCond(s == NATS_OK);
+
+    arg.nc = nc;
 
     pid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(pid);
@@ -20670,6 +20678,8 @@ void test_EventLoopRetryOnFailedConnect(void)
                                      _evLoopDetach));
     testCond(s == NATS_OK);
 
+    arg.nc = nc;
+
     test("Start event loop: ");
     natsMutex_Lock(arg.m);
     arg.sock = NATS_SOCK_INVALID;
@@ -20756,6 +20766,8 @@ void test_EventLoopTLS(void)
                                      _evLoopWrite,
                                      _evLoopDetach));
     testCond(s == NATS_OK);
+
+    arg.nc = nc;
 
     test("Start server: ");
     pid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);

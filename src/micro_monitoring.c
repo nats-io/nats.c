@@ -325,7 +325,7 @@ marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
                 IFOK_attr("queue_group", ep->QueueGroup, ",");
             IFOK(s, nats_marshalLong(buf, false, "num_requests", ep->NumRequests));
             IFOK(s, nats_marshalLong(buf, true, "num_errors", ep->NumErrors));
-            IFOK(s, nats_marshalDuration(buf, true, "average_processing_time", ep->AverageProcessingTimeNanoseconds));
+            IFOK(s, nats_marshalLong(buf, true, "average_processing_time", ep->AverageProcessingTimeNanoseconds));
             IFOK(s, natsBuf_AppendByte(buf, ','));
             IFOK_attr("last_error", ep->LastErrorString, "");
             IFOK(s, natsBuf_AppendByte(buf, '}'));

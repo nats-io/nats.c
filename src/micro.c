@@ -933,8 +933,12 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
                 MICRO_CALL(err, micro_strdup((char **)&stats->Endpoints[len].QueueGroup, micro_queue_group_for_endpoint(ep)));
                 if (err == NULL)
                 {
-                    avg = (long double)ep->stats.ProcessingTimeSeconds * 1000000000.0 + (long double)ep->stats.ProcessingTimeNanoseconds;
-                    avg = avg / (long double)ep->stats.NumRequests;
+                    avg = 0.0;
+                    if (ep->stats.NumRequests >= 1)
+                    {
+                        avg = (long double)ep->stats.ProcessingTimeSeconds * 1000000000.0 + (long double)ep->stats.ProcessingTimeNanoseconds;
+                        avg = avg / (long double)ep->stats.NumRequests;
+                    }
                     stats->Endpoints[len].AverageProcessingTimeNanoseconds = (int64_t)avg;
                     len++;
                     stats->EndpointsLen = len;

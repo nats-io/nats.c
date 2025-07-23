@@ -35194,6 +35194,29 @@ void test_MicroBasics(void)
 
     _startManyMicroservices(svcs, NUM_MICRO_SERVICES, nc, &cfg, eps, sizeof(eps)/sizeof(eps[0]), &arg);
 
+    test("Get stats before any activity: ");
+    for (i=0; (s == NATS_OK) && (i<NUM_MICRO_SERVICES); i++)
+    {
+        microServiceStats *stats = NULL;
+
+        err = microService_GetStats(&stats, svcs[i]);
+        if (err == NULL)
+        {
+            int j;
+
+            for (j=0; (s == NATS_OK) && (j<stats->EndpointsLen); j++)
+                s = (stats->Endpoints[j].AverageProcessingTimeNanoseconds == 0 ? NATS_OK : NATS_ERR);
+
+            microServiceStats_Destroy(stats);
+        }
+        else
+        {
+            s = NATS_ERR;
+            microError_Destroy(err);
+        }
+    }
+    testCond(s == NATS_OK);
+
     // Now send 50 requests.
     test("Send 50 requests (no matter response): ");
     for (i = 0; i < 50; i++)
@@ -35364,17 +35387,22 @@ void test_MicroBasics(void)
         s = nats_JSONGetArrayObject(js, "endpoints", &array, &array_len);
         testCond((NATS_OK == s) && (array != NULL) && (array_len == 2))
 
-        test("Ensure endpoint 0 has num_requests: ");
+        test("Ensure second endpoint has num_requests: ");
         n = 0;
         s = nats_JSONGetInt(array[1], "num_requests", &n);
         testCond(NATS_OK == s);
         num_requests += n;
 
-        test("Ensure endpoint 0 has num_errors: ");
+        test("Ensure second endpoint has num_errors: ");
         n = 0;
         s = nats_JSONGetInt(array[1], "num_errors", &n);
         testCond(NATS_OK == s);
         num_errors += n;
+
+        test("Ensure second endpoint has average_processing_time as a positive number: ");
+        int64_t avg = 0;
+        s = nats_JSONGetLong(array[1], "average_processing_time", &avg);
+        testCond((s == NATS_OK) && (avg > 0));
 
         NATS_FREE(array);
         nats_JSONDestroy(js);

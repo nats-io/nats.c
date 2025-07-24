@@ -203,7 +203,8 @@ _handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *c
     full_s = stats->ProcessingTimeNanoseconds / 1000000000;
     stats->ProcessingTimeSeconds += full_s;
     stats->ProcessingTimeNanoseconds -= full_s * 1000000000;
-    _update_last_error(ep, err);
+    if (err != NULL)
+        _update_last_error(ep, err);
     micro_unlock_endpoint(ep);
 
     microError_Destroy(err);

@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.10.0-beta</span>
+   &#160;<span id="projectnumber">3.11.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -174,8 +174,19 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a8bfc0284c57028bf9cf809205d989959"><td class="mdescLeft">&#160;</td><td class="mdescRight">User-provided metadata for the consumer, encoded as an array of {"key", "value",...}.  <br /></td></tr>
 <tr class="separator:a8bfc0284c57028bf9cf809205d989959"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:acf04468ef0a8bc4e83912e850e47a8ae" id="r_acf04468ef0a8bc4e83912e850e47a8ae"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_config.html#acf04468ef0a8bc4e83912e850e47a8ae">PauseUntil</a></td></tr>
-<tr class="memdesc:acf04468ef0a8bc4e83912e850e47a8ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">Suspends the consumer until this deadline, represented as number of nanoseconds since epoch.  <br /></td></tr>
+<tr class="memdesc:acf04468ef0a8bc4e83912e850e47a8ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">Suspends the consumer until this deadline, represented as number of nanoseconds since epoch. Requires nats-server v2.11.0 or later.  <br /></td></tr>
 <tr class="separator:acf04468ef0a8bc4e83912e850e47a8ae"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a0f30e4f7cd24c517efa7fae2d482ca3a" id="r_a0f30e4f7cd24c517efa7fae2d482ca3a"><td class="memItemLeft" align="right" valign="top">const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_config.html#a0f30e4f7cd24c517efa7fae2d482ca3a">PriorityPolicy</a></td></tr>
+<tr class="memdesc:a0f30e4f7cd24c517efa7fae2d482ca3a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Represents he priority policy the consumer is set to. Must be "pinned_client" or "overflow". Requires nats-server v2.11.0 or later.  <br /></td></tr>
+<tr class="separator:a0f30e4f7cd24c517efa7fae2d482ca3a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a98b6a4046149d3b5a50bb37e51c9d0a2" id="r_a98b6a4046149d3b5a50bb37e51c9d0a2"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_config.html#a98b6a4046149d3b5a50bb37e51c9d0a2">PinnedTTL</a></td></tr>
+<tr class="memdesc:a98b6a4046149d3b5a50bb37e51c9d0a2"><td class="mdescLeft">&#160;</td><td class="mdescRight">PinnedTTL represents the time after which the client will be unpinned if no new pull requests are sent. Used with PriorityPolicyPinned. Expressed in nanoseconds. Requires nats-server v2.11.0 or later.  <br /></td></tr>
+<tr class="separator:a98b6a4046149d3b5a50bb37e51c9d0a2"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a96779add42dd21350c23cffa9d7bd83d" id="r_a96779add42dd21350c23cffa9d7bd83d"><td class="memItemLeft" align="right" valign="top">const char **&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_config.html#a96779add42dd21350c23cffa9d7bd83d">PriorityGroups</a></td></tr>
+<tr class="memdesc:a96779add42dd21350c23cffa9d7bd83d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The list of priority groups this consumer supports.  <br /></td></tr>
+<tr class="separator:a96779add42dd21350c23cffa9d7bd83d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a022cdb0ea01d992c1cf68515290f30e0" id="r_a022cdb0ea01d992c1cf68515290f30e0"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_config.html#a022cdb0ea01d992c1cf68515290f30e0">PriorityGroupsLen</a></td></tr>
+<tr class="separator:a022cdb0ea01d992c1cf68515290f30e0"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Configuration of a JetStream consumer.</p>
@@ -646,6 +657,62 @@ NATS server 2.10 added consumer Metadata which contains user-provided string nam
       <table class="memname">
         <tr>
           <td class="memname">int64_t jsConsumerConfig::PauseUntil</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a0f30e4f7cd24c517efa7fae2d482ca3a" name="a0f30e4f7cd24c517efa7fae2d482ca3a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0f30e4f7cd24c517efa7fae2d482ca3a">&#9670;&#160;</a></span>PriorityPolicy</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">const char* jsConsumerConfig::PriorityPolicy</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a98b6a4046149d3b5a50bb37e51c9d0a2" name="a98b6a4046149d3b5a50bb37e51c9d0a2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a98b6a4046149d3b5a50bb37e51c9d0a2">&#9670;&#160;</a></span>PinnedTTL</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int64_t jsConsumerConfig::PinnedTTL</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a96779add42dd21350c23cffa9d7bd83d" name="a96779add42dd21350c23cffa9d7bd83d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a96779add42dd21350c23cffa9d7bd83d">&#9670;&#160;</a></span>PriorityGroups</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">const char** jsConsumerConfig::PriorityGroups</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a022cdb0ea01d992c1cf68515290f30e0" name="a022cdb0ea01d992c1cf68515290f30e0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a022cdb0ea01d992c1cf68515290f30e0">&#9670;&#160;</a></span>PriorityGroupsLen</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int jsConsumerConfig::PriorityGroupsLen</td>
         </tr>
       </table>
 </div><div class="memdoc">

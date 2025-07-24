@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.10.0-beta</span>
+   &#160;<span id="projectnumber">3.11.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -158,6 +158,8 @@ Classes</h2></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_sequence_info.html">jsSequenceInfo</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_priority_group_state.html">jsPriorityGroupState</a></td></tr>
+<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html">jsConsumerInfo</a></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info_list.html">jsConsumerInfoList</a></td></tr>
@@ -288,6 +290,8 @@ Typedefs</h2></td></tr>
 <tr class="separator:ga39011d30b295759b7f6ca0a7539dff8f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga27e1a5d5b513f9eb7d61a17db71f8003" id="r_ga27e1a5d5b513f9eb7d61a17db71f8003"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_sequence_info.html">jsSequenceInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga27e1a5d5b513f9eb7d61a17db71f8003">jsSequenceInfo</a></td></tr>
 <tr class="separator:ga27e1a5d5b513f9eb7d61a17db71f8003"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gacb09dc9c012f1835da1d547790aa2ebf" id="r_gacb09dc9c012f1835da1d547790aa2ebf"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_priority_group_state.html">jsPriorityGroupState</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gacb09dc9c012f1835da1d547790aa2ebf">jsPriorityGroupState</a></td></tr>
+<tr class="separator:gacb09dc9c012f1835da1d547790aa2ebf"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga2f21bb79884e56a5613d7fe76b11b1e5" id="r_ga2f21bb79884e56a5613d7fe76b11b1e5"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_consumer_info.html">jsConsumerInfo</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga2f21bb79884e56a5613d7fe76b11b1e5">jsConsumerInfo</a></td></tr>
 <tr class="separator:ga2f21bb79884e56a5613d7fe76b11b1e5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gadad3bf72baae970662248d82d9b05d0a" id="r_gadad3bf72baae970662248d82d9b05d0a"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="structjs_consumer_info_list.html">jsConsumerInfoList</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#gadad3bf72baae970662248d82d9b05d0a">jsConsumerInfoList</a></td></tr>
@@ -1068,6 +1072,21 @@ NATS server 2.10 added consumer Metadata which contains user-provided string nam
       </table>
 </div><div class="memdoc">
 <p>Has both the consumer and the stream sequence and last activity. </p>
+
+</div>
+</div>
+<a id="gacb09dc9c012f1835da1d547790aa2ebf" name="gacb09dc9c012f1835da1d547790aa2ebf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gacb09dc9c012f1835da1d547790aa2ebf">&#9670;&#160;</a></span>jsPriorityGroupState</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="structjs_priority_group_state.html">jsPriorityGroupState</a> <a class="el" href="structjs_priority_group_state.html">jsPriorityGroupState</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Describes the configuration of priority groups in a pull consumer. </p>
 
 </div>
 </div>

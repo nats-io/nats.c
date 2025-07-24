@@ -34528,7 +34528,15 @@ static microError *
 _microHandleRequestNoisy42(microRequest *req)
 {
     if ((rand() % 10) == 0)
+    {
+        struct threadArg *arg = (struct threadArg*) microService_GetState(req->Service);
+
+        natsMutex_Lock(arg->m);
+        arg->sum++;
+        natsMutex_Unlock(arg->m);
+
         return micro_Errorf("Unexpected error!");
+    }
 
     // Happy Path.
     // Random delay between 5-10ms
@@ -35169,6 +35177,7 @@ void test_MicroBasics(void)
     nats_JSON *md = NULL;
     int num_requests = 0;
     int num_errors = 0;
+    char *lastErr = NULL;
     int n;
     nats_JSON **array;
     int array_len;
@@ -35260,6 +35269,7 @@ void test_MicroBasics(void)
         if (s == NATS_TIMEOUT)
         {
             testCond(i == NUM_MICRO_SERVICES);
+            nats_clearLastError();
             break;
         }
         testCond(NATS_OK == s);
@@ -35338,6 +35348,7 @@ void test_MicroBasics(void)
         if (s == NATS_TIMEOUT)
         {
             testCond(i == NUM_MICRO_SERVICES);
+            nats_clearLastError();
             break;
         }
         testCond(NATS_OK == s);
@@ -35372,6 +35383,7 @@ void test_MicroBasics(void)
         if (s == NATS_TIMEOUT)
         {
             testCond(i == NUM_MICRO_SERVICES);
+            nats_clearLastError();
             break;
         }
         testCond(NATS_OK == s);
@@ -35399,6 +35411,14 @@ void test_MicroBasics(void)
         testCond(NATS_OK == s);
         num_errors += n;
 
+        test("Ensure second endpoint last_error is set if num_errors is positive: ");
+        lastErr = NULL;
+        s = nats_JSONGetStr(array[1], "last_error", &lastErr);
+        testCond((s == NATS_OK) && (((n == 0) && nats_IsStringEmpty(lastErr)) ||
+                                    ((n > 0) && (strcmp(lastErr, "Unexpected error!") == 0))));
+        free(lastErr);
+        lastErr = NULL;
+
         test("Ensure second endpoint has average_processing_time as a positive number: ");
         int64_t avg = 0;
         s = nats_JSONGetLong(array[1], "average_processing_time", &avg);
@@ -35411,7 +35431,11 @@ void test_MicroBasics(void)
     test("Check that STATS total request counts add up (50): ");
     testCond(num_requests == 50);
     test("Check that STATS total error count is positive, depends on how many instances: ");
-    testCond(num_errors > 0);
+    natsMutex_Lock(arg.m);
+    // The arg.sum value is incremented when the service handler returns an error.
+    s = (arg.sum == num_errors ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
     natsInbox_Destroy(inbox);

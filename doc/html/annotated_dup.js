@@ -24,6 +24,7 @@ var annotated_dup =
     [ "jsOptionsStreamPurge", "structjs_options_stream_purge.html", "structjs_options_stream_purge" ],
     [ "jsPeerInfo", "structjs_peer_info.html", "structjs_peer_info" ],
     [ "jsPlacement", "structjs_placement.html", "structjs_placement" ],
+    [ "jsPriorityGroupState", "structjs_priority_group_state.html", "structjs_priority_group_state" ],
     [ "jsPubAck", "structjs_pub_ack.html", "structjs_pub_ack" ],
     [ "jsPubAckErr", "structjs_pub_ack_err.html", "structjs_pub_ack_err" ],
     [ "jsPubOptions", "structjs_pub_options.html", "structjs_pub_options" ],

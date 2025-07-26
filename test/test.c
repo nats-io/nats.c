@@ -2901,8 +2901,8 @@ void test_natsOptions(void)
     test("Set Max Pending Bytes : ");
     s = natsOptions_SetMaxPendingBytes(opts, 1000000);
     testCond((s == NATS_OK) && (opts->maxPendingBytes == 1000000))
-
-	test("Set Proxy Connection Handler: ")
+	
+    test("Set Proxy Connection Handler: ")
     s = natsOptions_SetProxyConnHandler(opts, _dummyProxyConnHandler);
     testCond(s == NATS_OK && opts->proxyConnectCb == _dummyProxyConnHandler)
 

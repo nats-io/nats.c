@@ -1,4 +1,4 @@
-// Copyright 2015-2024 The NATS Authors
+// Copyright 2015-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -46,7 +46,8 @@ typedef struct __natsLibTimers
     natsMutex *lock;
     natsCondition *cond;
     natsThread *thread;
-    natsTimer *timers;
+    natsTimer *head;
+    natsTimer *tail;
     int count;
     bool changed;
     bool shutdown;

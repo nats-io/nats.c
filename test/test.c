@@ -1237,9 +1237,20 @@ void test_natsTimer(void)
     natsTimer           *t = NULL;
     struct threadArg    tArg;
     int                 refs;
+    int                 numTimers = 100000;
+    natsTimer           **timers;
+    int                 i;
+    int64_t             start = 0;
+    int64_t             dur   = 0;
 
     test("Setup test: ");
     s = _createDefaultThreadArgsForCbTests(&tArg);
+    if (s == NATS_OK)
+    {
+        timers = (natsTimer**) calloc(numTimers, sizeof(natsTimer*));
+        if (timers == NULL)
+            s = NATS_ERR;
+    }
     testCond(s == NATS_OK);
 
     tArg.control      = 0;
@@ -1443,6 +1454,99 @@ void test_natsTimer(void)
     natsTimer_Release(t);
 
     _destroyDefaultThreadArgs(&tArg);
+
+    // Test insert code and make sure timers are added in the proper order.
+    test("Add as first: ");
+    s = natsTimer_Create(&(timers[0]), _dummyTimerCB, NULL, 10000, NULL);
+    testCond(s == NATS_OK);
+
+    test("Add to the end: ");
+    s = natsTimer_Create(&(timers[1]), _dummyTimerCB, NULL, 20000, NULL);
+    testCond(s == NATS_OK);
+
+    test("Add to the end again: ");
+    s = natsTimer_Create(&(timers[2]), _dummyTimerCB, NULL, 30000, NULL);
+    testCond(s == NATS_OK);
+
+    test("Add as first again: ");
+    s = natsTimer_Create(&(timers[3]), _dummyTimerCB, NULL, 1000, NULL);
+    testCond(s == NATS_OK);
+
+    test("Insert in between: ");
+    s = natsTimer_Create(&(timers[4]), _dummyTimerCB, NULL, 15000, NULL);
+    testCond(s == NATS_OK);
+
+    test("Verify count: ");
+    testCond(nats_getTimersCountInList() == 5);
+
+    test("Verify order: ");
+    {
+        natsLibTimers   *timers = &(nats_lib()->timers);
+        natsTimer       *cur    = NULL;
+        int             idx     = 0;
+
+        s = NATS_OK;
+        natsMutex_Lock(timers->lock);
+        cur = timers->head;
+        while ((s == NATS_OK) && (cur != NULL))
+        {
+            switch (idx)
+            {
+                case 0:
+                    s = (cur->interval == 1000 ? NATS_OK : NATS_ERR);
+                    break;
+                case 1:
+                    s = (cur->interval == 10000 ? NATS_OK : NATS_ERR);
+                    break;
+                case 2:
+                    s = (cur->interval == 15000 ? NATS_OK : NATS_ERR);
+                    break;
+                case 3:
+                    s = (cur->interval == 20000 ? NATS_OK : NATS_ERR);
+                    break;
+                case 4:
+                    s = (cur->interval == 30000 ? NATS_OK : NATS_ERR);
+                    break;
+                default:
+                    s = NATS_ERR;
+            }
+            cur = cur->next;
+            idx++;
+        }
+        natsMutex_Unlock(timers->lock);
+    }
+    testCond(s == NATS_OK);
+
+    for (i=0; i<5; i++)
+    {
+        natsTimer_Destroy(timers[i]);
+        timers[i] = NULL;
+    }
+
+    test("Create performance: ");
+    s = NATS_OK;
+    start = nats_NowInNanoSeconds();
+    for (i=0; (s == NATS_OK) && (i<numTimers); i++)
+        s = natsTimer_Create(&(timers[i]), _dummyTimerCB, NULL, 10000+i, NULL);
+    if (s == NATS_OK)
+        dur = nats_NowInNanoSeconds() - start;
+    testCond((s == NATS_OK) && (dur < NATS_SECONDS_TO_NANOS(1)));
+
+    test("Verify count: ");
+    testCond(nats_getTimersCountInList() == numTimers);
+
+    test("Destroy performance: ");
+    start = nats_NowInNanoSeconds();
+    for (i=0; i<numTimers; i++)
+        natsTimer_Destroy(timers[i]);
+    dur = nats_NowInNanoSeconds() - start;
+    testCond(dur < NATS_SECONDS_TO_NANOS(1));
+
+    test("Verify count: ");
+    testCond(nats_getTimersCountInList() == 0);
+
+    free(timers);
+    timers = NULL;
 
     // Create a timer that will not be stopped here to exercise
     // code that cleans up timers when library is unloaded.
@@ -5143,6 +5247,12 @@ void test_HeadersLift(void)
     snprintf(buf, sizeof(buf), "%sk: a\r\n   bc\r\n def\r\n\r\n", HDR_LINE);
     _testHeader("Multiline values: ", buf, NATS_OK, "", "k", "a bc def");
 
+    snprintf(buf, sizeof(buf), "%sk:\r\n\r\n", HDR_LINE);
+    _testHeader("No value: ", buf, NATS_OK, "no value found for key", "k", "");
+
+    snprintf(buf, sizeof(buf), "%sk:       \r\n\r\n", HDR_LINE);
+    _testHeader("No value (extra spaces): ", buf, NATS_OK, "no value found for key", "k", "");
+
     snprintf(buf, sizeof(buf), "%s", "NATS\r\nk:v\r\n\r\n");
     _testHeader("NATS header missing: ", buf, NATS_PROTOCOL_ERROR, "header prefix missing", NULL, NULL);
 
@@ -5157,12 +5267,6 @@ void test_HeadersLift(void)
 
     snprintf(buf, sizeof(buf), "%sk\r\n\r\n", HDR_LINE);
     _testHeader("Column missing: ", buf, NATS_PROTOCOL_ERROR, "column delimiter not found", NULL, NULL);
-
-    snprintf(buf, sizeof(buf), "%sk:\r\n\r\n", HDR_LINE);
-    _testHeader("No value: ", buf, NATS_PROTOCOL_ERROR, "no value found for key", NULL, NULL);
-
-    snprintf(buf, sizeof(buf), "%sk:       \r\n\r\n", HDR_LINE);
-    _testHeader("No value (extra spaces): ", buf, NATS_PROTOCOL_ERROR, "no value found for key", NULL, NULL);
 
     // Check status description in header line prefix...
 
@@ -12301,23 +12405,45 @@ void test_CustomInbox(void)
         nats_clearLastError();
     }
 
-    test("Good prefix: ");
-    s = natsOptions_SetCustomInboxPrefix(opts, "my.prefix");
-    testCond((s == NATS_OK) && (opts->inboxPfx != NULL)
-                && (strcmp(opts->inboxPfx, "my.prefix.") == 0));
-
     arg.string = "I will help you";
     arg.control= 4;
 
-    for (mode=0; mode<2; mode++)
+    for (mode=0; mode<4; mode++)
     {
-        test("Set old request style: ");
-        s = natsOptions_UseOldRequestStyle(opts, true);
-        testCond(s == NATS_OK);
+        const char  *smallPrefix = "prefix.small";
+        const char  *bigPrefix   = "prefix.that.is.very.very.very.very.very.very.big.to.make.sure.that.we.do.proper.memory.allocation";
+        const char  *prefix      = (mode < 2 ? smallPrefix : bigPrefix);
+
+        if (mode < 2)
+        {
+            test("Set small prefix: ");
+        }
+        else
+        {
+            test("Set big prefix: ");
+        }
+        s = natsOptions_SetCustomInboxPrefix(opts, prefix);
+        testCond((s == NATS_OK) && (opts->inboxPfx != NULL)
+                    && (strstr(opts->inboxPfx, prefix) == opts->inboxPfx)
+                    && (strlen(opts->inboxPfx) == strlen(prefix) + 1)
+                    && (opts->inboxPfx[strlen(opts->inboxPfx)-1] == '.'));
+
+        if (mode % 2 == 0)
+        {
+            test("Set old request style: ");
+            s = natsOptions_UseOldRequestStyle(opts, true);
+            testCond(s == NATS_OK);
+        }
+        else
+        {
+            test("Use new request style: ");
+            s = natsOptions_UseOldRequestStyle(opts, false);
+            testCond(s == NATS_OK);
+        }
 
         test("Connect and setup sub: ");
         s = natsConnection_Connect(&nc, opts);
-        IFOK(s, natsConnection_SubscribeSync(&sub1, nc, "my.prefix.>"));
+        IFOK(s, natsConnection_SubscribeSync(&sub1, nc, "prefix.>"));
         IFOK(s, natsConnection_Subscribe(&sub2, nc, "foo", _recvTestString, (void*) &arg));
         testCond(s == NATS_OK);
 
@@ -12330,7 +12456,7 @@ void test_CustomInbox(void)
         test("Check custom inbox: ");
         s = natsSubscription_NextMsg(&msg, sub1, 500);
         testCond((s == NATS_OK) && (msg != NULL)
-                    && (strstr(natsMsg_GetSubject(msg), "my.prefix.") == natsMsg_GetSubject(msg)));
+                    && (strstr(natsMsg_GetSubject(msg), prefix) == natsMsg_GetSubject(msg)));
         natsMsg_Destroy(msg);
         msg = NULL;
 
@@ -20086,12 +20212,14 @@ void test_HeadersNotSupported(void)
 void test_HeadersBasic(void)
 {
     natsStatus          s;
-    natsConnection      *nc     = NULL;
-    natsPid             pid     = NATS_INVALID_PID;
-    natsMsg             *msg    = NULL;
-    natsMsg             *rmsg   = NULL;
-    natsSubscription    *sub    = NULL;
-    const char          *val    = NULL;
+    natsConnection      *nc      = NULL;
+    natsPid             pid      = NATS_INVALID_PID;
+    natsMsg             *msg     = NULL;
+    natsMsg             *rmsg    = NULL;
+    natsSubscription    *sub     = NULL;
+    const char          *val     = NULL;
+    int                 count    = 0;
+    const char          **values = NULL;
 
     if (!serverVersionAtLeast(2, 2, 0))
     {
@@ -20123,6 +20251,24 @@ void test_HeadersBasic(void)
     IFOK(s, natsMsgHeader_Set(msg, "Headers", "Hello Headers!"))
     testCond(s == NATS_OK);
 
+    test("Add NULL header: ");
+    IFOK(s, natsMsgHeader_Add(msg, "NULL header", NULL))
+    testCond(s == NATS_OK);
+
+    test("Add empty header: ");
+    IFOK(s, natsMsgHeader_Add(msg, "Empty header", ""))
+    testCond(s == NATS_OK);
+
+    test("Add whitespace header: ");
+    IFOK(s, natsMsgHeader_Add(msg, "Whitespace header", "  "))
+    testCond(s == NATS_OK);
+
+    test("Add NULL, empty, and whitespace values under same header: ");
+    IFOK(s, natsMsgHeader_Add(msg, "Special-Headers", NULL))
+    IFOK(s, natsMsgHeader_Add(msg, "Special-Headers", ""))
+    IFOK(s, natsMsgHeader_Add(msg, "Special-Headers", "  "))
+    testCond(s == NATS_OK);
+
     test("Publish with headers ok: ");
     s = natsConnection_PublishMsg(nc, msg);
     testCond(s == NATS_OK);
@@ -20147,6 +20293,31 @@ void test_HeadersBasic(void)
                 && (val != NULL) && (strcmp(val, "Hello Headers!") == 0)
                 && (natsMsg_GetDataLength(rmsg) == 4)
                 && (strncmp(natsMsg_GetData(msg), "body", 4) == 0));
+
+    test("Check NULL header: ");
+    s = natsMsgHeader_Get(rmsg, "NULL header", &val);
+    testCond((s == NATS_OK)
+                && (val != NULL) && *val == '\0');
+
+    test("Check empty header: ");
+    s = natsMsgHeader_Get(rmsg, "Empty header", &val);
+    testCond((s == NATS_OK)
+                && (val != NULL) && *val == '\0');
+
+    test("Check whitespace header: ");
+    s = natsMsgHeader_Get(rmsg, "Whitespace header", &val);
+    testCond((s == NATS_OK)
+                && (val != NULL) && *val == '\0');
+
+    test("Check getting values from special header: ");
+    s = natsMsgHeader_Values(rmsg, "Special-Headers", &values, &count);
+    testCond((s == NATS_OK) && (count == 3)
+                && (values != NULL)
+                && (*values[0] == '\0')
+                && (*values[1] == '\0')
+                && (*values[2] == '\0'));
+    free(values);
+    values = NULL;
 
     natsMsg_Destroy(rmsg);
     rmsg = NULL;
@@ -20300,7 +20471,13 @@ _evLoopWrite(void *userData, bool add)
 static natsStatus
 _evLoopDetach(void *userData)
 {
-    struct threadArg *arg = (struct threadArg *) userData;
+    struct threadArg    *arg = (struct threadArg *) userData;
+    natsConnection      *nc  = NULL;
+
+    natsMutex_Lock(arg->m);
+    nc = arg->nc;
+    natsMutex_Unlock(arg->m);
+    natsConnection_Destroy(nc);
 
     natsMutex_Lock(arg->m);
     arg->detached++;
@@ -20384,6 +20561,8 @@ void test_EventLoop(void)
     IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg));
     IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
     testCond(s == NATS_OK);
+
+    arg.nc = nc;
 
     pid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(pid);
@@ -20513,6 +20692,8 @@ void test_EventLoopRetryOnFailedConnect(void)
                                      _evLoopDetach));
     testCond(s == NATS_OK);
 
+    arg.nc = nc;
+
     test("Start event loop: ");
     natsMutex_Lock(arg.m);
     arg.sock = NATS_SOCK_INVALID;
@@ -20599,6 +20780,8 @@ void test_EventLoopTLS(void)
                                      _evLoopWrite,
                                      _evLoopDetach));
     testCond(s == NATS_OK);
+
+    arg.nc = nc;
 
     test("Start server: ");
     pid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
@@ -33771,12 +33954,20 @@ void test_KeyValueDiscardOldToNew(void)
     kvStore             *kv = NULL;
     kvConfig            kvc;
     natsStatus          s;
+    int                 ma, mi, up;
 
     JS_SETUP(2, 7, 2);
+
+    // We will wait for the INFO in response to CONNECT to arrive before
+    // changing the server versions.
+    nats_Sleep(250);
 
     // Change the server version in the connection to
     // create as-if we were connecting to a v2.7.1 server.
     natsConn_Lock(nc);
+    ma = nc->srvVersion.ma;
+    mi = nc->srvVersion.mi;
+    up = nc->srvVersion.up;
     nc->srvVersion.ma = 2;
     nc->srvVersion.mi = 7;
     nc->srvVersion.up = 1;
@@ -33790,9 +33981,9 @@ void test_KeyValueDiscardOldToNew(void)
 
     // Now change version to 2.7.2
     natsConn_Lock(nc);
-    nc->srvVersion.ma = 2;
-    nc->srvVersion.mi = 7;
-    nc->srvVersion.up = 2;
+    nc->srvVersion.ma = ma;
+    nc->srvVersion.mi = mi;
+    nc->srvVersion.up = up;
     natsConn_Unlock(nc);
 
     test("Check discard (old, no auto-update): ");
@@ -34351,7 +34542,15 @@ static microError *
 _microHandleRequestNoisy42(microRequest *req)
 {
     if ((rand() % 10) == 0)
+    {
+        struct threadArg *arg = (struct threadArg*) microService_GetState(req->Service);
+
+        natsMutex_Lock(arg->m);
+        arg->sum++;
+        natsMutex_Unlock(arg->m);
+
         return micro_Errorf("Unexpected error!");
+    }
 
     // Happy Path.
     // Random delay between 5-10ms
@@ -34992,6 +35191,7 @@ void test_MicroBasics(void)
     nats_JSON *md = NULL;
     int num_requests = 0;
     int num_errors = 0;
+    char *lastErr = NULL;
     int n;
     nats_JSON **array;
     int array_len;
@@ -35016,6 +35216,29 @@ void test_MicroBasics(void)
     testCond(NATS_OK == natsConnection_Connect(&nc, opts));
 
     _startManyMicroservices(svcs, NUM_MICRO_SERVICES, nc, &cfg, eps, sizeof(eps)/sizeof(eps[0]), &arg);
+
+    test("Get stats before any activity: ");
+    for (i=0; (s == NATS_OK) && (i<NUM_MICRO_SERVICES); i++)
+    {
+        microServiceStats *stats = NULL;
+
+        err = microService_GetStats(&stats, svcs[i]);
+        if (err == NULL)
+        {
+            int j;
+
+            for (j=0; (s == NATS_OK) && (j<stats->EndpointsLen); j++)
+                s = (stats->Endpoints[j].AverageProcessingTimeNanoseconds == 0 ? NATS_OK : NATS_ERR);
+
+            microServiceStats_Destroy(stats);
+        }
+        else
+        {
+            s = NATS_ERR;
+            microError_Destroy(err);
+        }
+    }
+    testCond(s == NATS_OK);
 
     // Now send 50 requests.
     test("Send 50 requests (no matter response): ");
@@ -35060,6 +35283,7 @@ void test_MicroBasics(void)
         if (s == NATS_TIMEOUT)
         {
             testCond(i == NUM_MICRO_SERVICES);
+            nats_clearLastError();
             break;
         }
         testCond(NATS_OK == s);
@@ -35138,6 +35362,7 @@ void test_MicroBasics(void)
         if (s == NATS_TIMEOUT)
         {
             testCond(i == NUM_MICRO_SERVICES);
+            nats_clearLastError();
             break;
         }
         testCond(NATS_OK == s);
@@ -35172,6 +35397,7 @@ void test_MicroBasics(void)
         if (s == NATS_TIMEOUT)
         {
             testCond(i == NUM_MICRO_SERVICES);
+            nats_clearLastError();
             break;
         }
         testCond(NATS_OK == s);
@@ -35187,17 +35413,30 @@ void test_MicroBasics(void)
         s = nats_JSONGetArrayObject(js, "endpoints", &array, &array_len);
         testCond((NATS_OK == s) && (array != NULL) && (array_len == 2))
 
-        test("Ensure endpoint 0 has num_requests: ");
+        test("Ensure second endpoint has num_requests: ");
         n = 0;
         s = nats_JSONGetInt(array[1], "num_requests", &n);
         testCond(NATS_OK == s);
         num_requests += n;
 
-        test("Ensure endpoint 0 has num_errors: ");
+        test("Ensure second endpoint has num_errors: ");
         n = 0;
         s = nats_JSONGetInt(array[1], "num_errors", &n);
         testCond(NATS_OK == s);
         num_errors += n;
+
+        test("Ensure second endpoint last_error is set if num_errors is positive: ");
+        lastErr = NULL;
+        s = nats_JSONGetStr(array[1], "last_error", &lastErr);
+        testCond((s == NATS_OK) && (((n == 0) && nats_IsStringEmpty(lastErr)) ||
+                                    ((n > 0) && (strcmp(lastErr, "Unexpected error!") == 0))));
+        free(lastErr);
+        lastErr = NULL;
+
+        test("Ensure second endpoint has average_processing_time as a positive number: ");
+        int64_t avg = 0;
+        s = nats_JSONGetLong(array[1], "average_processing_time", &avg);
+        testCond((s == NATS_OK) && (avg > 0));
 
         NATS_FREE(array);
         nats_JSONDestroy(js);
@@ -35206,7 +35445,11 @@ void test_MicroBasics(void)
     test("Check that STATS total request counts add up (50): ");
     testCond(num_requests == 50);
     test("Check that STATS total error count is positive, depends on how many instances: ");
-    testCond(num_errors > 0);
+    natsMutex_Lock(arg.m);
+    // The arg.sum value is incremented when the service handler returns an error.
+    s = (arg.sum == num_errors ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
     natsInbox_Destroy(inbox);

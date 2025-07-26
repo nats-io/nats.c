@@ -740,12 +740,14 @@ _makeTLSConn(natsConnection *nc)
             }
             if (s == NATS_OK)
             {
-                SSL_verify_cb cb = _collectSSLErr;
 #ifdef NATS_WITH_EXPERIMENTAL
+                SSL_verify_cb cb = _collectSSLErr;
                 if (nc->opts->sslCtx->callback != NULL)
                     cb = nc->opts->sslCtx->callback;
-#endif // NATS_WITH_EXPERIMENTAL
                 SSL_set_verify(ssl, SSL_VERIFY_PEER, cb);
+#else
+                SSL_set_verify(ssl, SSL_VERIFY_PEER, _collectSSLErr);
+#endif // NATS_WITH_EXPERIMENTAL
             }
         }
     }
@@ -1331,7 +1333,7 @@ natsConn_destroyRespPool(natsConnection *nc)
 // subject (that is set in respInbox). The respInfo object is returned.
 // Connection's lock is held on entry.
 natsStatus
-natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox, int respInboxSize)
+natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox)
 {
     respInfo    *resp  = NULL;
     natsStatus  s      = NATS_OK;
@@ -2014,6 +2016,10 @@ _processConnInit(natsConnection *nc)
             // event just after this call returns.
             nc->sockCtx.useEventLoop = true;
 
+            // For the very first attach, we will retain the connection.
+            if (!nc->el.retained)
+                _retain(nc);
+
             s = nc->opts->evCbs.attach(&(nc->el.data),
                                        nc->opts->evLoop,
                                        nc,
@@ -2021,10 +2027,16 @@ _processConnInit(natsConnection *nc)
             if (s == NATS_OK)
             {
                 nc->el.attached = true;
+                nc->el.retained = true;
             }
             else
             {
                 nc->sockCtx.useEventLoop = false;
+
+                // If this was the very first attach and we failed, release the connection
+                // to compensate for the retain above.
+                if (!nc->el.retained)
+                    _release(nc);
 
                 nats_setError(s,
                               "Error attaching to the event loop: %d - %s",
@@ -3363,7 +3375,7 @@ _processUrlString(natsOptions *opts, const char *urls)
     serverUrls = (char**) NATS_CALLOC(count + 1, sizeof(char*));
     if (serverUrls == NULL)
         return NATS_NO_MEMORY;
-    
+
     if (s == NATS_OK)
     {
         urlsCopy = NATS_STRDUP(urls);
@@ -4165,8 +4177,6 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
         }
     }
 
-    _retain(nc);
-
     buffer = nc->el.buffer;
     size   = nc->opts->ioBufSize;
 
@@ -4185,8 +4195,6 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
 
     if (s != NATS_OK)
         _processOpError(nc, s, false);
-
-    natsConn_release(nc);
 }
 
 void

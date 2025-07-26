@@ -277,6 +277,8 @@ struct __natsOptions
     natsConnectionHandler   microClosedCb;
     natsErrHandler          microAsyncErrCb;
 
+    natsProxyConnHandler    proxyConnectCb;
+
     int64_t                 pingInterval;
     int                     maxPingsOut;
     int                     maxPendingMsgs;
@@ -653,22 +655,24 @@ typedef struct __natsPongList
 
 typedef struct __natsSockCtx
 {
-    natsSock        fd;
-    bool            fdActive;
+    natsSock                fd;
+    bool                    fdActive;
 
-    natsDeadline    readDeadline;
-    natsDeadline    writeDeadline;
+    natsDeadline            readDeadline;
+    natsDeadline            writeDeadline;
 
-    SSL             *ssl;
+    SSL                     *ssl;
 
     // This is true when we are using an external event loop (such as libuv).
-    bool            useEventLoop;
+    bool                    useEventLoop;
 
-    int             orderIP; // possible values: 0,4,6,46,64
+    int                     orderIP; // possible values: 0,4,6,46,64
 
     // By default, the list of IPs returned by the hostname resolution will
     // be shuffled. This option, if `true`, will disable the shuffling.
-    bool            noRandomize;
+    bool                    noRandomize;
+
+    natsProxyConnHandler    proxyConnectCb;
 
 } natsSockCtx;
 

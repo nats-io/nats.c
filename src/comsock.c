@@ -277,11 +277,11 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
 
 #ifdef SO_NOSIGPIPE
             int set = 1;
-            if (setsockopt(ctx->fd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&set, sizeof(int)) == -1)        	
+            if (setsockopt(ctx->fd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&set, sizeof(int)) == -1)
             {
                 s = nats_setError(NATS_SYS_ERROR,
-                "setsockopt SO_NOSIGPIPE error: %d",
-                NATS_SOCK_GET_ERROR);
+                    "setsockopt SO_NOSIGPIPE error: %d",
+                    NATS_SOCK_GET_ERROR);
             }
 #endif
             if (s == NATS_OK)

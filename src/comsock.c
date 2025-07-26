@@ -242,10 +242,10 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
 
     // I don't think it can be the case if s == OK and/or numServInfo >= 1...
     if (numIPs == 0)
-    {	    
-        for (i = 0; i < numServInfo; i++)
+    {
+        for (i=0; i<numServInfo; i++)
             nats_FreeAddrInfo(servInfos[i]);
-        	    
+
         return NATS_UPDATE_ERR_STACK(NATS_NO_SERVER);
     }
 

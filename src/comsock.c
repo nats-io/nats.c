@@ -224,14 +224,12 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
             continue;	    
         }
 	    
-        servInfos[numServInfo] = servinfo;
-	    
+        servInfos[numServInfo] = servinfo;	    
         for (p = servinfo; (p != NULL); p = p->ai_next)	    
         {		    
             count++;		    
             numIPs++;	    
-        }
-	    
+        }	    
         natsSock_ShuffleIPs(ctx, tmpStorage, sizeof(tmpStorage), &(servInfos[numServInfo]), count);	    
         numServInfo++;    
     }
@@ -273,20 +271,20 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
                 s = nats_setError(NATS_SYS_ERROR, "socket error: %d", NATS_SOCK_GET_ERROR);
                 continue;
             }
-		    
+
             // Reset 's' for this loop iteration.
             s = NATS_OK;
 
-#ifdef SO_NOSIGPIPE        	
+#ifdef SO_NOSIGPIPE
             int set = 1;
-            if (setsockopt(ctx->fd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&set, sizeof(int)) == -1)
-        	{
+            if (setsockopt(ctx->fd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&set, sizeof(int)) == -1)        	
+            {
                 s = nats_setError(NATS_SYS_ERROR,
                 "setsockopt SO_NOSIGPIPE error: %d",
                 NATS_SOCK_GET_ERROR);
             }
-#endif        	
-            if (s == NATS_OK)            	
+#endif
+            if (s == NATS_OK)
                 s = natsSock_SetBlocking(ctx->fd, false);
 
             if (s == NATS_OK)
@@ -329,7 +327,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     }
 
     for (i=0; i<numServInfo; i++)
-	    nats_FreeAddrInfo(servInfos[i]);
+        nats_FreeAddrInfo(servInfos[i]);
 
     resetDeadline(ctx, start, totalTimeout);
 

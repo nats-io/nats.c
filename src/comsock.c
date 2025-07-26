@@ -237,95 +237,95 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     }
     // If we got a getaddrinfo() and there is no servInfos to try to connect to
     // bail out now.
-    if ((s != NATS_OK) && (numServInfo == 0))
-	    return NATS_UPDATE_ERR_STACK(s);
+    if ((s != NATS_OK) && (numServInfo == 0))	    
+        return NATS_UPDATE_ERR_STACK(s);
 
     // I don't think it can be the case if s == OK and/or numServInfo >= 1...
     if (numIPs == 0)
-    {
-	    for (i = 0; i < numServInfo; i++)
-		    nats_FreeAddrInfo(servInfos[i]);
-
-	    return NATS_UPDATE_ERR_STACK(NATS_NO_SERVER);
+    {	    
+        for (i = 0; i < numServInfo; i++)		    
+            nats_FreeAddrInfo(servInfos[i]);
+        	    
+        return NATS_UPDATE_ERR_STACK(NATS_NO_SERVER);
     }
 
     // Check if there has been a deadline set.
     totalTimeout = natsDeadline_GetTimeout(&(ctx->writeDeadline));
     if (totalTimeout > 0)
-    {
-	    // If so, compute a timeout based on the number of IPs we are going
-	    // to possibly try to connect to.
-	    timeoutPerIP = totalTimeout / numIPs;
-	    // If really small, give at least a 10ms timeout
-	    if (timeoutPerIP < 10)
-		    timeoutPerIP = 10;
+    {	    
+        // If so, compute a timeout based on the number of IPs we are going	    
+        // to possibly try to connect to.	    
+        timeoutPerIP = totalTimeout / numIPs;	    
+        // If really small, give at least a 10ms timeout	    
+        if (timeoutPerIP < 10)		    
+            timeoutPerIP = 10;
     }
 
     for (i=0; i<numServInfo; i++)
-    {
-	    struct addrinfo *p;
-
-	    for (p = servInfos[i]; (p != NULL); p = p->ai_next)
-	    {
-		    ctx->fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-		    if (ctx->fd == NATS_SOCK_INVALID)
-		    {
-			    s = nats_setError(NATS_SYS_ERROR, "socket error: %d", NATS_SOCK_GET_ERROR);
-			    continue;
-		    }
-
-		    // Reset 's' for this loop iteration.
-		    s = NATS_OK;
+    {	    
+        struct addrinfo *p;
+	    
+        for (p = servInfos[i]; (p != NULL); p = p->ai_next)	    
+        {		    
+            ctx->fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);		    
+            if (ctx->fd == NATS_SOCK_INVALID)		    
+            {			    
+                s = nats_setError(NATS_SYS_ERROR, "socket error: %d", NATS_SOCK_GET_ERROR);			    
+                continue;		    
+            }
+		    
+            // Reset 's' for this loop iteration.		    
+            s = NATS_OK;
 
 #ifdef SO_NOSIGPIPE
-				int set = 1;
-				if (setsockopt(ctx->fd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&set, sizeof(int)) == -1)
-				{
-					s = nats_setError(NATS_SYS_ERROR,
-                                  "setsockopt SO_NOSIGPIPE error: %d",
-                                  NATS_SOCK_GET_ERROR);
-				}
-#endif
-		    if (s == NATS_OK)
-			    s = natsSock_SetBlocking(ctx->fd, false);
+        	int set = 1;
+        	if (setsockopt(ctx->fd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&set, sizeof(int)) == -1)
+        	{
+        		s = nats_setError(NATS_SYS_ERROR,
+        		"setsockopt SO_NOSIGPIPE error: %d",
+        		NATS_SOCK_GET_ERROR);
+        	}
+#endif        	
+            if (s == NATS_OK)            	
+                s = natsSock_SetBlocking(ctx->fd, false);
 
-		    if (s == NATS_OK)
-		    {
-			    res = connect(ctx->fd, p->ai_addr, (natsSockLen) p->ai_addrlen);
-			    if ((res == NATS_SOCK_ERROR)
-				    && (NATS_SOCK_GET_ERROR == NATS_SOCK_CONNECT_IN_PROGRESS))
-			    {
-				    if (timeoutPerIP > 0)
-					    natsDeadline_Init(&(ctx->writeDeadline), timeoutPerIP);
-
-				    s = natsSock_WaitReady(WAIT_FOR_CONNECT, ctx);
-				    if ((s == NATS_OK) && !natsSock_IsConnected(ctx->fd))
-					    s = NATS_TIMEOUT;
-			    }
-			    else if (res == NATS_SOCK_ERROR)
-			    {
-				    s = nats_setDefaultError(NATS_NO_SERVER);
-			    }
-		    }
-
-		    if (s == NATS_OK)
-		    {
-			    s = natsSock_SetCommonTcpOptions(ctx->fd);
-			    // We have connected OK and completed setting options, so we are done.
-			    if (s == NATS_OK)
-				    break;
-		    }
-
-		    _closeFd(ctx->fd);
-		    ctx->fd = NATS_SOCK_INVALID;
-	    }
-	    if (s == NATS_OK)
-	    {
-		    // Clear the error stack in case we got errors in the loop until
-		    // being able to successfully connect.
-		    nats_clearLastError();
-		    break;
-	    }
+            if (s == NATS_OK)
+            {
+                res = connect(ctx->fd, p->ai_addr, (natsSockLen) p->ai_addrlen);
+                if ((res == NATS_SOCK_ERROR)
+                    && (NATS_SOCK_GET_ERROR == NATS_SOCK_CONNECT_IN_PROGRESS))
+                {
+                    if (timeoutPerIP > 0)
+                        natsDeadline_Init(&(ctx->writeDeadline), timeoutPerIP);
+                	
+                    s = natsSock_WaitReady(WAIT_FOR_CONNECT, ctx);
+                    if ((s == NATS_OK) && !natsSock_IsConnected(ctx->fd))
+                        s = NATS_TIMEOUT;
+                }
+                else if (res == NATS_SOCK_ERROR)
+                {
+                    s = nats_setDefaultError(NATS_NO_SERVER);
+                }
+            }
+        	
+            if (s == NATS_OK)
+            {
+                s = natsSock_SetCommonTcpOptions(ctx->fd);
+                // We have connected OK and completed setting options, so we are done.
+                if (s == NATS_OK)
+                    break;
+            }
+        	
+            _closeFd(ctx->fd);
+            ctx->fd = NATS_SOCK_INVALID;
+        }
+        if (s == NATS_OK)
+        {
+            // Clear the error stack in case we got errors in the loop until
+            // being able to successfully connect.		    
+            nats_clearLastError();
+            break;
+        }
     }
 
     for (i=0; i<numServInfo; i++)

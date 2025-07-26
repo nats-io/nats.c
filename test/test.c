@@ -2601,6 +2601,12 @@ _dummyTokenHandler(void *closure)
     return "token";
 }
 
+static natsStatus
+_dummyProxyConnHandler(char* host, int port, natsSock* fd)
+{
+    return NATS_SOCK_ERROR;
+}
+
 static void
 _dummyErrHandler(natsConnection *nc, natsSubscription *sub, natsStatus err,
                  void *closure)
@@ -2895,6 +2901,14 @@ void test_natsOptions(void)
     test("Set Max Pending Bytes : ");
     s = natsOptions_SetMaxPendingBytes(opts, 1000000);
     testCond((s == NATS_OK) && (opts->maxPendingBytes == 1000000))
+
+	test("Set Proxy Connection Handler: ")
+    s = natsOptions_SetProxyConnHandler(opts, _dummyProxyConnHandler);
+    testCond(s == NATS_OK && opts->proxyConnectCb == _dummyProxyConnHandler)
+
+    test("Remove Proxy Connection Handler: ")
+    s = natsOptions_SetProxyConnHandler(opts, NULL);
+    testCond(s == NATS_OK && opts->proxyConnectCb == NULL)
 
     test("Set Error Handler: ");
     s = natsOptions_SetErrorHandler(opts, _dummyErrHandler, NULL);

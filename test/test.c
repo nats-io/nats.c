@@ -5966,6 +5966,80 @@ void test_ReconnectServerStats(void)
     _destroyDefaultThreadArgs(&args);
 }
 
+
+static natsStatus
+_proxyConnectCb(char* host, int port, natsSock* pSock)
+{
+	natsStatus s = NATS_OK;
+	SOCKADDR_IN sockaddr_in;
+
+	natsSock fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	*pSock = fd;
+	if (fd == NATS_SOCK_INVALID)
+		return nats_setError(NATS_SYS_ERROR, "socket error: %d", NATS_SOCK_GET_ERROR);
+
+	// In case of an existing proxy scenario we would use the proxy host and port as the socket address
+	// and send a connect request. If the connect request is successful (i.e. 200 Connection established),
+	// it is ready for use.
+	// For this test, we will just connect to the server directly.
+
+	memset(&sockaddr_in, 0, sizeof(sockaddr_in));
+	sockaddr_in.sin_family = AF_INET;
+	sockaddr_in.sin_port = htons((unsigned short)port);
+	inet_pton(AF_INET, host, &sockaddr_in.sin_addr);
+
+	struct sockaddr* sockaddr = (struct sockaddr*)&sockaddr_in;
+	socklen_t socklen = (socklen_t)sizeof(sockaddr_in);
+
+	s = natsSock_SetBlocking(fd, false);
+	if (s == NATS_OK)
+	{
+        int ret = connect(fd, sockaddr, socklen);
+        if (ret == NATS_SOCK_ERROR)
+            return nats_setDefaultError(NATS_NO_SERVER);
+
+        s = natsSock_SetCommonTcpOptions(fd);
+	}
+
+	return s;
+}
+
+void test_ProxyConnectCb(void)
+{
+	natsStatus s;
+	natsConnection* nc = NULL;
+	natsOptions* opts = NULL;
+	natsPid serverPid = NATS_INVALID_PID;
+	struct threadArg args;
+
+	test("ProxyConnectCb Fail: ")
+
+	s = _createDefaultThreadArgsForCbTests(&args);
+	if (s != NATS_OK)
+		FAIL("Unable to setup test")
+
+	serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+	CHECK_SERVER_STARTED(serverPid)
+
+	s = natsOptions_Create(&opts);
+	IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL))
+	IFOK(s, natsOptions_SetProxyConnHandler(opts, _dummyProxyConnHandler))
+
+	s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+	if (s == NATS_OK)
+		FAIL("Test not failed!")
+
+	test("ProxyConnectCb OK: ")
+
+	IFOK(s, natsOptions_SetProxyConnHandler(opts, _proxyConnectCb))
+	s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+
+    if (s != NATS_OK)
+        FAIL("Test failed!")
+
+	_stopServer(serverPid);
+}
+
 static void
 _disconnectedCb(natsConnection *nc, void *closure)
 {

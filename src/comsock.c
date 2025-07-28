@@ -134,16 +134,13 @@ natsSock_ShuffleIPs(natsSockCtx *ctx, struct addrinfo **tmp, int tmpSize, struct
 
 #define MAX_HOST_NAME   (256)
 
-void resetDeadline(natsSockCtx* ctx, int64_t start, int64_t totalTimeout)
+static void
+_resetDeadline(natsSockCtx* ctx, int64_t start, int64_t totalTimeout)
 {
-    // If there was a deadline, reset the deadline with whatever is left.	
-    if (totalTimeout > 0)	
-    {    	
-        int64_t used = nats_Now() - start;		
-        int64_t left = totalTimeout - used;
-		
-        natsDeadline_Init(&(ctx->writeDeadline), (left > 0 ? left : 0));	
-    }
+    int64_t used = nats_Now() - start;
+    int64_t left = totalTimeout - used;
+
+    natsDeadline_Init(&(ctx->writeDeadline), (left > 0 ? left : 0));
 }
 
 natsStatus
@@ -191,7 +188,9 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
         // Invoke the proxy connect callback.
         s = ctx->proxyConnectCb(host, port, &ctx->fd);
 
-        resetDeadline(ctx, start, totalTimeout);
+        // If there was a deadline, reset the deadline with whatever is left.
+        if (totalTimeout > 0)
+            _resetDeadline(ctx, start, totalTimeout);
 
         return NATS_UPDATE_ERR_STACK(s);
     }
@@ -200,38 +199,38 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
 	    max = 2;
 
     for (i = 0; i < max; i++)
-    {	    
-        struct addrinfo hints;	    
-        struct addrinfo* servinfo = NULL;	    
-        int             count = 0;	    
-        struct addrinfo* p;
-	    
-        memset(&hints, 0, sizeof(hints));	    
+    {
+        struct addrinfo hints;
+        struct addrinfo *servinfo = NULL;
+        int             count     = 0;
+        struct addrinfo *p;
+
+        memset(&hints,0,sizeof(hints));
         hints.ai_socktype = SOCK_STREAM;
-        	    
-        switch (ctx->orderIP)	    
-        {	    
-            case  4: hints.ai_family = AF_INET; break;	    
-            case  6: hints.ai_family = AF_INET6; break;	    
-            case 46: hints.ai_family = (i == 0 ? AF_INET : AF_INET6); break;	    
-            case 64: hints.ai_family = (i == 0 ? AF_INET6 : AF_INET); break;	    
-            default: hints.ai_family = AF_UNSPEC;	    
+
+        switch (ctx->orderIP)
+        {
+            case  4: hints.ai_family = AF_INET; break;
+            case  6: hints.ai_family = AF_INET6; break;
+            case 46: hints.ai_family = (i == 0 ? AF_INET : AF_INET6); break;
+            case 64: hints.ai_family = (i == 0 ? AF_INET6 : AF_INET); break;
+            default: hints.ai_family = AF_UNSPEC;
         }
-	    
-        if ((res = getaddrinfo(host, sport, &hints, &servinfo)) != 0)	    
-        {		    
-            s = nats_setError(NATS_SYS_ERROR, "getaddrinfo error: %s", gai_strerror(res));		    
-            continue;	    
+
+        if ((res = getaddrinfo(host, sport, &hints, &servinfo)) != 0)
+        {
+            s = nats_setError(NATS_SYS_ERROR, "getaddrinfo error: %s",
+                              gai_strerror(res));
+            continue;
         }
-	    
-        servInfos[numServInfo] = servinfo;	    
-        for (p = servinfo; (p != NULL); p = p->ai_next)	    
-        {		    
-            count++;		    
-            numIPs++;	    
-        }	    
-        natsSock_ShuffleIPs(ctx, tmpStorage, sizeof(tmpStorage), &(servInfos[numServInfo]), count);	    
-        numServInfo++;    
+        servInfos[numServInfo] = servinfo;
+        for (p = servinfo; (p != NULL); p = p->ai_next)
+        {
+            count++;
+            numIPs++;
+        }
+        natsSock_ShuffleIPs(ctx, tmpStorage, sizeof(tmpStorage), &(servInfos[numServInfo]), count);
+        numServInfo++;
     }
     // If we got a getaddrinfo() and there is no servInfos to try to connect to
     // bail out now.
@@ -262,7 +261,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     for (i=0; i<numServInfo; i++)
     {
         struct addrinfo *p;
-	    
+
         for (p = servInfos[i]; (p != NULL); p = p->ai_next)
         {
             ctx->fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
@@ -305,7 +304,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
                     s = nats_setDefaultError(NATS_NO_SERVER);
                 }
             }
-        	
+
             if (s == NATS_OK)
             {
                 s = natsSock_SetCommonTcpOptions(ctx->fd);
@@ -313,7 +312,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
                 if (s == NATS_OK)
                     break;
             }
-        	
+
             _closeFd(ctx->fd);
             ctx->fd = NATS_SOCK_INVALID;
         }
@@ -325,11 +324,12 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
             break;
         }
     }
-
     for (i=0; i<numServInfo; i++)
         nats_FreeAddrInfo(servInfos[i]);
 
-    resetDeadline(ctx, start, totalTimeout);
+    // If there was a deadline, reset the deadline with whatever is left.
+    if (totalTimeout > 0)
+        _resetDeadline(ctx, start, totalTimeout);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

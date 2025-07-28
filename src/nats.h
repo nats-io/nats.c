@@ -1676,7 +1676,7 @@ typedef void (*natsConnectionHandler)(
  *
  * This callback is used to handle connections via proxy.
  * It creates a socket, use it for proxy verification, and return it in `fd`
- * to be used for the bus connection.
+ * to be used for the NATS connection.
  */
 typedef natsStatus (*natsProxyConnHandler)(
     char* host, int port, natsSock* fd);

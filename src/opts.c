@@ -1,4 +1,4 @@
-// Copyright 2015-2024 The NATS Authors
+// Copyright 2015-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -983,6 +983,19 @@ natsOptions_SetMaxPendingBytes(natsOptions* opts, int64_t maxPending)
     LOCK_AND_CHECK_OPTIONS(opts, (maxPending <= 0));
 
     opts->maxPendingBytes = maxPending;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
+natsOptions_SetProxyConnHandler(natsOptions* opts, natsProxyConnHandler proxyConnHandler, void *closure)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0)
+
+    opts->proxyConnectCb        = proxyConnHandler;
+    opts->proxyConnectClosure   = closure;
 
     UNLOCK_OPTS(opts);
 

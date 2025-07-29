@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -134,6 +134,15 @@ natsSock_ShuffleIPs(natsSockCtx *ctx, struct addrinfo **tmp, int tmpSize, struct
 
 #define MAX_HOST_NAME   (256)
 
+static void
+_resetDeadline(natsSockCtx* ctx, int64_t start, int64_t totalTimeout)
+{
+    int64_t used = nats_Now() - start;
+    int64_t left = totalTimeout - used;
+
+    natsDeadline_Init(&(ctx->writeDeadline), (left > 0 ? left : 0));
+}
+
 natsStatus
 natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
 {
@@ -170,12 +179,25 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
 
     snprintf(sport, sizeof(sport), "%d", port);
 
-    if ((ctx->orderIP == 46) || (ctx->orderIP == 64))
-        max = 2;
-
     start = nats_Now();
 
-    for (i=0; i<max; i++)
+    // Call the proxy connect callback if provided
+    if (ctx->proxyConnectCb != NULL)
+    {
+        // Invoke the proxy connect callback.
+        s = ctx->proxyConnectCb(&ctx->fd, host, port, ctx->proxyConnectClosure);
+
+        // If there was a deadline, reset the deadline with whatever is left.
+        if (totalTimeout > 0)
+            _resetDeadline(ctx, start, totalTimeout);
+
+        return NATS_UPDATE_ERR_STACK(s);
+    }
+
+    if ((ctx->orderIP == 46) || (ctx->orderIP == 64))
+	    max = 2;
+
+    for (i = 0; i < max; i++)
     {
         struct addrinfo hints;
         struct addrinfo *servinfo = NULL;
@@ -306,12 +328,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
 
     // If there was a deadline, reset the deadline with whatever is left.
     if (totalTimeout > 0)
-    {
-        int64_t used = nats_Now() - start;
-        int64_t left = totalTimeout - used;
-
-        natsDeadline_Init(&(ctx->writeDeadline), (left > 0 ? left : 0));
-    }
+        _resetDeadline(ctx, start, totalTimeout);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

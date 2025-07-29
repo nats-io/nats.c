@@ -1,4 +1,4 @@
-// Copyright 2015-2024 The NATS Authors
+// Copyright 2015-2025 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -402,6 +402,10 @@ _createConn(natsConnection *nc)
 
     // Set ctx.noRandomize based on public NoRandomize option.
     nc->sockCtx.noRandomize = nc->opts->noRandomize;
+
+    // Set the proxy connect callback and closure.
+    nc->sockCtx.proxyConnectCb      = nc->opts->proxyConnectCb;
+    nc->sockCtx.proxyConnectClosure = nc->opts->proxyConnectClosure;
 
     s = natsSock_ConnectTcp(&(nc->sockCtx), nc->cur->url->host, nc->cur->url->port);
     if (s == NATS_OK)

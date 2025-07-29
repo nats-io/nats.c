@@ -16,10 +16,11 @@ var searchData=
   ['natsmsglist_13',['natsMsgList',['../group__types_group.html#gafd5523161ec3783e79719cb9a9a66b5b',1,'nats.h']]],
   ['natsoncompletecb_14',['natsOnCompleteCB',['../group__callbacks_group.html#ga245131e64f1d0dff7edc8ed874a07e9a',1,'nats.h']]],
   ['natsoptions_15',['natsOptions',['../group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e',1,'nats.h']]],
-  ['natssignaturehandler_16',['natsSignatureHandler',['../group__callbacks_group.html#gab786ffd670c86de0563559351305080b',1,'nats.h']]],
-  ['natssock_17',['natsSock',['../nats_8h.html#af798865ac824e5959987de0fe8d07383',1,'nats.h']]],
-  ['natsstatistics_18',['natsStatistics',['../group__types_group.html#ga57a4b8c7109e2773878655722ce028aa',1,'nats.h']]],
-  ['natssubscription_19',['natsSubscription',['../group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8',1,'nats.h']]],
-  ['natstokenhandler_20',['natsTokenHandler',['../group__callbacks_group.html#ga4b02de70fe9380d184fd01d87527f499',1,'nats.h']]],
-  ['natsuserjwthandler_21',['natsUserJWTHandler',['../group__callbacks_group.html#ga258b30458134be90f17315c037f34b7b',1,'nats.h']]]
+  ['natsproxyconnhandler_16',['natsProxyConnHandler',['../group__callbacks_group.html#gae1d0ec90461ccdb105d00e1030806faa',1,'nats.h']]],
+  ['natssignaturehandler_17',['natsSignatureHandler',['../group__callbacks_group.html#gab786ffd670c86de0563559351305080b',1,'nats.h']]],
+  ['natssock_18',['natsSock',['../nats_8h.html#af798865ac824e5959987de0fe8d07383',1,'nats.h']]],
+  ['natsstatistics_19',['natsStatistics',['../group__types_group.html#ga57a4b8c7109e2773878655722ce028aa',1,'nats.h']]],
+  ['natssubscription_20',['natsSubscription',['../group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8',1,'nats.h']]],
+  ['natstokenhandler_21',['natsTokenHandler',['../group__callbacks_group.html#ga4b02de70fe9380d184fd01d87527f499',1,'nats.h']]],
+  ['natsuserjwthandler_22',['natsUserJWTHandler',['../group__callbacks_group.html#ga258b30458134be90f17315c037f34b7b',1,'nats.h']]]
 ];

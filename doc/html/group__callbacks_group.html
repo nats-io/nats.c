@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.10.0-beta</span>
+   &#160;<span id="projectnumber">3.11.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -105,6 +105,9 @@ Typedefs</h2></td></tr>
 <tr class="memitem:gacdef6aff3e47953f19e35857ab8e274c" id="r_gacdef6aff3e47953f19e35857ab8e274c"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gacdef6aff3e47953f19e35857ab8e274c">natsConnectionHandler</a>) (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, void *closure)</td></tr>
 <tr class="memdesc:gacdef6aff3e47953f19e35857ab8e274c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify the user of asynchronous connection events.  <br /></td></tr>
 <tr class="separator:gacdef6aff3e47953f19e35857ab8e274c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gae1d0ec90461ccdb105d00e1030806faa" id="r_gae1d0ec90461ccdb105d00e1030806faa"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gae1d0ec90461ccdb105d00e1030806faa">natsProxyConnHandler</a>) (<a class="el" href="nats_8h.html#af798865ac824e5959987de0fe8d07383">natsSock</a> *fd, char *host, int port, void *closure)</td></tr>
+<tr class="memdesc:gae1d0ec90461ccdb105d00e1030806faa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to handle connections via proxy.  <br /></td></tr>
+<tr class="separator:gae1d0ec90461ccdb105d00e1030806faa"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga9e511dffa471dfb971b7dd2b12329626" id="r_ga9e511dffa471dfb971b7dd2b12329626"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga9e511dffa471dfb971b7dd2b12329626">natsErrHandler</a>) (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *subscription, <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> err, void *closure)</td></tr>
 <tr class="memdesc:ga9e511dffa471dfb971b7dd2b12329626"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify the user of errors encountered while processing inbound messages.  <br /></td></tr>
 <tr class="separator:ga9e511dffa471dfb971b7dd2b12329626"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -193,6 +196,23 @@ Typedefs</h2></td></tr>
 <dd>
 <a class="el" href="group__opts_group.html#ga26a48c8529fffa5f5d1a61c030979980" title="Sets the callback to be invoked when the connection has reconnected.">natsOptions_SetReconnectedCB()</a></dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>Such callback is invoked from a dedicated thread and the state of the connection that triggered the event may have changed since that event was generated. </dd></dl>
+
+</div>
+</div>
+<a id="gae1d0ec90461ccdb105d00e1030806faa" name="gae1d0ec90461ccdb105d00e1030806faa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gae1d0ec90461ccdb105d00e1030806faa">&#9670;&#160;</a></span>natsProxyConnHandler</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(* natsProxyConnHandler) (<a class="el" href="nats_8h.html#af798865ac824e5959987de0fe8d07383">natsSock</a> *fd, char *host, int port, void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This callback is used to handle connections via proxy. It creates a socket, uses it for proxy verification, and returns it in <code>fd</code> to be used for the NATS connection.</p>
+<p>The callback should return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9cee6c417868ecaa69f99ff4f6576990" title="Success.">NATS_OK</a> if it has created a socket and returned it in <code>fd</code>, or any other error, such as <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a40a08ae6ae17deaf390b1d0d7550791c" title="Generic error.">NATS_ERR</a> if not.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#gad9199e095332535981db1582acea90d1" title="Sets the proxy connection handler.">natsOptions_SetProxyConnHandler</a> </dd></dl>
 
 </div>
 </div>

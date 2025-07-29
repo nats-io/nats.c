@@ -2706,9 +2706,18 @@ _dummyTokenHandler(void *closure)
 }
 
 static natsStatus
-_dummyProxyConnHandler(char* host, int port, natsSock* fd)
+_dummyProxyConnHandler(natsSock *fd, char *host, int port, void *closure)
 {
-    return NATS_SOCK_ERROR;
+    struct threadArg *args = (struct threadArg*) closure;
+
+    if (closure != NULL)
+    {
+        natsMutex_Lock(args->m);
+        args->sum++;
+        natsMutex_Unlock(args->m);
+    }
+
+    return NATS_ERR;
 }
 
 static void
@@ -3007,12 +3016,14 @@ void test_natsOptions(void)
     testCond((s == NATS_OK) && (opts->maxPendingBytes == 1000000))
 
     test("Set Proxy Connection Handler: ")
-    s = natsOptions_SetProxyConnHandler(opts, _dummyProxyConnHandler);
-    testCond((s == NATS_OK) && (opts->proxyConnectCb == _dummyProxyConnHandler));
+    s = natsOptions_SetProxyConnHandler(opts, _dummyProxyConnHandler, (void*) 1);
+    testCond((s == NATS_OK) && (opts->proxyConnectCb == _dummyProxyConnHandler)
+                && (opts->proxyConnectClosure == (void*) 1));
 
     test("Remove Proxy Connection Handler: ")
-    s = natsOptions_SetProxyConnHandler(opts, NULL);
-    testCond((s == NATS_OK) && (opts->proxyConnectCb == NULL));
+    s = natsOptions_SetProxyConnHandler(opts, NULL, NULL);
+    testCond((s == NATS_OK) && (opts->proxyConnectCb == NULL)
+                && (opts->proxyConnectClosure == NULL));
 
     test("Set Error Handler: ");
     s = natsOptions_SetErrorHandler(opts, _dummyErrHandler, NULL);
@@ -5968,27 +5979,33 @@ void test_ReconnectServerStats(void)
 
 
 static natsStatus
-_proxyConnectCb(char* host, int port, natsSock* pSock)
+_proxyConnectCb(natsSock *fd, char *host, int port, void *closure)
 {
-    natsStatus  s = NATS_OK;
-    natsSockCtx ctx;
+    struct threadArg    *arg    = (struct threadArg*) closure;
+    natsStatus          s       = NATS_OK;
+    natsSockCtx         ctx;
+
+    natsMutex_Lock(arg->m);
+    arg->sum++;
+    natsMutex_Unlock(arg->m);
 
     s = natsSock_Init(&ctx);
     IFOK(s, natsSock_ConnectTcp(&ctx, host, port))
 
     if (s == NATS_OK)
-        *pSock = ctx.fd;
+        *fd = ctx.fd;
 
     return s;
 }
 
 void test_ProxyConnectCb(void)
 {
-    natsStatus s;
-    natsConnection* nc = NULL;
-    natsOptions* opts = NULL;
-    natsPid serverPid = NATS_INVALID_PID;
-    struct threadArg args;
+    natsStatus          s;
+    natsConnection      *nc         = NULL;
+    natsOptions         *opts       = NULL;
+    natsPid             serverPid   = NATS_INVALID_PID;
+    const char          *servers[]  = { "nats://127.0.0.1:4222", "nats://127.0.0.1:4223" };
+    struct threadArg    args;
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s != NATS_OK)
@@ -5998,25 +6015,40 @@ void test_ProxyConnectCb(void)
     CHECK_SERVER_STARTED(serverPid)
 
     s = natsOptions_Create(&opts);
-    IFOK(s, natsOptions_SetURL(opts, NATS_DEFAULT_URL))
+    IFOK(s, natsOptions_SetServers(opts, servers, 2));
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
     if (s != NATS_OK)
         FAIL("Unable to create options")
 
     test("Set connectCb that returns failure: ");
-    s = natsOptions_SetProxyConnHandler(opts, _dummyProxyConnHandler);
+    s = natsOptions_SetProxyConnHandler(opts, _dummyProxyConnHandler, (void*) &args);
     testCond(s == NATS_OK);
 
     test("Connect with connectCb returning failure: ");
     s = natsConnection_Connect(&nc, opts);
-    testCond(s != NATS_OK);
+    testCond(s == NATS_NO_SERVER);
     nats_clearLastError();
 
+    test("Check invoked properly: ");
+    natsMutex_Lock(args.m);
+    s = (args.sum == 2 ? NATS_OK : NATS_ERR);
+    args.sum = 0;
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
     test("Set connectCb that returns success: ");
-    s = natsOptions_SetProxyConnHandler(opts, _proxyConnectCb);
+    s = natsOptions_SetProxyConnHandler(opts, _proxyConnectCb, (void*) &args);
     testCond(s == NATS_OK);
 
     test("Connect with connectCb returning success: ");
     s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    test("Check invoked properly: ");
+    natsMutex_Lock(args.m);
+    s = (args.sum == 1 ? NATS_OK : NATS_ERR);
+    args.sum = 0;
+    natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);

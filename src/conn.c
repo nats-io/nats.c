@@ -403,8 +403,9 @@ _createConn(natsConnection *nc)
     // Set ctx.noRandomize based on public NoRandomize option.
     nc->sockCtx.noRandomize = nc->opts->noRandomize;
 
-    // Set the proxy connect callback
-    nc->sockCtx.proxyConnectCb = nc->opts->proxyConnectCb;
+    // Set the proxy connect callback and closure.
+    nc->sockCtx.proxyConnectCb      = nc->opts->proxyConnectCb;
+    nc->sockCtx.proxyConnectClosure = nc->opts->proxyConnectClosure;
 
     s = natsSock_ConnectTcp(&(nc->sockCtx), nc->cur->url->host, nc->cur->url->port);
     if (s == NATS_OK)

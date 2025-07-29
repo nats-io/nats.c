@@ -1675,11 +1675,16 @@ typedef void (*natsConnectionHandler)(
 /** \brief Callback used to handle connections via proxy.
  *
  * This callback is used to handle connections via proxy.
- * It creates a socket, use it for proxy verification, and return it in `fd`
+ * It creates a socket, uses it for proxy verification, and returns it in `fd`
  * to be used for the NATS connection.
+ *
+ * The callback should return #NATS_OK if it has created a socket and returned it
+ * in `fd`, or any other error, such as #NATS_ERR if not.
+ *
+ * @see natsOptions_SetProxyConnHandler
  */
 typedef natsStatus (*natsProxyConnHandler)(
-    char* host, int port, natsSock* fd);
+    natsSock *fd, char *host, int port, void *closure);
 
 /** \brief Callback used to notify the user of errors encountered while processing
  *         inbound messages.
@@ -2968,9 +2973,12 @@ natsOptions_SetMaxPendingBytes(natsOptions* opts, int64_t maxPending);
  *
  * @param opts the pointer to the #natsOptions object.
  * @param proxyConnHandler the proxy connection handler callback.
+ * @param closure a pointer to an user object that will be passed to
+ * the callback. `closure` can be `NULL`.
  */
 NATS_EXTERN natsStatus
-natsOptions_SetProxyConnHandler(natsOptions* opts, natsProxyConnHandler proxyConnHandler);
+natsOptions_SetProxyConnHandler(natsOptions *opts, natsProxyConnHandler proxyConnHandler,
+                                void *closure);
 
 /** \brief Sets the error handler for asynchronous events.
  *

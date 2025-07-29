@@ -278,6 +278,7 @@ struct __natsOptions
     natsErrHandler          microAsyncErrCb;
 
     natsProxyConnHandler    proxyConnectCb;
+    void                    *proxyConnectClosure;
 
     int64_t                 pingInterval;
     int                     maxPingsOut;
@@ -673,6 +674,7 @@ typedef struct __natsSockCtx
     bool                    noRandomize;
 
     natsProxyConnHandler    proxyConnectCb;
+    void                    *proxyConnectClosure;
 
 } natsSockCtx;
 

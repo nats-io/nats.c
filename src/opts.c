@@ -990,11 +990,12 @@ natsOptions_SetMaxPendingBytes(natsOptions* opts, int64_t maxPending)
 }
 
 natsStatus
-natsOptions_SetProxyConnHandler(natsOptions* opts, natsProxyConnHandler proxyConnHandler)
+natsOptions_SetProxyConnHandler(natsOptions* opts, natsProxyConnHandler proxyConnHandler, void *closure)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0)
 
-    opts->proxyConnectCb = proxyConnHandler;
+    opts->proxyConnectCb        = proxyConnHandler;
+    opts->proxyConnectClosure   = closure;
 
     UNLOCK_OPTS(opts);
 

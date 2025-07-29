@@ -161,7 +161,6 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     int64_t         totalTimeout  = 0;
     int64_t         timeoutPerIP  = 0;
     struct addrinfo *tmpStorage[64];
-    bool            hasProxyConnectCb = ctx->proxyConnectCb != NULL;
 
     if (phost == NULL)
         return nats_setError(NATS_ADDRESS_MISSING, "%s", "No host specified");
@@ -183,10 +182,10 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
     start = nats_Now();
 
     // Call the proxy connect callback if provided
-    if (hasProxyConnectCb)
+    if (ctx->proxyConnectCb != NULL)
     {
         // Invoke the proxy connect callback.
-        s = ctx->proxyConnectCb(host, port, &ctx->fd);
+        s = ctx->proxyConnectCb(&ctx->fd, host, port, ctx->proxyConnectClosure);
 
         // If there was a deadline, reset the deadline with whatever is left.
         if (totalTimeout > 0)

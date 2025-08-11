@@ -756,6 +756,26 @@ natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback
     return s;
 }
 
+natsStatus
+natsOptions_SetSSLCertificatesCallback(natsOptions* opts, int (*cb)(SSL* ssl, void* arg), void* arg)
+{
+    natsStatus s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, cb == NULL);
+
+    s = _getSSLCtx(opts);
+    if (s == NATS_OK)
+    {
+        nats_sslRegisterThreadForCleanup();
+
+        SSL_CTX_set_cert_cb(opts->sslCtx->ctx, cb, arg);
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return s;
+}
+
 #endif // NATS_WITH_EXPERIMENTAL
 
 #else
@@ -821,6 +841,12 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
 
 natsStatus
 natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
+natsOptions_SetSSLCertificatesCallback(natsOptions* opts, int (*cb)(SSL* ssl, void* arg), void* arg)
 {
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }

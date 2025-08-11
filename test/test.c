@@ -21565,6 +21565,146 @@ void test_SSLVerificationCallback(void)
 #endif // NATS_WITH_EXPERIMENTAL
 }
 
+#if defined(NATS_HAS_TLS)
+static int _sslCertCallback(SSL* ssl, void* closure)
+{
+    if (ssl == NULL || closure == NULL)
+        return 0;
+
+    int* counter = (int*)closure;
+    (*counter)++; // increment each call
+
+    // Clear existing certs
+    SSL_certs_clear(ssl);
+
+    // Load certificate
+    FILE* certFile = fopen("certs/client-cert.pem", "r");
+    if (!certFile)
+        return 0;
+
+    X509* cert = PEM_read_X509(certFile, NULL, NULL, NULL);
+    fclose(certFile);
+    if (!cert)
+        return 0;
+
+    // Load private key
+    FILE* keyFile = fopen("certs/client-key.pem", "r");
+    if (!keyFile)
+    {
+        X509_free(cert);
+        return 0;
+    }
+    EVP_PKEY* pkey = PEM_read_PrivateKey(keyFile, NULL, NULL, NULL);
+    fclose(keyFile);
+    if (!pkey)
+    {
+        X509_free(cert);
+        return 0;
+    }
+
+    // Set certificate and private key
+    if (SSL_use_certificate(ssl, cert) != 1)
+    {
+        X509_free(cert);
+        EVP_PKEY_free(pkey);
+        return 0;
+    }
+
+    if (SSL_use_PrivateKey(ssl, pkey) != 1)
+    {
+        X509_free(cert);
+        EVP_PKEY_free(pkey);
+        return 0;
+    }
+
+    // Verify that the certificate and private key match
+    if (SSL_check_private_key(ssl) != 1)
+    {
+        X509_free(cert);
+        EVP_PKEY_free(pkey);
+        return 0;
+    }
+
+    // Free objects (OpenSSL makes its own copies)
+    X509_free(cert);
+    EVP_PKEY_free(pkey);
+
+    return 1; // Success
+}
+#endif // NATS_HAS_TLS
+
+void test_SSLCertificatesCallback(void)
+{
+#if defined(NATS_WITH_EXPERIMENTAL)
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc         = NULL;
+    natsOptions         *opts       = NULL;
+    natsPid             serverPid   = NATS_INVALID_PID;
+    int                 certCbCnt   = 0;
+    struct threadArg    args;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if (opts == NULL)
+        FAIL("Unable to create reconnect options!");
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check that connect fails if no SSL certs: ");
+    s = natsOptions_SetURL(opts, "nats://localhost:4443");
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    // For test purposes, we provide the CA trusted certs
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s != NATS_OK);
+
+    test("Check that connect succeeds with proper certs: ");
+    natsOptions_SetSSLCertificatesCallback(opts, _sslCertCallback, &certCbCnt);
+    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
+
+    test("Check that cert callback has been called: ");
+    testCond(certCbCnt == 1);
+
+    test("Check reconnects OK: ");
+    _stopServer(serverPid);
+
+    nats_Sleep(100);
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !(args.reconnected))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
+
+    test("Check cert callback has been called again on reconnect: ");
+    testCond(certCbCnt == 2);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif // NATS_HAS_TLS
+#endif // NATS_WITH_EXPERIMENTAL
+}
+
 void test_SSLCiphers(void)
 {
 #if defined(NATS_HAS_TLS)

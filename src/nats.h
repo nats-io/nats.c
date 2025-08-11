@@ -30,7 +30,7 @@ extern "C" {
 #ifdef NATS_WITH_EXPERIMENTAL
 
 #if !defined(NATS_HAS_TLS)
-#error "natsOptions_SetSSLVerificationCallback requires NATS_HAS_TLS to be defined"
+#error "natsOptions_SetSSLVerificationCallback and natsOptions_SetSSLCertificatesCallback requires NATS_HAS_TLS to be defined"
 #endif
 #include <openssl/ssl.h>
 #include <openssl/x509v3.h>
@@ -2760,6 +2760,23 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
  */
 NATS_EXTERN natsStatus
 natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback);
+
+/** \brief EXPERIMENTAL Sets the certificate callback.
+ *
+ * Sets a callback used to set or clear SSL certificates.
+ * Can be used to handle situation when certificate is renewed.
+ *
+ * \warning This is an experimental API and is subject to change in future
+ * versions. To use this API compile the client code with
+ * `-DNATS_WITH_EXPERIMENTAL -DNATS_HAS_TLS`. `openssl` library must be
+ * installed and added to the include/link paths.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param cb the custom SSL certificate handler to invoke. see
+ * https://docs.openssl.org/master/man3/SSL_CTX_set_cert_cb/
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetSSLCertificatesCallback(natsOptions* opts, int (*cb)(SSL* ssl, void* arg), void* arg);
 
 #endif // NATS_WITH_EXPERIMENTAL
 

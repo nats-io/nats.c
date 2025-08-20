@@ -563,9 +563,7 @@ _sslCertCallback(SSL* ssl, void* arg)
 {
     natsSSLCtx *ctx = (natsSSLCtx*)arg;
     if (ctx == NULL)
-    {
         return 0;
-    }
 
     // delete any certificates associated with the SSL object
     SSL_certs_clear(ssl);
@@ -598,8 +596,7 @@ natsOptions_LoadCertificatesChainDynamic(natsOptions *opts,
 {
     natsStatus s = NATS_OK;
 
-    if ((certFileName == NULL) || (certFileName[0] == '\0')
-        || (keyFileName == NULL) || (keyFileName[0] == '\0'))
+    if (nats_IsStringEmpty(certFileName) || nats_IsStringEmpty(keyFileName))
     {
         return nats_setError(NATS_INVALID_ARG, "%s",
                              "certificate and key file names can't be NULL nor empty");
@@ -613,25 +610,18 @@ natsOptions_LoadCertificatesChainDynamic(natsOptions *opts,
         NATS_FREE(opts->sslCtx->certFileName);
         opts->sslCtx->certFileName = NATS_STRDUP(certFileName);
         if (opts->sslCtx->certFileName == NULL)
-        {
             s = nats_setDefaultError(NATS_NO_MEMORY);
-        }
     }
-
     if (s == NATS_OK)
     {
         NATS_FREE(opts->sslCtx->keyFileName);
         opts->sslCtx->keyFileName = NATS_STRDUP(keyFileName);
         if (opts->sslCtx->keyFileName == NULL)
-        {
             s = nats_setDefaultError(NATS_NO_MEMORY);
-        }
     }
-
     if (s == NATS_OK)
     {
         nats_sslRegisterThreadForCleanup();
-
         SSL_CTX_set_cert_cb(opts->sslCtx->ctx, _sslCertCallback, opts->sslCtx);
     }
 

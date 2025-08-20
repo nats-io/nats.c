@@ -21347,69 +21347,16 @@ void test_SSLVerifyHostname(void)
 #endif
 }
 
-static char*
-_getAccountName(natsConnection *nc)
-{
-    natsStatus s = NATS_OK;
-    natsSubscription *inboxSub = NULL;
-    natsMsg *userInfoMsg = NULL;
-    natsInbox *inbox = NULL;
-    char *accountName = NULL;
-
-    s = natsConn_newInbox(nc, &inbox);
-
-    // Subscribe to inbox for response
-    IFOK(s, natsConnection_SubscribeSync(&inboxSub, nc, inbox));
-    IFOK(s, natsConnection_Flush(nc));
-
-    // Publish account request with inbox as reply subject
-    IFOK(s, natsConnection_PublishRequestString(nc, "$SYS.REQ.USER.INFO", inbox, ""));
-    IFOK(s, natsConnection_Flush(nc));
-
-    // Wait for response
-    IFOK(s, natsSubscription_NextMsg(&userInfoMsg, inboxSub, 2000));
-
-    if (s == NATS_OK && userInfoMsg != NULL)
-    {
-        // Parse JSON response and extract account information
-        nats_JSON *json = NULL;
-        nats_JSON *data = NULL;
-        const char *account = NULL;
-
-        s = nats_JSONParse(&json, natsMsg_GetData(userInfoMsg), (int)natsMsg_GetDataLength(userInfoMsg));
-        if (s == NATS_OK)
-        {
-            s = nats_JSONGetObject(json, "data", &data);
-            if (s == NATS_OK)
-            {
-                s = nats_JSONGetStr(data, "account", &account);
-                if (s == NATS_OK && account != NULL)
-                {
-                    accountName = NATS_STRDUP(account);
-                }
-            }
-        }
-
-        // Cleanup
-        nats_JSONDestroy(json);
-        natsMsg_Destroy(userInfoMsg);
-    }
-
-    natsSubscription_Destroy(inboxSub);
-    NATS_FREE(inbox);
-
-    return accountName;
-}
-
 void test_SSLVerifyDynamic(void)
 {
 #if defined(NATS_HAS_TLS)
     natsStatus          s;
     natsConnection      *nc          = NULL;
     natsOptions         *opts        = NULL;
+    natsSubscription    *sub         = NULL;
+    natsMsg             *msg         = NULL;
     natsPid             serverPid    = NATS_INVALID_PID;
     struct threadArg    args;
-    char                *accountName = NULL;
 
     s = _createDefaultThreadArgsForCbTests(&args);
     if (s == NATS_OK)
@@ -21428,6 +21375,18 @@ void test_SSLVerifyDynamic(void)
     IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
     IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s != NATS_OK);
+    nats_clearLastError();
+
+    test("Check load certs (bad args): ");
+    s = natsOptions_LoadCertificatesChainDynamic(opts, "certs/client-cert.pem", "");
+    if (s == NATS_INVALID_ARG)
+        s = natsOptions_LoadCertificatesChainDynamic(opts, "certs/client-cert.pem", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsOptions_LoadCertificatesChainDynamic(opts, "", "certs/client-key.pem");
+    if (s == NATS_INVALID_ARG)
+        s = natsOptions_LoadCertificatesChainDynamic(opts, NULL, "certs/client-key.pem");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
 
     test("Check that connect succeeds with dynamic cert loading: ");
     // Create temporary certificate files for dynamic loading
@@ -21443,21 +21402,19 @@ void test_SSLVerifyDynamic(void)
     if ((s == NATS_OK) && (system("copy certs\\client-key.pem certs\\key-dynamic.pem") != 0))
         s = NATS_ERR;
 #endif
-    
     IFOK(s, natsOptions_LoadCertificatesChainDynamic(opts,
                                                      "certs/cert-dynamic.pem",
                                                      "certs/key-dynamic.pem"));
     s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "*"));
     IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
     IFOK(s, natsConnection_Flush(nc));
-    testCond(s == NATS_OK);
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL) && (strcmp(natsMsg_GetData(msg), "test") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
 
-    test("Check account name equals \"DEREK\": ");
-    accountName = _getAccountName(nc);
-    testCond(accountName != NULL && !strcmp(accountName, "DEREK"));
-    NATS_FREE(accountName);
-
-    test("Check reconnects with different cert is OK: ");
+    test("Change certs: ");
     _stopServer(serverPid);
 
     nats_Sleep(100);
@@ -21474,24 +21431,34 @@ void test_SSLVerifyDynamic(void)
     if ((s == NATS_OK) && (system("copy certs\\server-key.pem certs\\key-dynamic.pem") != 0))
         s = NATS_ERR;
 #endif
+    testCond(s == NATS_OK);
 
     serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
     CHECK_SERVER_STARTED(serverPid);
 
+    test("Wait for reconnect: ");
     natsMutex_Lock(args.m);
     while ((s != NATS_TIMEOUT) && !(args.reconnected))
         s = natsCondition_TimedWait(args.c, args.m, 2000);
     natsMutex_Unlock(args.m);
-
-    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
-    IFOK(s, natsConnection_Flush(nc));
     testCond(s == NATS_OK);
 
-    test("Check account name equals \"JOHN\": ");
-    accountName = _getAccountName(nc);
-    testCond(accountName != NULL && !strcmp(accountName, "JOHN"));
-    NATS_FREE(accountName);
+    test("Check not able to publish on foo: ");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 250));
+    testCond((s == NATS_TIMEOUT) && (msg == NULL));
+    nats_clearLastError();
 
+    test("Send to right subject: ");
+    s = natsConnection_PublishString(nc, "bar", "test2");
+    IFOK(s, natsConnection_Flush(nc));
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL) && (strcmp(natsMsg_GetData(msg), "test2") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
 

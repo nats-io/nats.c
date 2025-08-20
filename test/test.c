@@ -21421,14 +21421,14 @@ void test_SSLVerifyDynamic(void)
 
     // change certificate files so that reconnect will use different client certificate
 #ifndef _WIN32
-    if (system("cp certs/server-cert.pem certs/cert-dynamic.pem") != 0)
+    if (system("cp certs/client-cert2.pem certs/cert-dynamic.pem") != 0)
         s = NATS_ERR;
-    if ((s == NATS_OK) && (system("cp certs/server-key.pem certs/key-dynamic.pem") != 0))
+    if ((s == NATS_OK) && (system("cp certs/client-key2.pem certs/key-dynamic.pem") != 0))
         s = NATS_ERR;
 #else
-    if (system("copy certs\\server-cert.pem certs\\cert-dynamic.pem") != 0)
+    if (system("copy certs\\client-cert2.pem certs\\cert-dynamic.pem") != 0)
         s = NATS_ERR;
-    if ((s == NATS_OK) && (system("copy certs\\server-key.pem certs\\key-dynamic.pem") != 0))
+    if ((s == NATS_OK) && (system("copy certs\\client-key2.pem certs\\key-dynamic.pem") != 0))
         s = NATS_ERR;
 #endif
     testCond(s == NATS_OK);

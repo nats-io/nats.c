@@ -21347,6 +21347,167 @@ void test_SSLVerifyHostname(void)
 #endif
 }
 
+static char*
+_getAccountName(natsConnection *nc)
+{
+    natsStatus s = NATS_OK;
+    natsSubscription *inboxSub = NULL;
+    natsMsg *userInfoMsg = NULL;
+    natsInbox *inbox = NULL;
+    char *accountName = NULL;
+
+    s = natsConn_newInbox(nc, &inbox);
+
+    // Subscribe to inbox for response
+    IFOK(s, natsConnection_SubscribeSync(&inboxSub, nc, inbox));
+    IFOK(s, natsConnection_Flush(nc));
+
+    // Publish account request with inbox as reply subject
+    IFOK(s, natsConnection_PublishRequestString(nc, "$SYS.REQ.USER.INFO", inbox, ""));
+    IFOK(s, natsConnection_Flush(nc));
+
+    // Wait for response
+    IFOK(s, natsSubscription_NextMsg(&userInfoMsg, inboxSub, 2000));
+
+    if (s == NATS_OK && userInfoMsg != NULL)
+    {
+        // Parse JSON response and extract account information
+        nats_JSON *json = NULL;
+        nats_JSON *data = NULL;
+        const char *account = NULL;
+
+        s = nats_JSONParse(&json, natsMsg_GetData(userInfoMsg), (int)natsMsg_GetDataLength(userInfoMsg));
+        if (s == NATS_OK)
+        {
+            s = nats_JSONGetObject(json, "data", &data);
+            if (s == NATS_OK)
+            {
+                s = nats_JSONGetStr(data, "account", &account);
+                if (s == NATS_OK && account != NULL)
+                {
+                    accountName = NATS_STRDUP(account);
+                }
+            }
+        }
+
+        // Cleanup
+        nats_JSONDestroy(json);
+        natsMsg_Destroy(userInfoMsg);
+    }
+
+    natsSubscription_Destroy(inboxSub);
+    NATS_FREE(inbox);
+
+    return accountName;
+}
+
+void test_SSLVerifyDynamic(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc          = NULL;
+    natsOptions         *opts        = NULL;
+    natsPid             serverPid    = NATS_INVALID_PID;
+    struct threadArg    args;
+    char                *accountName = NULL;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if (opts == NULL)
+        FAIL("Unable to create reconnect options!");
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check that connect fails if no SSL certs: ");
+    s = natsOptions_SetURL(opts, "nats://localhost:4443");
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    // For test purposes, we provide the CA trusted certs
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s != NATS_OK);
+
+    test("Check that connect succeeds with dynamic cert loading: ");
+    // Create temporary certificate files for dynamic loading
+    s = NATS_OK;
+#ifndef _WIN32
+    if (system("cp certs/client-cert.pem certs/cert-dynamic.pem") != 0)
+        s = NATS_ERR;
+    if ((s == NATS_OK) && (system("cp certs/client-key.pem certs/key-dynamic.pem") != 0))
+        s = NATS_ERR;
+#else
+    if (system("copy certs\\client-cert.pem certs\\cert-dynamic.pem") != 0)
+        s = NATS_ERR;
+    if ((s == NATS_OK) && (system("copy certs\\client-key.pem certs\\key-dynamic.pem") != 0))
+        s = NATS_ERR;
+#endif
+    
+    IFOK(s, natsOptions_LoadCertificatesChainDynamic(opts,
+                                                     "certs/cert-dynamic.pem",
+                                                     "certs/key-dynamic.pem"));
+    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
+
+    test("Check account name equals \"DEREK\": ");
+    accountName = _getAccountName(nc);
+    testCond(accountName != NULL && !strcmp(accountName, "DEREK"));
+    NATS_FREE(accountName);
+
+    test("Check reconnects with different cert is OK: ");
+    _stopServer(serverPid);
+
+    nats_Sleep(100);
+
+    // change certificate files so that reconnect will use different client certificate
+#ifndef _WIN32
+    if (system("cp certs/server-cert.pem certs/cert-dynamic.pem") != 0)
+        s = NATS_ERR;
+    if ((s == NATS_OK) && (system("cp certs/server-key.pem certs/key-dynamic.pem") != 0))
+        s = NATS_ERR;
+#else
+    if (system("copy certs\\server-cert.pem certs\\cert-dynamic.pem") != 0)
+        s = NATS_ERR;
+    if ((s == NATS_OK) && (system("copy certs\\server-key.pem certs\\key-dynamic.pem") != 0))
+        s = NATS_ERR;
+#endif
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !(args.reconnected))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
+
+    test("Check account name equals \"JOHN\": ");
+    accountName = _getAccountName(nc);
+    testCond(accountName != NULL && !strcmp(accountName, "JOHN"));
+    NATS_FREE(accountName);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid);
+
+    // Remove temporary files
+    remove("certs/cert-dynamic.pem");
+    remove("certs/key-dynamic.pem");
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif // NATS_HAS_TLS
+}
+
 void test_SSLSkipServerVerification(void)
 {
 #if defined(NATS_HAS_TLS)

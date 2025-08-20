@@ -196,6 +196,8 @@ typedef struct __natsSSLCtx
     SSL_CTX         *ctx;
     char            *expectedHostname;
     bool            skipVerify;
+    char            *certFileName;
+    char            *keyFileName;
 
 #ifdef NATS_WITH_EXPERIMENTAL
     SSL_verify_cb   callback;

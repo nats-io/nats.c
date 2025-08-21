@@ -761,9 +761,14 @@ _makeTLSConn(natsConnection *nc)
 #endif
     if ((s == NATS_OK) && (SSL_do_handshake(ssl) != 1))
     {
-        s = nats_setError(NATS_SSL_ERROR,
-                          "SSL handshake error: %s",
-                          (nc->errStr[0] != '\0' ? nc->errStr : NATS_SSL_ERR_REASON_STRING));
+        // check if there is already set NATS_SSL_ERROR from _sslCertCallback
+        nats_GetLastError(&s);
+        if (s != NATS_SSL_ERROR)
+        {
+            s = nats_setError(NATS_SSL_ERROR,
+                              "SSL handshake error: %s",
+                              (nc->errStr[0] != '\0' ? nc->errStr : NATS_SSL_ERR_REASON_STRING));
+        }
     }
     // Make sure that if nc-errStr was set in _collectSSLErr but
     // the overall handshake is ok, then we clear the error

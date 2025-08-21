@@ -233,6 +233,8 @@ natsSSLCtx_release(natsSSLCtx *ctx)
     if (refs == 0)
     {
         NATS_FREE(ctx->expectedHostname);
+        NATS_FREE(ctx->certFileName);
+        NATS_FREE(ctx->keyFileName);
         SSL_CTX_free(ctx->ctx);
         natsMutex_Destroy(ctx->lock);
         NATS_FREE(ctx);
@@ -549,6 +551,78 @@ natsOptions_LoadCertificatesChain(natsOptions *opts,
                               keyFileName,
                               NATS_SSL_ERR_REASON_STRING);
         }
+    }
+
+    UNLOCK_OPTS(opts);
+
+    return s;
+}
+
+static int
+_sslCertCallback(SSL* ssl, void* arg)
+{
+    natsSSLCtx *ctx = (natsSSLCtx*)arg;
+    if (ctx == NULL)
+        return 0;
+
+    // delete any certificates associated with the SSL object
+    SSL_certs_clear(ssl);
+
+    if (SSL_use_certificate_chain_file(ssl, ctx->certFileName) != 1)
+    {
+        nats_setError(NATS_SSL_ERROR,
+                      "Error loading certificate chain '%s': %s",
+                      ctx->certFileName,
+                      NATS_SSL_ERR_REASON_STRING);
+        return 0;
+    }
+
+    if (SSL_use_PrivateKey_file(ssl, ctx->keyFileName, SSL_FILETYPE_PEM) != 1)
+    {
+        nats_setError(NATS_SSL_ERROR,
+                      "Error loading private key '%s': %s",
+                      ctx->keyFileName,
+                      NATS_SSL_ERR_REASON_STRING);
+        return 0;
+    }
+
+    return 1;
+}
+
+natsStatus
+natsOptions_LoadCertificatesChainDynamic(natsOptions *opts,
+                                  const char *certFileName,
+                                  const char *keyFileName)
+{
+    natsStatus s = NATS_OK;
+
+    if (nats_IsStringEmpty(certFileName) || nats_IsStringEmpty(keyFileName))
+    {
+        return nats_setError(NATS_INVALID_ARG, "%s",
+                             "certificate and key file names can't be NULL nor empty");
+    }
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    s = _getSSLCtx(opts);
+    if (s == NATS_OK)
+    {
+        NATS_FREE(opts->sslCtx->certFileName);
+        opts->sslCtx->certFileName = NATS_STRDUP(certFileName);
+        if (opts->sslCtx->certFileName == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    if (s == NATS_OK)
+    {
+        NATS_FREE(opts->sslCtx->keyFileName);
+        opts->sslCtx->keyFileName = NATS_STRDUP(keyFileName);
+        if (opts->sslCtx->keyFileName == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    if (s == NATS_OK)
+    {
+        nats_sslRegisterThreadForCleanup();
+        SSL_CTX_set_cert_cb(opts->sslCtx->ctx, _sslCertCallback, opts->sslCtx);
     }
 
     UNLOCK_OPTS(opts);

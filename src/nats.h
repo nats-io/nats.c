@@ -2663,6 +2663,24 @@ natsOptions_LoadCertificatesChain(natsOptions *opts,
                                   const char *certsFileName,
                                   const char *keyFileName);
 
+/** \brief Loads the certificate chain and key from a file on every connection attempt.
+ *
+ * Similar to #natsOptions_LoadCertificatesChain expect that instead of loading
+ * from file just once, the key and certificate is read on every connection attempt.
+ * This is useful when the certificate is renewed and the application
+ * needs to pick up the new certificate without restarting.
+ *
+ * @see natsOptions_LoadCertificatesChain()
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param certsFileName the file containing the client certificates.
+ * @param keyFileName the file containing the client private key.
+ */
+NATS_EXTERN natsStatus
+natsOptions_LoadCertificatesChainDynamic(natsOptions *opts,
+                                         const char *certsFileName,
+                                         const char *keyFileName);
+
 /** \brief Sets the client certificate and key.
  *
  * Similar to #natsOptions_LoadCertificatesChain expect that instead

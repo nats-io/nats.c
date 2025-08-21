@@ -21347,6 +21347,134 @@ void test_SSLVerifyHostname(void)
 #endif
 }
 
+void test_SSLVerifyDynamic(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc          = NULL;
+    natsOptions         *opts        = NULL;
+    natsSubscription    *sub         = NULL;
+    natsMsg             *msg         = NULL;
+    natsPid             serverPid    = NATS_INVALID_PID;
+    struct threadArg    args;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if (opts == NULL)
+        FAIL("Unable to create reconnect options!");
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Check that connect fails if no SSL certs: ");
+    s = natsOptions_SetURL(opts, "nats://localhost:4443");
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    // For test purposes, we provide the CA trusted certs
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s != NATS_OK);
+    nats_clearLastError();
+
+    test("Check load certs (bad args): ");
+    s = natsOptions_LoadCertificatesChainDynamic(opts, "certs/client-cert.pem", "");
+    if (s == NATS_INVALID_ARG)
+        s = natsOptions_LoadCertificatesChainDynamic(opts, "certs/client-cert.pem", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsOptions_LoadCertificatesChainDynamic(opts, "", "certs/client-key.pem");
+    if (s == NATS_INVALID_ARG)
+        s = natsOptions_LoadCertificatesChainDynamic(opts, NULL, "certs/client-key.pem");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Check that connect succeeds with dynamic cert loading: ");
+    // Create temporary certificate files for dynamic loading
+    s = NATS_OK;
+#ifndef _WIN32
+    if (system("cp certs/client-cert.pem certs/cert-dynamic.pem") != 0)
+        s = NATS_ERR;
+    if ((s == NATS_OK) && (system("cp certs/client-key.pem certs/key-dynamic.pem") != 0))
+        s = NATS_ERR;
+#else
+    if (system("copy certs\\client-cert.pem certs\\cert-dynamic.pem") != 0)
+        s = NATS_ERR;
+    if ((s == NATS_OK) && (system("copy certs\\client-key.pem certs\\key-dynamic.pem") != 0))
+        s = NATS_ERR;
+#endif
+    IFOK(s, natsOptions_LoadCertificatesChainDynamic(opts,
+                                                     "certs/cert-dynamic.pem",
+                                                     "certs/key-dynamic.pem"));
+    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "*"));
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL) && (strcmp(natsMsg_GetData(msg), "test") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Change certs: ");
+    _stopServer(serverPid);
+
+    nats_Sleep(100);
+
+    // change certificate files so that reconnect will use different client certificate
+#ifndef _WIN32
+    if (system("cp certs/client-cert2.pem certs/cert-dynamic.pem") != 0)
+        s = NATS_ERR;
+    if ((s == NATS_OK) && (system("cp certs/client-key2.pem certs/key-dynamic.pem") != 0))
+        s = NATS_ERR;
+#else
+    if (system("copy certs\\client-cert2.pem certs\\cert-dynamic.pem") != 0)
+        s = NATS_ERR;
+    if ((s == NATS_OK) && (system("copy certs\\client-key2.pem certs\\key-dynamic.pem") != 0))
+        s = NATS_ERR;
+#endif
+    testCond(s == NATS_OK);
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Wait for reconnect: ");
+    natsMutex_Lock(args.m);
+    while ((s != NATS_TIMEOUT) && !(args.reconnected))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    test("Check not able to publish on foo: ");
+    IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
+    IFOK(s, natsConnection_Flush(nc));
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 250));
+    testCond((s == NATS_TIMEOUT) && (msg == NULL));
+    nats_clearLastError();
+
+    test("Send to right subject: ");
+    s = natsConnection_PublishString(nc, "bar", "test2");
+    IFOK(s, natsConnection_Flush(nc));
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL) && (strcmp(natsMsg_GetData(msg), "test2") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(serverPid);
+
+    // Remove temporary files
+    remove("certs/cert-dynamic.pem");
+    remove("certs/key-dynamic.pem");
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif // NATS_HAS_TLS
+}
+
 void test_SSLSkipServerVerification(void)
 {
 #if defined(NATS_HAS_TLS)

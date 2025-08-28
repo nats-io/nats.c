@@ -266,7 +266,7 @@ marshal_info(natsBuffer **new_buf, microServiceInfo *info)
         {
             IFOK(s, natsBuf_AppendByte(buf, '{'));
             IFOK_attr("name", info->Endpoints[i].Name, "");
-            IFOK(s, nats_marshalMetadata(buf, true, "metadata", info->Endpoints[i].Metadata));
+            IFOK(s, nats_marshalMetadata(buf, true, "metadata", &(info->Endpoints[i].Metadata)));
             IFOK(s, natsBuf_AppendByte(buf, ','));
             if (!nats_IsStringEmpty(info->Endpoints[i].QueueGroup))
                 IFOK_attr("queue_group", info->Endpoints[i].QueueGroup, ",");
@@ -279,7 +279,7 @@ marshal_info(natsBuffer **new_buf, microServiceInfo *info)
     }
 
     IFOK_attr("id", info->Id, "");
-    IFOK(s, nats_marshalMetadata(buf, true, "metadata", info->Metadata));
+    IFOK(s, nats_marshalMetadata(buf, true, "metadata", &(info->Metadata)));
     IFOK(s, natsBuf_AppendByte(buf, ','));
     IFOK_attr("name", info->Name, ",");
     IFOK_attr("type", info->Type, ",");

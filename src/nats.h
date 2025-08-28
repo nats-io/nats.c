@@ -196,6 +196,11 @@ typedef struct __natsOptions        natsOptions;
  */
 typedef char                        natsInbox;
 
+/** \brief Map with key being a string and value being an array of strings.
+ *
+ * This is represented as a map, with the key being a string and value being an array of strings.
+ */
+typedef struct __natsHeader         natsHeader;
 
 /** \brief An initial configuration for NATS client. Provides control over the
  * threading model, and sets many default option values.
@@ -250,15 +255,19 @@ typedef struct natsMsgList
 
 /** \brief A type to represent user-provided metadata, a list of k=v pairs.
  *
- * Used in JetStream, microservice configuration.
+ * Used in JetStream, object store and microservice configurations.
  */
-
 typedef struct natsMetadata
 {
-        // User-provided metadata for the stream, encoded as an array of {"key", "value",...}
-        const char **List;
-        // Number of key/value pairs in Metadata, 1/2 of the length of the array.
-        int Count;
+        /**
+         * @brief User-provided metadata for the stream, encoded as an array of {"key", "value",...}
+         */
+        const char  **List;
+        /**
+         * @brief Number of key/value pairs in Metadata, 1/2 of the length of the array.
+         */
+        int         Count;
+
 } natsMetadata;
 
 /**
@@ -1084,7 +1093,7 @@ typedef struct jsConsumerInfo
  *
  * \note Once done, the list should be destroyed calling #jsConsumerInfoList_Destroy
  *
- * @see jsStreamInfoList_Destroy
+ * @see jsConsumerInfoList_Destroy
  */
 typedef struct jsConsumerInfoList
 {
@@ -1592,6 +1601,423 @@ typedef struct kvKeysList
         int             Count;
 
 } kvKeysList;
+
+/**
+ * The Object Store object.
+ */
+typedef struct __objStore               objStore;
+
+/**
+ * The Object Store object returned when initiating a "put" operation.
+ * This is needed when using the generic #objStore_Put function because the
+ * user needs to add data to the object as the data becomes available.
+ *
+ * @see objStore_Put
+ *
+ * Most users don't need that and will use the followin convenience functions:
+ * - #objStore_PutString
+ * - #objStore_PutBytes
+ * - #objStore_PutFile
+ */
+typedef struct __objStorePut            objStorePut;
+
+/**
+ * The Object Store object returned by #objStore_Get operation.
+ *
+ * @see objStore_Get
+ */
+typedef struct __objStoreGet            objStoreGet;
+
+/**
+ * The Object Store watcher object.
+ */
+typedef struct __objStoreWatcher        objStoreWatcher;
+
+/**
+ * Object store configuration object.
+ *
+ * In order to create an object store, a configuration needs to be set.
+ * The typical usage would be to initialize all required objects on the stack
+ * and configure them, then pass the pointer to the configuration to
+ * #js_CreateObjectStore.
+ *
+ * \note The strings are applications owned and will not be freed by the library.
+ *
+ * @see objStoreConfig_Init
+ *
+ * \code{.unparsed}
+ * objStore         *obs = NULL;
+ * objStoreConfig   cfg;
+ *
+ * objStoreConfig_Init(&cfg);
+ * cfg.Bucket = "TEST";
+ * cfg.Description = "Testing ObjectStore";
+ * cfg.Storage = js_MemoryStorage;
+ * cfg.TTL = 10000; // 10 seconds
+ * cfg.MaxBytes = 1024*1024*1024;
+ * cfg.Metadata.List = (const char*[4]){"field1", "value1", "field2", "value2"};
+ * cfg.Metadata.Count = 2;
+ * s = js_CreateObjectStore(&obs, js, &cfg);
+ * \endcode
+ */
+typedef struct objStoreConfig
+{
+    /**
+     * @brief Bucket is the name of the object store.
+     *
+     * Bucket name has to be unique and can only contain alphanumeric characters,
+     * dashes, and underscores.
+     */
+    const char      *Bucket;
+
+    /**
+     * @brief Description is an optional description for the object store.
+     */
+    const char      *Description;
+
+    /**
+     * @brief TTL is the maximum age (expressed in milliseconds) of objects in the store.
+     *
+     * If an object is not updated within this time, it will be removed from the store.
+     * By default, objects do not expire.
+     */
+    int64_t         TTL;
+
+    /**
+     * @brief MaxBytes is the maximum size of the object store.
+     *
+     * If not specified, the default is -1 (unlimited).
+     */
+    int64_t         MaxBytes;
+
+    /**
+     * @brief Storage is the type of storage to use for the object store.
+     *
+     * If not specified, the default is FileStorage.
+     */
+    jsStorageType   Storage;
+
+    /**
+     * @brief Replicas is the number of replicas to keep for the object store in clustered jetstream.
+     *
+     * Defaults to 1, maximum is 5.
+     */
+    int             Replicas;
+
+    /**
+     * @brief Placement is used to declare where the object store should be placed.
+     *
+     * Placement is used to declare where the object store should be placed via
+     * tags and/or an explicit cluster name.
+     */
+    jsPlacement     *Placement;
+
+    /**
+     * @brief Compression enables the underlying stream compression.
+     *
+     * \note Compression is supported for nats-server 2.10.0+
+     */
+    bool            Compression;
+
+    // /**
+    //  * @brief Bucket-specific metadata.
+    //  *
+    //  * \note Metadata requires nats-server v2.10.0+
+    //  */
+    natsMetadata    Metadata;
+
+} objStoreConfig;
+
+/**
+ * List of object store names returned by #js_ObjectStoreNames
+ *
+ * \note Once done, the list should be destroyed calling #objStoreNamesList_Destroy
+ *
+ * @see objStoreNamesList_Destroy
+ */
+typedef struct objStoreNamesList
+{
+    char    **List;
+    int     Count;
+
+} objStoreNamesList;
+
+/**
+ * The Object Store status object.
+ *
+ * This is run-time status about a bucket.
+ *
+ * \note User needs to call #objStoreStatus_Destroy when object is
+ * no longer needed to free memory, except if the user got the status
+ * from the list #objStoreStatusesList, in which case the statuses will
+ * be destroyed when calling #objStoreStatusesList_Destroy.
+ *
+ * @see objStoreStatus_Destroy
+ * @see objStoreStatusesList_Destroy
+ */
+typedef struct objStoreStatus
+{
+    /**
+     * @brief Bucket is the name of the object store.
+     */
+    const char      *Bucket;
+
+    /**
+     * @brief Description is the description supplied when creating the bucket.
+     */
+    const char      *Description;
+
+    /**
+     * @brief TTL indicates how long (in milliseconds) objects are kept in the bucket.
+     */
+    int64_t         TTL;
+
+    /**
+     * @brief Storage indicates the underlying JetStream storage technology used tostore data.
+     */
+    jsStorageType   Storage;
+
+    /**
+     * @brief Replicas indicates how many storage replicas are kept for the data in the bucket.
+     */
+    int             Replicas;
+
+    /**
+     * @brief Sealed indicates the stream is sealed and cannot be modified in any way.
+     */
+    bool            Sealed;
+
+    /**
+     * @brief Size is the combined size of all data in the bucket including metadata, in bytes.
+     */
+    uint64_t        Size;
+
+    /**
+     * @brief BackingStore indicates what technology is used for storage of the bucket.
+     *
+     * Currently only JetStream is supported.
+     */
+    const char     *BackingStore;
+
+    /**
+     * @brief Metadata is the user supplied metadata for the bucket.
+     */
+    natsMetadata    Metadata;
+
+    /**
+     * @brief StreamInfo is the stream info retrieved to create the status.
+     */
+    jsStreamInfo    *StreamInfo;
+
+    /**
+     * @brief IsCompressed indicates if the data is compressed on disk.
+     */
+    bool            IsCompressed;
+
+} objStoreStatus;
+
+/**
+ * List of object store statuses returned by #js_ObjectStoreStatuses.
+ *
+ * \note Once done, the list should be destroyed calling #objStoreStatusesList_Destroy
+ *
+ * @see objStoreStatusesList_Destroy
+ */
+typedef struct objStoreStatusesList
+{
+    objStoreStatus  **List;
+    int             Count;
+
+} objStoreStatusesList;
+
+/**
+ * This structure is used to embed links to other buckets and objects.
+ */
+typedef struct objStoreLink
+{
+    /**
+     * @brief Bucket is the name of the object store the link is pointing to.
+     */
+    const char  *Bucket;
+
+    /**
+     * @brief Name can be used to link to a single object.
+     *
+     * If empty means this is a link to the whole store, like a directory.
+     */
+    const char  *Name;
+
+} objStoreLink;
+
+/**
+ * This structure is used to set additional options when creating an object.
+ */
+typedef struct objStoreMetaOptions
+{
+    /**
+     * @brief Link contains information about a link to another object or object store.
+     *
+     * It should not be set manually, but rather by using the #objStore_AddLink or #objStore_AddBucketLink methods.
+     */
+    objStoreLink    *Link;
+
+    /**
+     * @brief ChunkSize is the maximum size of each chunk in bytes.
+     *
+     * If not specified, the default is 128k.
+     */
+    uint32_t        ChunkSize;
+
+} objStoreMetaOptions;
+
+/**
+ * This structure represents high level information about an object.
+ */
+typedef struct objStoreMeta
+{
+    /**
+     * @brief Name is the name of the object.
+     *
+     * The name is required when adding an object and has to be unique within
+     * the object store.
+     */
+    const char  *Name;
+
+    /**
+     * @brief Description is an optional description for the object.
+     */
+    const char  *Description;
+
+    /**
+     * @brief Headers is an optional set of user-defined headers for the object.
+     */
+    natsHeader  *Headers;
+
+    /**
+     * @brief Metadata is the user supplied metadata for the object.
+     */
+    natsMetadata Metadata;
+
+    /**
+     * @brief Additional options for the object.
+     */
+    objStoreMetaOptions Opts;
+
+} objStoreMeta;
+
+/**
+ * This structure contains #objStoreMeta and additional information about an object.
+ */
+typedef struct objStoreInfo
+{
+    /**
+     * @brief objStoreMeta contains high level information about the object.
+     */
+    objStoreMeta    Meta;
+
+    /**
+     * @brief Bucket is the name of the object store.
+     */
+    const char      *Bucket;
+
+    /**
+     * @brief NUID is the unique identifier for the object set when putting the object into the store.
+     */
+    const char      *NUID;
+
+    /**
+     * @brief Size is the size of the object in bytes. It only includes the size of the object itself, not the metadata.
+     */
+    uint64_t        Size;
+
+    /**
+     * @brief ModTime is the last modification time of the object (in unix nanoseconds).
+     */
+     int64_t         ModTime;
+
+    /**
+     * @brief Chunks is the number of chunks the object is split into.
+     *
+     * Maximum size of each chunk can be specified in objStoreMetaOptions.
+     */
+    uint32_t        Chunks;
+
+    /**
+     * @brief Digest is the SHA-256 digest of the object.
+     *
+     * It is used to verify the integrity of the object.
+     */
+    const char      *Digest;
+
+    /**
+     * @brief Deleted indicates if the object is marked as deleted.
+     */
+    bool            Deleted;
+
+} objStoreInfo;
+
+/**
+ * List of object store information returned by #objStore_List.
+ *
+ * \note Once done, the list should be destroyed calling #objStoreInfoList_Destroy.
+ *
+ * @see objStoreInfoList_Destroy
+ */
+typedef struct objStoreInfoList
+{
+    objStoreInfo        **List;
+    int                 Count;
+
+} objStoreInfoList;
+
+/**
+ * This structure is used to provide additional options to some object store APIs.
+ *
+ * Some options will have a meaning only for some APIs. Each API that accepts
+ * this structure will describe which options can be used and their exact meaning
+ * in the context of the API.
+ *
+ * Typically, users will declare a variable of this type on the stack and initializes
+ * it with #objStoreOptions_Init, and then pass the pointer to this variable to APIs
+ * that need it.
+ */
+typedef struct objStoreOptions
+{
+    /**
+     * @brief ShowDeleted includes deleted object in the result.
+     *
+     * For some APIs, if this option is set to true, the returned value will include
+     * objects that have been deleted.
+     */
+    bool        ShowDeleted;
+
+} objStoreOptions;
+
+/**
+ * The Object Store watcher options.
+ *
+ * Initialize the object with #objStoreWatchOptions_Init
+ */
+typedef struct objStoreWatchOptions
+{
+    /**
+     * @brief The watcher won't return information about deleted objects.
+     *
+     * If this is set to true, #objStoreWatcher_Next will not return information
+     * about deleted objects.
+     */
+    bool    IgnoreDeletes;
+
+    /**
+     * @brief The watcher won't return information about existing objects.
+     *
+     * If this is set to true, #objStoreWatcher_Next will not return information
+     * about objects that have already been added to the object store.
+     */
+    bool    UpdatesOnly;
+
+} objStoreWatchOptions;
+
 
 #if defined(NATS_HAS_STREAMING)
 /** \brief A connection to a `NATS Streaming Server`.
@@ -3984,6 +4410,169 @@ natsInbox_Destroy(natsInbox *inbox);
 
 /** @} */ // end of inboxGroup
 
+/** \defgroup headerGroup Header
+ *
+ * This is represented as a map, with the key being a string and value being an array of strings.
+ *
+ * @{
+ */
+
+/** \brief Creates an header object.
+ *
+ * Creates an header object that is empty.
+ *
+ * \note The returned #natsHeader object needs be destroyed using #natsHeader_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see natsHeader_Destroy
+ *
+ * @param new_header the location where to store the pointer to the #natsHeader object.
+ */
+NATS_EXTERN natsStatus
+natsHeader_New(natsHeader **new_header);
+
+ /** \brief Set the header entries associated with `key` to the single element `value`.
+ *
+ * It will replace any existing value associated with `key`.
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads.
+ *
+ * @param h the pointer to the #natsHeader object.
+ * @param key the key under which the `value` will be stored. It can't ne `NULL` or empty.
+ * @param value the string to store under the given `key`. The value can be `NULL` or empty string.
+ */
+NATS_EXTERN natsStatus
+natsHeader_Set(natsHeader *h, const char *key, const char *value);
+
+/** \brief Add `value` to the header associated with `key`.
+ *
+ * It will append to any existing values associated with `key`.
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads.
+ *
+ * @param h the pointer to the #natsHeader object.
+ * @param key the key under which the `value` will be stored. It can't ne `NULL` or empty.
+ * @param value the string to add to the values associated with the given `key`. The value can be `NULL` or empty string.
+ */
+NATS_EXTERN natsStatus
+natsHeader_Add(natsHeader *h, const char *key, const char *value);
+
+/** \brief Get the header entry associated with `key`.
+ *
+ * If more than one entry for the `key` is available, the first is returned.
+ *
+ * \warning The returned value is owned by the library and MUST not be freed or altered.
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads.
+ *
+ * @param h the pointer to the #natsHeader object.
+ * @param key the key for which the value is requested.
+ * @param value the memory location where the library will store the pointer to the first
+ * value (if more than one is found) associated with the `key`.
+ * @return #NATS_NOT_FOUND if `key` is not present in the headers.
+ */
+NATS_EXTERN natsStatus
+natsHeader_Get(natsHeader *h, const char *key, const char **value);
+
+/** \brief Get all header values associated with `key`.
+ *
+ * \warning The returned strings are own by the library and MUST not be freed or altered.
+ * However, the returned array `values` MUST be freed by the user.
+ *
+ * \code{.c}
+ * const char* *values = NULL;
+ * int         count   = 0;
+ *
+ * s = natsHeader_Values(h, "My-Key", &values, &count);
+ * if (s == NATS_OK)
+ * {
+ *      // do something with the values
+ *
+ *      // then free the array of pointers.
+ *      free((void*) values);
+ * }
+ * \endcode
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads.
+ *
+ * @param h the pointer to the #natsHeader object.
+ * @param key the key for which the values are requested.
+ * @param values the memory location where the library will store the pointer to the array
+ * of values.
+ * @param count the memory location where the library will store the number of values returned.
+ * @return #NATS_NOT_FOUND if `key` is not present in the headers.
+ */
+NATS_EXTERN natsStatus
+natsHeader_Values(natsHeader *h, const char *key, const char* **values, int *count);
+
+/** \brief Get all header keys.
+ *
+ * \warning The returned strings are own by the library and MUST not be freed or altered.
+ * However, the returned array `keys` MUST be freed by the user.
+ *
+ * \code{.c}
+ * const char* *keys = NULL;
+ * int         count   = 0;
+ *
+ * s = natsMsgHeader_Keys(h, &keys, &count);
+ * if (s == NATS_OK)
+ * {
+ *      // do something with the keys
+ *
+ *      // then free the array of pointers.
+ *      free((void*) keys);
+ * }
+ * \endcode
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads.
+ *
+ * @param h the pointer to the #natsHeader object.
+ * @param keys the memory location where the library will store the pointer to the array
+ * of keys.
+ * @param count the memory location where the library will store the number of keys returned.
+ * @return #NATS_NOT_FOUND if no key is present.
+ */
+NATS_EXTERN natsStatus
+natsHeader_Keys(natsHeader *h, const char* **keys, int *count);
+
+/** \brief Returns the number of keys.
+ *
+ * @param h the pointer to the #natsHeader object.
+ * @return The number of keys. If `h` is `NULL`, retunrs 0.
+ */
+NATS_EXTERN int
+natsHeader_KeysCount(natsHeader *h);
+
+/** \brief Delete the value(s) associated with `key`.
+ *
+ * Delete the value(s) associated with `key`.
+ *
+ * \warning Headers are not thread-safe, that is, you must not set/add/get values or
+ * delete keys for the same message from different threads.
+ *
+ * @param h the pointer to the #natsHeader object.
+ * @param key the key to delete from the headers map.
+ * @return #NATS_NOT_FOUND if `key` is not present in the headers.
+ */
+NATS_EXTERN natsStatus
+natsHeader_Delete(natsHeader *h, const char *key);
+
+/** \brief Destroys the #natsHeader object.
+ *
+ * Releases memory allocated for this #natsHeader object.
+ *
+ * @param h the pointer to the #natsHeader object.
+ */
+NATS_EXTERN void
+natsHeader_Destroy(natsHeader *h);
+
+/** @} */ // end of headerGroup
+
 /** \defgroup msgGroup Message
  *
  *  NATS Message.
@@ -4128,7 +4717,7 @@ natsMsgHeader_Add(natsMsg *msg, const char *key, const char *value);
  * @param key the key for which the value is requested.
  * @param value the memory location where the library will store the pointer to the first
  * value (if more than one is found) associated with the `key`.
- * @return NATS_NOT_FOUND if `key` is not present in the headers.
+ * @return #NATS_NOT_FOUND if `key` is not present in the headers.
  */
 NATS_EXTERN natsStatus
 natsMsgHeader_Get(natsMsg *msg, const char *key, const char **value);
@@ -4164,7 +4753,7 @@ natsMsgHeader_Get(natsMsg *msg, const char *key, const char **value);
  * @param values the memory location where the library will store the pointer to the array
  * of values.
  * @param count the memory location where the library will store the number of values returned.
- * @return NATS_NOT_FOUND if `key` is not present in the headers.
+ * @return #NATS_NOT_FOUND if `key` is not present in the headers.
  */
 NATS_EXTERN natsStatus
 natsMsgHeader_Values(natsMsg *msg, const char *key, const char* **values, int *count);
@@ -4196,7 +4785,7 @@ natsMsgHeader_Values(natsMsg *msg, const char *key, const char* **values, int *c
  * @param keys the memory location where the library will store the pointer to the array
  * of keys.
  * @param count the memory location where the library will store the number of keys returned.
- * @return NATS_NOT_FOUND if no key is present.
+ * @return #NATS_NOT_FOUND if no key is present.
  */
 NATS_EXTERN natsStatus
 natsMsgHeader_Keys(natsMsg *msg, const char* **keys, int *count);
@@ -4212,7 +4801,7 @@ natsMsgHeader_Keys(natsMsg *msg, const char* **keys, int *count);
  *
  * @param msg the pointer to the #natsMsg object.
  * @param key the key to delete from the headers map.
- * @return NATS_NOT_FOUND if `key` is not present in the headers.
+ * @return #NATS_NOT_FOUND if `key` is not present in the headers.
  */
 NATS_EXTERN natsStatus
 natsMsgHeader_Delete(natsMsg *msg, const char *key);
@@ -7759,13 +8348,923 @@ kvStatus_Destroy(kvStatus *sts);
 
 /** @} */ // end of kvGroup
 
+/** \defgroup obsGroup Object Stores
+ *
+ * Object Stores offer a straightforward method for storing large objects
+ * within JetStream. These stores are backed by a specially configured streams,
+ * designed to efficiently and compactly store these objects.
+ *
+ * The Object Store, also known as a bucket, enables the execution of various
+ * operations:
+ *
+ * - create an object store
+ * - update an object store
+ * - get an object store
+ * - delete an object store
+ * - list all objects in a bucket
+ * - watch for changes on objects in a bucket
+ * - create links to other objects or other buckets
+ *
+ * \warning Object Stores needs TLS to be able to generate and check SHA256 object
+ * digests. If the library is compiled without TLS support, some of the features
+ * will still work, but "put" and "get" operations will fail.
+ *
+ *  @{
+ */
+
+/** \defgroup obsGroupMgt Object Stores management
+ *
+ * These functions allow to create, get or delete an Object Store.
+ *
+ *  @{
+ */
+
+/** \brief Initializes an Object Store configuration structure.
+ *
+ * Use this before setting specific #objStoreConfig options and passing it to #js_CreateObjectStore.
+ *
+ * @see js_CreateObjectStore
+ *
+ * @param cfg the pointer to the stack variable #objStoreConfig to initialize.
+ */
+NATS_EXTERN natsStatus
+objStoreConfig_Init(objStoreConfig *cfg);
+
+/** \brief Creates an object store with a given configuration.
+ *
+ * Creates an object store with a given configuration.
+ *
+ * Bucket names are restricted to this set of characters: `A-Z`, `a-z`, `0-9`, `_` and `-`.
+ *
+ * \note The returned #objStore object needs to be destroyed using #objStore_Destroy when
+ * no longer needed to free allocated memory. This is different from deleting an object store
+ * from the server using the #js_DeleteObjectStore API.
+ *
+ * @param new_obs the location where to store the pointer to the #objStore object.
+ * @param js the pointer to the #jsCtx object.
+ * @param cfg the pointer to the #objStoreConfig configuration information used to create the #objStore object.
+ */
+NATS_EXTERN natsStatus
+js_CreateObjectStore(objStore **new_obs, jsCtx *js, objStoreConfig *cfg);
+
+/** \brief Updates an object store with a given configuration.
+ *
+ * Updates an object store with a given configuration.
+ *
+ * Bucket names are restricted to this set of characters: `A-Z`, `a-z`, `0-9`, `_` and `-`.
+ *
+ * \note If the object store with given name does not exist, this will return #NATS_NOT_FOUND.
+ *
+ * \note The returned #objStore object needs to be destroyed using #objStore_Destroy when
+ * no longer needed to free allocated memory. This is different from deleting an object store
+ * from the server using the #js_DeleteObjectStore API.
+ *
+ * @param new_obs the location where to store the pointer to the #objStore object.
+ * @param js the pointer to the #jsCtx object.
+ * @param cfg the pointer to the #objStoreConfig configuration information used to create the #objStore object.
+ */
+NATS_EXTERN natsStatus
+js_UpdateObjectStore(objStore **new_obs, jsCtx *js, objStoreConfig *cfg);
+
+/** \brief Looks-up and binds to an existing object store.
+ *
+ * This call is when the user wants to use an existing object store.
+ * If the store does not already exists, an error is returned.
+ *
+ * Bucket names are restricted to this set of characters: `A-Z`, `a-z`, `0-9`, `_` and `-`.
+ *
+ * \note The returned #objStore object needs to be destroyed using #objStore_Destroy when
+ * no longer needed to free allocated memory. This is different from deleting an object store
+ * from the server using the #js_DeleteObjectStore API.
+ *
+ * @param new_obs the location where to store the pointer to the #objStore object.
+ * @param js the pointer to the #jsCtx object.
+ * @param bucket the name of the bucket of the existing object store.
+ */
+NATS_EXTERN natsStatus
+js_ObjectStore(objStore **new_obs, jsCtx *js, const char *bucket);
+
+/** \brief Retrieves a list of bucket names.
+ *
+ * Retrieves the list of all object store names.
+ *
+ * \note The returned #objStoreNamesList object needs to be destroyed using #objStoreNamesList_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see objStoreNamesList_Destroy
+ *
+ * @param new_list the location where to store the pointer to the #objStoreNamesList object.
+ * @param js the pointer to the #jsCtx object.
+ */
+NATS_EXTERN natsStatus
+js_ObjectStoreNames(objStoreNamesList **new_list, jsCtx *js);
+
+/** \brief Destroys the object store names list object.
+ *
+ * Releases memory allocated for this list of object store names.
+ *
+ * \warning All strings contained in the list will become invalid after this call.
+ *
+ * @param list the pointer to the #objStoreNamesList object.
+ */
+NATS_EXTERN void
+objStoreNamesList_Destroy(objStoreNamesList *list);
+
+/** \brief Retrieves a list of bucket statuses.
+ *
+ * Retrieves the list of all object store statuses.
+ *
+ * \note The returned #objStoreStatusesList object needs to be destroyed using #objStoreStatusesList_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see objStoreStatusesList_Destroy
+ *
+ * @param new_list the location where to store the pointer to the #objStoreStatusesList object.
+ * @param js the pointer to the #jsCtx object.
+ */
+NATS_EXTERN natsStatus
+js_ObjectStoreStatuses(objStoreStatusesList **new_list, jsCtx *js);
+
+/** \brief Destroys the object store statuses list object.
+ *
+ * Releases memory allocated for this list of object store statuses.
+ *
+ * \warning All #objStoreStatus objects contained in the list will become invalid after this call.
+ *
+ * @param list the pointer to the #objStoreStatusesList object.
+ */
+NATS_EXTERN void
+objStoreStatusesList_Destroy(objStoreStatusesList *list);
+
+/** \brief Deletes an object store.
+ *
+ * This will delete the object store with the `bucket` name.
+ *
+ * Bucket names are restricted to this set of characters: `A-Z`, `a-z`, `0-9`, `_` and `-`.
+ *
+ * @param js the pointer to the #jsCtx object.
+ * @param bucket the name of the bucket of the existing object store.
+ */
+NATS_EXTERN natsStatus
+js_DeleteObjectStore(jsCtx *js, const char *bucket);
+
+/** @} */ // end of obsGroupMgt
+
+/** \defgroup obsMgt Object Store management
+ *
+ * These functions allow to get information, status, etc... on a given object store.
+ *
+ *  @{
+ */
+
+/** \brief Initializes an Object Store options structure.
+ *
+ * Use this before setting specific #objStoreOptions options and passing it to the APIs
+ * that accept such object.
+ *
+ * @param opts the pointer to the stack variable #objStoreOptions to initialize.
+ */
+NATS_EXTERN natsStatus
+objStoreOptions_Init(objStoreOptions *opts);
+
+/** \brief Retrieves the current information for the object.
+ *
+ * Retrieves the current information for the object, containing
+ * the object's metadata and instance information.
+ *
+ * If the object does not exist, #NATS_NOT_FOUND will be returned.
+ *
+ * The #objStoreOptions.ShowDeleted option can be supplied to return
+ * an object even if it was marked as deleted.
+ *
+ * \note The returned #objStoreInfo object needs be destroyed using #objStoreInfo_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * If `opts` is not `NULL`, the #objStoreOptions.ShowDeleted can be used to get information about
+ * an object within the store, even if it has been deleted.
+ *
+ * @see objStoreInfo_Destroy
+ *
+ * @param new_info the location where to store the pointer to the #objStoreInfo object.
+ * @param obs the pointer to the #objStore object.
+ * @param name the name of the object to retrieve the info for.
+ * @param opts the pointer to the #objStoreOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+objStore_GetInfo(objStoreInfo **new_info, objStore *obs, const char *name, objStoreOptions *opts);
+
+/** \brief Destroys the ObjectStore information object.
+ *
+ * Releases memory allocated for this #objStoreInfo object.
+ *
+ * @param info the pointer to the #objStoreInfo object to destroy.
+ */
+NATS_EXTERN void
+objStoreInfo_Destroy(objStoreInfo *info);
+
+/** \brief Updates the metadata for the object.
+ *
+ * This will update the metadata for the object.
+ *
+ * The status #NATS_ILLEGAL_STATE may be returned if:
+ * - the object does not exist.
+ * - the new name is different from the old one, and an object with the new
+ *   name already exists.
+ *
+ * The error string will add more context.
+ *
+ * @param obs the pointer to the #objStore object.
+ * @param name the name of the object.
+ * @param meta the pointer to the #objStoreMeta information used for the update.
+ */
+NATS_EXTERN natsStatus
+objStore_UpdateMeta(objStore *obs, const char *name, objStoreMeta *meta);
+
+/** \brief Deletes the named object from the object store.
+ *
+ * This will delete the named object from the object store. If the object
+ * does not exist, the error #NATS_NOT_FOUND will be returned. If the object is
+ * already deleted, no error will be returned.
+ *
+ * All chunks for the object will be purged, and the object will be marked as
+ * deleted.
+ *
+ * @param obs the pointer to the #objStore object.
+ * @param name the name of the object to delete.
+ */
+NATS_EXTERN natsStatus
+objStore_Delete(objStore *obs, const char *name);
+
+/** \brief Adds a link to another object.
+ *
+ * A link is a reference to another object. The provided name is the name of the link object.
+ * The provided #objStoreInfo is the info of the object being linked to.
+ *
+ * The error #NATS_ILLEGAL_STATE is returned if an object with given name already exists,
+ * or if the provided object is a link.
+ *
+ * \note The returned #objStoreInfo object needs be destroyed using #objStoreInfo_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see objStoreInfo_Destroy
+ *
+ * @param new_info the location where to store the pointer to the #objStoreInfo object, or `NULL` if not needed.
+ * @param obs the pointer to the #objStore object.
+ * @param name the name of the link.
+ * @param obj the pointer to the #objStoreInfo object representing the object being linked to.
+ */
+NATS_EXTERN natsStatus
+objStore_AddLink(objStoreInfo **new_info, objStore *obs, const char *name, objStoreInfo *obj);
+
+/** \brief Adds a link to another object store.
+ *
+ * A link is a reference to another object store. The provided name is the name of
+ * the link object.
+ *
+ * The provided #objStore is the object store being linked to.
+ *
+ * The error #NATS_ILLEGAL_STATE is returned if an object with given name already exists.
+ *
+ * \note The returned #objStoreInfo object needs be destroyed using #objStoreInfo_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see objStoreInfo_Destroy
+ *
+ * @param new_info the location where to store the pointer to the #objStoreInfo object, or `NULL` if not needed.
+ * @param obs the pointer to the #objStore object.
+ * @param name the name of the link.
+ * @param bucket the pointer to the #objStore object representing the object store being linked to.
+ */
+NATS_EXTERN natsStatus
+objStore_AddBucketLink(objStoreInfo **new_info, objStore *obs, const char *name, objStore *bucket);
+
+/** \brief Seals the object store.
+ *
+ * This function will seal the object store, no further modifications will be allowed.
+ *
+ * @param obs the pointer to the #objStore object.
+ */
+NATS_EXTERN natsStatus
+objStore_Seal(objStore *obs);
+
+/** \brief Initializes the object store watcher options object
+ *
+ * Use this before setting specific object store watcher options and passing it
+ * to #objStore_Watch.
+ *
+ * @see objStore_Watch
+ *
+ * @param opts the pointer to the #objStoreWatchOptions object.
+ */
+NATS_EXTERN natsStatus
+objStoreWatchOptions_Init(objStoreWatchOptions *opts);
+
+/** \brief Watches for updates to objects in the store.
+ *
+ * This will create a watcher for any updates to objects in the store. By default, the watcher will
+ * send the latest information for each object and all future updates. The call
+ * to #objStoreWatcher_Next will return a `NULL` #objStoreInfo with status #NATS_OK
+ * when it has received all initial values.
+ *
+ * The watcher can be configured by initializing a #objStoreWatchOptions structure
+ * with #objStoreWatchOptions_Init and setting the following properties:
+ * - IgnoreDeletes will have the watcher not pass any objects with delete markers.
+ * - UpdatesOnly will have the watcher only pass updates on objects (without latest info when started).
+ *
+ * \note The returned #objStoreWatcher object needs be destroyed using #objStoreWatcher_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see objStoreWatchOptions_Init
+ * @see objStoreWatcher_Next
+ * @see objStoreWatcher_Stop
+ * @see objStoreWatcher_Destroy
+ *
+ * @param new_watcher the location where to store the pointer to the #objStoreWatcher object.
+ * @param obs the pointer to the #objStore object.
+ * @param opts the pointer to the #objStoreWatchOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+objStore_Watch(objStoreWatcher **new_watcher, objStore *obs, objStoreWatchOptions *opts);
+
+/** \brief Returns the next object store information for this object store watcher.
+ *
+ * Returns the next object store information for this watcher. The `new_info` may be `NULL`
+ * (with #NATS_OK status) to indicate that the initial state has been retrieved.
+ *
+ * If a thread is waiting on this call, it can be canceled with a call to
+ * #objStoreWatcher_Stop.
+ *
+ * \note The returned #objStoreInfo object needs be destroyed using #objStoreInfo_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see objStoreInfo_Destroy
+ * @see objStoreWatcher_Stop
+ * @see objStoreWatcher_Destroy
+ *
+ * @param new_info the location where to store the pointer to the #objStoreInfo object.
+ * @param watcher the pointer to the #objStoreWatcher object.
+ * @param timeout how long to wait (in milliseconds) for the next entry.
+ */
+NATS_EXTERN natsStatus
+objStoreWatcher_Next(objStoreInfo **new_info, objStoreWatcher *watcher, int64_t timeout);
+
+/** \brief Stops the object store watcher.
+ *
+ * Stops the watcher.
+ *
+ * \note Stopping a stopped watcher returns #NATS_OK.
+ *
+ * \warning After this call, new and existing calls to #objStoreWatcher_Next (that are waiting
+ * for an update) will return with #NATS_ILLEGAL_STATE.
+ *
+ * @param watcher the pointer to the #objStoreWatcher object.
+ */
+NATS_EXTERN natsStatus
+objStoreWatcher_Stop(objStoreWatcher *watcher);
+
+/** \brief Destroys the object store's watcher object.
+ *
+ * Releases memory allocated for this #objStoreWatcher object.
+ *
+ * @param watcher the pointer to the #objStoreWatcher object.
+ */
+NATS_EXTERN void
+objStoreWatcher_Destroy(objStoreWatcher *watcher);
+
+/** \brief Lists information about objects in the object store.
+ *
+ * This function will return a #objStoreInfoList object that contains the
+ * #objStoreInfo for objects in the store.
+ *
+ * If the object store is empty, this function will return #NATS_NOT_FOUND.
+ *
+ * To get information about deleted objects, initialize the options with #objStoreOptions_Init,
+ * then set #objStoreOptions.ShowDeleted to true and pass the options to this call.
+ *
+ * \note The returned #objStoreInfoList object needs be destroyed using #objStoreInfoList_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see objStoreInfoList_Destroy
+ *
+ * @param new_list the location where to store the pointer to the #objStoreInfoList object.
+ * @param obs the pointer to the #objStore object.
+ * @param opts the pointer to the #objStoreOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+objStore_List(objStoreInfoList **new_list, objStore *obs, objStoreOptions *opts);
+
+/** \brief Destroys the list of object informations.
+ *
+ * Releases memory allocated for this list of object store informations.
+ *
+ * \warning All #objStoreInfo objects contained in the list will become invalid after this call.
+ *
+ * @param list the pointer to the #objStoreStatusesList object.
+ */
+NATS_EXTERN void
+objStoreInfoList_Destroy(objStoreInfoList *list);
+
+/** \brief Retreive the status and configuration of the bucket.
+ *
+ * This function retrieves the status and configuration of the bucket.
+ *
+ * \note The returned #objStoreStatus object needs be destroyed using #objStoreStatus_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see objStoreStatus_Destroy
+ *
+ * @param new_status the location where to store the pointer to the #objStoreStatus object.
+ * @param obs the pointer to the #objStore object.
+ */
+NATS_EXTERN natsStatus
+objStore_Status(objStoreStatus **new_status, objStore *obs);
+
+/** \brief Destroys the object store status object.
+ *
+ * Releases memory allocated for this object store status object.
+ *
+ * @param status the pointer to the #objStoreStatus object.
+ */
+NATS_EXTERN void
+objStoreStatus_Destroy(objStoreStatus *status);
+
+/** \brief Destroys an object store object.
+ *
+ * This will simply free memory resources in the library for this object store object,
+ * but does not delete the object store in the server.
+ *
+ * @param obs the pointer to the #objStore object.
+ */
+NATS_EXTERN void
+objStore_Destroy(objStore *obs);
+
+/** @} */ // end of obsMgt
+
+/** \brief Initializes an object store meta structure.
+ *
+ * Typically, the user will declare an #objStoreMeta variable on the stack and call
+ * this function to initializes the structure, set some fields and pass it to an API.
+ *
+ * \code{.unparsed}
+ * objStoreMeta meta;
+ *
+ * objStoreMeta_Init(&meta);
+ * meta.Name = "test";
+ * s = objStore_Put(&put, obs, &meta);
+ * ...
+ * \endcode
+ *
+ * @see #objStore_Put
+ *
+ * @param meta the pointer to the #objStoreMeta structure to initialize.
+ */
+NATS_EXTERN natsStatus
+objStoreMeta_Init(objStoreMeta *meta);
+
+/** \brief Initiates a session to put bytes into an object.
+ *
+ * If the object already exists, it will be overwritten. The object name is
+ * required and taken from the #objStoreMeta.Name field.
+ *
+ * On success, an #objStorePut object will be returned. This should then be passed
+ * to the functions to add and complete the put operation.
+ *
+ * \note The returned #objStorePut object needs be destroyed using #objStorePut_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * \code{.unparsed}
+ * objStoreMeta meta;
+ * objStorePut  *put  = NULL;
+ * objStoreInfo *info = NULL;
+ *
+ * objStoreMeta_Init(&meta);
+ * meta.Name = "test";
+ * s = objStore_Put(&put, obs, &meta);
+ * if (s == NATS_OK)
+ * {
+ *      natsStatus addSts = NATS_OK;
+ *
+ *      while ((addSts == NATS_OK) && hasMoreDataToAdd)
+ *      {
+ *              // Get some data from somewhere...
+ *              addSts = objStorePut_Add(put, data, dataLen);
+ *              // If data needs to be freed, it is safe to do it after the "Add" call.
+ *              ...
+ *      }
+ *      // We are done adding data, call "Complete". We should invoke this even
+ *      // if there were issues adding data. The call will then purge partial chunks.
+ *      // The last param is the timeout for operation to complete, here using 3 seconds.
+ *      s = objStorePut_Complete(&info, put, 3000);
+ * }
+ * // At this point, the "put" operation is complete. On success, we would have an `info`
+ * // variable that can be inspected. If not needed, `NULL` should have been passed to
+ * // the `objStorePut_Complete` call.
+ * if (s == NATS_OK)
+ * {
+ *      // Inspect the info if needed.
+ * }
+ * // Now we need to destroy both object. No need to check for `NULL` (as long as you
+ * properly initialized them to `NULL`) since the calls internally check for that.
+ * objStoreInfo_Destroy(info);
+ * objStorePut_Destroy(put);
+ * ...
+ * \endcode
+ *
+ * @see objStoreMeta_Init
+ * @see objStorePut_Add
+ * @see objStorePut_Complete
+ * @see objStorePut_Destroy
+ *
+ * @param new_put the location where to store the pointer to the #objStorePut object.
+ * @param obs the pointer to the #objStore object.
+ * @param meta the pointer to the #objStoreMeta object.
+ */
+NATS_EXTERN natsStatus
+objStore_Put(objStorePut **new_put, objStore *obs, objStoreMeta *meta);
+
+/** \brief Add data to the object.
+ *
+ * After successfully calling #objStore_Put, the returned #objStorePut object
+ * is used by this function to add bytes to the object. When there is no more data
+ * to add, call #objStorePut_Complete to complete the operation.
+ *
+ * If an error occurs, invoking this function again will immediately error out.
+ * The only outcome is to call #objStorePut_Complete to undo the partial additions
+ * and free the object.
+ *
+ * See #objStore_Put for an example on how to use the set of APIs.
+ *
+ * @see objStore_Put
+ * @see objStorePut_Complete
+ *
+ * @param put the pointer to the #objStorePut object.
+ * @param data the pointer to the byte array to add to the object.
+ * @param dataLen the number of bytes of the byte array to add.
+ */
+NATS_EXTERN natsStatus
+objStorePut_Add(objStorePut *put, const void *data, int dataLen);
+
+/** \brief Complete a put operation.
+ *
+ * After adding data, this call will complete the operation and on success return
+ * the #objStoreInfo (if desired).
+ *
+ * If there were errors adding the data, this function will purge the partial
+ * data added.
+ *
+ * \note The returned #objStoreInfo object needs be destroyed using #objStoreInfo_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @param new_info the location where to store the pointer to the #objStoreInfo object, or `NULL` if not needed.
+ * @param put the pointer to the #objStorePut object.
+ * @param timeout the amount of time (in milliseconds) to wait for the operation to complete.
+ */
+NATS_EXTERN natsStatus
+objStorePut_Complete(objStoreInfo **new_info, objStorePut *put, int64_t timeout);
+
+/** \brief Destroys the object store's put object
+ *
+ * Releases memory allocated for this #objStorePut object.
+ *
+ * \note If there were errors and the put operation did not complete, this function will
+ * attempt to purge the data that was partially added.
+ *
+ * @param put the pointer to the #objStorePut object.
+ */
+NATS_EXTERN void
+objStorePut_Destroy(objStorePut *put);
+
+/** \brief Put a string into this object.
+ *
+ * This is a convenience function to put a string into this object
+ * store under the given name.
+ *
+ * An #objStoreInfo will be returned, containing the object's metadata, digest
+ * and instance information.
+ *
+ * \note The returned #objStoreInfo object needs be destroyed using #objStoreInfo_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see objStoreInfo_Destroy
+ *
+ * @param new_info the location where to store the pointer to the #objStoreInfo object, or `NULL` if not needed.
+ * @param obs the pointer to the #objStore object.
+ * @param name the name of the object to put the string into.
+ * @param data the string to put into the object.
+ */
+NATS_EXTERN natsStatus
+objStore_PutString(objStoreInfo **new_info, objStore *obs, const char *name, const char *data);
+
+/** \brief Put bytes into this object.
+ *
+ * This is a convenience function to put bytes into this object
+ * store under the given name.
+ *
+ * An #objStoreInfo will be returned, containing the object's metadata, digest
+ * and instance information.
+ *
+ * \note The returned #objStoreInfo object needs be destroyed using #objStoreInfo_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see objStoreInfo_Destroy
+ *
+ * @param new_info the location where to store the pointer to the #objStoreInfo object, or `NULL` if not needed.
+ * @param obs the pointer to the #objStore object.
+ * @param name the name of the object to put the string into.
+ * @param data the bytes to put into the object.
+ * @param dataLen the number of bytes to put into the object.
+ */
+NATS_EXTERN natsStatus
+objStore_PutBytes(objStoreInfo **new_info, objStore *obs, const char *name, const void *data, int dataLen);
+
+/** \brief Put the content of a file into this object.
+ *
+ * This is a convenience function to put a file content into this object store.
+ * The name of the object will be the path of the file.
+ *
+ * \note The returned #objStoreInfo object needs be destroyed using #objStoreInfo_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * @see objStoreInfo_Destroy
+ *
+ * @param new_info the location where to store the pointer to the #objStoreInfo object, or `NULL` if not needed.
+ * @param obs the pointer to the #objStore object.
+ * @param fileName the name of the file whose content will be put into the object.
+ */
+NATS_EXTERN natsStatus
+objStore_PutFile(objStoreInfo **new_info, objStore *obs, const char *fileName);
+
+/** \brief Pull the named object from the object store.
+ *
+ * If the object does not exist, #NATS_NOT_FOUND will be returned.
+ *
+ * The returned #objStoreGet object will contain the object's metadata and the user
+ * can call #objStoreGet_Read to get some bytes as they become available, or
+ * #objStoreGet_ReadAll to get the whole object in one call.
+ *
+ * The option #objStoreOptions.ShowDeleted can be provided to return an object
+ * even if it was marked as deleted.
+ *
+ * \note The returned #objStoreGet object needs be destroyed using #objStoreGet_Destroy
+ * when no longer needed to free allocated memory.
+ *
+ * Here is an example to read data by chunks:
+ *
+ * \code{.unparsed}
+ * objStoreGet *get = NULL;
+ *
+ * s = objStore_Get(&get, obs, "myobject", NULL);
+ * if (s == NATS_OK)
+ * {
+ *      objStoreInfo    *info   = NULL;
+ *      bool            done    = false;
+ *
+ *      // We can inspect the info if we chose to do so.
+ *      s = objStoreGet_Info(&info);
+ *      if (s == NATS_OK)
+ *      {
+ *              // Inspect the info...
+ *      }
+ *      // DO NOT destroy the info, it belongs to the `objStoreGet` object.
+ *
+ *      // Get data in chunks.
+ *      while ((s == NATS_OK) && !done)
+ *      {
+ *              void *data = NULL;
+ *              int  len   = 0;
+ *
+ *              // Read some data. The last param is a timeout (in milliseconds) to wait
+ *              // for some data to become available.
+ *              s = objStoreGet_Read(&done, &data, &len, get, 4000);
+ *              if (s == NATS_OK)
+ *              {
+ *                      // Do something with the data
+ *                      ...
+ *                      // It is the user responsibility to free the memory.
+ *                      free(data);
+ *              }
+ *      }
+ *      // At this point, all data for the object has been retrieved.
+ * }
+ * // Now we need to destroy the object. No need to check for `NULL` (as long as you
+ * properly initialized it to `NULL`) since the call internally check for that.
+ * objStoreGet_Destroy(get);
+ * ...
+ * \endcode
+ *
+ * Here is an example to read data all at once. Unless the user needs to inspect
+ * the object store information's object prior to read the data, the convenience
+ * functtion #objStore_GetBytes will be equivalent much simpler to use.
+ *
+ * \code{.unparsed}
+ * objStoreGet *get = NULL;
+ *
+ * s = objStore_Get(&get, obs, "myobject", NULL);
+ * if (s == NATS_OK)
+ * {
+ *      objStoreInfo *info = NULL;
+ *
+ *      // We can inspect the info if we chose to do so.
+ *      s = objStoreGet_Info(&info);
+ *      if (s == NATS_OK)
+ *      {
+ *              // Inspect the info...
+ *      }
+ *      // DO NOT destroy the info, it belongs to the `objStoreGet` object.
+ *
+ *      if (s == NATS_OK)
+ *      {
+ *              void    *data   = NULL;
+ *              int     len     = 0;
+ *
+ *              // The last param is a timeout (in milliseconds) to wait
+ *              // for some data to become available. Here we are using 10 seconds.
+ *              s = objStoreGet_ReadAll(&data, &len, get, 10000);
+ *              if (s == NATS_OK)
+ *              {
+ *                      // Do something with the data
+ *                      ...
+ *                      // It is the user responsibility to free the memory.
+ *                      free(data);
+ *              }
+ *      }
+ * }
+ * // Now we need to destroy the object. No need to check for `NULL` (as long as you
+ * properly initialized it to `NULL`) since the call internally check for that.
+ * objStoreGet_Destroy(get);
+ * ...
+ * \endcode
+ *
+ * @see objStoreGet_Read
+ * @see objStoreGet_ReadAll
+ * @see objStoreGet_Destroy
+ *
+ * @param new_get the location where to store the pointer to the #objStoreGet object.
+ * @param obs the pointer to the #objStore object.
+ * @param name the name of the object to pull data from.
+ * @param opts the pointer to the #objStoreOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+objStore_Get(objStoreGet **new_get, objStore *obs, const char *name, objStoreOptions *opts);
+
+/** \brief Returns a handle to the information object own by the #objStoreGet object.
+ *
+ * Allows the user to get information about the pulled object.
+ *
+ * \warning The #objStoreInfo is owned by the #objStoreGet object and MUST NOT be destroyed
+ * or altered by the user. In other words, do not call #objStoreInfo_Destroy on the #objStoreInfo
+ * pointer returned by this function. Instead, call #objStoreGet_Destroy to free allocated memory.
+ *
+ * @param new_info the location where to store the pointer to the #objStoreInfo object.
+ * @param get the pointer to the #objStoreGet object owning this information object.
+ */
+NATS_EXTERN natsStatus
+objStoreGet_Info(const objStoreInfo **new_info, objStoreGet *get);
+
+/** \brief Returns some bytes of the pulled object.
+ *
+ * This call returns up to a chunk of bytes of the object. The `dataLen` will be set with
+ * the number of bytes that were returned.
+ *
+ * The `done` boolean will be set to `true` if the call detects that this was the last
+ * bit of data that consistuted this object. Calling this function again would result
+ * in the #NATS_ILLEGAL_STATE error returned.
+ *
+ * \warning The returned `data` must be freed by the user.
+ *
+ * See #objStore_Get for example on how to use the set of APIs.
+ *
+ * @see objStore_Get
+ *
+ * @param done the location where to store the boolean indicating if this is the last read.
+ * @param new_data the location where to store the pointer to a chunk of the object's data.
+ * @param dataLen the location where to store the number of bytes returned.
+ * @param get the pointer to the #objStoreGet object.
+ * @param timeout the amount of time (in milliseconds) allowed to perform the operation.
+ */
+NATS_EXTERN natsStatus
+objStoreGet_Read(bool *done, void **new_data, int *dataLen, objStoreGet *get, int64_t timeout);
+
+/** \brief Returns the remaining bytes of the pulled object.
+ *
+ * This call returns all data representing the object, or the remaining of the data if some
+ * were already collected using #objStoreGet_Read.
+ *
+ * This function should be called only once (except in the case of a #NATS_TIMEOUT), if not
+ * the error #NATS_ILLEGAL_STATE error will be returned.
+ *
+ * \warning The returned `data` must be freed by the user.
+ *
+ * See #objStore_Get for example on how to use the set of APIs.
+ *
+ * @see objStore_Get
+ *
+ * @param new_data the location where to store the pointer to a chunk of the object's data.
+ * @param dataLen the location where to store the number of bytes returned.
+ * @param get the pointer to the #objStoreGet object.
+ * @param timeout the amount of time (in milliseconds) allowed to perform the operation.
+ */
+NATS_EXTERN natsStatus
+objStoreGet_ReadAll(void **new_data, int *dataLen, objStoreGet *get, int64_t timeout);
+
+/** \brief Destroys the object store's get object.
+ *
+ * Releases memory allocated for this #objStoreGet object.
+ *
+ * @param get the pointer to the #objStoreGet object.
+ */
+NATS_EXTERN void
+objStoreGet_Destroy(objStoreGet *get);
+
+/** \brief Pull the named object from the object store and return it as a string.
+ *
+ * This is a convenience function to pull an object from this object store and return
+ * it as a string.
+ *
+ * If the object does not exist, #NATS_NOT_FOUND will be returned.
+ *
+ * The option #objStoreOptions.ShowDeleted can be provided to return an object
+ * even if it was marked as deleted.
+ *
+ * Here is an example:
+ *
+ * * \code{.unparsed}
+ * objStoreOptions o;
+ *
+ * objStoreOptions_Init(&o);
+ * s = objStore_GetString(&str, obs, "myobject", &o);
+ * if (s == NATS_OK)
+ * {
+ *      // Do something with the string
+ *      ...
+ *      // It is the user responsibility to free the memory.
+ *      free(str);
+ * }
+ * ...
+ * \endcode
+ *
+ * \note The string is NULL terminated, therefore the allocated memory is one byte more
+ * than the size reported in the object's #objStoreInfo.Size field.
+ *
+ * \warning The returned string must be freed when no longer needed to reclaim memory.
+ *
+ * @param new_str the location where to store the pointer to the retrieved string.
+ * @param obs the pointer to the #objStore object.
+ * @param name the name of the object to pull the string from.
+ * @param opts the pointer to the #objStoreOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+objStore_GetString(char **new_str, objStore *obs, const char *name, objStoreOptions *opts);
+
+/** \brief Pull the named object from the object store and return it as a byte array.
+ *
+ * This is a convenience function to pull an object from this object store and return
+ * it as a byte array.
+ *
+ * If the object does not exist, #NATS_NOT_FOUND will be returned.
+ *
+ * The option #objStoreOptions.ShowDeleted can be provided to return an object
+ * even if it was marked as deleted. See #objStore_GetString for an example on how to do so.
+ *
+ * \warning The returned byte array must be freed when no longer needed to reclaim memory.
+ *
+ * @param new_data the location where to store the pointer to the retrieved byte array.
+ * @param dataLen the location where to store the number of bytes of the byte array.
+ * @param obs the pointer to the #objStore object.
+ * @param name the name of the object to pull the string from.
+ * @param opts the pointer to the #objStoreOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+objStore_GetBytes(void **new_data, int *dataLen, objStore *obs, const char *name, objStoreOptions *opts);
+
+/** \brief Pull the named object from the object store and place it into a file.
+ *
+ * This is a convenience function to pull an object from this object store and place
+ * it in a file. If the file already exists, it will be overwritten, otherwise it will
+ * be created.
+ *
+ * If the object does not exist, #NATS_NOT_FOUND will be returned.
+ *
+ * The option #objStoreOptions.ShowDeleted can be provided to return an object
+ * even if it was marked as deleted. See #objStore_GetString for an example on how to do so.
+ *
+ * @param obs the pointer to the #objStore object.
+ * @param name the name of the object to pull the string from.
+ * @param fileName the name of the file to write the content into.
+ * @param opts the pointer to the #objStoreOptions object, possibly `NULL`.
+ */
+NATS_EXTERN natsStatus
+objStore_GetFile(objStore *obs, const char *name, const char *fileName, objStoreOptions *opts);
+
+/** @} */ // end of obsGroup
+
 /** @} */ // end of funcGroup
 
 //
 // Microservices.
 //
 
-/** \defgroup microGroup - Microservices
+/** \defgroup microGroup Microservices
  *
  * ### NATS Microservices.
  *

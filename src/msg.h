@@ -116,6 +116,12 @@ natsMsg_createWithPadding(natsMsg **newMsg,
                           const char *buf, int bufLen, int bufPaddingSize,
                           int hdrLen);
 
+natsStatus
+natsHeaderValue_create(natsHeaderValue **retV, const char *value, bool makeCopy);
+
+void
+natsHeaderValue_free(natsHeaderValue *v, bool all);
+
 void
 natsMsg_freeHeaders(natsMsg *msg);
 

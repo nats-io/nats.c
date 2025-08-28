@@ -1243,6 +1243,12 @@ nats_JSONGetUInt16(nats_JSON *json, const char *fieldName, uint16_t *value)
 }
 
 natsStatus
+nats_JSONGetUInt32(nats_JSON *json, const char *fieldName, uint32_t *value)
+{
+    JSON_GET_AS(TYPE_UINT, uint32_t);
+}
+
+natsStatus
 nats_JSONGetBool(nats_JSON *json, const char *fieldName, bool *value)
 {
     natsStatus      s      = NATS_OK;
@@ -1866,6 +1872,13 @@ nats_Base64RawURL_EncodeString(const unsigned char *src, int srcLen, char **pDes
 }
 
 natsStatus
+nats_Base64URL_EncodeString(const unsigned char *src, int srcLen, char **pDest)
+{
+    natsStatus s = _base64Encode(base64EncodeURL, true, src, srcLen, pDest);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 nats_Base64_Encode(const unsigned char *src, int srcLen, char **pDest)
 {
     natsStatus s = _base64Encode(base64EncodeStd, true, src, srcLen, pDest);
@@ -2472,27 +2485,27 @@ nats_validateLimitedTerm(const char *name, const char *term)
 }
 
 natsStatus
-nats_marshalMetadata(natsBuffer *buf, bool comma, const char *fieldName, natsMetadata md)
+nats_marshalMetadata(natsBuffer *buf, bool comma, const char *fieldName, natsMetadata *md)
 {
     natsStatus s = NATS_OK;
     int i;
     const char *start = (comma ? ",\"" : "\"");
 
-    if (md.Count <= 0)
+    if ((md == NULL) || (md->Count <= 0))
         return NATS_OK;
 
     IFOK(s, natsBuf_Append(buf, start, -1));
     IFOK(s, natsBuf_Append(buf, fieldName, -1));
     IFOK(s, natsBuf_Append(buf, "\":{", 3));
-    for (i = 0; (s == NATS_OK) && (i < md.Count); i++)
+    for (i = 0; (s == NATS_OK) && (i < md->Count); i++)
     {
         IFOK(s, natsBuf_AppendByte(buf, '"'));
-        IFOK(s, natsBuf_Append(buf, md.List[i * 2], -1));
+        IFOK(s, natsBuf_Append(buf, md->List[i * 2], -1));
         IFOK(s, natsBuf_Append(buf, "\":\"", 3));
-        IFOK(s, natsBuf_Append(buf, md.List[i * 2 + 1], -1));
+        IFOK(s, natsBuf_Append(buf, md->List[i * 2 + 1], -1));
         IFOK(s, natsBuf_AppendByte(buf, '"'));
 
-        if (i != md.Count - 1)
+        if (i != md->Count - 1)
             IFOK(s, natsBuf_AppendByte(buf, ','));
     }
     IFOK(s, natsBuf_AppendByte(buf, '}'));
@@ -2545,26 +2558,26 @@ nats_unmarshalMetadata(nats_JSON *json, const char *fieldName, natsMetadata *md)
 }
 
 natsStatus
-nats_cloneMetadata(natsMetadata *clone, natsMetadata md)
+nats_cloneMetadata(natsMetadata *clone, natsMetadata *md)
 {
-    natsStatus s = NATS_OK;
-    int i = 0;
-    int n;
-    char **list = NULL;
+    natsStatus  s       = NATS_OK;
+    char        **list  = NULL;
+    int         i       = 0;
+    int         n;
 
     clone->Count = 0;
     clone->List = NULL;
-    if (md.Count == 0)
+    if ((md == NULL) || (md->Count == 0))
         return NATS_OK;
 
-    n = md.Count * 2;
+    n = md->Count * 2;
     list = NATS_CALLOC(n, sizeof(char *));
     if (list == NULL)
         s = nats_setDefaultError(NATS_NO_MEMORY);
 
     for (i = 0; (s == NATS_OK) && (i < n); i++)
     {
-        list[i] = NATS_STRDUP(md.List[i]);
+        list[i] = NATS_STRDUP(md->List[i]);
         if (list[i] == NULL)
             s = nats_setDefaultError(NATS_NO_MEMORY);
     }
@@ -2572,7 +2585,7 @@ nats_cloneMetadata(natsMetadata *clone, natsMetadata md)
     if (s == NATS_OK)
     {
         clone->List = (const char **)list;
-        clone->Count = md.Count;
+        clone->Count = md->Count;
     }
     else
     {
@@ -2624,13 +2637,13 @@ natsStatus nats_formatStringArray(char **out, const char **strings, int count)
 natsStatus
 nats_marshalStringArray(natsBuffer *buf, bool comma, const char *fieldName, const char **values, int len)
 {
-    natsStatus s = NATS_OK;
-    int  i;
-    const char *sep = (comma ? "," : "");
+    natsStatus  s = NATS_OK;
+    int         i;
 
     if (!nats_IsStringEmpty(fieldName))
     {
-        s = natsBuf_Append(buf, sep, -1);
+        if (comma)
+            s = natsBuf_AppendByte(buf, ',');
         IFOK(s, natsBuf_AppendByte(buf, '"'));
         IFOK(s, natsBuf_Append(buf, fieldName, -1));
         IFOK(s, natsBuf_AppendByte(buf, '"'));
@@ -2660,3 +2673,152 @@ nats_marshalStringArray(natsBuffer *buf, bool comma, const char *fieldName, cons
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+natsStatus
+nats_marshalTimeUTC(natsBuffer *buf, bool comma, const char *fieldName, int64_t timeUTC)
+{
+    natsStatus  s  = NATS_OK;
+    char        dbuf[36] = {'\0'};
+
+    s = nats_EncodeTimeUTC(dbuf, sizeof(dbuf), timeUTC);
+    if (s != NATS_OK)
+        return nats_setError(NATS_ERR, "unable to encode data for field '%s' value %" PRId64, fieldName, timeUTC);
+
+    if (comma)
+        s = natsBuf_AppendByte(buf, ',');
+
+    IFOK(s, natsBuf_AppendByte(buf, '"'));
+    IFOK(s, natsBuf_Append(buf, fieldName, -1));
+    IFOK(s, natsBuf_Append(buf, "\":\"", -1));
+    IFOK(s, natsBuf_Append(buf, dbuf, -1));
+    IFOK(s, natsBuf_AppendByte(buf, '"'));
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+nats_marshalString(natsBuffer *buf, bool omitEmpty, bool comma, const char *fieldName, const char *str)
+{
+    natsStatus  s = NATS_OK;
+
+    if (omitEmpty && nats_IsStringEmpty(str))
+        return NATS_OK;
+
+    if (comma)
+        s = natsBuf_AppendByte(buf, ',');
+
+    IFOK(s, natsBuf_AppendByte(buf, '"'));
+    IFOK(s, natsBuf_Append(buf, fieldName, -1));
+    IFOK(s, natsBuf_Append(buf, "\":\"", -1));
+    IFOK(s, natsBuf_Append(buf, str, -1));
+    IFOK(s, natsBuf_AppendByte(buf, '"'));
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+bool
+nats_validBucketName(const char *bucket)
+{
+    int     i;
+    char    c;
+
+    if (nats_IsStringEmpty(bucket))
+        return false;
+
+    for (i=0; i<(int)strlen(bucket); i++)
+    {
+        c = bucket[i];
+        if ((isalnum((unsigned char) c) == 0) && (c != '_') && (c != '-'))
+            return false;
+    }
+    return true;
+}
+
+static natsStatus
+_addHeader(void *userInfo, const char *fieldName, nats_JSONField *f)
+{
+    natsStatus      s       = NATS_OK;
+    natsHeader      *h      = (natsHeader*) userInfo;
+    nats_JSONArray  *arr    = f->value.varr;
+    int             i;
+
+    for (i=0; (s == NATS_OK) && (i<arr->size); i++)
+        s = natsHeader_Add(h, fieldName, (const char*) arr->values[i]);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+nats_unmarshalHeader(nats_JSON *json, const char *fieldName, natsHeader **new_header)
+{
+    natsStatus  s       = NATS_OK;
+    nats_JSON   *hJSON  = NULL;
+    natsHeader  *h      = NULL;
+
+    *new_header = NULL;
+
+    s = nats_JSONGetObject(json, fieldName, &hJSON);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    if ((hJSON == NULL) || (natsStrHash_Count(hJSON->fields) == 0))
+        return NATS_OK;
+
+    s = natsHeader_New(&h);
+    IFOK(s, nats_JSONRange(hJSON, TYPE_ARRAY, 0, _addHeader, (void*) h));
+    if (s == NATS_OK)
+        *new_header = h;
+    else
+        natsHeader_Destroy(h);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+nats_marshalHeader(natsBuffer *buf, bool omitEmpty, bool comma, const char *fieldName, natsHeader *header)
+{
+    natsStatus  s = NATS_OK;
+
+    // The function returns 0 if header is NULL.
+    if (omitEmpty && (natsHeader_KeysCount(header) == 0))
+        return NATS_OK;
+
+    if (comma)
+        s = natsBuf_AppendByte(buf, ',');
+    IFOK(s, natsBuf_AppendByte(buf, '\"'));
+    IFOK(s, natsBuf_Append(buf, fieldName, -1));
+    IFOK(s, natsBuf_Append(buf, "\":{", -1));
+    if (s == NATS_OK)
+    {
+        natsStrHashIter iter;
+        char            *key = NULL;
+        void            *p   = NULL;
+        natsHeaderValue *v   = NULL;
+        bool            first= true;
+
+        comma = false;
+        natsStrHashIter_Init(&iter, (natsStrHash*) header);
+        while ((s == NATS_OK) && natsStrHashIter_Next(&iter, &key, &p))
+        {
+            if (!first)
+                s = natsBuf_AppendByte(buf, ',');
+            IFOK(s, natsBuf_AppendByte(buf, '\"'));
+            IFOK(s, natsBuf_Append(buf, key, -1));
+            IFOK(s, natsBuf_Append(buf, "\":[", -1));
+
+            comma = false;
+            for (v = (natsHeaderValue*) p; (s == NATS_OK) && (v != NULL); v = v->next)
+            {
+                if (comma)
+                    s = natsBuf_AppendByte(buf, ',');
+                IFOK(s, natsBuf_AppendByte(buf, '\"'));
+                IFOK(s, natsBuf_Append(buf, v->value, -1));
+                IFOK(s, natsBuf_AppendByte(buf, '\"'));
+                comma = true;
+            }
+            IFOK(s, natsBuf_AppendByte(buf, ']'));
+            first = false;
+        }
+    }
+    IFOK(s, natsBuf_AppendByte(buf, '}'));
+
+    return NATS_UPDATE_ERR_STACK(s);
+}

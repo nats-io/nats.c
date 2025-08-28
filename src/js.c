@@ -80,7 +80,9 @@ _destroyOptions(jsOptions *o)
 static void
 _freeContext(jsCtx *js)
 {
-    natsConnection *nc = NULL;
+    natsConnection  *nc     = NULL;
+    void            *arg    = NULL;
+    js_onReleaseCb  cb      = NULL;
 
     natsStrHash_Destroy(js->pm);
     natsSubscription_Destroy(js->rsub);
@@ -90,7 +92,12 @@ _freeContext(jsCtx *js)
     natsMutex_Destroy(js->mu);
     natsTimer_Destroy(js->pmtmr);
     nc = js->nc;
+    cb = js->onReleaseCb;
+    arg = js->onReleaseCbArg;
     NATS_FREE(js);
+
+    if (cb != NULL)
+        cb(arg);
 
     natsConn_release(nc);
 }
@@ -3650,4 +3657,13 @@ jsSub_checkOrderedMsg(natsSubscription *sub, natsMsg *msg, bool *reset)
         }
     }
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+js_setOnReleasedCb(jsCtx *js, js_onReleaseCb cb, void *arg)
+{
+    js_lock(js);
+    js->onReleaseCb     = cb;
+    js->onReleaseCbArg  = arg;
+    js_unlock(js);
 }

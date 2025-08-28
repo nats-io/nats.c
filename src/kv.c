@@ -94,24 +94,6 @@ kvConfig_Init(kvConfig *cfg)
     return NATS_OK;
 }
 
-static bool
-validBucketName(const char *bucket)
-{
-    int     i;
-    char    c;
-
-    if (nats_IsStringEmpty(bucket))
-        return false;
-
-    for (i=0; i<(int)strlen(bucket); i++)
-    {
-        c = bucket[i];
-        if ((isalnum((unsigned char) c) == 0) && (c != '_') && (c != '-'))
-            return false;
-    }
-    return true;
-}
-
 static void
 _freeKV(kvStore *kv)
 {
@@ -166,7 +148,7 @@ _createKV(kvStore **new_kv, jsCtx *js, const char *bucket)
     natsStatus  s   = NATS_OK;
     kvStore     *kv = NULL;
 
-    if (!validBucketName(bucket))
+    if (!nats_validBucketName(bucket))
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidBucketName);
 
     kv = (kvStore*) NATS_CALLOC(1, sizeof(kvStore));
@@ -446,7 +428,7 @@ js_DeleteKeyValue(jsCtx *js, const char *bucket)
     if (js == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if (!validBucketName(bucket))
+    if (!nats_validBucketName(bucket))
         return nats_setError(NATS_INVALID_ARG, "%s", kvErrBadBucket);
 
     if (nats_asprintf(&stream, kvBucketNameTmpl, bucket) < 0)

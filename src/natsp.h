@@ -25,12 +25,17 @@
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
 #include <openssl/rand.h>
+#include <openssl/evp.h>
+#define nats_hash           EVP_MD_CTX
+#define NATS_HASH_MAX_LEN   EVP_MAX_MD_SIZE
 #else
-#define SSL             void*
-#define SSL_free(c)     { (c) = NULL; }
-#define SSL_CTX         void*
-#define SSL_CTX_free(c) { (c) = NULL; }
-#define NO_SSL_ERR  "The library was built without SSL support!"
+#define SSL                 void*
+#define SSL_free(c)         { (c) = NULL; }
+#define SSL_CTX             void*
+#define SSL_CTX_free(c)     { (c) = NULL; }
+#define NO_SSL_ERR          "The library was built without SSL support!"
+#define nats_hash           void
+#define NATS_HASH_MAX_LEN   32
 #endif
 
 #include "err.h"
@@ -106,6 +111,8 @@
 #define nats_IsStringEmpty(s) ((((s) == NULL) || ((s)[0] == '\0')) ? true : false)
 #define nats_HasPrefix(_s, _prefix) (nats_IsStringEmpty(_s) ? nats_IsStringEmpty(_prefix) : (strncmp((_s), (_prefix), strlen(_prefix)) == 0))
 
+#define __natsHeader natsStrHash
+
 static inline bool nats_StringEquals(const char *s1, const char *s2)
 {
     if (s1 == NULL)
@@ -147,6 +154,7 @@ static inline bool nats_StringEquals(const char *s1, const char *s2)
 
 #define NATS_MILLIS_TO_NANOS(d)     (((int64_t)d)*(int64_t)1E6)
 #define NATS_SECONDS_TO_NANOS(d)    (((int64_t)d)*(int64_t)1E9)
+#define NATS_NANOS_TO_MILLIS(d)     (((int64_t)d)/(int64_t)1E6)
 
 #if __STDC_VERSION__ >= 201112L
 #define NATS_GLOBAL_STATIC_ASSERT(_cond, _message_as_id) \
@@ -370,6 +378,8 @@ typedef struct __pmInfo
 
 } pmInfo;
 
+typedef void (*js_onReleaseCb)(void *arg);
+
 struct __jsCtx
 {
     natsMutex		    *mu;
@@ -388,6 +398,8 @@ struct __jsCtx
     int64_t             pmcount;
     int                 stalled;
     bool                closed;
+    js_onReleaseCb      onReleaseCb;
+    void                *onReleaseCbArg;
 };
 
 typedef struct __jsFetch
@@ -523,6 +535,60 @@ struct __kvWatcher
     bool                ignoreDel;
     bool                initDone;
     bool                retMarker;
+    bool                stopped;
+
+};
+
+struct __objStore
+{
+    natsMutex           *mu;
+    int                 refs;
+    jsCtx               *js;
+    jsCtx               *pushJS;
+    char                *name;
+    char                *streamName;
+
+};
+
+struct __objStorePut
+{
+    natsMutex           *mu;
+    int                 refs;
+    objStore            *obs;
+    char                *echunkSubj;
+    objStoreInfo        *info;
+    jsCtx               *pubJS;
+    char                *metaSubj;
+    char                *chunkSubj;
+    nats_hash           *h;
+    uint32_t            sent;
+    uint64_t            total;
+    natsStatus          err;
+    char                *errTxt;
+    bool                pcof;
+
+};
+
+struct __objStoreGet
+{
+    objStore            *obs;
+    objStoreInfo        *info;
+    nats_hash           *digest;
+    natsSubscription    *sub;
+    uint64_t            remaining;
+    bool                done;
+
+};
+
+struct __objStoreWatcher
+{
+    natsMutex           *mu;
+    int                 refs;
+    objStore            *obs;
+    natsSubscription    *sub;
+    bool                initDone;
+    bool                retMarker;
+    bool                ignoreDel;
     bool                stopped;
 
 };
@@ -803,6 +869,25 @@ nats_sslRegisterThreadForCleanup(void);
 
 void
 nats_setNATSThreadKey(void);
+
+//
+// SHA256
+//
+void
+nats_hashNoErrorOnNoSSL(bool noError);
+
+natsStatus
+nats_hashNew(nats_hash **new_hash);
+
+natsStatus
+nats_hashWrite(nats_hash *hash, const void *data, int dataLen);
+
+natsStatus
+nats_hashSum(nats_hash *hash, unsigned char *digest, unsigned int *len);
+
+void
+nats_hashDestroy(nats_hash *hash);
+
 
 //
 // Threads

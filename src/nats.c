@@ -20,6 +20,7 @@
 #include "glib/glib.h"
 #include "sub.h"
 #include "conn.h"
+#include "msg.h"
 
 #if defined(_WIN32) && _WIN32
 #ifndef NATS_STATIC
@@ -212,4 +213,230 @@ nats_SetMessageDeliveryPoolSize(int max)
 
     s = nats_setMessageDispatcherPoolCap(max);
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+natsHeader_Destroy(natsHeader *nh)
+{
+    natsStrHashIter iter;
+    natsStrHash     *h;
+    void            *p = NULL;
+
+    if (nh == NULL)
+        return;
+
+    h = (natsStrHash*) nh;
+    natsStrHashIter_Init(&iter, h);
+    for (;natsStrHashIter_Next(&iter, NULL, &p);)
+    {
+        natsHeaderValue *v = (natsHeaderValue *)p;
+        natsHeaderValue_free(v, true);
+    }
+    natsStrHash_Destroy(h);
+}
+
+natsStatus
+natsHeader_New(natsHeader **new_header)
+{
+    natsStatus s;
+
+    if (new_header == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = natsStrHash_Create((natsStrHash**) new_header, 4);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsHeader_Set(natsHeader *nh, const char *key, const char *value)
+{
+    natsStatus      s  = NATS_OK;
+    natsHeaderValue *v = NULL;
+    natsStrHash     *h = NULL;
+
+    // Value can be empty, but not NULL.
+    if ((nh == NULL) || nats_IsStringEmpty(key) || (value == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    h = (natsStrHash*) nh;
+    s = natsHeaderValue_create(&v, value, true);
+    if (s == NATS_OK)
+    {
+        void *p = NULL;
+
+        s = natsStrHash_Set(h, (char*) key, true, (void*) v, &p);
+        if (s != NATS_OK)
+            natsHeaderValue_free(v, false);
+        else if (p != NULL)
+        {
+            natsHeaderValue *old = (natsHeaderValue*) p;
+            natsHeaderValue_free(old, true);
+        }
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsHeader_Add(natsHeader *nh, const char *key, const char *value)
+{
+    natsStatus      s;
+    natsHeaderValue *v = NULL;
+    natsStrHash     *h = NULL;
+
+    // Value can be empty, but not NULL.
+    if ((nh == NULL) || nats_IsStringEmpty(key) || (value == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    h = (natsStrHash*) nh;
+    s = natsHeaderValue_create(&v, value, true);
+    if (s == NATS_OK)
+    {
+        natsHeaderValue *cur = natsStrHash_Get(h, (char*) key);
+        if (cur != NULL)
+        {
+            for (; cur->next != NULL; )
+                cur = cur->next;
+
+            cur->next = v;
+        }
+        else
+            s = natsStrHash_Set(h, (char*) key, true, (void*) v, NULL);
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsHeader_Get(natsHeader *nh, const char *key, const char **value)
+{
+    natsHeaderValue *v = NULL;
+    natsStrHash     *h = NULL;
+
+    if ((nh == NULL) || nats_IsStringEmpty(key) || (value == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    *value  = NULL;
+    h       = (natsStrHash*) nh;
+
+    if (natsStrHash_Count(h) == 0)
+        return NATS_NOT_FOUND; // normal error, so don't update error stack
+
+    v = natsStrHash_Get(h, (char*) key);
+    if (v == NULL)
+        return NATS_NOT_FOUND; // normal error, so don't update error stack
+
+    *value = (const char*) v->value;
+    return NATS_OK;
+}
+
+natsStatus
+natsHeader_Values(natsHeader *nh, const char *key, const char* **values, int *count)
+{
+    natsStatus      s       = NATS_OK;
+    int             c       = 0;
+    natsHeaderValue *cur    = NULL;
+    const char*     *strs   = NULL;
+    natsHeaderValue *v      = NULL;
+    natsStrHash     *h      = NULL;
+
+    if ((nh == NULL) || nats_IsStringEmpty(key) || (values == NULL) || (count == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    *values = NULL;
+    *count  = 0;
+    h       = (natsStrHash*) nh;
+
+    if (natsStrHash_Count(h) == 0)
+        return NATS_NOT_FOUND; // normal error, so don't update error stack
+
+    v = natsStrHash_Get(h, (char*) key);
+    if (v == NULL)
+        return NATS_NOT_FOUND; // normal error, so don't update error stack
+
+    for (cur=v; cur != NULL; cur = cur->next)
+        c++;
+
+    strs = NATS_CALLOC(c, sizeof(char*));
+    if (strs == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    else
+    {
+        int i = 0;
+
+        for (cur=v; cur != NULL; cur = cur->next)
+            strs[i++] = (const char*) cur->value;
+
+        *values = strs;
+        *count  = c;
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsHeader_Keys(natsHeader *nh, const char* **keys, int *count)
+{
+    natsStatus  s     = NATS_OK;
+    const char* *strs = NULL;
+    int         c     = 0;
+    natsStrHash *h    = NULL;
+
+    if ((nh == NULL) || (keys == NULL) || (count == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    *keys  = NULL;
+    *count = 0;
+    h      = (natsStrHash*) nh;
+
+    if ((c = natsStrHash_Count(h)) == 0)
+        return NATS_NOT_FOUND; // normal error, so don't update error stack
+
+    strs = NATS_CALLOC(c, sizeof(char*));
+    if (strs == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    else
+    {
+        natsStrHashIter iter;
+        char            *hk = NULL;
+        int             i;
+
+        natsStrHashIter_Init(&iter, h);
+        for (i=0; natsStrHashIter_Next(&iter, &hk, NULL); i++)
+        {
+            strs[i] = (const char*) hk;
+        }
+        natsStrHashIter_Done(&iter);
+
+        *keys  = strs;
+        *count = c;
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+int
+natsHeader_KeysCount(natsHeader *nh)
+{
+    if (nh == NULL)
+        return 0;
+
+    return natsStrHash_Count((natsStrHash*) nh);
+}
+
+natsStatus
+natsHeader_Delete(natsHeader *nh, const char *key)
+{
+    natsHeaderValue *v = NULL;
+    natsStrHash     *h = NULL;
+
+    if ((nh == NULL) || nats_IsStringEmpty(key))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    h = (natsStrHash*) nh;
+    if (natsStrHash_Count(h) == 0)
+        return NATS_NOT_FOUND; // normal error, so don't update error stack
+
+    v = natsStrHash_Remove(h, (char*) key);
+    if (v == NULL)
+        return NATS_NOT_FOUND; // normal error, so don't update error stack
+
+    natsHeaderValue_free(v, true);
+    return NATS_OK;
 }

@@ -561,7 +561,7 @@ _clone_service_config(microServiceConfig **out, microServiceConfig *cfg)
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Description, cfg->Description));
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->QueueGroup, cfg->QueueGroup));
     MICRO_CALL(err, micro_ErrorFromStatus(
-                        nats_cloneMetadata(&new_cfg->Metadata, cfg->Metadata)));
+                        nats_cloneMetadata(&new_cfg->Metadata, &(cfg->Metadata))));
     MICRO_CALL(err, micro_clone_endpoint_config(&new_cfg->Endpoint, cfg->Endpoint));
     if (err != NULL)
     {
@@ -802,7 +802,7 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
     MICRO_CALL(err, micro_strdup((char **)&info->Description, m->cfg->Description));
     MICRO_CALL(err, micro_strdup((char **)&info->Id, m->id));
     MICRO_CALL(err, micro_ErrorFromStatus(
-        nats_cloneMetadata(&info->Metadata, m->cfg->Metadata)));
+        nats_cloneMetadata(&info->Metadata, &(m->cfg->Metadata))));
 
     if (err == NULL)
     {
@@ -833,7 +833,7 @@ microService_GetInfo(microServiceInfo **new_info, microService *m)
                 MICRO_CALL(err, micro_strdup((char **)&info->Endpoints[len].Subject, ep->subject));
                 MICRO_CALL(err, micro_strdup((char **)&info->Endpoints[len].QueueGroup, micro_queue_group_for_endpoint(ep)));
                 MICRO_CALL(err, micro_ErrorFromStatus(
-                                    nats_cloneMetadata(&info->Endpoints[len].Metadata, ep->config->Metadata)));
+                                    nats_cloneMetadata(&info->Endpoints[len].Metadata, &(ep->config->Metadata))));
                 if (err == NULL)
                 {
                     len++;

@@ -298,7 +298,7 @@ micro_clone_endpoint_config(microEndpointConfig **out, microEndpointConfig *cfg)
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->Subject, cfg->Subject));
     MICRO_CALL(err, micro_strdup((char **)&new_cfg->QueueGroup, cfg->QueueGroup));
     MICRO_CALL(err, micro_ErrorFromStatus(
-                        nats_cloneMetadata(&new_cfg->Metadata, cfg->Metadata)));
+                        nats_cloneMetadata(&new_cfg->Metadata, &(cfg->Metadata))));
 
     if (err != NULL)
     {

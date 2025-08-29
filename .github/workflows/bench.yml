@@ -1,0 +1,119 @@
+name: "Benchmark"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -x -eo pipefail {0}
+
+jobs:
+  do:
+    runs-on: ubuntu-latest
+    name: "Benchmark with latest server version"
+    steps:
+      - name: Checkout nats.c
+        uses: actions/checkout@v4
+        with: ${{ github.ref }}
+
+      - name: "Checkout dependencies (nats.c.deps)"
+        uses: actions/checkout@v4
+        with:
+          repository: nats-io/nats.c.deps
+          path: deps
+
+      # Configure the cmake flags and NATS_... environment variables
+      - id: cmake-flags
+        name: Configure cmake flags
+        env:
+          flags: -DNATS_BUILD_ARCH=64
+            -DCMAKE_BUILD_TYPE=Release
+            -DNATS_BUILD_STREAMING=ON
+            -DNATS_BUILD_USE_SODIUM=ON
+            -DNATS_PROTOBUF_DIR=${{ github.workspace}}/deps/pbuf
+            -DNATS_SODIUM_DIR=${{ github.workspace}}/deps/sodium
+        run: |
+          flags="$flags -DNATS_BUILD_WITH_TLS=ON"
+          flags="$flags -DNATS_BUILD_TLS_FORCE_HOST_VERIFY=ON"
+          flags="$flags -DNATS_EXPERIMENTAL=ON"
+          echo "flags=$flags" >> $GITHUB_OUTPUT
+
+      # Install build dependencies
+      - name: Install gcc
+        run: |
+          sudo apt-get -q update
+          sudo apt-get -y install gcc
+
+      # Build
+      - name: CMake
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. ${{ steps.cmake-flags.outputs.flags }}
+          make rebuild_cache && make
+
+      - name: "Download nats-server version main"
+        working-directory: ./build
+        run: |
+            for c in 1 2 3 4 5
+            do
+                echo "Attempt $c to download binary for main"
+                rm -f ./nats-server
+                curl -sf "https://binaries.nats.dev/nats-io/nats-server/v2@$rel" | PREFIX=. sh
+                # We are sometimes getting nats-server of size 0. Make sure we have a
+                # working nats-server by making sure we get a version number.
+                v="$(./nats-server -v)"
+                if [ "$v" != "" ]; then
+                break
+                fi
+            done
+            mv ./nats-server ../deps/nats-server/nats-server
+
+      - name: "Cache for base benchmark for main"
+        id: cache-base-bench
+        uses: actions/cache@v4
+        with:
+          key: bench-main
+          path: ./build/bench-main.log
+
+      - name: "Benchmark the branch"
+        working-directory: ./build
+        run: |
+          export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
+          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
+          flags=""
+          ctest -L 'bench' --timeout 600 -VV | tee bench.log
+
+      - name: "Checkout nats.c for main"
+        if: steps.cache-base-bench.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          clean: false
+
+      - name: "Benchmark main for comparison"
+        if: steps.cache-base-bench.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p build
+          cd build
+          rm -rf CMakeFiles CMakeCache.txt
+          cmake .. ${{ steps.cmake-flags.outputs.flags }}
+          make rebuild_cache && make
+          export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
+          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
+          flags=""
+          ctest -L 'bench' --timeout 600 -VV | tee bench-main.log
+
+      - name: "Checkout branch"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          clean: false
+
+      - name: "Compare benchmark to main"
+        run: |
+          cd build
+          go run ../test/diffstat_sub_async.go bench-main.log bench.log

@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        server_version: [latest, v2.9.11]
+        server_version: [latest, v2.10.29]
     uses: ./.github/workflows/build-test.yml
     name: "Other servers"
     with:
@@ -56,10 +56,3 @@ jobs:
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-  bench:
-    name: "Benchmark"
-    uses: ./.github/workflows/build-test.yml
-    with:
-      server_version: main
-      benchmark: ON
-      type: Release

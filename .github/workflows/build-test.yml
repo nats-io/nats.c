@@ -4,9 +4,6 @@ on:
       arch:
         type: string
         default: "64"
-      benchmark:
-        type: string
-        default: "OFF"
       compiler:
         type: string
         default: "gcc"
@@ -112,7 +109,7 @@ jobs:
             flags="$flags -DDEV_MODE=ON"
           fi
           if [[ "${{ inputs.experimental }}" == "ON" ]]; then
-            flags="$flags -DNATS_EXPERIMENTAL=ON"
+            flags="$flags -DNATS_WITH_EXPERIMENTAL=ON"
           fi
           if [[ -n "${{ inputs.sanitize }}" ]]; then
             flags="$flags -DNATS_SANITIZE=ON -DCMAKE_C_FLAGS=-fsanitize=${{ inputs.sanitize }}"
@@ -181,7 +178,6 @@ jobs:
           fi
 
       - name: "Test"
-        if: inputs.benchmark == 'OFF'
         working-directory: ./build
         run: |
           export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
@@ -199,51 +195,3 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           # verbose: true
 
-      - name: "Cache for base benchmark for ${{ github.event.pull_request.base.ref }}"
-        id: cache-base-bench
-        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref
-        uses: actions/cache@v4
-        with:
-          key: bench-${{ github.event.pull_request.base.ref }}
-          path: ./build/bench-${{ github.event.pull_request.base.ref }}.log
-
-      - name: "Benchmark"
-        if: inputs.benchmark == 'ON'
-        working-directory: ./build
-        run: |
-          export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
-          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
-          flags=""
-          ctest -L 'bench' --timeout 600 -VV | tee bench.log
-
-      - name: "Checkout nats.c for ${{ github.event.pull_request.base.ref }}"
-        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref && steps.cache-base-bench.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.ref }}
-          clean: false
-
-      - name: "Benchmark ${{ github.event.pull_request.base.ref }} for comparison"
-        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref && steps.cache-base-bench.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p build
-          cd build
-          rm -rf CMakeFiles CMakeCache.txt
-          cmake .. ${{ steps.cmake-flags.outputs.flags }}
-          make rebuild_cache && make
-          export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
-          export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
-          flags=""
-          ctest -L 'bench' --timeout 600 -VV | tee bench-${{ github.event.pull_request.base.ref }}.log
-
-      - name: "Checkout HEAD ${{ github.event.pull_request.head.ref }}"
-        if: inputs.benchmark == 'ON' && github.event.pull_request.head.ref && steps.cache-base-bench.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
-        with:
-          clean: false
-
-      - name: "Compare benchmark to ${{ github.event.pull_request.base.ref }}"
-        if: inputs.benchmark == 'ON' && github.event.pull_request.base.ref
-        run: |
-          cd build
-          go run ../test/diffstat_sub_async.go bench-${{ github.event.pull_request.base.ref }}.log bench.log

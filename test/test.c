@@ -29606,8 +29606,9 @@ _jsPubReconnectThread(void *closure)
     js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
     natsConnection_Flush(js->nc);
 
-    natsConnection_Reconnect(js->nc);
     nats_Sleep(500);
+    natsConnection_Reconnect(js->nc);
+    nats_Sleep(250);
 
     js_Publish(NULL, js, "foo", "hell1", 5, NULL, NULL);
     natsConnection_Flush(js->nc);
@@ -29615,7 +29616,11 @@ _jsPubReconnectThread(void *closure)
 
 void test_JetStreamSubscribePull_Reconnect(void)
 {
-    natsStatus s;
+    natsStatus      s       = NATS_OK;
+    natsConnection  *nc2    = NULL;
+    natsOptions     *opts   = NULL;
+    jsCtx           *js2    = NULL;
+
     JS_SETUP(2, 9, 2);
 
     test("Create stream: ");
@@ -29628,14 +29633,22 @@ void test_JetStreamSubscribePull_Reconnect(void)
     s = js_AddStream(NULL, js, &sc, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
 
+    test("Create conn with lower reconnect wait: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 50));
+    IFOK(s, natsConnection_Connect(&nc2, opts));
+    IFOK(s, natsConnection_JetStream(&js2, nc2, NULL));
+    testCond((s == NATS_OK) && (opts != NULL) && (nc2 != NULL) && (js2 != NULL));
+
     test("Subscribe: ");
     natsSubscription *sub = NULL;
-    s = js_PullSubscribe(&sub, js, "foo", "dur", NULL, NULL, &jerr);
+    s = js_PullSubscribe(&sub, js2, "foo", "dur", NULL, NULL, &jerr);
     testCond(s == NATS_OK);
 
     test("Start thread to send: ");
     natsThread *t = NULL;
-    s = natsThread_Create(&t, _jsPubReconnectThread, (void*) js);
+    s = natsThread_Create(&t, _jsPubReconnectThread, (void*) js2);
     testCond(s == NATS_OK);
 
     test("Fetch request succeeds over a reconnect: ");
@@ -29651,6 +29664,9 @@ void test_JetStreamSubscribePull_Reconnect(void)
     natsThread_Join(t);
     natsThread_Destroy(t);
     natsSubscription_Destroy(sub);
+    jsCtx_Destroy(js2);
+    natsConnection_Destroy(nc2);
+    natsOptions_Destroy(opts);
     JS_TEARDOWN;
 }
 
@@ -32776,7 +32792,7 @@ void test_KeyValueBasics(void)
     kvConfig            kvc;
     int                 iterMax = 1;
     int                 i;
-    char                bucketName[10];
+    char                bucketName[24];
 
     JS_SETUP(2, 6, 2);
 

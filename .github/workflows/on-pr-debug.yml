@@ -81,7 +81,7 @@ jobs:
       experimental: ON
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-  
+
   coverage-NO-TLS:
     name: "Coverage NO-TLS"
     uses: ./.github/workflows/build-test.yml
@@ -94,14 +94,6 @@ jobs:
       verify_host: NO-verify_host
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-  
-  bench:
-    name: "Benchmark"
-    uses: ./.github/workflows/build-test.yml
-    with:
-      server_version: main
-      benchmark: ON
-      type: Release
 
   Windows:
     name: "Windows"

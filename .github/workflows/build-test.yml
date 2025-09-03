@@ -109,7 +109,7 @@ jobs:
             flags="$flags -DDEV_MODE=ON"
           fi
           if [[ "${{ inputs.experimental }}" == "ON" ]]; then
-            flags="$flags -DNATS_EXPERIMENTAL=ON"
+            flags="$flags -DNATS_WITH_EXPERIMENTAL=ON"
           fi
           if [[ -n "${{ inputs.sanitize }}" ]]; then
             flags="$flags -DNATS_SANITIZE=ON -DCMAKE_C_FLAGS=-fsanitize=${{ inputs.sanitize }}"

@@ -38,7 +38,7 @@ jobs:
         run: |
           flags="$flags -DNATS_BUILD_WITH_TLS=ON"
           flags="$flags -DNATS_BUILD_TLS_FORCE_HOST_VERIFY=ON"
-          flags="$flags -DNATS_EXPERIMENTAL=ON"
+          flags="$flags -DNATS_WITH_EXPERIMENTAL=ON"
           echo "flags=$flags" >> $GITHUB_OUTPUT
 
       # Install build dependencies

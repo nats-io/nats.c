@@ -32792,7 +32792,7 @@ void test_KeyValueBasics(void)
     kvConfig            kvc;
     int                 iterMax = 1;
     int                 i;
-    char                bucketName[10];
+    char                bucketName[24];
 
     JS_SETUP(2, 6, 2);
 

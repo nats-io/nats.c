@@ -24,7 +24,7 @@ void js_unlock(jsCtx *js);
 // We know what we are doing :-)
 
 #define js_lock(js)     (natsMutex_Lock((js)->mu))
-#define js_unlock(c)    (natsMutex_Unlock((js)->mu))
+#define js_unlock(js)   (natsMutex_Unlock((js)->mu))
 
 #endif // DEV_MODE
 
@@ -291,3 +291,6 @@ js_checkFetchedMsg(natsSubscription *sub, natsMsg *msg, uint64_t fetchID, bool c
 
 natsStatus
 js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch);
+
+void
+js_setOnReleasedCb(jsCtx *js, js_onReleaseCb cb, void *arg);

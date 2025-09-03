@@ -40,6 +40,7 @@
 #include "kv.h"
 #include "microp.h"
 #include "glib/glibp.h"
+#include "object.h"
 
 #if defined(NATS_HAS_STREAMING)
 
@@ -4619,10 +4620,15 @@ void test_natsBase64Encode(void)
             "dfslfdlkjsfdllkjfds dfsjlklkfsda dfsalkjklfdsalkj adfskjllkjfdaslkjfdslk",
             "This is another with numbers like 12345678.90 and special characters !@#$%^&*()-=+/",
     };
-    const char  *expectedResults[] = {
+    const char  *expectedRawResults[] = {
             "dGhpcyBpcyB0ZXN0aW5nIGJhc2U2NCBlbmNvZGluZw",
             "ZGZzbGZkbGtqc2ZkbGxramZkcyBkZnNqbGtsa2ZzZGEgZGZzYWxramtsZmRzYWxraiBhZGZza2psbGtqZmRhc2xramZkc2xr",
             "VGhpcyBpcyBhbm90aGVyIHdpdGggbnVtYmVycyBsaWtlIDEyMzQ1Njc4LjkwIGFuZCBzcGVjaWFsIGNoYXJhY3RlcnMgIUAjJCVeJiooKS09Ky8",
+    };
+    const char  *expectedResults[] = {
+            "dGhpcyBpcyB0ZXN0aW5nIGJhc2U2NCBlbmNvZGluZw==",
+            "ZGZzbGZkbGtqc2ZkbGxramZkcyBkZnNqbGtsa2ZzZGEgZGZzYWxramtsZmRzYWxraiBhZGZza2psbGtqZmRhc2xramZkc2xr",
+            "VGhpcyBpcyBhbm90aGVyIHdpdGggbnVtYmVycyBsaWtlIDEyMzQ1Njc4LjkwIGFuZCBzcGVjaWFsIGNoYXJhY3RlcnMgIUAjJCVeJiooKS09Ky8=",
     };
     const char  *expectedResultsStd[] = {
             "dGhpcyBpcyB0ZXN0aW5nIGJhc2U2NCBlbmNvZGluZw==",
@@ -4636,18 +4642,51 @@ void test_natsBase64Encode(void)
     int             dl   = 0;
     unsigned char   *dec = NULL;
 
-    test("EncodeURL nil: ");
+    test("EncodeRawURL nil: ");
     s = nats_Base64RawURL_EncodeString(NULL, 0, &enc);
     testCond((s == NATS_OK) && (enc == NULL));
 
-    test("EncodeURL empty: ");
+    test("EncodeRawURL empty: ");
     s = nats_Base64RawURL_EncodeString((const unsigned char*) "", 0, &enc);
+    testCond((s == NATS_OK) && (enc == NULL));
+
+    test("EncodeRawURL strings: ");
+    for (i=0; i<(int)(sizeof(testStrings)/sizeof(char*)); i++)
+    {
+        s = nats_Base64RawURL_EncodeString((const unsigned char*) testStrings[i], (int)strlen(testStrings[i]), &enc);
+        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, expectedRawResults[i]) != 0)))
+            s = NATS_ERR;
+
+        free(enc);
+        enc = NULL;
+        if (s != NATS_OK)
+            break;
+    }
+    testCond(s == NATS_OK);
+
+    test("EncodeRawURL bytes: ");
+    {
+        s = nats_Base64RawURL_EncodeString((const unsigned char*) &someBytes, sbl, &enc);
+        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, "AAIAAwQFAAYHCAAJAA") != 0)))
+            s = NATS_ERR;
+
+        free(enc);
+        enc = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    test("EncodeURL nil: ");
+    s = nats_Base64URL_EncodeString(NULL, 0, &enc);
+    testCond((s == NATS_OK) && (enc == NULL));
+
+    test("EncodeURL empty: ");
+    s = nats_Base64URL_EncodeString((const unsigned char*) "", 0, &enc);
     testCond((s == NATS_OK) && (enc == NULL));
 
     test("EncodeURL strings: ");
     for (i=0; i<(int)(sizeof(testStrings)/sizeof(char*)); i++)
     {
-        s = nats_Base64RawURL_EncodeString((const unsigned char*) testStrings[i], (int)strlen(testStrings[i]), &enc);
+        s = nats_Base64URL_EncodeString((const unsigned char*) testStrings[i], (int)strlen(testStrings[i]), &enc);
         if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, expectedResults[i]) != 0)))
             s = NATS_ERR;
 
@@ -4660,8 +4699,8 @@ void test_natsBase64Encode(void)
 
     test("EncodeURL bytes: ");
     {
-        s = nats_Base64RawURL_EncodeString((const unsigned char*) &someBytes, sbl, &enc);
-        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, "AAIAAwQFAAYHCAAJAA") != 0)))
+        s = nats_Base64URL_EncodeString((const unsigned char*) &someBytes, sbl, &enc);
+        if ((s == NATS_OK) && ((enc == NULL) || (strcmp(enc, "AAIAAwQFAAYHCAAJAA==") != 0)))
             s = NATS_ERR;
 
         free(enc);
@@ -24051,8 +24090,8 @@ void test_JetStreamMgtStreams(void)
     test("Purge stream (not found): ");
     s = js_PurgeStream(js, "NOT_FOUND", NULL, &jerr);
     testCond((s == NATS_NOT_FOUND)
-                && (jerr == JSStreamNotFoundErr));
-    nats_clearLastError();
+                && (jerr == JSStreamNotFoundErr)
+                && (nats_GetLastError(NULL) == NULL));
 
     test("Get stream info (verify purged): ");
     s = js_GetStreamInfo(&si, js, "TEST2", NULL, &jerr);
@@ -24256,8 +24295,8 @@ void test_JetStreamMgtStreams(void)
     test("Delete stream (not found): ");
     s = js_DeleteStream(js, "NOT_FOUND", NULL, &jerr);
     testCond((s == NATS_NOT_FOUND)
-                && (jerr == JSStreamNotFoundErr));
-    nats_clearLastError();
+                && (jerr == JSStreamNotFoundErr)
+                && (nats_GetLastError(NULL) == NULL));
 
     test("Delete stream: ");
     s = js_DeleteStream(js, "TEST2", NULL, &jerr);
@@ -24267,8 +24306,8 @@ void test_JetStreamMgtStreams(void)
     s = js_GetStreamInfo(&si, js, "TEST2", NULL, &jerr);
     testCond((s == NATS_NOT_FOUND)
                 && (jerr == JSStreamNotFoundErr)
-                && (si == NULL));
-    nats_clearLastError();
+                && (si == NULL)
+                && (nats_GetLastError(NULL) == NULL));
 
     natsSubscription_Destroy(sub);
     sub = NULL;
@@ -25097,8 +25136,8 @@ void test_JetStreamMgtConsumers(void)
     test("Delete consumer (not found): ");
     s = js_DeleteConsumer(js, "MY_STREAM", "dur2", NULL, &jerr);
     testCond((s == NATS_NOT_FOUND)
-                && (jerr == JSConsumerNotFoundErr));
-    nats_clearLastError();
+                && (jerr == JSConsumerNotFoundErr)
+                && (nats_GetLastError(NULL) == NULL));
 
     test("Create consumer with description: ");
     jsConsumerConfig_Init(&cfg);
@@ -34734,6 +34773,2229 @@ void test_KeyValueMirrorCrossDomains(void)
     rmtree(datastore);
     remove(confFile);
     remove(lconfFile);
+}
+
+void test_natsHeader(void)
+{
+    natsStatus  s           = NATS_OK;
+    natsHeader  *h          = NULL;
+    const char  **keys      = NULL;
+    const char  *val        = NULL;
+    const char  **values    = NULL;
+    int         count       = 0;
+    const char  *longKey    = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    test("New (bad args): ");
+    s = natsHeader_New(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("New: ");
+    s = natsHeader_New(&h);
+    testCond((s == NATS_OK) && (h != NULL));
+
+    test("Key cannot be NULL: ");
+    s = natsHeader_Set(h, NULL, "value");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Key cannot be empty: ");
+    s = natsHeader_Set(h, "", "value");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Set msg cannot be NULL: ");
+    s = natsHeader_Set(NULL, "key", "value");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Set value: ");
+    s = natsHeader_Set(h, "my-key", "value1");
+    testCond(s == NATS_OK);
+
+    test("Get header cannot be NULL: ");
+    s = natsHeader_Get(NULL, "my-key", &val);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Get must provide mem location: ");
+    s = natsHeader_Get(h, "my-key", NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Get: ");
+    s = natsHeader_Get(h, "my-key", &val);
+    testCond((s == NATS_OK) &&
+                (val != NULL) &&
+                (strcmp(val, "value1") == 0));
+    val = NULL;
+
+    test("Get value with different case: ");
+    s = natsHeader_Get(h, "my-Key", &val);
+    testCond((s == NATS_NOT_FOUND) && (val == NULL));
+
+    test("Key not found: ");
+    s = natsHeader_Get(h, "unknown-key", &val);
+    testCond((s == NATS_NOT_FOUND) && (val == NULL));
+
+    test("Set value replace old: ");
+    s = natsHeader_Set(h, "my-key", "value2");
+    testCond(s == NATS_OK);
+
+    test("Get value: ");
+    s = natsHeader_Get(h, "my-key", &val);
+    testCond((s == NATS_OK) &&
+                (val != NULL) &&
+                (strcmp(val, "value2") == 0));
+    val = NULL;
+
+    test("Set value cannot be NULL: ");
+    s = natsHeader_Set(h, "setnullvalue", NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Get value: ");
+    s = natsHeader_Get(h, "setnullvalue", &val);
+    testCond((s == NATS_NOT_FOUND) && (val == NULL));
+
+    test("Set empty value: ");
+    s = natsHeader_Set(h, "my-key", "");
+    testCond(s == NATS_OK);
+
+    test("Get value: ");
+    s = natsHeader_Get(h, "my-key", &val);
+    testCond((s == NATS_OK) && (val != NULL) && (val[0] == '\0'));
+    val = NULL;
+
+    test("Add header cannot be NULL: ");
+    s = natsHeader_Add(NULL, "key", "value");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Add first: ");
+    s = natsHeader_Add(h, "two-fields", "val1");
+    testCond(s == NATS_OK);
+
+    test("Add second: ");
+    s = natsHeader_Add(h, "two-fields", "val2");
+    testCond(s == NATS_OK);
+
+    test("Get should return first: ");
+    s = natsHeader_Get(h, "two-fields", &val);
+    testCond((s == NATS_OK) &&
+                (val != NULL) &&
+                (strcmp(val, "val1") == 0));
+    val = NULL;
+
+    test("Values: ");
+    s = natsHeader_Values(h, "two-fields", &values, &count);
+    testCond((s == NATS_OK) && (values != NULL) && (count == 2) &&
+                (strcmp(values[0], "val1") == 0) &&
+                (strcmp(values[1], "val2") == 0));
+
+    if (values != NULL)
+        free((void*) values);
+    values = NULL;
+    count  = 0;
+
+    test("Add after a Set: ");
+    s = natsHeader_Set(h, "my-other-key", "val3");
+    IFOK(s, natsHeader_Add(h, "my-other-key", "val4"));
+    IFOK(s, natsHeader_Values(h, "my-other-key", &values, &count));
+    testCond((s == NATS_OK) && (values != NULL) && (count == 2) &&
+                (strcmp(values[0], "val3") == 0) &&
+                (strcmp(values[1], "val4") == 0));
+
+    if (values != NULL)
+        free((void*) values);
+    values = NULL;
+    count  = 0;
+
+    test("Keys header cannot be NULL: ");
+    s = natsHeader_Keys(NULL, &keys, &count);
+    testCond((s == NATS_INVALID_ARG) && (keys == NULL) && (count == 0));
+    if (s == NATS_INVALID_ARG)
+    {
+        s = NATS_OK;
+        nats_clearLastError();
+    }
+
+    test("Keys keys cannot be NULL: ");
+    s = natsHeader_Keys(h, NULL, &count);
+    testCond((s == NATS_INVALID_ARG) && (keys == NULL) && (count == 0));
+    nats_clearLastError();
+
+    test("Keys count cannot be NULL: ");
+    s = natsHeader_Keys(h, &keys, NULL);
+    testCond((s == NATS_INVALID_ARG) && (keys == NULL) && (count == 0));
+    nats_clearLastError();
+
+    test("KeysCount (NULL): ");
+    testCond(natsHeader_KeysCount(NULL) == 0);
+
+    test("KeysCount: ");
+    testCond(natsHeader_KeysCount(h) == 3);
+
+    test("Keys: ");
+    s = natsHeader_Keys(h, &keys, &count);
+    if ((s == NATS_OK) && ((keys == NULL) || (count != 3)))
+    {
+        s = NATS_ERR;
+    }
+    else
+    {
+        int i;
+        bool ok1 = false;
+        bool ok2 = false;
+        bool ok3 = false;
+
+        for (i=0; i<count; i++)
+        {
+            if (strcmp(keys[i], "my-key") == 0)
+                ok1 = true;
+            else if (strcmp(keys[i], "two-fields") == 0)
+                ok2 = true;
+            else if (strcmp(keys[i], "my-other-key") == 0)
+                ok3 = true;
+        }
+        if (!ok1 || !ok2 || !ok3)
+            s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+    if (keys != NULL)
+        free((void*) keys);
+    count = 0;
+
+    test("Set with long key: ");
+    s = natsHeader_Set(h, longKey, "val1");
+    testCond(s == NATS_OK);
+
+    test("Add with long key: ");
+    s = natsHeader_Add(h, longKey, "val2");
+    testCond(s == NATS_OK);
+
+    test("Get with long key: ");
+    s = natsHeader_Get(h, longKey, &val);
+    testCond((s == NATS_OK) && (val != NULL) && (strcmp(val, "val1") == 0));
+
+    test("Values with long key: ");
+    s = natsHeader_Values(h, longKey, &values, &count);
+    testCond((s == NATS_OK) && (values != NULL) && (count == 2) &&
+                (strcmp(values[0], "val1") == 0) &&
+                (strcmp(values[1], "val2") == 0));
+    free((void*) values);
+    count = 0;
+
+    test("Add value cannot be NULL: ");
+    s = natsHeader_Add(h, "nullval", NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Get ok: ");
+    s = natsHeader_Get(h, "nullval", &val);
+    testCond((s == NATS_NOT_FOUND) && (val == NULL));
+
+    test("Add empty value: ");
+    s = natsHeader_Add(h, "emptyval", "");
+    testCond(s == NATS_OK);
+
+    test("Get ok: ");
+    s = natsHeader_Get(h, "emptyval", &val);
+    testCond((s == NATS_OK) && (val != NULL) && (val[0] == '\0'));
+    val = NULL;
+
+    test("Delete header cannot be NULL: ");
+    s = natsHeader_Delete(NULL, "key");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Delete key cannot be NULL: ");
+    s = natsHeader_Delete(h, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Delete key cannot be empty: ");
+    s = natsHeader_Delete(h, "");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Delete: ");
+    s = natsHeader_Delete(h, "my-other-key");
+    testCond(s == NATS_OK);
+
+    test("Should be gone: ");
+    s = natsHeader_Get(h, "my-other-key", &val);
+    testCond((s == NATS_NOT_FOUND) && (val == NULL));
+
+    test("Destroy: ");
+    natsHeader_Destroy(NULL);
+    natsHeader_Destroy(h);
+    h = NULL;
+    testCond(true);
+}
+
+void test_ObjectStore_GlobalMgt(void)
+{
+    natsStatus              s;
+    objStore                *obs        = NULL;
+    objStore                *obs2       = NULL;
+    jsErrCode               jerr        = 0;
+    jsStreamInfo            *si         = NULL;
+    objStoreNamesList       *nl         = NULL;
+    objStoreStatusesList    *sl         = NULL;
+    bool                    field1Ok    = false;
+    bool                    field2Ok    = false;
+    objStoreConfig          cfg;
+    jsStreamConfig          scfg;
+    int                     i;
+
+    JS_SETUP(2, 10, 0);
+
+    test("objStoreConfig Init (bad args): ");
+    s = objStoreConfig_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Create ObjectStore - bad args: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "TEST";
+    s = js_CreateObjectStore(NULL, js, &cfg);
+    if (s == NATS_INVALID_ARG)
+        s = js_CreateObjectStore(&obs, NULL, &cfg);
+    if (s == NATS_INVALID_ARG)
+        s = js_CreateObjectStore(&obs, js, NULL);
+    testCond((s == NATS_INVALID_ARG) && (obs == NULL));
+    nats_clearLastError();
+
+    test("Create ObjectStore - no bucket name: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = NULL;
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_INVALID_ARG) && (obs == NULL)
+                && (strstr(nats_GetLastError(NULL), obsErrInvalidStoreName) != NULL));
+    nats_clearLastError();
+
+    test("Create ObjectStore - bad bucket name: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "This.is.not.a.valid.name!";
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_INVALID_ARG) && (obs == NULL)
+                && (strstr(nats_GetLastError(NULL), obsErrInvalidStoreName) != NULL));
+    nats_clearLastError();
+
+    test("Create ObjectStore: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "TEST";
+    cfg.Description = "Testing ObjectStore";
+    cfg.Storage = js_MemoryStorage;
+    cfg.TTL = 10000;
+    cfg.MaxBytes = 1024*1024*1024;
+    cfg.Metadata.List = (const char*[4]){"field1", "value1", "field2", "value2"};
+    cfg.Metadata.Count = 2;
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    test("Already exists: ");
+    cfg.Description = "New store";
+    s = js_CreateObjectStore(&obs2, js, &cfg);
+    testCond((s == NATS_ERR) && (obs2 == NULL) &&
+                (strstr(nats_GetLastError(NULL), obsErrBucketExists) != NULL));
+    nats_clearLastError();
+
+    test("Get underlying stream info: ");
+    s = js_GetStreamInfo(&si, js, "OBJ_TEST", NULL, &jerr);
+    testCond((s == NATS_OK) && (si != NULL) && (jerr == 0));
+
+    test("Check properties: ");
+    testCond((strcmp(si->Config->Description, "Testing ObjectStore") == 0)
+                && (si->Config->Storage == js_MemoryStorage)
+                && (si->Config->MaxAge == NATS_SECONDS_TO_NANOS(10))
+                && (si->Config->MaxBytes == 1024*1024*1024)
+                && (si->Config->Metadata.Count >= 2)); // There may be other meta data fields.
+
+    test("Check metadata: ");
+    for (i=0; i<2*si->Config->Metadata.Count; i+=2)
+    {
+        if ((strcmp(si->Config->Metadata.List[i], "field1") == 0)
+            && (strcmp(si->Config->Metadata.List[i+1], "value1") == 0))
+        {
+            field1Ok = true;
+        }
+        else if ((strcmp(si->Config->Metadata.List[i], "field2") == 0)
+                 && (strcmp(si->Config->Metadata.List[i+1], "value2") == 0))
+        {
+            field2Ok = true;
+        }
+        if (field1Ok && field2Ok)
+            break;
+    }
+    testCond(field1Ok && field2Ok);
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Free object: ");
+    // Check that NULL does not crash.
+    objStore_Destroy(NULL);
+    // Destroy object.
+    objStore_Destroy(obs);
+    obs = NULL;
+    testCond(true);
+
+    test("Update (bad args): ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "TEST";
+    s = js_UpdateObjectStore(NULL, js, &cfg);
+    if (s == NATS_INVALID_ARG)
+        s = js_UpdateObjectStore(&obs2, NULL, &cfg);
+    if (s == NATS_INVALID_ARG)
+        s = js_UpdateObjectStore(&obs2, js, NULL);
+    testCond((s == NATS_INVALID_ARG) && (obs2 == NULL));
+    nats_clearLastError();
+
+    test("Update - no bucket name: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = NULL;
+    s = js_UpdateObjectStore(&obs2, js, &cfg);
+    testCond((s == NATS_INVALID_ARG) && (obs2 == NULL)
+                && (strstr(nats_GetLastError(NULL), obsErrInvalidStoreName) != NULL));
+    nats_clearLastError();
+
+    test("Update - bad bucket name: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "This.is.not.a.valid.name!";
+    s = js_UpdateObjectStore(&obs2, js, &cfg);
+    testCond((s == NATS_INVALID_ARG) && (obs2 == NULL)
+                && (strstr(nats_GetLastError(NULL), obsErrInvalidStoreName) != NULL));
+    nats_clearLastError();
+
+    test("Update - not found: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "NOT_FOUND";
+    s = js_UpdateObjectStore(&obs2, js, &cfg);
+    testCond((s == NATS_NOT_FOUND) && (obs2 == NULL)
+                && (strstr(nats_GetLastError(NULL), obsErrBucketNotFound) != NULL));
+    nats_clearLastError();
+
+    test("Update: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "TEST";
+    cfg.Description = "Testing Updated ObjectStore";
+    cfg.Storage = js_MemoryStorage;
+    cfg.TTL = 10000;
+    cfg.MaxBytes = 512*1024*1024;
+    cfg.Metadata.List = (const char*[4]){"field1", "value1", "field2", "value2"};
+    cfg.Metadata.Count = 2;
+    s = js_UpdateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+    objStore_Destroy(obs);
+    obs = NULL;
+
+    test("Get underlying stream info: ");
+    s = js_GetStreamInfo(&si, js, "OBJ_TEST", NULL, &jerr);
+    testCond((s == NATS_OK) && (si != NULL) && (jerr == 0));
+
+    test("Check properties: ");
+    testCond((strcmp(si->Config->Description, "Testing Updated ObjectStore") == 0)
+                && (si->Config->Storage == js_MemoryStorage)
+                && (si->Config->MaxAge == NATS_SECONDS_TO_NANOS(10))
+                && (si->Config->MaxBytes == 512*1024*1024)
+                && (si->Config->Metadata.Count >= 2)); // There may be other meta data fields.
+    jsStreamInfo_Destroy(si);
+    si = NULL;
+
+    test("Lookup with bad args: ");
+    s = js_ObjectStore(NULL, js, "TEST");
+    if (s == NATS_INVALID_ARG)
+        s = js_ObjectStore(&obs, NULL, "TEST");
+    if (s == NATS_INVALID_ARG)
+        s = js_ObjectStore(&obs, js, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_ObjectStore(&obs, js, "");
+    testCond((s == NATS_INVALID_ARG) && (obs == NULL));
+    nats_clearLastError();
+
+    test("Lookup bad bucket name: ");
+    s = js_ObjectStore(&obs, js, "This.is.a.bad.name");
+    testCond((s == NATS_INVALID_ARG) && (obs == NULL)
+                && (strstr(nats_GetLastError(NULL), obsErrInvalidStoreName) != NULL));
+    nats_clearLastError();
+
+    test("Lookup not existing bucket: ");
+    s = js_ObjectStore(&obs, js, "BucketNotFound");
+    testCond((s == NATS_NOT_FOUND) && (obs == NULL) && (nats_GetLastError(NULL) == NULL));
+
+    test("Lookup works: ");
+    s = js_ObjectStore(&obs, js, "TEST");
+    testCond((s == NATS_OK) && (obs != NULL));
+    objStore_Destroy(obs);
+    obs = NULL;
+
+    test("Delete object store bad args: ");
+    s = js_DeleteObjectStore(NULL, "TEST");
+    if (s == NATS_INVALID_ARG)
+        s = js_DeleteObjectStore(js, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_DeleteObjectStore(js, "");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Delete object store bad name: ");
+    s = js_DeleteObjectStore(js, "This.is.a.bad.name");
+    testCond((s == NATS_INVALID_ARG)
+            && (strstr(nats_GetLastError(NULL), obsErrInvalidStoreName) != NULL));
+    nats_clearLastError();
+
+    test("Delete object store not found: ");
+    s = js_DeleteObjectStore(js, "BucketNotFound");
+    testCond((s == NATS_NOT_FOUND) && (nats_GetLastError(NULL) == NULL));
+
+    test("Delete object store: ");
+    s = js_DeleteObjectStore(js, "TEST");
+    testCond(s == NATS_OK);
+
+    test("Check if stream exists: ");
+    s = js_GetStreamInfo(&si, js, "OBJ_TEST", NULL, &jerr);
+    testCond((s == NATS_NOT_FOUND) && (jerr == JSStreamNotFoundErr));
+    jsStreamInfo_Destroy(si);
+
+    test("Check it is gone (bind should fail): ");
+    s = js_ObjectStore(&obs, js, "TEST");
+    testCond((s == NATS_NOT_FOUND) && (obs == NULL));
+
+    test("Get names (none found): ");
+    s = js_ObjectStoreNames(&nl, js);
+    testCond((s == NATS_NOT_FOUND) && (nl == NULL) &&
+                (nats_GetLastError(NULL) == NULL));
+
+    test("Get statuses (none found): ");
+    s = js_ObjectStoreStatuses(&sl, js);
+    testCond((s == NATS_NOT_FOUND) && (sl == NULL) &&
+                (nats_GetLastError(NULL) == NULL));
+
+    test("Create several stores: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "Store1";
+    cfg.Description = "Testing Store 1";
+    cfg.Storage = js_MemoryStorage;
+    cfg.TTL = 10000;
+    cfg.MaxBytes = 1024*1024*1024;
+    cfg.Metadata.List = (const char*[4]){"field1", "value1", "field2", "value2"};
+    cfg.Metadata.Count = 2;
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    if (s == NATS_OK)
+    {
+        objStore_Destroy(obs);
+        obs = NULL;
+
+        objStoreConfig_Init(&cfg);
+        cfg.Bucket = "Store2";
+        cfg.Description = "Testing Store 2";
+        cfg.Storage = js_FileStorage;
+        cfg.TTL = 20000;
+        cfg.MaxBytes = (int64_t)2*1024*1024*1024;
+        cfg.Metadata.List = (const char*[6]){"field3", "value3", "field4", "value4", "field5", "value5"};
+        cfg.Metadata.Count = 3;
+        s = js_CreateObjectStore(&obs, js, &cfg);
+    }
+    testCond((s == NATS_OK) && (obs != NULL));
+    objStore_Destroy(obs);
+    obs = NULL;
+
+    test("Add stream that will match subject filter: ");
+    jsStreamConfig_Init(&scfg);
+    scfg.Name = "NotAnObjectStore";
+    scfg.Subjects = (const char*[1]){"$O.something.C.>"};
+    scfg.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &scfg, NULL, NULL);
+    IFOK(s, js_Publish(NULL, js, "$O.something.C.else", "hello", 5, NULL, NULL));
+    testCond(s == NATS_OK);
+
+    test("Get names (bad arg): ");
+    s = js_ObjectStoreNames(NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_ObjectStoreNames(NULL, js);
+    if (s == NATS_INVALID_ARG)
+        s = js_ObjectStoreNames(&nl, NULL);
+    testCond ((s == NATS_INVALID_ARG) && (nl == NULL));
+    nats_clearLastError();
+
+    test("Get names: ");
+    s = js_ObjectStoreNames(&nl, js);
+    testCond((s == NATS_OK) && (nl != NULL) && (nl->List != NULL) && (nl->Count == 2));
+
+    test("Check names: ");
+    s = NATS_ERR;
+    if ((strcmp(nl->List[0], "Store1") == 0) && (strcmp(nl->List[1], "Store2") == 0))
+        s = NATS_OK;
+    else if ((strcmp(nl->List[0], "Store2") == 0) && (strcmp(nl->List[1], "Store1") == 0))
+        s = NATS_OK;
+    testCond(s == NATS_OK);
+
+    test("Destroy list: ");
+    // Check that does not crash.
+    objStoreNamesList_Destroy(NULL);
+    // Destroy actual list.
+    objStoreNamesList_Destroy(nl);
+    nl = NULL;
+    testCond(true);
+
+    test("Get statuses (bad arg): ");
+    s = js_ObjectStoreStatuses(NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_ObjectStoreStatuses(NULL, js);
+    if (s == NATS_INVALID_ARG)
+        s = js_ObjectStoreStatuses(&sl, NULL);
+    testCond ((s == NATS_INVALID_ARG) && (sl == NULL));
+    nats_clearLastError();
+
+    test("Get statuses: ");
+    s = js_ObjectStoreStatuses(&sl, js);
+    testCond((s == NATS_OK) && (sl != NULL) && (sl->List != NULL) && (sl->Count == 2));
+
+    test("Check status: ");
+    for (i=0; (s == NATS_OK) && (i<2); i++)
+    {
+        objStoreStatus *oss = sl->List[i];
+        if (strcmp(oss->Bucket, "Store1") == 0)
+        {
+            if ((strcmp(oss->Description, "Testing Store 1") != 0)
+                || (oss->Storage != js_MemoryStorage)
+                || (oss->TTL != 10000)
+                || (oss->Metadata.List == NULL)
+                // there may be one more for "_nats.req.level", so at least 2.
+                || (oss->Metadata.Count < 2))
+            {
+                s = NATS_ERR;
+            }
+        }
+        else if (strcmp(oss->Bucket, "Store2") == 0)
+        {
+            if ((strcmp(oss->Description, "Testing Store 2") != 0)
+                || (oss->Storage != js_FileStorage)
+                || (oss->TTL != 20000)
+                || (oss->Metadata.List == NULL)
+                // there may be one more for "_nats.req.level", so at least 3.
+                || (oss->Metadata.Count < 3))
+            {
+                s = NATS_ERR;
+            }
+        }
+        else
+            s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+
+    test("Destroy list: ");
+    // Check that does not crash.
+    objStoreStatusesList_Destroy(NULL);
+    // Destroy actual list.
+    objStoreStatusesList_Destroy(sl);
+    sl = NULL;
+    testCond(true);
+
+    test("Delete object stores: ");
+    s = js_DeleteObjectStore(js, "Store1");
+    IFOK(s, js_DeleteObjectStore(js, "Store2"));
+    testCond(s == NATS_OK);
+
+    test("Get names with stream matching filter: ");
+    s = js_ObjectStoreNames(&nl, js);
+    testCond((s == NATS_NOT_FOUND) && (nl == NULL) && (nats_GetLastError(NULL) == NULL));
+
+    test("Get statuses with stream matching filter: ");
+    s = js_ObjectStoreStatuses(&sl, js);
+    testCond((s == NATS_NOT_FOUND) && (sl == NULL) && (nats_GetLastError(NULL) == NULL));
+
+    JS_TEARDOWN;
+}
+
+void test_ObjectStore_PutAndGet(void)
+{
+    natsStatus          s;
+    objStore            *obs        = NULL;
+    objStoreInfo        *info       = NULL;
+    char                *echunkSubj = NULL;
+    natsMsg             *msg        = NULL;
+    natsBuffer          *buf        = NULL;
+    natsBuffer          *buf2       = NULL;
+    const char          *esha       = NULL;
+    char                *str        = NULL;
+    void                *data       = NULL;
+    int                 len         = 0;
+    bool                done        = false;
+    objStoreGet         *get        = NULL;
+    const char          *fname      = NULL;
+    objStorePut         *put        = NULL;
+    char                *chunkSubj  = NULL;
+#ifndef NATS_HAS_TLS
+    const char          *nosha      = "SHA-256=bm90IHN1cHBvcnRlZA==";
+#endif
+    objStoreConfig      cfg;
+    objStoreMeta        meta;
+
+    JS_SETUP(2, 10, 0);
+
+    test("Create ObjectStore: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "TEST";
+    cfg.Description = "Testing ObjectStore";
+    cfg.Storage = js_FileStorage;
+    cfg.TTL = 10000;
+    cfg.MaxBytes = 1024*1024*1024;
+    cfg.Metadata.List = (const char*[4]){"field1", "value1", "field2", "value2"};
+    cfg.Metadata.Count = 2;
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    test("Put string (bad args): ");
+    s = objStore_PutString(&info, NULL, "putstring", "test string");
+    testCond((s == NATS_INVALID_ARG) && (info == NULL));
+    nats_clearLastError();
+
+    test("Put string (bad name): ");
+    s = objStore_PutString(&info, obs, NULL, "test string");
+    if (s == NATS_INVALID_ARG)
+        s = objStore_PutString(&info, obs, "", "test string");
+    testCond((s == NATS_INVALID_ARG) && (info == NULL)
+                && (strstr(nats_GetLastError(NULL), obsErrBadObjectMeta) != NULL));
+    nats_clearLastError();
+
+#ifndef NATS_HAS_TLS
+    test("Put errors on no tls: ");
+    s = objStore_PutString(&info, obs, "foobar", "should error out");
+    testCond((s == NATS_ILLEGAL_STATE) && (info == NULL) &&
+                (strstr(nats_GetLastError(NULL), NO_SSL_ERR) != NULL));
+    nats_clearLastError();
+
+    // From now on, simply avoid errors due to hash256.
+    nats_hashNoErrorOnNoSSL(true);
+    esha = nosha;
+#endif
+
+    test("Put string (check names): ");
+    s = objStore_PutString(NULL, obs, "BLOB.txt", "A");
+    IFOK(s, objStore_PutString(NULL, obs, "foo bar", "B"));
+    IFOK(s, objStore_PutString(NULL, obs, ".*<>:\"/\\|?&", "C"));
+	testCond(s == NATS_OK);
+
+	test("Put string (get info back): ");
+	s = objStore_PutString(&info, obs, "foo", "DEF");
+	testCond((s == NATS_OK) && (info != NULL));
+
+#if defined(NATS_HAS_TLS)
+    esha = "SHA-256=lnxaW34vu-MICgxc7-p8J5VwsWroRlUlU4vDsRUmekU=";
+#endif
+	test("Check info: ");
+    testCond((strcmp(info->Meta.Name, "foo") == 0) &&
+                (info->Meta.Opts.ChunkSize == obsDefaultChunkSize) &&
+                (strcmp(info->Bucket, "TEST") == 0) &&
+                (!nats_IsStringEmpty(info->NUID)) &&
+                (info->Size == 3) &&
+                (info->ModTime > 0) &&
+                (info->Chunks == 1) &&
+                (!nats_IsStringEmpty(info->Digest)) &&
+                (strcmp(info->Digest, esha) == 0));
+
+    test("Copy info's subject: ");
+    s = (nats_asprintf(&echunkSubj, "$O.TEST.C.%s", info->NUID) >= 0 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+
+	objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("Get string (bad args): ");
+    s = objStore_GetString(NULL, obs, "foo", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_GetString(&str, NULL, "foo", NULL);
+    testCond((s == NATS_INVALID_ARG) && (str == NULL));
+    nats_clearLastError();
+
+    test("Get string (bad name): ");
+    s = objStore_GetString(&str, obs, "", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_GetString(&str, obs, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (str == NULL) &&
+                (strstr(nats_GetLastError(NULL), obsErrNameIsRequired) != NULL));
+    nats_clearLastError();
+
+    test("Get string (not found): ");
+    s = objStore_GetString(&str, obs, "notfound", NULL);
+    testCond((s == NATS_NOT_FOUND) && (str == NULL) && (nats_GetLastError(NULL) == NULL));
+
+    test("Get string: ");
+    s = objStore_GetString(&str, obs, "foo", NULL);
+    testCond((s == NATS_OK) && (str != NULL) && (strcmp(str, "DEF") == 0));
+    free(str);
+    str = NULL;
+
+    test("Get info msg: ");
+    s = js_GetLastMsg(&msg, js, "OBJ_TEST", echunkSubj, NULL, NULL);
+    testCond((s == NATS_OK) && (msg != NULL) &&
+                (strstr(natsMsg_GetData(msg), "DEF") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Put other string with same name: ");
+    s = objStore_PutString(&info, obs, "foo", "GHIJKLMNOPQRSTUVWXYZ");
+	testCond((s == NATS_OK) && (info != NULL));
+
+#if defined(NATS_HAS_TLS)
+    esha = "SHA-256=QzNBausNa1iF0xPksPiDUXy6ppkd9YvDanB1r9wJW-A=";
+#endif
+    test("Check info: ");
+    testCond((strcmp(info->Meta.Name, "foo") == 0) &&
+                (info->Meta.Opts.ChunkSize == obsDefaultChunkSize) &&
+                (strcmp(info->Bucket, "TEST") == 0) &&
+                (!nats_IsStringEmpty(info->NUID)) &&
+                (info->Size == 20) &&
+                (info->ModTime > 0) &&
+                (info->Chunks == 1) &&
+                (!nats_IsStringEmpty(info->Digest)) &&
+                (strcmp(info->Digest, esha) == 0));
+
+	objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("Check old info msg removed: ");
+    s = js_GetLastMsg(&msg, js, "OBJ_TEST", echunkSubj, NULL, NULL);
+    testCond((s == NATS_NOT_FOUND) && (msg == NULL));
+    nats_clearLastError();
+
+    free(echunkSubj);
+    echunkSubj = NULL;
+
+    test("Put with empty string: ");
+    s = objStore_PutString(NULL, obs, "emptystring", "");
+    testCond(s == NATS_OK);
+
+    test("Get empty string: ");
+    s = objStore_GetString(&str, obs, "emptystring", NULL);
+    testCond((s == NATS_OK) && (str == NULL) && (nats_GetLastError(NULL) == NULL));
+
+    test("Put with NULL string: ");
+    s = objStore_PutString(NULL, obs, "nullstring", NULL);
+    testCond(s == NATS_OK);
+
+    test("Get NULL string: ");
+    s = objStore_GetString(&str, obs, "nullstring", NULL);
+    testCond((s == NATS_OK) && (str == NULL) && (nats_GetLastError(NULL) == NULL));
+
+    // Put Bytes
+
+    test("Put bytes (bad args): ");
+    s = objStore_PutBytes(&info, NULL, "put bytes", (const void*) "bytes", 5);
+    testCond((s == NATS_INVALID_ARG) && (info == NULL));
+    nats_clearLastError();
+
+    test("Put bytes (bad name): ");
+    s = objStore_PutBytes(&info, obs, NULL, (const void*) "bytes", 5);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_PutBytes(&info, obs, "", (const void*) "bytes", 5);
+    testCond((s == NATS_INVALID_ARG) && (info == NULL)
+                && (strstr(nats_GetLastError(NULL), obsErrBadObjectMeta) != NULL));
+    nats_clearLastError();
+
+    test("Put bytes (check names): ");
+    s = objStore_PutBytes(NULL, obs, "BLOBBYTES.txt", (const void*) "bytes", 5);
+    IFOK(s, objStore_PutBytes(NULL, obs, "foo bar baz", (const void*) "Bytes", 5));
+    IFOK(s, objStore_PutBytes(NULL, obs, "bytes.*<>:\"/\\|?&", (const void*) "BYTES", 5));
+	testCond(s == NATS_OK);
+
+	test("Put bytes (get info back): ");
+	s = objStore_PutBytes(&info, obs, "foo", (const void*) "some bytes", 10);
+	testCond((s == NATS_OK) && (info != NULL));
+
+#if defined(NATS_HAS_TLS)
+    esha = "SHA-256=DSLNzBDm0Enb4a9RI9UIc_38Gk9YMG5Yy2JBvpRyAU0=";
+#endif
+	test("Check info: ");
+    testCond((strcmp(info->Meta.Name, "foo") == 0) &&
+                (info->Meta.Opts.ChunkSize == obsDefaultChunkSize) &&
+                (strcmp(info->Bucket, "TEST") == 0) &&
+                (!nats_IsStringEmpty(info->NUID)) &&
+                (info->Size == 10) &&
+                (info->ModTime > 0) &&
+                (info->Chunks == 1) &&
+                (!nats_IsStringEmpty(info->Digest)) &&
+                (strcmp(info->Digest, esha) == 0));
+
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("Get bytes (bad args): ");
+    s = objStore_GetBytes(NULL, &len, obs, "foo", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_GetBytes(&data, NULL, obs, "foo", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_GetBytes(&data, &len, NULL, "foo", NULL);
+    testCond((s == NATS_INVALID_ARG) && (data == NULL) && (len == 0));
+    nats_clearLastError();
+
+    test("Get bytes (bad name): ");
+    s = objStore_GetBytes(&data, &len, obs, "", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_GetBytes(&data, &len, obs, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (data == NULL) && (len == 0) &&
+                (strstr(nats_GetLastError(NULL), obsErrNameIsRequired) != NULL));
+    nats_clearLastError();
+
+    test("Get bytes (not found): ");
+    s = objStore_GetBytes(&data, &len, obs, "notfound", NULL);
+    testCond((s == NATS_NOT_FOUND) && (data == NULL) && (len == 0) && (nats_GetLastError(NULL) == NULL));
+
+    test("Get string: ");
+    s = objStore_GetBytes(&data, &len, obs, "foo", NULL);
+    testCond((s == NATS_OK) && (data != NULL) && (len == 10) &&
+                (memcmp((const void*) data, (const void*) "some bytes", 10) == 0));
+    free(data);
+    data = NULL;
+    len = 0;
+
+    test("Put bytes (0 length): ");
+    s = objStore_PutBytes(NULL, obs, "nullbytes", NULL, 0);
+	testCond((s == NATS_OK) && (info == NULL));
+
+    test("Get bytes (0 length): ");
+    s = objStore_GetBytes(&data, &len, obs, "nullbytes", NULL);
+    testCond((s == NATS_OK) && (data == NULL) && (len == 0) && (nats_GetLastError(NULL) == NULL));
+
+    test("Put file (bad args): ");
+    s = objStore_PutFile(&info, NULL, "test.txt");
+    if (s == NATS_INVALID_ARG)
+        s = objStore_PutFile(&info, obs, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_PutFile(&info, obs, "");
+    testCond((s == NATS_INVALID_ARG) && (info == NULL));
+    nats_clearLastError();
+
+    test("Put file (not found): ");
+    s = objStore_PutFile(&info, obs, "test.txt");
+    testCond((s == NATS_ERR) && (info == NULL) &&
+                (strstr(nats_GetLastError(NULL), "error opening") != NULL));
+    nats_clearLastError();
+
+    test("Put file (get info back): ");
+    s = objStore_PutFile(&info, obs, "list_stan.txt");
+    testCond((s == NATS_OK) && (info != NULL));
+
+    test("Read same file for checks: ");
+    s = nats_ReadFile(&buf, 1024, "list_stan.txt");
+    testCond(s == NATS_OK);
+
+#if defined(NATS_HAS_TLS)
+    esha = "SHA-256=jTPSL4eQLmyLeId-rrZW5-HYikPO8s1k3YvGDd0kg4M=";
+#endif
+    test("Check info: ");
+    testCond((strcmp(info->Meta.Name, "list_stan.txt") == 0) &&
+                (info->Meta.Opts.ChunkSize == obsDefaultChunkSize) &&
+                (strcmp(info->Bucket, "TEST") == 0) &&
+                (!nats_IsStringEmpty(info->NUID)) &&
+                (info->Size == (uint64_t)(natsBuf_Len(buf)-1)) &&
+                (info->ModTime > 0) &&
+                (info->Chunks == 1) &&
+                (!nats_IsStringEmpty(info->Digest)) &&
+                (strcmp(info->Digest, esha) == 0));
+
+    test("Check content: ");
+    s = (nats_asprintf(&echunkSubj, "$O.TEST.C.%s", info->NUID) >= 0 ? NATS_OK : NATS_ERR);
+    IFOK(s, js_GetLastMsg(&msg, js, "OBJ_TEST", echunkSubj, NULL, NULL));
+    testCond((s == NATS_OK) && (msg != NULL) &&
+                (strncmp(natsMsg_GetData(msg), natsBuf_Data(buf), natsBuf_Len(buf)) == 0));
+    free(echunkSubj);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("Get file (bad args): ");
+    fname = "objstore_getfile.txt";
+    s = objStore_GetFile(NULL, "list_stan.txt", fname, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_GetFile(obs, "", fname, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_GetFile(obs, NULL, fname, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_GetFile(obs, "list_stan.txt", "", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_GetFile(obs, "list_stan.txt", NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (fopen(fname, "r") == NULL));
+    nats_clearLastError();
+
+    test("Get file (not found): ");
+    s = objStore_GetFile(obs, "notfound", fname, NULL);
+    testCond((s == NATS_NOT_FOUND) && (fopen(fname, "r") == NULL) &&
+                (nats_GetLastError(NULL) == NULL));
+
+    test("Get file: ");
+    s = objStore_GetFile(obs, "list_stan.txt", fname, NULL);
+    testCond(s == NATS_OK);
+
+    test("Read generated file: ");
+    s = nats_ReadFile(&buf2, 1024, fname);
+    testCond((s == NATS_OK) && (buf2 != NULL) && (natsBuf_Len(buf2) == natsBuf_Len(buf)));
+
+    test("Compare files: ");
+    s = (memcmp((const void*) natsBuf_Data(buf), (const void*) natsBuf_Data(buf2),
+                    natsBuf_Len(buf)) == 0 ? NATS_OK : NATS_ERR);
+    testCond(s == NATS_OK);
+
+    remove(fname);
+    natsBuf_Destroy(buf);
+    buf = NULL;
+    natsBuf_Destroy(buf2);
+    buf2 = NULL;
+
+    test("Check meta init: ");
+    s = objStoreMeta_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Put (bad args): ");
+    objStoreMeta_Init(&meta);
+    s = objStore_Put(NULL, obs, &meta);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_Put(&put, NULL, &meta);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_Put(&put, obs, NULL);
+    testCond((s == NATS_INVALID_ARG) && (put == NULL));
+    nats_clearLastError();
+
+    test("Put (bad name): ");
+    meta.Name = NULL;
+    s = objStore_Put(&put, obs, &meta);
+    if (s == NATS_INVALID_ARG)
+    {
+        meta.Name = "";
+        s = objStore_Put(&put, obs, &meta);
+    }
+    testCond((s == NATS_INVALID_ARG) && (info == NULL) &&
+            (strstr(nats_GetLastError(NULL), obsErrBadObjectMeta) != NULL));
+    nats_clearLastError();
+
+    test("Put (get put back): ");
+    meta.Name = "test put";
+    s = objStore_Put(&put, obs, &meta);
+    testCond((s == NATS_OK) && (put != NULL));
+
+    test("Put add (bad args): ");
+    s = objStorePut_Add(NULL, "test", 4);
+    if (s == NATS_INVALID_ARG)
+        s = objStorePut_Add(put, NULL, 4);
+    if (s == NATS_INVALID_ARG)
+        s = objStorePut_Add(put, "test", 0);
+    if (s == NATS_INVALID_ARG)
+        s = objStorePut_Add(put, "test", -10);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Add two chunks: ");
+    s = objStorePut_Add(put, "this is the first chunk", 23);
+    IFOK(s, objStorePut_Add(put, "this is the second chunk", 24));
+    IFOK(s, objStorePut_Complete(&info, put, 1000));
+    testCond((s == NATS_OK) && (info != NULL));
+
+    test("Destroy put: ");
+    // should not crash
+    objStorePut_Destroy(NULL);
+    objStorePut_Destroy(put);
+    testCond(true);
+    put = NULL;
+
+#if defined(NATS_HAS_TLS)
+    esha = "SHA-256=3UmPFsVY1hIZIKngP09wv2IaKNIV6s-Y1VjaGvhzZrk=";
+#endif
+    test("Check info: ");
+    testCond((strcmp(info->Meta.Name, "test put") == 0) &&
+                (info->Meta.Opts.ChunkSize == obsDefaultChunkSize) &&
+                (strcmp(info->Bucket, "TEST") == 0) &&
+                (!nats_IsStringEmpty(info->NUID)) &&
+                (info->Size == 47) &&
+                (info->ModTime > 0) &&
+                (info->Chunks == 2) &&
+                (!nats_IsStringEmpty(info->Digest)) &&
+                (strcmp(info->Digest, esha) == 0));
+
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("Get (bad args): ");
+    s = objStore_Get(NULL, obs, "foo", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_Get(&get, NULL,"foo", NULL);
+    testCond((s == NATS_INVALID_ARG) && (get == NULL));
+    nats_clearLastError();
+
+    test("Get (bad name): ");
+    s = objStore_Get(&get, obs, "", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_Get(&get, obs, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (get == NULL) &&
+                (strstr(nats_GetLastError(NULL), obsErrNameIsRequired) != NULL));
+    nats_clearLastError();
+
+    test("Get (result back): ");
+    s = objStore_Get(&get, obs, "test put", NULL);
+    testCond((s == NATS_OK) && (get != NULL));
+
+    test("Result get info (bad args): ");
+    s = objStoreGet_Info(NULL, get);
+    if (s == NATS_INVALID_ARG)
+        s = objStoreGet_Info((const objStoreInfo**) &info, NULL);
+    testCond((s == NATS_INVALID_ARG) && (info == NULL));
+    nats_clearLastError();
+
+    test("Result get info: ");
+    s = objStoreGet_Info((const objStoreInfo**) &info, get);
+    testCond((s == NATS_OK) && (info != NULL));
+
+    test("Check info: ");
+    testCond((strcmp(info->Meta.Name, "test put") == 0) &&
+                (info->Meta.Opts.ChunkSize == obsDefaultChunkSize) &&
+                (strcmp(info->Bucket, "TEST") == 0) &&
+                (!nats_IsStringEmpty(info->NUID)) &&
+                (info->Size == 47) &&
+                (info->ModTime > 0) &&
+                (info->Chunks == 2) &&
+                (!nats_IsStringEmpty(info->Digest)) &&
+                (strcmp(info->Digest, esha) == 0));
+
+    test("Read (bad args): ");
+    s = objStoreGet_Read(NULL, &data, &len, get, 1000);
+    if (s == NATS_INVALID_ARG)
+        s = objStoreGet_Read(&done, NULL, &len, get, 1000);
+    if (s == NATS_INVALID_ARG)
+        s = objStoreGet_Read(&done, &data, NULL, get, 1000);
+    if (s == NATS_INVALID_ARG)
+        s = objStoreGet_Read(&done, &data, &len, NULL, 1000);
+    if (s == NATS_INVALID_ARG)
+        s = objStoreGet_Read(&done, &data, &len, get, 0);
+    if (s == NATS_INVALID_ARG)
+        s = objStoreGet_Read(&done, &data, &len, get, -10);
+    testCond((s == NATS_INVALID_ARG) && (!done) && (data == NULL) && (len == 0));
+    nats_clearLastError();
+
+    test("Read (first chunk): ");
+    s = objStoreGet_Read(&done, &data, &len, get, 1000);
+    testCond((s == NATS_OK) && (!done) && (data != NULL) && (len == 23) &&
+                (memcmp((const void*) data, (const void*) "this is the first chunk", len) == 0));
+    free(data);
+    data = NULL;
+    len = 0;
+
+    test("Read (second chunk): ");
+    s = objStoreGet_Read(&done, &data, &len, get, 1000);
+    testCond((s == NATS_OK) && done && (data != NULL) && (len == 24) &&
+                (memcmp((const void*) data, (const void*) "this is the second chunk", len) == 0));
+    free(data);
+    data = NULL;
+    len = 0;
+    done = false;
+
+    test("Read (no more): ");
+    s = objStoreGet_Read(&done, &data, &len, get, 1000);
+    testCond((s == NATS_ILLEGAL_STATE) && (!done) && (data == NULL) && (len == 0) &&
+                (strstr(nats_GetLastError(NULL), obsErrReadComplete) != NULL));
+    nats_clearLastError();
+
+    test("Destroy result: ");
+    // Should not crash.
+    objStoreGet_Destroy(NULL);
+    objStoreGet_Destroy(get);
+    testCond(true);
+    get = NULL;
+
+    test("Get with null bytes: ");
+    s = objStore_Get(&get, obs, "nullbytes", NULL);
+    testCond((s == NATS_OK) && (get != NULL));
+
+    test("Read: ");
+    s = objStoreGet_Read(&done, &data, &len, get, 1000);
+    testCond((s == NATS_OK) && done && (data == NULL) && (len == 0));
+
+    done = false;
+    test("Read (no more): ");
+    s = objStoreGet_Read(&done, &data, &len, get, 1000);
+    testCond((s == NATS_ILLEGAL_STATE) && (!done) && (data == NULL) && (len == 0) &&
+                (strstr(nats_GetLastError(NULL), obsErrReadComplete) != NULL));
+    nats_clearLastError();
+
+    objStoreGet_Destroy(get);
+    get = NULL;
+
+    test("Get with null bytes: ");
+    s = objStore_Get(&get, obs, "nullbytes", NULL);
+    testCond((s == NATS_OK) && (get != NULL));
+
+    test("Read all: ");
+    s = objStoreGet_ReadAll(&data, &len, get, 1000);
+    testCond((s == NATS_OK) && (data == NULL) && (len == 0));
+
+    test("Read (no more): ");
+    s = objStoreGet_ReadAll(&data, &len, get, 1000);
+    testCond((s == NATS_ILLEGAL_STATE) && (data == NULL) && (len == 0) &&
+                (strstr(nats_GetLastError(NULL), obsErrReadComplete) != NULL));
+    nats_clearLastError();
+
+    objStoreGet_Destroy(get);
+    get = NULL;
+
+    test("Put (small chunk size): ");
+    meta.Opts.ChunkSize = 5;
+    meta.Name = "test put 2";
+    s = objStore_Put(&put, obs, &meta);
+    IFOK(s, objStorePut_Add(put, "abcdefghijklm", 13));
+    IFOK(s, objStorePut_Complete(&info, put, 1000));
+    testCond((s == NATS_OK) && (info != NULL));
+
+    objStorePut_Destroy(put);
+    put = NULL;
+
+#if defined(NATS_HAS_TLS)
+    esha = "SHA-256=_xAwTxryNgbt4eLYq83JTCKQR6YUWNgJ2LvVPt4fZZg=";
+#endif
+    test("Check info: ");
+    testCond((strcmp(info->Meta.Name, "test put 2") == 0) &&
+                (info->Meta.Opts.ChunkSize == 5) &&
+                (strcmp(info->Bucket, "TEST") == 0) &&
+                (!nats_IsStringEmpty(info->NUID)) &&
+                (info->Size == 13) &&
+                (info->ModTime > 0) &&
+                (info->Chunks == 3) &&
+                (!nats_IsStringEmpty(info->Digest)) &&
+                (strcmp(info->Digest, esha) == 0));
+
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("Get (result back): ");
+    s = objStore_Get(&get, obs, "test put 2", NULL);
+    testCond((s == NATS_OK) && (get != NULL));
+
+    done = false;
+    test("Read (first chunk): ");
+    s = objStoreGet_Read(&done, &data, &len, get, 1000);
+    testCond((s == NATS_OK) && (!done) && (data != NULL) && (len == 5) &&
+                (memcmp((const void*) data, (const void*) "abcde", len) == 0));
+    free(data);
+    data = NULL;
+    len = 0;
+
+    test("Read all for the rest: ");
+    s = objStoreGet_ReadAll(&data, &len, get, 1000);
+    testCond((s == NATS_OK) && (data != NULL) && (len == 8) &&
+                (memcmp((const void*) data, (const void*) "fghijklm", len) == 0));
+    free(data);
+    data = NULL;
+    len = 0;
+
+    test("Read all (no more): ");
+    s = objStoreGet_ReadAll(&data, &len, get, 1000);
+    testCond((s == NATS_ILLEGAL_STATE) && (data == NULL) && (len == 0) &&
+                (strstr(nats_GetLastError(NULL), obsErrReadComplete) != NULL));
+    nats_clearLastError();
+
+    objStoreGet_Destroy(get);
+    get = NULL;
+
+    meta.Name = "test put 3";
+    test("Put with error: ");
+    s = objStore_Put(&put, obs, &meta);
+    IFOK(s, objStorePut_Add(put, "some", 4));
+    IFOK(s, objStorePut_Add(put, "data", 4));
+    // Wait for those to be written.
+    IFOK(s, js_PublishAsyncComplete(obs->js, NULL));
+    if (s == NATS_OK)
+    {
+        // Save the subject to get if messages have been persisted.
+        chunkSubj = strdup(put->chunkSubj);
+        if (chunkSubj == NULL)
+            s = NATS_NO_MEMORY;
+    }
+    testCond(s == NATS_OK);
+    // If we destroy before completing the Add, we should get the chunks purged.
+    objStorePut_Destroy(put);
+    put = NULL;
+
+    // Wait a bit to make sure purge has time to be done.
+    nats_Sleep(250);
+
+    test("Check info: ");
+    s = js_GetLastMsg(&msg, js, "OBJ_TEST", chunkSubj, NULL, NULL);
+    testCond((s == NATS_NOT_FOUND) && (msg == NULL));
+    nats_clearLastError();
+    free(chunkSubj);
+    chunkSubj = NULL;
+
+    test("Put with link error: ");
+    // Normally, users don't set Link directly (done through Add[Bucket]Link()
+    // that generates a objStoreInfo, so would not be passed to a Put() call,
+    // but simulate that the Link pointer is not NULL to check that we are
+    // properly rejecting.
+    s = NATS_OK;
+    meta.Name = "test put 4";
+    meta.Opts.Link = (objStoreLink*) calloc(1, sizeof(objStoreLink));
+    if (meta.Opts.Link == NULL)
+        s = NATS_NO_MEMORY;
+    else
+        s = objStore_Put(&put, obs, &meta);
+    testCond((s == NATS_INVALID_ARG) && (put == NULL) &&
+                (strstr(nats_GetLastError(NULL), obsErrLinkNotAllowed) != NULL));
+    nats_clearLastError();
+    free(meta.Opts.Link);
+    meta.Opts.Link = NULL;
+    objStore_Destroy(obs);
+    obs = NULL;
+
+    test("Create ObjectStore with max bytes low: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "TEST2";
+    cfg.Description = "Testing ObjectStore Errors";
+    cfg.Storage = js_FileStorage;
+    cfg.MaxBytes = 100;
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    test("Start a put: ")
+    objStoreMeta_Init(&meta);
+    meta.Name = "test put maxbytes err";
+    s = objStore_Put(&put, obs, &meta);
+    if (s == NATS_OK)
+    {
+        // Save the subject to get if messages have been persisted.
+        chunkSubj = strdup(put->chunkSubj);
+        if (chunkSubj == NULL)
+            s = NATS_NO_MEMORY;
+    }
+    testCond((s == NATS_OK) && (put != NULL));
+
+    test("Add some bytes: ");
+    s = objStorePut_Add(put, "abcdefghijklmnopqrstuvwxyz", 26);
+    testCond(s == NATS_OK);
+
+    test("Check pub complete: ");
+    s = js_PublishAsyncComplete(put->pubJS, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check chunk persisted: ");
+    s = js_GetLastMsg(&msg, js, "OBJ_TEST2", chunkSubj, NULL, NULL);
+    testCond((s == NATS_OK) && (msg != NULL) && (natsMsg_GetDataLength(msg) == 26));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Add more bytes: ");
+    s = objStorePut_Add(put, "abcdefghijklmnopqrstuvwxyz", 26);
+    testCond(s == NATS_OK);
+
+    test("Complete should return error: ");
+    s = objStorePut_Complete(&info, put, 1000);
+    testCond((s == NATS_ERR) && (info == NULL) &&
+                (strstr(nats_GetLastError(NULL), "maximum") != NULL));
+    nats_clearLastError();
+
+    test("Check chunk purged: ");
+    s = js_GetLastMsg(&msg, js, "OBJ_TEST2", chunkSubj, NULL, NULL);
+    testCond((s == NATS_NOT_FOUND) && (msg == NULL));
+    nats_clearLastError();
+
+    objStorePut_Destroy(put);
+    objStore_Destroy(obs);
+    free(chunkSubj);
+
+    JS_TEARDOWN;
+}
+
+void test_ObjectStore_StoreMgt(void)
+{
+    natsStatus          s;
+    objStore            *obs  = NULL;
+    objStoreInfo        *info = NULL;
+    objStoreStatus      *sts  = NULL;
+    objStorePut         *put  = NULL;
+    natsHeader          *hdr  = NULL;
+    const char          *esha = NULL;
+    const char          **keys= NULL;
+    const char          **vals= NULL;
+    int                 count = 0;
+#ifndef NATS_HAS_TLS
+    const char          *nosha= "SHA-256=bm90IHN1cHBvcnRlZA==";
+#endif
+    objStoreConfig      cfg;
+    objStoreMeta        meta;
+
+    JS_SETUP(2, 10, 0);
+
+    test("Create ObjectStore: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "TEST";
+    cfg.Description = "Testing ObjectStore";
+    cfg.Storage = js_FileStorage;
+    cfg.TTL = 10000;
+    cfg.MaxBytes = 1024*1024*1024;
+    cfg.Metadata.List = (const char*[4]){"field1", "value1", "field2", "value2"};
+    cfg.Metadata.Count = 2;
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    test("GetInfo (bad args): ");
+    s = objStore_GetInfo(NULL, obs, "testinfo", NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_GetInfo(&info, NULL, "testinfo", NULL);
+    testCond((s == NATS_INVALID_ARG) && (info == NULL));
+    nats_clearLastError();
+
+    test("GetInfo (bad name): ");
+    s = objStore_GetInfo(&info, obs, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_GetInfo(&info, obs, "", NULL);
+    testCond((s == NATS_INVALID_ARG) && (info == NULL) &&
+                (strstr(nats_GetLastError(NULL), obsErrNameIsRequired) != NULL));
+    nats_clearLastError();
+
+    test("GetInfo (not found): ");
+    s = objStore_GetInfo(&info, obs, "notfound", NULL);
+    testCond((s == NATS_NOT_FOUND) && (info == NULL) && (nats_GetLastError(NULL) == NULL));
+
+#ifndef NATS_HAS_TLS
+    nats_hashNoErrorOnNoSSL(true);
+#endif
+    test("GetInfo: ");
+    s = objStore_PutString(NULL, obs, "test", "this is a test string");
+    IFOK(s, objStore_GetInfo(&info, obs, "test", NULL));
+    testCond((s == NATS_OK) && (info != NULL));
+
+#if defined(NATS_HAS_TLS)
+    esha = "SHA-256=9ndFGdHHozie8yfpwEdmuZnbjN-4XRNGxHHuhtZYhbw=";
+#else
+    esha = nosha;
+#endif
+    test("Check info: ");
+    testCond((strcmp(info->Meta.Name, "test") == 0) &&
+                (info->Meta.Opts.ChunkSize == obsDefaultChunkSize) &&
+                (strcmp(info->Bucket, "TEST") == 0) &&
+                (!nats_IsStringEmpty(info->NUID)) &&
+                (info->Size == 21) &&
+                (info->ModTime > 0) &&
+                (info->Chunks == 1) &&
+                (!nats_IsStringEmpty(info->Digest)) &&
+                (strcmp(info->Digest, esha) == 0));
+
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    objStore_Destroy(obs);
+    obs = NULL;
+
+    test("Create store: ")
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "META-TEST";
+    cfg.Metadata.List   = (const char*[]){"foo", "bar", "baz", "boo"};
+    cfg.Metadata.Count  = 2;
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    test("Status (bad args): ");
+    s = objStore_Status(NULL, obs);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_Status(&sts, NULL);
+    testCond((s == NATS_INVALID_ARG) && (sts == NULL));
+    nats_clearLastError();
+
+    test("Status: ");
+    s = objStore_Status(&sts, obs);
+    testCond((s == NATS_OK) && (sts != NULL));
+
+    test("Check meta data: ");
+    int ok = 0;
+    int i  = 0;
+    for (i = 0; i < 2*sts->Metadata.Count; )
+    {
+        if ((strcmp(sts->Metadata.List[i], "foo") == 0) &&
+            (strcmp(sts->Metadata.List[i+1], "bar") == 0))
+        {
+            ok++;
+        } else if ((strcmp(sts->Metadata.List[i], "baz") == 0) &&
+                    (strcmp(sts->Metadata.List[i+1], "boo") == 0))
+        {
+            ok++;
+        }
+        i += 2;
+    }
+    testCond(ok == 2);
+
+    test("Destroy status: ");
+    objStoreStatus_Destroy(NULL);
+    objStoreStatus_Destroy(sts);
+    sts = NULL;
+    testCond(true);
+
+    test("Simple put with no meta: ");
+    s = objStore_PutString(NULL, obs, "A", "AAA");
+    testCond(s == NATS_OK);
+
+    test("Put with meta data: ");
+    objStoreMeta_Init(&meta);
+    meta.Name = "C";
+    meta.Metadata.List  = (const char*[]){"name", "C", "description", "descC"};
+    meta.Metadata.Count = 2;
+    s = objStore_Put(&put, obs, &meta);
+    IFOK(s, objStorePut_Add(put, "CCC", 3));
+    IFOK(s, objStorePut_Complete(&info, put, 1000));
+    testCond((s == NATS_OK) && (info != NULL));
+
+    objStorePut_Destroy(put);
+    put = NULL;
+
+    test("Check info: ");
+    ok = 0;
+    for (i = 0; i < 2*info->Meta.Metadata.Count; )
+    {
+        if ((strcmp(info->Meta.Metadata.List[i], "name") == 0) &&
+            (strcmp(info->Meta.Metadata.List[i+1], "C") == 0))
+        {
+            ok++;
+        } else if ((strcmp(info->Meta.Metadata.List[i], "description") == 0) &&
+                    (strcmp(info->Meta.Metadata.List[i+1], "descC") == 0))
+        {
+            ok++;
+        }
+        i += 2;
+    }
+    testCond(ok == 2);
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("Update meta (bad args): ");
+    s = objStore_UpdateMeta(NULL, "name", &meta);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_UpdateMeta(obs, "name", NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Update meta (bad name): ");
+    s = objStore_UpdateMeta(obs, "", &meta);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_UpdateMeta(obs, NULL, &meta);
+    testCond((s == NATS_INVALID_ARG) && (strstr(nats_GetLastError(NULL), obsErrNameIsRequired) != NULL));
+    nats_clearLastError();
+
+    test("Simple meta update: ");
+    objStoreMeta_Init(&meta);
+    meta.Name = "A";
+	meta.Description = "descA";
+    meta.Metadata.List  = (const char*[]){"description", "updated desc", "version", "0.1"};
+    meta.Metadata.Count = 2;
+    s = natsHeader_New(&hdr);
+    IFOK(s, natsHeader_Set(hdr, "color", "blue"));
+    IFOK(s, natsHeader_Add(hdr, "color", ""));
+    IFOK(s, natsHeader_Add(hdr, "color", "red"));
+    meta.Headers = hdr;
+    IFOK(s, objStore_UpdateMeta(obs, "A", &meta));
+    testCond(s == NATS_OK);
+
+    test("Check info: ");
+    s = objStore_GetInfo(&info, obs, "A", NULL);
+    testCond((s == NATS_OK) && (info != NULL) && (strcmp(info->Meta.Name, "A") == 0) &&
+                (strcmp(info->Meta.Description, "descA") == 0) &&
+                (info->Meta.Metadata.Count >= 2) &&
+                (info->Meta.Headers != NULL) &&
+                (natsHeader_KeysCount(info->Meta.Headers) == 1));
+
+    test("Check header keys: ");
+    s = natsHeader_Keys(info->Meta.Headers, &keys, &count);
+    testCond((s == NATS_OK) && (count == 1) && (keys != NULL) &&
+                (strcmp(keys[0], "color") == 0));
+    free(keys);
+    keys = NULL;
+    count = 0;
+
+    test("Check header values: ");
+    s = natsHeader_Values(info->Meta.Headers, "color", &vals, &count);
+    testCond((s == NATS_OK) && (count == 3) && (vals != NULL) &&
+                (strcmp(vals[0], "blue") == 0) &&
+                ((vals[1] != NULL) && (vals[1][0] == '\0')) &&
+                (strcmp(vals[2], "red") == 0));
+    free(vals);
+    vals = NULL;
+    count = 0;
+
+    test("Check meta: ");
+    ok = 0;
+    for (i = 0; i < 2*info->Meta.Metadata.Count; )
+    {
+        if ((strcmp(info->Meta.Metadata.List[i], "description") == 0) &&
+            (strcmp(info->Meta.Metadata.List[i+1], "updated desc") == 0))
+        {
+            ok++;
+        } else if ((strcmp(info->Meta.Metadata.List[i], "version") == 0) &&
+                    (strcmp(info->Meta.Metadata.List[i+1], "0.1") == 0))
+        {
+            ok++;
+        }
+        i += 2;
+    }
+    testCond(ok == 2);
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("Update that changes name and some data: ");
+    objStoreMeta_Init(&meta);
+    meta.Name = "B";
+    meta.Description = "descB";
+    // Reuse header object.
+    s = natsHeader_Set(hdr, "color", "black");
+    IFOK(s, natsHeader_Set(hdr, "foo", "bar"));
+    meta.Headers = hdr;
+    s = objStore_UpdateMeta(obs, "A", &meta);
+    testCond(s == NATS_OK);
+
+    test("Check info for A: ");
+    s = objStore_GetInfo(&info, obs, "A", NULL);
+    testCond((s == NATS_NOT_FOUND) && (info == NULL) && (nats_GetLastError(NULL) == NULL));
+
+    test("Check info for B: ");
+    s = objStore_GetInfo(&info, obs, "B", NULL);
+    testCond((s == NATS_OK) && (info != NULL) && (strcmp(info->Meta.Name, "B") == 0) &&
+                (strcmp(info->Meta.Description, "descB") == 0) && (info->Meta.Metadata.Count == 0) &&
+                (info->Meta.Headers != NULL) && (natsHeader_KeysCount(info->Meta.Headers) == 2));
+
+    test("Check header keys: ");
+    s = natsHeader_Keys(info->Meta.Headers, &keys, &count);
+    testCond((s == NATS_OK) && (count == 2) && (keys != NULL) &&
+                (((strcmp(keys[0], "color") == 0) && (strcmp(keys[1], "foo") == 0)) ||
+                    (((strcmp(keys[0], "foo") == 0) && (strcmp(keys[1], "color") == 0)))));
+    free(keys);
+    keys = NULL;
+    count = 0;
+
+    test("Check header values (color): ");
+    s = natsHeader_Values(info->Meta.Headers, "color", &vals, &count);
+    testCond((s == NATS_OK) && (count == 1) && (vals != NULL) && (strcmp(vals[0], "black") == 0));
+    free(vals);
+    vals = NULL;
+    count = 0;
+
+    test("Check header values (foo): ");
+    s = natsHeader_Values(info->Meta.Headers, "foo", &vals, &count);
+    testCond((s == NATS_OK) && (count == 1) && (vals != NULL) && (strcmp(vals[0], "bar") == 0));
+    free(vals);
+    vals = NULL;
+    count = 0;
+    natsHeader_Destroy(hdr);
+    hdr = NULL;
+
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("Change meta name to existing object: ");
+    objStoreMeta_Init(&meta);
+    meta.Name = "C";
+    s = objStore_UpdateMeta(obs, "B", &meta);
+    testCond((s == NATS_ILLEGAL_STATE) && (strstr(nats_GetLastError(NULL), obsErrObjectAlreadyExists) != NULL));
+    nats_clearLastError();
+
+    test("Delete (bad args): ");
+    s = objStore_Delete(NULL, "C");
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Delete (bad name): ");
+    s = objStore_Delete(obs, "");
+    if (s == NATS_INVALID_ARG)
+        s = objStore_Delete(obs, NULL);
+    testCond((s == NATS_INVALID_ARG) && (strstr(nats_GetLastError(NULL), obsErrNameIsRequired) != NULL));
+    nats_clearLastError();
+
+    test("Delete not found: ");
+    s = objStore_Delete(obs, "notfound");
+    testCond((s == NATS_NOT_FOUND) && (nats_GetLastError(NULL) == NULL));
+
+    test("Delete C object: ");
+    s = objStore_Delete(obs, "C");
+    testCond(s == NATS_OK);
+
+    test("Update should be ok now: ");
+    s = objStore_UpdateMeta(obs, "B", &meta);
+	testCond(s == NATS_OK);
+
+    test("Delete of deleted object ok: ");
+    s = objStore_Delete(obs, "C");
+    testCond(s == NATS_OK);
+
+    test("Update meta of deleted object: ");
+    s = objStore_UpdateMeta(obs, "C", &meta);
+    testCond((s == NATS_ILLEGAL_STATE) && (strstr(nats_GetLastError(NULL), obsErrUpdateMetaDelete) != NULL));
+    nats_clearLastError();
+
+    test("Update of object not found: ");
+    s = objStore_UpdateMeta(obs, "X", &meta);
+    testCond((s == NATS_ILLEGAL_STATE) && (strstr(nats_GetLastError(NULL), obsErrUpdateMetaDelete) != NULL));
+    nats_clearLastError();
+
+    objStore_Destroy(obs);
+    obs = NULL;
+
+    test("Create object store: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "SEAL";
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    test("Put string: ");
+    s = objStore_PutString(NULL, obs, "A", "AAA");
+    testCond(s == NATS_OK);
+
+    test("Seal (bad args): ");
+    s = objStore_Seal(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Seal: ");
+    s = objStore_Seal(obs);
+    testCond(s == NATS_OK);
+
+    test("Put should fail: ");
+    s = objStore_PutString(NULL, obs, "B", "BBB");
+    testCond((s == NATS_ERR) && (strstr(nats_GetLastError(NULL), "sealed") != NULL));
+    nats_clearLastError();
+
+    test("Delete underlying stream: ");
+    s = js_DeleteStream(js, "OBJ_SEAL", NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Seal should fail: ");
+    s = objStore_Seal(obs);
+    testCond(s == NATS_NOT_FOUND);
+    nats_clearLastError();
+
+    objStore_Destroy(obs);
+    obs = NULL;
+
+    JS_TEARDOWN;
+}
+
+static bool
+_linkPartsAreCorrect(objStoreInfo *linkObj, const char *bucket, const char *name)
+{
+    if ((strcmp(linkObj->Meta.Opts.Link->Bucket, bucket) != 0) ||
+        (linkObj->ModTime == 0) || nats_IsStringEmpty(linkObj->NUID))
+    {
+        return false;
+    }
+    // We know that either `name` is empty, and so make sure same for linkObj,
+    // otherwise, they need to be equal.
+    if (nats_IsStringEmpty(linkObj->Meta.Opts.Link->Name) && nats_IsStringEmpty(name))
+        return true;
+
+    return (strcmp(linkObj->Meta.Opts.Link->Name, name) == 0);
+}
+
+static bool
+_linkIsCorrect(objStoreInfo *origObj, objStoreInfo *linkObj)
+{
+    if (linkObj->Meta.Opts.Link == NULL)
+        return false;
+
+    return _linkPartsAreCorrect(linkObj, origObj->Bucket, origObj->Meta.Name);
+}
+
+void
+test_ObjectStore_StoreMgtLinks(void)
+{
+    natsStatus      s;
+    objStore        *root           = NULL;
+    objStore        *dir            = NULL;
+    objStoreInfo    *info           = NULL;
+    objStoreInfo    *infoA          = NULL;
+    objStoreInfo    *infoLA         = NULL;
+    objStoreInfo    *infoB          = NULL;
+    objStoreInfo    *infoLB         = NULL;
+    objStoreInfo    *infoBucketLink = NULL;
+    objStoreGet     *get            = NULL;
+    char            *getLA          = NULL;
+    char            *getDbl         = NULL;
+    const char      *orgn = NULL;
+    objStoreConfig  cfg;
+    objStoreOptions o;
+
+    JS_SETUP(2, 10, 0);
+
+#ifndef NATS_HAS_TLS
+    nats_hashNoErrorOnNoSSL(true);
+#endif
+
+    test("Create root store: ")
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "ROOT";
+    s = js_CreateObjectStore(&root, js, &cfg);
+    testCond((s == NATS_OK) && (root != NULL));
+
+    test("Add some data: ");
+    s = objStore_PutString(NULL, root, "A", "AAA");
+    IFOK(s, objStore_PutString(NULL, root, "B", "BBB"));
+    IFOK(s, objStore_GetInfo(&infoA, root, "A", NULL));
+    testCond((s == NATS_OK) && (infoA != NULL));
+
+    test("AddLink (bad args): ");
+    s = objStore_AddLink(&infoLA, NULL, "LA", infoA);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_AddLink(&infoLA, root, "LA", NULL);
+    testCond((s == NATS_INVALID_ARG) && (infoLA == NULL));
+
+    test("AddLink (bad name): ");
+    s = objStore_AddLink(&infoLA, root, "", infoA);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_AddLink(&infoLA, root, NULL, infoA);
+    testCond((s == NATS_INVALID_ARG) && (infoLA == NULL) &&
+                (strstr(nats_GetLastError(NULL), obsErrNameIsRequired) != NULL));
+    nats_clearLastError();
+
+    test("Link to individual object: ");
+    s = objStore_AddLink(&infoLA, root, "LA", infoA);
+    testCond((s == NATS_OK) && (infoLA != NULL) && _linkIsCorrect(infoA, infoLA));
+
+    test("Link to a link: ");
+    s = objStore_AddLink(&info, root, "LALA", infoLA);
+    testCond((s == NATS_ILLEGAL_STATE) && (info == NULL) &&
+                (strstr(nats_GetLastError(NULL), obsErrNoLinkToLink) != NULL));
+    nats_clearLastError();
+
+    objStoreInfo_Destroy(infoLA);
+    infoLA = NULL;
+
+    test("Create dir store: ")
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "DIR";
+    s = js_CreateObjectStore(&dir, js, &cfg);
+    testCond((s == NATS_OK) && (dir != NULL));
+
+    test("Add data: ");
+    s = objStore_PutString(NULL, dir, "DIR/A", "DIR-AAA");
+    IFOK(s, objStore_PutString(NULL, dir, "DIR/B", "DIR-BBB"));
+    IFOK(s, objStore_GetInfo(&infoB, dir, "DIR/B", NULL));
+    testCond((s == NATS_OK) && (infoB != NULL));
+
+    test("Add link dbl: ");
+    s = objStore_AddLink(&infoLB, root, "DBL", infoB);
+    testCond((s == NATS_OK) && (infoLB != NULL) && _linkIsCorrect(infoB, infoLB));
+    objStoreInfo_Destroy(infoB);
+    infoB = NULL;
+
+    test("AddBucket (bad args): ");
+    s = objStore_AddBucketLink(&infoBucketLink, NULL, "dir", dir);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_AddBucketLink(&infoBucketLink, root, "dir", NULL);
+    testCond((s == NATS_INVALID_ARG) && (infoBucketLink == NULL));
+
+    test("Add whole store as a link: ");
+    s = objStore_AddBucketLink(&infoBucketLink, root, "dir", dir);
+    testCond((s == NATS_OK) && (infoBucketLink != NULL));
+
+    test("Cant get bucket: ");
+    s = objStore_Get(&get, root, infoBucketLink->Meta.Name, NULL);
+    testCond((s == NATS_ILLEGAL_STATE) && (get == NULL) &&
+                (strstr(nats_GetLastError(NULL), obsErrCantGetBucket) != NULL));
+    nats_clearLastError();
+
+    test("Link parts correct: ");
+    testCond(_linkPartsAreCorrect(infoBucketLink, "DIR", NULL));
+    objStoreInfo_Destroy(infoBucketLink);
+    infoBucketLink = NULL;
+
+    test("Get a linked object, same bucket: ");
+    s = objStore_GetString(&getLA, root, "LA", NULL);
+    testCond((s == NATS_OK) && !nats_IsStringEmpty(getLA) && (strcmp(getLA, "AAA") == 0));
+    free(getLA);
+    getLA = NULL;
+
+    test("Get a linked object, cross bucket: ");
+    s = objStore_GetString(&getDbl, root, "DBL", NULL);
+    testCond((s == NATS_OK) && !nats_IsStringEmpty(getDbl) && (strcmp(getDbl, "DIR-BBB") == 0));
+    free(getDbl);
+    getDbl = NULL;
+
+    test("Get infoB: ");
+    s = objStore_GetInfo(&infoB, root, "B", NULL);
+    testCond((s == NATS_OK) && (infoB != NULL));
+
+    test("Get infoLA: ");
+    s = objStore_GetInfo(&infoLA, root, "LA", NULL);
+    testCond((s == NATS_OK) && (infoLA != NULL) && _linkIsCorrect(infoA, infoLA));
+    objStoreInfo_Destroy(infoLA);
+    infoLA = NULL;
+    objStoreInfo_Destroy(infoA);
+    infoA = NULL;
+
+    test("AddLink LA to B: ");
+    s = objStore_AddLink(&infoLA, root, "LA", infoB);
+    testCond((s == NATS_OK) && (infoLA != NULL) && _linkIsCorrect(infoB, infoLA));
+    objStoreInfo_Destroy(infoLA);
+    infoLA = NULL;
+
+    test("Get info bucket link: ");
+    s = objStore_GetInfo(&infoBucketLink, root, "dir", NULL);
+    testCond((s == NATS_OK) && (infoBucketLink != NULL) &&
+                _linkPartsAreCorrect(infoBucketLink, "DIR", NULL));
+    objStoreInfo_Destroy(infoBucketLink);
+    infoBucketLink = NULL;
+
+    test("Change a bucket link: ");
+    s = objStore_AddBucketLink(&infoBucketLink, root, "dir", root);
+    testCond((s == NATS_OK) && (infoBucketLink != NULL) &&
+                _linkPartsAreCorrect(infoBucketLink, "ROOT", NULL));
+    objStoreInfo_Destroy(infoBucketLink);
+    infoBucketLink = NULL;
+
+    test("AddLink error (already an object): ");
+    s = objStore_AddLink(&info, root, "A", infoB);
+    testCond((s == NATS_ILLEGAL_STATE) && (info == NULL) &&
+                (strstr(nats_GetLastError(NULL), obsErrObjectAlreadyExists) != NULL));
+    nats_clearLastError();
+
+    test("AddLink error (empty info name): ");
+    orgn = infoB->Meta.Name;
+    infoB->Meta.Name = "";
+    s = objStore_AddLink(&info, root, "Empty Info Name", infoB);
+    if (s == NATS_ILLEGAL_STATE)
+    {
+        infoB->Meta.Name = NULL;
+        s = objStore_AddLink(&info, root, "NULL Info Name", infoB);
+    }
+    testCond((s == NATS_INVALID_ARG) && (info == NULL));
+    nats_clearLastError();
+    infoB->Meta.Name = orgn;
+    objStoreInfo_Destroy(infoB);
+    infoB = NULL;
+
+    test("AddLink error (link to link): ");
+    s = objStore_AddLink(&info, root, "Link To Link", infoLB);
+    testCond((s == NATS_ILLEGAL_STATE) && (info == NULL) &&
+                (strstr(nats_GetLastError(NULL), obsErrNoLinkToLink) != NULL));
+    nats_clearLastError();
+    objStoreInfo_Destroy(infoLB);
+    infoLB = NULL;
+
+    test("Delete object A: ");
+    s = objStore_Delete(root, "A");
+    testCond(s == NATS_OK);
+
+    test("Init options (bad args): ");
+    s = objStoreOptions_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+
+    test("Get A as deleted: ");
+    objStoreOptions_Init(&o);
+    o.ShowDeleted = true;
+    s = objStore_GetInfo(&infoA, root, "A", &o);
+    testCond((s == NATS_OK) && (infoA != NULL));
+
+    test("AddLink error (to deleted): ");
+    s = objStore_AddLink(&info, root, "To Deleted", infoA);
+    testCond((s == NATS_ILLEGAL_STATE) && (info == NULL) &&
+                (strstr(nats_GetLastError(NULL), obsErrNoLinkToDeleted) != NULL));
+    nats_clearLastError();
+    objStoreInfo_Destroy(infoA);
+    infoA = NULL;
+
+    objStore_Destroy(root);
+    root = NULL;
+    objStore_Destroy(dir);
+    dir = NULL;
+
+    JS_TEARDOWN;
+}
+
+void
+test_ObjectStore_StoreMgtWatchAndList(void)
+{
+    natsStatus              s;
+    objStore                *obs    = NULL;
+    objStoreWatcher         *watch  = NULL;
+    objStoreInfo            *info   = NULL;
+    objStoreInfoList        *list   = NULL;
+    objStoreConfig          cfg;
+    objStoreOptions         so;
+    objStoreWatchOptions    o;
+
+    JS_SETUP(2, 10, 0);
+
+#ifndef NATS_HAS_TLS
+    nats_hashNoErrorOnNoSSL(true);
+#endif
+
+    test("Create store: ")
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "WATCH-TEST";
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    test("Create watcher (bad args): ");
+    s = objStore_Watch(NULL, obs, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_Watch(&watch, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (watch == NULL));
+    nats_clearLastError();
+
+    test("Watch: ");
+    s = objStore_Watch(&watch, obs, NULL);
+    testCond((s == NATS_OK) && (watch != NULL));
+
+    test("Get marker: ");
+    s = objStoreWatcher_Next(&info, watch, 1000);
+    testCond((s == NATS_OK) && (info == NULL));
+
+    test("Add some data: ");
+    s = objStore_PutString(NULL, obs, "A", "AAA");
+    IFOK(s, objStore_PutString(NULL, obs, "B", "BBB"));
+    testCond(s == NATS_OK);
+
+    test("WatchNext (bad args): ");
+    s = objStoreWatcher_Next(NULL, watch, 1000);
+    if (s == NATS_INVALID_ARG)
+        s = objStoreWatcher_Next(&info, NULL, 1000);
+    if (s == NATS_INVALID_ARG)
+        s = objStoreWatcher_Next(&info, watch, 0);
+    if (s == NATS_INVALID_ARG)
+        s = objStoreWatcher_Next(&info, watch, -10);
+    testCond((s == NATS_INVALID_ARG) && (info == NULL));
+    nats_clearLastError();
+
+    test("WatchNext (A): ");
+    s = objStoreWatcher_Next(&info, watch, 1000);
+    testCond((s == NATS_OK) && (info != NULL) && (strcmp(info->Meta.Name, "A") == 0));
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("WatchNext (B): ");
+    s = objStoreWatcher_Next(&info, watch, 1000);
+    testCond((s == NATS_OK) && (info != NULL) && (strcmp(info->Meta.Name, "B") == 0));
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("WatchNext (no more): ");
+    s = objStoreWatcher_Next(&info, watch, 100);
+    testCond((s == NATS_TIMEOUT) && (info == NULL));
+    nats_clearLastError();
+
+    test("Delete A: ");
+    s = objStore_Delete(obs, "A");
+    testCond(s == NATS_OK);
+
+    test("WatchNext (A): ");
+    s = objStoreWatcher_Next(&info, watch, 1000);
+    testCond((s == NATS_OK) && (info != NULL) && (strcmp(info->Meta.Name, "A") == 0) && info->Deleted);
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("WatcherStop (bad args): ");
+    s = objStoreWatcher_Stop(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("WatcherStop: ");
+    s = objStoreWatcher_Stop(watch);
+    testCond(s == NATS_OK);
+
+    test("WatchNext fails: ");
+    s = objStoreWatcher_Next(&info, watch, 1000);
+    testCond((s == NATS_ILLEGAL_STATE) && (info == NULL));
+    nats_clearLastError();
+
+    test("WatchDestroy: ");
+    objStoreWatcher_Destroy(NULL);
+    objStoreWatcher_Destroy(watch);
+    watch = NULL;
+    testCond(true);
+
+    objStore_Destroy(obs);
+    obs = NULL;
+
+    // Test with updates only now.
+
+    test("Create store: ")
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "WATCH-TEST2";
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    test("Add some data: ");
+    s = objStore_PutString(NULL, obs, "A", "AAA");
+    IFOK(s, objStore_PutString(NULL, obs, "B", "BBB"));
+    testCond(s == NATS_OK);
+
+    test("Init options (bad args): ");
+    s = objStoreWatchOptions_Init(NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Create watcher with updates only: ");
+    objStoreWatchOptions_Init(&o);
+    o.UpdatesOnly = true;
+    s = objStore_Watch(&watch, obs, &o);
+    testCond((s == NATS_OK) && (watch != NULL));
+
+    // When listening for updates only, we should not receive anything when watcher is started
+    test("WatchNext (timeout): ");
+    s = objStoreWatcher_Next(&info, watch, 100);
+    testCond((s == NATS_TIMEOUT) && (info == NULL));
+    nats_clearLastError();
+
+    test("Delete A: ");
+    s = objStore_Delete(obs, "A");
+    testCond(s == NATS_OK);
+
+    test("WatchNext (A): ");
+    s = objStoreWatcher_Next(&info, watch, 1000);
+    testCond((s == NATS_OK) && (info != NULL) && (strcmp(info->Meta.Name, "A") == 0) && info->Deleted);
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("WatchNext (timeout): ");
+    s = objStoreWatcher_Next(&info, watch, 100);
+    testCond((s == NATS_TIMEOUT) && (info == NULL));
+    nats_clearLastError();
+
+    test("Add more data: ");
+    s = objStore_PutString(NULL, obs, "C", "CCC");
+    testCond(s == NATS_OK);
+
+    test("WatchNext (C): ");
+    s = objStoreWatcher_Next(&info, watch, 1000);
+    testCond((s == NATS_OK) && (info != NULL) && (strcmp(info->Meta.Name, "C") == 0) && !info->Deleted);
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("WatcherStop: ");
+    s = objStoreWatcher_Stop(watch);
+    testCond(s == NATS_OK);
+
+    test("Add more data: ");
+    s = objStore_PutString(NULL, obs, "D", "DDD");
+    testCond(s == NATS_OK);
+
+    test("WatchNext fails: ");
+    s = objStoreWatcher_Next(&info, watch, 1000);
+    testCond((s == NATS_ILLEGAL_STATE) && (info == NULL));
+    nats_clearLastError();
+
+    objStoreWatcher_Destroy(watch);
+    watch = NULL;
+    objStore_Destroy(obs);
+    obs = NULL;
+
+    // Test with ignore delets now.
+    test("Create store: ")
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "WATCH-TEST3";
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    test("Add A: ");
+    s = objStore_PutString(NULL, obs, "A", "AAA");
+    testCond(s == NATS_OK);
+
+    test("Delete A: ");
+    s = objStore_Delete(obs, "A");
+    testCond(s == NATS_OK);
+
+    test("Create watcher with ignore deletes: ");
+    objStoreWatchOptions_Init(&o);
+    o.IgnoreDeletes = true;
+    s = objStore_Watch(&watch, obs, &o);
+    testCond((s == NATS_OK) && (watch != NULL));
+
+    test("Get marker: ");
+    s = objStoreWatcher_Next(&info, watch, 1000);
+    testCond((s == NATS_OK) && (info == NULL));
+
+    test("WatchNext (timeout): ");
+    s = objStoreWatcher_Next(&info, watch, 100);
+    testCond((s == NATS_TIMEOUT) && (info == NULL));
+    nats_clearLastError();
+
+    objStoreWatcher_Destroy(watch);
+    watch = NULL;
+    objStore_Destroy(obs);
+    obs = NULL;
+
+    // Test list now.
+
+    // Set the initial list capacity size low to make sure we properly grow it.
+    obsInitialListCap = 2;
+
+    test("Create store: ")
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "LIST-TEST";
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    test("List (bad args): ");
+    s = objStore_List(NULL, obs, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = objStore_List(&list, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (list == NULL));
+    nats_clearLastError();
+
+    test("List (empty): ");
+    s = objStore_List(&list, obs, NULL);
+    testCond((s == NATS_NOT_FOUND) && (list == NULL) && (nats_GetLastError(NULL) == NULL));
+
+    test("Add data: ");
+    s = objStore_PutString(NULL, obs, "A", "AAA");
+    IFOK(s, objStore_PutString(NULL, obs, "B", "BBB"));
+    IFOK(s, objStore_PutString(NULL, obs, "C", "CCC"));
+    IFOK(s, objStore_PutString(NULL, obs, "B", "bbb"));
+    testCond(s == NATS_OK);
+
+    test("Add link: ");
+    s = objStore_GetInfo(&info, obs, "B", NULL);
+    IFOK(s, objStore_AddLink(NULL, obs, "b", info));
+    testCond((s == NATS_OK) && (info != NULL));
+    objStoreInfo_Destroy(info);
+    info = NULL;
+
+    test("Add and delete data: ");
+    s = objStore_PutString(NULL, obs, "D", "DDD");
+    IFOK(s, objStore_Delete(obs, "D"));
+    testCond(s == NATS_OK);
+
+    test("List without deletes: ");
+    s = objStore_List(&list, obs, NULL);
+    testCond((s == NATS_OK) && (list != NULL) && (list->List != NULL) && (list->Count == 4));
+
+    test("Check list: ");
+    testCond((strcmp(list->List[0]->Meta.Name, "A") == 0) &&
+                (strcmp(list->List[1]->Meta.Name, "C") == 0) &&
+                (strcmp(list->List[2]->Meta.Name, "B") == 0) &&
+                (strcmp(list->List[3]->Meta.Name, "b") == 0));
+
+    test("Destroy list: ");
+    objStoreInfoList_Destroy(NULL);
+    objStoreInfoList_Destroy(list);
+    list = NULL;
+    testCond(true);
+
+    // Set back to default value and check it works ok.
+    obsInitialListCap = obsInitialListCapValue;
+
+    test("List with deletes: ");
+    objStoreOptions_Init(&so);
+    so.ShowDeleted = true;
+    s = objStore_List(&list, obs, &so);
+    testCond((s == NATS_OK) && (list != NULL) && (list->List != NULL) && (list->Count == 5));
+
+    test("Check list: ");
+    testCond((strcmp(list->List[0]->Meta.Name, "A") == 0) &&
+                (strcmp(list->List[1]->Meta.Name, "C") == 0) &&
+                (strcmp(list->List[2]->Meta.Name, "B") == 0) &&
+                (strcmp(list->List[3]->Meta.Name, "b") == 0) &&
+                (strcmp(list->List[4]->Meta.Name, "D") == 0));
+    objStoreInfoList_Destroy(list);
+    list = NULL;
+
+    objStore_Destroy(obs);
+    obs = NULL;
+
+    JS_TEARDOWN;
 }
 
 void test_MicroMatchEndpointSubject(void)

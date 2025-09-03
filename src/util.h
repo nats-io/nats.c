@@ -118,6 +118,9 @@ natsStatus
 nats_JSONGetUInt16(nats_JSON *json, const char *fieldName, uint16_t *value);
 
 natsStatus
+nats_JSONGetUInt32(nats_JSON *json, const char *fieldName, uint32_t *value);
+
+natsStatus
 nats_JSONGetBool(nats_JSON *json, const char *fieldName, bool *value);
 
 natsStatus
@@ -205,6 +208,9 @@ natsStatus
 nats_Base64RawURL_EncodeString(const unsigned char *src, int srcLen, char **pDest);
 
 natsStatus
+nats_Base64URL_EncodeString(const unsigned char *src, int srcLen, char **pDest);
+
+natsStatus
 nats_Base64_Encode(const unsigned char *src, int srcLen, char **pDest);
 
 natsStatus
@@ -252,13 +258,13 @@ natsStatus
 nats_marshalDuration(natsBuffer *out_buf, bool comma, const char *field_name, int64_t d);
 
 natsStatus
-nats_marshalMetadata(natsBuffer *buf, bool comma, const char *fieldName, natsMetadata md);
+nats_marshalMetadata(natsBuffer *buf, bool comma, const char *fieldName, natsMetadata *md);
 
 natsStatus
 nats_unmarshalMetadata(nats_JSON *json, const char *fieldName, natsMetadata *md);
 
 natsStatus
-nats_cloneMetadata(natsMetadata *clone, natsMetadata md);
+nats_cloneMetadata(natsMetadata *clone, natsMetadata *md);
 
 void
 nats_freeMetadata(natsMetadata *md);
@@ -276,6 +282,21 @@ natsStatus
 nats_marshalStringArray(natsBuffer *buf, bool comma, const char *fieldName, const char **values, int len);
 
 natsStatus
+nats_marshalTimeUTC(natsBuffer *buf, bool comma, const char *fieldName, int64_t timeUTC);
+
+natsStatus
+nats_marshalString(natsBuffer *buf, bool omitEmpty, bool comma, const char *fieldName, const char *str);
+
+natsStatus
 nats_validateLimitedTerm(const char *name, const char *term);
+
+bool
+nats_validBucketName(const char *bucket);
+
+natsStatus
+nats_unmarshalHeader(nats_JSON *json, const char *fieldName, natsHeader **header);
+
+natsStatus
+nats_marshalHeader(natsBuffer *buf, bool omitEmpty, bool comma, const char *fieldName, natsHeader *header);
 
 #endif /* UTIL_H_ */

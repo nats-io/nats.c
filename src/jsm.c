@@ -32,28 +32,6 @@ typedef struct apiPaged
 
 } apiPaged;
 
-static natsStatus
-_marshalTimeUTC(natsBuffer *buf, bool sep, const char *fieldName, int64_t timeUTC)
-{
-    natsStatus  s  = NATS_OK;
-    char        dbuf[36] = {'\0'};
-
-    s = nats_EncodeTimeUTC(dbuf, sizeof(dbuf), timeUTC);
-    if (s != NATS_OK)
-        return nats_setError(NATS_ERR, "unable to encode data for field '%s' value %" PRId64, fieldName, timeUTC);
-
-    if (sep)
-        s = natsBuf_AppendByte(buf, ',');
-
-    IFOK(s, natsBuf_AppendByte(buf, '"'));
-    IFOK(s, natsBuf_Append(buf, fieldName, -1));
-    IFOK(s, natsBuf_Append(buf, "\":\"", -1));
-    IFOK(s, natsBuf_Append(buf, dbuf, -1));
-    IFOK(s, natsBuf_AppendByte(buf, '"'));
-
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
 //
 // Stream related functions
 //
@@ -356,7 +334,7 @@ _marshalStreamSource(jsStreamSource *source, const char *fieldName, natsBuffer *
     if ((s == NATS_OK) && (source->OptStartSeq > 0))
         s = nats_marshalLong(buf, true, "opt_start_seq", source->OptStartSeq);
     if ((s == NATS_OK) && (source->OptStartTime > 0))
-        IFOK(s, _marshalTimeUTC(buf, true, "opt_start_time", source->OptStartTime));
+        IFOK(s, nats_marshalTimeUTC(buf, true, "opt_start_time", source->OptStartTime));
     if (source->FilterSubject != NULL)
     {
         IFOK(s, natsBuf_Append(buf, ",\"filter_subject\":\"", -1));
@@ -887,7 +865,7 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
     if ((s == NATS_OK) && cfg->DiscardNewPerSubject)
         IFOK(s, natsBuf_Append(buf, ",\"discard_new_per_subject\":true", -1));
 
-    IFOK(s, nats_marshalMetadata(buf, true, "metadata", cfg->Metadata));
+    IFOK(s, nats_marshalMetadata(buf, true, "metadata", &(cfg->Metadata)));
     IFOK(s, _marshalStorageCompression(cfg->Compression, buf));
     IFOK(s, nats_marshalULong(buf, true, "first_seq", cfg->FirstSeq));
     IFOK(s, _marshalSubjectTransformConfig(&cfg->SubjectTransform, buf));
@@ -1779,14 +1757,34 @@ _purgeOrDelete(bool purge, jsCtx *js, const char *stream, jsOptions *opts, jsErr
 natsStatus
 js_PurgeStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode)
 {
-    natsStatus s = _purgeOrDelete(true, js, stream, opts, errCode);
+    natsStatus  s       = NATS_OK;
+    jsErrCode   jsErr   = 0;
+    jsErrCode   *pErr   = (errCode == NULL ? &jsErr : errCode);
+
+    s = _purgeOrDelete(true, js, stream, opts, pErr);
+    // On "not found", clear the error stack and return the error.
+    if ((s == NATS_NOT_FOUND) && ((*pErr) == JSStreamNotFoundErr))
+    {
+        nats_clearLastError();
+        return s;
+    }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
 js_DeleteStream(jsCtx *js, const char *stream, jsOptions *opts, jsErrCode *errCode)
 {
-    natsStatus s = _purgeOrDelete(false, js, stream, opts, errCode);
+    natsStatus  s       = NATS_OK;
+    jsErrCode   jsErr   = 0;
+    jsErrCode   *pErr   = (errCode == NULL ? &jsErr : errCode);
+
+    s = _purgeOrDelete(false, js, stream, opts, pErr);
+    // On "not found", clear the error stack and return the error.
+    if ((s == NATS_NOT_FOUND) && ((*pErr) == JSStreamNotFoundErr))
+    {
+        nats_clearLastError();
+        return s;
+    }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -2927,7 +2925,7 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
     if ((s == NATS_OK) && (cfg->OptStartSeq > 0))
         s = nats_marshalLong(buf, true, "opt_start_seq", cfg->OptStartSeq);
     if ((s == NATS_OK) && (cfg->OptStartTime > 0))
-        s = _marshalTimeUTC(buf, true, "opt_start_time", cfg->OptStartTime);
+        s = nats_marshalTimeUTC(buf, true, "opt_start_time", cfg->OptStartTime);
     IFOK(s, _marshalAckPolicy(buf, cfg->AckPolicy));
     if ((s == NATS_OK) && (cfg->AckWait > 0))
         s = nats_marshalLong(buf, true, "ack_wait", cfg->AckWait);
@@ -2941,9 +2939,9 @@ _marshalConsumerCreateReq(natsBuffer **new_buf, const char *stream, jsConsumerCo
     }
     if ((s == NATS_OK) && (cfg->FilterSubjectsLen > 0))
         s = nats_marshalStringArray(buf, true, "filter_subjects", cfg->FilterSubjects, cfg->FilterSubjectsLen);
-    IFOK(s, nats_marshalMetadata(buf, true, "metadata", cfg->Metadata));
+    IFOK(s, nats_marshalMetadata(buf, true, "metadata", &(cfg->Metadata)));
     if ((s == NATS_OK) && (cfg->PauseUntil > 0))
-        s = _marshalTimeUTC(buf, true, "pause_until", cfg->PauseUntil);
+        s = nats_marshalTimeUTC(buf, true, "pause_until", cfg->PauseUntil);
     if ((s == NATS_OK) && !nats_IsStringEmpty(cfg->PriorityPolicy))
     {
         s = natsBuf_Append(buf, ",\"priority_policy\":\"", -1);
@@ -3390,6 +3388,8 @@ js_GetConsumerInfo(jsConsumerInfo **new_ci, jsCtx *js,
     bool                freePfx = false;
     natsConnection      *nc     = NULL;
     natsMsg             *resp   = NULL;
+    jsErrCode           jsErr   = 0;
+    jsErrCode           *pErr   = (errCode == NULL ? &jsErr : errCode);
     jsOptions           o;
 
     if (errCode != NULL)
@@ -3420,17 +3420,16 @@ js_GetConsumerInfo(jsConsumerInfo **new_ci, jsCtx *js,
     IFOK_JSR(s, natsConnection_Request(&resp, nc, subj, NULL, 0, o.Wait));
 
     // If we got a response, check for error or return the consumer info result.
-    IFOK(s, _unmarshalConsumerCreateOrGetResp(new_ci, resp, errCode));
+    IFOK(s, _unmarshalConsumerCreateOrGetResp(new_ci, resp, pErr));
 
     NATS_FREE(subj);
     natsMsg_Destroy(resp);
 
-    if (s == NATS_NOT_FOUND)
+    if ((s == NATS_NOT_FOUND) && ((*pErr) == JSConsumerNotFoundErr))
     {
         nats_clearLastError();
         return s;
     }
-
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -3444,6 +3443,8 @@ js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
     natsConnection      *nc     = NULL;
     natsMsg             *resp   = NULL;
     bool                success = false;
+    jsErrCode           jsErr   = 0;
+    jsErrCode           *pErr   = (errCode == NULL ? &jsErr : errCode);
     jsOptions           o;
 
     if (errCode != NULL)
@@ -3474,13 +3475,18 @@ js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
     IFOK_JSR(s, natsConnection_Request(&resp, nc, subj, NULL, 0, o.Wait));
 
     // If we got a response, check for error and success result.
-    IFOK(s, _unmarshalSuccessResp(&success, resp, errCode));
+    IFOK(s, _unmarshalSuccessResp(&success, resp, pErr));
     if ((s == NATS_OK) && !success)
         s = nats_setError(s, "failed to delete consumer '%s'", consumer);
 
     NATS_FREE(subj);
     natsMsg_Destroy(resp);
 
+    if ((s == NATS_NOT_FOUND) && ((*pErr) == JSConsumerNotFoundErr))
+    {
+        nats_clearLastError();
+        return s;
+    }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -3548,7 +3554,7 @@ _marshalConsumerPauseReq(natsBuffer **new_buf, uint64_t pauseUntil)
     s = natsBuf_Create(&buf, 256);
     IFOK(s, natsBuf_AppendByte(buf, '{'));
     if ((s == NATS_OK) && (pauseUntil > 0)) {
-        s = _marshalTimeUTC(buf, false, "pause_until", pauseUntil);
+        s = nats_marshalTimeUTC(buf, false, "pause_until", pauseUntil);
     }
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
@@ -3575,13 +3581,15 @@ js_PauseConsumer(jsConsumerPauseResponse **new_cpr, jsCtx *js,
                  const char *stream, const char *consumer,
                  uint64_t pauseUntil, jsOptions *opts, jsErrCode *errCode)
 {
-    natsStatus s = NATS_OK;
-    char *subj = NULL;
-    bool freePfx = false;
-    natsConnection *nc = NULL;
-    natsBuffer *buf = NULL;
-    natsMsg *resp = NULL;
-    jsOptions o;
+    natsStatus      s       = NATS_OK;
+    char            *subj   = NULL;
+    bool            freePfx = false;
+    natsConnection  *nc     = NULL;
+    natsBuffer      *buf    = NULL;
+    natsMsg         *resp   = NULL;
+    jsErrCode       jsErr   = 0;
+    jsErrCode       *pErr   = (errCode == NULL ? &jsErr : errCode);
+    jsOptions       o;
 
     if (errCode != NULL)
         *errCode = 0;
@@ -3613,18 +3621,17 @@ js_PauseConsumer(jsConsumerPauseResponse **new_cpr, jsCtx *js,
     IFOK_JSR(s, natsConnection_Request(&resp, nc, subj, natsBuf_Data(buf), natsBuf_Len(buf), o.Wait));
 
     // If we got a response, check for error or return the consumer info result.
-    IFOK(s, _unmarshalConsumerPauseResp(new_cpr, resp, errCode));
+    IFOK(s, _unmarshalConsumerPauseResp(new_cpr, resp, pErr));
 
     NATS_FREE(subj);
     natsMsg_Destroy(resp);
     natsBuf_Destroy(buf);
 
-    if (s == NATS_NOT_FOUND)
+    if ((s == NATS_NOT_FOUND) && ((*pErr) == JSConsumerNotFoundErr))
     {
         nats_clearLastError();
         return s;
     }
-
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -3638,6 +3645,8 @@ js_UnpinConsumer(jsCtx *js, const char *stream, const char *consumer, const char
     natsConnection      *nc     = NULL;
     natsMsg             *resp   = NULL;
     bool                success = false;
+    jsErrCode           jsErr   = 0;
+    jsErrCode           *pErr   = (errCode == NULL ? &jsErr : errCode);
     jsOptions           o;
     char                jsonBuf[64];
 
@@ -3675,13 +3684,18 @@ js_UnpinConsumer(jsCtx *js, const char *stream, const char *consumer, const char
     IFOK_JSR(s, natsConnection_RequestString(&resp, nc, subj, jsonBuf, o.Wait));
 
     // If we got a response, check for error and success result.
-    IFOK(s, _unmarshalSuccessResp(&success, resp, errCode));
+    IFOK(s, _unmarshalSuccessResp(&success, resp, pErr));
     if ((s == NATS_OK) && !success)
         s = nats_setError(s, "failed to unpin group '%s' at consumer '%s'", group, consumer);
 
     NATS_FREE(subj);
     natsMsg_Destroy(resp);
 
+    if ((s == NATS_NOT_FOUND) && ((*pErr) == JSConsumerNotFoundErr))
+    {
+        nats_clearLastError();
+        return s;
+    }
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -4121,7 +4135,7 @@ js_cloneConsumerConfig(jsConsumerConfig *org, jsConsumerConfig **clone)
                 c->FilterSubjectsLen++;
         }
     }
-    IFOK(s, nats_cloneMetadata(&(c->Metadata), org->Metadata));
+    IFOK(s, nats_cloneMetadata(&(c->Metadata), &(org->Metadata)));
     if (s == NATS_OK)
         *clone = c;
     else

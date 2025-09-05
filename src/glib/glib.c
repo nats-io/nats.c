@@ -57,20 +57,6 @@ void natsLib_Release(void)
 static void
 _finalCleanup(void)
 {
-    if (gLib.sslInitialized)
-    {
-#if defined(NATS_HAS_TLS)
-#if !defined(NATS_USE_OPENSSL_1_1)
-        ERR_free_strings();
-        EVP_cleanup();
-        CRYPTO_cleanup_all_ex_data();
-        ERR_remove_thread_state(0);
-#endif
-        sk_SSL_COMP_free(SSL_COMP_get_compression_methods());
-#endif
-        natsThreadLocal_DestroyKey(gLib.sslTLKey);
-    }
-
     natsThreadLocal_DestroyKey(gLib.errTLKey);
     natsThreadLocal_DestroyKey(gLib.natsThreadKey);
     natsMutex_Destroy(gLib.lock);
@@ -422,20 +408,6 @@ void nats_ReleaseThreadMemory(void)
         _destroyErrTL(tl);
         natsThreadLocal_SetEx(gLib.errTLKey, NULL, false);
     }
-
-    tl = NULL;
-
-    natsMutex_Lock(gLib.lock);
-    if (gLib.sslInitialized)
-    {
-        tl = natsThreadLocal_Get(gLib.sslTLKey);
-        if (tl != NULL)
-        {
-            nats_cleanupThreadSSL(tl);
-            natsThreadLocal_SetEx(gLib.sslTLKey, NULL, false);
-        }
-    }
-    natsMutex_Unlock(gLib.lock);
 }
 
 natsClientConfig *nats_testInspectClientConfig(void)

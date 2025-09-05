@@ -183,6 +183,10 @@ jobs:
           export PATH=../deps/nats-server:../deps/nats-streaming-server:$PATH
           export NATS_TEST_SERVER_VERSION="$(nats-server -v)"
           flags=""
+          # Test app using dynamic library does not crash if no NATS call is made
+          bin/nonats
+          # Test C++ compiler compatibility
+          bin/check_cpp
           ctest -L 'test' --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }}
 
       - name: Upload coverage reports to Codecov

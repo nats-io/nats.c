@@ -21752,11 +21752,7 @@ void test_SSLCiphers(void)
 
     test("SetCipherSuites requires OpenSSL 1.1: ");
     s = natsOptions_SetCipherSuites(opts, "TLS_AES_128_GCM_SHA256");
-#if defined(NATS_USE_OPENSSL_1_1)
     testCond(s == NATS_OK);
-#else
-    testCond(s == NATS_ERR);
-#endif
 
     test("Check that connect fails if improper ciphers: ");
     s = natsOptions_SetURL(opts, "nats://localhost:4443");
@@ -21765,17 +21761,13 @@ void test_SSLCiphers(void)
     // For test purposes, we provide the CA trusted certs
     IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
     IFOK(s, natsOptions_SetCiphers(opts, "-ALL:RSA"));
-#if defined(NATS_USE_OPENSSL_1_1)
     IFOK(s, natsOptions_SetCipherSuites(opts, ""));
-#endif
     IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s != NATS_OK);
 
     test("Check connects OK with proper ciphers: ");
     s = natsOptions_SetCiphers(opts, "-ALL:HIGH");
-#if defined(NATS_USE_OPENSSL_1_1)
     IFOK(s, natsOptions_SetCipherSuites(opts, "TLS_AES_128_GCM_SHA256"));
-#endif
     IFOK(s, natsConnection_Connect(&nc, opts));
     IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
     IFOK(s, natsConnection_Flush(nc));
@@ -22134,11 +22126,7 @@ void test_SSLServerNameIndication(void)
 
     test("Check hostname is found in ClientHello: ");
     bool found = strstr(buffer, "localhost");
-#if defined(NATS_USE_OPENSSL_1_1)
     testCond(found == true);
-#else
-    testCond(found == false);
-#endif
 
     // Need to close those for the client side to unblock.
     natsSock_Close(ctx.fd);

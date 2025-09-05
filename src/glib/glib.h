@@ -23,7 +23,6 @@ void natsLib_Release(void);
 
 natsStatus nats_assignSubToDispatch(natsSubscription *sub);
 natsStatus nats_closeLib(bool wait, int64_t timeout);
-natsStatus nats_initSSL(void);
 natsStatus nats_openLib(natsClientConfig *config);
 natsStatus nats_postAsyncCbInfo(natsAsyncCbInfo *info);
 natsStatus nats_setMessageDispatcherPoolCap(int max);

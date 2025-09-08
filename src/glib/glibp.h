@@ -91,9 +91,7 @@ typedef struct __natsLib
     // Leave these fields before 'refs'
     natsMutex *lock;
     volatile bool wasOpenedOnce;
-    bool sslInitialized;
     natsThreadLocal errTLKey;
-    natsThreadLocal sslTLKey;
     natsThreadLocal natsThreadKey;
     bool initialized;
     bool closed;
@@ -135,7 +133,5 @@ natsStatus nats_initDispatcherPool(natsDispatcherPool *pool, int cap);
 void nats_freeDispatcherPool(natsDispatcherPool *pool);
 void nats_signalDispatcherPoolToShutdown(natsDispatcherPool *pool);
 void nats_waitForDispatcherPoolShutdown(natsDispatcherPool *pool);
-
-void nats_cleanupThreadSSL(void *localStorage);
 
 #endif // GLIBP_H_

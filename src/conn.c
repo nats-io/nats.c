@@ -690,8 +690,6 @@ _makeTLSConn(natsConnection *nc)
         }
         else
         {
-            nats_sslRegisterThreadForCleanup();
-
             SSL_set_ex_data(ssl, 0, (void*) nc);
         }
     }
@@ -729,14 +727,8 @@ _makeTLSConn(natsConnection *nc)
 #endif
             if (nc->tlsName != NULL)
             {
-#if defined(NATS_USE_OPENSSL_1_1)
                 SSL_set_hostflags(ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
                 if (!SSL_set1_host(ssl, nc->tlsName))
-#else
-                X509_VERIFY_PARAM *param = SSL_get0_param(ssl);
-                X509_VERIFY_PARAM_set_hostflags(param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-                if (!X509_VERIFY_PARAM_set1_host(param, nc->tlsName, 0))
-#endif
                     s = nats_setError(NATS_SSL_ERROR, "unable to set expected hostname '%s'", nc->tlsName);
             }
             if (s == NATS_OK)
@@ -752,13 +744,11 @@ _makeTLSConn(natsConnection *nc)
             }
         }
     }
-#if defined(NATS_USE_OPENSSL_1_1)
     // add the host name in the SNI extension
     if ((s == NATS_OK) && (nc->cur != NULL) && (!SSL_set_tlsext_host_name(ssl, nc->cur->url->host)))
     {
         s = nats_setError(NATS_SSL_ERROR, "unable to set SNI extension for hostname '%s'", nc->cur->url->host);
     }
-#endif
     if ((s == NATS_OK) && (SSL_do_handshake(ssl) != 1))
     {
         // check if there is already set NATS_SSL_ERROR from _sslCertCallback
@@ -2303,9 +2293,6 @@ _readLoop(void  *arg)
     buffer = NATS_MALLOC(bufSize);
     if (buffer == NULL)
         s = nats_setDefaultError(NATS_NO_MEMORY);
-
-    if (nc->sockCtx.ssl != NULL)
-        nats_sslRegisterThreadForCleanup();
 
     natsDeadline_Clear(&(nc->sockCtx.readDeadline));
 

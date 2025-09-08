@@ -13,60 +13,6 @@
 
 #include "glibp.h"
 
-
-void
-nats_cleanupThreadSSL(void *localStorage)
-{
-#if defined(NATS_HAS_TLS) && !defined(NATS_USE_OPENSSL_1_1)
-    ERR_remove_thread_state(0);
-#endif
-}
-
-void nats_sslRegisterThreadForCleanup(void)
-{
-#if defined(NATS_HAS_TLS)
-    natsLib *lib = nats_lib();
-    // Set anything. The goal is that at thread exit, the thread local key
-    // will have something non NULL associated, which will trigger the
-    // destructor that we have registered.
-    (void)natsThreadLocal_Set(lib->sslTLKey, (void *)1);
-#endif
-}
-
-natsStatus
-nats_initSSL(void)
-{
-    natsLib *lib = nats_lib();
-    natsStatus s = NATS_OK;
-
-    // Ensure the library is loaded
-    s = nats_openLib(NULL);
-    if (s != NATS_OK)
-        return s;
-
-    natsMutex_Lock(lib->lock);
-
-    if (!lib->sslInitialized)
-    {
-        // Regardless of success, mark as initialized so that we
-        // can do cleanup on exit.
-        lib->sslInitialized = true;
-
-#if defined(NATS_HAS_TLS)
-#if !defined(NATS_USE_OPENSSL_1_1)
-        // Initialize SSL.
-        SSL_library_init();
-        SSL_load_error_strings();
-#endif
-#endif
-        s = natsThreadLocal_CreateKey(&(lib->sslTLKey), nats_cleanupThreadSSL);
-    }
-
-    natsMutex_Unlock(lib->lock);
-
-    return NATS_UPDATE_ERR_STACK(s);
-}
-
 static bool hashNoErrorOnNoSSL = false;
 
 void

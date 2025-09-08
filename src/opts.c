@@ -271,11 +271,7 @@ _createSSLCtx(natsSSLCtx **newCtx)
     }
     if (s == NATS_OK)
     {
-#if defined(NATS_USE_OPENSSL_1_1)
         ctx->ctx = SSL_CTX_new(TLS_client_method());
-#else
-        ctx->ctx = SSL_CTX_new(TLSv1_2_client_method());
-#endif
         if (ctx->ctx == NULL)
             s = nats_setError(NATS_SSL_ERROR,
                               "Unable to create SSL context: %s",
@@ -286,12 +282,7 @@ _createSSLCtx(natsSSLCtx **newCtx)
     {
         (void) SSL_CTX_set_mode(ctx->ctx, SSL_MODE_AUTO_RETRY);
 
-#if defined(NATS_USE_OPENSSL_1_1)
         SSL_CTX_set_min_proto_version(ctx->ctx, TLS1_2_VERSION);
-#else
-        SSL_CTX_set_options(ctx->ctx, SSL_OP_NO_SSLv2);
-        SSL_CTX_set_options(ctx->ctx, SSL_OP_NO_SSLv3);
-#endif
         SSL_CTX_set_default_verify_paths(ctx->ctx);
 
         *newCtx = ctx;
@@ -307,10 +298,9 @@ _createSSLCtx(natsSSLCtx **newCtx)
 static natsStatus
 _getSSLCtx(natsOptions *opts)
 {
-    natsStatus s;
+    natsStatus s = NATS_OK;
 
-    s = nats_initSSL();
-    if ((s == NATS_OK) && (opts->sslCtx != NULL))
+    if (opts->sslCtx != NULL)
     {
         bool createNew = false;
 
@@ -394,8 +384,6 @@ natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName)
     s = _getSSLCtx(opts);
     if (s == NATS_OK)
     {
-        nats_sslRegisterThreadForCleanup();
-
         if (SSL_CTX_load_verify_locations(opts->sslCtx->ctx, fileName, NULL) != 1)
         {
             s = nats_setError(NATS_SSL_ERROR,
@@ -420,8 +408,6 @@ natsOptions_LoadCATrustedCertificatesPath(natsOptions *opts, const char *path)
     s = _getSSLCtx(opts);
     if (s == NATS_OK)
     {
-        nats_sslRegisterThreadForCleanup();
-
         if (SSL_CTX_load_verify_locations(opts->sslCtx->ctx, NULL, path) != 1)
         {
             s = nats_setError(NATS_SSL_ERROR,
@@ -456,8 +442,6 @@ natsOptions_SetCATrustedCertificates(natsOptions *opts, const char *certs)
         X509_STORE          *cts  = NULL;
         STACK_OF(X509_INFO) *inf  = NULL;
         int i;
-
-        nats_sslRegisterThreadForCleanup();
 
         cts = SSL_CTX_get_cert_store(opts->sslCtx->ctx);
         if (cts == NULL)
@@ -532,8 +516,6 @@ natsOptions_LoadCertificatesChain(natsOptions *opts,
     s = _getSSLCtx(opts);
     if (s == NATS_OK)
     {
-        nats_sslRegisterThreadForCleanup();
-
         if (SSL_CTX_use_certificate_chain_file(opts->sslCtx->ctx, certFileName) != 1)
         {
             s = nats_setError(NATS_SSL_ERROR,
@@ -621,7 +603,6 @@ natsOptions_LoadCertificatesChainDynamic(natsOptions *opts,
     }
     if (s == NATS_OK)
     {
-        nats_sslRegisterThreadForCleanup();
         SSL_CTX_set_cert_cb(opts->sslCtx->ctx, _sslCertCallback, opts->sslCtx);
     }
 
@@ -648,8 +629,6 @@ natsOptions_SetCertificatesChain(natsOptions *opts, const char *certStr, const c
     {
         X509 *cert = NULL;
         BIO  *bio  = NULL;
-
-        nats_sslRegisterThreadForCleanup();
 
         bio = BIO_new_mem_buf((char*) certStr, -1);
         if ((bio == NULL) || ((cert = PEM_read_bio_X509(bio, NULL, 0, NULL)) == NULL))
@@ -709,8 +688,6 @@ natsOptions_SetCiphers(natsOptions *opts, const char *ciphers)
     s = _getSSLCtx(opts);
     if (s == NATS_OK)
     {
-        nats_sslRegisterThreadForCleanup();
-
         if (SSL_CTX_set_cipher_list(opts->sslCtx->ctx, ciphers) != 1)
         {
             s = nats_setError(NATS_SSL_ERROR,
@@ -730,14 +707,11 @@ natsOptions_SetCipherSuites(natsOptions *opts, const char *ciphers)
 {
     natsStatus s = NATS_OK;
 
-#if defined(NATS_USE_OPENSSL_1_1)
     LOCK_AND_CHECK_OPTIONS(opts, 0);
 
     s = _getSSLCtx(opts);
     if (s == NATS_OK)
     {
-        nats_sslRegisterThreadForCleanup();
-
         if (SSL_CTX_set_ciphersuites(opts->sslCtx->ctx, ciphers) != 1)
         {
             s = nats_setError(NATS_SSL_ERROR,
@@ -748,9 +722,6 @@ natsOptions_SetCipherSuites(natsOptions *opts, const char *ciphers)
     }
 
     UNLOCK_OPTS(opts);
-#else
-    s = nats_setError(NATS_ERR, "%s", "Setting TLSv1.3 ciphersuites requires OpenSSL 1.1+");
-#endif
 
     return s;
 }

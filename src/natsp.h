@@ -865,9 +865,6 @@ struct __natsConnection
 };
 
 void
-nats_sslRegisterThreadForCleanup(void);
-
-void
 nats_setNATSThreadKey(void);
 
 //

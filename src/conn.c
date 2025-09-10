@@ -678,20 +678,16 @@ _makeTLSConn(natsConnection *nc)
 
     natsMutex_Lock(nc->opts->sslCtx->lock);
 
-    s = natsSock_SetBlocking(nc->sockCtx.fd, true);
-    if (s == NATS_OK)
+    ssl = SSL_new(nc->opts->sslCtx->ctx);
+    if (ssl == NULL)
     {
-        ssl = SSL_new(nc->opts->sslCtx->ctx);
-        if (ssl == NULL)
-        {
-            s = nats_setError(NATS_SSL_ERROR,
-                              "Error creating SSL object: %s",
-                              NATS_SSL_ERR_REASON_STRING);
-        }
-        else
-        {
-            SSL_set_ex_data(ssl, 0, (void*) nc);
-        }
+        s = nats_setError(NATS_SSL_ERROR,
+                            "Error creating SSL object: %s",
+                            NATS_SSL_ERR_REASON_STRING);
+    }
+    else
+    {
+        SSL_set_ex_data(ssl, 0, (void*) nc);
     }
     if (s == NATS_OK)
     {
@@ -749,15 +745,33 @@ _makeTLSConn(natsConnection *nc)
     {
         s = nats_setError(NATS_SSL_ERROR, "unable to set SNI extension for hostname '%s'", nc->cur->url->host);
     }
-    if ((s == NATS_OK) && (SSL_do_handshake(ssl) != 1))
+    if (s == NATS_OK)
     {
-        // check if there is already set NATS_SSL_ERROR from _sslCertCallback
-        nats_GetLastError(&s);
-        if (s != NATS_SSL_ERROR)
+        int hsErr = 0;
+
+DO_HANDSHAKE:
+        hsErr = SSL_do_handshake(ssl);
+        if (hsErr != 1)
         {
-            s = nats_setError(NATS_SSL_ERROR,
-                              "SSL handshake error: %s",
-                              (nc->errStr[0] != '\0' ? nc->errStr : NATS_SSL_ERR_REASON_STRING));
+            int sslErr = SSL_get_error(ssl, hsErr);
+            if ((sslErr == SSL_ERROR_WANT_READ) || (sslErr == SSL_ERROR_WANT_WRITE))
+            {
+                int waitMode = (sslErr == SSL_ERROR_WANT_READ ? WAIT_FOR_READ : WAIT_FOR_WRITE);
+
+                if ((s = natsSock_WaitReady(waitMode, &(nc->sockCtx))) == NATS_OK)
+                    goto DO_HANDSHAKE;
+            }
+            else
+            {
+                // check if there is already set NATS_SSL_ERROR from _sslCertCallback
+                nats_GetLastError(&s);
+                if (s != NATS_SSL_ERROR)
+                {
+                    s = nats_setError(NATS_SSL_ERROR,
+                                    "SSL handshake error: %s",
+                                    (nc->errStr[0] != '\0' ? nc->errStr : NATS_SSL_ERR_REASON_STRING));
+                }
+            }
         }
     }
     // Make sure that if nc-errStr was set in _collectSSLErr but
@@ -765,7 +779,6 @@ _makeTLSConn(natsConnection *nc)
     if (s == NATS_OK)
     {
         nc->errStr[0] = '\0';
-        s = natsSock_SetBlocking(nc->sockCtx.fd, false);
     }
 
     natsMutex_Unlock(nc->opts->sslCtx->lock);

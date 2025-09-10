@@ -206,10 +206,7 @@ typedef struct __natsSSLCtx
     bool            skipVerify;
     char            *certFileName;
     char            *keyFileName;
-
-#ifdef NATS_WITH_EXPERIMENTAL
-    SSL_verify_cb   callback;
-#endif // NATS_WITH_EXPERIMENTAL
+    natsSSLVerifyCb callback;
 
 } natsSSLCtx;
 

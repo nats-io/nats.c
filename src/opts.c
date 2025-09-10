@@ -766,10 +766,8 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
     if (s == NATS_OK)
     {
         opts->sslCtx->skipVerify = skip;
-#ifdef NATS_WITH_EXPERIMENTAL
         if (skip)
             opts->sslCtx->callback = NULL;
-#endif // NATS_WITH_EXPERIMENTAL
     }
 
     UNLOCK_OPTS(opts);
@@ -777,10 +775,8 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
     return s;
 }
 
-#ifdef NATS_WITH_EXPERIMENTAL
-
 natsStatus
-natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback)
+natsOptions_SetSSLVerificationCallback(natsOptions *opts, natsSSLVerifyCb callback)
 {
     natsStatus s = NATS_OK;
 
@@ -800,8 +796,6 @@ natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback
 
     return s;
 }
-
-#endif // NATS_WITH_EXPERIMENTAL
 
 #else
 
@@ -861,16 +855,11 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }
 
-
-#ifdef NATS_WITH_EXPERIMENTAL
-
 natsStatus
-natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback)
+natsOptions_SetSSLVerificationCallback(natsOptions *opts, natsSSLVerifyCb callback)
 {
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }
-
-#endif // NATS_WITH_EXPERIMENTAL
 
 #endif
 

@@ -22073,6 +22073,210 @@ void test_SSLHandshakeFirst(void)
 #endif
 }
 
+struct testSP
+{
+    natsSock            sock1;
+    natsSock            sock2;
+};
+
+static void
+_sslProxyExData(void *closure)
+{
+    natsStatus          s   = NATS_OK;
+    struct testSP       *sp = (struct testSP*) closure;
+    natsSockCtx         ctx1;
+    natsSockCtx         ctx2;
+    char                buffer[100];
+
+    memset(&ctx1, 0, sizeof(natsSockCtx));
+    memset(&ctx2, 0, sizeof(natsSockCtx));
+
+    ctx1.fd = sp->sock1;
+    ctx2.fd = sp->sock2;
+
+    while (s == NATS_OK)
+    {
+        int n = 0;
+        s = natsSock_Read(&ctx1, buffer, sizeof(buffer), &n);
+        IFOK(s, natsSock_WriteFully(&ctx2, buffer, n));
+    }
+}
+
+static void
+_sslProxy(void *closure)
+{
+    natsStatus          s = NATS_OK;
+    natsSock            sock = NATS_SOCK_INVALID;
+    struct threadArg    *arg = (struct threadArg*) closure;
+    int                 mode;
+    natsSockCtx         ctx;
+    natsSockCtx         srv;
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+    memset(&srv, 0, sizeof(natsSockCtx));
+
+    _startMockupServer(&sock, "127.0.0.1", "4444");
+
+    for (mode = 1; (s == NATS_OK) && (mode <=2); mode++)
+    {
+        if (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+                || (natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK))
+        {
+            s = NATS_SYS_ERROR;
+            break;
+        }
+        natsMutex_Lock(arg->m);
+        if (mode == 1)
+        {
+            while ((s != NATS_TIMEOUT) && !arg->done)
+                s = natsCondition_TimedWait(arg->c, arg->m, 5000);
+
+            if (s != NATS_OK)
+                arg->status = s;
+
+            arg->done = false;
+            natsMutex_Unlock(arg->m);
+            natsSock_Close(ctx.fd);
+            ctx.fd = NATS_SOCK_INVALID;
+            continue;
+        }
+        natsMutex_Unlock(arg->m);
+        // In this mode, we will just read and write in small chunks.
+        s = natsSock_ConnectTcp(&srv, "127.0.0.1", 4443);
+        if (s == NATS_OK)
+        {
+            natsThread      *t1 = NULL;
+            natsThread      *t2 = NULL;
+            struct testSP   sp1;
+            struct testSP   sp2;
+
+            natsSock_SetBlocking(ctx.fd, true);
+            natsSock_SetBlocking(srv.fd, true);
+
+            sp1.sock1 = ctx.fd;
+            sp1.sock2 = srv.fd;
+
+            sp2.sock1 = srv.fd;
+            sp2.sock2 = ctx.fd;
+
+            s = natsThread_Create(&t1, _sslProxyExData, &sp1);
+            IFOK(s, natsThread_Create(&t2, _sslProxyExData, &sp2));
+
+            natsMutex_Lock(arg->m);
+            while ((s != NATS_TIMEOUT) && !arg->done)
+                s = natsCondition_TimedWait(arg->c, arg->m, 5000);
+            natsMutex_Unlock(arg->m);
+
+            natsSock_Shutdown(ctx.fd);
+            natsSock_Shutdown(srv.fd);
+
+            if (t1 != NULL)
+            {
+                natsThread_Join(t1);
+                natsThread_Destroy(t1);
+            }
+            if (t2 != NULL)
+            {
+                natsThread_Join(t2);
+                natsThread_Destroy(t2);
+            }
+
+            natsSock_Close(ctx.fd);
+            natsSock_Close(srv.fd);
+        }
+    }
+    natsSock_Close(sock);
+
+    if (s != NATS_OK)
+    {
+        natsMutex_Lock(arg->m);
+        arg->status = s;
+        natsMutex_Unlock(arg->m);
+    }
+}
+
+void test_SSLHandshakeTimeout(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsThread          *t        = NULL;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsfirst.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Start proxy: ");
+    s = natsThread_Create(&t, _sslProxy, &arg);
+    testCond(s == NATS_OK);
+
+    test("Set options: ");
+    s = natsOptions_Create(&opts);
+    // Point to the proxy.
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4444"));
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
+    IFOK(s, natsOptions_TLSHandshakeFirst(opts));
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
+    testCond(s == NATS_OK);
+
+    test("SSL handshake should timeout: ");
+    s = natsConnection_Connect(&nc, opts);
+    // We expect a failure, but make sure it fails because of the
+    // SSLHandshake timing out, not because the proxy timed out.
+    if (s != NATS_OK)
+    {
+        nats_clearLastError();
+        s = NATS_OK;
+        natsMutex_Lock(arg.m);
+        s = arg.status;
+        natsMutex_Unlock(arg.m);
+    }
+    testCond((s == NATS_OK) && (nc == NULL));
+
+    test("Release proxy: ");
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Broadcast(arg.c);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("SSL handshake should work: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond((s == NATS_OK) && (nc != NULL));
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    test("Stop proxy: ");
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Broadcast(arg.c);
+    natsMutex_Unlock(arg.m);
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+    natsMutex_Lock(arg.m);
+    s = arg.status;
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
 void test_SSLServerNameIndication(void)
 {
 #if defined(NATS_HAS_TLS)

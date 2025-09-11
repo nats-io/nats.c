@@ -676,7 +676,12 @@ _makeTLSConn(natsConnection *nc)
     // Reset nc->errStr before initiating the handshake...
     nc->errStr[0] = '\0';
 
-    natsMutex_Lock(nc->opts->sslCtx->lock);
+    // Connections have a clone of the options structure, where the SSL context
+    // is stored. When doing so, it prevents the public options structure to
+    // be modified (see _getSSLCtx in opts.c), so although `nc->opts->sslCtx`
+    // is shared with other connections that used the same `natsOptions` when
+    // created, `nc->opts->sslCtx` fields are "immutable". We don't need
+    // `nc->opts->sslCtx->lock`to be acquired/released here.
 
     ssl = SSL_new(nc->opts->sslCtx->ctx);
     if (ssl == NULL)
@@ -764,8 +769,9 @@ DO_HANDSHAKE:
                 if (s != NATS_SSL_ERROR)
                 {
                     s = nats_setError(NATS_SSL_ERROR,
-                                    "SSL handshake error: %s",
-                                    (nc->errStr[0] != '\0' ? nc->errStr : NATS_SSL_ERR_REASON_STRING));
+                                    "SSL handshake error: %s (ssl err=%d - errno=%d (%s))",
+                                    (nc->errStr[0] != '\0' ? nc->errStr : NATS_SSL_ERR_REASON_STRING),
+                                    sslErr, errno, strerror(errno));
                 }
             }
         }
@@ -775,18 +781,11 @@ DO_HANDSHAKE:
     if (s == NATS_OK)
     {
         nc->errStr[0] = '\0';
-    }
-
-    natsMutex_Unlock(nc->opts->sslCtx->lock);
-
-    if (s != NATS_OK)
-    {
-        if (ssl != NULL)
-            SSL_free(ssl);
-    }
-    else
-    {
         nc->sockCtx.ssl = ssl;
+    }
+    else if (ssl != NULL)
+    {
+        SSL_free(ssl);
     }
 
     return NATS_UPDATE_ERR_STACK(s);

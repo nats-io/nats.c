@@ -178,7 +178,7 @@ At times we may introduce APIs that are not stable yet. To build with them, defi
 ```
 # cd ./build
 rm CMakeCache.txt
-cmake .. <build options that you may already use> -DNATS_WITH_EXPERIMENTALON
+cmake .. <build options that you may already use> -DNATS_WITH_EXPERIMENTAL=ON
 make
 ```
 

@@ -21631,8 +21631,9 @@ _logChain(STACK_OF(X509) *chain)
 }
 
 static int
-_sslVerifyCallback(int preverify_ok, X509_STORE_CTX *ctx)
+_sslVerifyCallback(int preverify_ok, void *pctx)
 {
+    X509_STORE_CTX      *ctx                = (X509_STORE_CTX*) pctx;
     X509                *cert               = X509_STORE_CTX_get_current_cert(ctx);
     SSL                 *ssl                = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
     STACK_OF(X509)      *chain              = SSL_get_peer_cert_chain(ssl);
@@ -21694,7 +21695,6 @@ _sslVerifyCallback(int preverify_ok, X509_STORE_CTX *ctx)
 
 void test_SSLVerificationCallback(void)
 {
-#ifdef NATS_WITH_EXPERIMENTAL
 #ifdef NATS_HAS_TLS
     natsStatus          s;
     natsConnection      *nc         = NULL;
@@ -21729,7 +21729,6 @@ void test_SSLVerificationCallback(void)
     test("Skipped when built with no SSL support: ");
     testCond(true);
 #endif // NATS_HAS_TLS
-#endif // NATS_WITH_EXPERIMENTAL
 }
 
 void test_SSLCiphers(void)

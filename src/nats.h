@@ -27,16 +27,6 @@ extern "C" {
 #include "status.h"
 #include "version.h"
 
-#ifdef NATS_WITH_EXPERIMENTAL
-
-#if !defined(NATS_HAS_TLS)
-#error "natsOptions_SetSSLVerificationCallback requires NATS_HAS_TLS to be defined"
-#endif
-#include <openssl/ssl.h>
-#include <openssl/x509v3.h>
-
-#endif // NATS_WITH_EXPERIMENTAL
-
 /** \def NATS_EXTERN
  *  \brief Needed for shared library.
  *
@@ -2278,6 +2268,31 @@ typedef void (*natsOnCompleteCB)(void *closure);
  */
 typedef int64_t (*natsCustomReconnectDelayHandler)(natsConnection *nc, int attempts, void *closure);
 
+/** \brief SSL certificate verification callback.
+ *
+ * This is invoked during SSL handshake and allows the user to inspect and validate
+ * the certificate chain.
+ *
+ * The `ctx` pointer should be cast to `(X509_STORE_CTX*)` before use:
+ *
+ * \code{.unparsed}
+ * int
+ * mySSLVerifyCb(int preverifyOk, void *ctx)
+ * {
+ *      X509 *cert = X509_STORE_CTX_get_current_cert((X509_STORE_CTX*) ctx);
+ *      ...
+ * }
+ * \endcode
+ *
+ * See https://docs.openssl.org/master/man3/SSL_CTX_set_verify/ for more details.
+ *
+ * @param preverifyOk indicates whether the verification of the certificate in question
+ * was passed (preverifyOk=1) or not (preverifyOk=0).
+ * @param ctx a pointer to the complete context used for the certificate chain verification.
+ * The application should cast this to `(X509_STORE_CTX*)` before use.
+ */
+typedef int (*natsSSLVerifyCb)(int preverifyOk, void *ctx);
+
 #ifdef BUILD_IN_DOXYGEN
 /** \brief Callback used to process asynchronous publish errors from JetStream.
  *
@@ -3184,8 +3199,6 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
 NATS_EXTERN natsStatus
 natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
 
-#ifdef NATS_WITH_EXPERIMENTAL
-
 /** \brief EXPERIMENTAL Sets the certificate validation callback.
  *
  * Sets a callback used to verify the SSL certificate.
@@ -3193,19 +3206,11 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
  * \note Setting a callback will enable SSL verification if disabled via
  * natsOptions_SkipServerVerification().
  *
- * \warning This is an experimental API and is subject to change in future
- * versions. To use this API compile the client code with
- * `-DNATS_WITH_EXPERIMENTAL -DNATS_HAS_TLS`. `openssl` library must be
- * installed and added to the include/link paths.
- *
  * @param opts the pointer to the #natsOptions object.
- * @param callback the custom SSL verification handler to invoke. see
- * https://docs.openssl.org/master/man3/SSL_CTX_set_verify/
+ * @param callback the custom SSL verification handler to invoke.
  */
 NATS_EXTERN natsStatus
-natsOptions_SetSSLVerificationCallback(natsOptions *opts, SSL_verify_cb callback);
-
-#endif // NATS_WITH_EXPERIMENTAL
+natsOptions_SetSSLVerificationCallback(natsOptions *opts, natsSSLVerifyCb callback);
 
 /** \brief Sets the verbose mode.
  *

@@ -673,11 +673,21 @@ _makeTLSConn(natsConnection *nc)
 #if defined(NATS_HAS_TLS)
     natsStatus  s       = NATS_OK;
     SSL         *ssl    = NULL;
+    bool        useLock = false;
 
     // Reset nc->errStr before initiating the handshake...
     nc->errStr[0] = '\0';
 
+    // We will lock by default, unless the option `tlsConcurrentHandshakes` allows
+    // us to perform the handshake concurrently. Regardless, we will perform the
+    // handshake under lock for the very first one for this context. This is because
+    // otherwise we get thread sanitizer reports (looks like there is some lazy
+    // initialization happening in the OpenSSL library for the very first handshake).
+
     natsMutex_Lock(nc->opts->sslCtx->lock);
+    useLock = !nc->opts->tlsConcurrentHandshakes || nc->opts->sslCtx->firstHandshake;
+    if (!useLock)
+        natsMutex_Unlock(nc->opts->sslCtx->lock);
 
     ssl = SSL_new(nc->opts->sslCtx->ctx);
     if (ssl == NULL)
@@ -783,19 +793,16 @@ DO_HANDSHAKE:
     if (s == NATS_OK)
     {
         nc->errStr[0] = '\0';
-    }
-
-    natsMutex_Unlock(nc->opts->sslCtx->lock);
-
-    if (s != NATS_OK)
-    {
-        if (ssl != NULL)
-            SSL_free(ssl);
-    }
-    else
-    {
         nc->sockCtx.ssl = ssl;
+        if (useLock)
+            nc->opts->sslCtx->firstHandshake = false;
     }
+    else if (ssl != NULL)
+    {
+        SSL_free(ssl);
+    }
+    if (useLock)
+        natsMutex_Unlock(nc->opts->sslCtx->lock);
 
     return NATS_UPDATE_ERR_STACK(s);
 #else

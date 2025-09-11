@@ -21470,7 +21470,7 @@ void test_SSLVerifyDynamic(void)
     IFOK(s, natsOptions_LoadCertificatesChainDynamic(opts,
                                                      "certs/cert-dynamic.pem",
                                                      "certs/key-dynamic.pem"));
-    s = natsConnection_Connect(&nc, opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
     IFOK(s, natsConnection_SubscribeSync(&sub, nc, "*"));
     IFOK(s, natsConnection_PublishString(nc, "foo", "test"));
     IFOK(s, natsConnection_Flush(nc));
@@ -22548,6 +22548,154 @@ void test_SSLAvailable(void)
 
     _stopServer(serverPid);
     remove(conf);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
+#if defined(NATS_HAS_TLS)
+static void
+_sslConcurrentConn(void *closure)
+{
+    struct threadArg    *args   = (struct threadArg*) closure;
+    natsStatus          s       = NATS_OK;
+    natsConnection      *nc     = NULL;
+
+    natsMutex_Lock(args->m);
+    while (!args->connected)
+        natsCondition_Wait(args->c, args->m);
+    natsMutex_Unlock(args->m);
+
+    s = natsConnection_Connect(&nc, args->opts);
+    if (s != NATS_OK)
+    {
+        natsMutex_Lock(args->m);
+        if (args->status == NATS_OK)
+        {
+            nats_PrintLastErrorStack(stderr);
+            args->status = s;
+        }
+        natsMutex_Unlock(args->m);
+    }
+    natsConnection_Destroy(nc);
+}
+
+#define SSL_CONCURRENT_CONNS 10
+
+static int
+_sslConcurrentVerifyCb(int preverify_ok, void *pctx)
+{
+    // Access some fields to make sure that we are not triggering data races.
+    X509_STORE_CTX      *ctx                = (X509_STORE_CTX*) pctx;
+    X509                *cert               = X509_STORE_CTX_get_current_cert(ctx);
+    SSL                 *ssl                = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
+    STACK_OF(X509)      *chain              = SSL_get_peer_cert_chain(ssl);
+    char                *issuerName         = NULL;
+    int                 result              = 0;
+
+    issuerName = X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
+    if (strstr(issuerName, "Synadia"))
+        result = 1;
+    else
+        result = preverify_ok;
+
+    if (chain == NULL)
+    {
+        // To silence compiler warning...
+    }
+
+    // Sleep on purpose for 500ms. The test creates SSL_CONCURRENT_CONNS
+    // connections in parallel. If this callback invoked during the SSL
+    // handshake had a lock shared by connections (like we used to), the
+    // test would take more than 0.5*SSL_CONCURRENT_CONNS seconds to complete.
+    nats_Sleep(500);
+
+    OPENSSL_free(issuerName);
+
+    return result;
+}
+#endif
+
+void test_SSLPerfConcurrentConnect(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s           = NATS_OK;
+    natsOptions         *opts       = NULL;
+    natsPid             serverPid   = NATS_INVALID_PID;
+    int64_t             start       = 0;
+    int64_t             dur         = 0;
+    natsThread          *t[SSL_CONCURRENT_CONNS];
+    int                 i;
+    struct threadArg    args;
+    int64_t             limit;
+
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if (opts == NULL)
+        FAIL("Unable to setup test!");
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Create options: ");
+    s = natsOptions_SetURL(opts, "nats://127.0.0.1:4443");
+    IFOK(s, natsOptions_SetSecure(opts, true));
+    // For test purposes, we provide the CA trusted certs
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsOptions_SetExpectedHostname(opts, "localhost"));
+    IFOK(s, natsOptions_AllowConcurrentTLSHandshakes(opts));
+    IFOK(s, natsOptions_SetSSLVerificationCallback(opts, _sslConcurrentVerifyCb));
+    IFOK(s, natsOptions_SetTimeout(opts, 10000));
+    testCond(s == NATS_OK);
+
+    args.opts   = opts;
+    args.status = NATS_OK;
+
+    test("Start threads creating connections: ");
+    for (i=0; (s == NATS_OK) && (i<SSL_CONCURRENT_CONNS); i++)
+        s = natsThread_Create(&t[i], _sslConcurrentConn, &args);
+    testCond(s == NATS_OK);
+
+    test("Notify threads: ");
+    nats_Sleep(250);
+    natsMutex_Lock(args.m);
+    args.connected = true;
+    start = nats_Now();
+    natsCondition_Broadcast(args.c);
+    natsMutex_Unlock(args.m);
+    testCond(true);
+
+    test("Check time: ");
+    for (i=0; i<SSL_CONCURRENT_CONNS; i++)
+    {
+        if (t[i] == NULL)
+            continue;
+
+        natsThread_Join(t[i]);
+        natsThread_Destroy(t[i]);
+    }
+    dur = nats_Now()-start;
+    // Should be less than 0.5*SSL_CONCURRENT_CONNS (that is 0.5*10=5sec)
+    // but account for when running with valgrind where things are slowed
+    // down quite a bit.
+    if (valgrind)
+        limit = 4000;
+    else
+        limit = 2500;
+    testCond(dur < limit);
+
+    test("Check there was no failure: ");
+    natsMutex_Lock(args.m);
+    s = args.status;
+    natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+    _stopServer(serverPid);
 #else
     test("Skipped when built with no SSL support: ");
     testCond(true);

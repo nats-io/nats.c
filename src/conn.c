@@ -764,8 +764,9 @@ DO_HANDSHAKE:
                 if (s != NATS_SSL_ERROR)
                 {
                     s = nats_setError(NATS_SSL_ERROR,
-                                    "SSL handshake error: %s",
-                                    (nc->errStr[0] != '\0' ? nc->errStr : NATS_SSL_ERR_REASON_STRING));
+                                    "SSL handshake error: %s (ssl err=%d - errno=%d (%s))",
+                                    (nc->errStr[0] != '\0' ? nc->errStr : NATS_SSL_ERR_REASON_STRING),
+                                    sslErr, errno, strerror(errno));
                 }
             }
         }

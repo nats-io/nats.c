@@ -22072,6 +22072,7 @@ void test_SSLHandshakeFirst(void)
 #endif
 }
 
+#if defined(NATS_HAS_TLS)
 struct testSP
 {
     natsSock            sock1;
@@ -22104,7 +22105,7 @@ _sslProxyExData(void *closure)
 static void
 _sslProxy(void *closure)
 {
-    natsStatus          s = NATS_OK;
+    natsStatus          s    = NATS_OK;
     natsSock            sock = NATS_SOCK_INVALID;
     struct threadArg    *arg = (struct threadArg*) closure;
     int                 mode;
@@ -22114,7 +22115,14 @@ _sslProxy(void *closure)
     memset(&ctx, 0, sizeof(natsSockCtx));
     memset(&srv, 0, sizeof(natsSockCtx));
 
-    _startMockupServer(&sock, "127.0.0.1", "4444");
+    s = _startMockupServer(&sock, "127.0.0.1", "4444");
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg->m);
+        arg->connected = true;
+        natsCondition_Broadcast(arg->c);
+        natsMutex_Unlock(arg->m);
+    }
 
     for (mode = 1; (s == NATS_OK) && (mode <=2); mode++)
     {
@@ -22133,10 +22141,12 @@ _sslProxy(void *closure)
             if (s != NATS_OK)
                 arg->status = s;
 
-            arg->done = false;
-            natsMutex_Unlock(arg->m);
             natsSock_Close(ctx.fd);
             ctx.fd = NATS_SOCK_INVALID;
+
+            arg->disconnected = true;
+            natsCondition_Broadcast(arg->c);
+            natsMutex_Unlock(arg->m);
             continue;
         }
         natsMutex_Unlock(arg->m);
@@ -22162,7 +22172,7 @@ _sslProxy(void *closure)
             IFOK(s, natsThread_Create(&t2, _sslProxyExData, &sp2));
 
             natsMutex_Lock(arg->m);
-            while ((s != NATS_TIMEOUT) && !arg->done)
+            while ((s != NATS_TIMEOUT) && !arg->closed)
                 s = natsCondition_TimedWait(arg->c, arg->m, 5000);
             natsMutex_Unlock(arg->m);
 
@@ -22193,6 +22203,7 @@ _sslProxy(void *closure)
         natsMutex_Unlock(arg->m);
     }
 }
+#endif
 
 void test_SSLHandshakeTimeout(void)
 {
@@ -22213,6 +22224,13 @@ void test_SSLHandshakeTimeout(void)
 
     test("Start proxy: ");
     s = natsThread_Create(&t, _sslProxy, &arg);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.connected)
+            s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+        natsMutex_Unlock(arg.m);
+    }
     testCond(s == NATS_OK);
 
     test("Set options: ");
@@ -22222,7 +22240,8 @@ void test_SSLHandshakeTimeout(void)
     IFOK(s, natsOptions_SetSecure(opts, true));
     IFOK(s, natsOptions_SkipServerVerification(opts, true));
     IFOK(s, natsOptions_TLSHandshakeFirst(opts));
-    IFOK(s, natsOptions_SetTimeout(opts, 500));
+    // Not too small for when running with valgrind, on VMs, etc...
+    IFOK(s, natsOptions_SetTimeout(opts, 1000));
     testCond(s == NATS_OK);
 
     test("SSL handshake should timeout: ");
@@ -22232,7 +22251,6 @@ void test_SSLHandshakeTimeout(void)
     if (s != NATS_OK)
     {
         nats_clearLastError();
-        s = NATS_OK;
         natsMutex_Lock(arg.m);
         s = arg.status;
         natsMutex_Unlock(arg.m);
@@ -22243,6 +22261,8 @@ void test_SSLHandshakeTimeout(void)
     natsMutex_Lock(arg.m);
     arg.done = true;
     natsCondition_Broadcast(arg.c);
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 5000);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
@@ -22255,7 +22275,7 @@ void test_SSLHandshakeTimeout(void)
 
     test("Stop proxy: ");
     natsMutex_Lock(arg.m);
-    arg.done = true;
+    arg.closed = true;
     natsCondition_Broadcast(arg.c);
     natsMutex_Unlock(arg.m);
     if (t != NULL)

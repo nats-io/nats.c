@@ -302,27 +302,33 @@ _getSSLCtx(natsOptions *opts)
 
     if (opts->sslCtx != NULL)
     {
-        bool createNew = false;
+        bool fail = false;
 
         natsMutex_Lock(opts->sslCtx->lock);
 
-        // If this context is retained by a cloned natsOptions, we need to
-        // release it and create a new context.
+        // If this context is retained by a cloned natsOptions, we can't
+        // continue because we can't alter the SSL_CTX while it is being
+        // used by the connections that have a reference to it. We can't
+        // simply create a new context here (like we used to) because it
+        // would be "empty" and users may think that it is already
+        // configured with all the previous options (which would not be
+        // the case). We have to fail the parent call so that the users
+        // create a new natsOptions object instead, and reconfigure from
+        // scratch, or wait for referencing connections to be destroyed.
         if (opts->sslCtx->refs > 1)
-            createNew = true;
+            fail = true;
 
         natsMutex_Unlock(opts->sslCtx->lock);
 
-        if (createNew)
+        if (fail)
         {
-            natsSSLCtx_release(opts->sslCtx);
-            opts->sslCtx = NULL;
+            return nats_setError(NATS_ILLEGAL_STATE, "%s",
+                "This natsOptions object can't be modified because it is "\
+                "configured for SSL and is currently used by connection(s)!");
         }
-        else
-        {
-            // We can use this ssl context.
-            return NATS_OK;
-        }
+
+        // We can use this ssl context.
+        return NATS_OK;
     }
 
     if (s == NATS_OK)
@@ -363,9 +369,10 @@ natsOptions_TLSHandshakeFirst(natsOptions *opts)
 
     LOCK_AND_CHECK_OPTIONS(opts, 0);
 
-    s = natsOptions_SetSecure(opts, true);
+    s = _getSSLCtx(opts);
     if (s == NATS_OK)
     {
+        opts->secure            = true;
         opts->tlsHandshakeFirst = true;
     }
 

@@ -2865,6 +2865,7 @@ void test_natsOptions(void)
     test("Set Timeout (invalid args): ");
     s = natsOptions_SetTimeout(opts, -10);
     testCond(s != NATS_OK);
+    nats_clearLastError();
 
     test("Set Timeout to zero: ");
     s = natsOptions_SetTimeout(opts, 0);
@@ -21016,11 +21017,36 @@ void test_SSLBasic(void)
     IFOK(s, natsConnection_Connect(&nc, opts));
     testCond(s == NATS_OK);
 
+    test("Check that options can't be modified while used by connection: ")
+    s = natsOptions_TLSHandshakeFirst(opts);
+    testCond((s == NATS_ILLEGAL_STATE) &&
+                (strstr(nats_GetLastError(NULL), "can't be modified")) != NULL);
+    nats_clearLastError();
+
     natsConnection_Destroy(nc);
     nc = NULL;
 
-    test("Check connects OK with SSL options: ");
+    test("Check ok after last connection destroyed: ")
     s = natsOptions_SetSecure(opts, true);
+    if (s == NATS_OK)
+    {
+        // Verify that earlier setting is still valid.
+        natsMutex_Lock(opts->sslCtx->lock);
+        s = (opts->sslCtx->skipVerify ? NATS_OK : NATS_ERR);
+        natsMutex_Unlock(opts->sslCtx->lock);
+    }
+    testCond(s == NATS_OK);
+
+    // Destroy now, we will recreate from scratch.
+    natsOptions_Destroy(opts);
+    opts = NULL;
+
+    test("Check connects OK with SSL options: ");
+    opts = _createReconnectOptions();
+    if (opts == NULL)
+        s = NATS_ERR;
+    IFOK(s, natsOptions_SetURL(opts, "nats://localhost:4443"));
+    IFOK(s, natsOptions_SetSecure(opts, true));
     IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, &args));
 
     // For test purposes, we provide the CA trusted certs

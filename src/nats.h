@@ -3002,6 +3002,13 @@ natsOptions_SetName(natsOptions *opts, const char *name);
  *
  * The default is `false`.
  *
+ * \warning Once this option is set and if this #natsOptions object is passed
+ * to any #natsConnection_Connect call, and connections are still active,
+ * any other modification of the options related to TLS/SSL will return
+ * #NATS_ILLEGAL_STATE. You either need to create a new #natsOptions object
+ * and reconfigure it from scratch, or wait for the last connection that uses
+ * this #natsOptions object to be destroyed before altering the configuration.
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param secure `true` for a secure connection, `false` otherwise.
  */
@@ -3010,15 +3017,20 @@ natsOptions_SetSecure(natsOptions *opts, bool secure);
 
 /** \brief Performs TLS handshake first.
  *
- * If the server is not configured to require the client to perform
- * the TLS handshake first, the server sends an INFO protocol first.
- * When receiving it, the client and server are then initiate the
- * TLS handshake.
+ * By default, the server will first send an INFO protocol in plain text
+ * to the client. After receiving this protocol, the client and server
+ * initiate the TLS handshake.
+ *
+ * This option (and similar option exists in the server) changes this
+ * behavior and requires the TLS handshake to be performed before the
+ * INFO protocol is sent.
  *
  * If the server is configured to require the client to perform
  * the TLS handshake first, the client will fail to connect if
  * not setting this option. Conversely, if the client is configured
  * with this option but the server is not, the connection will fail.
+ *
+ * \warning See warning in #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  */
@@ -3033,6 +3045,8 @@ natsOptions_TLSHandshakeFirst(natsOptions *opts);
  * object at the time of this call, so possible errors while loading the
  * certificates will be reported now instead of when a connection is created.
  * You can get extra information by calling #nats_GetLastError.
+ *
+ * \warning See warning in #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param fileName the file containing the CA certificates.
@@ -3049,6 +3063,8 @@ natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName);
  * object at the time of this call, so possible errors while loading the
  * certificates will be reported now instead of when a connection is created.
  * You can get extra information by calling #nats_GetLastError.
+ *
+ * \warning See warning in #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param path the path containing the CA certificates.
@@ -3079,6 +3095,8 @@ natsOptions_LoadCATrustedCertificatesPath(natsOptions *opts, const char *path);
  *
  * @see natsOptions_LoadCATrustedCertificates
  *
+ * \warning See warning in #natsOptions_SetSecure.
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param certificates the string containing the concatenated CA certificates.
  */
@@ -3094,6 +3112,8 @@ natsOptions_SetCATrustedCertificates(natsOptions *opts, const char *certificates
  * The private key file format supported is also PEM.
  *
  * See #natsOptions_LoadCATrustedCertificates regarding error reports.
+ *
+ * \warning See warning in #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param certsFileName the file containing the client certificates.
@@ -3111,7 +3131,9 @@ natsOptions_LoadCertificatesChain(natsOptions *opts,
  * This is useful when the certificate is renewed and the application
  * needs to pick up the new certificate without restarting.
  *
- * @see natsOptions_LoadCertificatesChain()
+ * @see natsOptions_LoadCertificatesChain
+ *
+ * \warning See warning in #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param certsFileName the file containing the client certificates.
@@ -3127,7 +3149,9 @@ natsOptions_LoadCertificatesChainDynamic(natsOptions *opts,
  * Similar to #natsOptions_LoadCertificatesChain expect that instead
  * of loading from file, this loads from the given memory locations.
  *
- * @see natsOptions_LoadCertificatesChain()
+ * @see natsOptions_LoadCertificatesChain
+ *
+ * \warning See warning in #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param cert the memory location containing the client certificates.
@@ -3150,6 +3174,8 @@ natsOptions_SetCertificatesChain(natsOptions *opts,
  *
  * See #natsOptions_LoadCATrustedCertificates regarding error reports.
  *
+ * \warning See warning in #natsOptions_SetSecure.
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param ciphers the ciphers suite.
  */
@@ -3166,6 +3192,8 @@ natsOptions_SetCiphers(natsOptions *opts, const char *ciphers);
  *
  * See #natsOptions_LoadCATrustedCertificates regarding error reports.
  *
+ * \warning See warning in #natsOptions_SetSecure.
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param ciphers the ciphers suite.
  */
@@ -3177,6 +3205,8 @@ natsOptions_SetCipherSuites(natsOptions *opts, const char *ciphers);
  * If set, the library will check that the hostname in the server
  * certificate matches the given `hostname`. This will occur when a connection
  * is created, not at the time of this call.
+ *
+ * \warning See warning in #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param hostname the expected server certificate hostname.
@@ -3193,6 +3223,8 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
  *
  * \warning This is fine for tests but use with caution since this is not secure.
  *
+ * \warning See warning in #natsOptions_SetSecure.
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param skip set it to <c>true</c> to disable - or skip - server certificate verification.
  */
@@ -3204,7 +3236,9 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
  * Sets a callback used to verify the SSL certificate.
  *
  * \note Setting a callback will enable SSL verification if disabled via
- * natsOptions_SkipServerVerification().
+ * #natsOptions_SkipServerVerification.
+ *
+ * \warning See warning in #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param callback the custom SSL verification handler to invoke.

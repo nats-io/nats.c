@@ -3037,6 +3037,47 @@ natsOptions_SetSecure(natsOptions *opts, bool secure);
 NATS_EXTERN natsStatus
 natsOptions_TLSHandshakeFirst(natsOptions *opts);
 
+/** \brief Allows concurrent TLS handshakes.
+ *
+ * When creating a #natsOptions object and configuring it with SSL
+ * related options, an internal SSL context (`SSL_CTX`) is stored in
+ * the #natsOptions object. If this #natsOptions object is passed to
+ * multiple #natsConnection_Connect calls, the connections share this
+ * same `SSL_CTX` object.
+ *
+ * Since those connections can connect (and reconnect) from different
+ * threads, the SSL handshake process is normally protected by a mutex
+ * that belongs to the shared #natsOptions object. It was historically
+ * done this way because a data race is reported (in some cases) if
+ * not the case, and since there was no warning to users that any
+ * SSL verification callback that would be set would need to be
+ * thread safe.
+ *
+ * If there is no SSL verification callback (or they are known to be
+ * thread safe), this option can be used to let the library invoke
+ * the SSL handshake without the aforementioned mutex. This can improve
+ * performance since now multiple connections can happen concurrently
+ * instead of being serialized.
+ *
+ * \warning The very first SSL handshake will be done under the protection
+ * of the mutex, which means other connections (that share the same
+ * #natsOptions object) will not be able to perform their SSL handshake
+ * until the very first is complete. This is because of OpenSSL internal
+ * initialization that is performed during the first handshake. Once that
+ * is done, other SSL handshakes will be done concurrently.
+ *
+ * \note If each connection has its own configured #natsOptions, then there is
+ * no concurrency issue and the SSL handshakes are already performed concurrently,
+ * and therefore this option has no effect. Of course, if SSL verification
+ * callback is passed to different #natsOptions objects, then the callback
+ * has to be thread safe. Even without this option, the risk of data race
+ * would have already existed.
+ *
+ * @param opts the pointer to the #natsOptions obbject.
+ */
+NATS_EXTERN natsStatus
+natsOptions_AllowConcurrentTLSHandshakes(natsOptions *opts);
+
 /** \brief Loads the trusted CA certificates from a file.
  *
  * Loads the trusted CA certificates from a file.

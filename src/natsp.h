@@ -207,6 +207,7 @@ typedef struct __natsSSLCtx
     char            *certFileName;
     char            *keyFileName;
     natsSSLVerifyCb callback;
+    bool            firstHandshake;
 
 } natsSSLCtx;
 
@@ -246,6 +247,7 @@ struct __natsOptions
     bool                    allowReconnect;
     bool                    secure;
     bool                    tlsHandshakeFirst;
+    bool                    tlsConcurrentHandshakes;
     int                     ioBufSize;
     int                     maxReconnect;
     int64_t                 reconnectWait;

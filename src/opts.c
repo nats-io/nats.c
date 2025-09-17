@@ -285,6 +285,7 @@ _createSSLCtx(natsSSLCtx **newCtx)
         SSL_CTX_set_min_proto_version(ctx->ctx, TLS1_2_VERSION);
         SSL_CTX_set_default_verify_paths(ctx->ctx);
 
+        ctx->firstHandshake = true;
         *newCtx = ctx;
     }
     else if (ctx != NULL)
@@ -375,6 +376,22 @@ natsOptions_TLSHandshakeFirst(natsOptions *opts)
         opts->secure            = true;
         opts->tlsHandshakeFirst = true;
     }
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsOptions_AllowConcurrentTLSHandshakes(natsOptions *opts)
+{
+    natsStatus s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    s = _getSSLCtx(opts);
+    if (s == NATS_OK)
+        opts->tlsConcurrentHandshakes = true;
 
     UNLOCK_OPTS(opts);
 
@@ -814,6 +831,12 @@ natsOptions_SetSecure(natsOptions *opts, bool secure)
 
 natsStatus
 natsOptions_TLSHandshakeFirst(natsOptions *opts)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
+
+natsStatus
+natsOptions_AllowConcurrentTLSHandshakes(natsOptions *opts)
 {
     return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
 }

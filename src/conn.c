@@ -198,6 +198,7 @@ _freeConn(natsConnection *nc)
     natsOptions_Destroy(nc->opts);
     if (nc->sockCtx.ssl != NULL)
         SSL_free(nc->sockCtx.ssl);
+    natsMutex_Destroy(nc->sockCtx.sslMu);
     NATS_FREE(nc->el.buffer);
     natsConn_destroyRespPool(nc);
     natsInbox_Destroy(nc->respSub);
@@ -740,6 +741,12 @@ _makeTLSConn(natsConnection *nc)
     if ((s == NATS_OK) && (nc->cur != NULL) && (!SSL_set_tlsext_host_name(ssl, nc->cur->url->host)))
     {
         s = nats_setError(NATS_SSL_ERROR, "unable to set SNI extension for hostname '%s'", nc->cur->url->host);
+    }
+    // Create the mutex that will protect ssl_read/ssl_write. Do this only if
+    // not already done (will not be NULL on reconnect).
+    if ((s == NATS_OK) && (nc->sockCtx.sslMu == NULL))
+    {
+        s = natsMutex_Create(&(nc->sockCtx.sslMu));
     }
     if (s == NATS_OK)
     {
@@ -1998,7 +2005,8 @@ _processConnInit(natsConnection *nc)
     natsSock_ClearDeadline(&nc->sockCtx);
 
     // If there is no write deadline option, switch to blocking socket here...
-   if ((s == NATS_OK) && (nc->opts->writeDeadline <= 0))
+    // unless it is SSL, in which case we need to keep it non-blocking.
+   if ((s == NATS_OK) && (nc->opts->writeDeadline <= 0) && (nc->sockCtx.ssl == NULL))
        s = natsSock_SetBlocking(nc->sockCtx.fd, true);
 
     // Start the readLoop and flusher threads

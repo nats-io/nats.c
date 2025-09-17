@@ -728,6 +728,7 @@ typedef struct __natsSockCtx
     natsDeadline            writeDeadline;
 
     SSL                     *ssl;
+    natsMutex               *sslMu;
 
     // This is true when we are using an external event loop (such as libuv).
     bool                    useEventLoop;

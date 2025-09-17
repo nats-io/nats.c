@@ -425,22 +425,17 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
     {
 #if defined(NATS_HAS_TLS)
         if (ctx->ssl != NULL)
+        {
+            int sslErr = 0;
+
+            natsMutex_Lock(ctx->sslMu);
             readBytes = SSL_read(ctx->ssl, buffer, (int) maxBufferSize);
-        else
-#endif
-            readBytes = recv(ctx->fd, buffer, (natsRecvLen) maxBufferSize, 0);
+            if (readBytes < 0)
+                sslErr = SSL_get_error(ctx->ssl, readBytes);
+            natsMutex_Unlock(ctx->sslMu);
 
-        if (readBytes == 0)
-        {
-            return nats_setDefaultError(NATS_CONNECTION_CLOSED);
-        }
-        else if (readBytes < 0)
-        {
-#if defined(NATS_HAS_TLS)
-            if (ctx->ssl != NULL)
+            if (sslErr != 0)
             {
-                int sslErr = SSL_get_error(ctx->ssl, readBytes);
-
                 if (sslErr == SSL_ERROR_ZERO_RETURN)
                     return nats_setDefaultError(NATS_CONNECTION_CLOSED);
 
@@ -457,8 +452,17 @@ natsSock_Read(natsSockCtx *ctx, char *buffer, size_t maxBufferSize, int *n)
                     continue;
                 }
             }
+        }
+        else
 #endif
+            readBytes = recv(ctx->fd, buffer, (natsRecvLen) maxBufferSize, 0);
 
+        if (readBytes == 0)
+        {
+            return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+        }
+        else if (readBytes < 0)
+        {
             if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
             {
 #if defined(NATS_HAS_TLS)
@@ -509,26 +513,17 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
     {
 #if defined(NATS_HAS_TLS)
         if (ctx->ssl != NULL)
+        {
+            int sslErr = 0;
+
+            natsMutex_Lock(ctx->sslMu);
             bytes = SSL_write(ctx->ssl, data, len);
-        else
-#endif
-#ifdef MSG_NOSIGNAL
-            bytes = send(ctx->fd, data, len, MSG_NOSIGNAL);
-#else
-            bytes = send(ctx->fd, data, len, 0);
-#endif
+            if (bytes < 0)
+                sslErr = SSL_get_error(ctx->ssl, bytes);
+            natsMutex_Unlock(ctx->sslMu);
 
-        if (bytes == 0)
-        {
-            return nats_setDefaultError(NATS_CONNECTION_CLOSED);
-        }
-        else if (bytes < 0)
-        {
-#if defined(NATS_HAS_TLS)
-            if (ctx->ssl != NULL)
+            if (sslErr != 0)
             {
-                int sslErr = SSL_get_error(ctx->ssl, bytes);
-
                 if (sslErr == SSL_ERROR_ZERO_RETURN)
                     return nats_setDefaultError(NATS_CONNECTION_CLOSED);
 
@@ -545,8 +540,21 @@ natsSock_Write(natsSockCtx *ctx, const char *data, int len, int *n)
                     continue;
                 }
             }
+        }
+        else
+#endif
+#ifdef MSG_NOSIGNAL
+            bytes = send(ctx->fd, data, len, MSG_NOSIGNAL);
+#else
+            bytes = send(ctx->fd, data, len, 0);
 #endif
 
+        if (bytes == 0)
+        {
+            return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+        }
+        else if (bytes < 0)
+        {
             if (NATS_SOCK_GET_ERROR != NATS_SOCK_WOULD_BLOCK)
             {
 #if defined(NATS_HAS_TLS)

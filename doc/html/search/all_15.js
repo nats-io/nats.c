@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['variables_0',['Environment Variables',['../group__env_variables_group.html',1,'']]],
-  ['version_1',['version',['../structmicro__service__config__s.html#a20d3780b9452237119aee56853216b03',1,'micro_service_config_s::Version'],['../structmicro__service__info__s.html#a46ad1eddcbed5db1af32add59a910369',1,'micro_service_info_s::Version'],['../structmicro__service__stats__s.html#ace4844493f3a27ce7b1accb2d1bb4da5',1,'micro_service_stats_s::Version']]]
+  ['updatesonly_0',['updatesonly',['../structkv_watch_options.html#a82cd6bcb7167e7f798b6f912c1fa29c9',1,'kvWatchOptions::UpdatesOnly'],['../structobj_store_watch_options.html#a31d7a6db4750e5c8417a340eb23f4595',1,'objStoreWatchOptions::UpdatesOnly']]],
+  ['useseparatepoolforreplies_1',['UseSeparatePoolForReplies',['../struct____nats_client_config.html#a11769afbb1dd577e63571e05fd579ddf',1,'__natsClientConfig']]]
 ];

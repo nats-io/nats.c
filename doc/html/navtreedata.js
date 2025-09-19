@@ -44,7 +44,7 @@ var NAVTREE =
         [ "Variables", "globals_vars.html", null ],
         [ "Typedefs", "globals_type.html", null ],
         [ "Enumerations", "globals_enum.html", null ],
-        [ "Enumerator", "globals_eval.html", null ],
+        [ "Enumerator", "globals_eval.html", "globals_eval" ],
         [ "Macros", "globals_defs.html", null ]
       ] ]
     ] ]
@@ -54,10 +54,11 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"group__kv_group_mgt.html#ga6bc715319560bc28359679fcdcead937",
-"group__stan_sub_opts_group.html#gaafd7a553486eea3c9d309da0744a3608",
-"status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aa88122abfaf173f0411a3642803aac04",
-"structjs_peer_info.html"
+"group__kv_group.html#ga34ab74b229ff88e64301ea53a274da69",
+"group__opts_group.html#ga8b6db9efb9adaa62ced649c3d26c1465",
+"status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70",
+"structjs_consumer_config.html",
+"structjs_stream_source_info.html#a6c150fb59dd91a954e0877937a5498d5"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

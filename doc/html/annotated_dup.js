@@ -24,6 +24,7 @@ var annotated_dup =
     [ "jsOptionsStreamPurge", "structjs_options_stream_purge.html", "structjs_options_stream_purge" ],
     [ "jsPeerInfo", "structjs_peer_info.html", "structjs_peer_info" ],
     [ "jsPlacement", "structjs_placement.html", "structjs_placement" ],
+    [ "jsPriorityGroupState", "structjs_priority_group_state.html", "structjs_priority_group_state" ],
     [ "jsPubAck", "structjs_pub_ack.html", "structjs_pub_ack" ],
     [ "jsPubAckErr", "structjs_pub_ack_err.html", "structjs_pub_ack_err" ],
     [ "jsPubOptions", "structjs_pub_options.html", "structjs_pub_options" ],
@@ -57,5 +58,16 @@ var annotated_dup =
     [ "micro_service_info_s", "structmicro__service__info__s.html", "structmicro__service__info__s" ],
     [ "micro_service_stats_s", "structmicro__service__stats__s.html", "structmicro__service__stats__s" ],
     [ "natsMetadata", "structnats_metadata.html", "structnats_metadata" ],
-    [ "natsMsgList", "structnats_msg_list.html", "structnats_msg_list" ]
+    [ "natsMsgList", "structnats_msg_list.html", "structnats_msg_list" ],
+    [ "objStoreConfig", "structobj_store_config.html", "structobj_store_config" ],
+    [ "objStoreInfo", "structobj_store_info.html", "structobj_store_info" ],
+    [ "objStoreInfoList", "structobj_store_info_list.html", "structobj_store_info_list" ],
+    [ "objStoreLink", "structobj_store_link.html", "structobj_store_link" ],
+    [ "objStoreMeta", "structobj_store_meta.html", "structobj_store_meta" ],
+    [ "objStoreMetaOptions", "structobj_store_meta_options.html", "structobj_store_meta_options" ],
+    [ "objStoreNamesList", "structobj_store_names_list.html", "structobj_store_names_list" ],
+    [ "objStoreOptions", "structobj_store_options.html", "structobj_store_options" ],
+    [ "objStoreStatus", "structobj_store_status.html", "structobj_store_status" ],
+    [ "objStoreStatusesList", "structobj_store_statuses_list.html", "structobj_store_statuses_list" ],
+    [ "objStoreWatchOptions", "structobj_store_watch_options.html", "structobj_store_watch_options" ]
 ];

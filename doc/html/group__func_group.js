@@ -7,6 +7,7 @@ var group__func_group =
     [ "Streaming Connection Options", "group__stan_conn_opts_group.html", "group__stan_conn_opts_group" ],
     [ "Streaming Subscription Options", "group__stan_sub_opts_group.html", "group__stan_sub_opts_group" ],
     [ "Inboxes", "group__inbox_group.html", "group__inbox_group" ],
+    [ "Header", "group__header_group.html", "group__header_group" ],
     [ "Message", "group__msg_group.html", "group__msg_group" ],
     [ "Streaming Message", "group__stan_msg_group.html", "group__stan_msg_group" ],
     [ "Connection", "group__conn_group.html", "group__conn_group" ],
@@ -14,5 +15,6 @@ var group__func_group =
     [ "Streaming Connection", "group__stan_conn_group.html", "group__stan_conn_group" ],
     [ "Streaming Subscription", "group__stan_sub_group.html", "group__stan_sub_group" ],
     [ "JetStream", "group__js_group.html", "group__js_group" ],
-    [ "KeyValue store", "group__kv_group.html", "group__kv_group" ]
+    [ "KeyValue store", "group__kv_group.html", "group__kv_group" ],
+    [ "Object Stores", "group__obs_group.html", "group__obs_group" ]
 ];

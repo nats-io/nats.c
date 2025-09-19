@@ -6219,12 +6219,20 @@ _recvTestString(natsConnection *nc, natsSubscription *sub, natsMsg *msg,
             break;
         }
         case 7:
+        case 13:
         {
             arg->msgReceived = true;
             natsCondition_Signal(arg->c);
 
             while (!arg->closed)
                 natsCondition_Wait(arg->c, arg->m);
+
+            if (arg->control == 13)
+            {
+                doSignal = false;
+                arg->closed = false;
+                natsConnection_PublishString(nc, natsMsg_GetReply(msg), arg->string);
+            }
 
             break;
         }
@@ -17862,7 +17870,6 @@ void test_DrainSub(void)
     arg.closed = true;
     natsCondition_Signal(arg.c);
     natsMutex_Unlock(arg.m);
-    testCond(s == NATS_OK);
 
     test("Wait for Drain to complete: ");
     s = natsSubscription_WaitForDrainCompletion(sub, -1);
@@ -18551,6 +18558,140 @@ void test_DrainConn(void)
     // destroying sub's closure.
     nats_Sleep(100);
     _destroyDefaultThreadArgs(&arg);
+}
+
+static void
+_drainConnWhileInCb(void *closure)
+{
+    struct threadArg    *arg = (struct threadArg*) closure;
+    natsConnection      *nc  = NULL;
+
+    natsMutex_Lock(arg->m);
+    while (!arg->msgReceived)
+        natsCondition_Wait(arg->c, arg->m);
+    nc = arg->nc;
+    natsMutex_Unlock(arg->m);
+
+    // Initiate the drain
+    natsConnection_DrainTimeout(nc, 2000);
+
+    // Wait a bit and then release the user callback.
+    nats_Sleep(250);
+
+    natsMutex_Lock(arg->m);
+    arg->closed = true;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+void test_DrainConnReqReply(void)
+{
+    natsStatus          s;
+    natsConnection      *nc     = NULL;
+    natsOptions         *opts   = NULL;
+    natsSubscription    *sub    = NULL;
+    natsMsg             *rply   = NULL;
+    natsThread          *t      = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+    int64_t             limit   = (valgrind ? 80 : 10);
+    int                 i;
+    struct threadArg    arg;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Setup options: ");
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&opts));
+    IFOK(s, natsOptions_SetSendAsap(opts, true));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    testCond(s == NATS_OK);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    natsMutex_Lock(arg.m);
+    arg.control = 13;
+    arg.string  = "last";
+    arg.nc      = nc;
+    natsMutex_Unlock(arg.m);
+
+    test("Check respMux drained last: ");
+    s = natsConnection_Subscribe(&sub, nc, "respMux.last", _recvTestString, (void*) &arg);
+    IFOK(s, natsThread_Create(&t, _drainConnWhileInCb, (void*) &arg));
+    IFOK(s, natsConnection_RequestString(&rply, nc, "respMux.last", "should not timeout", 2000));
+    testCond((s == NATS_OK) && (rply != NULL) && (strcmp(natsMsg_GetData(rply), "last") == 0));
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    t = NULL;
+
+    test("Check conn closed: ")
+    testCond(_waitForConnClosed(&arg) == NATS_OK);
+
+    natsMsg_Destroy(rply);
+    rply = NULL;
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    test("Check no delay with req/reply: ");
+    // Repeat the test multiple times to catch cases where we would not have
+    // waited, even with old code, and also test with/without explicit
+    // drain of the "user" subscription (the connection respMux subscription
+    // is drained internally).
+    for (i=0; (s == NATS_OK) && (i<10); i++)
+    {
+        int64_t start   = 0;
+        int64_t timeout = 0;
+
+        natsMutex_Lock(arg.m);
+        arg.control = 4;
+        arg.string  = "reply";
+        arg.closed  = false;
+        natsMutex_Unlock(arg.m);
+
+        s = natsConnection_Connect(&nc, opts);
+        IFOK(s, natsConnection_Subscribe(&sub, nc, "nodelay", _recvTestString, (void*) &arg));
+        IFOK(s, natsConnection_RequestString(&rply, nc, "nodelay", "request", 1000));
+        if (s == NATS_OK)
+        {
+            if (strcmp(natsMsg_GetData(rply), "reply") != 0)
+                s = NATS_ERR;
+
+            natsMsg_Destroy(rply);
+            rply = NULL;
+        }
+        if (i%2==0)
+        {
+            IFOK(s, natsSubscription_Drain(sub))
+            IFOK(s, natsSubscription_WaitForDrainCompletion(sub, 0));
+            IFOK(s, natsSubscription_DrainCompletionStatus(sub));
+        }
+
+        // Test also with timeout other than 0 for better code coverage.
+        if (i > 5)
+            timeout = 2000;
+        start = nats_Now();
+        IFOK(s, natsConnection_DrainTimeout(nc, timeout));
+        if (s == NATS_OK)
+        {
+            s = _waitForConnClosed(&arg);
+            if (s == NATS_OK)
+                s = (nats_Now() - start > limit ? NATS_ERR : NATS_OK);
+        }
+        natsSubscription_Destroy(sub);
+        sub = NULL;
+        natsConnection_Destroy(nc);
+        nc = NULL;
+    }
+    testCond(s == NATS_OK);
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(pid);
 }
 
 static void

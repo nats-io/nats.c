@@ -204,6 +204,7 @@ _freeConn(natsConnection *nc)
     natsInbox_Destroy(nc->respSub);
     natsStrHash_Destroy(nc->respMap);
     natsCondition_Destroy(nc->reconnectCond);
+    natsCondition_Destroy(nc->drainCond);
     natsMutex_Destroy(nc->subsMu);
     natsMutex_Destroy(nc->servicesMu);
     natsMutex_Destroy(nc->mu);
@@ -2602,6 +2603,14 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
         return;
     }
 
+    // When draining the connection, we may be checking for the number of
+    // subscriptions to go down to 0, but also need to check that the
+    // connection is closed or not. So we do that under the `subsMu` lock.
+    natsMutex_Lock(nc->subsMu);
+    nc->drainConnClosed = true;
+    natsCondition_Signal(nc->drainCond);
+    natsMutex_Unlock(nc->subsMu);
+
     nc->status = NATS_CONN_STATUS_CLOSED;
 
     _initThreadsToJoin(&ttj, nc, true);
@@ -3043,7 +3052,13 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub)
     // Note that the sub may have already been removed, so 'sub == NULL'
     // is not an error.
     if (sub != NULL)
+    {
         natsSub_close(sub, false);
+
+        // If required, signal when count is down to what the connection wants it to be.
+        if (nc->drainSubSignalOnRemove && (natsHash_Count(nc->subs) == nc->drainSubCountTarget))
+            natsCondition_Signal(nc->drainCond);
+    }
 
     natsMutex_Unlock(nc->subsMu);
 
@@ -3318,6 +3333,8 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
         s = natsCondition_Create(&(nc->pongs.cond));
     if (s == NATS_OK)
         s = natsCondition_Create(&(nc->reconnectCond));
+    if (s == NATS_OK)
+        s = natsCondition_Create(&(nc->drainCond));
 
     if (s == NATS_OK)
     {
@@ -3673,6 +3690,9 @@ typedef natsStatus (*subIterFunc)(natsStatus callerSts, natsConnection *nc, nats
 // If the callback returns an error, the iteration continues and the first
 // non NATS_OK error is returned.
 //
+// This is used exclusively for the drain code. Should that change, modify
+// the code to take into account the check for "nc->drainExcludeRespMux" below.
+//
 // Connection lock is held on entry.
 static natsStatus
 _iterateSubsAndInvokeFunc(natsStatus callerSts, natsConnection *nc, subIterFunc f)
@@ -3693,6 +3713,8 @@ _iterateSubsAndInvokeFunc(natsStatus callerSts, natsConnection *nc, subIterFunc 
     while (natsHashIter_Next(&iter, NULL, &p))
     {
         sub = (natsSubscription*) p;
+        if (nc->drainExcludeRespMux && (sub == nc->respMux))
+            continue;
         ls = (f)(callerSts, nc, sub);
         s = (s == NATS_OK ? ls : s);
     }
@@ -3705,11 +3727,13 @@ _iterateSubsAndInvokeFunc(natsStatus callerSts, natsConnection *nc, subIterFunc 
 static natsStatus
 _enqueUnsubProto(natsStatus callerSts, natsConnection *nc, natsSubscription *sub)
 {
-    natsStatus s;
+    natsStatus  s;
+    int64_t     sid;
 
     natsSub_Lock(sub);
-    s = natsConn_enqueueUnsubProto(nc, sub->sid);
+    sid = sub->sid;
     natsSub_Unlock(sub);
+    s = natsConn_enqueueUnsubProto(nc, sid);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -3750,6 +3774,7 @@ _flushAndDrain(void *closure)
     bool            subsDone = false;
     bool            timedOut = false;
     bool            closed   = false;
+    bool            exRespMux= false;
     natsStatus      s        = NATS_OK;
     int64_t         start;
 
@@ -3758,7 +3783,13 @@ _flushAndDrain(void *closure)
     timeout = nc->drainTimeout;
     closed  = natsConn_isClosed(nc);
     natsMutex_Lock(nc->subsMu);
-    doSubs = (natsHash_Count(nc->subs) > 0 ? true : false);
+    // If nc->drainSubSignalOnRemove is true, it means that we started this
+    // thread knowing that there were subscriptions that need to be drained.
+    doSubs = nc->drainSubSignalOnRemove;
+    // This tells us if we have excluded the nc->respMux internal subscription
+    // from the drain process. If so, we will first do all "users" subscriptions
+    // and then finish with the nc->respMux subscription.
+    exRespMux = nc->drainExcludeRespMux;
     natsMutex_Unlock(nc->subsMu);
     natsConn_Unlock(nc);
 
@@ -3770,44 +3801,92 @@ _flushAndDrain(void *closure)
     start = nats_Now();
     if (!closed && doSubs)
     {
-        if (timeout == 0)
-            s = natsConnection_Flush(nc);
-        else
-            s = natsConnection_FlushTimeout(nc, timeout);
+        int max = (exRespMux ? 2 : 1);
+        int i   = 0;
 
-        if (s != NATS_OK)
-            _pushDrainErr(nc, s, "unable to flush all subscriptions UNSUB protocols");
-
-        // Start the draining of all registered subscriptions.
-        // Update the drain status with possibly failed flush.
-        natsConn_Lock(nc);
-        _iterateSubsAndInvokeFunc(s, nc, _startSubDrain);
-        natsConn_Unlock(nc);
-
-        // Reset status now.
-        s = NATS_OK;
-
-        // Now wait for the number of subscriptions to go down to 0, or deadline is reached.
-        while ((timeout == 0) || (deadline - nats_Now() > 0))
+        for (i=0; (s == NATS_OK) && !closed && !subsDone && (i<max); i++)
         {
+            if (timeout == 0)
+            {
+                s = natsConnection_Flush(nc);
+            }
+            else
+            {
+                int64_t elapsed = nats_Now() - start;
+                if (elapsed < timeout)
+                    s = natsConnection_FlushTimeout(nc, timeout-elapsed);
+                else
+                    s = nats_setDefaultError(NATS_TIMEOUT);
+            }
+
+            if (s != NATS_OK)
+                _pushDrainErr(nc, s, "unable to flush all subscriptions UNSUB protocols");
+
+            // Start the draining of all registered subscriptions.
+            // Update the drain status with possibly failed flush.
             natsConn_Lock(nc);
-            if (!(closed = natsConn_isClosed(nc)))
+            _iterateSubsAndInvokeFunc(s, nc, _startSubDrain);
+            natsConn_Unlock(nc);
+
+            // Reset status now.
+            s = NATS_OK;
+
+            // Now wait for the number of subscriptions to go down to 0, or deadline is reached.
+            while ((s == NATS_OK) && !closed && !subsDone && ((timeout == 0) || (deadline - nats_Now() > 0)))
             {
                 natsMutex_Lock(nc->subsMu);
-                subsDone = (natsHash_Count(nc->subs) == 0 ? true : false);
+                closed = nc->drainConnClosed;
+                if (!closed)
+                {
+                    subsDone = (natsHash_Count(nc->subs) == nc->drainSubCountTarget ? true : false);
+                    if (!subsDone)
+                    {
+                        if (timeout == 0)
+                            natsCondition_Wait(nc->drainCond, nc->subsMu);
+                        else
+                            s = natsCondition_AbsoluteTimedWait(nc->drainCond, nc->subsMu, deadline);
+                    }
+                }
                 natsMutex_Unlock(nc->subsMu);
             }
-            natsConn_Unlock(nc);
-            if (closed || subsDone)
-                break;
-            nats_Sleep(100);
+
+            // If we are done with the subscriptions and we did exclude
+            // nc->respMux (and connection was not closed), now is the
+            // time to drain the nc->respMux subscription.
+            if ((s == NATS_OK) && subsDone && exRespMux && !closed)
+            {
+                // We are no longer exluding the respMux subscription.
+                exRespMux = false;
+
+                natsConn_Lock(nc);
+                // Now that we are under the lock, make sure that nc->respMux
+                // has not been removed by the time we get here.
+                natsMutex_Lock(nc->subsMu);
+                if (nc->respMux != NULL)
+                {
+                    subsDone = false;
+                    nc->drainExcludeRespMux = false;
+                    nc->drainSubCountTarget = 0;
+                    s = _enqueUnsubProto(NATS_OK, nc, nc->respMux);
+                    if (s == NATS_OK)
+                        s = _initSubDrain(NATS_OK, nc, nc->respMux);
+                }
+                // If respMux is NULL, `subsDone` is true, so we will exit the loop.
+                natsMutex_Unlock(nc->subsMu);
+                natsConn_Unlock(nc);
+            }
         }
+
         // If the connection has been closed, then the subscriptions will have
         // be removed from the map. So only try to update the subs' drain status
         // if we are here due to a NATS_TIMEOUT, not a NATS_CONNECTION_CLOSED.
         if (!closed && !subsDone)
         {
+            natsConn_Lock(nc);
+            // Clear the flag that could have excluded the nc->respMux for the call below.
+            nc->drainExcludeRespMux = false;
             _iterateSubsAndInvokeFunc(NATS_TIMEOUT, nc, _setSubDrainStatus);
+            natsConn_Unlock(nc);
             _pushDrainErr(nc, NATS_TIMEOUT, "timeout waiting for subscriptions to drain");
             timedOut = true;
         }
@@ -3866,6 +3945,22 @@ _drain(natsConnection *nc, int64_t timeout)
         s = nats_setError(NATS_ILLEGAL_STATE, "%s", "Illegal to call Drain while the connection is reconnecting");
     else if (!natsConn_isDraining(nc))
     {
+        int subs = 0;
+
+        natsMutex_Lock(nc->subsMu);
+        if ((subs = natsHash_Count(nc->subs)) > 0)
+        {
+            // We want to be signaled when the "last" subscription is removed.
+            nc->drainSubSignalOnRemove = true;
+            // Exclude respMux if it exists and there are more than 1
+            // subscriptions present in the list at this time.
+            nc->drainExcludeRespMux = ((nc->respMux != NULL) && (subs > 1) ? true : false);
+            // If we exclude respMux, then we will wait for the number of subscriptions
+            // to fall down to 1, otherwise to 0.
+            nc->drainSubCountTarget = (nc->drainExcludeRespMux ? 1 : 0);
+        }
+        natsMutex_Unlock(nc->subsMu);
+
         // Enqueue UNSUB protocol for all current subscriptions.
         s = _iterateSubsAndInvokeFunc(NATS_OK, nc, _enqueUnsubProto);
         if (s == NATS_OK)

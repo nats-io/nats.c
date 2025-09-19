@@ -819,6 +819,12 @@ struct __natsConnection
     natsThread          *drainThread;
     int64_t             drainTimeout;
     bool                dontSendInPlace;
+    // These below will be protected by the `subsMu` lock.
+    natsCondition       *drainCond;
+    int                 drainSubCountTarget;
+    bool                drainSubSignalOnRemove;
+    bool                drainExcludeRespMux;
+    bool                drainConnClosed;
 
     // Set to true when owned by a Streaming connection,
     // which will prevent user from calling Close and/or Destroy.

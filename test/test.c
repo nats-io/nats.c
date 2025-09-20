@@ -33764,6 +33764,7 @@ void test_KeyValueWatch(void)
     int                 plb = 0;
     kvConfig            kvc;
     int64_t             start;
+    int                 i;
 
     JS_SETUP(2, 6, 2);
 
@@ -33905,6 +33906,51 @@ void test_KeyValueWatch(void)
     IFOK(s, kvStore_PutString(NULL, kv, "t.age", "57"));
     testCond(_expectUpdate(w, "t.age", "57", 11));
     kvWatcher_Destroy(w);
+    w = NULL;
+
+    test("Fill with lots of keys: ");
+    for (i=0; (s == NATS_OK) && (i<5000); i++)
+    {
+        char key[64];
+
+        snprintf(key, sizeof(key), "key.delete.%05d", i);
+        s = kvStore_Put(NULL, kv, key, "ok", 2);
+    }
+    testCond(s == NATS_OK);
+
+    test("Delete them: ");
+    for (i=0; (s == NATS_OK) && (i<5000); i++)
+    {
+        char key[64];
+
+        snprintf(key, sizeof(key), "key.delete.%05d", i);
+        s = kvStore_Delete(kv, key);
+    }
+    testCond(s == NATS_OK);
+
+    test("Create watcher: ");
+    kvWatchOptions_Init(&o);
+    o.IgnoreDeletes = true;
+    s = kvStore_Watch(&w, kv, "key.>", &o);
+    testCond((s == NATS_OK) && (w != NULL));
+
+    test("Watch next ok: ");
+    s = kvWatcher_Next(&e, w, 10000); // 10 seconds should be enough
+    testCond((s == NATS_OK) && (e == NULL));
+    kvWatcher_Destroy(w);
+    w = NULL;
+
+    test("Create watcher: ");
+    kvWatchOptions_Init(&o);
+    o.IgnoreDeletes = true;
+    s = kvStore_Watch(&w, kv, "key.>", &o);
+    testCond((s == NATS_OK) && (w != NULL));
+
+    test("Watch next should timeout: ");
+    s = kvWatcher_Next(&e, w, 1); // 1 ms should be not enough
+    testCond((s == NATS_TIMEOUT) && (e == NULL));
+    nats_clearLastError();
+    kvWatcher_Destroy(w);
     kvStore_Destroy(kv);
 
     JS_TEARDOWN;
@@ -34035,7 +34081,39 @@ void test_KeyValueHistory(void)
 
     // Check that this is ok
     kvEntryList_Destroy(NULL);
+    kvStore_Destroy(kv);
+    kv = NULL;
 
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "WATCH2";
+    kvc.History = kvMaxHistory;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Populate: ");
+    for (i=0; (s == NATS_OK) && (i<kvMaxHistory); i++)
+    {
+        char tmp[16];
+
+        snprintf(tmp, sizeof(tmp), "%d", i);
+        s = kvStore_PutString(NULL, kv, "history", tmp);
+    }
+    testCond(s == NATS_OK);
+
+    test("Get history: ");
+    kvWatchOptions_Init(&o);
+    o.Timeout = 50; // 50 ms should be enough.
+    for (i=0; (s == NATS_OK) && (i<100); i++)
+    {
+        s = kvStore_History(&l, kv, "history", &o);
+        if (s == NATS_OK)
+        {
+            s = ((l.Entries != NULL) && (l.Count == kvMaxHistory) ? NATS_OK : NATS_ERR);
+            kvEntryList_Destroy(&l);
+        }
+    }
+    testCond(s == NATS_OK);
     kvStore_Destroy(kv);
 
     JS_TEARDOWN;
@@ -34138,6 +34216,43 @@ void test_KeyValueKeys(void)
     testCond(s == NATS_OK);
     kvKeysList_Destroy(&l);
 
+    kvStore_Destroy(kv);
+    kv = NULL;
+
+    test("Create bucket: ")
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "my_very_awesome_bucket";
+    kvc.History = 1;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Fill with values: ");
+    for (i=0; (s == NATS_OK) && (i<5000); i++)
+    {
+        char key[64];
+        char value[64];
+
+        snprintf(key, sizeof(key), "key-%05d", i);
+        snprintf(value, sizeof(value), "value-%05d", i);
+        s = kvStore_Put(NULL, kv, key, value, (int) strlen(value));
+    }
+    testCond(s == NATS_OK);
+
+    test("List keys ok: ");
+    kvWatchOptions_Init(&o);
+    o.Timeout = 10000; // 10 seconds should be enough
+    s = kvStore_Keys(&l, kv, &o);
+    testCond(s == NATS_OK);
+    kvKeysList_Destroy(&l);
+
+    test("List keys should timeout: ");
+    kvWatchOptions_Init(&o);
+    o.Timeout = 1; // 1ms should not be enough
+    s = kvStore_Keys(&l, kv, &o);
+    testCond(s == NATS_TIMEOUT);
+    nats_clearLastError();
+
+    js_DeleteKeyValue(js, kvc.Bucket);
     kvStore_Destroy(kv);
 
     JS_TEARDOWN;

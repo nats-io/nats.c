@@ -57,13 +57,14 @@ kvEntry         *t = NULL;                  \
 int             n  = 0;                     \
 int64_t         timeout = KV_WATCH_FOR_EVER;\
 int64_t         start;                      \
+int64_t         elapsed = 0;                \
 int             i;
 
 #define KV_GATHER_LIST \
 start = nats_Now();                                 \
 while (s == NATS_OK)                                \
 {                                                   \
-    s = kvWatcher_Next(&e, w, timeout);             \
+    s = kvWatcher_Next(&e, w, timeout-elapsed);     \
     if (s == NATS_OK)                               \
     {                                               \
         if (e == NULL)                              \
@@ -74,8 +75,8 @@ while (s == NATS_OK)                                \
             h = e;                                  \
         t = e;                                      \
         n++;                                        \
-        timeout -= (nats_Now() - start);            \
-        if (timeout <= 0)                           \
+        elapsed = nats_Now() - start;               \
+        if (elapsed >= timeout)                     \
             s = nats_setDefaultError(NATS_TIMEOUT); \
     }                                               \
 }
@@ -926,9 +927,10 @@ kvWatchOptions_Init(kvWatchOptions *opts)
 natsStatus
 kvWatcher_Next(kvEntry **new_entry, kvWatcher *w, int64_t timeout)
 {
-    natsStatus  s    = NATS_OK;
-    kvEntry     *e   = NULL;
-    int64_t     start;
+    natsStatus  s       = NATS_OK;
+    kvEntry     *e      = NULL;
+    int64_t     start   = 0;
+    int64_t     elapsed = 0;
 
     if ((new_entry == NULL) || (w == NULL) || (timeout <= 0))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -957,7 +959,7 @@ GET_NEXT:
         w->refs++;
         natsMutex_Unlock(w->mu);
 
-        s = natsSubscription_NextMsg(&msg, w->sub, timeout);
+        s = natsSubscription_NextMsg(&msg, w->sub, timeout-elapsed);
 
         natsMutex_Lock(w->mu);
         if (w->stopped)
@@ -995,8 +997,8 @@ GET_NEXT:
             }
             else
             {
-                timeout -= (nats_Now() - start);
-                if (timeout > 0)
+                elapsed = (nats_Now() - start);
+                if (elapsed < timeout)
                     next = true;
                 else
                     s = nats_setDefaultError(NATS_TIMEOUT);
@@ -1274,14 +1276,8 @@ kvStore_History(kvEntryList *list, kvStore *kv, const char *key, kvWatchOptions 
 {
     natsStatus      s;
     kvWatchOptions  o;
-    kvEntry         *e = NULL;
-    kvEntry         *h = NULL;
-    kvEntry         *t = NULL;
-    int             n  = 0;
     kvWatcher       *w = NULL;
-    int64_t         timeout = KV_WATCH_FOR_EVER;
-    int64_t         start;
-    int             i;
+    KV_DEFINE_LIST;
 
     if (list == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);

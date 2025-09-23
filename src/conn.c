@@ -4367,6 +4367,12 @@ natsConnection_ProcessCloseEvent(natsSock *socket)
     *socket = NATS_SOCK_INVALID;
 }
 
+void
+natsConnection_ProcessDetachedEvent(natsConnection *nc)
+{
+    natsConn_release(nc);
+}
+
 natsStatus
 natsConnection_GetClientID(natsConnection *nc, uint64_t *cid)
 {

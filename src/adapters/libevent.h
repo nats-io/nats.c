@@ -83,6 +83,32 @@ keepAliveCb(evutil_socket_t fd, short flags, void * arg)
     // do nothing...
 }
 
+static void
+natsLibeventEvents_free(natsLibeventEvents *nle, bool processDetachedEvents)
+{
+    if (nle->read != NULL)
+        event_free(nle->read);
+    if (nle->write != NULL)
+        event_free(nle->write);
+    if (nle->keepActive != NULL)
+    {
+        event_active(nle->keepActive, 0, 0);
+        event_free(nle->keepActive);
+    }
+    if (processDetachedEvents)
+        natsConnection_ProcessDetachedEvent(nle->nc);
+    free(nle);
+}
+
+// This callback is invoked from the event loop thread and will free the
+// `natsLibeventEvents` object.
+static void
+_freeCb(evutil_socket_t ignoredSocket, short ignoredEvent, void *arg)
+{
+    natsLibeventEvents *nle = (natsLibeventEvents*) arg;
+    natsLibeventEvents_free(nle, true);
+}
+
 /** \brief Attach a connection to the given event loop.
  *
  * This callback is invoked after `NATS` library has connected, or reconnected.
@@ -101,6 +127,7 @@ natsLibevent_Attach(void **userData, void *loop, natsConnection *nc, natsSock so
     struct event_base   *libeventLoop = (struct event_base*) loop;
     natsLibeventEvents  *nle          = (natsLibeventEvents*) (*userData);
     natsStatus          s             = NATS_OK;
+    bool                created       = false;
 
     // This is the first attach (when reconnecting, nle will be non-NULL).
     if (nle == NULL)
@@ -109,6 +136,8 @@ natsLibevent_Attach(void **userData, void *loop, natsConnection *nc, natsSock so
         if (nle == NULL)
             return NATS_NO_MEMORY;
 
+        // Indicate that we have created the object here (in case we get a failure).
+        created   = true;
         nle->nc   = nc;
         nle->loop = libeventLoop;
 
@@ -153,8 +182,8 @@ natsLibevent_Attach(void **userData, void *loop, natsConnection *nc, natsSock so
 
     if (s == NATS_OK)
         *userData = (void*) nle;
-    else
-        natsLibevent_Detach((void*) nle);
+    else if (created)
+        natsLibeventEvents_free(nle, false);
 
     return s;
 }
@@ -222,27 +251,6 @@ natsLibevent_Write(void *userData, bool add)
         res = event_del_noblock(nle->write);
 
     return (res == 0 ? NATS_OK : NATS_ERR);
-}
-
-// This callback is invoked from the event loop thread and will free the
-// `natsLibeventEvents` object.
-static void
-_freeCb(evutil_socket_t ignoredSocket, short ignoredEvent, void *arg)
-{
-    natsLibeventEvents  *nle = (natsLibeventEvents*) arg;
-
-    if (nle->read != NULL)
-        event_free(nle->read);
-    if (nle->write != NULL)
-        event_free(nle->write);
-    if (nle->keepActive != NULL)
-    {
-        event_active(nle->keepActive, 0, 0);
-        event_free(nle->keepActive);
-    }
-    // This will release the connection that is retained by the library on the first attach.
-    natsConnection_Destroy(nle->nc);
-    free(nle);
 }
 
 /** \brief The connection is closed, it can be safely detached.

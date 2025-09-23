@@ -237,10 +237,9 @@ uvAsyncAttach(natsLibuvEvents *nle)
 }
 
 static void
-uvFinalCloseCb(uv_handle_t* handle)
+natsLibuvEvents_free(natsLibuvEvents *nle, bool processDetachedEvent)
 {
-    natsLibuvEvents *nle = (natsLibuvEvents*) handle->data;
-    natsLibuvEvent  *event;
+    natsLibuvEvent *event;
 
     while ((event = nle->head) != NULL)
     {
@@ -248,11 +247,21 @@ uvFinalCloseCb(uv_handle_t* handle)
         free(event);
     }
     free(nle->scheduler);
-    uv_mutex_destroy(nle->lock);
-    free(nle->lock);
-    // This will release the connection that is retained by the library on the first attach.
-    natsConnection_Destroy(nle->nc);
+    if (nle->lock != NULL)
+    {
+        uv_mutex_destroy(nle->lock);
+        free(nle->lock);
+    }
+    if (processDetachedEvent)
+        natsConnection_ProcessDetachedEvent(nle->nc);
     free(nle);
+}
+
+static void
+uvFinalCloseCb(uv_handle_t* handle)
+{
+    natsLibuvEvents *nle = (natsLibuvEvents*) handle->data;
+    natsLibuvEvents_free(nle, true);
 }
 
 static void
@@ -348,6 +357,7 @@ natsLibuv_Attach(void **userData, void *loop, natsConnection *nc, natsSock socke
     bool            sched   = false;
     natsLibuvEvents *nle    = (natsLibuvEvents*) (*userData);
     natsStatus      s       = NATS_OK;
+    bool            created = false;
 
     sched = ((uv_key_get(&uvLoopThreadKey) != loop) ? true : false);
 
@@ -361,6 +371,9 @@ natsLibuv_Attach(void **userData, void *loop, natsConnection *nc, natsSock socke
         nle = (natsLibuvEvents*) calloc(1, sizeof(natsLibuvEvents));
         if (nle == NULL)
             return NATS_NO_MEMORY;
+
+        // Indicate that we have created the object here (in case we get a failure).
+        created = true;
 
         nle->lock = (uv_mutex_t*) malloc(sizeof(uv_mutex_t));
         if (nle->lock == NULL)
@@ -402,8 +415,8 @@ natsLibuv_Attach(void **userData, void *loop, natsConnection *nc, natsSock socke
 
     if (s == NATS_OK)
         *userData = (void*) nle;
-    else
-        natsLibuv_Detach((void*) nle);
+    else if (created)
+        natsLibuvEvents_free(nle, false);
 
     return s;
 }

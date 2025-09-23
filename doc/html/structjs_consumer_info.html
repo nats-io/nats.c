@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.10.0-beta</span>
+   &#160;<span id="projectnumber">3.11.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -132,6 +132,12 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a86501e735531929add3e161d40479c44" id="r_a86501e735531929add3e161d40479c44"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#a86501e735531929add3e161d40479c44">PauseRemaining</a></td></tr>
 <tr class="memdesc:a86501e735531929add3e161d40479c44"><td class="mdescLeft">&#160;</td><td class="mdescRight">Remaining time in nanoseconds.  <br /></td></tr>
 <tr class="separator:a86501e735531929add3e161d40479c44"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a1b93a87ac24c171319a7d8350355c1ef" id="r_a1b93a87ac24c171319a7d8350355c1ef"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_priority_group_state.html">jsPriorityGroupState</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#a1b93a87ac24c171319a7d8350355c1ef">PriorityGroups</a></td></tr>
+<tr class="memdesc:a1b93a87ac24c171319a7d8350355c1ef"><td class="mdescLeft">&#160;</td><td class="mdescRight">Priority groups for the (pull) consumer.  <br /></td></tr>
+<tr class="separator:a1b93a87ac24c171319a7d8350355c1ef"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a5deb4de557d4520772ef6a1319c7e67c" id="r_a5deb4de557d4520772ef6a1319c7e67c"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_consumer_info.html#a5deb4de557d4520772ef6a1319c7e67c">PriorityGroupsLen</a></td></tr>
+<tr class="memdesc:a5deb4de557d4520772ef6a1319c7e67c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Number of priority groups.  <br /></td></tr>
+<tr class="separator:a5deb4de557d4520772ef6a1319c7e67c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Configuration and current state for this consumer.</p>
@@ -327,6 +333,34 @@ Public Attributes</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">int64_t jsConsumerInfo::PauseRemaining</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a1b93a87ac24c171319a7d8350355c1ef" name="a1b93a87ac24c171319a7d8350355c1ef"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1b93a87ac24c171319a7d8350355c1ef">&#9670;&#160;</a></span>PriorityGroups</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="structjs_priority_group_state.html">jsPriorityGroupState</a>* jsConsumerInfo::PriorityGroups</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a5deb4de557d4520772ef6a1319c7e67c" name="a5deb4de557d4520772ef6a1319c7e67c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5deb4de557d4520772ef6a1319c7e67c">&#9670;&#160;</a></span>PriorityGroupsLen</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int jsConsumerInfo::PriorityGroupsLen</td>
         </tr>
       </table>
 </div><div class="memdoc">

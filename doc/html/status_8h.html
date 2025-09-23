@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.10.0-beta</span>
+   &#160;<span id="projectnumber">3.11.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -162,6 +162,8 @@ Enumerations</h2></td></tr>
 , <br />
 &#160;&#160;<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a37d80c8232775339a32805fe93e0ea7f">NATS_MISSED_HEARTBEAT</a>
 , <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ac1eb33007d16930e74c2fa3b22761635">NATS_LIMIT_REACHED</a>
+, <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80aec45b93e3dd0ca1b1bc878730ea81c31">NATS_PIN_ID_MISMATCH</a>
+, <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a57e2c2023e6a7730b9e960ddebd73f09">NATS_MAX_STATUS_VALUE</a>
 <br />
  }</td></tr>
 <tr class="memdesc:a36c934157b663b7b5fb5d6609c897c80"><td class="mdescLeft">&#160;</td><td class="mdescRight">Status returned by most of the APIs.  <a href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">More...</a><br /></td></tr>
@@ -330,6 +332,47 @@ Enumerations</h2></td></tr>
 &#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aaee714daa8b2d00c09d202bbf682a099">JSConsumerCreateFilterSubjectMismatchErr</a> = 10131
 , <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a2fd5f6bb7dac1ef16bdc0818886f78ac">JSConsumerCreateDurableAndNameMismatchErr</a> = 10132
 , <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a0e2194a4bb7565834982a39deddea878">JSReplicasCountCannotBeNegativeErr</a> = 10133
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aafb4466815c8006d93a72daf4f7015f7">JSConsumerReplicasShouldMatchStreamErr</a> = 10134
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a82561ad00a53118a7fc719f47b364d95">JSConsumerMetadataLengthErr</a> = 10135
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a6fe7653d55aa20900d48c7ad369d7b32">JSConsumerDuplicateFilterSubjectsErr</a> = 10136
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ad284d66d22da3ff3bc62fcc6c72fe911">JSConsumerMultipleFiltersNotAllowedErr</a> = 10137
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a35b0b1273deae4d5b50d6eccacfe2b8e">JSConsumerOverlappingSubjectFiltersErr</a> = 10138
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a627d4064a6df21a719e30fe978f415a5">JSConsumerEmptyFilterErr</a> = 10139
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aa03688b2c9afed2b39e91418e118ff94">JSSourceDuplicateDetectedErr</a> = 10140
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a93874de7372f858810789d9007cee176">JSSourceInvalidStreamNameErr</a> = 10141
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ae2b3c41b4dc76d2dfb040bba53356019">JSMirrorInvalidStreamNameErr</a> = 10142
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a279b51fb8480d90603f68c4de342b9ed">JSSourceMultipleFiltersNotAllowedErr</a> = 10144
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ae292a85cd1ac5605b6fd76089d13dd31">JSSourceInvalidSubjectFilterErr</a> = 10145
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a65ba8fcd99cab6e9688a7db2a83890cc">JSSourceInvalidTransformDestinationErr</a> = 10146
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70af63b4ffe3ded26ad785408d619cb8728">JSSourceOverlappingSubjectFiltersErr</a> = 10147
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a22ea75734543c94797902b2c5e8ae95a">JSConsumerAlreadyExistsErr</a> = 10148
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a813ea81037b4dc1af140c29714bc3c2f">JSConsumerDoesNotExistErr</a> = 10149
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70abc2c43283506b1e2d54d6c51bc4ec650">JSMirrorMultipleFiltersNotAllowedErr</a> = 10150
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70addf133c8aca298284bf83a4a9e2ac60c">JSMirrorInvalidSubjectFilterErr</a> = 10151
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ad5d8e03bb8eb7d6534838be23542c529">JSMirrorOverlappingSubjectFiltersErr</a> = 10152
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aac4188e2c22adee64cb4f96effbfe40c">JSConsumerInactiveThresholdExcessErr</a> = 10153
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a752e093abd7ebf961e53405779e54b44">JSMirrorInvalidTransformDestinationErr</a> = 10154
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a104ba6d6245f34be64aaa9bbab5a1716">JSStreamTransformInvalidSourceErr</a> = 10155
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70abf91775b272db2dd7eb345e7e7448b70">JSStreamTransformInvalidDestinationErr</a> = 10156
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ae867f25967c1771a3cee0e40437401b2">JSPedanticErr</a> = 10157
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a5d3be35fcd34bcdf1c378088b96a7770">JSStreamDuplicateMessageConflictErr</a> = 10158
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a97c5d50799264c5ecb2f64a7c89eba1a">JSConsumerPriorityPolicyWithoutGroupErr</a> = 10159
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a4ca4f7cdd7e03eb5d290d010893552cd">JSConsumerInvalidPriorityGroupErr</a> = 10160
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a806fb45e8d6e7fd335e7a1b9b5cbbd01">JSConsumerEmptyGroupNameErr</a> = 10161
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ac6cdd884ff45e053f8bde1075688403c">JSConsumerInvalidGroupNameErr</a> = 10162
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aee5a815a75c629169bf21d4fab777e82">JSStreamExpectedLastSeqPerSubjectNotReadyErr</a> = 10163
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ab9865b2405db4747f002f545667ad7ec">JSStreamWrongLastSequenceConstantErr</a> = 10164
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a85d46a574d4a3a1a7d63bf0c891724ba">JSMessageTTLInvalidErr</a> = 10165
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a0ff642cd118d8fdde5da78bb06fee48d">JSMessageTTLDisabledErr</a> = 10166
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a1c6f821ff093a7d00615a3625cbd898c">JSStreamTooManyRequestsErr</a> = 10167
 <br />
  }</td></tr>
 <tr class="separator:a10731415ffcd3e2330df10c4d5fd3d70"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -452,6 +495,10 @@ Enumerations</h2></td></tr>
 <tr><td class="fieldname"><a id="a36c934157b663b7b5fb5d6609c897c80a37d80c8232775339a32805fe93e0ea7f" name="a36c934157b663b7b5fb5d6609c897c80a37d80c8232775339a32805fe93e0ea7f"></a>NATS_MISSED_HEARTBEAT&#160;</td><td class="fielddoc"><p>For JetStream subscriptions, it means that the library detected that server heartbeats have been missed. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="a36c934157b663b7b5fb5d6609c897c80ac1eb33007d16930e74c2fa3b22761635" name="a36c934157b663b7b5fb5d6609c897c80ac1eb33007d16930e74c2fa3b22761635"></a>NATS_LIMIT_REACHED&#160;</td><td class="fielddoc"><p>Attempt to receive messages than allowed by the byte limit, for instance in <a class="el" href="group__js_sub_group.html#ga938d410675ab09fa8c21896ab61bed0a" title="Starts a Pull based JetStream subscription, and delivers messages to a user callback asynchronously.">js_PullSubscribeAsync()</a>. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a36c934157b663b7b5fb5d6609c897c80aec45b93e3dd0ca1b1bc878730ea81c31" name="a36c934157b663b7b5fb5d6609c897c80aec45b93e3dd0ca1b1bc878730ea81c31"></a>NATS_PIN_ID_MISMATCH&#160;</td><td class="fielddoc"><p>Pin ID sent in the request does not match the currently pinned consumer subscriber ID on the server. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a36c934157b663b7b5fb5d6609c897c80a57e2c2023e6a7730b9e960ddebd73f09" name="a36c934157b663b7b5fb5d6609c897c80a57e2c2023e6a7730b9e960ddebd73f09"></a>NATS_MAX_STATUS_VALUE&#160;</td><td class="fielddoc"><p>Maximum status value, this element MUST be the last one. </p>
 </td></tr>
 </table>
 
@@ -730,6 +777,72 @@ Enumerations</h2></td></tr>
 <tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a2fd5f6bb7dac1ef16bdc0818886f78ac" name="a10731415ffcd3e2330df10c4d5fd3d70a2fd5f6bb7dac1ef16bdc0818886f78ac"></a>JSConsumerCreateDurableAndNameMismatchErr&#160;</td><td class="fielddoc"><p>Consumer Durable and Name have to be equal if both are provided. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a0e2194a4bb7565834982a39deddea878" name="a10731415ffcd3e2330df10c4d5fd3d70a0e2194a4bb7565834982a39deddea878"></a>JSReplicasCountCannotBeNegativeErr&#160;</td><td class="fielddoc"><p>Replicas count cannot be negative. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70aafb4466815c8006d93a72daf4f7015f7" name="a10731415ffcd3e2330df10c4d5fd3d70aafb4466815c8006d93a72daf4f7015f7"></a>JSConsumerReplicasShouldMatchStreamErr&#160;</td><td class="fielddoc"><p>Consumer config replicas must match interest retention stream's replicas. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a82561ad00a53118a7fc719f47b364d95" name="a10731415ffcd3e2330df10c4d5fd3d70a82561ad00a53118a7fc719f47b364d95"></a>JSConsumerMetadataLengthErr&#160;</td><td class="fielddoc"><p>Consumer metadata exceeds maximum size. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a6fe7653d55aa20900d48c7ad369d7b32" name="a10731415ffcd3e2330df10c4d5fd3d70a6fe7653d55aa20900d48c7ad369d7b32"></a>JSConsumerDuplicateFilterSubjectsErr&#160;</td><td class="fielddoc"><p>Consumer cannot have both FilterSubject and FilterSubjects specified. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70ad284d66d22da3ff3bc62fcc6c72fe911" name="a10731415ffcd3e2330df10c4d5fd3d70ad284d66d22da3ff3bc62fcc6c72fe911"></a>JSConsumerMultipleFiltersNotAllowedErr&#160;</td><td class="fielddoc"><p>Consumer with multiple subject filters cannot use subject based API. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a35b0b1273deae4d5b50d6eccacfe2b8e" name="a10731415ffcd3e2330df10c4d5fd3d70a35b0b1273deae4d5b50d6eccacfe2b8e"></a>JSConsumerOverlappingSubjectFiltersErr&#160;</td><td class="fielddoc"><p>Consumer subject filters cannot overlap. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a627d4064a6df21a719e30fe978f415a5" name="a10731415ffcd3e2330df10c4d5fd3d70a627d4064a6df21a719e30fe978f415a5"></a>JSConsumerEmptyFilterErr&#160;</td><td class="fielddoc"><p>Consumer filter in FilterSubjects cannot be empty. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70aa03688b2c9afed2b39e91418e118ff94" name="a10731415ffcd3e2330df10c4d5fd3d70aa03688b2c9afed2b39e91418e118ff94"></a>JSSourceDuplicateDetectedErr&#160;</td><td class="fielddoc"><p>Source stream, filter and transform (plus external if present) must form a unique combination. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a93874de7372f858810789d9007cee176" name="a10731415ffcd3e2330df10c4d5fd3d70a93874de7372f858810789d9007cee176"></a>JSSourceInvalidStreamNameErr&#160;</td><td class="fielddoc"><p>Sourced stream name is invalid. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70ae2b3c41b4dc76d2dfb040bba53356019" name="a10731415ffcd3e2330df10c4d5fd3d70ae2b3c41b4dc76d2dfb040bba53356019"></a>JSMirrorInvalidStreamNameErr&#160;</td><td class="fielddoc"><p>Mirrored stream name is invalid. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a279b51fb8480d90603f68c4de342b9ed" name="a10731415ffcd3e2330df10c4d5fd3d70a279b51fb8480d90603f68c4de342b9ed"></a>JSSourceMultipleFiltersNotAllowedErr&#160;</td><td class="fielddoc"><p>Source with multiple subject transforms cannot also have a single subject filter. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70ae292a85cd1ac5605b6fd76089d13dd31" name="a10731415ffcd3e2330df10c4d5fd3d70ae292a85cd1ac5605b6fd76089d13dd31"></a>JSSourceInvalidSubjectFilterErr&#160;</td><td class="fielddoc"><p>Source transform source error. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a65ba8fcd99cab6e9688a7db2a83890cc" name="a10731415ffcd3e2330df10c4d5fd3d70a65ba8fcd99cab6e9688a7db2a83890cc"></a>JSSourceInvalidTransformDestinationErr&#160;</td><td class="fielddoc"><p>Source transform error. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70af63b4ffe3ded26ad785408d619cb8728" name="a10731415ffcd3e2330df10c4d5fd3d70af63b4ffe3ded26ad785408d619cb8728"></a>JSSourceOverlappingSubjectFiltersErr&#160;</td><td class="fielddoc"><p>Source subject filters cannot overlap. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a22ea75734543c94797902b2c5e8ae95a" name="a10731415ffcd3e2330df10c4d5fd3d70a22ea75734543c94797902b2c5e8ae95a"></a>JSConsumerAlreadyExistsErr&#160;</td><td class="fielddoc"><p>Action CREATE is used for a existing consumer with a different config. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a813ea81037b4dc1af140c29714bc3c2f" name="a10731415ffcd3e2330df10c4d5fd3d70a813ea81037b4dc1af140c29714bc3c2f"></a>JSConsumerDoesNotExistErr&#160;</td><td class="fielddoc"><p>Action UPDATE is used for a non-existing consumer. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70abc2c43283506b1e2d54d6c51bc4ec650" name="a10731415ffcd3e2330df10c4d5fd3d70abc2c43283506b1e2d54d6c51bc4ec650"></a>JSMirrorMultipleFiltersNotAllowedErr&#160;</td><td class="fielddoc"><p>Mirror with multiple subject transforms cannot also have a single subject filter. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70addf133c8aca298284bf83a4a9e2ac60c" name="a10731415ffcd3e2330df10c4d5fd3d70addf133c8aca298284bf83a4a9e2ac60c"></a>JSMirrorInvalidSubjectFilterErr&#160;</td><td class="fielddoc"><p>Mirror transform source error. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70ad5d8e03bb8eb7d6534838be23542c529" name="a10731415ffcd3e2330df10c4d5fd3d70ad5d8e03bb8eb7d6534838be23542c529"></a>JSMirrorOverlappingSubjectFiltersErr&#160;</td><td class="fielddoc"><p>Mirror subject filters cannot overlap. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70aac4188e2c22adee64cb4f96effbfe40c" name="a10731415ffcd3e2330df10c4d5fd3d70aac4188e2c22adee64cb4f96effbfe40c"></a>JSConsumerInactiveThresholdExcessErr&#160;</td><td class="fielddoc"><p>Consumer inactive threshold exceeds system limit. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a752e093abd7ebf961e53405779e54b44" name="a10731415ffcd3e2330df10c4d5fd3d70a752e093abd7ebf961e53405779e54b44"></a>JSMirrorInvalidTransformDestinationErr&#160;</td><td class="fielddoc"><p>Mirror transform error. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a104ba6d6245f34be64aaa9bbab5a1716" name="a10731415ffcd3e2330df10c4d5fd3d70a104ba6d6245f34be64aaa9bbab5a1716"></a>JSStreamTransformInvalidSourceErr&#160;</td><td class="fielddoc"><p>Stream transform source error. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70abf91775b272db2dd7eb345e7e7448b70" name="a10731415ffcd3e2330df10c4d5fd3d70abf91775b272db2dd7eb345e7e7448b70"></a>JSStreamTransformInvalidDestinationErr&#160;</td><td class="fielddoc"><p>Stream transform destination error. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70ae867f25967c1771a3cee0e40437401b2" name="a10731415ffcd3e2330df10c4d5fd3d70ae867f25967c1771a3cee0e40437401b2"></a>JSPedanticErr&#160;</td><td class="fielddoc"><p>Pedantic mode error. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a5d3be35fcd34bcdf1c378088b96a7770" name="a10731415ffcd3e2330df10c4d5fd3d70a5d3be35fcd34bcdf1c378088b96a7770"></a>JSStreamDuplicateMessageConflictErr&#160;</td><td class="fielddoc"><p>Duplicate message id is in process. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a97c5d50799264c5ecb2f64a7c89eba1a" name="a10731415ffcd3e2330df10c4d5fd3d70a97c5d50799264c5ecb2f64a7c89eba1a"></a>JSConsumerPriorityPolicyWithoutGroupErr&#160;</td><td class="fielddoc"><p>Setting PriorityPolicy requires at least one PriorityGroup to be set. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a4ca4f7cdd7e03eb5d290d010893552cd" name="a10731415ffcd3e2330df10c4d5fd3d70a4ca4f7cdd7e03eb5d290d010893552cd"></a>JSConsumerInvalidPriorityGroupErr&#160;</td><td class="fielddoc"><p>Provided priority group does not exist for this consumer". </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a806fb45e8d6e7fd335e7a1b9b5cbbd01" name="a10731415ffcd3e2330df10c4d5fd3d70a806fb45e8d6e7fd335e7a1b9b5cbbd01"></a>JSConsumerEmptyGroupNameErr&#160;</td><td class="fielddoc"><p>Group name cannot be an empty string. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70ac6cdd884ff45e053f8bde1075688403c" name="a10731415ffcd3e2330df10c4d5fd3d70ac6cdd884ff45e053f8bde1075688403c"></a>JSConsumerInvalidGroupNameErr&#160;</td><td class="fielddoc"><p>Valid priority group name must match A-Z, a-z, 0-9, -_/=)+ and may not exceed 16 characters. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70aee5a815a75c629169bf21d4fab777e82" name="a10731415ffcd3e2330df10c4d5fd3d70aee5a815a75c629169bf21d4fab777e82"></a>JSStreamExpectedLastSeqPerSubjectNotReadyErr&#160;</td><td class="fielddoc"><p>Expected last sequence per subject temporarily unavailable. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70ab9865b2405db4747f002f545667ad7ec" name="a10731415ffcd3e2330df10c4d5fd3d70ab9865b2405db4747f002f545667ad7ec"></a>JSStreamWrongLastSequenceConstantErr&#160;</td><td class="fielddoc"><p>Wrong last sequence. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a85d46a574d4a3a1a7d63bf0c891724ba" name="a10731415ffcd3e2330df10c4d5fd3d70a85d46a574d4a3a1a7d63bf0c891724ba"></a>JSMessageTTLInvalidErr&#160;</td><td class="fielddoc"><p>Invalid per-message TTL. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a0ff642cd118d8fdde5da78bb06fee48d" name="a10731415ffcd3e2330df10c4d5fd3d70a0ff642cd118d8fdde5da78bb06fee48d"></a>JSMessageTTLDisabledErr&#160;</td><td class="fielddoc"><p>Per-message TTL is disabled. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a1c6f821ff093a7d00615a3625cbd898c" name="a10731415ffcd3e2330df10c4d5fd3d70a1c6f821ff093a7d00615a3625cbd898c"></a>JSStreamTooManyRequestsErr&#160;</td><td class="fielddoc"><p>Too many requests. </p>
 </td></tr>
 </table>
 

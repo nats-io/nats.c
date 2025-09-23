@@ -5085,6 +5085,19 @@ natsConnection_ProcessCloseEvent(natsSock *socket);
 NATS_EXTERN void
 natsConnection_ProcessWriteEvent(natsConnection *nc);
 
+/** \brief Process a detach event when using external event loop.
+ *
+ * When a connection is closed, the library will invoke the adapter's
+ * #natsEvLoop_Detach callback. But the code in the adapter may run
+ * asynchronously. The adapter will invoke this function when the
+ * adapter has fully detached the NATS connection from the event loop,
+ * so that resources held by the library for this connection can be released.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ */
+NATS_EXTERN void
+natsConnection_ProcessDetachedEvent(natsConnection *nc);
+
 /** \brief Connects to a `NATS Server` using any of the URL from the given list.
  *
  * Attempts to connect to a `NATS Server`.

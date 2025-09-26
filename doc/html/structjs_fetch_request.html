@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.10.0-beta</span>
+   &#160;<span id="projectnumber">3.11.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -117,6 +117,14 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:ae8e73c7cc2e2a2d2502407c9b1522496" id="r_ae8e73c7cc2e2a2d2502407c9b1522496"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_fetch_request.html#ae8e73c7cc2e2a2d2502407c9b1522496">Heartbeat</a></td></tr>
 <tr class="memdesc:ae8e73c7cc2e2a2d2502407c9b1522496"><td class="mdescLeft">&#160;</td><td class="mdescRight">Have server sends heartbeats to help detect communication failures.  <br /></td></tr>
 <tr class="separator:ae8e73c7cc2e2a2d2502407c9b1522496"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a5a83f41e8e44bc592a4e6e1a34127e68" id="r_a5a83f41e8e44bc592a4e6e1a34127e68"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_fetch_request.html#a5a83f41e8e44bc592a4e6e1a34127e68">MinPending</a></td></tr>
+<tr class="separator:a5a83f41e8e44bc592a4e6e1a34127e68"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab9ef4230eca62471d84bd907e6aec8c9" id="r_ab9ef4230eca62471d84bd907e6aec8c9"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_fetch_request.html#ab9ef4230eca62471d84bd907e6aec8c9">MinAckPending</a></td></tr>
+<tr class="separator:ab9ef4230eca62471d84bd907e6aec8c9"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a14214f0e033e75b3ee0f8de634f5a553" id="r_a14214f0e033e75b3ee0f8de634f5a553"><td class="memItemLeft" align="right" valign="top">const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_fetch_request.html#a14214f0e033e75b3ee0f8de634f5a553">ID</a></td></tr>
+<tr class="separator:a14214f0e033e75b3ee0f8de634f5a553"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a298e98d26850e1105833689c280e4f5e" id="r_a298e98d26850e1105833689c280e4f5e"><td class="memItemLeft" align="right" valign="top">const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_fetch_request.html#a298e98d26850e1105833689c280e4f5e">Group</a></td></tr>
+<tr class="separator:a298e98d26850e1105833689c280e4f5e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Options for the <a class="el" href="group__js_sub_group.html#ga676292505e7fde8688cfd886b79a10ed" title="Fetches messages for a pull subscription with a complete request configuration.">natsSubscription_FetchRequest()</a> call, which is similar to <a class="el" href="group__js_sub_group.html#gafc5e0d2269bd23b4d5fb7f3b05278e50" title="Fetches messages for a pull subscription.">natsSubscription_Fetch()</a> but gives more control in the configuration of the fetch. </p>
@@ -185,6 +193,63 @@ Public Attributes</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">int64_t jsFetchRequest::Heartbeat</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a5a83f41e8e44bc592a4e6e1a34127e68" name="a5a83f41e8e44bc592a4e6e1a34127e68"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5a83f41e8e44bc592a4e6e1a34127e68">&#9670;&#160;</a></span>MinPending</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int64_t jsFetchRequest::MinPending</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ab9ef4230eca62471d84bd907e6aec8c9" name="ab9ef4230eca62471d84bd907e6aec8c9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab9ef4230eca62471d84bd907e6aec8c9">&#9670;&#160;</a></span>MinAckPending</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int64_t jsFetchRequest::MinAckPending</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a14214f0e033e75b3ee0f8de634f5a553" name="a14214f0e033e75b3ee0f8de634f5a553"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a14214f0e033e75b3ee0f8de634f5a553">&#9670;&#160;</a></span>ID</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">const char* jsFetchRequest::ID</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>the "pinned" ID of this subscription, if any; to use with the "pinned_client" priority policy </p>
+
+</div>
+</div>
+<a id="a298e98d26850e1105833689c280e4f5e" name="a298e98d26850e1105833689c280e4f5e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a298e98d26850e1105833689c280e4f5e">&#9670;&#160;</a></span>Group</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">const char* jsFetchRequest::Group</td>
         </tr>
       </table>
 </div><div class="memdoc">

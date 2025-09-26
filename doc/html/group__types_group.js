@@ -24,7 +24,8 @@ var group__types_group =
       [ "ExpectLastMsgId", "structjs_pub_options.html#a095391b33a261586fc02eaf013b65e61", null ],
       [ "ExpectLastSeq", "structjs_pub_options.html#a3b02b60b05caa6d242079a4c26b181bf", null ],
       [ "ExpectLastSubjectSeq", "structjs_pub_options.html#aeefec1d2c7644562d23b87e55bf2e253", null ],
-      [ "ExpectNoMessage", "structjs_pub_options.html#a740a7edee8c832a75b75fded6046ba90", null ]
+      [ "ExpectNoMessage", "structjs_pub_options.html#a740a7edee8c832a75b75fded6046ba90", null ],
+      [ "MsgTTL", "structjs_pub_options.html#a07c8ec214966ef7ce0bd48a8e8008f9d", null ]
     ] ],
     [ "jsPlacement", "structjs_placement.html", [
       [ "Cluster", "structjs_placement.html#ad8c83588d57f0e30959cfb6f3d5d61bf", null ],
@@ -90,7 +91,9 @@ var group__types_group =
       [ "Compression", "structjs_stream_config.html#a406554aaf1e16eed4abade52f7ca5e61", null ],
       [ "FirstSeq", "structjs_stream_config.html#a7ed5e8e5a8d367b25751b9708d0e395b", null ],
       [ "SubjectTransform", "structjs_stream_config.html#a0ce1d0a7c1f0576151f505724ae393d1", null ],
-      [ "ConsumerLimits", "structjs_stream_config.html#a5ce51cb5a36febda30bb444a0f59c2d1", null ]
+      [ "ConsumerLimits", "structjs_stream_config.html#a5ce51cb5a36febda30bb444a0f59c2d1", null ],
+      [ "AllowMsgTTL", "structjs_stream_config.html#a54d080160cd8179c8c6f3982f0b11ab5", null ],
+      [ "SubjectDeleteMarkerTTL", "structjs_stream_config.html#aa45bb2b4fb0e7ce71b77d9af91c0a6bd", null ]
     ] ],
     [ "jsLostStreamData", "structjs_lost_stream_data.html", [
       [ "Msgs", "structjs_lost_stream_data.html#a5d2e87697526033c842a7f955776dfda", null ],
@@ -198,7 +201,11 @@ var group__types_group =
       [ "FilterSubjects", "structjs_consumer_config.html#ada703eb1db0288d8a937126d6d856c6f", null ],
       [ "FilterSubjectsLen", "structjs_consumer_config.html#a2a6cdec5efe7542496f8b8cccb539643", null ],
       [ "Metadata", "structjs_consumer_config.html#a8bfc0284c57028bf9cf809205d989959", null ],
-      [ "PauseUntil", "structjs_consumer_config.html#acf04468ef0a8bc4e83912e850e47a8ae", null ]
+      [ "PauseUntil", "structjs_consumer_config.html#acf04468ef0a8bc4e83912e850e47a8ae", null ],
+      [ "PriorityPolicy", "structjs_consumer_config.html#a0f30e4f7cd24c517efa7fae2d482ca3a", null ],
+      [ "PinnedTTL", "structjs_consumer_config.html#a98b6a4046149d3b5a50bb37e51c9d0a2", null ],
+      [ "PriorityGroups", "structjs_consumer_config.html#a96779add42dd21350c23cffa9d7bd83d", null ],
+      [ "PriorityGroupsLen", "structjs_consumer_config.html#a022cdb0ea01d992c1cf68515290f30e0", null ]
     ] ],
     [ "jsConsumerSequenceMismatch", "structjs_consumer_sequence_mismatch.html", [
       [ "Stream", "structjs_consumer_sequence_mismatch.html#aad6a17af1719c023c38a6fd254b73f8e", null ],
@@ -222,6 +229,11 @@ var group__types_group =
       [ "Stream", "structjs_sequence_info.html#ab52c55c1d0edd20e064870b490b4b990", null ],
       [ "Last", "structjs_sequence_info.html#a4e94c91650b7db253645515fee4c3b05", null ]
     ] ],
+    [ "jsPriorityGroupState", "structjs_priority_group_state.html", [
+      [ "Group", "structjs_priority_group_state.html#a0f8811c8712134d885f13f0f0b70b2a3", null ],
+      [ "PinnedClientID", "structjs_priority_group_state.html#a1871302bac80b4fabb3d55bb0c6e4a2c", null ],
+      [ "PinnedTS", "structjs_priority_group_state.html#aebf3e898409cee484cc3ef2351040482", null ]
+    ] ],
     [ "jsConsumerInfo", "structjs_consumer_info.html", [
       [ "Stream", "structjs_consumer_info.html#a8f21939613163a7c0ebfb521aa471260", null ],
       [ "Name", "structjs_consumer_info.html#a9359aea7cd05a27b2a15f8a35cdb1008", null ],
@@ -236,7 +248,9 @@ var group__types_group =
       [ "Cluster", "structjs_consumer_info.html#a6f4401563a9fd102226d82cdc6136e32", null ],
       [ "PushBound", "structjs_consumer_info.html#a31282cdc72000a91af03f89899740bfa", null ],
       [ "Paused", "structjs_consumer_info.html#a13f80f4b24da173ef2da051e69f216d7", null ],
-      [ "PauseRemaining", "structjs_consumer_info.html#a86501e735531929add3e161d40479c44", null ]
+      [ "PauseRemaining", "structjs_consumer_info.html#a86501e735531929add3e161d40479c44", null ],
+      [ "PriorityGroups", "structjs_consumer_info.html#a1b93a87ac24c171319a7d8350355c1ef", null ],
+      [ "PriorityGroupsLen", "structjs_consumer_info.html#a5deb4de557d4520772ef6a1319c7e67c", null ]
     ] ],
     [ "jsConsumerInfoList", "structjs_consumer_info_list.html", [
       [ "List", "structjs_consumer_info_list.html#a75354882af5e11959b198a70bde14db8", null ],
@@ -315,7 +329,11 @@ var group__types_group =
       [ "Batch", "structjs_fetch_request.html#a84f06b60e25decb2674996f0cb315f63", null ],
       [ "MaxBytes", "structjs_fetch_request.html#a3298db691c2ecb9725cc029e2c35d6d1", null ],
       [ "NoWait", "structjs_fetch_request.html#ae251eebb1998a39fe3b898302b58293d", null ],
-      [ "Heartbeat", "structjs_fetch_request.html#ae8e73c7cc2e2a2d2502407c9b1522496", null ]
+      [ "Heartbeat", "structjs_fetch_request.html#ae8e73c7cc2e2a2d2502407c9b1522496", null ],
+      [ "MinPending", "structjs_fetch_request.html#a5a83f41e8e44bc592a4e6e1a34127e68", null ],
+      [ "MinAckPending", "structjs_fetch_request.html#ab9ef4230eca62471d84bd907e6aec8c9", null ],
+      [ "ID", "structjs_fetch_request.html#a14214f0e033e75b3ee0f8de634f5a553", null ],
+      [ "Group", "structjs_fetch_request.html#a298e98d26850e1105833689c280e4f5e", null ]
     ] ],
     [ "jsOptionsPullSubscribeAsync", "structjs_options_pull_subscribe_async.html", [
       [ "Timeout", "structjs_options_pull_subscribe_async.html#a3dcad3cffbee77d14ceaa392dfa377c5", null ],
@@ -325,6 +343,9 @@ var group__types_group =
       [ "CompleteHandler", "structjs_options_pull_subscribe_async.html#a6224bf50d314a83ed2df2c84a6966055", null ],
       [ "CompleteHandlerClosure", "structjs_options_pull_subscribe_async.html#aa5437f766db36d61595cc0471b2b65c2", null ],
       [ "Heartbeat", "structjs_options_pull_subscribe_async.html#a6583dfdee172d82b6877d9e6ff4e845c", null ],
+      [ "Group", "structjs_options_pull_subscribe_async.html#ad133f4ce6e9147f991ba837fc40ed538", null ],
+      [ "MinPending", "structjs_options_pull_subscribe_async.html#acf2ebfa655aa25ac8abb1e2665fa90da", null ],
+      [ "MinAckPending", "structjs_options_pull_subscribe_async.html#a5f49861af9e790fb963ddea5c6c01594", null ],
       [ "FetchSize", "structjs_options_pull_subscribe_async.html#a1bf6fa8ddd19698bd82f4c27ddb06a9f", null ],
       [ "KeepAhead", "structjs_options_pull_subscribe_async.html#ae50d78c4012666aca20b7a01341d8d07", null ],
       [ "NextHandler", "structjs_options_pull_subscribe_async.html#a591cac37de66ace6a96f7c73fc305661", null ],
@@ -392,12 +413,81 @@ var group__types_group =
       [ "Keys", "structkv_keys_list.html#aa5cb40820a1a927375215e0a94ecfc18", null ],
       [ "Count", "structkv_keys_list.html#a625f7b34784e024a538359efd9a97265", null ]
     ] ],
+    [ "objStoreConfig", "structobj_store_config.html", [
+      [ "Bucket", "structobj_store_config.html#a891e2145bafa1b2d255d05ff603a8bcc", null ],
+      [ "Description", "structobj_store_config.html#ac29ef87ecb3ed0cb3f12b6d8168150aa", null ],
+      [ "TTL", "structobj_store_config.html#a2c523719648a5c92f10fb6c4d1d91075", null ],
+      [ "MaxBytes", "structobj_store_config.html#acff28d4a1e27fb7ebcf3b9eebfafc7a4", null ],
+      [ "Storage", "structobj_store_config.html#a62e1bb8c895c23cdb0fac8e7f6b09461", null ],
+      [ "Replicas", "structobj_store_config.html#a65ff5975b3cf2568401204938bf3c9fd", null ],
+      [ "Placement", "structobj_store_config.html#ab27853d71a16ce268d06743667842fe2", null ],
+      [ "Compression", "structobj_store_config.html#a6c0c659a4ca5b9a82da87beab4fbaa1f", null ],
+      [ "Metadata", "structobj_store_config.html#a1aadd26b6fdda95b72b8eb1a06778d08", null ]
+    ] ],
+    [ "objStoreNamesList", "structobj_store_names_list.html", [
+      [ "List", "structobj_store_names_list.html#a4edc7ffb7638196d6fb56281a879bcd2", null ],
+      [ "Count", "structobj_store_names_list.html#a9292f471bd2676470c5aae3e9e92f0ae", null ]
+    ] ],
+    [ "objStoreStatus", "structobj_store_status.html", [
+      [ "Bucket", "structobj_store_status.html#a8803a146fb8319049800c54d5aa5f368", null ],
+      [ "Description", "structobj_store_status.html#a3998e4fa99d52de9ecbe60bb897d029f", null ],
+      [ "TTL", "structobj_store_status.html#af355bf927e331a08dcea9c7e9eebf64c", null ],
+      [ "Storage", "structobj_store_status.html#a6f9cb566ab35b2bd045e9eae05a01c24", null ],
+      [ "Replicas", "structobj_store_status.html#af35581d23f5d9342e0908fc8679edc9b", null ],
+      [ "Sealed", "structobj_store_status.html#a1a34b2b5eabdbda4480bc0cd1f8b31fc", null ],
+      [ "Size", "structobj_store_status.html#a851f7005836a3781ecfd863d6a3cb194", null ],
+      [ "BackingStore", "structobj_store_status.html#aa0aafb7622fd3bcba16f67c7bdc033c1", null ],
+      [ "Metadata", "structobj_store_status.html#afa1c16d011acad8057968f10bafca2af", null ],
+      [ "StreamInfo", "structobj_store_status.html#ab23213b4237526aa5b45a8cdb6f761d8", null ],
+      [ "IsCompressed", "structobj_store_status.html#a2cf5bb6118fdc42bafa45bceaeb64858", null ]
+    ] ],
+    [ "objStoreStatusesList", "structobj_store_statuses_list.html", [
+      [ "List", "structobj_store_statuses_list.html#abe0982ba9af0f37d54c10bfead118ace", null ],
+      [ "Count", "structobj_store_statuses_list.html#a41eaf0cc403a70f1a1bd1806edcc5f51", null ]
+    ] ],
+    [ "objStoreLink", "structobj_store_link.html", [
+      [ "Bucket", "structobj_store_link.html#a861a15dee01a742286861ff83e8276d1", null ],
+      [ "Name", "structobj_store_link.html#a760d4a2d35cc3a9e840d8df2f80e47ee", null ]
+    ] ],
+    [ "objStoreMetaOptions", "structobj_store_meta_options.html", [
+      [ "Link", "structobj_store_meta_options.html#a7e66f8df891302473bfcb802ad967c27", null ],
+      [ "ChunkSize", "structobj_store_meta_options.html#a94b7c3dac90e0f6c89a1111b4737ce10", null ]
+    ] ],
+    [ "objStoreMeta", "structobj_store_meta.html", [
+      [ "Name", "structobj_store_meta.html#a30cb6788f1a84a392028e08be35791a7", null ],
+      [ "Description", "structobj_store_meta.html#a26a2ce8a738ae0ebb2fe946e40252eca", null ],
+      [ "Headers", "structobj_store_meta.html#ae68e69653eabd582a68a42166e6e0369", null ],
+      [ "Metadata", "structobj_store_meta.html#ad4c964a192c4abe830744747d920605e", null ],
+      [ "Opts", "structobj_store_meta.html#a539e06d8b13d0d35db56e6e102c4faa6", null ]
+    ] ],
+    [ "objStoreInfo", "structobj_store_info.html", [
+      [ "Meta", "structobj_store_info.html#a06fd53bb3fe3fe401907d75a6cb4de6e", null ],
+      [ "Bucket", "structobj_store_info.html#a231b0f2162cc9471cb1927fba28430ee", null ],
+      [ "NUID", "structobj_store_info.html#ac02bc2f2296fcb0f78b3e098a91a4a6e", null ],
+      [ "Size", "structobj_store_info.html#a7dcf7fcbb773e478120b5a6206c7f20d", null ],
+      [ "ModTime", "structobj_store_info.html#a93ecb8dd39f2c87e3273625b42de1b71", null ],
+      [ "Chunks", "structobj_store_info.html#a8bdfcd40f1d4ece9b8f9abc71ae1b2cd", null ],
+      [ "Digest", "structobj_store_info.html#aa8973283ff5ff24b8c8b68f7ce1327c6", null ],
+      [ "Deleted", "structobj_store_info.html#a6151965a660b1ae4cce4ae40a2f630c0", null ]
+    ] ],
+    [ "objStoreInfoList", "structobj_store_info_list.html", [
+      [ "List", "structobj_store_info_list.html#afc4740ea7b479bd89946f0317c267348", null ],
+      [ "Count", "structobj_store_info_list.html#ad2c32894a73498b53ea04d1e2457bc6c", null ]
+    ] ],
+    [ "objStoreOptions", "structobj_store_options.html", [
+      [ "ShowDeleted", "structobj_store_options.html#ab64a09119339521ead3ea4b7e5c3c8b7", null ]
+    ] ],
+    [ "objStoreWatchOptions", "structobj_store_watch_options.html", [
+      [ "IgnoreDeletes", "structobj_store_watch_options.html#a8d71571a37077940150cbe13c8ef62e5", null ],
+      [ "UpdatesOnly", "structobj_store_watch_options.html#a31d7a6db4750e5c8417a340eb23f4595", null ]
+    ] ],
     [ "natsConnection", "group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec", null ],
     [ "natsStatistics", "group__types_group.html#ga57a4b8c7109e2773878655722ce028aa", null ],
     [ "natsSubscription", "group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8", null ],
     [ "natsMsg", "group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a", null ],
     [ "natsOptions", "group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e", null ],
     [ "natsInbox", "group__types_group.html#ga206c3d4d6f4f6f96fd2cae53a3df31c1", null ],
+    [ "natsHeader", "group__types_group.html#gac2df3a141cb6a868f1ce4c0f27e726f2", null ],
     [ "natsClientConfig", "group__types_group.html#gad29b6af20b875a1b7890ab8f0675287d", null ],
     [ "natsMsgList", "group__types_group.html#gafd5523161ec3783e79719cb9a9a66b5b", null ],
     [ "natsMetadata", "group__types_group.html#ga3b454f3c6ac697a3cdc5bdd3c9ece12b", null ],
@@ -426,6 +516,7 @@ var group__types_group =
     [ "jsSubOptions", "group__types_group.html#gaccfaac2079656ffd40d003e4de5d2280", null ],
     [ "jsSequencePair", "group__types_group.html#ga39011d30b295759b7f6ca0a7539dff8f", null ],
     [ "jsSequenceInfo", "group__types_group.html#ga27e1a5d5b513f9eb7d61a17db71f8003", null ],
+    [ "jsPriorityGroupState", "group__types_group.html#gacb09dc9c012f1835da1d547790aa2ebf", null ],
     [ "jsConsumerInfo", "group__types_group.html#ga2f21bb79884e56a5613d7fe76b11b1e5", null ],
     [ "jsConsumerInfoList", "group__types_group.html#gadad3bf72baae970662248d82d9b05d0a", null ],
     [ "jsConsumerNamesList", "group__types_group.html#gad00ab4381eec504ada3272aa9ff8adb2", null ],
@@ -456,6 +547,21 @@ var group__types_group =
     [ "kvPurgeOptions", "group__types_group.html#ga90e8de23c4468005488bde690a2ffe9d", null ],
     [ "kvEntryList", "group__types_group.html#ga0125d394a3cbae2a1713eed8fab7f78e", null ],
     [ "kvKeysList", "group__types_group.html#gab36492d9d4370337cfed80edce4144e0", null ],
+    [ "objStore", "group__types_group.html#ga0dbdf6ef78b63bfeeb8551519ba57c5d", null ],
+    [ "objStorePut", "group__types_group.html#ga00926d2a2f92b993a9e488491f68f2da", null ],
+    [ "objStoreGet", "group__types_group.html#gac9635b7be7110db17b5e61bb5624aa95", null ],
+    [ "objStoreWatcher", "group__types_group.html#gae2a5ab7a7d3b50688d084102afb9c982", null ],
+    [ "objStoreConfig", "group__types_group.html#gafd04fb1b404bc43c0833bbe9cc55d704", null ],
+    [ "objStoreNamesList", "group__types_group.html#ga1847fb7592bd0fda6e7db8de847b1d4e", null ],
+    [ "objStoreStatus", "group__types_group.html#ga175ca9f21ae86d127e1b42cdfc16214a", null ],
+    [ "objStoreStatusesList", "group__types_group.html#gafe099c8a8b5901620972527862d49105", null ],
+    [ "objStoreLink", "group__types_group.html#gadd629f77cc9128f2c29df555e537c3cd", null ],
+    [ "objStoreMetaOptions", "group__types_group.html#ga357fc821577119320265d1766718f94f", null ],
+    [ "objStoreMeta", "group__types_group.html#gad33ce5e6a4cf28a6c1d350c9d938627a", null ],
+    [ "objStoreInfo", "group__types_group.html#gad161e0bbe07d47847c9cc01c8307e934", null ],
+    [ "objStoreInfoList", "group__types_group.html#ga1f2a7d44e4ce511117c352cf6d10ff38", null ],
+    [ "objStoreOptions", "group__types_group.html#gac4c724c2d6c819a57db7e97fc0d5dddb", null ],
+    [ "objStoreWatchOptions", "group__types_group.html#ga375e2f7b356f1e92d6d4eaaa77192b57", null ],
     [ "stanConnection", "group__types_group.html#ga9e826493769d23086cfccefe95cdf64c", null ],
     [ "stanSubscription", "group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5", null ],
     [ "stanMsg", "group__types_group.html#ga2cf5db7703b42d97abe56a3e83b2a87d", null ],

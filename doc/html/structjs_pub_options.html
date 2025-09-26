@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.10.0-beta</span>
+   &#160;<span id="projectnumber">3.11.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -123,6 +123,9 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a740a7edee8c832a75b75fded6046ba90" id="r_a740a7edee8c832a75b75fded6046ba90"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_pub_options.html#a740a7edee8c832a75b75fded6046ba90">ExpectNoMessage</a></td></tr>
 <tr class="memdesc:a740a7edee8c832a75b75fded6046ba90"><td class="mdescLeft">&#160;</td><td class="mdescRight">Expected no message (that is, sequence == 0) for the subject in the stream.  <br /></td></tr>
 <tr class="separator:a740a7edee8c832a75b75fded6046ba90"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a07c8ec214966ef7ce0bd48a8e8008f9d" id="r_a07c8ec214966ef7ce0bd48a8e8008f9d"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_pub_options.html#a07c8ec214966ef7ce0bd48a8e8008f9d">MsgTTL</a></td></tr>
+<tr class="memdesc:a07c8ec214966ef7ce0bd48a8e8008f9d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Message time to live (TTL) in milliseconds, used by the server to expire the message. Requires nats-server v2.11.0 or later.  <br /></td></tr>
+<tr class="separator:a07c8ec214966ef7ce0bd48a8e8008f9d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>JetStream publish options.</p>
@@ -223,6 +226,20 @@ Public Attributes</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">bool jsPubOptions::ExpectNoMessage</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a07c8ec214966ef7ce0bd48a8e8008f9d" name="a07c8ec214966ef7ce0bd48a8e8008f9d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a07c8ec214966ef7ce0bd48a8e8008f9d">&#9670;&#160;</a></span>MsgTTL</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int64_t jsPubOptions::MsgTTL</td>
         </tr>
       </table>
 </div><div class="memdoc">

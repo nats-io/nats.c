@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.10.0</span>
+   &#160;<span id="projectnumber">3.11.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -105,6 +105,9 @@ Typedefs</h2></td></tr>
 <tr class="memitem:gacdef6aff3e47953f19e35857ab8e274c" id="r_gacdef6aff3e47953f19e35857ab8e274c"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gacdef6aff3e47953f19e35857ab8e274c">natsConnectionHandler</a>) (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, void *closure)</td></tr>
 <tr class="memdesc:gacdef6aff3e47953f19e35857ab8e274c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify the user of asynchronous connection events.  <br /></td></tr>
 <tr class="separator:gacdef6aff3e47953f19e35857ab8e274c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gae1d0ec90461ccdb105d00e1030806faa" id="r_gae1d0ec90461ccdb105d00e1030806faa"><td class="memItemLeft" align="right" valign="top">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gae1d0ec90461ccdb105d00e1030806faa">natsProxyConnHandler</a>) (<a class="el" href="nats_8h.html#af798865ac824e5959987de0fe8d07383">natsSock</a> *fd, char *host, int port, void *closure)</td></tr>
+<tr class="memdesc:gae1d0ec90461ccdb105d00e1030806faa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to handle connections via proxy.  <br /></td></tr>
+<tr class="separator:gae1d0ec90461ccdb105d00e1030806faa"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga9e511dffa471dfb971b7dd2b12329626" id="r_ga9e511dffa471dfb971b7dd2b12329626"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga9e511dffa471dfb971b7dd2b12329626">natsErrHandler</a>) (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *subscription, <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> err, void *closure)</td></tr>
 <tr class="memdesc:ga9e511dffa471dfb971b7dd2b12329626"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify the user of errors encountered while processing inbound messages.  <br /></td></tr>
 <tr class="separator:ga9e511dffa471dfb971b7dd2b12329626"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -135,6 +138,9 @@ Typedefs</h2></td></tr>
 <tr class="memitem:ga3353d4b92851c52121f65aaf0684cba4" id="r_ga3353d4b92851c52121f65aaf0684cba4"><td class="memItemLeft" align="right" valign="top">typedef int64_t(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga3353d4b92851c52121f65aaf0684cba4">natsCustomReconnectDelayHandler</a>) (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, int attempts, void *closure)</td></tr>
 <tr class="memdesc:ga3353d4b92851c52121f65aaf0684cba4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to specify how long to wait between reconnects.  <br /></td></tr>
 <tr class="separator:ga3353d4b92851c52121f65aaf0684cba4"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gac45beaf6d26ef2c335ba499e4be5a896" id="r_gac45beaf6d26ef2c335ba499e4be5a896"><td class="memItemLeft" align="right" valign="top">typedef int(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gac45beaf6d26ef2c335ba499e4be5a896">natsSSLVerifyCb</a>) (int preverifyOk, void *ctx)</td></tr>
+<tr class="memdesc:gac45beaf6d26ef2c335ba499e4be5a896"><td class="mdescLeft">&#160;</td><td class="mdescRight">SSL certificate verification callback.  <br /></td></tr>
+<tr class="separator:gac45beaf6d26ef2c335ba499e4be5a896"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga954768cc1d3388bb6ab723e777647992" id="r_ga954768cc1d3388bb6ab723e777647992"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga954768cc1d3388bb6ab723e777647992">jsPubAckErrHandler</a>) (<a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> *js, <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a> *pae, void *closure)</td></tr>
 <tr class="memdesc:ga954768cc1d3388bb6ab723e777647992"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to process asynchronous publish errors from JetStream.  <br /></td></tr>
 <tr class="separator:ga954768cc1d3388bb6ab723e777647992"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -193,6 +199,23 @@ Typedefs</h2></td></tr>
 <dd>
 <a class="el" href="group__opts_group.html#ga26a48c8529fffa5f5d1a61c030979980" title="Sets the callback to be invoked when the connection has reconnected.">natsOptions_SetReconnectedCB()</a></dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>Such callback is invoked from a dedicated thread and the state of the connection that triggered the event may have changed since that event was generated. </dd></dl>
+
+</div>
+</div>
+<a id="gae1d0ec90461ccdb105d00e1030806faa" name="gae1d0ec90461ccdb105d00e1030806faa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gae1d0ec90461ccdb105d00e1030806faa">&#9670;&#160;</a></span>natsProxyConnHandler</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>(* natsProxyConnHandler) (<a class="el" href="nats_8h.html#af798865ac824e5959987de0fe8d07383">natsSock</a> *fd, char *host, int port, void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This callback is used to handle connections via proxy. It creates a socket, uses it for proxy verification, and returns it in <code>fd</code> to be used for the NATS connection.</p>
+<p>The callback should return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9cee6c417868ecaa69f99ff4f6576990" title="Success.">NATS_OK</a> if it has created a socket and returned it in <code>fd</code>, or any other error, such as <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a40a08ae6ae17deaf390b1d0d7550791c" title="Generic error.">NATS_ERR</a> if not.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#gad9199e095332535981db1582acea90d1" title="Sets the proxy connection handler.">natsOptions_SetProxyConnHandler</a> </dd></dl>
 
 </div>
 </div>
@@ -400,6 +423,36 @@ Typedefs</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>the number of milliseconds to wait before trying to reconnect. </dd></dl>
+
+</div>
+</div>
+<a id="gac45beaf6d26ef2c335ba499e4be5a896" name="gac45beaf6d26ef2c335ba499e4be5a896"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gac45beaf6d26ef2c335ba499e4be5a896">&#9670;&#160;</a></span>natsSSLVerifyCb</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef int(* natsSSLVerifyCb) (int preverifyOk, void *ctx)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This is invoked during SSL handshake and allows the user to inspect and validate the certificate chain.</p>
+<p>The <code>ctx</code> pointer should be cast to <code>(X509_STORE_CTX*)</code> before use:</p>
+<div class="fragment"><div class="line">int</div>
+<div class="line">mySSLVerifyCb(int preverifyOk, void *ctx)</div>
+<div class="line">{</div>
+<div class="line">     X509 *cert = X509_STORE_CTX_get_current_cert((X509_STORE_CTX*) ctx);</div>
+<div class="line">     ...</div>
+<div class="line">}</div>
+</div><!-- fragment --><p>See <a href="https://docs.openssl.org/master/man3/SSL_CTX_set_verify/">https://docs.openssl.org/master/man3/SSL_CTX_set_verify/</a> for more details.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">preverifyOk</td><td>indicates whether the verification of the certificate in question was passed (preverifyOk=1) or not (preverifyOk=0). </td></tr>
+    <tr><td class="paramname">ctx</td><td>a pointer to the complete context used for the certificate chain verification. The application should cast this to <code>(X509_STORE_CTX*)</code> before use. </td></tr>
+  </table>
+  </dd>
+</dl>
 
 </div>
 </div>

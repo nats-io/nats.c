@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.10.0</span>
+   &#160;<span id="projectnumber">3.11.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -119,6 +119,7 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:ad75e47d4293441bd5ddbc5eaf01e0451" id="r_ad75e47d4293441bd5ddbc5eaf01e0451"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#ad75e47d4293441bd5ddbc5eaf01e0451">MaxBytes</a></td></tr>
 <tr class="separator:ad75e47d4293441bd5ddbc5eaf01e0451"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aa538765ad97d343d60212ebd9894661e" id="r_aa538765ad97d343d60212ebd9894661e"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#aa538765ad97d343d60212ebd9894661e">MaxAge</a></td></tr>
+<tr class="memdesc:aa538765ad97d343d60212ebd9894661e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Max age of messages in nanoseconds.  <br /></td></tr>
 <tr class="separator:aa538765ad97d343d60212ebd9894661e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aa167c7547d13bf2a01510a375ad38340" id="r_aa167c7547d13bf2a01510a375ad38340"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#aa167c7547d13bf2a01510a375ad38340">MaxMsgsPerSubject</a></td></tr>
 <tr class="separator:aa167c7547d13bf2a01510a375ad38340"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -183,6 +184,12 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a5ce51cb5a36febda30bb444a0f59c2d1" id="r_a5ce51cb5a36febda30bb444a0f59c2d1"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_stream_consumer_limits.html">jsStreamConsumerLimits</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a5ce51cb5a36febda30bb444a0f59c2d1">ConsumerLimits</a></td></tr>
 <tr class="memdesc:a5ce51cb5a36febda30bb444a0f59c2d1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the limits on certain options on all consumers of the stream.  <br /></td></tr>
 <tr class="separator:a5ce51cb5a36febda30bb444a0f59c2d1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a54d080160cd8179c8c6f3982f0b11ab5" id="r_a54d080160cd8179c8c6f3982f0b11ab5"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a54d080160cd8179c8c6f3982f0b11ab5">AllowMsgTTL</a></td></tr>
+<tr class="memdesc:a54d080160cd8179c8c6f3982f0b11ab5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allow the message to be sent with a time to live (TTL) value. Requires nats-server v2.11.0 or later.  <br /></td></tr>
+<tr class="separator:a54d080160cd8179c8c6f3982f0b11ab5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aa45bb2b4fb0e7ce71b77d9af91c0a6bd" id="r_aa45bb2b4fb0e7ce71b77d9af91c0a6bd"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#aa45bb2b4fb0e7ce71b77d9af91c0a6bd">SubjectDeleteMarkerTTL</a></td></tr>
+<tr class="memdesc:aa45bb2b4fb0e7ce71b77d9af91c0a6bd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enables and sets a duration for adding server markers for delete, purge and max age limits. In nanoseconds. Requires nats-server v2.11.0 or later.  <br /></td></tr>
+<tr class="separator:aa45bb2b4fb0e7ce71b77d9af91c0a6bd"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Configuration of a JetStream stream.</p>
@@ -721,6 +728,34 @@ NATS server 2.10 added user-provided Metadata, storage Compression type, FirstSe
       <table class="memname">
         <tr>
           <td class="memname"><a class="el" href="structjs_stream_consumer_limits.html">jsStreamConsumerLimits</a> jsStreamConfig::ConsumerLimits</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a54d080160cd8179c8c6f3982f0b11ab5" name="a54d080160cd8179c8c6f3982f0b11ab5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a54d080160cd8179c8c6f3982f0b11ab5">&#9670;&#160;</a></span>AllowMsgTTL</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool jsStreamConfig::AllowMsgTTL</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="aa45bb2b4fb0e7ce71b77d9af91c0a6bd" name="aa45bb2b4fb0e7ce71b77d9af91c0a6bd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa45bb2b4fb0e7ce71b77d9af91c0a6bd">&#9670;&#160;</a></span>SubjectDeleteMarkerTTL</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int64_t jsStreamConfig::SubjectDeleteMarkerTTL</td>
         </tr>
       </table>
 </div><div class="memdoc">

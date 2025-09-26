@@ -33,5 +33,7 @@ var structjs_stream_config =
     [ "Compression", "structjs_stream_config.html#a406554aaf1e16eed4abade52f7ca5e61", null ],
     [ "FirstSeq", "structjs_stream_config.html#a7ed5e8e5a8d367b25751b9708d0e395b", null ],
     [ "SubjectTransform", "structjs_stream_config.html#a0ce1d0a7c1f0576151f505724ae393d1", null ],
-    [ "ConsumerLimits", "structjs_stream_config.html#a5ce51cb5a36febda30bb444a0f59c2d1", null ]
+    [ "ConsumerLimits", "structjs_stream_config.html#a5ce51cb5a36febda30bb444a0f59c2d1", null ],
+    [ "AllowMsgTTL", "structjs_stream_config.html#a54d080160cd8179c8c6f3982f0b11ab5", null ],
+    [ "SubjectDeleteMarkerTTL", "structjs_stream_config.html#aa45bb2b4fb0e7ce71b77d9af91c0a6bd", null ]
 ];

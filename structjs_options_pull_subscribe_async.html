@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.10.0</span>
+   &#160;<span id="projectnumber">3.11.0</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -122,6 +122,15 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a6583dfdee172d82b6877d9e6ff4e845c" id="r_a6583dfdee172d82b6877d9e6ff4e845c"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_options_pull_subscribe_async.html#a6583dfdee172d82b6877d9e6ff4e845c">Heartbeat</a></td></tr>
 <tr class="memdesc:a6583dfdee172d82b6877d9e6ff4e845c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Have server sends heartbeats at this interval (in milliseconds) to help detect communication failures.  <br /></td></tr>
 <tr class="separator:a6583dfdee172d82b6877d9e6ff4e845c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad133f4ce6e9147f991ba837fc40ed538" id="r_ad133f4ce6e9147f991ba837fc40ed538"><td class="memItemLeft" align="right" valign="top">const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_options_pull_subscribe_async.html#ad133f4ce6e9147f991ba837fc40ed538">Group</a></td></tr>
+<tr class="memdesc:ad133f4ce6e9147f991ba837fc40ed538"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name of consumer priority group.  <br /></td></tr>
+<tr class="separator:ad133f4ce6e9147f991ba837fc40ed538"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:acf2ebfa655aa25ac8abb1e2665fa90da" id="r_acf2ebfa655aa25ac8abb1e2665fa90da"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_options_pull_subscribe_async.html#acf2ebfa655aa25ac8abb1e2665fa90da">MinPending</a></td></tr>
+<tr class="memdesc:acf2ebfa655aa25ac8abb1e2665fa90da"><td class="mdescLeft">&#160;</td><td class="mdescRight">When specified, this subscription will only receive messages when the consumer has at least this many pending messages.  <br /></td></tr>
+<tr class="separator:acf2ebfa655aa25ac8abb1e2665fa90da"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a5f49861af9e790fb963ddea5c6c01594" id="r_a5f49861af9e790fb963ddea5c6c01594"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_options_pull_subscribe_async.html#a5f49861af9e790fb963ddea5c6c01594">MinAckPending</a></td></tr>
+<tr class="memdesc:a5f49861af9e790fb963ddea5c6c01594"><td class="mdescLeft">&#160;</td><td class="mdescRight">When specified, this Pull request will only receive messages when the consumer has at least this many ack pending messages.  <br /></td></tr>
+<tr class="separator:a5f49861af9e790fb963ddea5c6c01594"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a1bf6fa8ddd19698bd82f4c27ddb06a9f" id="r_a1bf6fa8ddd19698bd82f4c27ddb06a9f"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_options_pull_subscribe_async.html#a1bf6fa8ddd19698bd82f4c27ddb06a9f">FetchSize</a></td></tr>
 <tr class="memdesc:a1bf6fa8ddd19698bd82f4c27ddb06a9f"><td class="mdescLeft">&#160;</td><td class="mdescRight">When using the automatic Fetch flow control (default NextHandler), this is the number of messages to ask for in a single request.  <br /></td></tr>
 <tr class="separator:a1bf6fa8ddd19698bd82f4c27ddb06a9f"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -234,6 +243,51 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+
+</div>
+</div>
+<a id="ad133f4ce6e9147f991ba837fc40ed538" name="ad133f4ce6e9147f991ba837fc40ed538"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad133f4ce6e9147f991ba837fc40ed538">&#9670;&#160;</a></span>Group</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">const char* jsOptionsPullSubscribeAsync::Group</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<dl class="section note"><dt>Note</dt><dd>The use of this option require nats-server v2.11.0 or later, and a consumer with priority groups enabled and configured. </dd></dl>
+
+</div>
+</div>
+<a id="acf2ebfa655aa25ac8abb1e2665fa90da" name="acf2ebfa655aa25ac8abb1e2665fa90da"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acf2ebfa655aa25ac8abb1e2665fa90da">&#9670;&#160;</a></span>MinPending</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int64_t jsOptionsPullSubscribeAsync::MinPending</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<dl class="section note"><dt>Note</dt><dd>The use of this option require nats-server v2.11.0 or later, and a consumer with priority groups enabled and configured. </dd></dl>
+
+</div>
+</div>
+<a id="a5f49861af9e790fb963ddea5c6c01594" name="a5f49861af9e790fb963ddea5c6c01594"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5f49861af9e790fb963ddea5c6c01594">&#9670;&#160;</a></span>MinAckPending</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int64_t jsOptionsPullSubscribeAsync::MinAckPending</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<dl class="section note"><dt>Note</dt><dd>The use of this option require nats-server v2.11.0 or later, and a consumer with priority groups enabled and configured. </dd></dl>
 
 </div>
 </div>

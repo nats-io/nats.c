@@ -562,11 +562,6 @@ var group__types_group =
     [ "objStoreInfoList", "group__types_group.html#ga1f2a7d44e4ce511117c352cf6d10ff38", null ],
     [ "objStoreOptions", "group__types_group.html#gac4c724c2d6c819a57db7e97fc0d5dddb", null ],
     [ "objStoreWatchOptions", "group__types_group.html#ga375e2f7b356f1e92d6d4eaaa77192b57", null ],
-    [ "stanConnection", "group__types_group.html#ga9e826493769d23086cfccefe95cdf64c", null ],
-    [ "stanSubscription", "group__types_group.html#gae4dae869fb614536f0f027c2e2660cc5", null ],
-    [ "stanMsg", "group__types_group.html#ga2cf5db7703b42d97abe56a3e83b2a87d", null ],
-    [ "stanConnOptions", "group__types_group.html#ga13d64411878ba13a6ca39c915f2447c1", null ],
-    [ "stanSubOptions", "group__types_group.html#ga023712711f5c289663fc2223e83686d3", null ],
     [ "jsRetentionPolicy", "group__types_group.html#ga410f8fb053efa02b2ca1de0c02fa4b6d", [
       [ "js_LimitsPolicy", "group__types_group.html#gga410f8fb053efa02b2ca1de0c02fa4b6da6a2aa02f32acec6526d81f6e974e690f", null ],
       [ "js_InterestPolicy", "group__types_group.html#gga410f8fb053efa02b2ca1de0c02fa4b6dae874de4a787cfbec4c6d0eb1a3f05ebd", null ],

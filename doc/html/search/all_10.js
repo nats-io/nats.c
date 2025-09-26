@@ -16,7 +16,7 @@ var searchData=
   ['public_20constants_13',['Public constants',['../group__micro_constants.html',1,'']]],
   ['public_20structs_14',['Public structs',['../group__micro_structs.html',1,'']]],
   ['publishasync_15',['PublishAsync',['../structjs_options.html#a817c4199ff9825808769cceb048c7081',1,'jsOptions']]],
-  ['publishing_16',['publishing',['../group__conn_pub_group.html',1,'Publishing'],['../group__stan_conn_pub_group.html',1,'Publishing'],['../group__js_pub_group.html',1,'Publishing']]],
+  ['publishing_16',['publishing',['../group__conn_pub_group.html',1,'Publishing'],['../group__js_pub_group.html',1,'Publishing']]],
   ['pullsubscribeasync_17',['PullSubscribeAsync',['../structjs_options.html#a0cccdfa48473ddf17e00a422235b8c31',1,'jsOptions']]],
   ['purge_18',['Purge',['../structjs_options_stream.html#ac95ec5ccbac73396a0af503abc99ec01',1,'jsOptionsStream']]],
   ['pushbound_19',['PushBound',['../structjs_consumer_info.html#a31282cdc72000a91af03f89899740bfa',1,'jsConsumerInfo']]]

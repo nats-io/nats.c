@@ -24,7 +24,7 @@
 */
 var NAVTREE =
 [
-  [ "NATS C Client with JetStream and Streaming support", "index.html", [
+  [ "NATS C Client with JetStream support", "index.html", [
     [ "NATS C client.", "index.html", "index" ],
     [ "Deprecated List", "deprecated.html", null ],
     [ "Topics", "topics.html", "topics" ],
@@ -54,11 +54,11 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"group__kv_group.html#ga30feca870f580c7b9d2ad07a740505b2",
-"group__opts_group.html#ga7e4172084520708b8c9f28e73174461c",
-"status_8h.html",
-"structjs_cluster_info.html#af7d85652b52f56fa1eedce8f45fe6a19",
-"structjs_stream_source_info.html#a28b8cc0a9d487672955d3a3fa03de247"
+"group__kv_group.html#ga5726ad2e6205d2f6749be013138218ca",
+"group__opts_group.html#ga95510436eee06f9992ded96a44795c40",
+"status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a61cd7aa9b9e02f410465a61a085fa209",
+"structjs_consumer_names_list.html#a0bccbad8ac5d335a0ed89970a58900fb",
+"structkv_keys_list.html"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

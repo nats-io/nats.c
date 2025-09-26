@@ -56,7 +56,7 @@ var searchData=
   ['objstorewatchoptions_53',['objstorewatchoptions',['../structobj_store_watch_options.html',1,'objStoreWatchOptions'],['../group__types_group.html#ga375e2f7b356f1e92d6d4eaaa77192b57',1,'objStoreWatchOptions:&#160;nats.h']]],
   ['objstorewatchoptions_5finit_54',['objStoreWatchOptions_Init',['../group__obs_mgt.html#ga0902c54372c1e3ff63cbeca5839cd77b',1,'nats.h']]],
   ['offline_55',['Offline',['../structjs_peer_info.html#a3f3e09c5996858ec5faca2dc7fa5224e',1,'jsPeerInfo']]],
-  ['options_56',['options',['../group__opts_group.html',1,'Options'],['../group__stan_conn_opts_group.html',1,'Streaming Connection Options'],['../group__stan_sub_opts_group.html',1,'Streaming Subscription Options']]],
+  ['options_56',['Options',['../group__opts_group.html',1,'']]],
   ['opts_57',['Opts',['../structobj_store_meta.html#a539e06d8b13d0d35db56e6e102c4faa6',1,'objStoreMeta']]],
   ['optstartseq_58',['optstartseq',['../structjs_stream_source.html#ad6948b7a34c202f324b6d2beb32fe5ed',1,'jsStreamSource::OptStartSeq'],['../structjs_consumer_config.html#a2f0243899885dc97f304f48ca52b5356',1,'jsConsumerConfig::OptStartSeq']]],
   ['optstarttime_59',['optstarttime',['../structjs_consumer_config.html#a802ea3bf0669395bee28611f4ecede80',1,'jsConsumerConfig::OptStartTime'],['../structjs_stream_source.html#a67eb1dac41b2d826a923cfb23baa24a5',1,'jsStreamSource::OptStartTime']]],

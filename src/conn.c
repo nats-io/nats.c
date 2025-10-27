@@ -2132,8 +2132,6 @@ _connect(natsConnection *nc)
                     _close(nc, NATS_CONN_STATUS_DISCONNECTED, false, false);
 
                     natsConn_Lock(nc);
-
-                    nc->cur = NULL;
                 }
             }
             else

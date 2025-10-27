@@ -9617,6 +9617,7 @@ void test_RetryOnFailedConnect(void)
     natsSubscription    *sub  = NULL;
     natsMsg             *msg  = NULL;
     natsMsg             *rmsg = NULL;
+    natsPid             pid   = NATS_INVALID_PID;
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
@@ -9762,8 +9763,6 @@ void test_RetryOnFailedConnect(void)
     natsOptions_Destroy(opts);
     opts = NULL;
 
-    _destroyDefaultThreadArgs(&arg);
-
     // Make sure that closing the connection while not connected returns fast
     test("Create opts: ");
     s = natsOptions_Create(&opts);
@@ -9783,7 +9782,58 @@ void test_RetryOnFailedConnect(void)
     testCond(nats_Now()-start <1500);
 
     natsConnection_Destroy(nc);
+    nc = NULL;
     natsOptions_Destroy(opts);
+    opts = NULL;
+
+    // Start a mockup server that will close the connection after the
+    // TCP connect and a little delay.
+    test("Start mockup server: ");
+    arg.connected = false;
+    arg.status    = NATS_ERR;
+    arg.string    = "";
+    s = natsThread_Create(&t, _startMockupServerThread, (void*) &arg);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && (arg.status != NATS_OK))
+            s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+        s = (s == NATS_OK ? arg.status : s);
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Create options: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, 20));
+    IFOK(s, natsOptions_SetRetryOnFailedConnect(opts, true, _connectedCb, (void*) &arg));
+    testCond(s == NATS_OK);
+
+    test("Connect: ")
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_NOT_YET_CONNECTED);
+
+    test("Start server: ");
+    pid = _startServer("nats://127.0.0.1", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Wait for connect: ");
+    s = NATS_OK;
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.connected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _stopServer(pid);
+    _destroyDefaultThreadArgs(&arg);
 }
 
 static void
@@ -17552,7 +17602,7 @@ _startMockupServerThread(void *closure)
     {
         s = NATS_SYS_ERROR;
     }
-    if (s == NATS_OK)
+    if ((s == NATS_OK) && !nats_IsStringEmpty(arg->string))
     {
         char info[1024];
 
@@ -17583,6 +17633,12 @@ _startMockupServerThread(void *closure)
                 s = natsCondition_TimedWait(arg->c, arg->m, 10000);
             natsMutex_Unlock(arg->m);
         }
+        natsSock_Close(ctx.fd);
+    }
+    else if (s == NATS_OK)
+    {
+        // Wait a bit and close the connection.
+        nats_Sleep(100);
         natsSock_Close(ctx.fd);
     }
 

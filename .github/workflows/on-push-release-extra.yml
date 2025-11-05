@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        server_version: [latest, v2.10.29]
+        server_version: [latest, v2.11.10]
     uses: ./.github/workflows/build-test.yml
     name: "Other servers"
     with:

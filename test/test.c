@@ -168,12 +168,9 @@ struct threadArg
 };
 
 static bool
-serverVersionAtLeast(int major, int minor, int update)
+extractServerVersionComponents(int *ma, int *mi, int *up)
 {
-    int     ma       = 0;
-    int     mi       = 0;
-    int     up       = 0;
-    char    *version = NULL;
+    char *version = NULL;
 
     if (serverVersion == NULL)
         return false;
@@ -192,7 +189,20 @@ serverVersionAtLeast(int major, int minor, int update)
         version += 2;
     }
 
-    sscanf(version, "%d.%d.%d", &ma, &mi, &up);
+    sscanf(version, "%d.%d.%d", ma, mi, up);
+    return true;
+}
+
+static bool
+serverVersionAtLeast(int major, int minor, int update)
+{
+    int ma = 0;
+    int mi = 0;
+    int up = 0;
+
+    if (!extractServerVersionComponents(&ma, &mi, &up))
+        return false;
+
     if ((ma > major) || ((ma == major) && (mi > minor)) || ((ma == major) && (mi == minor) && (up >= update)))
         return true;
 
@@ -30578,6 +30588,19 @@ void test_JetStreamSubscribePullAsync(void)
     natsSubscription_Destroy(sub);
     sub = NULL;
 
+    // Starting 2.11.11 and 2.12.2, if a noWait request does not have
+    // expiration, 404 is returned instead of 408. Adjust expected
+    // status accordingly.
+    natsStatus  noWaitNoExpireSts = NATS_TIMEOUT;
+    int         ma, mi, up;
+    if (extractServerVersionComponents(&ma, &mi, &up))
+    {
+        if ((ma > 2) || (mi > 12) || ((mi == 11) && (up > 10)) || ((mi == 12) && (up > 1)))
+        {
+            noWaitNoExpireSts = NATS_NOT_FOUND;
+        }
+    }
+
     // TEST exit criteria.
     typedef struct
     {
@@ -30595,21 +30618,21 @@ void test_JetStreamSubscribePullAsync(void)
     } nowaitTC_t;
     nowaitTC_t nowaitTCs[] = {
         {
-            .name = "single fetch NOWAIT, partially fulfilled NATS_TIMEOUT",
+            .name = "single fetch NOWAIT, partially fulfilled",
             .noWait = true,
             .want = 1000,
             .before = 2,
             .fetchSize = 13,
-            .expectedStatus = NATS_TIMEOUT,
+            .expectedStatus = noWaitNoExpireSts,
             .expectedN = 2,
         },
         {
-            .name = "multi-fetch NOWAIT, partially fulfilled NATS_TIMEOUT",
+            .name = "multi-fetch NOWAIT, partially fulfilled",
             .noWait = true,
             .want = 1000,
             .before = 117,
             .fetchSize = 20, // 117 is not divisible by 20
-            .expectedStatus = NATS_TIMEOUT,
+            .expectedStatus = noWaitNoExpireSts,
             .expectedN = 117,
         },
         {

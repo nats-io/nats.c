@@ -1460,55 +1460,55 @@ kvStatus_Destroy(kvStatus *sts)
 //////////////////////////////////
 
 const char*
-kvEntry_Bucket(kvEntry *e)
+kvEntry_Bucket(const kvEntry *e)
 {
     return (e == NULL ? NULL : kvStore_Bucket(e->kv));
 }
 
 const char*
-kvEntry_Key(kvEntry *e)
+kvEntry_Key(const kvEntry *e)
 {
     return (e == NULL ? NULL : e->key);
 }
 
 const void*
-kvEntry_Value(kvEntry *e)
+kvEntry_Value(const kvEntry *e)
 {
     return (e == NULL ? NULL : (const void*) natsMsg_GetData(e->msg));
 }
 
 int
-kvEntry_ValueLen(kvEntry *e)
+kvEntry_ValueLen(const kvEntry *e)
 {
     return (e == NULL ? -1 : natsMsg_GetDataLength(e->msg));
 }
 
 const char*
-kvEntry_ValueString(kvEntry *e)
+kvEntry_ValueString(const kvEntry *e)
 {
     return (e == NULL ? NULL : natsMsg_GetData(e->msg));
 }
 
 uint64_t
-kvEntry_Revision(kvEntry *e)
+kvEntry_Revision(const kvEntry *e)
 {
     return (e == NULL ? 0 : natsMsg_GetSequence(e->msg));
 }
 
 int64_t
-kvEntry_Created(kvEntry *e)
+kvEntry_Created(const kvEntry *e)
 {
     return (e == NULL ? 0 : natsMsg_GetTime(e->msg));
 }
 
 uint64_t
-kvEntry_Delta(kvEntry *e)
+kvEntry_Delta(const kvEntry *e)
 {
     return (e == NULL ? 0 : e->delta);
 }
 
 kvOperation
-kvEntry_Operation(kvEntry *e)
+kvEntry_Operation(const kvEntry *e)
 {
     return (e == NULL ? 0 : e->op);
 }

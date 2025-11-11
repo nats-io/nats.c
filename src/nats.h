@@ -7864,7 +7864,7 @@ kvStore_Destroy(kvStore *kv);
  * @param e the pointer to the #kvEntry object.
  */
 NATS_EXTERN const char*
-kvEntry_Bucket(kvEntry *e);
+kvEntry_Bucket(const kvEntry *e);
 
 /** \brief Returns the name of the key that was retrieved.
  *
@@ -7873,7 +7873,7 @@ kvEntry_Bucket(kvEntry *e);
  * @param e the pointer to the #kvEntry object.
  */
 NATS_EXTERN const char*
-kvEntry_Key(kvEntry *e);
+kvEntry_Key(const kvEntry *e);
 
 /** \brief Returns the value for this key.
  *
@@ -7882,7 +7882,7 @@ kvEntry_Key(kvEntry *e);
  * @param e the pointer to the #kvEntry object.
  */
 NATS_EXTERN const void*
-kvEntry_Value(kvEntry *e);
+kvEntry_Value(const kvEntry *e);
 
 /** \brief Returns the value length for this key.
  *
@@ -7891,7 +7891,7 @@ kvEntry_Value(kvEntry *e);
  * @param e the pointer to the #kvEntry object.
  */
 NATS_EXTERN int
-kvEntry_ValueLen(kvEntry *e);
+kvEntry_ValueLen(const kvEntry *e);
 
 /** \brief Returns the value, as a string, for this key.
  *
@@ -7901,7 +7901,7 @@ kvEntry_ValueLen(kvEntry *e);
  * @param e the pointer to the #kvEntry object.
  */
 NATS_EXTERN const char*
-kvEntry_ValueString(kvEntry *e);
+kvEntry_ValueString(const kvEntry *e);
 
 /** \brief Returns the unique sequence for this value.
  *
@@ -7910,7 +7910,7 @@ kvEntry_ValueString(kvEntry *e);
  * @param e the pointer to the #kvEntry object.
  */
 NATS_EXTERN uint64_t
-kvEntry_Revision(kvEntry *e);
+kvEntry_Revision(const kvEntry *e);
 
 /** \brief Returns the time (in UTC) the data was put in the bucket.
  *
@@ -7919,7 +7919,7 @@ kvEntry_Revision(kvEntry *e);
  * @param e the pointer to the #kvEntry object.
  */
 NATS_EXTERN int64_t
-kvEntry_Created(kvEntry *e);
+kvEntry_Created(const kvEntry *e);
 
 /** \brief Returns the distance from the latest value.
  *
@@ -7931,7 +7931,7 @@ kvEntry_Created(kvEntry *e);
  * @param e the pointer to the #kvEntry object.
  */
 NATS_EXTERN uint64_t
-kvEntry_Delta(kvEntry *e);
+kvEntry_Delta(const kvEntry *e);
 
 /** \brief Returns the type of operation of this value.
  *
@@ -7942,7 +7942,7 @@ kvEntry_Delta(kvEntry *e);
  * @param e the pointer to the #kvEntry object.
  */
 NATS_EXTERN kvOperation
-kvEntry_Operation(kvEntry *e);
+kvEntry_Operation(const kvEntry *e);
 
 /** \brief Destroys the KeyValue entry object.
  *

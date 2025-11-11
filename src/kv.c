@@ -1040,14 +1040,14 @@ kvWatcher_Destroy(kvWatcher *w)
 }
 
 natsStatus
-kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, kvWatchOptions *opts)
+kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, const kvWatchOptions *opts)
 {
     const char *subjects = { key };
     return kvStore_WatchMulti(new_watcher, kv, &subjects, 1, opts);
 }
 
 natsStatus
-kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int numKeys, kvWatchOptions *opts)
+kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int numKeys, const kvWatchOptions *opts)
 {
     natsStatus      s = NATS_OK;
     kvWatcher       *w = NULL;
@@ -1163,7 +1163,7 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
 }
 
 natsStatus
-kvStore_WatchAll(kvWatcher **new_watcher, kvStore *kv, kvWatchOptions *opts)
+kvStore_WatchAll(kvWatcher **new_watcher, kvStore *kv, const kvWatchOptions *opts)
 {
     natsStatus s = kvStore_Watch(new_watcher, kv, ">", opts);
     return NATS_UPDATE_ERR_STACK(s);

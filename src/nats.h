@@ -8150,7 +8150,7 @@ kvStore_PurgeDeletes(kvStore *kv, kvPurgeOptions *opts);
  * @param opts the watcher options, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *keys, kvWatchOptions *opts);
+kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *keys, const kvWatchOptions *opts);
 
 /** \brief Returns a watcher for any updates to keys that match one of the
  * `keys` argument.
@@ -8174,7 +8174,7 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *keys, kvWatchOpt
  * @param opts the watcher options, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int numKeys, kvWatchOptions *opts);
+kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int numKeys, const kvWatchOptions *opts);
 
 /** \brief Returns a watcher for any updates to any keys of the KeyValue store bucket.
  *
@@ -8191,7 +8191,7 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
  * @param opts the watcher options, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_WatchAll(kvWatcher **new_watcher, kvStore *kv, kvWatchOptions *opts);
+kvStore_WatchAll(kvWatcher **new_watcher, kvStore *kv, const kvWatchOptions *opts);
 
 /** \brief Returns all keys in the bucket.
  *

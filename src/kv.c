@@ -735,7 +735,7 @@ kvStore_UpdateString(uint64_t *rev, kvStore *kv, const char *key, const char *da
 }
 
 static natsStatus
-_delete(kvStore *kv, const char *key, bool purge, kvPurgeOptions *opts)
+_delete(kvStore *kv, const char *key, bool purge, const kvPurgeOptions *opts)
 {
     natsStatus      s;
     natsMsg         *msg = NULL;
@@ -784,7 +784,7 @@ kvStore_Delete(kvStore *kv, const char *key)
 }
 
 natsStatus
-kvStore_Purge(kvStore *kv, const char *key, kvPurgeOptions *opts)
+kvStore_Purge(kvStore *kv, const char *key, const kvPurgeOptions *opts)
 {
     natsStatus s = _delete(kv, key, true, opts);
     return NATS_UPDATE_ERR_STACK(s);
@@ -801,7 +801,7 @@ kvPurgeOptions_Init(kvPurgeOptions *opts)
 }
 
 natsStatus
-kvStore_PurgeDeletes(kvStore *kv, kvPurgeOptions *opts)
+kvStore_PurgeDeletes(kvStore *kv, const kvPurgeOptions *opts)
 {
     natsStatus      s;
     kvWatcher       *w = NULL;
@@ -1170,7 +1170,7 @@ kvStore_WatchAll(kvWatcher **new_watcher, kvStore *kv, const kvWatchOptions *opt
 }
 
 static natsStatus
-_kvStore_Keys(kvKeysList *list, kvStore *kv, const char **filters, int numFilters, kvWatchOptions *opts)
+_kvStore_Keys(kvKeysList *list, kvStore *kv, const char **filters, int numFilters, const kvWatchOptions *opts)
 {
     natsStatus      s;
     kvWatchOptions  o;
@@ -1240,14 +1240,14 @@ _kvStore_Keys(kvKeysList *list, kvStore *kv, const char **filters, int numFilter
 }
 
 natsStatus
-kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts)
+kvStore_Keys(kvKeysList *list, kvStore *kv, const kvWatchOptions *opts)
 {
     natsStatus s = _kvStore_Keys(list, kv, NULL, 0, opts);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 natsStatus
-kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, const char **filters, int numFilters, kvWatchOptions *opts)
+kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, const char **filters, int numFilters, const kvWatchOptions *opts)
 {
     if ((filters == NULL) || (numFilters <= 0))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1272,7 +1272,7 @@ kvKeysList_Destroy(kvKeysList *list)
 }
 
 natsStatus
-kvStore_History(kvEntryList *list, kvStore *kv, const char *key, kvWatchOptions *opts)
+kvStore_History(kvEntryList *list, kvStore *kv, const char *key, const kvWatchOptions *opts)
 {
     natsStatus      s;
     kvWatchOptions  o;
@@ -1365,7 +1365,7 @@ kvWatcher_Stop(kvWatcher *w)
 }
 
 const char*
-kvStore_Bucket(kvStore *kv)
+kvStore_Bucket(const kvStore *kv)
 {
     return (kv == NULL ? NULL : kv->bucket);
 }
@@ -1406,37 +1406,37 @@ kvStore_Status(kvStatus **new_status, kvStore *kv)
 //////////////////////////////////
 
 const char*
-kvStatus_Bucket(kvStatus *sts)
+kvStatus_Bucket(const kvStatus *sts)
 {
     return (sts == NULL ? NULL : sts->kv->bucket);
 }
 
 uint64_t
-kvStatus_Values(kvStatus *sts)
+kvStatus_Values(const kvStatus *sts)
 {
     return (sts == NULL ? 0 : sts->si->State.Msgs);
 }
 
 int64_t
-kvStatus_History(kvStatus *sts)
+kvStatus_History(const kvStatus *sts)
 {
     return (sts == NULL || sts->si->Config == NULL ? 0 : sts->si->Config->MaxMsgsPerSubject);
 }
 
 int64_t
-kvStatus_TTL(kvStatus *sts)
+kvStatus_TTL(const kvStatus *sts)
 {
     return (sts == NULL || sts->si->Config == NULL ? 0 : sts->si->Config->MaxAge);
 }
 
 int64_t
-kvStatus_Replicas(kvStatus *sts)
+kvStatus_Replicas(const kvStatus *sts)
 {
     return (sts == NULL || sts->si->Config == NULL ? 0 : sts->si->Config->Replicas);
 }
 
 uint64_t
-kvStatus_Bytes(kvStatus *sts)
+kvStatus_Bytes(const kvStatus *sts)
 {
     return (sts == NULL ? 0 : sts->si->State.Bytes);
 }

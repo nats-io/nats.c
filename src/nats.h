@@ -1709,11 +1709,11 @@ typedef struct objStoreConfig
      */
     bool            Compression;
 
-    // /**
-    //  * @brief Bucket-specific metadata.
-    //  *
-    //  * \note Metadata requires nats-server v2.10.0+
-    //  */
+    /**
+     * @brief Bucket-specific metadata.
+     *
+     * \note Metadata requires nats-server v2.10.0+
+     */
     natsMetadata    Metadata;
 
 } objStoreConfig;
@@ -8091,7 +8091,7 @@ kvStore_Delete(kvStore *kv, const char *key);
  * @param opts the pointer to the #kvPurgeOptions, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_Purge(kvStore *kv, const char *key, kvPurgeOptions *opts);
+kvStore_Purge(kvStore *kv, const char *key, const kvPurgeOptions *opts);
 
 /** \brief Initializes a KeyValue watcher options structure.
  *
@@ -8131,7 +8131,7 @@ kvPurgeOptions_Init(kvPurgeOptions *opts);
  * @param opts the pointer to the #kvPurgeOptions, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_PurgeDeletes(kvStore *kv, kvPurgeOptions *opts);
+kvStore_PurgeDeletes(kvStore *kv, const kvPurgeOptions *opts);
 
 /** \brief Returns a watcher for any updates to keys that match the `keys` argument.
  *
@@ -8212,7 +8212,7 @@ kvStore_WatchAll(kvWatcher **new_watcher, kvStore *kv, const kvWatchOptions *opt
  * @param opts the history options, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts);
+kvStore_Keys(kvKeysList *list, kvStore *kv, const kvWatchOptions *opts);
 
 /** \brief Returns all keys in the bucket which matches the list of subject like filters.
  *
@@ -8238,7 +8238,7 @@ kvStore_Keys(kvKeysList *list, kvStore *kv, kvWatchOptions *opts);
  * @param opts the history options, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, const char **filters, int numFilters, kvWatchOptions *opts);
+kvStore_KeysWithFilters(kvKeysList *list, kvStore *kv, const char **filters, int numFilters, const kvWatchOptions *opts);
 
 /** \brief Destroys this list of KeyValue store key strings.
  *
@@ -8277,7 +8277,7 @@ kvKeysList_Destroy(kvKeysList *list);
  * @param opts the history options, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-kvStore_History(kvEntryList *list, kvStore *kv, const char *key, kvWatchOptions *opts);
+kvStore_History(kvEntryList *list, kvStore *kv, const char *key, const kvWatchOptions *opts);
 
 /** \brief Destroys this list of KeyValue store entries.
  *
@@ -8303,7 +8303,7 @@ kvEntryList_Destroy(kvEntryList *list);
  * @param kv the pointer to the #kvStore object.
  */
 NATS_EXTERN const char*
-kvStore_Bucket(kvStore *kv);
+kvStore_Bucket(const kvStore *kv);
 
 // PurgeDeletes
 
@@ -8381,7 +8381,7 @@ kvWatcher_Destroy(kvWatcher *w);
  * @param sts the pointer to the #kvStatus object.
  */
 NATS_EXTERN const char*
-kvStatus_Bucket(kvStatus *sts);
+kvStatus_Bucket(const kvStatus *sts);
 
 /** \brief Returns how many messages are in the bucket, including historical values.
  *
@@ -8390,7 +8390,7 @@ kvStatus_Bucket(kvStatus *sts);
  * @param sts the pointer to the #kvStatus object.
  */
 NATS_EXTERN uint64_t
-kvStatus_Values(kvStatus *sts);
+kvStatus_Values(const kvStatus *sts);
 
 /** \brief Returns the configured history kept per key.
  *
@@ -8399,7 +8399,7 @@ kvStatus_Values(kvStatus *sts);
  * @param sts the pointer to the #kvStatus object.
  */
 NATS_EXTERN int64_t
-kvStatus_History(kvStatus *sts);
+kvStatus_History(const kvStatus *sts);
 
 /** \brief Returns how long the bucket keeps values for.
  *
@@ -8408,7 +8408,7 @@ kvStatus_History(kvStatus *sts);
  * @param sts the pointer to the #kvStatus object.
  */
 NATS_EXTERN int64_t
-kvStatus_TTL(kvStatus *sts);
+kvStatus_TTL(const kvStatus *sts);
 
 /** \brief Returns the number of replicas to keep for a bucket.
  *
@@ -8417,7 +8417,7 @@ kvStatus_TTL(kvStatus *sts);
  * @param sts the pointer to the #kvStatus object.
  */
 NATS_EXTERN int64_t
-kvStatus_Replicas(kvStatus *sts);
+kvStatus_Replicas(const kvStatus *sts);
 
 /** \brief Returns the size (in bytes) of this bucket.
  *
@@ -8426,7 +8426,7 @@ kvStatus_Replicas(kvStatus *sts);
  * @param sts the pointer to the #kvStatus object.
  */
 NATS_EXTERN uint64_t
-kvStatus_Bytes(kvStatus *sts);
+kvStatus_Bytes(const kvStatus *sts);
 
 /** \brief Destroys the KeyValue status object.
  *

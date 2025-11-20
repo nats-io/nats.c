@@ -614,7 +614,7 @@ objStoreInfo_Destroy(objStoreInfo *info)
 static natsStatus
 _encodeName(char **en, const char *name)
 {
-    natsStatus  s = nats_Base64RawURL_EncodeString((const unsigned char*) name, (int) strlen(name), en);
+    natsStatus  s = nats_Base64URL_EncodeString((const unsigned char*) name, (int) strlen(name), en);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

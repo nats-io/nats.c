@@ -36835,6 +36835,8 @@ void test_ObjectStore_StoreMgt(void)
     const char          *esha = NULL;
     const char          **keys= NULL;
     const char          **vals= NULL;
+    natsSubscription    *sub  = NULL;
+    natsMsg             *msg  = NULL;
     int                 count = 0;
 #ifndef NATS_HAS_TLS
     const char          *nosha= "SHA-256=bm90IHN1cHBvcnRlZA==";
@@ -36875,6 +36877,10 @@ void test_ObjectStore_StoreMgt(void)
     s = objStore_GetInfo(&info, obs, "notfound", NULL);
     testCond((s == NATS_NOT_FOUND) && (info == NULL) && (nats_GetLastError(NULL) == NULL));
 
+    test("Create subscription to check encoding: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "$O.TEST.M.>");
+    testCond(s == NATS_OK);
+
 #ifndef NATS_HAS_TLS
     nats_hashNoErrorOnNoSSL(true);
 #endif
@@ -36882,6 +36888,18 @@ void test_ObjectStore_StoreMgt(void)
     s = objStore_PutString(NULL, obs, "test", "this is a test string");
     IFOK(s, objStore_GetInfo(&info, obs, "test", NULL));
     testCond((s == NATS_OK) && (info != NULL));
+
+    test("Check encoding for test: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    // Proper encoding of "test" should be "dGVzdA==".
+    // We used to wrongly use nats_Base64RawURL_EncodeString
+    // which would lead to "dGVzdA".
+    testCond((s == NATS_OK) && (msg != NULL)
+        && (strcmp(natsMsg_GetSubject(msg), "$O.TEST.M.dGVzdA==") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsSubscription_Destroy(sub);
+    sub = NULL;
 
 #if defined(NATS_HAS_TLS)
     esha = "SHA-256=9ndFGdHHozie8yfpwEdmuZnbjN-4XRNGxHHuhtZYhbw=";

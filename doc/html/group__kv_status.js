@@ -1,10 +1,10 @@
 var group__kv_status =
 [
-    [ "kvStatus_Bucket", "group__kv_status.html#ga1acec36db32207f21e15afc26bb5af1c", null ],
-    [ "kvStatus_Values", "group__kv_status.html#ga2016af3c73841d8b226361e764dce158", null ],
-    [ "kvStatus_History", "group__kv_status.html#gada6f22b5659b184762cea4f45d369ee5", null ],
-    [ "kvStatus_TTL", "group__kv_status.html#gaa747ad0a6182ec7a47fb47018c33d1c1", null ],
-    [ "kvStatus_Replicas", "group__kv_status.html#ga86b114f4dac9f06df86101f84bd497b2", null ],
-    [ "kvStatus_Bytes", "group__kv_status.html#ga6db13a3b26c7c17633623da5f27978ff", null ],
+    [ "kvStatus_Bucket", "group__kv_status.html#ga932873e1f9250f972a3f236a2089a7e3", null ],
+    [ "kvStatus_Values", "group__kv_status.html#ga56f076de5f92b4e3eaa4cdd97c44b08b", null ],
+    [ "kvStatus_History", "group__kv_status.html#gaf0f2b0cc02effd591aabd75ab51b87c4", null ],
+    [ "kvStatus_TTL", "group__kv_status.html#gad9e30587157b1596c621c5098bfab02d", null ],
+    [ "kvStatus_Replicas", "group__kv_status.html#gad42330e684b30f42f239511f352235b1", null ],
+    [ "kvStatus_Bytes", "group__kv_status.html#ga9c716b144c136ef6451eb2c07afb7cf5", null ],
     [ "kvStatus_Destroy", "group__kv_status.html#ga5eb3d824c1873af705beee4798246a08", null ]
 ];

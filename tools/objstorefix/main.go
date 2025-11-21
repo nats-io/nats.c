@@ -76,8 +76,10 @@ func main() {
 		fixed        int
 		ctx          = context.Background()
 		objectStores = js.ObjectStores(ctx)
+		storeCount   int
 	)
 	for info := range objectStores.Status() {
+		storeCount++
 		storeName := info.Bucket()
 		fmt.Printf("Fixing object store %q\n", storeName)
 		n, err := fixStore(ctx, js, storeName)
@@ -98,7 +100,11 @@ func main() {
 		}
 		fmt.Println("")
 	}
-	fmt.Printf("\nFixed a total of %v entries!", fixed)
+	if storeCount == 0 {
+		fmt.Printf("\nNo object store present!\n\n")
+	} else {
+		fmt.Printf("\nFixed a total of %v entries!\n\n", fixed)
+	}
 }
 
 func fixStore(ctx context.Context, js jetstream.JetStream, storeName string) (int, error) {

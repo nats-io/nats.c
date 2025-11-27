@@ -506,6 +506,13 @@ natsOptions_SetCATrustedCertificates(natsOptions *opts, const char *certs)
                                       "error adding CA CRL: %s",
                                       NATS_SSL_ERR_REASON_STRING);
                 }
+
+                if ((s == NATS_OK) && (X509_STORE_set_flags(cts, X509_V_FLAG_CRL_CHECK) != 1))
+                {
+                    s = nats_setError(NATS_SSL_ERROR,
+                                      "error enabling CA CRL: %s",
+                                      NATS_SSL_ERR_REASON_STRING);
+                }
             }
         }
 

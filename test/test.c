@@ -19075,6 +19075,53 @@ void test_GetClientIP(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
+void test_GetName(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    char                *name     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Option without name set: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+
+    test("Get name (bad args): ");
+    s = natsConnection_GetName(NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = natsConnection_GetName(NULL, &name);
+    if (s == NATS_INVALID_ARG)
+        s = natsConnection_GetName(nc, NULL);
+    testCond((s == NATS_INVALID_ARG) && (name == NULL));
+    nats_clearLastError();
+
+    test("Get name: ");
+    s = natsConnection_GetName(nc, &name);
+    testCond((s == NATS_OK) && (name == NULL));
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    test("Option with name set: ");
+    s = natsOptions_SetName(opts, "MyConnection");
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+
+    test("Get name: ");
+    s = natsConnection_GetName(nc, &name);
+    testCond((s == NATS_OK) && (name != NULL) && (strcmp(name, "MyConnection") == 0));
+    free(name);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+    _stopServer(serverPid);
+}
+
 void test_GetRTT(void)
 {
     natsStatus          s;

@@ -5421,8 +5421,8 @@ natsConnection_Sign(natsConnection *nc,
  * When a connection is created to the server, the server identifies
  * the connection's remote IP address and return it back to the client.
  *
- * \note The user is responsible to free memory allocated to store
- * the client IP address.
+ * \note The user is responsible for freeing the memory allocated for the
+ * returned client IP address string.
  *
  * \note This is supported on servers >= version 2.1.6. Calling
  * #natsConnection_GetClientIP() with server below this version will
@@ -5436,6 +5436,22 @@ natsConnection_Sign(natsConnection *nc,
  */
 NATS_EXTERN natsStatus
 natsConnection_GetClientIP(natsConnection *nc, char **ip);
+
+/** \brief Returns the name of this connection.
+ *
+ * Returns the name of the connection set with the option #natsOptions_SetName,
+ * or `NULL` if none were set.
+ *
+ * \note The user is responsible for freeing the memory allocated for the
+ * returned connection name string.
+ *
+ * @see natsOptions_SetName
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param name the memory location where to store the connection's name string.
+ */
+NATS_EXTERN natsStatus
+natsConnection_GetName(natsConnection *nc, char **name);
 
 /** \brief Returns the round trip time between this client and the server.
  *

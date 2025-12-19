@@ -4562,6 +4562,30 @@ natsConnection_GetClientIP(natsConnection *nc, char **ip)
 }
 
 natsStatus
+natsConnection_GetName(natsConnection *nc, char **name)
+{
+    natsStatus  s   = NATS_OK;
+    char        *n  = NULL;
+
+    if ((nc == NULL) || (name == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+    if (!nats_IsStringEmpty(nc->opts->name))
+    {
+        n = NATS_STRDUP(nc->opts->name);
+        if (n == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    natsConn_Unlock(nc);
+
+    if (s == NATS_OK)
+        *name = n;
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 natsConnection_GetRTT(natsConnection *nc, int64_t *rtt)
 {
     natsStatus  s = NATS_OK;

@@ -1604,7 +1604,7 @@ typedef struct __objStore               objStore;
  *
  * @see objStore_Put
  *
- * Most users don't need that and will use the followin convenience functions:
+ * Most users don't need that and will use the following convenience functions:
  * - #objStore_PutString
  * - #objStore_PutBytes
  * - #objStore_PutFile
@@ -3260,7 +3260,7 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
  * By default, the server certificate is verified. You can disable the verification
  * by passing <c>true</c> to this function.
  *
- * \note Setting this to true will clear SSL verfication callback set via natsOptions_SetSSLVerificationCallback().
+ * \note Setting this to true will clear SSL verification callback set via natsOptions_SetSSLVerificationCallback().
  *
  * \warning This is fine for tests but use with caution since this is not secure.
  *
@@ -3618,7 +3618,7 @@ natsOptions_SetIgnoreDiscoveredServers(natsOptions *opts, bool ignore);
  *
  * Specifies the callback to invoke when the server notifies
  * the connection that it entered lame duck mode, that is, going to
- * gradually disconnect all its connections before shuting down. This is
+ * gradually disconnect all its connections before shutting down. This is
  * often used in deployments when upgrading NATS Servers.
  *
  * \warning Invocation of this callback is asynchronous, which means that
@@ -4623,7 +4623,7 @@ natsHeader_Keys(natsHeader *h, const char* **keys, int *count);
 /** \brief Returns the number of keys.
  *
  * @param h the pointer to the #natsHeader object.
- * @return The number of keys. If `h` is `NULL`, retunrs 0.
+ * @return The number of keys. If `h` is `NULL`, returns 0.
  */
 NATS_EXTERN int
 natsHeader_KeysCount(natsHeader *h);
@@ -5337,7 +5337,7 @@ natsConnection_GetLastError(natsConnection *nc, const char **lastError);
  *
  * \note We recommend a buffer size of at least 256 bytes. There is currently no
  * way for the user to obtain the length of the full error string, without
- * suppling a buffer large enough to fit it.
+ * supplying a buffer large enough to fit it.
  */
 NATS_EXTERN natsStatus
 natsConnection_ReadLastError(natsConnection *nc, char *buf, size_t n);
@@ -5581,7 +5581,7 @@ natsConnection_PublishMsg(natsConnection *nc, natsMsg *msg);
  *
  * @param nc the pointer to the #natsConnection object.
  * @param subj the subject the request is sent to.
- * @param reply the reply on which resonses are expected.
+ * @param reply the reply on which responses are expected.
  * @param data the data to be sent, can be `NULL`.
  * @param dataLen the length of the data to be sent.
  */
@@ -5602,7 +5602,7 @@ natsConnection_PublishRequest(natsConnection *nc, const char *subj,
  *
  * @param nc the pointer to the #natsConnection object.
  * @param subj the subject the request is sent to.
- * @param reply the reply on which resonses are expected.
+ * @param reply the reply on which responses are expected.
  * @param str the string to send.
  */
 NATS_EXTERN natsStatus
@@ -5624,7 +5624,7 @@ natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
  * @param data the data of the request, can be `NULL`.
  * @param dataLen the length of the data to send.
  * @param timeout in milliseconds, before this call returns #NATS_TIMEOUT
- * if no response is received in this alloted time.
+ * if no response is received in this allotted time.
  */
 NATS_EXTERN natsStatus
 natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
@@ -5649,7 +5649,7 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
  * @param subj the subject the request is sent to.
  * @param str the string to send.
  * @param timeout in milliseconds, before this call returns #NATS_TIMEOUT
- * if no response is received in this alloted time.
+ * if no response is received in this allotted time.
  */
 NATS_EXTERN natsStatus
 natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
@@ -5668,7 +5668,7 @@ natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
  * @param nc the pointer to the #natsConnection object.
  * @param requestMsg the message used for the request.
  * @param timeout in milliseconds, before this call returns #NATS_TIMEOUT
- * if no response is received in this alloted time.
+ * if no response is received in this allotted time.
  */
 NATS_EXTERN natsStatus
 natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
@@ -5717,7 +5717,7 @@ natsConnection_Subscribe(natsSubscription **sub, natsConnection *nc,
  * are processed, no timeout will occur. The timeout starts when the
  * message handler for the last pending message returns.
  *
- * \warning If you re-use message handler code between subscriptions with
+ * \warning If you reuse message handler code between subscriptions with
  * and without timeouts, keep in mind that the message passed in the
  * message handler may be `NULL`.
  *
@@ -5736,7 +5736,7 @@ natsConnection_SubscribeTimeout(natsSubscription **sub, natsConnection *nc,
                                 const char *subject, int64_t timeout,
                                 natsMsgHandler cb, void *cbClosure);
 
-/** \brief Creates a synchronous subcription.
+/** \brief Creates a synchronous subscription.
  *
  * Similar to #natsConnection_Subscribe, but creates a synchronous subscription
  * that can be polled via #natsSubscription_NextMsg().
@@ -5789,7 +5789,7 @@ natsConnection_QueueSubscribe(natsSubscription **sub, natsConnection *nc,
  * are processed, no timeout will occur. The timeout starts when the
  * message handler for the last pending message returns.
  *
- * \warning If you re-use message handler code between subscriptions with
+ * \warning If you reuse message handler code between subscriptions with
  * and without timeouts, keep in mind that the message passed in the
  * message handler may be `NULL`.
  *
@@ -6227,7 +6227,7 @@ natsSubscription_DrainCompletionStatus(natsSubscription *sub);
  *
  * In order to make sure that an asynchronous subscription's message handler is no longer invoked once the
  * subscription is closed (#natsSubscription_Unsubscribe), the subscription should be closed from the
- * message handler itslef.
+ * message handler itself.
  *
  * If the application closes the subscription from a different thread and immediately frees resources
  * needed in the message handler, there is a risk of a crash since the subscription's message handler
@@ -6503,7 +6503,7 @@ stanConnection_QueueSubscribe(stanSubscription **sub, stanConnection *sc,
  *
  * In order to make sure that an asynchronous subscription's message handler is no longer invoked once the
  * subscription is closed (or unsubscribed) (#stanSubscription_Close, #stanSubscription_Unsubscribe), the
- * subscription should be closed from the message handler itslef.
+ * subscription should be closed from the message handler itself.
  *
  * If the application closes the subscription from a different thread and immediately frees resources
  * needed in the message handler, there is a risk of a crash since the subscription's message handler
@@ -6871,7 +6871,7 @@ js_DeleteMsg(jsCtx *js, const char *stream, uint64_t seq, jsOptions *opts, jsErr
 NATS_EXTERN natsStatus
 js_EraseMsg(jsCtx *js, const char *stream, uint64_t seq, jsOptions *opts, jsErrCode *errCode);
 
-/** \brief Retreives information from a stream.
+/** \brief Retrieves information from a stream.
  *
  * Returns information about the stream named <c>stream</c>.
  *
@@ -7508,7 +7508,7 @@ js_PullSubscribe(natsSubscription **sub, jsCtx *js, const char *subject, const c
 /** \brief Fetches messages for a pull subscription.
  *
  * Fetches up to `batch` messages from the server, waiting up to `timeout` milliseconds.
- * No more thant `batch` messages will be returned, however, it can be less.
+ * No more than `batch` messages will be returned, however, it can be less.
  *
  * For `batch` greater than `1`, this call will not necessarily wait up `timeout` milliseconds
  * if some messages were collected and the library receives a notification that
@@ -8862,9 +8862,9 @@ objStoreWatcher_Destroy(objStoreWatcher *watcher);
 NATS_EXTERN natsStatus
 objStore_List(objStoreInfoList **new_list, objStore *obs, objStoreOptions *opts);
 
-/** \brief Destroys the list of object informations.
+/** \brief Destroys the list of object information.
  *
- * Releases memory allocated for this list of object store informations.
+ * Releases memory allocated for this list of object store information.
  *
  * \warning All #objStoreInfo objects contained in the list will become invalid after this call.
  *
@@ -8873,7 +8873,7 @@ objStore_List(objStoreInfoList **new_list, objStore *obs, objStoreOptions *opts)
 NATS_EXTERN void
 objStoreInfoList_Destroy(objStoreInfoList *list);
 
-/** \brief Retreive the status and configuration of the bucket.
+/** \brief Retrieve the status and configuration of the bucket.
  *
  * This function retrieves the status and configuration of the bucket.
  *
@@ -9163,7 +9163,7 @@ objStore_PutFile(objStoreInfo **new_info, objStore *obs, const char *fileName);
  *
  * Here is an example to read data all at once. Unless the user needs to inspect
  * the object store information's object prior to read the data, the convenience
- * functtion #objStore_GetBytes will be equivalent much simpler to use.
+ * function #objStore_GetBytes will be equivalent much simpler to use.
  *
  * \code{.unparsed}
  * objStoreGet *get = NULL;
@@ -9236,7 +9236,7 @@ objStoreGet_Info(const objStoreInfo **new_info, objStoreGet *get);
  * the number of bytes that were returned.
  *
  * The `done` boolean will be set to `true` if the call detects that this was the last
- * bit of data that consistuted this object. Calling this function again would result
+ * bit of data that constituted this object. Calling this function again would result
  * in the #NATS_ILLEGAL_STATE error returned.
  *
  * \warning The returned `data` must be freed by the user.
@@ -9390,10 +9390,10 @@ objStore_GetFile(objStore *obs, const char *name, const char *fileName, objStore
  * statistics requests. The endpoint subscriptions are created with a queue
  * group, so that incoming requests are automatically load-balanced across all
  * running instances of a microservice. The monitoring subscriptions are not
- * groupped, each service instance receives and responds to all monitoring
+ * grouped, each service instance receives and responds to all monitoring
  * requests.
  *
- * Once created, the microservice is asyncronous, message handlers and other
+ * Once created, the microservice is asynchronous, message handlers and other
  * callbacks will be invoked in separate threads. No further action is needed.
  * Your program can use microService_Stop, microService_IsStopped to control the
  * execution of the service.
@@ -9579,7 +9579,7 @@ typedef microError *(*microRequestHandler)(microRequest *req);
  * endpoint. However, this handler may be invoked for errors happening in
  * monitoring subjects, in which case ep is NULL.
  *
- * The error handler is invoked asynchronously, in a separate theread.
+ * The error handler is invoked asynchronously, in a separate thread.
  *
  * The error handler is not invoked for microservice-level errors that are sent
  * back to the client as responses. Note that the error counts in
@@ -9822,7 +9822,7 @@ struct micro_service_config_s
     /**
      * @brief An error notification handler.
      *
-     * It will be called asynchonously upon internal errors. It does not get
+     * It will be called asynchronously upon internal errors. It does not get
      * called for application-level errors, successfully sent out by the
      * microservice.
      */
@@ -10424,7 +10424,7 @@ microRequest_Respond(microRequest *req, const char *data, size_t len);
  *
  * If err is NULL, `RespondError` does nothing.
  *
- * @note microRequest_RespondError is called automatially if the handler returns
+ * @note microRequest_RespondError is called automatically if the handler returns
  * an error. Usually, there is no need for a handler to use this function
  * directly. If the request
  *
@@ -10584,10 +10584,10 @@ NATS_EXTERN const char *
 microError_String(microError *err, char *buf, size_t len);
 
 /**
- * @brief Wraps an exising #microError with a higher printf-like formatted
+ * @brief Wraps an existing #microError with a higher printf-like formatted
  * message.
  *
- * @warning The original error may be freed and should not be refered to after
+ * @warning The original error may be freed and should not be referred to after
  * having been wrapped.
  *
  * @param err the original error

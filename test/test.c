@@ -22956,6 +22956,141 @@ void test_SSLPerfConcurrentConnect(void)
 #endif
 }
 
+void test_SSLURLSchemeAutoEnable(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+
+    // Start a non-TLS server first to verify tls:// URL *requires* TLS
+    serverPid = _startServer("nats://127.0.0.1:4443", "-p 4443", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    // Test that tls:// URL requires TLS - connection to non-TLS server should fail
+    test("tls:// URL requires TLS (fails with non-TLS server): ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "tls://127.0.0.1:4443"));
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond((s != NATS_OK) && (nc == NULL));
+    natsOptions_Destroy(opts);
+    opts = NULL;
+    nats_clearLastError();
+
+    test("TLS:// (uppercase) requires TLS (fails with non-TLS server): ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "TLS://127.0.0.1:4443"));
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond((s != NATS_OK) && (nc == NULL));
+    natsOptions_Destroy(opts);
+    opts = NULL;
+    nats_clearLastError();
+
+    _stopServer(serverPid);
+
+    // Now start TLS server for remaining tests
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tls.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("tls:// URL connects to TLS server: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "tls://127.0.0.1:4443"));
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
+    IFOK(s, natsOptions_SetTimeout(opts, 2000));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+    natsOptions_Destroy(opts);
+    opts = NULL;
+
+    test("SetSecure(false) before tls:// URL is respected: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetSecure(opts, false));
+    IFOK(s, natsOptions_SetURL(opts, "tls://127.0.0.1:4443"));
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond((s != NATS_OK) && (nc == NULL));
+    natsOptions_Destroy(opts);
+    opts = NULL;
+    nats_clearLastError();
+
+    test("SetSecure(false) after tls:// URL is respected: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "tls://127.0.0.1:4443"));
+    IFOK(s, natsOptions_SetSecure(opts, false));
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond((s != NATS_OK) && (nc == NULL));
+    natsOptions_Destroy(opts);
+    opts = NULL;
+    nats_clearLastError();
+
+    test("SetServers with tls:// URL: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetServers(opts, (const char*[]){"tls://127.0.0.1:4443"}, 1));
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
+    IFOK(s, natsOptions_SetTimeout(opts, 2000));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+    natsOptions_Destroy(opts);
+    opts = NULL;
+
+    // Mixed schemes: if ANY server uses tls://, TLS is enabled globally.
+    // Put tls:// first to prove it's not just the last URL that sets the flag.
+    test("SetServers with mixed tls:// and nats:// URLs enables TLS: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetServers(opts, (const char*[]){"tls://127.0.0.1:4443", "nats://127.0.0.1:4222"}, 2));
+    IFOK(s, natsOptions_SkipServerVerification(opts, true));
+    IFOK(s, natsOptions_SetTimeout(opts, 2000));
+    // Only the TLS server is running, so connection will use that one
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+    natsOptions_Destroy(opts);
+    opts = NULL;
+
+    _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
+void test_SSLURLSchemeNonTLSBuild(void)
+{
+#if !defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsOptions         *opts = NULL;
+
+    test("tls:// URL fails in non-TLS build: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "tls://127.0.0.1:4443"));
+    testCond(s == NATS_ILLEGAL_STATE);
+    natsOptions_Destroy(opts);
+    opts = NULL;
+    nats_clearLastError();
+
+    test("nats:// URL works in non-TLS build: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    testCond(s == NATS_OK);
+    natsOptions_Destroy(opts);
+    opts = NULL;
+#else
+    test("Skipped when built with SSL support: ");
+    testCond(true);
+#endif
+}
+
 static void
 rmtree(const char *path)
 {

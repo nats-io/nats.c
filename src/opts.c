@@ -21,6 +21,20 @@
 #include "conn.h"
 #include "glib/glib.h"
 
+// Check if the URL has a tls:// scheme (case-insensitive).
+// Expects trimmed input (callers use nats_Trim before storing URLs).
+static bool
+_hasTLSScheme(const char *url)
+{
+    if (nats_IsStringEmpty(url))
+        return false;
+
+    return (strncasecmp(url, "tls://", 6) == 0);
+}
+
+// Forward declaration - defined in TLS/non-TLS conditional blocks below.
+static natsStatus _setSecureLocked(natsOptions *opts, bool secure);
+
 natsStatus
 natsOptions_SetURL(natsOptions *opts, const char* url)
 {
@@ -36,6 +50,10 @@ natsOptions_SetURL(natsOptions *opts, const char* url)
 
     if (url != NULL)
         s = nats_Trim(&(opts->url), url);
+
+    // Auto-enable TLS for tls:// URLs if user hasn't explicitly set secure.
+    if ((s == NATS_OK) && !opts->secureExplicitlySet && _hasTLSScheme(opts->url))
+        s = _setSecureLocked(opts, true);
 
     UNLOCK_OPTS(opts);
 
@@ -63,6 +81,7 @@ natsStatus
 natsOptions_SetServers(natsOptions *opts, const char** servers, int serversCount)
 {
     natsStatus  s = NATS_OK;
+    bool        needsSecure = false;
     int         i;
 
     LOCK_AND_CHECK_OPTIONS(opts,
@@ -81,9 +100,17 @@ natsOptions_SetServers(natsOptions *opts, const char** servers, int serversCount
         {
             s = nats_Trim(&(opts->servers[i]), servers[i]);
             if (s == NATS_OK)
+            {
                 opts->serversCount++;
+                if (!needsSecure && _hasTLSScheme(opts->servers[i]))
+                    needsSecure = true;
+            }
         }
     }
+
+    // Auto-enable TLS for tls:// URLs if user hasn't explicitly set secure.
+    if ((s == NATS_OK) && !opts->secureExplicitlySet && needsSecure)
+        s = _setSecureLocked(opts, true);
 
     if (s != NATS_OK)
         _freeServers(opts);
@@ -338,12 +365,12 @@ _getSSLCtx(natsOptions *opts)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-natsStatus
-natsOptions_SetSecure(natsOptions *opts, bool secure)
+// Internal version of SetSecure that assumes the lock is already held.
+// Does NOT set secureExplicitlySet - that's only for explicit user calls.
+static natsStatus
+_setSecureLocked(natsOptions *opts, bool secure)
 {
     natsStatus s = NATS_OK;
-
-    LOCK_AND_CHECK_OPTIONS(opts, 0);
 
     if (!secure && (opts->sslCtx != NULL))
     {
@@ -357,6 +384,20 @@ natsOptions_SetSecure(natsOptions *opts, bool secure)
 
     if (s == NATS_OK)
         opts->secure = secure;
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsOptions_SetSecure(natsOptions *opts, bool secure)
+{
+    natsStatus s = NATS_OK;
+
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    s = _setSecureLocked(opts, secure);
+    if (s == NATS_OK)
+        opts->secureExplicitlySet = true;
 
     UNLOCK_OPTS(opts);
 
@@ -829,6 +870,12 @@ natsOptions_SetSSLVerificationCallback(natsOptions *opts, natsSSLVerifyCb callba
 }
 
 #else
+
+static natsStatus
+_setSecureLocked(natsOptions *opts, bool secure)
+{
+    return nats_setError(NATS_ILLEGAL_STATE, "%s", NO_SSL_ERR);
+}
 
 natsStatus
 natsOptions_SetSecure(natsOptions *opts, bool secure)
@@ -1702,6 +1749,7 @@ natsOptions_Create(natsOptions **newOpts)
 
     opts->allowReconnect        = true;
     opts->secure                = false;
+    opts->secureExplicitlySet   = false;
     opts->maxReconnect          = NATS_OPTS_DEFAULT_MAX_RECONNECT;
     opts->reconnectWait         = NATS_OPTS_DEFAULT_RECONNECT_WAIT;
     opts->pingInterval          = NATS_OPTS_DEFAULT_PING_INTERVAL;
@@ -1762,6 +1810,11 @@ natsOptions_clone(natsOptions *opts)
     // it (if necessary) when calling SetServers.
     cloned->serversCount = 0;
 
+    // This needs to be done first, at least before calling any API
+    // that may call _setSecureLocked.
+    if (opts->sslCtx != NULL)
+        cloned->sslCtx = natsSSLCtx_retain(opts->sslCtx);
+
     if (opts->name != NULL)
         s = natsOptions_SetName(cloned, opts->name);
 
@@ -1778,9 +1831,6 @@ natsOptions_clone(natsOptions *opts)
 
     if ((s == NATS_OK) && (opts->token != NULL))
         s = natsOptions_SetToken(cloned, opts->token);
-
-    if ((s == NATS_OK) && (opts->sslCtx != NULL))
-        cloned->sslCtx = natsSSLCtx_retain(opts->sslCtx);
 
     if ((s == NATS_OK) && (opts->nkey != NULL))
     {

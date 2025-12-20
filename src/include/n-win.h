@@ -60,6 +60,7 @@ typedef int                 natsRecvLen;
 #define snprintf    nats_snprintf
 #endif
 #define strcasecmp  _stricmp
+#define strncasecmp _strnicmp
 
 #define nats_vsnprintf(b, sb, f, a) vsnprintf_s((b), (sb), (_TRUNCATE), (f), (a))
 

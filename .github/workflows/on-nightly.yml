@@ -2,7 +2,7 @@ name: "Nightly"
 on:
   schedule:
     # * is a special character in YAML so you have to quote this string
-    - cron:  '37 4 * * *'
+    - cron: "37 4 * * *"
 
 permissions:
   contents: write # required by build-test to comment on coverage but not used here.
@@ -21,3 +21,4 @@ jobs:
     uses: ./.github/workflows/build-test.yml
     with:
       server_version: ${{ matrix.server_version }}
+      repeat: 3

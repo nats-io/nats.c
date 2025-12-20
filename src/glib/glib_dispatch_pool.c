@@ -35,19 +35,18 @@ _newDispatcher(natsDispatcher **newDispatcher, void (*threadf)(void *))
     if (d == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    s = natsMutex_Create(&d->mu);
-    if (s != NATS_OK)
-        return s;
-
-    natsCondition_Create(&d->cond);
-
-    natsMutex_Lock(d->mu);
     natsLib_Retain();
-    s = natsThread_Create(&d->thread, threadf, (void *)d);
+    s = natsMutex_Create(&d->mu);
     if (s == NATS_OK)
-        d->running = true;
-    natsMutex_Unlock(d->mu);
-
+        s = natsCondition_Create(&d->cond);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(d->mu);
+        s = natsThread_Create(&d->thread, threadf, (void *)d);
+        if (s == NATS_OK)
+            d->running = true;
+        natsMutex_Unlock(d->mu);
+    }
     if (s != NATS_OK)
     {
         _destroyDispatcher(d);

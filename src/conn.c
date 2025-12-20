@@ -3348,7 +3348,7 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
     if (s == NATS_OK)
         *newConn = nc;
     else
-        natsConn_release(nc);
+        _freeConn(nc);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

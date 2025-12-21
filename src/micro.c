@@ -476,14 +476,17 @@ microService_GetState(microService *m)
 static microError *
 _new_service(microService **ptr, natsConnection *nc)
 {
+    natsStatus s;
+
     *ptr = NATS_CALLOC(1, sizeof(microService));
     if (*ptr == NULL)
         return micro_ErrorOutOfMemory;
 
-    if (natsMutex_Create(&((*ptr)->service_mu)) != NATS_OK)
+    s = natsMutex_Create(&((*ptr)->service_mu));
+    if (s != NATS_OK)
     {
         NATS_FREE(*ptr);
-        return micro_ErrorOutOfMemory;
+        return micro_ErrorFromStatus(s);
     }
     (*ptr)->refs = 1;
     (*ptr)->nc = nc;

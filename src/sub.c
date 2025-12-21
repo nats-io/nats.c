@@ -1055,6 +1055,19 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs)
     return s;
 }
 
+natsConnection*
+natsSubscription_GetConnection(natsSubscription* sub)
+{
+    natsConnection *nc = NULL;
+    if (sub != NULL)
+    {
+        natsSub_Lock(sub);
+        nc = sub->conn;
+        natsSub_Unlock(sub);
+    }
+    return nc;
+}
+
 int64_t
 natsSubscription_GetID(natsSubscription *sub)
 {

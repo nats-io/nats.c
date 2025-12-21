@@ -5442,16 +5442,16 @@ natsConnection_GetClientIP(natsConnection *nc, char **ip);
  * Returns the name of the connection set with the option #natsOptions_SetName,
  * or `NULL` if none were set.
  *
- * \note The user is responsible for freeing the memory allocated for the
- * returned connection name string.
+ * \warning The returned string is owned by the connection and MUST NOT be freed.
+ * The returned string should be copied if it is needed past the connection's
+ * lifetime.
  *
  * @see natsOptions_SetName
  *
  * @param nc the pointer to the #natsConnection object.
- * @param name the memory location where to store the connection's name string.
  */
-NATS_EXTERN natsStatus
-natsConnection_GetName(natsConnection *nc, char **name);
+NATS_EXTERN const char*
+natsConnection_GetName(natsConnection *nc);
 
 /** \brief Returns the round trip time between this client and the server.
  *

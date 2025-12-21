@@ -4561,28 +4561,17 @@ natsConnection_GetClientIP(natsConnection *nc, char **ip)
     return s;
 }
 
-natsStatus
-natsConnection_GetName(natsConnection *nc, char **name)
+const char*
+natsConnection_GetName(natsConnection *nc)
 {
-    natsStatus  s   = NATS_OK;
-    char        *n  = NULL;
-
-    if ((nc == NULL) || (name == NULL))
-        return nats_setDefaultError(NATS_INVALID_ARG);
-
-    natsConn_Lock(nc);
-    if (!nats_IsStringEmpty(nc->opts->name))
+    const char *name = NULL;
+    if (nc != NULL)
     {
-        n = NATS_STRDUP(nc->opts->name);
-        if (n == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
+        natsConn_Lock(nc);
+        name = nc->opts->name;
+        natsConn_Unlock(nc);
     }
-    natsConn_Unlock(nc);
-
-    if (s == NATS_OK)
-        *name = n;
-
-    return NATS_UPDATE_ERR_STACK(s);
+    return name;
 }
 
 natsStatus

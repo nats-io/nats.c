@@ -1315,7 +1315,7 @@ objStore_Watch(objStoreWatcher **new_watcher, objStore *obs, objStoreWatchOption
     if (s == NATS_OK)
         *new_watcher = w;
     else
-        objStoreWatcher_Destroy(w);
+        _freeWatcher(w);
 
     NATS_FREE(allMeta);
 
@@ -1871,16 +1871,19 @@ objStore_Put(objStorePut **new_put, objStore *obs, objStoreMeta *pMeta)
     if (put == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
+    s = natsMutex_Create(&(put->mu));
+    if (s != NATS_OK)
+    {
+        NATS_FREE(put);
+        return NATS_UPDATE_ERR_STACK(s);
+    }
+
     put->refs = 1;
     put->obs  = obs;
     _retainObs(obs);
-    s = natsMutex_Create(&(put->mu));
-    if (s == NATS_OK)
-    {
-        put->info = (objStoreInfo*) NATS_CALLOC(1, sizeof(objStoreInfo));
-        if (put->info == NULL)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-    }
+    put->info = (objStoreInfo*) NATS_CALLOC(1, sizeof(objStoreInfo));
+    if (put->info == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
     // Clone the user provided meta into our info object.
     if (s == NATS_OK)
     {

@@ -261,23 +261,22 @@ _createSSLCtx(natsSSLCtx **newCtx)
 
     ctx = (natsSSLCtx*) NATS_CALLOC(1, sizeof(natsSSLCtx));
     if (ctx == NULL)
-        s = nats_setDefaultError(NATS_NO_MEMORY);
+        return nats_setDefaultError(NATS_NO_MEMORY);
 
-    if (s == NATS_OK)
+    s = natsMutex_Create(&(ctx->lock));
+    if (s != NATS_OK)
     {
-        ctx->refs = 1;
-
-        s = natsMutex_Create(&(ctx->lock));
+        NATS_FREE(ctx);
+        return NATS_UPDATE_ERR_STACK(s);
     }
-    if (s == NATS_OK)
+    ctx->refs = 1;
+    ctx->ctx = SSL_CTX_new(TLS_client_method());
+    if (ctx->ctx == NULL)
     {
-        ctx->ctx = SSL_CTX_new(TLS_client_method());
-        if (ctx->ctx == NULL)
-            s = nats_setError(NATS_SSL_ERROR,
-                              "Unable to create SSL context: %s",
-                              NATS_SSL_ERR_REASON_STRING);
+        s = nats_setError(NATS_SSL_ERROR,
+                            "Unable to create SSL context: %s",
+                            NATS_SSL_ERR_REASON_STRING);
     }
-
     if (s == NATS_OK)
     {
         (void) SSL_CTX_set_mode(ctx->ctx, SSL_MODE_AUTO_RETRY);
@@ -288,10 +287,8 @@ _createSSLCtx(natsSSLCtx **newCtx)
         ctx->firstHandshake = true;
         *newCtx = ctx;
     }
-    else if (ctx != NULL)
-    {
+    if (s != NATS_OK)
         natsSSLCtx_release(ctx);
-    }
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -1693,11 +1690,11 @@ natsOptions_Create(natsOptions **newOpts)
     if (opts == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    IFOK(s, natsMutex_Create(&opts->mu));
-    if(s != NATS_OK)
+    s = natsMutex_Create(&opts->mu);
+    if (s != NATS_OK)
     {
         NATS_FREE(opts);
-        return NATS_UPDATE_ERR_STACK(NATS_NO_MEMORY);
+        return NATS_UPDATE_ERR_STACK(s);
     }
 
     opts->allowReconnect        = true;

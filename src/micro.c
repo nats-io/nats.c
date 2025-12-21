@@ -49,8 +49,7 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
     if (err != NULL)
         return err;
 
-    IFOK(s, natsMutex_Create(&m->service_mu));
-    IFOK(s, natsNUID_Next(m->id, sizeof(m->id)));
+    s = natsNUID_Next(m->id, sizeof(m->id));
     err = micro_ErrorFromStatus(s);
 
     MICRO_CALL(err, _clone_service_config(&m->cfg, cfg));
@@ -477,10 +476,18 @@ microService_GetState(microService *m)
 static microError *
 _new_service(microService **ptr, natsConnection *nc)
 {
+    natsStatus s;
+
     *ptr = NATS_CALLOC(1, sizeof(microService));
     if (*ptr == NULL)
         return micro_ErrorOutOfMemory;
 
+    s = natsMutex_Create(&((*ptr)->service_mu));
+    if (s != NATS_OK)
+    {
+        NATS_FREE(*ptr);
+        return micro_ErrorFromStatus(s);
+    }
     (*ptr)->refs = 1;
     (*ptr)->nc = nc;
     (*ptr)->started = nats_Now() * 1000000;

@@ -356,7 +356,7 @@ natsConnection_JetStream(jsCtx **new_js, natsConnection *nc, jsOptions *opts)
     if (s == NATS_OK)
         *new_js = js;
     else
-        jsCtx_Destroy(js);
+        _freeContext(js);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

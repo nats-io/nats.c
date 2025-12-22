@@ -5914,10 +5914,12 @@ natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
 
 /** \brief Returns the connection that created this subscription.
  *
- * Returns the connection that created this connection.
+ * Returns the connection that created this subscription. This is the case even
+ * if the subscription itself is no longer valid, say after #natsSubscription_Unsubscribe.
  *
- * \note The reference of the returned connection object is valid (but the connection
- * could be closed) as long as the subscription itself has not been destroyed.
+ * \note The pointer to the returned #natsConnection object is guaranteed to
+ * be valid at least until the #natsSubscription itself is destroyed. It can
+ * still be valid if the #natsConnection has not yet been destroyed.
  *
  * @param sub the pointer to the #natsSubscription object.
  */

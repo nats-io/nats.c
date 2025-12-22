@@ -11260,6 +11260,22 @@ void test_AsyncSubscribe(void)
     IFOK(s, arg.status);
     testCond(s == NATS_OK);
 
+    test("Get connection (bad args): ");
+    testCond(natsSubscription_GetConnection(NULL) == NULL);
+
+    test("Get connection: ");
+    testCond(natsSubscription_GetConnection(sub) == nc);
+
+    test("Unsubscribe: ");
+    s = natsSubscription_Unsubscribe(sub);
+    testCond(s == NATS_OK);
+
+    test("Sub invalid: ");
+    testCond(!natsSubscription_IsValid(sub));
+
+    test("Get connection still OK: ");
+    testCond(natsSubscription_GetConnection(sub) == nc);
+
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
 
@@ -11473,6 +11489,22 @@ void test_SyncSubscribe(void)
     testCond((s == NATS_OK)
              && (msg != NULL)
              && (strncmp(string, natsMsg_GetData(msg), natsMsg_GetDataLength(msg)) == 0));
+
+    test("Get connection (bad args): ");
+    testCond(natsSubscription_GetConnection(NULL) == NULL);
+
+    test("Get connection: ");
+    testCond(natsSubscription_GetConnection(sub) == nc);
+
+    test("Unsubscribe: ");
+    s = natsSubscription_Unsubscribe(sub);
+    testCond(s == NATS_OK);
+
+    test("Sub invalid: ");
+    testCond(!natsSubscription_IsValid(sub));
+
+    test("Get connection still OK: ");
+    testCond(natsSubscription_GetConnection(sub) == nc);
 
     natsMsg_Destroy(msg);
     natsSubscription_Destroy(sub);

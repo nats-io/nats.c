@@ -5912,6 +5912,20 @@ natsSubscription_AutoUnsubscribe(natsSubscription *sub, int max);
 NATS_EXTERN natsStatus
 natsSubscription_QueuedMsgs(natsSubscription *sub, uint64_t *queuedMsgs);
 
+/** \brief Returns the connection that created this subscription.
+ *
+ * Returns the connection that created this subscription. This is the case even
+ * if the subscription itself is no longer valid, say after #natsSubscription_Unsubscribe.
+ *
+ * \note The pointer to the returned #natsConnection object is guaranteed to
+ * be valid at least until the #natsSubscription itself is destroyed. It can
+ * still be valid if the #natsConnection has not yet been destroyed.
+ *
+ * @param sub the pointer to the #natsSubscription object.
+ */
+NATS_EXTERN natsConnection*
+natsSubscription_GetConnection(natsSubscription* sub);
+
 /** \brief Gets the subscription id.
  *
  * Returns the id of the given subscription.

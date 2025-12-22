@@ -246,6 +246,7 @@ struct __natsOptions
     bool                    pedantic;
     bool                    allowReconnect;
     bool                    secure;
+    bool                    secureExplicitlySet;
     bool                    tlsHandshakeFirst;
     bool                    tlsConcurrentHandshakes;
     int                     ioBufSize;

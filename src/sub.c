@@ -162,7 +162,7 @@ _setDrainCompleteState(natsSubscription *sub)
 {
     // It is possible that we are here without being in "drain in progress"
     // or event "started" due to auto-unsubscribe. So unless we already
-    // switched to "drain complete", swith the state.
+    // switched to "drain complete", switch the state.
     if (!natsSub_drainComplete(sub))
     {
         // For JS subscription we may need to delete the JS consumer, but

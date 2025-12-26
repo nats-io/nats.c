@@ -2450,9 +2450,9 @@ bool nats_IsSubjectValid(const char *subject, bool wcAllowed)
         // if not a token of their own, they are not considered wildcards).
         if (i == len-1)
         {
-            // If they are a token of their own, that is, the preceeding
+            // If they are a token of their own, that is, the preceding
             // character is the `.` or they are the first and only character,
-            // then the result will depend if wilcards are allowed or not.
+            // then the result will depend if wildcards are allowed or not.
             if (((c == '>') || (c == '*')) && (i == lastDot+1))
                 return wcAllowed;
         }

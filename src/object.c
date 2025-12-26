@@ -938,7 +938,7 @@ objStore_UpdateMeta(objStore *obs, const char *name, objStoreMeta *meta)
         s = _checkElapsed(&elapsed, start, timeout);
         IFOK(s, _publishMeta(obs->js, info, timeout-elapsed));
 
-        // Retore original values so that we don't free user's provided data
+        // Restore original values so that we don't free user's provided data
         // from the `meta` parameter.
         info->Meta.Name         = orgName;
         info->Meta.Description  = orgDesc;
@@ -1636,7 +1636,7 @@ _purgeChunks(objStorePut *put, int64_t timeout)
     jsOptions_Init(&opts);
     jsPubOptions_Init(&po);
 
-    // We will not udpate the error stack for those calls.
+    // We will not update the error stack for those calls.
     nats_doNotUpdateErrStack(true);
     // Keep track of when we start.
     start = nats_Now();

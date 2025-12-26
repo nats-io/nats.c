@@ -486,7 +486,7 @@ typedef struct __jsSub
     uint64_t            fciseq;
     char                *fcReply;
 
-    // When reseting an OrderedConsumer, need the original configuration.
+    // When resetting an OrderedConsumer, need the original configuration.
     jsConsumerConfig    *ocCfg;
 
 } jsSub;

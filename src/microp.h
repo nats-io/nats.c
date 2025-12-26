@@ -100,7 +100,7 @@ struct micro_service_s
     char id[NUID_BUFFER_LEN + 1];
 
     // groups are just convenient wrappers to make "prefixed" endpoints with
-    // AddEndpoint. They are added at initializaton time, so no need to lock.
+    // AddEndpoint. They are added at initialization time, so no need to lock.
     struct micro_group_s *groups;
 
     // these are are updated concurrently with access as the service runs, so

@@ -2792,13 +2792,13 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     }
 
     jsi = sub->jsi;
-    // For JS subscriptions (but not pull ones), handle hearbeat and flow control here.
+    // For JS subscriptions (but not pull ones), handle heartbeat and flow control here.
     if (jsi && !jsi->pull)
     {
         ctrlMsg = natsMsg_isJSCtrl(msg, &jct);
         if (ctrlMsg && jct == jsCtrlHeartbeat)
         {
-            // Check if the hearbeat has a "Consumer Stalled" header, if
+            // Check if the heartbeat has a "Consumer Stalled" header, if
             // so, the value is the FC reply to send a nil message to.
             // We will send it at the end of this function.
             natsMsgHeader_Get(msg, jsConsumerStalledHdr, &fcReply);
@@ -3853,7 +3853,7 @@ _flushAndDrain(void *closure)
             // time to drain the nc->respMux subscription.
             if ((s == NATS_OK) && subsDone && exRespMux && !closed)
             {
-                // We are no longer exluding the respMux subscription.
+                // We are no longer excluding the respMux subscription.
                 exRespMux = false;
 
                 natsConn_Lock(nc);

@@ -292,7 +292,7 @@ natsConnection_JetStream(jsCtx **new_js, natsConnection *nc, jsOptions *opts)
 
     js->refs = 1;
     // Retain the NATS connection and keep track of it so that if we
-    // detroy the context, in case of failure to fully initialize,
+    // destroy the context, in case of failure to fully initialize,
     // we properly release the NATS connection.
     natsConn_retain(nc);
     js->nc = nc;
@@ -1794,7 +1794,7 @@ js_checkFetchedMsg(natsSubscription *sub, natsMsg *msg, uint64_t fetchID, bool c
     if (!checkSts)
         return NATS_OK;
 
-    // 100 Idle hearbeat, return OK
+    // 100 Idle heartbeat, return OK
     if (strncmp(val, HDR_STATUS_CTRL_100, HDR_STATUS_LEN) == 0)
         return NATS_OK;
 
@@ -2160,7 +2160,7 @@ _hbTimerFired(natsTimer *timer, void* closure)
     if (alert && jsi->pull)
     {
         // If there are messages pending then we can't really consider
-        // that we missed hearbeats. Wait for those to be processed and
+        // that we missed heartbeats. Wait for those to be processed and
         // we will check missed HBs again.
         if (sub->ownDispatcher.queue.msgs == 0)
         {
@@ -2558,7 +2558,7 @@ _subscribeMulti(natsSubscription **new_sub, jsCtx *js, const char **subjects, in
     }
     else if (isQueue)
     {
-        // Reject a user configuration that would want to define hearbeats with
+        // Reject a user configuration that would want to define heartbeats with
         // a queue subscription.
         if (opts->Config.Heartbeat > 0)
             return nats_setError(NATS_INVALID_ARG, "%s", jsErrNoHeartbeatForQueueSub);
@@ -2615,7 +2615,7 @@ PROCESS_INFO:
         if (s != NATS_OK)
             goto END;
 
-        // Capture the HB interval (convert in millsecond since Go duration is in nanos)
+        // Capture the HB interval (convert in millisecond since Go duration is in nanos)
         hbi = info->Config->Heartbeat / 1000000;
         maxap = info->Config->MaxAckPending;
     }
@@ -2685,7 +2685,7 @@ PROCESS_INFO:
             cfg->DeliverGroup = opts->Queue;
         }
 
-        // Capture the HB interval (convert in millsecond since Go duration is in nanos)
+        // Capture the HB interval (convert in millisecond since Go duration is in nanos)
         hbi = cfg->Heartbeat / 1000000;
 
         create = true;

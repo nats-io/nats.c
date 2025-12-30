@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -15,9 +15,14 @@
 #ifndef ERR_H_
 #define ERR_H_
 
+#if defined(_WIN32)
+# include "include/n-win.h"
+#else
+# include "include/n-unix.h"
+#endif
+
 #include "status.h"
 #include "nats.h"
-#include "natsp.h"
 
 #define NATS_SSL_ERR_REASON_STRING ERR_reason_error_string(ERR_get_error())
 

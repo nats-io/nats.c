@@ -1,4 +1,4 @@
-// Copyright 2015-2025 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -982,6 +982,76 @@ void test_natsThread(void)
     natsMutex_Destroy(m);
 
     free(threads);
+}
+
+static void
+_testThreadStartedCB(void *closure)
+{
+    struct threadArg *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    arg->sum++;
+    natsCondition_Signal(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+void test_natsThreadStartedCB(void)
+{
+    natsStatus          s           = NATS_OK;
+    natsPid             serverPid   = NATS_INVALID_PID;
+    natsConnection      *nc         = NULL;
+    int                 oldVal      = 0;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    // First, close the library and re-open, to reset things
+    test("Reset the library's global state: ");
+    nats_CloseAndWait(1000);
+    testCond(true);
+
+    natsClientConfig c = {
+        .LockSpinCount = -1,
+        .ThreadStartedHandler = _testThreadStartedCB,
+        .ThreadStartedHandlerClosure = &arg
+    };
+
+    test("Open lib: ")
+    s = nats_OpenWithConfig(&c);
+    testCond(s == NATS_OK);
+
+    // We expect at least timer, async cb and gc threads to be started
+    test("Check cb invoked: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && (arg.sum < 3))
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    oldVal = arg.sum;
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Start connection: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    // We expect at least readLoop and flusher.
+    test("Check cb invoked: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && (arg.sum < oldVal+2))
+        s = natsCondition_TimedWait(arg.c, arg.m, 1000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    _stopServer(serverPid);
+    _destroyDefaultThreadArgs(&arg);
+
+    // Close so we remove our test specific settings.
+    nats_CloseAndWait(1000);
 }
 
 static void

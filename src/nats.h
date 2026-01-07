@@ -2384,10 +2384,10 @@ typedef void (*jsPubAckHandler)(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckE
 
 /** \brief Callback invoked when a thread created by the library starts.
  *
- * This callback can be used to configured a thread that is started by the library.
+ * This callback can be used to configure a thread that is started by the library.
  *
- * For instance, one could use this callback to speficy thread affinity.
- * On Linux, such code could look like:
+ * For instance, one could use this callback to specify thread affinity.
+ * On Linux, such code could look like this:
  *
  * \code{.unparsed}
  *
@@ -2402,15 +2402,15 @@ typedef void (*jsPubAckHandler)(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckE
  *
  * void pin_current_thread(void *closure)
  * {
- *     pthread_t current_thread = pthread_self();
  *     cpu_set_t cpuset;
  *     CPU_ZERO(&cpuset);
- *     CPU_SET(cpu, &cpuset);
+ *     // Set CPU 3 (since the first CPU on the system corresponds to a cpu value of 0)
+ *     CPU_SET(2, &cpuset);
  *
  *     pthread_setaffinity_np(
- *         current_thread,
+ *         pthread_self(),
  *         sizeof(cpu_set_t),
- *        &cpuset
+ *         &cpuset
  *     );
  * }
  * \endcode

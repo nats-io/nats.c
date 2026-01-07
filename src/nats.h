@@ -1,4 +1,4 @@
-// Copyright 2015-2025 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -192,6 +192,11 @@ typedef char                        natsInbox;
  */
 typedef struct __natsHeader         natsHeader;
 
+#ifndef BUILD_IN_DOXYGEN
+// Forward declaration
+typedef void (*natsThreadStartedHandler)(void *closure);
+#endif
+
 /** \brief An initial configuration for NATS client. Provides control over the
  * threading model, and sets many default option values.
  *
@@ -211,6 +216,11 @@ typedef struct __natsClientConfig
         bool DefaultRepliesToThreadPool;
         bool UseSeparatePoolForReplies;
         int ReplyThreadPoolMax;
+
+        // Callback invoked when a thread created by the library starts
+        natsThreadStartedHandler    ThreadStartedHandler;
+        void                        *ThreadStartedHandlerClosure;
+
 } natsClientConfig;
 
 /** \brief A list of NATS messages.
@@ -2371,6 +2381,48 @@ typedef void (*jsPubAckErrHandler)(jsCtx *js, jsPubAckErr *pae, void *closure);
  * registering the callback.
  */
 typedef void (*jsPubAckHandler)(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, void *closure);
+
+/** \brief Callback invoked when a thread created by the library starts.
+ *
+ * This callback can be used to configure a thread that is started by the library.
+ *
+ * For instance, one could use this callback to specify thread affinity.
+ * On Linux, such code could look like this:
+ *
+ * \code{.unparsed}
+ *
+ * natsClientConfig cfg = {
+ *     .LockSpinCount = -1,
+ *     .ThreadStartedHandler = pin_current_thread,
+ *     .ThreadStartedHandlerClosure = NULL // No closure needed for this.
+ * };
+ * s = nats_OpenWithConfig(&c);
+ *
+ * (...)
+ *
+ * void pin_current_thread(void *closure)
+ * {
+ *     cpu_set_t cpuset;
+ *     CPU_ZERO(&cpuset);
+ *     // Set CPU 3 (since the first CPU on the system corresponds to a cpu value of 0)
+ *     CPU_SET(2, &cpuset);
+ *
+ *     pthread_setaffinity_np(
+ *         pthread_self(),
+ *         sizeof(cpu_set_t),
+ *         &cpuset
+ *     );
+ * }
+ * \endcode
+ *
+ * @see nats_OpenWithConfig()
+ *
+ * \warning Such callback is invoked from different threads, so use of the `closure`
+ *          object (if non `NULL`) must be thread-safe.
+ *
+ * @param closure user-defined object, possibly `NULL`.
+ */
+typedef void (*natsThreadStartedHandler)(void *closure);
 #endif
 
 #if defined(NATS_HAS_STREAMING)

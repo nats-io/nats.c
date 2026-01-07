@@ -1,4 +1,4 @@
-// Copyright 2015-2024 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -13,6 +13,16 @@
 
 #ifndef GLIB_H_
 #define GLIB_H_
+
+#if defined(_WIN32)
+# include "../include/n-win.h"
+#else
+# include "../include/n-unix.h"
+#endif
+
+#include "../nats.h"
+#include "../asynccb.h"
+#include "../timer.h"
 
 typedef struct __natsDispatcherPool natsDispatcherPool;
 
@@ -39,5 +49,8 @@ int nats_getTimersCount(void);
 // equal to nats_getTimersCount() or nats_getTimersCount() - 1 when a
 // timer thread is invoking a timer's callback.
 int nats_getTimersCountInList(void);
+
+// Invoked when a library thread is started.
+void nats_threadStartedHandler(void);
 
 #endif // GLIB_H_

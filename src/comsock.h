@@ -1,4 +1,4 @@
-// Copyright 2015-2019 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -36,10 +36,6 @@ bool
 natsSock_IsConnected(natsSock fd);
 
 // Reads a line from the socket and returns it without the line-ending characters.
-// This call blocks until the line is complete, or the socket is closed or an
-// error occurs.
-// Handles blocking and non-blocking sockets. For the later, an optional 'deadline'
-// indicates how long it can wait for the full read to complete.
 //
 // NOTE: 'buffer[0]' must be set to '\0' prior to the very first call. If the
 // peer is sending multiple lines, it is possible that this function reads the

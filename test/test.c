@@ -108,6 +108,7 @@ static const char *testServers[] = {"nats://127.0.0.1:1222",
 
 // Forward declaration
 static void _startMockupServerThread(void *closure);
+static natsStatus _startMockupServer(natsSock *serverSock, const char *host, const char *port);
 static void _createConfFile(char *buf, int bufLen, const char *content);
 
 typedef natsStatus (*testCheckInfoCB)(char *buffer);
@@ -3404,28 +3405,142 @@ void test_natsOptions(void)
     natsOptions_Destroy(opts);
 }
 
-void test_natsSock_ReadLine(void)
+static void
+_startTestReadLineThread(void *closure)
 {
-    char        buffer[20];
-    natsStatus  s;
-    natsSockCtx ctx;
+    natsStatus          s    = NATS_OK;
+    natsSock            sock = NATS_SOCK_INVALID;
+    struct threadArg    *arg = (struct threadArg*) closure;
+    natsSockCtx         ctx;
 
     memset(&ctx, 0, sizeof(natsSockCtx));
 
-    snprintf(buffer, sizeof(buffer), "%s", "+OK\r\nPONG\r\nFOO\r\nxxx");
-    buffer[3] = '\0';
+    _startMockupServer(&sock, "127.0.0.1", "4222");
 
-    test("Read second line from buffer: ");
+    if (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+            || (natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    if (s == NATS_OK)
+    {
+        natsSock_WriteFully(&ctx, "PING\r", 5);
+        nats_Sleep(100);
+        natsSock_WriteFully(&ctx, "\nPONG\r\n+OK\r\n", 12);
+
+        natsMutex_Lock(arg->m);
+        while ((s != NATS_TIMEOUT) && !arg->done)
+            s = natsCondition_TimedWait(arg->c, arg->m, 2000);
+        arg->done = false;
+        natsMutex_Unlock(arg->m);
+    }
+    if (s == NATS_OK)
+    {
+        natsSock_WriteFully(&ctx, "VERY_VERY_LONG_PROTOCOL\r\n", 25);
+
+        natsMutex_Lock(arg->m);
+        while ((s != NATS_TIMEOUT) && !arg->done)
+            s = natsCondition_TimedWait(arg->c, arg->m, 2000);
+        arg->done = false;
+        natsMutex_Unlock(arg->m);
+    }
+    if (s == NATS_OK)
+    {
+        natsSock_WriteFully(&ctx, "VERY_VERY_LONG_PR", 17);
+        nats_Sleep(100);
+        natsSock_WriteFully(&ctx, "OTOCOL\r\n", 8);
+    }
+
+    natsMutex_Lock(arg->m);
+    while ((s != NATS_TIMEOUT) && !arg->disconnected)
+        s = natsCondition_TimedWait(arg->c, arg->m, 5000);
+    natsMutex_Unlock(arg->m);
+
+    natsSock_Close(ctx.fd);
+    natsSock_Close(sock);
+}
+
+void test_natsSock_ReadLine(void)
+{
+    natsStatus          s    = NATS_OK;
+    natsThread          *t   = NULL;
+    char                buffer[20];
+    struct threadArg    arg;
+    natsSockCtx         ctx;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsThread_Create(&t, _startTestReadLineThread, (void*) &arg));
+    if (s != NATS_OK)
+    {
+        _destroyDefaultThreadArgs(&arg);
+        FAIL("Unable to setup test");
+    }
+
+    nats_Sleep(100);
+    test("Connect: ");
+    memset(&ctx, 0, sizeof(natsSockCtx));
+    s = natsSock_ConnectTcp(&ctx, "127.0.0.1", 4222);
+    testCond(s == NATS_OK);
+
+    test("Set deadline: ");
+    natsDeadline_Init(&ctx.readDeadline, 2000);
+    testCond(true);
+
+    // Set for first call.
+    buffer[0] = '\0';
+    test("Read PING: ");
+    s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+    testCond((s == NATS_OK) && (strcmp(buffer, "PING") == 0));
+
+    test("Read PONG: ");
     s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
     testCond((s == NATS_OK) && (strcmp(buffer, "PONG") == 0));
 
-    test("Read third line from buffer: ");
+    test("Read +OK: ");
     s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
-    testCond((s == NATS_OK) && (strcmp(buffer, "FOO") == 0));
+    testCond((s == NATS_OK) && (strcmp(buffer, "+OK") == 0));
 
-    test("Next call should trigger recv, which is expected to fail: ");
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    // Reset the buffer as if it was the first read.
+    buffer[0] = '\0';
+    test("Line too long: ");
     s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
-    testCond(s != NATS_OK);
+    testCond(s == NATS_LINE_TOO_LONG);
+    nats_clearLastError();
+
+    // Drain remaining. In normal conditions, we would stop reading.
+    test("Drain: ");
+    buffer[0] = '\0';
+    s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+    testCond((s == NATS_OK) && (strcmp(buffer, "COL") == 0));
+
+    natsMutex_Lock(arg.m);
+    arg.done = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    // Reset the buffer as if it was the first read.
+    buffer[0] = '\0';
+    test("Line too long (split): ");
+    s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+    testCond(s == NATS_LINE_TOO_LONG);
+    nats_clearLastError();
+
+    natsMutex_Lock(arg.m);
+    arg.disconnected = true;
+    natsCondition_Signal(arg.c);
+    natsMutex_Unlock(arg.m);
+
+    natsThread_Join(t);
+    natsThread_Destroy(t);
+
+    natsSock_Close(ctx.fd);
+
+    _destroyDefaultThreadArgs(&arg);
 }
 
 static natsStatus

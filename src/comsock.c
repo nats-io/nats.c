@@ -406,10 +406,10 @@ natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize)
         // We need to append a NULL character after what we have received.
         *(p + readBytes) = '\0';
 
-        // Search from the beginning of the buffer, not from `p` which points
-        // the last location in the buffer where new data needs to be stored
-        // from the socket read.
-        if ((eol = strstr(buffer, _CRLF_)) != NULL)
+        // If this is not the first read (`p != buffer`), then we need to start
+        // the search from one character before `p` in case it was `\r` and
+        // the first character of the new read is `\n`.
+        if ((eol = strstr((p != buffer ? (char*)(p-1) : buffer), _CRLF_)) != NULL)
         {
             *eol = '\0';
             return NATS_OK;

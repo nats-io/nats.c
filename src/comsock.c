@@ -1,4 +1,4 @@
-// Copyright 2015-2025 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -354,9 +354,9 @@ natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize)
         size_t  len = 0;
 
         // The start of the next line will be the length of the line at the
-        // start of the buffer + 2, which is the number of characters
+        // start of the buffer + _CRLF_LEN_, which is the number of characters
         // representing CRLF.
-        nextStart = strlen(buffer) + 2;
+        nextStart = strlen(buffer) + _CRLF_LEN_;
         nextLine  = (char*) (buffer + nextStart);
 
         // There is some data...
@@ -397,13 +397,19 @@ natsSock_ReadLine(natsSockCtx *ctx, char *buffer, size_t maxBufferSize)
         if (s != NATS_OK)
             return NATS_UPDATE_ERR_STACK(s);
 
-        if (totalBytes + readBytes == maxBufferSize)
+        if (totalBytes + readBytes >= maxBufferSize)
+        {
+            *(buffer + maxBufferSize - 1) = '\0';
             return nats_setDefaultError(NATS_LINE_TOO_LONG);
+        }
 
         // We need to append a NULL character after what we have received.
         *(p + readBytes) = '\0';
 
-        if ((eol = strstr(p, _CRLF_)) != NULL)
+        // If this is not the first read (`p != buffer`), then we need to start
+        // the search from one character before `p` in case it was `\r` and
+        // the first character of the new read is `\n`.
+        if ((eol = strstr((p != buffer ? (char*)(p-1) : buffer), _CRLF_)) != NULL)
         {
             *eol = '\0';
             return NATS_OK;

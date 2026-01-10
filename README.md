@@ -877,6 +877,30 @@ natsConnection_Connect(&nc, opts);
 // That's it! On success you will have a secure connection with the server!
 ```
 
+### mTLS Helper
+
+For convenience, a helper function `natsOptions_SetupMTLSFromFiles()` is provided to set up mutual TLS (mTLS) authentication in a single call:
+
+```c
+#include "mtls_helper.h"
+
+natsOptions *opts = NULL;
+natsConnection *nc = NULL;
+
+natsOptions_Create(&opts);
+natsOptions_SetURL(opts, "tls://localhost:4443");
+
+// Set up mTLS with CA cert, client cert, and client key in one call
+natsOptions_SetupMTLSFromFiles(opts,
+    "certs/ca.pem",
+    "certs/client-cert.pem",
+    "certs/client-key.pem");
+
+natsConnection_Connect(&nc, opts);
+```
+
+This is equivalent to calling `natsOptions_SetSecure()`, `natsOptions_LoadCATrustedCertificates()`, and `natsOptions_LoadCertificatesChain()` individually. See `examples/mtls-publisher.c` and `examples/mtls-subscriber.c` for complete examples.
+
 ## New Authentication (Nkeys and User Credentials)
 
 This requires server with version >= 2.0.0

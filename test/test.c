@@ -41,6 +41,7 @@
 #include "microp.h"
 #include "glib/glibp.h"
 #include "object.h"
+#include "mtls_helper.h"
 
 #if defined(NATS_HAS_STREAMING)
 
@@ -23296,6 +23297,34 @@ void test_SSLURLSchemeNonTLSBuild(void)
     opts = NULL;
 #else
     test("Skipped when built with SSL support: ");
+    testCond(true);
+#endif
+}
+
+void test_MTLSHelper(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus      s;
+    natsConnection  *nc   = NULL;
+    natsOptions     *opts = NULL;
+    natsPid         serverPid = NATS_INVALID_PID;
+
+    serverPid = _startServer("nats://127.0.0.1:4443", "-config tlsverify.conf", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("mTLS helper function SetupMTLSFromFiles works: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "nats://localhost:4443"));
+    IFOK(s, natsOptions_SetupMTLSFromFiles(opts, "certs/ca.pem", "certs/client-cert.pem", "certs/client-key.pem"));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _stopServer(serverPid);
+#else
+    test("Skipped when not built with TLS: ");
     testCond(true);
 #endif
 }

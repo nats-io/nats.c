@@ -28,7 +28,7 @@ test/conf_*
 .idea/
 .vs/
 out/
+.cache/
 
 # Mac
 .DS_Store
-

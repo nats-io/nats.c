@@ -23997,6 +23997,7 @@ void test_JetStreamMarshalStreamConfig(void)
     sc.Replicas = 3;
     sc.NoAck = true;
     sc.Template = "template";
+    sc.PersistMode = js_PersistAsync;
 
     jsPlacement_Init(&p);
     p.Cluster = "MyCluster";
@@ -24153,6 +24154,7 @@ void test_JetStreamMarshalStreamConfig(void)
                 && (strcmp(rsc->SubjectTransform.Destination, "bar") == 0)
                 && (rsc->ConsumerLimits.InactiveThreshold == 1000)
                 && (rsc->ConsumerLimits.MaxAckPending == 99)
+                && (rsc->PersistMode == js_PersistAsync)
                 );
     js_destroyStreamConfig(rsc);
     rsc = NULL;

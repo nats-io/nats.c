@@ -12,7 +12,6 @@
 // limitations under the License.
 
 #include "test.h"
-#include "nats.h"
 
 #include <stdio.h>
 #include <string.h>

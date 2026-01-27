@@ -384,6 +384,14 @@ typedef enum
 
 } jsReplayPolicy;
 
+/**
+ *
+ */
+typedef enum
+{
+    js_PersistDefault = 0,  ///< Writes are immediately flushed, acknowledgement sent after message is stored
+    js_PersistAsync = 1,    ///< Writes are flushed asynchronously, acknowledgement may be sent before message is stored
+} jsPersistenceMode;
 
 /**
  * Used to guide placement of streams in clustered JetStream.
@@ -630,6 +638,10 @@ typedef struct jsStreamConfig {
         /// delete, purge and max age limits. In nanoseconds. Requires
         /// nats-server v2.11.0 or later.
         int64_t                 SubjectDeleteMarkerTTL;
+
+        /// @brief Sets the persistence mode for the stream. Requires nats-server
+        /// v2.12.0 or later.
+        jsPersistenceMode       PersistenceMode;
 
 } jsStreamConfig;
 

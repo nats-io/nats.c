@@ -86,6 +86,9 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsStorageCompressionNoneStr "none"
 #define jsStorageCompressionS2Str   "s2"
 
+#define jsPersistenceModeDefaultStr "default"
+#define jsPersistenceModeAsyncStr   "async"
+
 #define jsDeliverAllStr             "all"
 #define jsDeliverLastStr            "last"
 #define jsDeliverNewStr             "new"

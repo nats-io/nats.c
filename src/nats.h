@@ -385,13 +385,13 @@ typedef enum
 } jsReplayPolicy;
 
 /**
- *
+ * Determines what persistence mode the stream uses
  */
 typedef enum
 {
     js_PersistDefault = 0,  ///< Writes are immediately flushed, acknowledgement sent after message is stored
-    js_PersistAsync = 1,    ///< Writes are flushed asynchronously, acknowledgement may be sent before message is stored
-} jsPersistenceMode;
+    js_PersistAsync,        ///< Writes are flushed asynchronously, acknowledgement may be sent before message is stored
+} jsPersistModeType;
 
 /**
  * Used to guide placement of streams in clustered JetStream.
@@ -641,7 +641,7 @@ typedef struct jsStreamConfig {
 
         /// @brief Sets the persistence mode for the stream. Requires nats-server
         /// v2.12.0 or later.
-        jsPersistenceMode       PersistenceMode;
+        jsPersistModeType       PersistMode;
 
 } jsStreamConfig;
 

@@ -487,7 +487,7 @@ _marshalDiscardPolicy(jsDiscardPolicy policy, natsBuffer *buf)
 }
 
 static natsStatus
-_unmarshalPersistenceMode(nats_JSON *json, jsPersistenceMode *persist_mode)
+_unmarshalPersistModeType(nats_JSON *json, jsPersistModeType *persist_mode)
 {
     natsStatus  s    = NATS_OK;
     char        *str = NULL;
@@ -496,9 +496,9 @@ _unmarshalPersistenceMode(nats_JSON *json, jsPersistenceMode *persist_mode)
     if (str == NULL)
         return NATS_UPDATE_ERR_STACK(s);
 
-    if (strcmp(str, jsPersistenceModeDefaultStr) == 0)
+    if (strcmp(str, jsPersistModeDefaultStr) == 0)
         *persist_mode = js_PersistDefault;
-    else if (strcmp(str, jsPersistenceModeAsyncStr) == 0)
+    else if (strcmp(str, jsPersistModeAsyncStr) == 0)
         *persist_mode = js_PersistAsync;
     else
         s = nats_setError(NATS_ERR, "unable to unmarshal persist mode type '%s'", str);
@@ -509,19 +509,19 @@ _unmarshalPersistenceMode(nats_JSON *json, jsPersistenceMode *persist_mode)
 }
 
 static natsStatus
-_marshalPersistenceMode(jsPersistenceMode persist_mode, natsBuffer *buf)
+_marshalPersistModeType(jsPersistModeType persist_mode, natsBuffer *buf)
 {
-    natsStatus  s;
+    natsStatus  s = NATS_OK;
     const char  *st = NULL;
+
+    if (persist_mode == js_PersistDefault)
+        return s;
 
     s = natsBuf_Append(buf, ",\"persist_mode\":\"", -1);
     switch (persist_mode)
     {
-        case js_PersistDefault:
-            st = jsPersistenceModeDefaultStr;
-            break;
         case js_PersistAsync:
-            st = jsPersistenceModeAsyncStr;
+            st = jsPersistModeAsyncStr;
             break;
         default:
             return nats_setError(NATS_INVALID_ARG, "invalid persist mode %d", (int) persist_mode);
@@ -788,7 +788,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, _unmarshalStreamConsumerLimits(obj, &(cfg->ConsumerLimits)));
     IFOK(s, nats_JSONGetLong(jcfg, "subject_delete_marker_ttl", &(cfg->SubjectDeleteMarkerTTL)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_msg_ttl", &(cfg->AllowMsgTTL)));
-    IFOK(s, _unmarshalPersistenceMode(jcfg, &(cfg->PersistenceMode)));
+    IFOK(s, _unmarshalPersistModeType(jcfg, &(cfg->PersistMode)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -916,7 +916,7 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
     IFOK(s, nats_marshalULong(buf, true, "first_seq", cfg->FirstSeq));
     IFOK(s, _marshalSubjectTransformConfig(&cfg->SubjectTransform, buf));
     IFOK(s, _marshalStreamConsumerLimits(&cfg->ConsumerLimits, buf));
-    IFOK(s, _marshalPersistenceMode(cfg->PersistenceMode, buf));
+    IFOK(s, _marshalPersistModeType(cfg->PersistMode, buf));
 
     if ((s == NATS_OK) && cfg->AllowMsgTTL)
         s = natsBuf_Append(buf, ",\"allow_msg_ttl\":true", -1);

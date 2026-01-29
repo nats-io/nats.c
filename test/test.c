@@ -39544,6 +39544,92 @@ void test_ConnReadLastError(void)
     natsConnection_Destroy(nc);
 }
 
+void test_MirrorsRemove(void)
+{
+    natsStatus          s;
+    natsConnection      *nc        = NULL;
+    jsCtx               *js        = NULL;
+    natsPid             pid        = NATS_INVALID_PID;
+    char                datastore[256]  = {'\0'};
+    char                cmdLine[1024]   = {'\0'};
+    char                confFile[256]   = {'\0'};
+    jsStreamConfig      cfg, cfg_mirror;
+    jsStreamSource      ss;
+    jsStreamInfo        *si_mirror = NULL;
+
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+    _createConfFile(confFile, sizeof(confFile),
+        "listen: 127.0.0.1:4222\n"\
+        "jetstream: {\n" \
+            "strict: true,\n" \
+            "max_mem_store:  64MiB,\n" \
+        "}\n");
+
+    test("Start server: ");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(NATS_OK == s);
+
+    test("Get JS context");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(NATS_OK == s);
+
+    test("Stream Config init: ");
+    s = jsStreamConfig_Init(&cfg);
+    testCond(NATS_OK == s);
+
+    cfg.Name = "Source";
+    cfg.Subjects = (const char*[1]){"foo"};
+    cfg.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    testCond(NATS_OK == s);
+
+    test("Create Mirror Stream");
+    jsStreamSource_Init(&ss);
+    ss.Name = "Source";
+
+    jsStreamConfig_Init(&cfg_mirror);
+    cfg_mirror.Name = "Mirror";
+    cfg_mirror.Mirror = &ss;
+    s = js_AddStream(&si_mirror, js, &cfg_mirror, NULL, NULL);
+    testCond((NATS_OK == s) && (NULL != si_mirror));
+
+    test("Publish data");
+    for (int i = 0; i < 10; i++)
+    {
+        s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
+        testCond(NATS_OK == s);
+    }
+
+    test("Remove Source");
+    s = js_DeleteStream(js, "Source", NULL, NULL);
+    testCond(NATS_OK == s);
+    s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
+    testCond(NATS_NO_RESPONDERS == s);
+    s = NATS_OK;
+
+    test("Update Mirror")
+    s = jsStreamConfig_Init(&cfg);
+    testCond(NATS_OK == s);
+    cfg.Name = "Mirror";
+    cfg.Subjects = (const char*[1]){"foo"};
+    cfg.SubjectsLen = 1;
+    s = js_UpdateStream(&si_mirror, js, &cfg, NULL, NULL);
+    testCond(NATS_OK == s);
+
+    test("Verify mirror promotion");
+    s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
+    testCond(NATS_OK == s);
+
+    jsCtx_Destroy(js);
+    _stopServer(pid);
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int
@@ -41728,7 +41814,7 @@ void test_StanSubTimeout(void)
     _stopServer(pid);
 }
 
-#endif
+#endif // defined(NATS_HAS_STREAMING)
 
 #ifndef _WIN32
 static void _sigsegv_handler(int sig) {

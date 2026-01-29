@@ -39544,50 +39544,24 @@ void test_ConnReadLastError(void)
     natsConnection_Destroy(nc);
 }
 
-void test_MirrorsRemove(void)
+void test_JetStreamMirrorsRemove(void)
 {
     natsStatus          s;
-    natsConnection      *nc        = NULL;
-    jsCtx               *js        = NULL;
-    natsPid             pid        = NATS_INVALID_PID;
-    char                datastore[256]  = {'\0'};
-    char                cmdLine[1024]   = {'\0'};
-    char                confFile[256]   = {'\0'};
     jsStreamConfig      cfg, cfg_mirror;
     jsStreamSource      ss;
     jsStreamInfo        *si_mirror = NULL;
 
-    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-    _createConfFile(confFile, sizeof(confFile),
-        "listen: 127.0.0.1:4222\n"\
-        "jetstream: {\n" \
-            "strict: true,\n" \
-            "max_mem_store:  64MiB,\n" \
-        "}\n");
-
-    test("Start server: ");
-    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
-    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    CHECK_SERVER_STARTED(pid);
-    testCond(true);
-
-    test("Connect: ");
-    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
-    testCond(NATS_OK == s);
-
-    test("Get JS context");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(NATS_OK == s);
+    JS_SETUP(2, 12, 0);
 
     test("Stream Config init: ");
     s = jsStreamConfig_Init(&cfg);
-    testCond(NATS_OK == s);
+    testCond(s == NATS_OK);
 
     cfg.Name = "Source";
     cfg.Subjects = (const char*[1]){"foo"};
     cfg.SubjectsLen = 1;
     s = js_AddStream(NULL, js, &cfg, NULL, NULL);
-    testCond(NATS_OK == s);
+    testCond(s == NATS_OK);
 
     test("Create Mirror Stream");
     jsStreamSource_Init(&ss);
@@ -39597,36 +39571,44 @@ void test_MirrorsRemove(void)
     cfg_mirror.Name = "Mirror";
     cfg_mirror.Mirror = &ss;
     s = js_AddStream(&si_mirror, js, &cfg_mirror, NULL, NULL);
-    testCond((NATS_OK == s) && (NULL != si_mirror));
+    testCond((s == NATS_OK) && (si_mirror != NULL));
+    jsStreamInfo_Destroy(si_mirror);
 
     test("Publish data");
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; (s == NATS_OK) && (i < 10); i++)
     {
         s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
-        testCond(NATS_OK == s);
     }
+    testCond(s == NATS_OK);
 
     test("Remove Source");
     s = js_DeleteStream(js, "Source", NULL, NULL);
-    testCond(NATS_OK == s);
+    testCond(s == NATS_OK);
+    test("Publish should fail: ")
     s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
-    testCond(NATS_NO_RESPONDERS == s);
+    testCond(s == NATS_NO_RESPONDERS);
+
+    nats_clearLastError();
     s = NATS_OK;
 
     test("Update Mirror")
     s = jsStreamConfig_Init(&cfg);
-    testCond(NATS_OK == s);
-    cfg.Name = "Mirror";
-    cfg.Subjects = (const char*[1]){"foo"};
-    cfg.SubjectsLen = 1;
-    s = js_UpdateStream(&si_mirror, js, &cfg, NULL, NULL);
-    testCond(NATS_OK == s);
+    if (s == NATS_OK)
+    {
+        cfg.Name = "Mirror";
+        cfg.Subjects = (const char*[1]){"foo"};
+        cfg.SubjectsLen = 1;
+        s = js_UpdateStream(&si_mirror, js, &cfg, NULL, NULL);
+    }
+    testCond((s == NATS_OK) && (si_mirror != NULL));
+    jsStreamInfo_Destroy(si_mirror);
 
     test("Verify mirror promotion");
     s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
-    testCond(NATS_OK == s);
+    testCond(s == NATS_OK);
 
-    jsCtx_Destroy(js);
+    // Clean up
+    JS_TEARDOWN;
     _stopServer(pid);
 }
 

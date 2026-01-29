@@ -39553,17 +39553,18 @@ void test_JetStreamMirrorsRemove(void)
 
     JS_SETUP(2, 12, 0);
 
-    test("Stream Config init: ");
+    test("Adding Stream: ");
     s = jsStreamConfig_Init(&cfg);
+    if (s == NATS_OK)
+    {
+        cfg.Name = "Source";
+        cfg.Subjects = (const char*[1]){"foo"};
+        cfg.SubjectsLen = 1;
+        s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    }
     testCond(s == NATS_OK);
 
-    cfg.Name = "Source";
-    cfg.Subjects = (const char*[1]){"foo"};
-    cfg.SubjectsLen = 1;
-    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
-    testCond(s == NATS_OK);
-
-    test("Create Mirror Stream");
+    test("Create Mirror Stream: ");
     jsStreamSource_Init(&ss);
     ss.Name = "Source";
 
@@ -39573,15 +39574,16 @@ void test_JetStreamMirrorsRemove(void)
     s = js_AddStream(&si_mirror, js, &cfg_mirror, NULL, NULL);
     testCond((s == NATS_OK) && (si_mirror != NULL));
     jsStreamInfo_Destroy(si_mirror);
+    si_mirror = NULL;
 
-    test("Publish data");
+    test("Publish data: ");
     for (int i = 0; (s == NATS_OK) && (i < 10); i++)
     {
         s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
     }
     testCond(s == NATS_OK);
 
-    test("Remove Source");
+    test("Remove Source: ");
     s = js_DeleteStream(js, "Source", NULL, NULL);
     testCond(s == NATS_OK);
     test("Publish should fail: ")
@@ -39591,7 +39593,7 @@ void test_JetStreamMirrorsRemove(void)
     nats_clearLastError();
     s = NATS_OK;
 
-    test("Update Mirror")
+    test("Update Mirror: ")
     s = jsStreamConfig_Init(&cfg);
     if (s == NATS_OK)
     {
@@ -39602,14 +39604,14 @@ void test_JetStreamMirrorsRemove(void)
     }
     testCond((s == NATS_OK) && (si_mirror != NULL));
     jsStreamInfo_Destroy(si_mirror);
+    si_mirror = NULL;
 
-    test("Verify mirror promotion");
+    test("Verify mirror promotion: ");
     s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
     testCond(s == NATS_OK);
 
     // Clean up
     JS_TEARDOWN;
-    _stopServer(pid);
 }
 
 #if defined(NATS_HAS_STREAMING)

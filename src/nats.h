@@ -752,6 +752,10 @@ typedef struct jsClusterInfo
         char            *Leader;
         jsPeerInfo      **Replicas;
         int             ReplicasLen;
+        char            *RaftGroup;
+        int64_t         LeaderSince; ///< UTC time expressed as number of nanoseconds since epoch.
+        bool            SystemAcc;
+        char            *TrafficAcc;
 
 } jsClusterInfo;
 

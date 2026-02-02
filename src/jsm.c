@@ -1098,10 +1098,10 @@ _unmarshalClusterInfo(nats_JSON *pjson, const char *fieldName, jsClusterInfo **n
         // Free the array of JSON objects that was allocated by nats_JSONGetArrayObject.
         NATS_FREE(replicas);
     }
-    IFOK(s, nats_JSONGetStr(json, "RaftGroup", &(ci->RaftGroup)));
-    IFOK(s, nats_JSONGetLong(json, "LeaderSince", &(ci->LeaderSince)));
-    IFOK(s, nats_JSONGetBool(json, "SystemAcc", &(ci->SystemAcc)));
-    IFOK(s, nats_JSONGetStr(json, "TrafficAcc", &(ci->TrafficAcc)));
+    IFOK(s, nats_JSONGetStr(json, "raft_group", &(ci->RaftGroup)));
+    IFOK(s, nats_JSONGetLong(json, "leader_since", &(ci->LeaderSince)));
+    IFOK(s, nats_JSONGetBool(json, "system_account", &(ci->SystemAcc)));
+    IFOK(s, nats_JSONGetStr(json, "traffic_account", &(ci->TrafficAcc)));
 
     if (s == NATS_OK)
         *new_ci = ci;

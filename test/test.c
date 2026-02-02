@@ -39614,6 +39614,94 @@ void test_JetStreamMirrorsRemove(void)
     JS_TEARDOWN;
 }
 
+void test_JetStreamClusterInfo(void)
+{
+    char                datastore1[256] = {'\0'};
+    char                datastore2[256] = {'\0'};
+    char                datastore3[256] = {'\0'};
+    char                cmdLine[1024]   = {'\0'};
+    natsPid             pid1            = NATS_INVALID_PID;
+    natsPid             pid2            = NATS_INVALID_PID;
+    natsPid             pid3            = NATS_INVALID_PID;
+    natsConnection      *nc             = NULL;
+    jsCtx               *js             = NULL;
+    jsStreamInfo        *si             = NULL;
+    jsStreamConfig      sc;
+    natsStatus          s;
+    int                 i;
+
+    ENSURE_JS_VERSION(2, 12, 0);
+
+    test("Start cluster: ");
+    _makeUniqueDir(datastore1, sizeof(datastore1), "datastore_");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -cluster_name abc -server_name A -cluster nats://127.0.0.1:6222 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223,nats://127.0.0.1:6224 -p 4222", datastore1);
+    pid1 = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid1);
+
+    _makeUniqueDir(datastore2, sizeof(datastore2), "datastore_");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -cluster_name abc -server_name B -cluster nats://127.0.0.1:6223 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223,nats://127.0.0.1:6224 -p 4223", datastore2);
+    pid2 = _startServer("nats://127.0.0.1:4223", cmdLine, true);
+    CHECK_SERVER_STARTED(pid2);
+
+    _makeUniqueDir(datastore3, sizeof(datastore3), "datastore_");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -cluster_name abc -server_name C -cluster nats://127.0.0.1:6224 -routes nats://127.0.0.1:6222,nats://127.0.0.1:6223,nats://127.0.0.1:6224 -p 4224", datastore3);
+    pid3 = _startServer("nats://127.0.0.1:4224", cmdLine, true);
+    CHECK_SERVER_STARTED(pid3);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js, nc, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    sc.Replicas = 3;
+    // We will try up to 10 times to create the stream. It may fail if the cluster
+    // is not ready to accept the request.
+    for (i=0; (s == NATS_OK) && (i < 10); i++)
+    {
+        s = js_AddStream(NULL, js, &sc, NULL, NULL);
+        if ((s != NATS_OK) && (i < 9))
+        {
+            nats_clearLastError();
+            s = NATS_OK;
+            nats_Sleep(100);
+        }
+    }
+    testCond(s == NATS_OK);
+
+    test("Get stream info: ");
+    s = js_GetStreamInfo(&si, js, "TEST", NULL, NULL);
+    testCond(s == NATS_OK);
+    test("Verify cluster info");
+    testCond((si != NULL) && (si->Cluster != NULL) &&
+             (memcmp(si->Cluster->Name, "abc", strlen("abc")) == 0) &&
+             (si->Cluster->Leader != NULL) && (si->Cluster->ReplicasLen == 2) &&
+             (si->Cluster->RaftGroup != NULL) && (si->Cluster->LeaderSince != 0) &&
+             (si->Cluster->SystemAcc == true) && (si->Cluster->TrafficAcc != NULL)
+    );
+
+    // Cleanup
+    jsStreamInfo_Destroy(si);
+
+    jsCtx_Destroy(js);
+    natsConnection_Destroy(nc);
+
+    _stopServer(pid3);
+    _stopServer(pid2);
+    _stopServer(pid1);
+    rmtree(datastore1);
+    rmtree(datastore2);
+    rmtree(datastore3);
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int

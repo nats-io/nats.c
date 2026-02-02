@@ -145,6 +145,8 @@ _destroyClusterInfo(jsClusterInfo *cluster)
     for (i=0; i<cluster->ReplicasLen; i++)
         _destroyPeerInfo(cluster->Replicas[i]);
     NATS_FREE(cluster->Replicas);
+    NATS_FREE(cluster->RaftGroup);
+    NATS_FREE(cluster->TrafficAcc);
     NATS_FREE(cluster);
 }
 
@@ -1096,6 +1098,11 @@ _unmarshalClusterInfo(nats_JSON *pjson, const char *fieldName, jsClusterInfo **n
         // Free the array of JSON objects that was allocated by nats_JSONGetArrayObject.
         NATS_FREE(replicas);
     }
+    IFOK(s, nats_JSONGetStr(json, "raft_group", &(ci->RaftGroup)));
+    IFOK(s, nats_JSONGetTime(json, "leader_since", &(ci->LeaderSince)));
+    IFOK(s, nats_JSONGetBool(json, "system_account", &(ci->SystemAcc)));
+    IFOK(s, nats_JSONGetStr(json, "traffic_account", &(ci->TrafficAcc)));
+
     if (s == NATS_OK)
         *new_ci = ci;
     else

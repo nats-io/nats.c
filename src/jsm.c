@@ -1099,7 +1099,7 @@ _unmarshalClusterInfo(nats_JSON *pjson, const char *fieldName, jsClusterInfo **n
         NATS_FREE(replicas);
     }
     IFOK(s, nats_JSONGetStr(json, "raft_group", &(ci->RaftGroup)));
-    IFOK(s, nats_JSONGetLong(json, "leader_since", &(ci->LeaderSince)));
+    IFOK(s, nats_JSONGetTime(json, "leader_since", &(ci->LeaderSince)));
     IFOK(s, nats_JSONGetBool(json, "system_account", &(ci->SystemAcc)));
     IFOK(s, nats_JSONGetStr(json, "traffic_account", &(ci->TrafficAcc)));
 

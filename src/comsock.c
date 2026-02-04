@@ -111,7 +111,7 @@ natsSock_ShuffleIPs(natsSockCtx *ctx, struct addrinfo **tmp, int tmpSize, struct
     // Shuffle the array
     for (i=0; i<count; i++)
     {
-        j = rand() % (i + 1);
+        j = (int)(nats_Rand64() % (i + 1));
         p = ips[i];
         ips[i] = ips[j];
         ips[j] = p;

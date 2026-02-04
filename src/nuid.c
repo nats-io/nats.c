@@ -20,16 +20,44 @@
 #define CMWC_C_MAX 809430660    // as Marsaglia recommends
 static uint32_t Q[CMWC_CYCLE];
 static uint32_t carry = 362436;     // must be limited with CMWC_C_MAX (we will reinit it with seed)
+static uint32_t _lcg_state = 0;     // Simple LCG state used only for CMWC initialization.
+
+static uint32_t
+_lcg_next(void)
+{
+    _lcg_state = _lcg_state * 1103515245u + 12345u;
+    return (_lcg_state >> 16) & 0x7fff;
+}
 
 // Make 32 bit random number (some systems use 16 bit RAND_MAX)
 static uint32_t
 _rand32(void)
 {
     uint32_t result = 0;
-    result = rand();
+    result = _lcg_next();
     result <<= 16;
-    result |= rand();
+    result |= _lcg_next();
     return result;
+}
+
+// Mix multiple entropy sources into a seed for the LCG.
+// Combines nanosecond time, PID, thread ID, and a stack address
+// to reduce predictability of the CMWC initialization.
+static uint32_t
+_entropyMix(void)
+{
+    uint32_t h = (uint32_t) nats_NowInNanoSeconds();
+#if defined(_WIN32)
+    h ^= (uint32_t) GetCurrentProcessId() * 2654435761u;
+    h ^= (uint32_t) GetCurrentThreadId() * 2246822519u;
+#else
+    h ^= (uint32_t) getpid() * 2654435761u;
+    h ^= (uint32_t) (uintptr_t) pthread_self() * 2246822519u;
+#endif
+    // Use address of local var as ASLR-based entropy
+    volatile int stack_var;
+    h ^= (uint32_t) (uintptr_t) &stack_var * 3266489917u;
+    return h;
 }
 
 // Init all engine parts with seed
@@ -37,6 +65,8 @@ static void
 _initCMWC(unsigned int seed)
 {
     int i;
+
+    _lcg_state = seed;
 
     for (i = 0; i < CMWC_CYCLE; i++)
         Q[i] = _rand32();
@@ -87,12 +117,6 @@ _rand64(int64_t maxValue)
     return v;
 }
 
-int64_t
-nats_Rand64(void)
-{
-    return _rand64(0x7FFFFFFFFFFFFFFF);
-}
-
 // A unique identifier generator that is high performance, very fast, and entropy pool friendly.
 //
 // NUID needs to be very fast to generate and truly unique, all while being entropy pool friendly.
@@ -128,6 +152,18 @@ typedef struct natsLockedNUID
 
 // Global NUID
 static natsLockedNUID   globalNUID;
+
+int64_t
+nats_Rand64(void)
+{
+    int64_t r;
+
+    natsMutex_Lock(globalNUID.mu);
+    r = _rand64(0x7FFFFFFFFFFFFFFF);
+    natsMutex_Unlock(globalNUID.mu);
+
+    return r;
+}
 
 static natsStatus
 _nextLong(int64_t *next, bool useCrypto, int64_t maxValue)
@@ -201,16 +237,15 @@ natsNUID_free(void)
     globalNUID.mu = NULL;
 }
 
-// Seed sequential random with math/random and current time and generate crypto prefix.
+// Seed sequential random with mixed entropy and generate crypto prefix.
 natsStatus
 natsNUID_init(void)
 {
     natsStatus      s;
-    unsigned int    seed = (unsigned int) nats_NowInNanoSeconds();
+    unsigned int    seed = (unsigned int) _entropyMix();
 
     memset(&globalNUID, 0, sizeof(natsLockedNUID));
 
-    srand(seed);
     _initCMWC(seed);
 
     s = natsMutex_Create(&(globalNUID.mu));

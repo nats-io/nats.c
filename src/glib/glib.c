@@ -228,8 +228,6 @@ nats_openLib(natsClientConfig *config)
     signal(SIGPIPE, SIG_IGN);
 #endif
 
-    srand((unsigned int)nats_NowInNanoSeconds());
-
     gLib.refs = 1;
 
     // If the caller specifies negative value, then we use the default

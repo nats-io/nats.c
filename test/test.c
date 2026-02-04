@@ -2183,6 +2183,163 @@ void test_natsInbox(void)
     natsStrHash_Destroy(inboxes);
 }
 
+#define RAND_TEST_ITER  1000000
+
+void test_natsNUID_Uniqueness(void)
+{
+    int count = RAND_TEST_ITER;
+
+    if (valgrind)
+        count = 10000;
+
+    natsStatus  s = NATS_OK;
+    char        buf1[NUID_BUFFER_LEN + 1];
+    char        buf2[NUID_BUFFER_LEN + 1];
+    int         i;
+
+    test("NUIDs are non-empty: ");
+    s = natsNUID_Next(buf1, sizeof(buf1));
+    testCond((s == NATS_OK) && (strlen(buf1) == NUID_BUFFER_LEN));
+
+    test("NUIDs are unique: ");
+    {
+        natsStrHash *nuids = NULL;
+        bool        allUnique = true;
+
+        s = natsStrHash_Create(&nuids, 16);
+        for (i = 0; (s == NATS_OK) && (i < count); i++)
+        {
+            s = natsNUID_Next(buf1, sizeof(buf1));
+            if (s == NATS_OK)
+            {
+                if (natsStrHash_Get(nuids, buf1) != NULL)
+                {
+                    allUnique = false;
+                    break;
+                }
+                s = natsStrHash_Set(nuids, buf1, true, (void*) 1, NULL);
+            }
+        }
+        natsStrHash_Destroy(nuids);
+        testCond((s == NATS_OK) && allUnique);
+    }
+
+    test("NUIDs have correct length: ");
+    s = natsNUID_Next(buf1, sizeof(buf1));
+    if (s == NATS_OK)
+        s = natsNUID_Next(buf2, sizeof(buf2));
+    testCond((s == NATS_OK)
+             && (strlen(buf1) == NUID_BUFFER_LEN)
+             && (strlen(buf2) == NUID_BUFFER_LEN));
+
+    test("NUID buffer too small fails: ");
+    s = natsNUID_Next(buf1, 5);
+    testCond(s != NATS_OK);
+    nats_clearLastError();
+}
+
+static void
+_rand64Thread(void* notused)
+{
+    int i;
+
+    nats_Sleep(100);
+
+    for (i=0; i<1000; i++)
+    {
+        // Just make sure that this code is not compiled out (if just calling
+        // nats_Rand64()) by making sure that the returned value is not 0.
+        // Abort if that is the case (previous test has ensured that it always
+        // returns a positive value, so that should not happen of course).
+        if (nats_Rand64() == 0)
+            abort();
+    }
+}
+
+void test_natsRand64(void)
+{
+    int         count = RAND_TEST_ITER;
+    int         i;
+    int64_t     val;
+    bool        allPositive = true;
+    bool        hasVariation = false;
+    int64_t     first;
+    natsThread  *t1 = NULL;
+    natsThread  *t2 = NULL;
+    natsStatus  s;
+
+    if (valgrind)
+        count = 10000;
+
+    test("nats_Rand64 returns positive values: ");
+    first = nats_Rand64();
+    for (i = 0; i < count; i++)
+    {
+        val = nats_Rand64();
+        if (val < 0)
+        {
+            allPositive = false;
+            break;
+        }
+        if (val != first)
+            hasVariation = true;
+    }
+    testCond(allPositive);
+
+    test("nats_Rand64 has variation: ");
+    testCond(hasVariation);
+
+    test("nats_Rand64 modulo produces values in range: ");
+    {
+        bool inRange = true;
+        for (i = 0; i < count; i++)
+        {
+            val = nats_Rand64() % 100;
+            if ((val < 0) || (val >= 100))
+            {
+                inRange = false;
+                break;
+            }
+        }
+        testCond(inRange);
+    }
+
+    test("nats_Rand64 modulo distributes across range: ");
+    {
+        // With count samples and 10 buckets, each bucket should
+        // get roughly count/10 hits. We check that no bucket is empty.
+        int buckets[10] = {0};
+        bool noEmpty = true;
+
+        for (i = 0; i < count; i++)
+        {
+            val = nats_Rand64() % 10;
+            buckets[val]++;
+        }
+        for (i = 0; i < 10; i++)
+        {
+            if (buckets[i] == 0)
+            {
+                noEmpty = false;
+                break;
+            }
+        }
+        testCond(noEmpty);
+    }
+
+    test("Thread safe: ");
+    s = natsThread_Create(&t1, _rand64Thread, NULL);
+    IFOK(s, natsThread_Create(&t2, _rand64Thread, NULL));
+    if (s == NATS_OK)
+    {
+        natsThread_Join(t1);
+        natsThread_Join(t2);
+        natsThread_Destroy(t1);
+        natsThread_Destroy(t2);
+    }
+    testCond(s == NATS_OK);
+}
+
 static int HASH_ITER = 10000000;
 
 void test_natsHashing(void)

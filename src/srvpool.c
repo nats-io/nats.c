@@ -204,11 +204,9 @@ _shufflePool(natsSrvPool *pool, int offset)
     if (pool->size <= offset+1)
         return;
 
-    srand((unsigned int) nats_NowInNanoSeconds());
-
     for (i = offset; i < pool->size; i++)
     {
-        j = offset + rand() % (i + 1 - offset);
+        j = offset + (int)(nats_Rand64() % (i + 1 - offset));
         tmp = pool->srvrs[i];
         pool->srvrs[i] = pool->srvrs[j];
         pool->srvrs[j] = tmp;

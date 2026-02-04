@@ -1,4 +1,4 @@
-// Copyright 2021-2025 The NATS Authors
+// Copyright 2021-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -1881,6 +1881,8 @@ _publishPullRequest(natsConnection *nc, const char *subj, const char *rply,
         IFOK(s, natsBuf_Append(buf, req->ID, -1));
         IFOK(s, natsBuf_AppendByte(buf, '"'));
     }
+    if ((s == NATS_OK) && (req->Priority != 0))
+         s = nats_marshalUInt8(buf, true, "priority", req->Priority);
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
     // Sent the request to get more messages.

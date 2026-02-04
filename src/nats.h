@@ -929,9 +929,9 @@ typedef struct jsConsumerConfig
         /// later.
         int64_t                 PauseUntil;
 
-        /// \brief Represents he priority policy the consumer is set to. Must be
+        /// \brief Represents the priority policy the consumer is set to. Must be
         /// "pinned_client" or "overflow". Requires nats-server v2.11.0 or
-        /// later.
+        /// later and v2.12.0 or later for "prioritized".
         const char              *PriorityPolicy;
 
         /// \brief PinnedTTL represents the time after which the client will be
@@ -1284,6 +1284,10 @@ typedef struct jsFetchRequest
         const char      *ID;            ///< the "pinned" ID of this subscription, if any; to use with the
                                         /// "pinned_client" priority policy
         const char      *Group;
+        // The use of this field require nats-server v2.12.0 or later
+        uint8_t        Priority;        ///< Sets the priority used when sending fetch requests for consumer with
+                                        /// "prioritized". Lower values indicate higher priority (0 is the highest priority)
+                                        /// and are served first. Maximum priority value is 9.
 
 } jsFetchRequest;
 

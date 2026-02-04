@@ -39859,6 +39859,166 @@ void test_JetStreamClusterInfo(void)
     rmtree(datastore3);
 }
 
+static void
+_prioritizedPull(void *closure)
+{
+    struct threadArg    *arg        = (struct threadArg*) closure;
+    int                 priority    = 0;
+    int                 n           = 0;
+    natsSubscription    *sub        = NULL;
+    jsCtx               *js         = NULL;
+    natsStatus          s;
+
+    natsMutex_Lock(arg->m);
+    priority    = arg->control;
+    js          = arg->js;
+    natsMutex_Unlock(arg->m);
+
+    s = js_PullSubscribe(&sub, js, "foo", "consumer", NULL, NULL, NULL);
+    if (s == NATS_OK)
+    {
+        natsMsgList     list;
+        jsFetchRequest  req;
+
+        jsFetchRequest_Init(&req);
+        req.Group   = "TheGroup";
+        req.Priority= (uint8_t) priority;
+        // For the request with priority 1 (more urgent), we will ask for a
+        // batch of 7 (a total of 10 messages will be published), and for
+        // the request of priority 2 (less urgent), we will ask for a batch
+        // of 10. That second request should actually receive only 3 msgs,
+        // since the high priority will get its full batch of 7. The caller
+        // will check the proper results.
+        req.Batch   = (priority == 1 ? 7 : 10);
+        req.Expires = NATS_SECONDS_TO_NANOS(1);
+        s = natsSubscription_FetchRequest(&list, sub, &req);
+        if (s == NATS_OK)
+            n = list.Count;
+
+        natsMsgList_Destroy(&list);
+    }
+    natsMutex_Lock(arg->m);
+    if (s == NATS_OK)
+        arg->results[priority] = n;
+    else if (arg->status == NATS_OK)
+        arg->status = s;
+    natsMutex_Unlock(arg->m);
+
+    natsSubscription_Destroy(sub);
+}
+
+void test_JetStreamPrioritizedPullConsumer(void)
+{
+    natsStatus          s;
+    natsSubscription    *psub   = NULL;
+    natsMsg             *pmsg   = NULL;
+    natsThread          *t1     = NULL;
+    natsThread          *t2     = NULL;
+    jsErrCode           jerr    = 0;
+    jsStreamConfig      sc;
+    jsConsumerConfig    cc;
+    const char          *groups[] = {"TheGroup"};
+    struct threadArg    arg;
+    int                 i;
+
+    JS_SETUP(2, 12, 0);
+
+    test("Create thread args: ");
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    testCond(s == NATS_OK);
+
+    test("Create stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "TEST";
+    sc.Subjects = (const char*[1]){"foo"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Create sub to check proto: ");
+    s = natsConnection_SubscribeSync(&psub, nc, "$JS.API.CONSUMER.DURABLE.CREATE.TEST.consumer");
+    testCond((s == NATS_OK) && (psub != NULL));
+
+    test("Create pull consumer: ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "consumer";
+    cc.PriorityPolicy = jsPriorityPolicyPrioritizedStr;
+    cc.PriorityGroups = groups;
+    cc.PriorityGroupsLen = 1;
+    s = js_AddConsumer(NULL, js, "TEST", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Check proto ok: ");
+    s = natsSubscription_NextMsg(&pmsg, psub, 1000);
+    testCond((s == NATS_OK) && (pmsg != NULL) &&
+                (strstr(natsMsg_GetData(pmsg), jsPriorityPolicyPrioritizedStr) != NULL) &&
+                (strstr(natsMsg_GetData(pmsg), "TheGroup") != NULL));
+    natsMsg_Destroy(pmsg);
+    pmsg = NULL;
+    natsSubscription_Destroy(psub);
+    psub = NULL;
+
+    test("Create sub to check proto: ");
+    s = natsConnection_SubscribeSync(&psub, nc, "$JS.API.CONSUMER.MSG.NEXT.TEST.consumer");
+    testCond((s == NATS_OK) && (psub != NULL));
+
+    test("Start first fetch req: ");
+    natsMutex_Lock(arg.m);
+    arg.js      = js;
+    arg.control = 1;
+    natsMutex_Unlock(arg.m);
+    s = natsThread_Create(&t1, _prioritizedPull, (void*) &arg);
+    testCond(s == NATS_OK);
+
+    test("Check proto: ");
+    s = natsSubscription_NextMsg(&pmsg, psub, 1000);
+    testCond((s == NATS_OK) && (pmsg != NULL) &&
+                (strstr(natsMsg_GetData(pmsg), "\"priority\":1") != NULL) &&
+                (strstr(natsMsg_GetData(pmsg), "TheGroup") != NULL));
+    natsMsg_Destroy(pmsg);
+    pmsg = NULL;
+
+    test("Start second fetch req: ");
+    natsMutex_Lock(arg.m);
+    arg.control = 2;
+    natsMutex_Unlock(arg.m);
+    s = natsThread_Create(&t2, _prioritizedPull, (void*) &arg);
+    testCond(s == NATS_OK);
+
+    test("Check proto: ");
+    s = natsSubscription_NextMsg(&pmsg, psub, 1000);
+    testCond((s == NATS_OK) && (pmsg != NULL) &&
+                (strstr(natsMsg_GetData(pmsg), "\"priority\":2") != NULL) &&
+                (strstr(natsMsg_GetData(pmsg), "TheGroup") != NULL));
+    natsMsg_Destroy(pmsg);
+    pmsg = NULL;
+    natsSubscription_Destroy(psub);
+    psub = NULL;
+
+    test("Publish msgs: ");
+    for (i = 0; (s == NATS_OK) && (i < 10); i++)
+        s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Wait for threads to return: ");
+    natsThread_Join(t1);
+    natsThread_Destroy(t1);
+    t1 = NULL;
+    natsThread_Join(t2);
+    natsThread_Destroy(t2);
+    t2 = NULL;
+    testCond(s == NATS_OK);
+
+    test("Check results: ");
+    natsMutex_Lock(arg.m);
+    s = ((arg.status == NATS_OK) && (arg.results[1] == 7) && (arg.results[2] == 3) ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    JS_TEARDOWN;
+    _destroyDefaultThreadArgs(&arg);
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int

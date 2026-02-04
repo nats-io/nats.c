@@ -1,4 +1,4 @@
-// Copyright 2015-2025 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -2243,6 +2243,13 @@ natsStatus
 nats_marshalULong(natsBuffer *buf, bool comma, const char *fieldName, uint64_t uval)
 {
     natsStatus s = _marshalLongVal(buf, comma, fieldName, false, 0, uval);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+nats_marshalUInt8(natsBuffer *buf, bool comma, const char *fieldName, uint8_t uval)
+{
+    natsStatus s = _marshalLongVal(buf, comma, fieldName, false, 0, (uint64_t) uval);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

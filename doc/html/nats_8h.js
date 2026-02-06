@@ -125,6 +125,7 @@ var nats_8h =
     [ "natsSSLVerifyCb", "group__callbacks_group.html#gac45beaf6d26ef2c335ba499e4be5a896", null ],
     [ "jsPubAckErrHandler", "group__callbacks_group.html#ga954768cc1d3388bb6ab723e777647992", null ],
     [ "jsPubAckHandler", "group__callbacks_group.html#ga4f66e065bd918f02510d4c53d8a5b729", null ],
+    [ "natsThreadStartedHandler", "group__callbacks_group.html#gad845be86eb43304975beac908b0296dd", null ],
     [ "stanPubAckHandler", "group__callbacks_group.html#gad5d6a685731b3bf635995b7375af4d18", null ],
     [ "stanMsgHandler", "group__callbacks_group.html#gaf7456e37fa14f1834d9048d3789e9409", null ],
     [ "stanConnectionLostHandler", "group__callbacks_group.html#gac34092f6c698374f86ad349302bdd55c", null ],
@@ -178,6 +179,10 @@ var nats_8h =
     [ "jsReplayPolicy", "group__types_group.html#ga8650faf52b0b6b23df376eebeb9d0354", [
       [ "js_ReplayInstant", "group__types_group.html#gga8650faf52b0b6b23df376eebeb9d0354a2c4a1e2b75f31dd69a89b541d75afa44", null ],
       [ "js_ReplayOriginal", "group__types_group.html#gga8650faf52b0b6b23df376eebeb9d0354a6ee3851dac5c90a61492193dd55931f5", null ]
+    ] ],
+    [ "jsPersistModeType", "group__types_group.html#ga0816678d2eb067e44ebf180e9b7397ee", [
+      [ "js_PersistDefault", "group__types_group.html#gga0816678d2eb067e44ebf180e9b7397eea75aee5547ccfc5773ec9b131a4fa62c5", null ],
+      [ "js_PersistAsync", "group__types_group.html#gga0816678d2eb067e44ebf180e9b7397eeabe6a5707846de97704b17923225c90c2", null ]
     ] ],
     [ "kvOperation", "group__types_group.html#ga89db3bd6bf11af3ac5eb3ab560d16332", [
       [ "kvOp_Unknown", "group__types_group.html#gga89db3bd6bf11af3ac5eb3ab560d16332a0b7a6bef67e4220f5f0c4075f2ed16b6", null ],
@@ -347,6 +352,7 @@ var nats_8h =
     [ "natsConnection_DrainTimeout", "group__conn_mgt_group.html#gae06fe6f5933f216d6d93645a122a7dd4", null ],
     [ "natsConnection_Sign", "group__conn_mgt_group.html#ga6960cfdbaac3b8759784f352d4c264f8", null ],
     [ "natsConnection_GetClientIP", "group__conn_mgt_group.html#gadafcfeeeac2733c7119981ab97b7103d", null ],
+    [ "natsConnection_GetName", "group__conn_mgt_group.html#ga731ffd265f0a91d873aaa5627a3277d3", null ],
     [ "natsConnection_GetRTT", "group__conn_mgt_group.html#gaa3fd27e6e7d8131e679d4f10e201c435", null ],
     [ "natsConnection_HasHeaderSupport", "group__conn_mgt_group.html#gad765b80ae8e1a06a7a942cccf29f042a", null ],
     [ "natsConnection_GetLocalIPAndPort", "group__conn_mgt_group.html#gaa079d4712912ed8e484fa8a60fe71bcb", null ],
@@ -371,6 +377,7 @@ var nats_8h =
     [ "natsSubscription_Unsubscribe", "group__sub_group.html#gaee87f8be0e6c2a4693ba2cea070583ba", null ],
     [ "natsSubscription_AutoUnsubscribe", "group__sub_group.html#ga09f285de2746a6e27fc66efd60bd3116", null ],
     [ "natsSubscription_QueuedMsgs", "group__sub_group.html#ga8a37b2d5290da3aecc05483d79e7e254", null ],
+    [ "natsSubscription_GetConnection", "group__sub_group.html#ga6b7f4afb4fba85db1540dc32a7ee7043", null ],
     [ "natsSubscription_GetID", "group__sub_group.html#ga5a029a784c0a7f8b5800b48cc995db20", null ],
     [ "natsSubscription_GetSubject", "group__sub_group.html#gadd4872b9fc5678a73f9ab04ce8428432", null ],
     [ "natsSubscription_SetPendingLimits", "group__sub_group.html#ga68a7cea89e75c529a7dd3bb77303dda4", null ],

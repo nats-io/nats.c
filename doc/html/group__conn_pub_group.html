@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -309,7 +309,7 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">subj</td><td>the subject the request is sent to. </td></tr>
-    <tr><td class="paramname">reply</td><td>the reply on which resonses are expected. </td></tr>
+    <tr><td class="paramname">reply</td><td>the reply on which responses are expected. </td></tr>
     <tr><td class="paramname">data</td><td>the data to be sent, can be <code>NULL</code>. </td></tr>
     <tr><td class="paramname">dataLen</td><td>the length of the data to be sent. </td></tr>
   </table>
@@ -363,7 +363,7 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">subj</td><td>the subject the request is sent to. </td></tr>
-    <tr><td class="paramname">reply</td><td>the reply on which resonses are expected. </td></tr>
+    <tr><td class="paramname">reply</td><td>the reply on which responses are expected. </td></tr>
     <tr><td class="paramname">str</td><td>the string to send. </td></tr>
   </table>
   </dd>
@@ -429,7 +429,7 @@ Functions</h2></td></tr>
     <tr><td class="paramname">subj</td><td>the subject the request is sent to. </td></tr>
     <tr><td class="paramname">data</td><td>the data of the request, can be <code>NULL</code>. </td></tr>
     <tr><td class="paramname">dataLen</td><td>the length of the data to send. </td></tr>
-    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this alloted time. </td></tr>
+    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this allotted time. </td></tr>
   </table>
   </dd>
 </dl>
@@ -491,7 +491,7 @@ Functions</h2></td></tr>
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">subj</td><td>the subject the request is sent to. </td></tr>
     <tr><td class="paramname">str</td><td>the string to send. </td></tr>
-    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this alloted time. </td></tr>
+    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this allotted time. </td></tr>
   </table>
   </dd>
 </dl>
@@ -542,7 +542,7 @@ Functions</h2></td></tr>
     <tr><td class="paramname">replyMsg</td><td>the location where to store the pointer to the received <a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a" title="A structure holding a subject, optional reply and payload.">natsMsg</a> reply. </td></tr>
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">requestMsg</td><td>the message used for the request. </td></tr>
-    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this alloted time. </td></tr>
+    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this allotted time. </td></tr>
   </table>
   </dd>
 </dl>

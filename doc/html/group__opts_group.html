@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -1168,7 +1168,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>By default, the server certificate is verified. You can disable the verification by passing <code>true</code> to this function.</p>
-<dl class="section note"><dt>Note</dt><dd>Setting this to true will clear SSL verfication callback set via <a class="el" href="group__opts_group.html#ga241477d90abb58ada7001cd676d293cb" title="EXPERIMENTAL Sets the certificate validation callback.">natsOptions_SetSSLVerificationCallback()</a>.</dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Setting this to true will clear SSL verification callback set via <a class="el" href="group__opts_group.html#ga241477d90abb58ada7001cd676d293cb" title="EXPERIMENTAL Sets the certificate validation callback.">natsOptions_SetSSLVerificationCallback()</a>.</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>This is fine for tests but use with caution since this is not secure.</dd>
 <dd>
 See warning in <a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba" title="Sets the secure mode.">natsOptions_SetSecure</a>.</dd></dl>
@@ -2043,7 +2043,7 @@ See warning in <a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Specifies the callback to invoke when the server notifies the connection that it entered lame duck mode, that is, going to gradually disconnect all its connections before shuting down. This is often used in deployments when upgrading NATS Servers.</p>
+<p>Specifies the callback to invoke when the server notifies the connection that it entered lame duck mode, that is, going to gradually disconnect all its connections before shutting down. This is often used in deployments when upgrading NATS Servers.</p>
 <dl class="section warning"><dt>Warning</dt><dd>Invocation of this callback is asynchronous, which means that the state may have changed when this callback is invoked.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">

@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -190,6 +190,9 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:aa45bb2b4fb0e7ce71b77d9af91c0a6bd" id="r_aa45bb2b4fb0e7ce71b77d9af91c0a6bd"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#aa45bb2b4fb0e7ce71b77d9af91c0a6bd">SubjectDeleteMarkerTTL</a></td></tr>
 <tr class="memdesc:aa45bb2b4fb0e7ce71b77d9af91c0a6bd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enables and sets a duration for adding server markers for delete, purge and max age limits. In nanoseconds. Requires nats-server v2.11.0 or later.  <br /></td></tr>
 <tr class="separator:aa45bb2b4fb0e7ce71b77d9af91c0a6bd"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a532a35a82101aba31033b5da088f90eb" id="r_a532a35a82101aba31033b5da088f90eb"><td class="memItemLeft" align="right" valign="top"><a class="el" href="group__types_group.html#ga0816678d2eb067e44ebf180e9b7397ee">jsPersistModeType</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a532a35a82101aba31033b5da088f90eb">PersistMode</a></td></tr>
+<tr class="memdesc:a532a35a82101aba31033b5da088f90eb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the persistence mode for the stream. Requires nats-server v2.12.0 or later.  <br /></td></tr>
+<tr class="separator:a532a35a82101aba31033b5da088f90eb"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Configuration of a JetStream stream.</p>
@@ -756,6 +759,20 @@ NATS server 2.10 added user-provided Metadata, storage Compression type, FirstSe
       <table class="memname">
         <tr>
           <td class="memname">int64_t jsStreamConfig::SubjectDeleteMarkerTTL</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a532a35a82101aba31033b5da088f90eb" name="a532a35a82101aba31033b5da088f90eb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a532a35a82101aba31033b5da088f90eb">&#9670;&#160;</a></span>PersistMode</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="group__types_group.html#ga0816678d2eb067e44ebf180e9b7397ee">jsPersistModeType</a> jsStreamConfig::PersistMode</td>
         </tr>
       </table>
 </div><div class="memdoc">

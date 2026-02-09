@@ -24536,6 +24536,7 @@ void test_JetStreamMarshalStreamConfig(void)
         .InactiveThreshold = 1000,
         .MaxAckPending = 99,
     };
+    sc.AllowAtomic = true;
 
     test("Marshal stream config: ");
     s = js_marshalStreamConfig(&buf, &sc);
@@ -24619,6 +24620,7 @@ void test_JetStreamMarshalStreamConfig(void)
                 && (rsc->ConsumerLimits.InactiveThreshold == 1000)
                 && (rsc->ConsumerLimits.MaxAckPending == 99)
                 && (rsc->PersistMode == js_PersistAsync)
+                && (rsc->AllowAtomic == true)
                 );
     js_destroyStreamConfig(rsc);
     rsc = NULL;

@@ -644,6 +644,8 @@ typedef struct jsStreamConfig {
         /// v2.12.0 or later.
         jsPersistModeType       PersistMode;
 
+        /// @brief Enables sending atomic batch publishing into the stream
+        bool                    AllowAtomic;
 } jsStreamConfig;
 
 /**

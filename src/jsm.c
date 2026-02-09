@@ -791,6 +791,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_JSONGetLong(jcfg, "subject_delete_marker_ttl", &(cfg->SubjectDeleteMarkerTTL)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_msg_ttl", &(cfg->AllowMsgTTL)));
     IFOK(s, _unmarshalPersistModeType(jcfg, &(cfg->PersistMode)));
+    IFOK(s, nats_JSONGetBool(jcfg, "allow_atomic", &(cfg->AllowAtomic)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -912,6 +913,8 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         IFOK(s, natsBuf_Append(buf, ",\"mirror_direct\":true", -1));
     if ((s == NATS_OK) && cfg->DiscardNewPerSubject)
         IFOK(s, natsBuf_Append(buf, ",\"discard_new_per_subject\":true", -1));
+    if ((s == NATS_OK) && cfg->AllowAtomic)
+        IFOK(s, natsBuf_Append(buf, ",\"allow_atomic\":true", -1));
 
     IFOK(s, nats_marshalMetadata(buf, true, "metadata", &(cfg->Metadata)));
     IFOK(s, _marshalStorageCompression(cfg->Compression, buf));

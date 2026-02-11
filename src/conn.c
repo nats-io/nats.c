@@ -2904,6 +2904,7 @@ _processPermissionViolation(natsConnection *nc, char *error)
     natsConn_Lock(nc);
     nc->err = NATS_NOT_PERMITTED;
     snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
+    _clearPendingRequestCalls(nc, NATS_NOT_PERMITTED);
     natsAsyncCb_PostErrHandler(nc, NULL, nc->err, NATS_STRDUP(error));
     natsConn_Unlock(nc);
 }

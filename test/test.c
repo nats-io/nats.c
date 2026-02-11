@@ -10785,6 +10785,107 @@ void test_PermViolation(void)
 }
 
 static void
+_permViolationOnRequestHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
+{
+    struct threadArg *args = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    // Record that the error callback was invoked.
+    args->done = true;
+    // Store the error status.
+    args->status = err;
+    // Check that the subscription is NULL (empty) as reported in the issue.
+    args->results[0] = (sub == NULL) ? 1 : 0;
+    natsCondition_Broadcast(args->c);
+    natsMutex_Unlock(args->m);
+}
+
+void test_PermViolationOnRequest(void)
+{
+    natsStatus          s;
+    natsConnection      *conn    = NULL;
+    natsMsg             *reply   = NULL;
+    natsOptions         *opts    = NULL;
+    natsPid             pid      = NATS_INVALID_PID;
+    struct threadArg    args;
+    int64_t             start    = 0;
+    int64_t             elapsed  = 0;
+
+    // Set up the error handler callback to log the info returned.
+    s = _createDefaultThreadArgsForCbTests(&args);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "nats://ivan:pwd@127.0.0.1:8232"));
+    IFOK(s, natsOptions_SetErrorHandler(opts, _permViolationOnRequestHandler, &args));
+    if (s != NATS_OK)
+        FAIL("Error setting up test");
+
+    // Set up a NATS server that returns a Not Permitted error to requests.
+    // User 'ivan' can only publish to "foo", so requesting "bar"
+    // will trigger a publish permission violation.
+    pid = _startServer("nats://127.0.0.1:8232", "-c permissions_request.conf -a 127.0.0.1 -p 8232", false);
+    CHECK_SERVER_STARTED(pid);
+    s = _checkStart("nats://ivan:pwd@127.0.0.1:8232", 4, 10);
+    if (s != NATS_OK)
+    {
+        _stopServer(pid);
+        FAIL("Error starting server!");
+    }
+
+    test("Check connection created: ");
+    s = natsConnection_Connect(&conn, opts);
+    testCond(s == NATS_OK);
+
+    // Call natsConnection_Request() with a 5s timeout on a denied subject.
+    // Before the fix, the request would complete only after the timeout
+    // without the underlying Not Permitted status.
+    test("Request to denied subject returns NOT_PERMITTED: ");
+    start = nats_Now();
+    s = natsConnection_RequestString(&reply, conn, "bar", "hello", 5000);
+    elapsed = nats_Now() - start;
+    testCond(s == NATS_NOT_PERMITTED);
+
+    // The request should return well before the 5s timeout.
+    test("Request returned before timeout: ");
+    testCond(elapsed < 2000);
+    printf("  >> Request completed in %" PRId64 "ms\n", elapsed);
+    fflush(stdout);
+
+    // The reply message should be NULL.
+    test("Reply is NULL: ");
+    testCond(reply == NULL);
+
+    // The error callback should have been invoked first with
+    // NATS_NOT_PERMITTED and a NULL subscription.
+    test("Error callback was invoked: ");
+    {
+        natsStatus ws = NATS_OK;
+        natsMutex_Lock(args.m);
+        while (!args.done && (ws == NATS_OK))
+            ws = natsCondition_TimedWait(args.c, args.m, 2000);
+        natsMutex_Unlock(args.m);
+    }
+    testCond(args.done);
+
+    test("Error callback received NOT_PERMITTED: ");
+    testCond(args.status == NATS_NOT_PERMITTED);
+
+    test("Error callback subscription is NULL: ");
+    testCond(args.results[0] == 1);
+
+    test("Connection not closed: ");
+    testCond(!natsConnection_IsClosed(conn));
+
+    natsMsg_Destroy(reply);
+    natsConnection_Destroy(conn);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&args);
+
+    _stopServer(pid);
+}
+
+static void
 _authViolationHandler(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
     struct threadArg *args      = (struct threadArg*) closure;

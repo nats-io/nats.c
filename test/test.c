@@ -34982,7 +34982,9 @@ void test_KeyValueKeysWithFilters(void)
     kvKeysList_Destroy(&l);
 
     test("filter: multiple overlapping filters");
-    const char **filter6 = (const char *[]){"*.a","a.*","*.a.*"};
+    // Original test with values {"*.a","a.*","*.a.*"} would fail since
+    // server PR #7810, so updating the list to this:
+    const char **filter6 = (const char *[]){"a.>","a.*","*.a.*"};
     s = kvStore_KeysWithFilters(&l, kv, filter6, 3, NULL);
     // consumer subject filters cannot overlap
     testCond((s == NATS_ERR) && (l.Keys == NULL) && (l.Count == 0));

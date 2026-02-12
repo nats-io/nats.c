@@ -42397,3 +42397,33 @@ int main(int argc, char **argv)
     printf("ALL PASSED\n");
     return 0;
 }
+
+void test_JetStreamSharedSub(void)
+{
+    natsStatus          s;
+    jsStreamConfig      cfg, cfg_mirror;
+    jsStreamSource      ss;
+    jsStreamInfo        *si_mirror = NULL;
+    natsSubscription    *sub      = NULL;
+    natsMsg             *msg      = NULL;
+    natsMsg             *req      = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    struct threadArg    arg;
+    int                 i;
+
+    JS_SETUP(2, 12, 0);
+
+    test("Creating shared subscription: ");
+    s = natsSubscription_CreateSharedSubscription(nc, js);
+    testCond(s == NATS_OK);
+
+    test("Create req message: ");
+    s = natsMsg_Create(&req, "foo", NULL, "help", 4);
+    testCond(s == NATS_OK);
+
+    test("Test RequestMsg: ");
+    s = natsConnection_RequestMsg(&msg, nc, req, 500);
+    testCond(s == NATS_OK);
+
+    JS_TEARDOWN;
+}

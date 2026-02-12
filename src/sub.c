@@ -1388,7 +1388,8 @@ void natsSubscription_Destroy(natsSubscription *sub)
 static void
 _sharedRespHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    jsCtx *js = (jsCtx *)closure;
+    // jsCtx *js = (jsCtx *)closure;
+    printf("%.*s\n", msg->hdrLen, msg->hdr);
 
     natsMsg_Destroy(msg);
 }

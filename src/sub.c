@@ -1370,10 +1370,55 @@ void natsSubscription_Destroy(natsSubscription *sub)
     if (sub->jsi != NULL)
         sub->jsi->dc = false;
 
+    if (sub->shareCount > 0)
+        sub->shareCount--;
+
     natsSub_Unlock(sub);
+
+    // Don't close or free the subscription if it's still in use
+    if (sub->shareCount != 0)
+        return;
 
     if (doUnsub)
         (void)natsSubscription_Unsubscribe(sub);
 
     natsSub_release(sub);
+}
+
+static void
+_sharedRespHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    jsCtx *js = (jsCtx *)closure;
+
+    natsMsg_Destroy(msg);
+}
+
+natsStatus
+natsSubscription_CreateSharedSubscription(natsConnection *nc, jsCtx *js)
+{
+    natsSubscription *sub = NULL;
+    natsInbox        *inbox = NULL;
+    natsStatus       s = NATS_OK;
+
+    // If either are already set, we shouldn't create a new one
+    if ((nc->respMux != NULL) || (js->rsub != NULL) || (js->nc != nc)) {
+        return NATS_INVALID_ARG;
+    }
+
+    s = natsConn_newInbox(nc, (natsInbox**) &nc->respSub);
+
+    if (nats_asprintf(&inbox, "%s.*", nc->respSub) < 0)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    if (s == NATS_OK)
+        s = natsConn_subscribeNoPool(&sub, nc, inbox, _sharedRespHandler, (void*) js);
+    NATS_FREE(inbox);
+
+    if (s == NATS_OK)
+    {
+        sub->shareCount = 2;
+        nc->respMux = sub;
+        js->rsub = sub;
+    }
+
+    return NATS_UPDATE_ERR_STACK(s);
 }

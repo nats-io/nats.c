@@ -6351,6 +6351,9 @@ natsSubscription_SetOnCompleteCB(natsSubscription *sub, natsOnCompleteCB cb, voi
 NATS_EXTERN void
 natsSubscription_Destroy(natsSubscription *sub);
 
+NATS_EXTERN natsStatus
+natsSubscription_CreateSharedSubscription(natsConnection *nc, jsCtx *js);
+
 /** @} */ // end of subGroup
 
 #if defined(NATS_HAS_STREAMING)

@@ -303,7 +303,7 @@ typedef struct jsPubOptions
         const char      *ExpectLastMsgId;       ///< Expected last message ID in the stream.
         uint64_t        ExpectLastSeq;          ///< Expected last message sequence in the stream.
         uint64_t        ExpectLastSubjectSeq;   ///< Expected last message sequence for the subject in the stream.
-        const char      *ExpectlastSubject;     ///< Expected subject for the last sequence
+        const char      *ExpectLastSubject;     ///< Expected subject for the sequence set with 'ExpectLastSubjectSeq'.
         bool            ExpectNoMessage;        ///< Expected no message (that is, sequence == 0) for the subject in the stream.
         int64_t         MsgTTL;                 ///< Message time to live (TTL) in milliseconds, used by the server to expire the message. Requires nats-server v2.11.0 or later.
 

@@ -481,11 +481,11 @@ _setHeadersFromOptions(natsMsg *msg, jsPubOptions *opts)
         {
             snprintf(temp, sizeof(temp), "%" PRIu64, opts->ExpectLastSubjectSeq);
             s = natsMsgHeader_Set(msg, jsExpectedLastSubjSeqHdr, temp);
+            if ((s == NATS_OK) && (!nats_IsStringEmpty(opts->ExpectLastSubject)))
+            {
+                s = natsMsgHeader_Set(msg, jsExpectedLastSubjSeqSubjHdr, opts->ExpectLastSubject);
+            }
         }
-    }
-    if ((s == NATS_OK) && (!nats_IsStringEmpty(opts->ExpectlastSubject)))
-    {
-        s = natsMsgHeader_Set(msg, jsExpectedLastSubjSeqSubjHdr, opts->ExpectlastSubject);
     }
     if ((s == NATS_OK) && (opts->MsgTTL != 0))
     {

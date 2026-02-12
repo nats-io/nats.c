@@ -27002,7 +27002,23 @@ void test_JetStreamPublish(void)
     // is 3, which is wrong, so should fail.
     opts.ExpectLastSubjectSeq = 3;
     s = js_PublishMsg(&pa, js, msg, &opts, &jerr);
-    testCond((s == NATS_ERR) && ((jerr == 0) || (jerr == JSStreamWrongLastSequenceErr)) && (pa == NULL));
+    testCond((s == NATS_ERR) && (jerr == JSStreamWrongLastSequenceErr) && (pa == NULL));
+    nats_clearLastError();
+    jerr = 0;
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Publish with wrong expected last subject: ");
+    jsPubOptions_Init(&opts);
+    natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+
+    // Set the last expected for subject to 2, which should be correct, but set the expected
+    // last subject to "bar", which is wrong, so should fail.
+    opts.ExpectLastSubjectSeq = 2;
+    opts.ExpectLastSubjectSeqSubject = "bar";
+    s = js_PublishMsg(&pa, js, msg, &opts, &jerr);
+    testCond((s == NATS_ERR) && (jerr == JSStreamWrongLastSequenceErr) && (pa == NULL));
+    nats_clearLastError();
     jerr = 0;
     natsMsg_Destroy(msg);
     msg = NULL;
@@ -27011,6 +27027,7 @@ void test_JetStreamPublish(void)
     natsMsg_Create(&msg, "foo", NULL, "hello", 5);
     // Now set last expected for subject to 2, and it should be ok, and the sequence will be 4.
     opts.ExpectLastSubjectSeq = 2;
+    opts.ExpectLastSubjectSeqSubject = "foo";
     s = js_PublishMsg(&pa, js, msg, &opts, &jerr);
     testCond((s == NATS_OK) && (jerr == 0) && (pa != NULL)
                 && (strcmp(pa->Stream, "TEST") == 0)

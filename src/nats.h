@@ -297,14 +297,15 @@ typedef struct __jsCtx                  jsCtx;
  */
 typedef struct jsPubOptions
 {
-        int64_t         MaxWait;                ///< Amount of time (in milliseconds) to wait for a publish response, default will the context's Wait value.
-        const char      *MsgId;                 ///< Message ID used for de-duplication.
-        const char      *ExpectStream;          ///< Expected stream to respond from the publish call.
-        const char      *ExpectLastMsgId;       ///< Expected last message ID in the stream.
-        uint64_t        ExpectLastSeq;          ///< Expected last message sequence in the stream.
-        uint64_t        ExpectLastSubjectSeq;   ///< Expected last message sequence for the subject in the stream.
-        bool            ExpectNoMessage;        ///< Expected no message (that is, sequence == 0) for the subject in the stream.
-        int64_t         MsgTTL;                 ///< Message time to live (TTL) in milliseconds, used by the server to expire the message. Requires nats-server v2.11.0 or later.
+        int64_t         MaxWait;                      ///< Amount of time (in milliseconds) to wait for a publish response, default will the context's Wait value.
+        const char      *MsgId;                       ///< Message ID used for de-duplication.
+        const char      *ExpectStream;                ///< Expected stream to respond from the publish call.
+        const char      *ExpectLastMsgId;             ///< Expected last message ID in the stream.
+        uint64_t        ExpectLastSeq;                ///< Expected last message sequence in the stream.
+        uint64_t        ExpectLastSubjectSeq;         ///< Expected last message sequence for the subject in the stream.
+        const char      *ExpectLastSubjectSeqSubject; ///< Expected subject for the sequence set with 'ExpectLastSubjectSeq'.
+        bool            ExpectNoMessage;              ///< Expected no message (that is, sequence == 0) for the subject in the stream.
+        int64_t         MsgTTL;                       ///< Message time to live (TTL) in milliseconds, used by the server to expire the message. Requires nats-server v2.11.0 or later.
 
 } jsPubOptions;
 

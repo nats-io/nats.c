@@ -33,14 +33,15 @@ void js_unlock(jsCtx *js);
 extern const char*      jsDefaultAPIPrefix;
 extern const int64_t    jsDefaultRequestWait;
 
-#define jsMsgIdHdr                  "Nats-Msg-Id"
-#define jsMsgTTLHdr                 "Nats-TTL"
-#define jsExpectedStreamHdr         "Nats-Expected-Stream"
-#define jsExpectedLastSeqHdr        "Nats-Expected-Last-Sequence"
-#define jsExpectedLastSubjSeqHdr    "Nats-Expected-Last-Subject-Sequence"
-#define jsExpectedLastMsgIdHdr      "Nats-Expected-Last-Msg-Id"
-#define jsConsumerStalledHdr        "Nats-Consumer-Stalled"
-#define jsConsumerPinIDHdr          "Nats-Pin-Id"
+#define jsMsgIdHdr                     "Nats-Msg-Id"
+#define jsMsgTTLHdr                    "Nats-TTL"
+#define jsExpectedStreamHdr            "Nats-Expected-Stream"
+#define jsExpectedLastSeqHdr           "Nats-Expected-Last-Sequence"
+#define jsExpectedLastSubjSeqHdr       "Nats-Expected-Last-Subject-Sequence"
+#define jsExpectedLastSubjSeqSubjHdr   "Nats-Expected-Last-Subject-Sequence-Subject"
+#define jsExpectedLastMsgIdHdr         "Nats-Expected-Last-Msg-Id"
+#define jsConsumerStalledHdr           "Nats-Consumer-Stalled"
+#define jsConsumerPinIDHdr             "Nats-Pin-Id"
 
 #define jsErrStreamNameRequired             "stream name is required"
 #define jsErrConsumerNameRequired           "consumer name is required"

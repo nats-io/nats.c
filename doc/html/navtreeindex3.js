@@ -1,5 +1,11 @@
 var NAVTREEINDEX3 =
 {
+"nats_8h.html#acc62d11b7e67fe3feb74acdfa4a6e8ac":[4,0,0,1,5],
+"nats_8h.html#ad22dce8f66bae9b3e1027790d9c95c09":[4,0,0,1,4],
+"nats_8h.html#ae18fb15ea8130a650e904e5153eb30d5":[4,0,0,1,8],
+"nats_8h.html#af798865ac824e5959987de0fe8d07383":[4,0,0,1,22],
+"nats_8h_source.html":[4,0,0,1],
+"pages.html":[],
 "status_8h.html":[4,0,0,2],
 "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70":[4,0,0,2,2],
 "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a00b4ce854e473bb8f49d91c0f982c6f9":[4,0,0,2,2,98],
@@ -221,9 +227,11 @@ var NAVTREEINDEX3 =
 "struct____nats_client_config.html#a11769afbb1dd577e63571e05fd579ddf":[2,0,0,5],
 "struct____nats_client_config.html#a70f9a7d726a564fb1c3ef14c1bc6cd47":[2,0,0,6],
 "struct____nats_client_config.html#a7c9592d371e589faf41d5f493934b5c1":[2,0,0,3],
+"struct____nats_client_config.html#a846d531c14368a4fbfb9f2ba472e81af":[2,0,0,7],
 "struct____nats_client_config.html#a9a92a915d00d9f39592c407ad6b4a5d1":[2,0,0,0],
 "struct____nats_client_config.html#a9cfade80f1a92d2ce6821007a282d047":[2,0,0,2],
 "struct____nats_client_config.html#aa8e7db4bae066739c5af59a93d6b4ca0":[2,0,0,1],
+"struct____nats_client_config.html#aaea9884a869402dbe226cd9ecae5dd27":[2,0,0,8],
 "structjs_a_p_i_stats.html":[2,0,32],
 "structjs_a_p_i_stats.html#a1545170bebb347d0ea1254f51c3027cf":[2,0,32,0],
 "structjs_a_p_i_stats.html#a84e85ad9d94dbe9afd1101388574255d":[2,0,32,1],
@@ -241,13 +249,5 @@ var NAVTREEINDEX3 =
 "structjs_account_limits.html#a38875d969274b0f0fcefc6b04ce56eb8":[2,0,33,5],
 "structjs_account_limits.html#a4710a10950857a322c2a3ad6f946ded2":[2,0,33,2],
 "structjs_account_limits.html#a4abf1972690c20d73bd314f2059e8013":[2,0,33,4],
-"structjs_account_limits.html#a6169f29101d51d48eed0803b719e6338":[2,0,33,3],
-"structjs_account_limits.html#a6fff014c46739410ecf298b0cf643b30":[2,0,33,1],
-"structjs_account_limits.html#a7bfc63e6f49ce724663ee534c5efdfa4":[2,0,33,0],
-"structjs_account_limits.html#a858edf99ee1c60354bdba4e59293fb6a":[2,0,33,7],
-"structjs_account_limits.html#a8cca06ab72b715c02a6a2c72b59f6a52":[2,0,33,6],
-"structjs_cluster_info.html":[2,0,16],
-"structjs_cluster_info.html#a237a639579def1345e02f1490a510ed5":[2,0,16,3],
-"structjs_cluster_info.html#a2e13d7ec417574100c938c4df78e5484":[2,0,16,0],
-"structjs_cluster_info.html#a8dfcae3bc348a5b595b509e3f3d3500b":[2,0,16,2]
+"structjs_account_limits.html#a6169f29101d51d48eed0803b719e6338":[2,0,33,3]
 };

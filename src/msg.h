@@ -129,4 +129,7 @@ natsMsg_freeHeaders(natsMsg *msg);
 void
 natsMsg_free(void *object);
 
+natsStatus
+natsMsg_Clone(natsMsg **dest, natsMsg *src);
+
 #endif /* MSG_H_ */

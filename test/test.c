@@ -42406,30 +42406,7 @@ void test_JetStreamSharedSub(void)
     struct threadArg    arg;
     natsSubscription    *sub      = NULL;
 
-
-    // natsConnection  *nc = NULL; \
-    // jsCtx           *js = NULL; \
-    // natsPid         pid = NATS_INVALID_PID;
-    // char            datastore[256] = {'\0'};
-    // char            cmdLine[1024] = {'\0'};
-
-    // ENSURE_JS_VERSION((2), (12), (0));
-
-    // _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
-    // test("Start JS Server: ");
-    // snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -m 8222", datastore);
-    // pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
-    // CHECK_SERVER_STARTED(pid);
-    // testCond(true);
     JS_SETUP(2, 12, 0);
-
-    test("Connect: ");
-    s = natsConnection_Connect(&nc, NULL);
-    testCond(s == NATS_OK);
-
-    test("Get context: ");
-    s = natsConnection_JetStream(&js, nc, NULL);
-    testCond(s == NATS_OK);
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if ( s != NATS_OK)
@@ -42447,6 +42424,15 @@ void test_JetStreamSharedSub(void)
     IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
     testCond(s == NATS_OK);
 
+    test("Validate Jetstream Publish: ");
+    s = natsMsg_Create(&req, "foo", NULL, "help", 4);
+    IFOK(s, js_PublishMsgAsync(js, &req, NULL));
+    testCond(s == NATS_OK);
+
+    test("Wait for publish ack: ");
+    s = js_PublishAsyncComplete(js, NULL);
+    testCond(s == NATS_OK);
+
     test("Create req message: ");
     s = natsMsg_Create(&req, "foo", NULL, "help", 4);
     testCond(s == NATS_OK);
@@ -42457,14 +42443,10 @@ void test_JetStreamSharedSub(void)
     while ((s != NATS_TIMEOUT) && !arg.msgReceived)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     testCond(s == NATS_OK);
-
-    test("Validate Jetstream subscription: ");
-    s = js_PublishMsgAsync(js, &req, NULL);
-    testCond(s == NATS_OK);
-
-    natsSubscription_Destroy(sub);
     natsMsg_Destroy(req);
     natsMsg_Destroy(msg);
+
+    natsSubscription_Destroy(sub);
     _destroyDefaultThreadArgs(&arg);
 
     JS_TEARDOWN;

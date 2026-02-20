@@ -1388,92 +1388,12 @@ void natsSubscription_Destroy(natsSubscription *sub)
 static void
 _sharedRespHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    printf("Resp handler recieved msg: %.*s\n", msg->hdrLen, msg->hdr);
     char        *rt   = NULL;
     const char  *subj = NULL;
     respInfo    *resp = NULL;
     bool        dmsg  = true;
-    // char            *id         = NULL;
-    // jsCtx           *js         = (jsCtx*) closure;
-    // natsMsg         *pmsg       = NULL;
-    // char            errTxt[256] = {'\0'};
-    // jsPubAckErr     pae;
-    // jsPubAck        pa;
-    // struct jsOptionsPublishAsync *opa = NULL;
 
-    // if ((subject == NULL) || (int) strlen(subject) <= js->rpreLen)
-    // {
-    //     natsMsg_Destroy(msg);
-    //     return;
-    // }
-
-    // id = (char*) (subject+js->rpreLen);
-
-    // js_lock(js);
-
-    // pmsg = natsStrHash_Remove(js->pm, id);
-    // if (pmsg == NULL)
-    // {
-    //     js_unlock(js);
-    //     natsMsg_Destroy(msg);
-    //     return;
-    // }
-
-    // opa = &(js->opts.PublishAsync);
-    // if (opa->AckHandler)
-    // {
-    //     jsPubAckErr *ppae   = NULL;
-    //     jsPubAck    *ppa    = NULL;
-
-    //     // If _parsePubAck returns an error, we will set the pointer ppae to
-    //     // our stack variable 'pae', otherwise, set the pointer ppa to the
-    //     // stack variable 'pa', which is the jsPubAck (positive ack).
-    //     if (_parsePubAck(msg, &pa, &pae, errTxt, sizeof(errTxt)) != NATS_OK)
-    //         ppae = &pae;
-    //     else
-    //         ppa = &pa;
-
-    //     // Invoke the handler with pointer to either jsPubAck or jsPubAckErr.
-    //     js_unlock(js);
-
-    //     (opa->AckHandler)(js, pmsg, ppa, ppae, opa->AckHandlerClosure);
-
-    //     js_lock(js);
-
-    //     _freePubAck(ppa);
-    //     // Set pmsg to NULL because user was responsible for destroying the message.
-    //     pmsg = NULL;
-    // }
-    // else if ((opa->ErrHandler != NULL) && (_parsePubAck(msg, NULL, &pae, errTxt, sizeof(errTxt)) != NATS_OK))
-    // {
-    //     // We will invoke CB only if there is any kind of error.
-    //     // Associate the message with the pubAckErr object.
-    //     pae.Msg = pmsg;
-    //     js_unlock(js);
-
-    //     (opa->ErrHandler)(js, &pae, opa->ErrHandlerClosure);
-
-    //     js_lock(js);
-
-    //     // If the user resent the message, pae->Msg will have been cleared.
-    //     // In this case, do not destroy the message. Do not blindly destroy
-    //     // an address that could have been set, so destroy only if pmsg
-    //     // is same value than pae->Msg.
-    //     if (pae.Msg != pmsg)
-    //         pmsg = NULL;
-    // }
-
-    // // Now that the callback has returned, decrement the number of pending messages.
-    // js->pmcount--;
-
-    // // If there are callers waiting for async pub completion, or stalled async
-    // // publish calls and we are now below max pending, broadcast to unblock them.
-    // if (((js->pacw > 0) && (js->pmcount == 0))
-    //     || ((js->stalled > 0) && (js->pmcount <= opa->MaxPending)))
-    // {
-    //     natsCondition_Broadcast(js->cond);
-    // }
-    // js_unlock(js);
+    js_handleSharedReply(nc, sub, msg, closure);
 
     natsConn_Lock(nc);
     if (natsConn_isClosed(nc))
@@ -1509,7 +1429,7 @@ _sharedRespHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void
         // the message.
         if (!resp->removed)
         {
-            // Do not destroy the message since it is being used.
+
             dmsg = false;
             resp->msg = msg;
             resp->removed = true;
@@ -1527,7 +1447,6 @@ natsStatus
 natsSubscription_CreateSharedSubscription(natsConnection *nc, jsCtx *js)
 {
     natsSubscription *sub = NULL;
-    natsInbox        *inbox = NULL;
     natsStatus       s = NATS_OK;
 
     // If either are already set, we shouldn't create a new one
@@ -1540,11 +1459,8 @@ natsSubscription_CreateSharedSubscription(natsConnection *nc, jsCtx *js)
         s = nats_setDefaultError(NATS_NO_MEMORY);
     if (s == NATS_OK)
         s = natsStrHash_Create(&nc->respMap, 4);
-    if (s == NATS_OK)
-        s = natsConn_newInbox(nc, (natsInbox**) &nc->respSub);
 
-    // js details
-    IFOK(s, natsCondition_Create(&(js->cond)));
+    s = natsCondition_Create(&(js->cond));
     IFOK(s, natsStrHash_Create(&(js->pm), 64));
     if (s == NATS_OK)
     {
@@ -1565,26 +1481,47 @@ natsSubscription_CreateSharedSubscription(natsConnection *nc, jsCtx *js)
             }
         }
     }
-
-    if ((s == NATS_OK) && (nats_asprintf(&inbox, "%s.*", nc->respSub) < 0))
-        s = nats_setDefaultError(NATS_NO_MEMORY);
-    if (s == NATS_OK)
-        s = natsConn_subscribeNoPool(&sub, nc, inbox, _sharedRespHandler, (void*) js);
-    NATS_FREE(inbox);
-
     if (s == NATS_OK)
     {
-        sub->shareCount = 2;
-        nc->respMux = sub;
-        js->rsub = sub;
-    } else {
-        natsInbox_Destroy(nc->respSub);
-        nc->respSub = NULL;
-        natsStrHash_Destroy(nc->respMap);
-        nc->respMap = NULL;
-        NATS_FREE(nc->respPool);
-        nc->respPool = NULL;
-    }
+        char *subj = NULL;
 
+        if (nats_asprintf(&subj, "%s*", js->rpre) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+        {
+            s = natsConn_subscribeNoPool(&sub, js->nc, subj, _sharedRespHandler, (void*) js);
+            if (s == NATS_OK)
+            {
+                nc->respSub = subj;
+                nc->reqIdOffset = js->rpreLen;
+
+                sub->shareCount = 2;
+                nc->respMux = sub;
+                js->rsub = sub;
+            }
+            else {
+                NATS_FREE(subj);
+            }
+        }
+
+        if (s == NATS_OK)
+        {
+            _retain(js);
+            natsSubscription_SetPendingLimits(js->rsub, -1, -1);
+            natsSubscription_SetOnCompleteCB(js->rsub, js_subComplete, (void*) js);
+        }
+    }
+    if (s != NATS_OK)
+    {
+        // Undo the things we created so we retry again next time.
+        // It is either that or we have to always check individual
+        // objects to know if we have to create them.
+        NATS_FREE(js->rpre);
+        js->rpre = NULL;
+        natsStrHash_Destroy(js->pm);
+        js->pm = NULL;
+        natsCondition_Destroy(js->cond);
+        js->cond = NULL;
+    }
     return NATS_UPDATE_ERR_STACK(s);
 }

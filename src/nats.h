@@ -10786,10 +10786,37 @@ microServiceStats_Destroy(microServiceStats *stats);
  *  @{
  *  You will find here the environment variables that change the default behavior
  *  of the NATS C Client library.
- * <br><br>
- * Name | Effect
- * -----|:-----:
- * <b>`NATS_DEFAULT_TO_LIB_MSG_DELIVERY`</b> | On #nats_Open, the library looks for this environment variable. If set (to any value), the library will default to using a global thread pool to perform message delivery. See #natsOptions_UseGlobalMessageDelivery and #nats_SetMessageDeliveryPoolSize.
+ *
+ *  They are retrieved in #nats_Open but will not take precendence over explicit
+ *  configuration by the application.
+ *
+ *  In other words, if the environment variable `NATS_DEFAULT_LIB_WRITE_DEADLINE`
+ *  is set to say 2000 (in milliseconds, so 2 seconds), then any connection that
+ *  is created with an option object that has not been explicitly configured
+ *  with #natsOptions_SetWriteDeadline, will use a 2 seconds TCP write deadline,
+ *  otherwise the value specified by the #natsOptions_SetWriteDeadline API will be used.
+ *
+ *  \note Using #nats_OpenWithConfig prevents the use of the environment
+ *  variables because the library would not be able to distinguish between the
+ *  user wanting to explicitly disable a feature or set a value to 0 from the
+ *  normal `C` type initialization. In other words, suppose that the environment
+ *  variable `NATS_DEFAULT_TO_LIB_MSG_DELIVERY` is set and the user calls
+ *  #nats_OpenWithConfig, the library would not know if #natsClientConfig.DefaultToThreadPool
+ *  is set to `false` because the user wanted to disable thread pool or because it
+ *  is initialized to `false` when the #natsClientConfig structure is initialized
+ *  on the stack.
+ *
+ *  The primary intent of these environment variables is to be able to change
+ *  the behavior of the library without needing to modify the code, which
+ *  is very valuable for the test suite that can be run with the same code base
+ *  and simply setting the variable before the run.
+ *
+ * <table>
+ * <tr><th>Name<th>Effect
+ * <tr><td style="text-align: center;"><b>`NATS_DEFAULT_TO_LIB_MSG_DELIVERY`</b><td>If set (to any value), message delivery uses a global thread pool (see #natsOptions_UseGlobalMessageDelivery)
+ * <tr><td style="text-align: center;"><b>`NATS_DEFAULT_LIB_MSG_DELIVERY_POOL_SIZE`</b><td>Sets the message delivery thread pool size (see #nats_SetMessageDeliveryPoolSize)
+ * <tr><td style="text-align: center;"><b>`NATS_DEFAULT_LIB_WRITE_DEADLINE`</b><td>Sets the write deadline (in milliseconds). See #natsOptions_SetWriteDeadline
+ * </table>
  *
  ** @} */
 

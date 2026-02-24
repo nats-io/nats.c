@@ -8365,6 +8365,7 @@ void test_AssignSubToDispatch(void)
     };
     natsDispatcherPool *pool = NULL;
     natsDispatcherPool *rpool = NULL;
+    char *env = NULL;
     natsClientConfig c;
     struct threadArg arg;
     char subSubj[32];
@@ -8411,6 +8412,27 @@ void test_AssignSubToDispatch(void)
         },
     };
     TC *tc, *end = tcs + (sizeof(tcs) / sizeof(tcs[0]));
+
+    // For the case where we don't provide a config, we need to check for
+    // the presence of environment variables.
+    env = getenv("NATS_DEFAULT_TO_LIB_MSG_DELIVERY");
+    if (env != NULL)
+    {
+        tcs[0].expectedDefaultPool = true;
+        tcs[0].expectedDispatchers = 1;
+    }
+    // Check the possible setting of a pool size too.
+    env = getenv("NATS_DEFAULT_LIB_MSG_DELIVERY_POOL_SIZE");
+    if (env != NULL)
+    {
+        int num = atoi(env);
+        if (num > 0)
+        {
+            tcs[0].expectedMax = num;
+            if (tcs[0].expectedDefaultPool)
+                tcs[0].expectedDispatchers = (tcs[0].numSubs < num ? tcs[0].numSubs : num);
+        }
+    }
 
     test("Check pool size not negative: ");
     s = nats_SetMessageDeliveryPoolSize(-1);
@@ -17448,8 +17470,13 @@ void test_OpenCloseAndWait(void)
     natsOptions         *opts= NULL;
     natsSubscription    *sub = NULL;
     natsPid             pid  = NATS_INVALID_PID;
+    char                *env = NULL;
+    bool                lmd  = false;
+    int                 lps  = 0;
+    int64_t             wdl  = 0;
     int                 i;
     natsThread          *t   = NULL;
+    natsLib             *lib = NULL;
     struct threadArg    arg;
 
     pid = _startServer("nats://127.0.0.1:4222", NULL, true);
@@ -17462,6 +17489,28 @@ void test_OpenCloseAndWait(void)
     test("Close to prepare for test: ");
     s = nats_CloseAndWait(0);
     testCond(s == NATS_OK);
+
+    // Check effect of environment variables.
+    test("Env variables effect: ");
+    env = getenv("NATS_DEFAULT_TO_LIB_MSG_DELIVERY");
+    // Any value for this env variable means "enabled"
+    if (env != NULL)
+        lmd = true;
+    env = getenv("NATS_DEFAULT_LIB_MSG_DELIVERY_POOL_SIZE");
+    // Default thread pool size is 1.
+    lps = (env != NULL ? atoi(env) : 1);
+    // If not present, the default value is 0.
+    env = getenv("NATS_DEFAULT_LIB_WRITE_DEADLINE");
+    wdl = (env != NULL ? (int64_t) atoll(env) : 0);
+    s = nats_Open(-1);
+    if (s == NATS_OK)
+        lib = nats_lib();
+    testCond((s == NATS_OK) &&
+                (lib->config.DefaultToThreadPool == lmd) &&
+                (lib->config.ThreadPoolMax == lps) &&
+                (lib->config.DefaultWriteDeadline == wdl));
+    lib = NULL;
+    nats_CloseAndWait(0);
 
     test("Open/Close in loop: ");
     for (i=0;i<2;i++)

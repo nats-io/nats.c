@@ -127,6 +127,7 @@ jobs:
           fi
           if [[ "${{ inputs.pool_dispatch }}" == "pool" ]]; then
             echo "NATS_DEFAULT_TO_LIB_MSG_DELIVERY=yes" >> $GITHUB_ENV
+            echo "NATS_DEFAULT_LIB_MSG_DELIVERY_POOL_SIZE=4" >> $GITHUB_ENV
           fi
           if [[ "${{ inputs.write_deadline }}" == "write_deadline" ]]; then
             echo "NATS_DEFAULT_LIB_WRITE_DEADLINE=2000" >> $GITHUB_ENV
@@ -198,4 +199,3 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
           # verbose: true
-

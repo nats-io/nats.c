@@ -663,8 +663,8 @@ _parsePubAck(natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, char *errTxt, size_t 
     return s;
 }
 
-static void
-_handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+void
+js_handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     const char      *subject    = natsMsg_GetSubject(msg);
     char            *id         = NULL;
@@ -754,92 +754,6 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
 }
 
 void
-js_handleSharedReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
-{
-    const char      *subject    = natsMsg_GetSubject(msg);
-    char            *id         = NULL;
-    jsCtx           *js         = (jsCtx*) closure;
-    natsMsg         *pmsg       = NULL;
-    char            errTxt[256] = {'\0'};
-    jsPubAckErr     pae;
-    jsPubAck        pa;
-    struct jsOptionsPublishAsync *opa = NULL;
-
-    if ((subject == NULL) || (int) strlen(subject) <= js->rpreLen)
-    {
-        return;
-    }
-
-    id = (char*) (subject+js->rpreLen);
-
-    js_lock(js);
-
-    pmsg = natsStrHash_Remove(js->pm, id);
-    if (pmsg == NULL)
-    {
-        js_unlock(js);
-        return;
-    }
-
-    opa = &(js->opts.PublishAsync);
-    if (opa->AckHandler)
-    {
-        jsPubAckErr *ppae   = NULL;
-        jsPubAck    *ppa    = NULL;
-
-        // If _parsePubAck returns an error, we will set the pointer ppae to
-        // our stack variable 'pae', otherwise, set the pointer ppa to the
-        // stack variable 'pa', which is the jsPubAck (positive ack).
-        if (_parsePubAck(msg, &pa, &pae, errTxt, sizeof(errTxt)) != NATS_OK)
-            ppae = &pae;
-        else
-            ppa = &pa;
-
-        // Invoke the handler with pointer to either jsPubAck or jsPubAckErr.
-        js_unlock(js);
-
-        (opa->AckHandler)(js, pmsg, ppa, ppae, opa->AckHandlerClosure);
-
-        js_lock(js);
-
-        _freePubAck(ppa);
-        // Set pmsg to NULL because user was responsible for destroying the message.
-        pmsg = NULL;
-    }
-    else if ((opa->ErrHandler != NULL) && (_parsePubAck(msg, NULL, &pae, errTxt, sizeof(errTxt)) != NATS_OK))
-    {
-        // We will invoke CB only if there is any kind of error.
-        // Associate the message with the pubAckErr object.
-        pae.Msg = pmsg;
-        js_unlock(js);
-
-        (opa->ErrHandler)(js, &pae, opa->ErrHandlerClosure);
-
-        js_lock(js);
-
-        // If the user resent the message, pae->Msg will have been cleared.
-        // In this case, do not destroy the message. Do not blindly destroy
-        // an address that could have been set, so destroy only if pmsg
-        // is same value than pae->Msg.
-        if (pae.Msg != pmsg)
-            pmsg = NULL;
-    }
-
-    // Now that the callback has returned, decrement the number of pending messages.
-    js->pmcount--;
-
-    // If there are callers waiting for async pub completion, or stalled async
-    // publish calls and we are now below max pending, broadcast to unblock them.
-    if (((js->pacw > 0) && (js->pmcount == 0))
-        || ((js->stalled > 0) && (js->pmcount <= opa->MaxPending)))
-    {
-        natsCondition_Broadcast(js->cond);
-    }
-    js_unlock(js);
-    natsMsg_Destroy(pmsg);
-}
-
-void
 js_subComplete(void *closure)
 {
     js_release((jsCtx*) closure);
@@ -882,7 +796,7 @@ _newAsyncReply(char *reply, jsCtx *js)
             if (nats_asprintf(&subj, "%s*", js->rpre) < 0)
                 s = nats_setDefaultError(NATS_NO_MEMORY);
             else
-                s = natsConn_subscribeNoPool(&(js->rsub), js->nc, subj, _handleAsyncReply, (void*) js);
+                s = natsConn_subscribeNoPool(&(js->rsub), js->nc, subj, js_handleAsyncReply, (void*) js);
             if (s == NATS_OK)
             {
                 _retain(js);

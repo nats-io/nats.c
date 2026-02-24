@@ -160,4 +160,7 @@ natsConn_close(natsConnection *nc);
 void
 natsConn_destroy(natsConnection *nc, bool fromPublicDestroy);
 
+void
+natsConnection_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
+
 #endif /* CONN_H_ */

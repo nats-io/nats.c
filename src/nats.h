@@ -6351,8 +6351,15 @@ natsSubscription_SetOnCompleteCB(natsSubscription *sub, natsOnCompleteCB cb, voi
 NATS_EXTERN void
 natsSubscription_Destroy(natsSubscription *sub);
 
+/** \breif Create a shared subscription for a nats Connection and jetstream stream
+ *
+ * Creates a subscription shared between a jetstream stream and it's nats connection
+ * to be used for jetstream publishes and req/reply.
+ *
+ * @param js the pointer to the #jsCtx object.
+ */
 NATS_EXTERN natsStatus
-natsSubscription_CreateSharedSubscription(natsConnection *nc, jsCtx *js);
+natsSubscription_CreateSharedSubscription(jsCtx *js);
 
 /** @} */ // end of subGroup
 

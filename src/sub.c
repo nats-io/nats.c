@@ -1352,6 +1352,7 @@ bool natsSubscription_IsValid(natsSubscription *sub)
 void natsSubscription_Destroy(natsSubscription *sub)
 {
     bool doUnsub = false;
+    int shareCount = 0;
 
     if (sub == NULL)
         return;
@@ -1373,10 +1374,11 @@ void natsSubscription_Destroy(natsSubscription *sub)
     if (sub->shareCount > 0)
         sub->shareCount--;
 
+    shareCount = sub->shareCount;
     natsSub_Unlock(sub);
 
     // Don't close or free the subscription if it's still in use
-    if (sub->shareCount != 0)
+    if (shareCount != 0)
         return;
 
     if (doUnsub)
@@ -1388,71 +1390,39 @@ void natsSubscription_Destroy(natsSubscription *sub)
 static void
 _sharedRespHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    char        *rt   = NULL;
-    const char  *subj = NULL;
-    respInfo    *resp = NULL;
-    bool        dmsg  = true;
+    int len = 0;
+    const char  *subj = subj = natsMsg_GetSubject(msg);
 
-    js_handleSharedReply(nc, sub, msg, closure);
+    len = strlen(subj);
+    printf("Received message on subject: %s subjlen = %d; subscription subj = %s, nc->reqIdOffset = %d\n",
+        subj, len, sub->subject, nc->reqIdOffset);
 
-    natsConn_Lock(nc);
-    if (natsConn_isClosed(nc))
+    if (len == nc->reqIdOffset + 1 && subj[len - 1] == '0')
     {
-        natsConn_Unlock(nc);
-        natsMsg_Destroy(msg);
-        return;
+        printf("In nc resp handler\n");
+        natsConnection_respHandler(nc, sub, msg, closure);
     }
-    subj = natsMsg_GetSubject(msg);
-    // We look for the reply token by first checking that the message subject
-    // prefix matches the subscription's subject (without the last '*').
-    // It is possible that it does not due to subject rewrite (JetStream).
-    if (((int) strlen(subj) > nc->reqIdOffset)
-        && (memcmp((const void*) sub->subject, (const void*) subj, strlen(sub->subject) - 1) == 0))
+    else
     {
-        rt = (char*) (natsMsg_GetSubject(msg) + nc->reqIdOffset);
-        resp = (respInfo*) natsStrHash_Remove(nc->respMap, rt);
+        printf("In js async reply handler\n");
+        js_handleAsyncReply(nc, sub, msg, closure);
     }
-    else if (natsStrHash_Count(nc->respMap) == 1)
-    {
-        // Only if the subject is completely different, we assume that it
-        // could be the server that has rewritten the subject and so if there
-        // is a single entry, use that.
-        void *value = NULL;
-        natsStrHash_RemoveSingle(nc->respMap, NULL, &value);
-        resp = (respInfo*) value;
-    }
-    if (resp != NULL)
-    {
-        natsMutex_Lock(resp->mu);
-        // Check for the race where the requestor has already timed-out.
-        // If so, resp->removed will be true, in which case simply discard
-        // the message.
-        if (!resp->removed)
-        {
-
-            dmsg = false;
-            resp->msg = msg;
-            resp->removed = true;
-            natsCondition_Signal(resp->cond);
-        }
-        natsMutex_Unlock(resp->mu);
-    }
-    natsConn_Unlock(nc);
-
-    if (dmsg)
-        natsMsg_Destroy(msg);
 }
 
 natsStatus
-natsSubscription_CreateSharedSubscription(natsConnection *nc, jsCtx *js)
+natsSubscription_CreateSharedSubscription(jsCtx *js)
 {
     natsSubscription *sub = NULL;
     natsStatus       s = NATS_OK;
+    natsConnection  *nc = js->nc;
 
     // If either are already set, we shouldn't create a new one
     if ((nc->respMux != NULL) || (js->rsub != NULL) || (js->nc != nc)) {
         return NATS_INVALID_ARG;
     }
+
+    natsMutex_Lock(nc->mu);
+    natsMutex_Lock(js->mu);
 
     nc->respPool = NATS_CALLOC(RESP_INFO_POOL_MAX_SIZE, sizeof(respInfo*));
     if (nc->respPool == NULL)
@@ -1460,7 +1430,7 @@ natsSubscription_CreateSharedSubscription(natsConnection *nc, jsCtx *js)
     if (s == NATS_OK)
         s = natsStrHash_Create(&nc->respMap, 4);
 
-    s = natsCondition_Create(&(js->cond));
+    IFOK(s, natsCondition_Create(&(js->cond)));
     IFOK(s, natsStrHash_Create(&(js->pm), 64));
     if (s == NATS_OK)
     {
@@ -1523,5 +1493,8 @@ natsSubscription_CreateSharedSubscription(natsConnection *nc, jsCtx *js)
         natsCondition_Destroy(js->cond);
         js->cond = NULL;
     }
+
+    natsMutex_Unlock(nc->mu);
+    natsMutex_Unlock(js->mu);
     return NATS_UPDATE_ERR_STACK(s);
 }

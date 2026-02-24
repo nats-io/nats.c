@@ -913,24 +913,6 @@ natsMsg_Create(natsMsg **newMsg, const char *subj, const char *reply,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-natsStatus
-natsMsg_Clone(natsMsg **dest, natsMsg *src)
-{
-    natsMsg    *msg      = NULL;
-
-    if (dest == NULL)
-        return nats_setDefaultError(NATS_INVALID_ARG);
-
-    msg = NATS_MALLOC(sizeof(natsMsg));
-    if (msg == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
-
-    memcpy(msg, src, sizeof(natsMsg));
-    *dest = msg;
-
-    return NATS_OK;
-}
-
 bool
 natsMsg_IsNoResponders(natsMsg *m)
 {

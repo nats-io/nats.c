@@ -304,4 +304,4 @@ void
 js_subComplete(void *closure);
 
 void
-js_handleSharedReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
+js_handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);

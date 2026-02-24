@@ -42417,7 +42417,7 @@ void test_JetStreamSharedSub(void)
     arg.control= 4;
 
     test("Creating shared subscription: ");
-    s = natsSubscription_CreateSharedSubscription(nc, js);
+    s = natsSubscription_CreateSharedSubscription(js);
     testCond(s == NATS_OK);
 
     test("Subscribe: ");
@@ -42432,6 +42432,7 @@ void test_JetStreamSharedSub(void)
     test("Wait for publish ack: ");
     s = js_PublishAsyncComplete(js, NULL);
     testCond(s == NATS_OK);
+    natsMsg_Destroy(req);
 
     test("Create req message: ");
     s = natsMsg_Create(&req, "foo", NULL, "help", 4);
@@ -42442,6 +42443,7 @@ void test_JetStreamSharedSub(void)
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.msgReceived)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
     natsMsg_Destroy(req);
     natsMsg_Destroy(msg);

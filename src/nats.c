@@ -56,56 +56,63 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, // DLL module handle
 static void _overwriteInt64(const char *envVar, int64_t *val)
 {
     char *str = getenv(envVar);
+
     if (str != NULL)
-        *val = atoll(str);
+    {
+        int64_t num = (int64_t) atoll(str);
+        if (num > 0)
+            *val = num;
+    }
 }
 
 static void _overwriteInt(const char *envVar, int *val)
 {
     char *str = getenv(envVar);
     if (str != NULL)
-        *val = atoi(str);
+    {
+        int num = atoi(str);
+        if (num > 0)
+            *val = num;
+    }
 }
 
 static void _overwriteBool(const char *envVar, bool *val)
 {
     char *str = getenv(envVar);
+    // Any value means enabled. User should "unset" the environment variable to disable.
     if (str != NULL)
-        *val = (strcasecmp(str, "true") == 0) ||
-               (strcasecmp(str, "on") == 0) ||
-               (atoi(str) != 0);
+        *val = true;
 }
 
 static void _overrideWithEnv(natsClientConfig *config)
 {
     _overwriteInt64("NATS_DEFAULT_LIB_WRITE_DEADLINE", &config->DefaultWriteDeadline);
-    _overwriteBool("NATS_USE_THREAD_POOL", &config->DefaultToThreadPool);
-    _overwriteInt("NATS_THREAD_POOL_MAX", &config->ThreadPoolMax);
-    _overwriteBool("NATS_USE_THREAD_POOL_FOR_REPLIES", &config->DefaultRepliesToThreadPool);
-    _overwriteInt("NATS_REPLY_THREAD_POOL_MAX", &config->ReplyThreadPoolMax);
-}
-
-// environment variables will override the default options.
-natsStatus
-nats_OpenWithConfig(natsClientConfig *config)
-{
-    return nats_openLib(config);
+    _overwriteBool("NATS_DEFAULT_TO_LIB_MSG_DELIVERY", &config->DefaultToThreadPool);
+    _overwriteInt("NATS_DEFAULT_LIB_MSG_DELIVERY_POOL_SIZE", &config->ThreadPoolMax);
 }
 
 natsStatus
 nats_Open(int64_t lockSpinCount)
 {
-    bool defaultToSharedDispatchers = (getenv("NATS_DEFAULT_TO_LIB_MSG_DELIVERY") != NULL ? true : false);
-
     natsClientConfig config = {
         .LockSpinCount = lockSpinCount,
-        .DefaultToThreadPool = defaultToSharedDispatchers,
+        .DefaultToThreadPool = false,
         .ThreadPoolMax = 1,
         .DefaultRepliesToThreadPool = false,
         .ReplyThreadPoolMax = 0,
     };
+    _overrideWithEnv(&config);
 
     return nats_openLib(&config);
+}
+
+natsStatus
+nats_OpenWithConfig(natsClientConfig *config)
+{
+    if (config == NULL)
+        return nats_Open(-1);
+
+    return nats_openLib(config);
 }
 
 natsStatus

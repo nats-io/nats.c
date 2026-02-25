@@ -198,13 +198,6 @@ nats_openLib(natsClientConfig *config)
 {
     natsStatus s = NATS_OK;
 
-    natsClientConfig defaultConfig = {
-        .LockSpinCount = -1,
-        .ThreadPoolMax = 1,
-    };
-    if (config == NULL)
-        config = &defaultConfig;
-
     if (!nats_InitOnce(&gInitOnce, _doInitOnce))
         return NATS_FAILED_TO_INITIALIZE;
 

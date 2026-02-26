@@ -336,8 +336,8 @@ _oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static void
-_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+void
+natsConnection_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     char        *rt   = NULL;
     const char  *subj = NULL;
@@ -438,7 +438,7 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
 
     // Setup only once (but could be more if natsConn_initResp() returns != OK)
     if (nc->respMux == NULL)
-        s = natsConn_initResp(nc, _respHandler);
+        s = natsConn_initResp(nc, natsConnection_respHandler);
     if (s == NATS_OK)
         s = natsConn_addRespInfo(&resp, nc, respInbox);
 

@@ -697,6 +697,8 @@ struct __natsSubscription
 
     // For JetStream
     jsSub                       *jsi;
+    // Counts the usage of this subscription when shared between nc and js
+    int                         shareCount;
 };
 
 typedef struct __natsPong

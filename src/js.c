@@ -663,8 +663,8 @@ _parsePubAck(natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, char *errTxt, size_t 
     return s;
 }
 
-static void
-_handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+void
+js_handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     const char      *subject    = natsMsg_GetSubject(msg);
     char            *id         = NULL;
@@ -753,8 +753,8 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
     natsMsg_Destroy(msg);
 }
 
-static void
-_subComplete(void *closure)
+void
+js_subComplete(void *closure)
 {
     js_release((jsCtx*) closure);
 }
@@ -796,12 +796,12 @@ _newAsyncReply(char *reply, jsCtx *js)
             if (nats_asprintf(&subj, "%s*", js->rpre) < 0)
                 s = nats_setDefaultError(NATS_NO_MEMORY);
             else
-                s = natsConn_subscribeNoPool(&(js->rsub), js->nc, subj, _handleAsyncReply, (void*) js);
+                s = natsConn_subscribeNoPool(&(js->rsub), js->nc, subj, js_handleAsyncReply, (void*) js);
             if (s == NATS_OK)
             {
                 _retain(js);
                 natsSubscription_SetPendingLimits(js->rsub, -1, -1);
-                natsSubscription_SetOnCompleteCB(js->rsub, _subComplete, (void*) js);
+                natsSubscription_SetOnCompleteCB(js->rsub, js_subComplete, (void*) js);
             }
             NATS_FREE(subj);
         }

@@ -299,3 +299,9 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch);
 
 void
 js_setOnReleasedCb(jsCtx *js, js_onReleaseCb cb, void *arg);
+
+void
+js_subComplete(void *closure);
+
+void
+js_handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);

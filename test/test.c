@@ -42592,3 +42592,59 @@ int main(int argc, char **argv)
     printf("ALL PASSED\n");
     return 0;
 }
+
+void test_JetStreamSharedSub(void)
+{
+    natsStatus          s;
+    natsMsg             *msg      = NULL;
+    natsMsg             *req      = NULL;
+    struct threadArg    arg;
+    natsSubscription    *sub      = NULL;
+
+    JS_SETUP(2, 12, 0);
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if ( s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    arg.string = "I will help you";
+    arg.status = NATS_OK;
+    arg.control= 4;
+
+    test("Creating shared subscription: ");
+    s = natsSubscription_CreateSharedSubscription(js);
+    testCond(s == NATS_OK);
+
+    test("Subscribe: ");
+    IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+    testCond(s == NATS_OK);
+
+    test("Validate Jetstream Publish: ");
+    s = natsMsg_Create(&req, "foo", NULL, "help", 4);
+    IFOK(s, js_PublishMsgAsync(js, &req, NULL));
+    testCond(s == NATS_OK);
+
+    test("Wait for publish ack: ");
+    s = js_PublishAsyncComplete(js, NULL);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(req);
+
+    test("Create req message: ");
+    s = natsMsg_Create(&req, "foo", NULL, "help", 4);
+    testCond(s == NATS_OK);
+
+    test("Validate Core RequestMsg: ");
+    s = natsConnection_RequestMsg(&msg, nc, req, 100);
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(req);
+    natsMsg_Destroy(msg);
+
+    natsSubscription_Destroy(sub);
+    _destroyDefaultThreadArgs(&arg);
+
+    JS_TEARDOWN;
+}

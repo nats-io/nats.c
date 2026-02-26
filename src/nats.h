@@ -5606,6 +5606,13 @@ natsConnection_Destroy(natsConnection *nc);
  * Publishes the data argument to the given subject. The data argument is left
  * untouched and needs to be correctly interpreted on the receiver.
  *
+ * \note Unless the connection is created with the #natsOptions_SetSendAsap, the data
+ * is added to an internal buffer. If the buffer is considered full, then it is written
+ * to the TCP socket within this function, otherwise, the connection's flusher thread is
+ * notified. In order to maximize throughput, that thread tries to gather more data from
+ * future publish calls before writing to the TCP socket. This has an impact on latency.
+ * If latency is more important, use #natsConnection_Send instead.
+ *
  * @param nc the pointer to the #natsConnection object.
  * @param subj the subject the data is sent to.
  * @param data the data to be sent, can be `NULL`.
@@ -5625,6 +5632,8 @@ natsConnection_Publish(natsConnection *nc, const char *subj,
  * natsConnection_Publish(nc, subj, (const void*) myString, (int) strlen(myString));
  * \endcode
  *
+ * See #natsConnection_Publish note regarding when the data is sent.
+ *
  * @param nc the pointer to the #natsConnection object.
  * @param subj the subject the data is sent to.
  * @param str the string to be sent.
@@ -5637,6 +5646,8 @@ natsConnection_PublishString(natsConnection *nc, const char *subj,
  *
  * Publishes the #natsMsg, which includes the subject, an optional reply and
  * optional data.
+ *
+ * See #natsConnection_Publish note regarding when the data is sent.
  *
  * @see #natsMsg_Create()
  *
@@ -5651,6 +5662,8 @@ natsConnection_PublishMsg(natsConnection *nc, natsMsg *msg);
  * Publishes the data argument to the given subject expecting a response on
  * the reply subject. Use #natsConnection_Request() for automatically waiting
  * for a response inline.
+ *
+ * See #natsConnection_Publish note regarding when the data is sent.
  *
  * @param nc the pointer to the #natsConnection object.
  * @param subj the subject the request is sent to.
@@ -5673,6 +5686,8 @@ natsConnection_PublishRequest(natsConnection *nc, const char *subj,
  * natsPublishRequest(nc, subj, reply, (const void*) myString, (int) strlen(myString));
  * \endcode
  *
+ * See #natsConnection_Publish note regarding when the data is sent.
+ *
  * @param nc the pointer to the #natsConnection object.
  * @param subj the subject the request is sent to.
  * @param reply the reply on which responses are expected.
@@ -5686,6 +5701,13 @@ natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
  *
  * Sends a request payload and delivers the first response message,
  * or an error, including a timeout if no message was received properly.
+ *
+ * \note See #natsConnection_Publish note regarding how data is normally
+ * sent to the server. However, this call causes the internal buffer (along
+ * with this data) to be written to the server within this call. The rationale
+ * is that we don't want the connection to wait for more data to be sent, but
+ * instead for the request to be sent as soon as possible so that the latency
+ * waiting for the reply is reduced to a minimum.
  *
  * \warning If connected to a NATS Server v2.2.0+ with no responder running
  * when the request is received, this call will return a #NATS_NO_RESPONDERS error.
@@ -5714,6 +5736,8 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
  * natsConnection_Request(replyMsg, nc, subj, (const void*) myString, (int) strlen(myString));
  * \endcode
  *
+ * See #natsConnection_Request note regarding when data is sent.
+ *
  * \warning See warning about no responders in #natsConnection_Request().
  *
  * @param replyMsg the location where to store the pointer to the received
@@ -5734,6 +5758,8 @@ natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
  * Similar to #natsConnection_Request but uses `requestMsg` to extract subject,
  * and payload to send.
  *
+ * See #natsConnection_Request note regarding when data is sent.
+ *
  * \warning See warning about no responders in #natsConnection_Request().
  *
  * @param replyMsg the location where to store the pointer to the received
@@ -5746,6 +5772,69 @@ natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
 NATS_EXTERN natsStatus
 natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
                           natsMsg *requestMsg, int64_t timeout);
+
+/** \brief Sends data on a subject with reduced latency.
+ *
+ * This is similar to #natsConnection_Publish but the data is written to
+ * the TCP socket within this function.
+ *
+ * See #natsConnection_Publish note for more information about how
+ * data is normally sent to the server.
+ *
+ * \note The data is still added to the internal buffer and is written to the
+ * socket from the function itself. It means that if the application mixes "publish"
+ * and "send" calls, it is possible that the "send" function writes a much bigger buffer
+ * than the data it is trying to send. In other words, this function doe not
+ * send the data out-of-order with regards to the "publish" calls.
+ *
+ * @see natsConnection_SendMsg
+ * @see natsConnection_SendRequest
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param subj the subject the data is sent to.
+ * @param data the data to send, can be `NULL`.
+ * @param dataLen the length of the data to send.
+ */
+NATS_EXTERN natsStatus
+natsConnection_Send(natsConnection *nc, const char *subj,
+                    const void *data, int dataLen);
+
+/** \brief Sends a message with reduced latency.
+ *
+ * This is similar to #natsConnection_Send but uses a #natsMsg which
+ * includes the subject, an optional reply and optional data.
+ *
+ * This is needed if the application wants to send a message with headers.
+ *
+ * See #natsConnection_Send for more details.
+ *
+ * @see natsConnection_Send
+ * @see natsConnection_SendRequest
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param msg the #natsMsg to send.
+ */
+NATS_EXTERN natsStatus
+natsConnection_SendMsg(natsConnection *nc, natsMsg *msg);
+
+/** \brief Sends data with a reply subject with reduced latency.
+ *
+ * This is similar to #natsConnection_Send but requires a reply subject.
+ *
+ * See #natsConnection_Send for more details.
+ *
+ * @see natsConnection_Send
+ * @see natsConnection_SendMsg
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param subj the subject the request is sent to.
+ * @param reply the reply subject for this message.
+ * @param data the data of the request, can be `NULL`.
+ * @param dataLen the length of the data to send.
+*/
+NATS_EXTERN natsStatus
+natsConnection_SendRequest(natsConnection *nc, const char *subj,
+                           const char *reply, const void *data, int dataLen);
 
 /** @} */ // end of connPubGroup
 

@@ -6976,6 +6976,152 @@ void test_SelectNextServer(void)
     natsOptions_Destroy(opts);
 }
 
+void test_SendMsg(void)
+{
+    natsStatus          s;
+    natsConnection      *nc     = NULL;
+    natsSubscription    *sub    = NULL;
+    natsMsg             *msg    = NULL;
+    natsMsg             *smsg   = NULL;
+    const char          *val    = NULL;
+    natsPid             pid     = NATS_INVALID_PID;
+
+    // When can't really test that the data is sent "right away".
+    // We just make sure that we properly check for valid args
+    // and make sure that the data/msg is properly received.
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(pid);
+
+    test("Connect: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    testCond(s == NATS_OK);
+
+    test("Subscribe: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "foo");
+    testCond(s == NATS_OK);
+
+    test("Send invalid arg: ");
+    s = natsConnection_Send(NULL, "foo", "data", 4);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Send invalid subject: ");
+    s = natsConnection_Send(nc, NULL, "data", 4);
+    if (s == NATS_INVALID_SUBJECT)
+        s = natsConnection_Send(nc, "", "data", 4);
+    testCond(s == NATS_INVALID_SUBJECT);
+    nats_clearLastError();
+
+    test("Send: ");
+    s = natsConnection_Send(nc, "foo", "data", 4);
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL) &&
+                (strcmp(natsMsg_GetSubject(msg), "foo") == 0) &&
+                (natsMsg_GetReply(msg) == NULL) &&
+                (natsMsg_GetDataLength(msg) == 4) &&
+                (strcmp(natsMsg_GetData(msg), "data") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Send empty payload: ");
+    s = natsConnection_Send(nc, "foo", NULL, 0);
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL) &&
+                (strcmp(natsMsg_GetSubject(msg), "foo") == 0) &&
+                (natsMsg_GetReply(msg) == NULL) &&
+                (natsMsg_GetDataLength(msg) == 0) &&
+                nats_IsStringEmpty(natsMsg_GetData(msg)));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("SendRequest invalid arg: ");
+    s = natsConnection_SendRequest(NULL, "foo", "bar", "data2", 5);
+    if (s == NATS_INVALID_ARG)
+        s = natsConnection_SendRequest(nc, "foo", NULL, "data2", 5);
+    if (s == NATS_INVALID_ARG)
+        s = natsConnection_SendRequest(nc, "foo", "", "data2", 5);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("SendRequest invalid subject: ");
+    s = natsConnection_SendRequest(nc, NULL, "bar", "data2", 5);
+    if (s == NATS_INVALID_SUBJECT)
+        s = natsConnection_SendRequest(nc, "", "bar", "data2", 5);
+    testCond(s == NATS_INVALID_SUBJECT);
+    nats_clearLastError();
+
+    test("SendRequest: ");
+    s = natsConnection_SendRequest(nc, "foo", "bar", "data2", 5);
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL) &&
+                (strcmp(natsMsg_GetSubject(msg), "foo") == 0) &&
+                (strcmp(natsMsg_GetReply(msg), "bar") == 0) &&
+                (strcmp(natsMsg_GetData(msg), "data2") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("SendRequest empty payload: ");
+    s = natsConnection_SendRequest(nc, "foo", "bar", NULL, 0);
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL) &&
+                (strcmp(natsMsg_GetSubject(msg), "foo") == 0) &&
+                (strcmp(natsMsg_GetReply(msg), "bar") == 0) &&
+                (natsMsg_GetDataLength(msg) == 0) &&
+                nats_IsStringEmpty(natsMsg_GetData(msg)));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Create msg with headers: ");
+    s = natsMsg_Create(&smsg, "foo", NULL, "data3", 5);
+    IFOK(s, natsMsgHeader_Set(smsg, "MyKey", "MyVal"));
+    testCond(s == NATS_OK);
+
+    test("SendMsg invalid args: ");
+    s = natsConnection_SendMsg(NULL, smsg);
+    if (s == NATS_INVALID_ARG)
+        s = natsConnection_SendMsg(nc, NULL);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("SendMsg: ");
+    s = natsConnection_SendMsg(nc, smsg);
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL) &&
+                (strcmp(natsMsg_GetSubject(msg), "foo") == 0) &&
+                (natsMsg_GetReply(msg) == NULL) &&
+                (natsMsg_GetDataLength(msg) == 5) &&
+                (strcmp(natsMsg_GetData(msg), "data3") == 0) &&
+                (natsMsgHeader_Get(msg, "MyKey", &val) == NATS_OK) &&
+                (strcmp(val, "MyVal") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsMsg_Destroy(smsg);
+    smsg = NULL;
+    val = NULL;
+
+    test("Create message with reply, no payload, no headers: ");
+    s = natsMsg_Create(&smsg, "foo", "bar", NULL, 0);
+    testCond(s == NATS_OK);
+
+    test("SendMsg: ");
+    s = natsConnection_SendMsg(nc, smsg);
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+    testCond((s == NATS_OK) && (msg != NULL) &&
+                (strcmp(natsMsg_GetSubject(msg), "foo") == 0) &&
+                (strcmp(natsMsg_GetReply(msg), "bar") == 0) &&
+                (natsMsg_GetDataLength(msg) == 0) &&
+                nats_IsStringEmpty(natsMsg_GetData(msg)));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsMsg_Destroy(smsg);
+    smsg = NULL;
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    _stopServer(pid);
+}
+
 static void
 parserNegTest(int lineNum)
 {

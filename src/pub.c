@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,7 +16,6 @@
 #include <string.h>
 
 #include "conn.h"
-#include "sub.h"
 #include "msg.h"
 #include "nuid.h"
 #include "mem.h"
@@ -231,10 +230,6 @@ natsConn_publish(natsConnection *nc, natsMsg *msg, const char *reply, bool direc
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-/*
- * Publishes the data argument to the given subject. The data argument is left
- * untouched and needs to be correctly interpreted on the receiver.
- */
 natsStatus
 natsConnection_Publish(natsConnection *nc, const char *subj,
                        const void *data, int dataLen)
@@ -248,13 +243,6 @@ natsConnection_Publish(natsConnection *nc, const char *subj,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-/*
- * Convenient function to publish a string. This call is equivalent to:
- *
- * const char* myString = "hello";
- *
- * natsPublish(nc, subj, (const void*) myString, (int) strlen(myString));
- */
 natsStatus
 natsConnection_PublishString(natsConnection *nc, const char *subj,
                              const char *str)
@@ -272,10 +260,6 @@ natsConnection_PublishString(natsConnection *nc, const char *subj,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-/*
- * Publishes the natsMsg structure, which includes the subject, an optional
- * reply and optional data.
- */
 natsStatus
 natsConnection_PublishMsg(natsConnection *nc, natsMsg *msg)
 {
@@ -288,11 +272,6 @@ natsConnection_PublishMsg(natsConnection *nc, natsMsg *msg)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-/*
- * Publishes the data argument to the given subject expecting a response on
- * the reply subject. Use natsConnection_Request() for automatically waiting for a
- * response inline.
- */
 natsStatus
 natsConnection_PublishRequest(natsConnection *nc, const char *subj,
                               const char *reply, const void *data, int dataLen)
@@ -309,15 +288,6 @@ natsConnection_PublishRequest(natsConnection *nc, const char *subj,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-/*
- * Convenient function to publish a request as a string. This call is
- * equivalent to:
- *
- * const char* myString = "hello";
- *
- * natsPublishRequest(nc, subj, reply, (const void*) myString,
- *                    (int) strlen(myString));
- */
 natsStatus
 natsConnection_PublishRequestString(natsConnection *nc, const char *subj,
                                     const char *reply, const char *str)
@@ -422,10 +392,6 @@ _respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clos
         natsMsg_Destroy(msg);
 }
 
-/*
- * Sends a request and waits for the first reply, up to the provided timeout.
- * This is optimized for the case of multiple responses.
- */
 natsStatus
 natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
                           natsMsg *m, int64_t timeout)
@@ -538,15 +504,6 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-/*
- * Convenient function to send a request as a string. This call is
- * equivalent to:
- *
- * const char* myString = "hello";
- *
- * natsConnection_Request(nc, subj, reply, (const void*) myString,
- *                        (int) strlen(myString));
- */
 natsStatus
 natsConnection_RequestString(natsMsg **replyMsg, natsConnection *nc,
                              const char *subj, const char *str,
@@ -571,5 +528,42 @@ natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj,
     natsMsg_init(&msg, subj, (const char*) data, dataLen);
     s = natsConnection_RequestMsg(replyMsg, nc, &msg, timeout);
 
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_Send(natsConnection *nc, const char *subj, const void *data, int dataLen)
+{
+    natsStatus s;
+    natsMsg    msg;
+
+    natsMsg_init(&msg, subj, (const char*) data, dataLen);
+    s = natsConn_publish(nc, &msg, NULL, true);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_SendMsg(natsConnection *nc, natsMsg *msg)
+{
+    natsStatus s;
+
+    if (nc == NULL || msg == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = natsConn_publish(nc, msg, NULL, true);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_SendRequest(natsConnection *nc, const char *subj, const char *reply, const void *data, int dataLen)
+{
+    natsStatus s;
+    natsMsg    msg;
+
+    if (nats_IsStringEmpty(reply))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsMsg_init(&msg, subj, (const char*) data, dataLen);
+    s = natsConn_publish(nc, &msg, reply, true);
     return NATS_UPDATE_ERR_STACK(s);
 }

@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -466,6 +466,10 @@ Enumerations</h2></td></tr>
 , <a class="el" href="group__types_group.html#gga8650faf52b0b6b23df376eebeb9d0354a6ee3851dac5c90a61492193dd55931f5">js_ReplayOriginal</a>
  }</td></tr>
 <tr class="separator:ga8650faf52b0b6b23df376eebeb9d0354"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga0816678d2eb067e44ebf180e9b7397ee" id="r_ga0816678d2eb067e44ebf180e9b7397ee"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga0816678d2eb067e44ebf180e9b7397ee">jsPersistModeType</a> { <a class="el" href="group__types_group.html#gga0816678d2eb067e44ebf180e9b7397eea75aee5547ccfc5773ec9b131a4fa62c5">js_PersistDefault</a> = 0
+, <a class="el" href="group__types_group.html#gga0816678d2eb067e44ebf180e9b7397eeabe6a5707846de97704b17923225c90c2">js_PersistAsync</a>
+ }</td></tr>
+<tr class="separator:ga0816678d2eb067e44ebf180e9b7397ee"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga89db3bd6bf11af3ac5eb3ab560d16332" id="r_ga89db3bd6bf11af3ac5eb3ab560d16332"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__types_group.html#ga89db3bd6bf11af3ac5eb3ab560d16332">kvOperation</a> { <a class="el" href="group__types_group.html#gga89db3bd6bf11af3ac5eb3ab560d16332a0b7a6bef67e4220f5f0c4075f2ed16b6">kvOp_Unknown</a> = 0
 , <a class="el" href="group__types_group.html#gga89db3bd6bf11af3ac5eb3ab560d16332acc0e1da3c292cb7eb19d909c9dfd788a">kvOp_Put</a>
 , <a class="el" href="group__types_group.html#gga89db3bd6bf11af3ac5eb3ab560d16332a4efb91331f3307128c75af5b23362f83">kvOp_Delete</a>
@@ -907,7 +911,7 @@ NATS server 2.10 added user-provided Metadata, storage Compression type, FirstSe
 <div class="line">}</div>
 </div><!-- fragment --><dl class="section see"><dt>See also</dt><dd><a class="el" href="structjs_stream_state_subject.html">jsStreamStateSubject</a> </dd>
 <dd>
-<a class="el" href="group__js_assets_group.html#ga94cb23a35516b7779de28fcbb263180a" title="Retreives information from a stream.">js_GetStreamInfo</a> </dd>
+<a class="el" href="group__js_assets_group.html#ga94cb23a35516b7779de28fcbb263180a" title="Retrieves information from a stream.">js_GetStreamInfo</a> </dd>
 <dd>
 jsOptions.Stream.Info.SubjectsFilter </dd></dl>
 
@@ -1693,7 +1697,7 @@ NATS server 2.10 added consumer Metadata which contains user-provided string nam
 </div><div class="memdoc">
 <p>The Object Store object returned when initiating a "put" operation. This is needed when using the generic <a class="el" href="group__obs_group.html#ga7f905e1cda4e13b4a44f0e614adec6b6" title="Initiates a session to put bytes into an object.">objStore_Put</a> function because the user needs to add data to the object as the data becomes available.</p>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__obs_group.html#ga7f905e1cda4e13b4a44f0e614adec6b6" title="Initiates a session to put bytes into an object.">objStore_Put</a></dd></dl>
-<p>Most users don't need that and will use the followin convenience functions:</p><ul>
+<p>Most users don't need that and will use the following convenience functions:</p><ul>
 <li><a class="el" href="group__obs_group.html#gac0484b53e470c6a6821df662eb52922e" title="Put a string into this object.">objStore_PutString</a></li>
 <li><a class="el" href="group__obs_group.html#gabfc126056112ae8522a70ace6900e3a3" title="Put bytes into this object.">objStore_PutBytes</a></li>
 <li><a class="el" href="group__obs_group.html#ga792f04ea3c22e1a0aebdbbc38c62ff04" title="Put the content of a file into this object.">objStore_PutFile</a> </li>
@@ -1888,8 +1892,8 @@ NATS server 2.10 added consumer Metadata which contains user-provided string nam
       </table>
 </div><div class="memdoc">
 <p>List of object store information returned by <a class="el" href="group__obs_mgt.html#gaf7ea0ad61e9d4077d536be882e78802e" title="Lists information about objects in the object store.">objStore_List</a>.</p>
-<dl class="section note"><dt>Note</dt><dd>Once done, the list should be destroyed calling <a class="el" href="group__obs_mgt.html#gaea3a2dbd39cd6e69a01391548add9a13" title="Destroys the list of object informations.">objStoreInfoList_Destroy</a>.</dd></dl>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__obs_mgt.html#gaea3a2dbd39cd6e69a01391548add9a13" title="Destroys the list of object informations.">objStoreInfoList_Destroy</a> </dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Once done, the list should be destroyed calling <a class="el" href="group__obs_mgt.html#gaea3a2dbd39cd6e69a01391548add9a13" title="Destroys the list of object information.">objStoreInfoList_Destroy</a>.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__obs_mgt.html#gaea3a2dbd39cd6e69a01391548add9a13" title="Destroys the list of object information.">objStoreInfoList_Destroy</a> </dd></dl>
 
 </div>
 </div>
@@ -2156,6 +2160,27 @@ NATS server 2.10 added consumer Metadata which contains user-provided string nam
 <tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="gga8650faf52b0b6b23df376eebeb9d0354a2c4a1e2b75f31dd69a89b541d75afa44" name="gga8650faf52b0b6b23df376eebeb9d0354a2c4a1e2b75f31dd69a89b541d75afa44"></a>js_ReplayInstant&#160;</td><td class="fielddoc"><p>Replays messages as fast as possible. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="gga8650faf52b0b6b23df376eebeb9d0354a6ee3851dac5c90a61492193dd55931f5" name="gga8650faf52b0b6b23df376eebeb9d0354a6ee3851dac5c90a61492193dd55931f5"></a>js_ReplayOriginal&#160;</td><td class="fielddoc"><p>Maintains the same timing as the messages were received. </p>
+</td></tr>
+</table>
+
+</div>
+</div>
+<a id="ga0816678d2eb067e44ebf180e9b7397ee" name="ga0816678d2eb067e44ebf180e9b7397ee"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga0816678d2eb067e44ebf180e9b7397ee">&#9670;&#160;</a></span>jsPersistModeType</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum <a class="el" href="group__types_group.html#ga0816678d2eb067e44ebf180e9b7397ee">jsPersistModeType</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Determines what persistence mode the stream uses </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="gga0816678d2eb067e44ebf180e9b7397eea75aee5547ccfc5773ec9b131a4fa62c5" name="gga0816678d2eb067e44ebf180e9b7397eea75aee5547ccfc5773ec9b131a4fa62c5"></a>js_PersistDefault&#160;</td><td class="fielddoc"><p>Writes are immediately flushed, acknowledgement sent after message is stored. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="gga0816678d2eb067e44ebf180e9b7397eeabe6a5707846de97704b17923225c90c2" name="gga0816678d2eb067e44ebf180e9b7397eeabe6a5707846de97704b17923225c90c2"></a>js_PersistAsync&#160;</td><td class="fielddoc"><p>Writes are flushed asynchronously, acknowledgement may be sent before message is stored. </p>
 </td></tr>
 </table>
 

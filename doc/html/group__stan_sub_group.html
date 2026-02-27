@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -149,7 +149,7 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>In order to make sure that an asynchronous subscription's message handler is no longer invoked once the subscription is closed (or unsubscribed) (<a class="el" href="group__stan_sub_group.html#gacfa3a7b4fa333c84acfa7521fbbb5bcc" title="Closes the subscription.">stanSubscription_Close</a>, <a class="el" href="group__stan_sub_group.html#gafa428a7e0f6800216cb06fd738bd235e" title="Permanently remove a subscription.">stanSubscription_Unsubscribe</a>), the subscription should be closed from the message handler itslef.</p>
+<p>In order to make sure that an asynchronous subscription's message handler is no longer invoked once the subscription is closed (or unsubscribed) (<a class="el" href="group__stan_sub_group.html#gacfa3a7b4fa333c84acfa7521fbbb5bcc" title="Closes the subscription.">stanSubscription_Close</a>, <a class="el" href="group__stan_sub_group.html#gafa428a7e0f6800216cb06fd738bd235e" title="Permanently remove a subscription.">stanSubscription_Unsubscribe</a>), the subscription should be closed from the message handler itself.</p>
 <p>If the application closes the subscription from a different thread and immediately frees resources needed in the message handler, there is a risk of a crash since the subscription's message handler may still be invoked one last time or already in the process of executing.</p>
 <p>To address this, the user can set a callback that will be invoked after the subscription is closed and the message handler has returned.</p>
 <dl class="section note"><dt>Note</dt><dd>You don't need to call this function if you are not freeing resources needed in the message handler or if you always close the subscription from the message handler itself.</dd></dl>

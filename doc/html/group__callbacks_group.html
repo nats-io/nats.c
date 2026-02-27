@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -147,6 +147,9 @@ Typedefs</h2></td></tr>
 <tr class="memitem:ga4f66e065bd918f02510d4c53d8a5b729" id="r_ga4f66e065bd918f02510d4c53d8a5b729"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#ga4f66e065bd918f02510d4c53d8a5b729">jsPubAckHandler</a>) (<a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> *js, <a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a">natsMsg</a> *msg, <a class="el" href="structjs_pub_ack.html">jsPubAck</a> *pa, <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a> *pae, void *closure)</td></tr>
 <tr class="memdesc:ga4f66e065bd918f02510d4c53d8a5b729"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to process asynchronous publish responses from JetStream.  <br /></td></tr>
 <tr class="separator:ga4f66e065bd918f02510d4c53d8a5b729"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gad845be86eb43304975beac908b0296dd" id="r_gad845be86eb43304975beac908b0296dd"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gad845be86eb43304975beac908b0296dd">natsThreadStartedHandler</a>) (void *closure)</td></tr>
+<tr class="memdesc:gad845be86eb43304975beac908b0296dd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback invoked when a thread created by the library starts.  <br /></td></tr>
+<tr class="separator:gad845be86eb43304975beac908b0296dd"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gad5d6a685731b3bf635995b7375af4d18" id="r_gad5d6a685731b3bf635995b7375af4d18"><td class="memItemLeft" align="right" valign="top">typedef void(*&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__callbacks_group.html#gad5d6a685731b3bf635995b7375af4d18">stanPubAckHandler</a>) (const char *guid, const char *error, void *closure)</td></tr>
 <tr class="memdesc:gad5d6a685731b3bf635995b7375af4d18"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callback used to notify of an asynchronous publish result.  <br /></td></tr>
 <tr class="separator:gad5d6a685731b3bf635995b7375af4d18"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -524,6 +527,52 @@ Unlike a NATS message callback, the user does not have to destroy the original N
     <tr><td class="paramname">pa</td><td>the pointer to the <a class="el" href="structjs_pub_ack.html">jsPubAck</a> object. </td></tr>
     <tr><td class="paramname">pae</td><td>the pointer to the <a class="el" href="structjs_pub_ack_err.html">jsPubAckErr</a> object. </td></tr>
     <tr><td class="paramname">closure</td><td>an optional pointer to a user defined object that was specified when registering the callback. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="gad845be86eb43304975beac908b0296dd" name="gad845be86eb43304975beac908b0296dd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gad845be86eb43304975beac908b0296dd">&#9670;&#160;</a></span>natsThreadStartedHandler</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef void(* natsThreadStartedHandler) (void *closure)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This callback can be used to configure a thread that is started by the library.</p>
+<p>For instance, one could use this callback to specify thread affinity. On Linux, such code could look like this:</p>
+<div class="fragment"><div class="line">natsClientConfig cfg = {</div>
+<div class="line">    .LockSpinCount = -1,</div>
+<div class="line">    .ThreadStartedHandler = pin_current_thread,</div>
+<div class="line">    .ThreadStartedHandlerClosure = NULL // No closure needed for this.</div>
+<div class="line">};</div>
+<div class="line">s = nats_OpenWithConfig(&amp;c);</div>
+<div class="line"> </div>
+<div class="line">(...)</div>
+<div class="line"> </div>
+<div class="line">void pin_current_thread(void *closure)</div>
+<div class="line">{</div>
+<div class="line">    cpu_set_t cpuset;</div>
+<div class="line">    CPU_ZERO(&amp;cpuset);</div>
+<div class="line">    // Set CPU 3 (since the first CPU on the system corresponds to a cpu value of 0)</div>
+<div class="line">    CPU_SET(2, &amp;cpuset);</div>
+<div class="line"> </div>
+<div class="line">    pthread_setaffinity_np(</div>
+<div class="line">        pthread_self(),</div>
+<div class="line">        sizeof(cpu_set_t),</div>
+<div class="line">        &amp;cpuset</div>
+<div class="line">    );</div>
+<div class="line">}</div>
+</div><!-- fragment --><dl class="section see"><dt>See also</dt><dd><a class="el" href="group__library_group.html#gab5e09f2429b8b790f030d8d91fbc20f4" title="Initializes the library.">nats_OpenWithConfig()</a></dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd>Such callback is invoked from different threads, so use of the <code>closure</code> object (if non <code>NULL</code>) must be thread-safe.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">closure</td><td>user-defined object, possibly <code>NULL</code>. </td></tr>
   </table>
   </dd>
 </dl>

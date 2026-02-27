@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -123,6 +123,15 @@ Functions</h2></td></tr>
 <tr class="memitem:ga052de4b75b3b69ccd8d20eb4861b801d" id="r_ga052de4b75b3b69ccd8d20eb4861b801d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_pub_group.html#ga052de4b75b3b69ccd8d20eb4861b801d">natsConnection_RequestMsg</a> (<a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a">natsMsg</a> **replyMsg, <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, <a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a">natsMsg</a> *requestMsg, int64_t timeout)</td></tr>
 <tr class="memdesc:ga052de4b75b3b69ccd8d20eb4861b801d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a request based on the given <code>requestMsg</code> and waits for a reply.  <br /></td></tr>
 <tr class="separator:ga052de4b75b3b69ccd8d20eb4861b801d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga90ee6749a4a192bea7775d4371435b4f" id="r_ga90ee6749a4a192bea7775d4371435b4f"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_pub_group.html#ga90ee6749a4a192bea7775d4371435b4f">natsConnection_Send</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char *subj, const void *data, int dataLen)</td></tr>
+<tr class="memdesc:ga90ee6749a4a192bea7775d4371435b4f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends data on a subject with reduced latency.  <br /></td></tr>
+<tr class="separator:ga90ee6749a4a192bea7775d4371435b4f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga70d01d2827ce39a825c525ffe253ef7c" id="r_ga70d01d2827ce39a825c525ffe253ef7c"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_pub_group.html#ga70d01d2827ce39a825c525ffe253ef7c">natsConnection_SendMsg</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, <a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a">natsMsg</a> *msg)</td></tr>
+<tr class="memdesc:ga70d01d2827ce39a825c525ffe253ef7c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a message with reduced latency.  <br /></td></tr>
+<tr class="separator:ga70d01d2827ce39a825c525ffe253ef7c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga95cb95efc6684725129feee99e882fe6" id="r_ga95cb95efc6684725129feee99e882fe6"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_pub_group.html#ga95cb95efc6684725129feee99e882fe6">natsConnection_SendRequest</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char *subj, const char *reply, const void *data, int dataLen)</td></tr>
+<tr class="memdesc:ga95cb95efc6684725129feee99e882fe6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends data with a reply subject with reduced latency.  <br /></td></tr>
+<tr class="separator:ga95cb95efc6684725129feee99e882fe6"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>Publishing functions </p>
@@ -165,6 +174,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Publishes the data argument to the given subject. The data argument is left untouched and needs to be correctly interpreted on the receiver.</p>
+<dl class="section note"><dt>Note</dt><dd>Unless the connection is created with the <a class="el" href="group__opts_group.html#ga8f06568cc3319a5a0eef9f80282034ca" title="Sets if Publish calls should send data right away.">natsOptions_SetSendAsap</a>, the data is added to an internal buffer. If the buffer is considered full, then it is written to the TCP socket within this function, otherwise, the connection's flusher thread is notified. In order to maximize throughput, that thread tries to gather more data from future publish calls before writing to the TCP socket. This has an impact on latency. If latency is more important, use <a class="el" href="group__conn_pub_group.html#ga90ee6749a4a192bea7775d4371435b4f" title="Sends data on a subject with reduced latency.">natsConnection_Send</a> instead.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
@@ -213,7 +223,8 @@ Functions</h2></td></tr>
 <div class="line"> </div>
 <div class="line"><a class="code hl_function" href="group__conn_pub_group.html#gac0b9f7759ecc39b8d77807b94254f9b4">natsConnection_Publish</a>(nc, subj, (<span class="keyword">const</span> <span class="keywordtype">void</span>*) myString, (<span class="keywordtype">int</span>) strlen(myString));</div>
 <div class="ttc" id="agroup__conn_pub_group_html_gac0b9f7759ecc39b8d77807b94254f9b4"><div class="ttname"><a href="group__conn_pub_group.html#gac0b9f7759ecc39b8d77807b94254f9b4">natsConnection_Publish</a></div><div class="ttdeci">NATS_EXTERN natsStatus natsConnection_Publish(natsConnection *nc, const char *subj, const void *data, int dataLen)</div><div class="ttdoc">Publishes data on a subject.</div></div>
-</div><!-- fragment --><dl class="params"><dt>Parameters</dt><dd>
+</div><!-- fragment --><p>See <a class="el" href="group__conn_pub_group.html#gac0b9f7759ecc39b8d77807b94254f9b4" title="Publishes data on a subject.">natsConnection_Publish</a> note regarding when the data is sent.</p>
+<dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">subj</td><td>the subject the data is sent to. </td></tr>
@@ -250,6 +261,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Publishes the <a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a" title="A structure holding a subject, optional reply and payload.">natsMsg</a>, which includes the subject, an optional reply and optional data.</p>
+<p>See <a class="el" href="group__conn_pub_group.html#gac0b9f7759ecc39b8d77807b94254f9b4" title="Publishes data on a subject.">natsConnection_Publish</a> note regarding when the data is sent.</p>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__msg_group.html#ga098e4fec1c5a71c00a0d092fbd6d1a21" title="Creates a natsMsg object.">natsMsg_Create()</a></dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
@@ -305,11 +317,12 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Publishes the data argument to the given subject expecting a response on the reply subject. Use <a class="el" href="group__conn_pub_group.html#gaf4b4a022f9c21fc269b87c000330c5a7" title="Sends a request and waits for a reply.">natsConnection_Request()</a> for automatically waiting for a response inline.</p>
+<p>See <a class="el" href="group__conn_pub_group.html#gac0b9f7759ecc39b8d77807b94254f9b4" title="Publishes data on a subject.">natsConnection_Publish</a> note regarding when the data is sent.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">subj</td><td>the subject the request is sent to. </td></tr>
-    <tr><td class="paramname">reply</td><td>the reply on which resonses are expected. </td></tr>
+    <tr><td class="paramname">reply</td><td>the reply on which responses are expected. </td></tr>
     <tr><td class="paramname">data</td><td>the data to be sent, can be <code>NULL</code>. </td></tr>
     <tr><td class="paramname">dataLen</td><td>the length of the data to be sent. </td></tr>
   </table>
@@ -359,11 +372,12 @@ Functions</h2></td></tr>
 <div class="fragment"><div class="line"><span class="keyword">const</span> <span class="keywordtype">char</span>* myString = <span class="stringliteral">&quot;hello&quot;</span>;</div>
 <div class="line"> </div>
 <div class="line">natsPublishRequest(nc, subj, reply, (<span class="keyword">const</span> <span class="keywordtype">void</span>*) myString, (<span class="keywordtype">int</span>) strlen(myString));</div>
-</div><!-- fragment --><dl class="params"><dt>Parameters</dt><dd>
+</div><!-- fragment --><p>See <a class="el" href="group__conn_pub_group.html#gac0b9f7759ecc39b8d77807b94254f9b4" title="Publishes data on a subject.">natsConnection_Publish</a> note regarding when the data is sent.</p>
+<dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">subj</td><td>the subject the request is sent to. </td></tr>
-    <tr><td class="paramname">reply</td><td>the reply on which resonses are expected. </td></tr>
+    <tr><td class="paramname">reply</td><td>the reply on which responses are expected. </td></tr>
     <tr><td class="paramname">str</td><td>the string to send. </td></tr>
   </table>
   </dd>
@@ -421,6 +435,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Sends a request payload and delivers the first response message, or an error, including a timeout if no message was received properly.</p>
+<dl class="section note"><dt>Note</dt><dd>See <a class="el" href="group__conn_pub_group.html#gac0b9f7759ecc39b8d77807b94254f9b4" title="Publishes data on a subject.">natsConnection_Publish</a> note regarding how data is normally sent to the server. However, this call causes the internal buffer (along with this data) to be written to the server within this call. The rationale is that we don't want the connection to wait for more data to be sent, but instead for the request to be sent as soon as possible so that the latency waiting for the reply is reduced to a minimum.</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>If connected to a NATS Server v2.2.0+ with no responder running when the request is received, this call will return a <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80aab97324e40ccfe1360080c651c330e62" title="No responders were running when the server received the request.">NATS_NO_RESPONDERS</a> error.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
@@ -429,7 +444,7 @@ Functions</h2></td></tr>
     <tr><td class="paramname">subj</td><td>the subject the request is sent to. </td></tr>
     <tr><td class="paramname">data</td><td>the data of the request, can be <code>NULL</code>. </td></tr>
     <tr><td class="paramname">dataLen</td><td>the length of the data to send. </td></tr>
-    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this alloted time. </td></tr>
+    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this allotted time. </td></tr>
   </table>
   </dd>
 </dl>
@@ -484,14 +499,15 @@ Functions</h2></td></tr>
 <div class="line"> </div>
 <div class="line"><a class="code hl_function" href="group__conn_pub_group.html#gaf4b4a022f9c21fc269b87c000330c5a7">natsConnection_Request</a>(replyMsg, nc, subj, (<span class="keyword">const</span> <span class="keywordtype">void</span>*) myString, (<span class="keywordtype">int</span>) strlen(myString));</div>
 <div class="ttc" id="agroup__conn_pub_group_html_gaf4b4a022f9c21fc269b87c000330c5a7"><div class="ttname"><a href="group__conn_pub_group.html#gaf4b4a022f9c21fc269b87c000330c5a7">natsConnection_Request</a></div><div class="ttdeci">NATS_EXTERN natsStatus natsConnection_Request(natsMsg **replyMsg, natsConnection *nc, const char *subj, const void *data, int dataLen, int64_t timeout)</div><div class="ttdoc">Sends a request and waits for a reply.</div></div>
-</div><!-- fragment --><dl class="section warning"><dt>Warning</dt><dd>See warning about no responders in <a class="el" href="group__conn_pub_group.html#gaf4b4a022f9c21fc269b87c000330c5a7" title="Sends a request and waits for a reply.">natsConnection_Request()</a>.</dd></dl>
+</div><!-- fragment --><p>See <a class="el" href="group__conn_pub_group.html#gaf4b4a022f9c21fc269b87c000330c5a7" title="Sends a request and waits for a reply.">natsConnection_Request</a> note regarding when data is sent.</p>
+<dl class="section warning"><dt>Warning</dt><dd>See warning about no responders in <a class="el" href="group__conn_pub_group.html#gaf4b4a022f9c21fc269b87c000330c5a7" title="Sends a request and waits for a reply.">natsConnection_Request()</a>.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">replyMsg</td><td>the location where to store the pointer to the received <a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a" title="A structure holding a subject, optional reply and payload.">natsMsg</a> reply. </td></tr>
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">subj</td><td>the subject the request is sent to. </td></tr>
     <tr><td class="paramname">str</td><td>the string to send. </td></tr>
-    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this alloted time. </td></tr>
+    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this allotted time. </td></tr>
   </table>
   </dd>
 </dl>
@@ -536,13 +552,171 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Similar to <a class="el" href="group__conn_pub_group.html#gaf4b4a022f9c21fc269b87c000330c5a7" title="Sends a request and waits for a reply.">natsConnection_Request</a> but uses <code>requestMsg</code> to extract subject, and payload to send.</p>
+<p>See <a class="el" href="group__conn_pub_group.html#gaf4b4a022f9c21fc269b87c000330c5a7" title="Sends a request and waits for a reply.">natsConnection_Request</a> note regarding when data is sent.</p>
 <dl class="section warning"><dt>Warning</dt><dd>See warning about no responders in <a class="el" href="group__conn_pub_group.html#gaf4b4a022f9c21fc269b87c000330c5a7" title="Sends a request and waits for a reply.">natsConnection_Request()</a>.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">replyMsg</td><td>the location where to store the pointer to the received <a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a" title="A structure holding a subject, optional reply and payload.">natsMsg</a> reply. </td></tr>
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">requestMsg</td><td>the message used for the request. </td></tr>
-    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this alloted time. </td></tr>
+    <tr><td class="paramname">timeout</td><td>in milliseconds, before this call returns <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> if no response is received in this allotted time. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ga90ee6749a4a192bea7775d4371435b4f" name="ga90ee6749a4a192bea7775d4371435b4f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga90ee6749a4a192bea7775d4371435b4f">&#9670;&#160;</a></span>natsConnection_Send()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsConnection_Send </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *&#160;</td>
+          <td class="paramname"><em>nc</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>subj</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const void *&#160;</td>
+          <td class="paramname"><em>data</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname"><em>dataLen</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This is similar to <a class="el" href="group__conn_pub_group.html#gac0b9f7759ecc39b8d77807b94254f9b4" title="Publishes data on a subject.">natsConnection_Publish</a> but the data is written to the TCP socket within this function.</p>
+<p>See <a class="el" href="group__conn_pub_group.html#gac0b9f7759ecc39b8d77807b94254f9b4" title="Publishes data on a subject.">natsConnection_Publish</a> note for more information about how data is normally sent to the server.</p>
+<dl class="section note"><dt>Note</dt><dd>The data is still added to the internal buffer and is written to the socket from the function itself. It means that if the application mixes "publish" and "send" calls, it is possible that the "send" function writes a much bigger buffer than the data it is trying to send. In other words, this function doe not send the data out-of-order with regards to the "publish" calls.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__conn_pub_group.html#ga70d01d2827ce39a825c525ffe253ef7c" title="Sends a message with reduced latency.">natsConnection_SendMsg</a> </dd>
+<dd>
+<a class="el" href="group__conn_pub_group.html#ga95cb95efc6684725129feee99e882fe6" title="Sends data with a reply subject with reduced latency.">natsConnection_SendRequest</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
+    <tr><td class="paramname">subj</td><td>the subject the data is sent to. </td></tr>
+    <tr><td class="paramname">data</td><td>the data to send, can be <code>NULL</code>. </td></tr>
+    <tr><td class="paramname">dataLen</td><td>the length of the data to send. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ga70d01d2827ce39a825c525ffe253ef7c" name="ga70d01d2827ce39a825c525ffe253ef7c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga70d01d2827ce39a825c525ffe253ef7c">&#9670;&#160;</a></span>natsConnection_SendMsg()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsConnection_SendMsg </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *&#160;</td>
+          <td class="paramname"><em>nc</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a">natsMsg</a> *&#160;</td>
+          <td class="paramname"><em>msg</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This is similar to <a class="el" href="group__conn_pub_group.html#ga90ee6749a4a192bea7775d4371435b4f" title="Sends data on a subject with reduced latency.">natsConnection_Send</a> but uses a <a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a" title="A structure holding a subject, optional reply and payload.">natsMsg</a> which includes the subject, an optional reply and optional data.</p>
+<p>This is needed if the application wants to send a message with headers.</p>
+<p>See <a class="el" href="group__conn_pub_group.html#ga90ee6749a4a192bea7775d4371435b4f" title="Sends data on a subject with reduced latency.">natsConnection_Send</a> for more details.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__conn_pub_group.html#ga90ee6749a4a192bea7775d4371435b4f" title="Sends data on a subject with reduced latency.">natsConnection_Send</a> </dd>
+<dd>
+<a class="el" href="group__conn_pub_group.html#ga95cb95efc6684725129feee99e882fe6" title="Sends data with a reply subject with reduced latency.">natsConnection_SendRequest</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
+    <tr><td class="paramname">msg</td><td>the <a class="el" href="group__types_group.html#gadcab54026c4ed78f344ce03ce31bb61a" title="A structure holding a subject, optional reply and payload.">natsMsg</a> to send. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ga95cb95efc6684725129feee99e882fe6" name="ga95cb95efc6684725129feee99e882fe6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga95cb95efc6684725129feee99e882fe6">&#9670;&#160;</a></span>natsConnection_SendRequest()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsConnection_SendRequest </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *&#160;</td>
+          <td class="paramname"><em>nc</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>subj</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>reply</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const void *&#160;</td>
+          <td class="paramname"><em>data</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname"><em>dataLen</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>This is similar to <a class="el" href="group__conn_pub_group.html#ga90ee6749a4a192bea7775d4371435b4f" title="Sends data on a subject with reduced latency.">natsConnection_Send</a> but requires a reply subject.</p>
+<p>See <a class="el" href="group__conn_pub_group.html#ga90ee6749a4a192bea7775d4371435b4f" title="Sends data on a subject with reduced latency.">natsConnection_Send</a> for more details.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__conn_pub_group.html#ga90ee6749a4a192bea7775d4371435b4f" title="Sends data on a subject with reduced latency.">natsConnection_Send</a> </dd>
+<dd>
+<a class="el" href="group__conn_pub_group.html#ga70d01d2827ce39a825c525ffe253ef7c" title="Sends a message with reduced latency.">natsConnection_SendMsg</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
+    <tr><td class="paramname">subj</td><td>the subject the request is sent to. </td></tr>
+    <tr><td class="paramname">reply</td><td>the reply subject for this message. </td></tr>
+    <tr><td class="paramname">data</td><td>the data of the request, can be <code>NULL</code>. </td></tr>
+    <tr><td class="paramname">dataLen</td><td>the length of the data to send. </td></tr>
   </table>
   </dd>
 </dl>

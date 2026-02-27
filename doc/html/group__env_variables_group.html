@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -94,13 +94,20 @@ $(document).ready(function(){initNavTree('group__env_variables_group.html',''); 
   <div class="headertitle"><div class="title">Environment Variables</div></div>
 </div><!--header-->
 <div class="contents">
-<p>You will find here the environment variables that change the default behavior of the NATS C Client library. <br  />
-<br  />
- </p><table class="markdownTable">
-<tr class="markdownTableHead">
-<th class="markdownTableHeadNone">Name   </th><th class="markdownTableHeadCenter">Effect    </th></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b><code>NATS_DEFAULT_TO_LIB_MSG_DELIVERY</code></b>   </td><td class="markdownTableBodyCenter">On <a class="el" href="group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d" title="Initializes the library.">nats_Open</a>, the library looks for this environment variable. If set (to any value), the library will default to using a global thread pool to perform message delivery. See <a class="el" href="group__opts_group.html#gabf060c92648b50c069f0abe7cbb06f1c" title="Switch on/off the use of a central message delivery thread pool.">natsOptions_UseGlobalMessageDelivery</a> and <a class="el" href="group__library_group.html#gab21e94ce7a7d226611ea2c05914cf19d" title="Sets the maximum size of the global message delivery thread pool.">nats_SetMessageDeliveryPoolSize</a>.   </td></tr>
+<p>You will find here the environment variables that change the default behavior of the NATS C Client library.</p>
+<p>They are retrieved in <a class="el" href="group__library_group.html#ga4a26d4caecb23348f6eee862c95fee7d" title="Initializes the library.">nats_Open</a> but will not take precendence over explicit configuration by the application.</p>
+<p>In other words, if the environment variable <code>NATS_DEFAULT_LIB_WRITE_DEADLINE</code> is set to say 2000 (in milliseconds, so 2 seconds), then any connection that is created with an option object that has not been explicitly configured with <a class="el" href="group__opts_group.html#gaafda5fb8d9ee3a17bd475ceaecfac218" title="Sets the write deadline.">natsOptions_SetWriteDeadline</a>, will use a 2 seconds TCP write deadline, otherwise the value specified by the <a class="el" href="group__opts_group.html#gaafda5fb8d9ee3a17bd475ceaecfac218" title="Sets the write deadline.">natsOptions_SetWriteDeadline</a> API will be used.</p>
+<dl class="section note"><dt>Note</dt><dd>Using <a class="el" href="group__library_group.html#gab5e09f2429b8b790f030d8d91fbc20f4" title="Initializes the library.">nats_OpenWithConfig</a> prevents the use of the environment variables because the library would not be able to distinguish between the user wanting to explicitly disable a feature or set a value to 0 from the normal <code>C</code> type initialization. In other words, suppose that the environment variable <code>NATS_DEFAULT_TO_LIB_MSG_DELIVERY</code> is set and the user calls <a class="el" href="group__library_group.html#gab5e09f2429b8b790f030d8d91fbc20f4" title="Initializes the library.">nats_OpenWithConfig</a>, the library would not know if <a class="el" href="struct____nats_client_config.html#a9cfade80f1a92d2ce6821007a282d047">natsClientConfig.DefaultToThreadPool</a> is set to <code>false</code> because the user wanted to disable thread pool or because it is initialized to <code>false</code> when the <a class="el" href="group__types_group.html#gad29b6af20b875a1b7890ab8f0675287d" title="An initial configuration for NATS client. Provides control over the threading model,...">natsClientConfig</a> structure is initialized on the stack.</dd></dl>
+<p>The primary intent of these environment variables is to be able to change the behavior of the library without needing to modify the code, which is very valuable for the test suite that can be run with the same code base and simply setting the variable before the run.</p>
+<table class="doxtable">
+<tr>
+<th>Name</th><th>Effect </th></tr>
+<tr>
+<td style="text-align: center;"><b><code>NATS_DEFAULT_TO_LIB_MSG_DELIVERY</code></b></td><td>If set (to any value), message delivery uses a global thread pool (see <a class="el" href="group__opts_group.html#gabf060c92648b50c069f0abe7cbb06f1c" title="Switch on/off the use of a central message delivery thread pool.">natsOptions_UseGlobalMessageDelivery</a>) </td></tr>
+<tr>
+<td style="text-align: center;"><b><code>NATS_DEFAULT_LIB_MSG_DELIVERY_POOL_SIZE</code></b></td><td>Sets the message delivery thread pool size (see <a class="el" href="group__library_group.html#gab21e94ce7a7d226611ea2c05914cf19d" title="Sets the maximum size of the global message delivery thread pool.">nats_SetMessageDeliveryPoolSize</a>) </td></tr>
+<tr>
+<td style="text-align: center;"><b><code>NATS_DEFAULT_LIB_WRITE_DEADLINE</code></b></td><td>Sets the write deadline (in milliseconds). See <a class="el" href="group__opts_group.html#gaafda5fb8d9ee3a17bd475ceaecfac218" title="Sets the write deadline.">natsOptions_SetWriteDeadline</a> </td></tr>
 </table>
 </div><!-- contents -->
 </div><!-- doc-content -->

@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -115,8 +115,8 @@ Modules</h2></td></tr>
 NATS Microservices.</h3>
 <p>Microservices can expose one or more request-response endpoints that process incoming NATS messages.</p>
 <p>Microservices are created by calling micro_AddService, and configured by passing a microServiceConfig to it. Many microservices can share a single connection to a NATS server.</p>
-<p>Once created, a microservice will subscribe to all endpoints' subjects and associate them with the configured handlers. It will also subscribe to and service monitoring subjects for service-specific pings, metadata, and statistics requests. The endpoint subscriptions are created with a queue group, so that incoming requests are automatically load-balanced across all running instances of a microservice. The monitoring subscriptions are not groupped, each service instance receives and responds to all monitoring requests.</p>
-<p>Once created, the microservice is asyncronous, message handlers and other callbacks will be invoked in separate threads. No further action is needed. Your program can use microService_Stop, microService_IsStopped to control the execution of the service. </p>
+<p>Once created, a microservice will subscribe to all endpoints' subjects and associate them with the configured handlers. It will also subscribe to and service monitoring subjects for service-specific pings, metadata, and statistics requests. The endpoint subscriptions are created with a queue group, so that incoming requests are automatically load-balanced across all running instances of a microservice. The monitoring subscriptions are not grouped, each service instance receives and responds to all monitoring requests.</p>
+<p>Once created, the microservice is asynchronous, message handlers and other callbacks will be invoked in separate threads. No further action is needed. Your program can use microService_Stop, microService_IsStopped to control the execution of the service. </p>
 </div><!-- contents -->
 </div><!-- doc-content -->
 <!-- HTML footer for doxygen 1.8.10-->

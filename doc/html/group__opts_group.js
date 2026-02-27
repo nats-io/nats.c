@@ -27,6 +27,7 @@ var group__opts_group =
     [ "natsOptions_SetPedantic", "group__opts_group.html#ga26f166af20de98bec67bc6cc916f769e", null ],
     [ "natsOptions_SetPingInterval", "group__opts_group.html#gae68fb615835364c0809555e8dc93f57e", null ],
     [ "natsOptions_SetMaxPingsOut", "group__opts_group.html#gaaff89c3f41627f4b2929dbc9b82d265b", null ],
+    [ "natsOptions_SetIgnoreAuthErrorAbort", "group__opts_group.html#ga64016b8481ff8b423c567ae64ef7680e", null ],
     [ "natsOptions_SetIOBufSize", "group__opts_group.html#ga1a3e3abfd7ddd8aff247df8f332bbda3", null ],
     [ "natsOptions_SetAllowReconnect", "group__opts_group.html#ga3d1d3cb2f2a0e23d27dd60e96d1cc91b", null ],
     [ "natsOptions_SetMaxReconnect", "group__opts_group.html#gab54cd2719c0b64eebd6c7b83dd2908a0", null ],

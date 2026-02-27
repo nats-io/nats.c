@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -647,7 +647,7 @@ Functions</h2></td></tr>
 <div class="line">properly initialized it to `NULL`) since the call internally check for that.</div>
 <div class="line">objStoreGet_Destroy(get);</div>
 <div class="line">...</div>
-</div><!-- fragment --><p>Here is an example to read data all at once. Unless the user needs to inspect the object store information's object prior to read the data, the convenience functtion <a class="el" href="group__obs_group.html#gafb7f87a99c7e2b0fe14f8044bb82e032" title="Pull the named object from the object store and return it as a byte array.">objStore_GetBytes</a> will be equivalent much simpler to use.</p>
+</div><!-- fragment --><p>Here is an example to read data all at once. Unless the user needs to inspect the object store information's object prior to read the data, the convenience function <a class="el" href="group__obs_group.html#gafb7f87a99c7e2b0fe14f8044bb82e032" title="Pull the named object from the object store and return it as a byte array.">objStore_GetBytes</a> will be equivalent much simpler to use.</p>
 <div class="fragment"><div class="line">objStoreGet *get = NULL;</div>
 <div class="line"> </div>
 <div class="line">s = objStore_Get(&amp;get, obs, &quot;myobject&quot;, NULL);</div>
@@ -782,7 +782,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>This call returns up to a chunk of bytes of the object. The <code>dataLen</code> will be set with the number of bytes that were returned.</p>
-<p>The <code>done</code> boolean will be set to <code>true</code> if the call detects that this was the last bit of data that consistuted this object. Calling this function again would result in the <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9bb78b4f245d2870040d25c450febd4b">NATS_ILLEGAL_STATE</a> error returned.</p>
+<p>The <code>done</code> boolean will be set to <code>true</code> if the call detects that this was the last bit of data that constituted this object. Calling this function again would result in the <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a9bb78b4f245d2870040d25c450febd4b">NATS_ILLEGAL_STATE</a> error returned.</p>
 <dl class="section warning"><dt>Warning</dt><dd>The returned <code>data</code> must be freed by the user.</dd></dl>
 <p>See <a class="el" href="group__obs_group.html#gab967cd5a4c6ed2b403ec9baa374543eb" title="Pull the named object from the object store.">objStore_Get</a> for example on how to use the set of APIs.</p>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__obs_group.html#gab967cd5a4c6ed2b403ec9baa374543eb" title="Pull the named object from the object store.">objStore_Get</a></dd></dl>

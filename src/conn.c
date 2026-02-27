@@ -2921,7 +2921,9 @@ _processAuthError(natsConnection *nc, int errCode, char *error)
     if (!nc->initc)
         natsAsyncCb_PostErrHandler(nc, NULL, nc->err, NATS_STRDUP(error));
 
-    if (nc->cur->lastAuthErrCode == errCode)
+    // We should give up if we tried twice on this server and got the
+    // same error. This behavior can be modified using ignoreAuthErrAbort.
+    if ((nc->cur->lastAuthErrCode == errCode) && !nc->opts->ignoreAuthErrAbort)
         nc->ar = true;
     else
         nc->cur->lastAuthErrCode = errCode;

@@ -3412,6 +3412,19 @@ natsOptions_SetPingInterval(natsOptions *opts, int64_t interval);
 NATS_EXTERN natsStatus
 natsOptions_SetMaxPingsOut(natsOptions *opts, int maxPingsOut);
 
+/** \brief Indicates if the connection should abort on authentication error or not.
+ *
+ * If set to true, client opts out of the default connect behavior of aborting
+ * subsequent reconnect attempts if server returns the same auth error twice
+ * (regardless of reconnect policy).
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param ignore `true` if the connection should stay opened when receiving
+ * authentication errors, `false` if it should close after two errors (default behavior).
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetIgnoreAuthErrorAbort(natsOptions *opts, bool ignore);
+
 /** \brief Sets the size of the internal read/write buffers.
  *
  * Sets the size, in bytes, of the internal read/write buffers used for

@@ -369,6 +369,11 @@ struct __natsOptions
 
     // Custom message payload padding size
     int payloadPaddingSize;
+
+    // If set to true, client opts out of the default connect behavior of aborting
+    // subsequent reconnect attempts if server returns the same auth error twice
+    // (regardless of reconnect policy).
+    bool ignoreAuthErrAbort;
 };
 typedef struct __pmInfo
 {

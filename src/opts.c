@@ -993,6 +993,18 @@ natsOptions_SetMaxPingsOut(natsOptions *opts, int maxPignsOut)
 }
 
 natsStatus
+natsOptions_SetIgnoreAuthErrorAbort(natsOptions *opts, bool ignore)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->ignoreAuthErrAbort = ignore;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
 natsOptions_SetIOBufSize(natsOptions *opts, int ioBufSize)
 {
     LOCK_AND_CHECK_OPTIONS(opts, (ioBufSize < 0));

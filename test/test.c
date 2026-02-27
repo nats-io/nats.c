@@ -3019,7 +3019,8 @@ void test_natsOptions(void)
              && !opts->noEcho
              && !opts->retryOnFailedConnect
              && !opts->ignoreDiscoveredServers
-             && !opts->tlsHandshakeFirst);
+             && !opts->tlsHandshakeFirst
+             && !opts->ignoreAuthErrAbort);
 
     test("Add URL: ");
     s = natsOptions_SetURL(opts, "test");
@@ -3202,6 +3203,14 @@ void test_natsOptions(void)
     IFOK(s, natsOptions_SetMaxPingsOut(opts, 1));
     IFOK(s, natsOptions_SetMaxPingsOut(opts, 10));
     testCond((s == NATS_OK) && (opts->maxPingsOut == 10));
+
+    test("Set IgnoreAuthErrorAbort: ");
+    s = natsOptions_SetIgnoreAuthErrorAbort(opts, true);
+    testCond((s == NATS_OK) && (opts->ignoreAuthErrAbort == true));
+
+    test("Remove IgnoreAuthErrorAbort: ");
+    s = natsOptions_SetIgnoreAuthErrorAbort(opts, false);
+    testCond((s == NATS_OK) && (opts->ignoreAuthErrAbort == false));
 
     test("Set IOBufSize: ");
     s = natsOptions_SetIOBufSize(opts, -1);
@@ -16249,6 +16258,21 @@ void test_ProperFalloutAfterMaxAttempts(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
+static void
+_authErrCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
+{
+    struct threadArg *arg = (struct threadArg*) closure;
+
+    // We care only about auth errors.
+    if (err != NATS_CONNECTION_AUTH_FAILED)
+        return;
+
+    natsMutex_Lock(arg->m);
+    arg->sum++;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
 void test_StopReconnectAfterTwoAuthErr(void)
 {
     natsStatus          s;
@@ -16260,12 +16284,6 @@ void test_StopReconnectAfterTwoAuthErr(void)
     natsStatistics      *stats    = NULL;
     int                 serversCount;
     struct threadArg    arg;
-
-//#if _WIN32
-//    test("Skip when running on Windows: ");
-//    testCond(true);
-//    return;
-//#endif
 
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
@@ -16281,6 +16299,7 @@ void test_StopReconnectAfterTwoAuthErr(void)
     IFOK(s, natsOptions_SetServers(opts, servers, serversCount));
     IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
     IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetErrorHandler(opts, _authErrCb, (void*) &arg));
 #if _WIN32
     IFOK(s, natsOptions_SetTimeout(opts, 500));
 #endif
@@ -16302,26 +16321,31 @@ void test_StopReconnectAfterTwoAuthErr(void)
     testCond(s == NATS_OK);
 
     _stopServer(serverPid);
+    serverPid = NATS_INVALID_PID;
 
-    // wait for disconnect
     test("Wait for disconnected: ");
     natsMutex_Lock(arg.m);
     while ((s != NATS_TIMEOUT) && !arg.disconnected)
         s = natsCondition_TimedWait(arg.c, arg.m, 2000);
     natsMutex_Unlock(arg.m);
-    testCond((s == NATS_OK) && arg.disconnected);
+    testCond(s == NATS_OK);
 
-    // wait for closed
     test("Wait for closed: ");
     s = _waitForConnClosed(&arg);
     testCond(s == NATS_OK);
 
-    // Make sure we have not exceeded MaxReconnect
-    test("Check reconnect twice: ");
+    test("Check attempted reconnect twice: ");
     s = natsConnection_GetStats(nc, stats);
     testCond((s == NATS_OK)
              && (stats != NULL)
              && (stats->reconnects == 2));
+
+    test("Got the auth error twice: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && (arg.sum != 2))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
 
     // Disconnect CB only from disconnect from server 1.
     test("Disconnected should have been called once: ");
@@ -16337,6 +16361,94 @@ void test_StopReconnectAfterTwoAuthErr(void)
 
     _destroyDefaultThreadArgs(&arg);
 
+    _stopServer(serverPid2);
+}
+
+void test_IgnoreAuthErrorAbort(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    natsPid             serverPid2= NATS_INVALID_PID;
+    const char          *servers[]= {"nats://127.0.0.1:1222", "nats://127.0.0.1:1223"};
+    int                 serversCount;
+    struct threadArg    arg;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test!");
+
+    serversCount = sizeof(servers) / sizeof(char*);
+
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetIgnoreAuthErrorAbort(opts, true));
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetMaxReconnect(opts, -1));
+    IFOK(s, natsOptions_SetReconnectWait(opts, 25));
+    IFOK(s, natsOptions_SetReconnectJitter(opts, 0, 0));
+    IFOK(s, natsOptions_SetServers(opts, servers, serversCount));
+    IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetReconnectedCB(opts, _reconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetErrorHandler(opts, _authErrCb, (void*) &arg));
+#if _WIN32
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
+#endif
+
+    if (s != NATS_OK)
+        FAIL("Unable to create options for test ServerOptions");
+
+    serverPid = _startServer("nats://127.0.0.1:1222", "-p 1222", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    serverPid2 = _startServer("nats://127.0.0.1:1223", "-p 1223 -user ivan -pass secret", true);
+    if (serverPid == NATS_INVALID_PID)
+        _stopServer(serverPid);
+    CHECK_SERVER_STARTED(serverPid2);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    _stopServer(serverPid);
+    serverPid = NATS_INVALID_PID;
+
+    test("Wait for disconnected: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.disconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Check continues on auth errors: ")
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && (arg.sum < 4))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    serverPid = _startServer("nats://127.0.0.1:1222", "-p 1222", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Wait for reconnect: ");
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Closing: ");
+    natsConnection_Close(nc);
+    s = _waitForConnClosed(&arg);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    natsOptions_Destroy(opts);
+
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(serverPid);
     _stopServer(serverPid2);
 }
 

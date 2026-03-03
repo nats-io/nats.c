@@ -281,6 +281,11 @@ typedef struct natsMetadata
 typedef struct __jsCtx                  jsCtx;
 
 /**
+ * The JetStream atomic batch context. Use for JetStream atomic batch publish.
+ */
+typedef struct __jsAtomicBatchCtx       jsAtomicBatchCtx;
+
+/**
  * JetStream publish options.
  *
  * These are options that you can provide to JetStream publish APIs.
@@ -1229,6 +1234,8 @@ typedef struct jsPubAck
         uint64_t        Sequence;
         char            *Domain;
         bool            Duplicate;
+        char            *Batch;
+        uint64_t        Count;
 
 } jsPubAck;
 
@@ -7544,6 +7551,21 @@ js_PublishAsyncComplete(jsCtx *js, jsPubOptions *opts);
  */
 NATS_EXTERN natsStatus
 js_PublishAsyncGetPendingList(natsMsgList *pending, jsCtx *js);
+
+NATS_EXTERN natsStatus
+js_startBatchPublish(jsAtomicBatchCtx **ctx, jsPubAck **new_puback, jsCtx *js,
+                     natsMsg *msg, jsPubOptions *opts, jsErrCode *errCode);
+
+NATS_EXTERN natsStatus
+js_batchPublishAdd(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg,
+                   jsPubOptions *opts, jsErrCode *errCode);
+
+NATS_EXTERN natsStatus
+js_batchPublishCommit(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg,
+                      jsPubOptions *opts, jsErrCode *errCode);
+
+NATS_EXTERN void
+js_destroyAtomicBatchCtx(jsAtomicBatchCtx *ctx);
 
 /** @} */ // end of jsPubGroup
 

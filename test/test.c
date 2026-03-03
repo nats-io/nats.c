@@ -40347,6 +40347,59 @@ void test_JetStreamPrioritizedPullConsumer(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
+void test_JetStreamAtomicBatchPublish(void)
+{
+    natsStatus       s = NATS_OK;
+    natsMsg          *msg = NULL;
+    jsAtomicBatchCtx *batch_ctx = NULL;
+    jsStreamConfig   sc;
+    jsPubAck *new_puback = NULL;
+    jsPubOptions opts;
+
+    const uint64_t msg_count = 98;
+
+    JS_SETUP(2, 12, 0);
+
+    test("Initialize Stream: ");
+    s = jsStreamConfig_Init(&sc);
+    if (s == NATS_OK)
+    {
+        sc.AllowAtomic = true;
+        sc.Name = "foo";
+    }
+    IFOK(s, js_AddStream(NULL, js, &sc, NULL, NULL));
+    testCond(s == NATS_OK);
+
+    test("Create batch context: ");
+    s = natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+    IFOK(s, js_startBatchPublish(&batch_ctx, NULL, js, msg, NULL, NULL));
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+
+    test("Publish 98 messages: ");
+    for (uint64_t i = 0; (i < msg_count) && (s == NATS_OK); i++)
+    {
+        char data[12];
+        snprintf(data, sizeof(data), "%" PRIu64, i);
+        s = natsMsg_Create(&msg, "foo", NULL, data, strlen(data));
+        IFOK(s, js_batchPublishAdd(NULL, batch_ctx, msg, NULL, NULL));
+        natsMsg_Destroy(msg);
+    }
+    testCond(s == NATS_OK);
+
+    test("Commit batch: ");
+    s = natsMsg_Create(&msg, "foo", NULL, "end", 3);
+    IFOK(s, js_batchPublishCommit(&new_puback, batch_ctx, msg, NULL, NULL));
+    testCond((s == NATS_OK) && (new_puback != NULL) && (new_puback->Count == msg_count + 2));
+
+    jsPubAck_Destroy(new_puback);
+    js_destroyAtomicBatchCtx(batch_ctx);
+    batch_ctx = NULL;
+    natsMsg_Destroy(msg);
+
+    JS_TEARDOWN;
+}
+
 #if defined(NATS_HAS_STREAMING)
 
 static int

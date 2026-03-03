@@ -403,6 +403,15 @@ struct __jsCtx
     void                *onReleaseCbArg;
 };
 
+struct __jsAtomicBatchCtx
+{
+    natsMutex   *mu;
+    char        *id;
+    jsCtx       *js;
+    int         count;
+    bool        done;
+};
+
 typedef struct __jsFetch
 {
     struct jsOptionsPullSubscribeAsync opts;

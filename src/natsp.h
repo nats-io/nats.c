@@ -53,10 +53,6 @@
 #include "natstime.h"
 #include "nuid.h"
 
-// Comment/uncomment to replace some function calls with direct structure
-// access
-//#define DEV_MODE    (1)
-
 #define LIB_NATS_VERSION_STRING             NATS_VERSION_STRING
 #define LIB_NATS_VERSION_NUMBER             NATS_VERSION_NUMBER
 #define LIB_NATS_VERSION_REQUIRED_NUMBER    NATS_VERSION_REQUIRED_NUMBER

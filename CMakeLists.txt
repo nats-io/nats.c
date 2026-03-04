@@ -32,6 +32,7 @@ endif()
 option(NATS_UPDATE_VERSION "Update the version file" OFF)
 option(NATS_UPDATE_DOC "Update the doc template file" OFF)
 option(NATS_COVERAGE "Code coverage" OFF)
+option(NATS_BUILD_DEV_MODE "Enable type safety checks" OFF)
 option(NATS_BUILD_NO_SPIN "Enable if spin code does not compile on your arch" OFF)
 option(NATS_BUILD_WITH_TLS "Build with TLS support" ON)
 option(NATS_BUILD_TLS_FORCE_HOST_VERIFY "Forces hostname verification" ON)
@@ -161,6 +162,10 @@ endif(NATS_BUILD_NO_PREFIX_CONNSTS)
 if(NATS_WITH_EXPERIMENTAL)
   add_definitions(-DNATS_WITH_EXPERIMENTAL)
 endif(NATS_WITH_EXPERIMENTAL)
+
+if (NATS_BUILD_DEV_MODE)
+  add_definitions(-DDEV_MODE)
+endif(NATS_BUILD_DEV_MODE)
 
 # Platform specific settings
 if(UNIX)

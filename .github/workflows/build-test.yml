@@ -106,7 +106,7 @@ jobs:
             flags="$flags -DNATS_COVERAGE=ON"
           fi
           if [[ "${{ inputs.dev_mode }}" == "ON" ]]; then
-            flags="$flags -DDEV_MODE=ON"
+            flags="$flags -DNATS_BUILD_DEV_MODE=ON"
           fi
           if [[ "${{ inputs.experimental }}" == "ON" ]]; then
             flags="$flags -DNATS_WITH_EXPERIMENTAL=ON"

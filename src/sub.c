@@ -1352,6 +1352,7 @@ bool natsSubscription_IsValid(natsSubscription *sub)
 void natsSubscription_Destroy(natsSubscription *sub)
 {
     bool doUnsub = false;
+    int shareCount = 0;
 
     if (sub == NULL)
         return;
@@ -1370,10 +1371,130 @@ void natsSubscription_Destroy(natsSubscription *sub)
     if (sub->jsi != NULL)
         sub->jsi->dc = false;
 
+    if (sub->shareCount > 0)
+        sub->shareCount--;
+
+    shareCount = sub->shareCount;
     natsSub_Unlock(sub);
+
+    // Don't close or free the subscription if it's still in use
+    if (shareCount != 0)
+        return;
 
     if (doUnsub)
         (void)natsSubscription_Unsubscribe(sub);
 
     natsSub_release(sub);
+}
+
+static void
+_sharedRespHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    int len = 0;
+    const char  *subj = subj = natsMsg_GetSubject(msg);
+
+    len = strlen(subj);
+    printf("Received message on subject: %s subjlen = %d; subscription subj = %s, nc->reqIdOffset = %d\n",
+        subj, len, sub->subject, nc->reqIdOffset);
+
+    if (len == nc->reqIdOffset + 1 && subj[len - 1] == '0')
+    {
+        printf("In nc resp handler\n");
+        natsConnection_respHandler(nc, sub, msg, closure);
+    }
+    else
+    {
+        printf("In js async reply handler\n");
+        js_handleAsyncReply(nc, sub, msg, closure);
+    }
+}
+
+natsStatus
+natsSubscription_CreateSharedSubscription(jsCtx *js)
+{
+    natsSubscription *sub = NULL;
+    natsStatus       s = NATS_OK;
+    natsConnection  *nc = js->nc;
+
+    // If either are already set, we shouldn't create a new one
+    if ((nc->respMux != NULL) || (js->rsub != NULL) || (js->nc != nc)) {
+        return NATS_INVALID_ARG;
+    }
+
+    natsMutex_Lock(nc->mu);
+    natsMutex_Lock(js->mu);
+
+    nc->respPool = NATS_CALLOC(RESP_INFO_POOL_MAX_SIZE, sizeof(respInfo*));
+    if (nc->respPool == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    if (s == NATS_OK)
+        s = natsStrHash_Create(&nc->respMap, 4);
+
+    IFOK(s, natsCondition_Create(&(js->cond)));
+    IFOK(s, natsStrHash_Create(&(js->pm), 64));
+    if (s == NATS_OK)
+    {
+        js->rpre = NATS_MALLOC(js->rpreLen+1);
+        if (js->rpre == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+        {
+            char nuid[NUID_BUFFER_LEN+1];
+
+            s = natsNUID_Next(nuid, sizeof(nuid));
+            if (s == NATS_OK)
+            {
+                memcpy(js->rpre, js->nc->inboxPfx, js->nc->inboxPfxLen);
+                memcpy(js->rpre+js->nc->inboxPfxLen, nuid+((int)strlen(nuid)-8), 8);
+                js->rpre[js->rpreLen-1] = '.';
+                js->rpre[js->rpreLen]   = '\0';
+            }
+        }
+    }
+    if (s == NATS_OK)
+    {
+        char *subj = NULL;
+
+        if (nats_asprintf(&subj, "%s*", js->rpre) < 0)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+        {
+            s = natsConn_subscribeNoPool(&sub, js->nc, subj, _sharedRespHandler, (void*) js);
+            if (s == NATS_OK)
+            {
+                nc->respSub = subj;
+                nc->reqIdOffset = js->rpreLen;
+
+                sub->shareCount = 2;
+                nc->respMux = sub;
+                js->rsub = sub;
+            }
+            else {
+                NATS_FREE(subj);
+            }
+        }
+
+        if (s == NATS_OK)
+        {
+            _retain(js);
+            natsSubscription_SetPendingLimits(js->rsub, -1, -1);
+            natsSubscription_SetOnCompleteCB(js->rsub, js_subComplete, (void*) js);
+        }
+    }
+    if (s != NATS_OK)
+    {
+        // Undo the things we created so we retry again next time.
+        // It is either that or we have to always check individual
+        // objects to know if we have to create them.
+        NATS_FREE(js->rpre);
+        js->rpre = NULL;
+        natsStrHash_Destroy(js->pm);
+        js->pm = NULL;
+        natsCondition_Destroy(js->cond);
+        js->cond = NULL;
+    }
+
+    natsMutex_Unlock(nc->mu);
+    natsMutex_Unlock(js->mu);
+    return NATS_UPDATE_ERR_STACK(s);
 }

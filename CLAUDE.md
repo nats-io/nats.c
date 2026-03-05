@@ -112,7 +112,7 @@ doc/                        # Doxygen documentation
 ### License Header
 Every file starts with the Apache 2.0 license header (C-style `//` comments):
 ```c
-// Copyright 2015-2025 The NATS Authors
+// Copyright 20XX The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -125,6 +125,7 @@ Every file starts with the Apache 2.0 license header (C-style `//` comments):
 // See the License for the specific language governing permissions and
 // limitations under the License.
 ```
+- Replace `20XX` with the current year when creating new files. If a previous year is present, update it to a range (e.g., `2024-2026`).
 
 ### Error Handling
 - Functions return `natsStatus` (enum). Success is `NATS_OK`.

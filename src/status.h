@@ -306,6 +306,13 @@ typedef enum {
     JSMessageTTLInvalidErr = 10165,                     ///< Invalid per-message TTL
     JSMessageTTLDisabledErr = 10166,                    ///< Per-message TTL is disabled
     JSStreamTooManyRequestsErr = 10167,                 ///< Too many requests
+    JSBatchPublishNotEnabledErr = 10174,                ///< Batch publish not enabled on stream
+    JSBatchPublishIncompleteErr = 10176,                ///< Batch publish is incomplete and was abandoned
+    JSBatchPublishInvalidIDErr = 10179,                 ///< Batch publish ID is invalid (exceeds 64 characters)
+    JSBatchPublishSequenceMissingErr = 10175,           ///< Batch publish sequence is missing
+    JSBatchPublishSequenceExceedsLimitErr = 10199,      ///< Batch publish sequence exceeds server limit (default 1000)
+    JSBatchPublishUnsupportedHeaderErr = 10177,         ///< Batch publish unsupported header used (Nats-Expected-Last-Msg-Id)
+    JSBatchPublishDuplicateMessageIDErr = 10201,        ///< Batch publish contains duplicate message id (Nats-Msg-Id)
 
 } jsErrCode;
 

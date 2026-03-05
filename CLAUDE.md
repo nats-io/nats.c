@@ -1,6 +1,6 @@
 # CLAUDE.md - nats.c
 
-NATS client library for C (v3.12.0-beta). Supports core NATS, JetStream, KeyValue, Object Store, and microservices. C99 standard, cross-platform (Linux, macOS, Windows).
+NATS client library for C. Supports core NATS, JetStream, KeyValue, Object Store, and microservices. C99 standard, cross-platform (Linux, macOS, Windows).
 
 ## Build Commands
 
@@ -21,7 +21,7 @@ cmake .. \
   -DNATS_COVERAGE=ON                   # Code coverage
 
 # Dev mode build (adds type safety checks for lock/unlock macros)
-cmake .. -DDEV_MODE=ON -DCMAKE_BUILD_TYPE=Debug
+cmake .. -DNATS_BUILD_DEV_MODE=ON -DCMAKE_BUILD_TYPE=Debug
 
 # Run tests (requires nats-server on PATH)
 cd build
@@ -29,7 +29,7 @@ ctest -L test --timeout 60 --output-on-failure
 
 # Run a single test
 cd build
-bin/testsuite <TestName>    # e.g., bin/testsuite DefaultConnection
+ctest -L test --timeout 60 -V --repeat-until-fail 1 -R <TestName>    # e.g., ctest -L test --timeout 60 -V --repeat-until-fail 1 -R DefaultConnection
 
 # With sanitizers (set env before cmake)
 NATS_SANITIZE=address cmake .. -DNATS_SANITIZE=ON -DCMAKE_C_FLAGS=-fsanitize=address
@@ -80,7 +80,7 @@ src/                        # Library source code
   stan/                     # NATS Streaming (deprecated, requires protobuf-c)
   adapters/                 # Event loop adapter headers (libuv, libevent)
 test/
-  test.c                    # Single monolithic test file (~41K lines)
+  test.c                    # Single monolithic test file
   test.h                    # Test helpers, server management macros
   list.h                    # X-macro that includes list_test.txt, list_bench.txt, list_stan.txt
   list_test.txt             # Test function registry (~304 tests), format: _test(TestName)
@@ -112,8 +112,18 @@ doc/                        # Doxygen documentation
 ### License Header
 Every file starts with the Apache 2.0 license header (C-style `//` comments):
 ```c
-// Copyright 20XX-20XX The NATS Authors
-// Licensed under the Apache License, Version 2.0 ...
+// Copyright 2015-2025 The NATS Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 ```
 
 ### Error Handling
@@ -131,11 +141,10 @@ Every file starts with the Apache 2.0 license header (C-style `//` comments):
 ### Threading / Locking
 - Custom mutex/condition/thread abstraction in `natsp.h` (platform-specific in `unix/` and `win/`)
 - Lock helpers: `natsConn_Lock()`/`natsConn_Unlock()` -- macros in release, real functions in DEV_MODE
-- `DEV_MODE` build flag enables type-safe function versions for debugging
+- `NATS_BUILD_DEV_MODE` build flag enables type-safe function versions for debugging
 
 ### Brace Style
-- Opening brace on same line for `if`/`else`/`for`/`while`/struct definitions
-- Opening brace on next line for function definitions
+- Opening brace always on next line
 - 4-space indentation
 
 ### Tests
@@ -144,6 +153,7 @@ Every file starts with the Apache 2.0 license header (C-style `//` comments):
 - Registered in `test/list_test.txt` with `_test(TestName)` macro
 - Test assertions: `test("description")` then `testCond(condition)` -- prints PASSED/FAILED
 - Tests require a running `nats-server` binary on PATH
+- NATS_TEST_SERVER_VERSION environment must be set to run tests. This should be set with `export NATS_TEST_SERVER_VERSION="$(nats-server -v)"`
 - Tests use `serverVersionAtLeast(major, minor, update)` to skip version-dependent tests
 
 ## CI
@@ -167,7 +177,7 @@ Every file starts with the Apache 2.0 license header (C-style `//` comments):
 | `NATS_BUILD_LIB_SHARED` | ON | Build shared library |
 | `NATS_BUILD_EXAMPLES` | ON | Build example programs |
 | `NATS_COVERAGE` | ON/OFF | Code coverage flags |
-| `DEV_MODE` | OFF | Type-safe lock/retain macros |
+| `NATS_BUILD_DEV_MODE` | OFF | Type-safe lock/retain macros |
 | `NATS_SANITIZE` | OFF | Enable sanitizers |
 | `CMAKE_BUILD_TYPE` | Release | Build type |
 

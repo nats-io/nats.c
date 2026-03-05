@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -110,6 +110,15 @@ Public Attributes</h2></td></tr>
 <tr class="separator:a8dfcae3bc348a5b595b509e3f3d3500b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a237a639579def1345e02f1490a510ed5" id="r_a237a639579def1345e02f1490a510ed5"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_cluster_info.html#a237a639579def1345e02f1490a510ed5">ReplicasLen</a></td></tr>
 <tr class="separator:a237a639579def1345e02f1490a510ed5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a68d35d442df3d9a313a41552faa998ff" id="r_a68d35d442df3d9a313a41552faa998ff"><td class="memItemLeft" align="right" valign="top">char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_cluster_info.html#a68d35d442df3d9a313a41552faa998ff">RaftGroup</a></td></tr>
+<tr class="separator:a68d35d442df3d9a313a41552faa998ff"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a9c03a1b98a771b471be82d43f4947100" id="r_a9c03a1b98a771b471be82d43f4947100"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_cluster_info.html#a9c03a1b98a771b471be82d43f4947100">LeaderSince</a></td></tr>
+<tr class="memdesc:a9c03a1b98a771b471be82d43f4947100"><td class="mdescLeft">&#160;</td><td class="mdescRight">UTC time expressed as number of nanoseconds since epoch.  <br /></td></tr>
+<tr class="separator:a9c03a1b98a771b471be82d43f4947100"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab04dd2930e2b76874650007ba323a64c" id="r_ab04dd2930e2b76874650007ba323a64c"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_cluster_info.html#ab04dd2930e2b76874650007ba323a64c">SystemAcc</a></td></tr>
+<tr class="separator:ab04dd2930e2b76874650007ba323a64c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a3686f62d18e63daaf990505c6d5288f6" id="r_a3686f62d18e63daaf990505c6d5288f6"><td class="memItemLeft" align="right" valign="top">char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_cluster_info.html#a3686f62d18e63daaf990505c6d5288f6">TrafficAcc</a></td></tr>
+<tr class="separator:a3686f62d18e63daaf990505c6d5288f6"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Information about the underlying set of servers that make up the stream or consumer. </p>
@@ -164,6 +173,62 @@ Public Attributes</h2></td></tr>
       <table class="memname">
         <tr>
           <td class="memname">int jsClusterInfo::ReplicasLen</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a68d35d442df3d9a313a41552faa998ff" name="a68d35d442df3d9a313a41552faa998ff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a68d35d442df3d9a313a41552faa998ff">&#9670;&#160;</a></span>RaftGroup</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">char* jsClusterInfo::RaftGroup</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a9c03a1b98a771b471be82d43f4947100" name="a9c03a1b98a771b471be82d43f4947100"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9c03a1b98a771b471be82d43f4947100">&#9670;&#160;</a></span>LeaderSince</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int64_t jsClusterInfo::LeaderSince</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ab04dd2930e2b76874650007ba323a64c" name="ab04dd2930e2b76874650007ba323a64c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab04dd2930e2b76874650007ba323a64c">&#9670;&#160;</a></span>SystemAcc</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool jsClusterInfo::SystemAcc</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a3686f62d18e63daaf990505c6d5288f6" name="a3686f62d18e63daaf990505c6d5288f6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3686f62d18e63daaf990505c6d5288f6">&#9670;&#160;</a></span>TrafficAcc</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">char* jsClusterInfo::TrafficAcc</td>
         </tr>
       </table>
 </div><div class="memdoc">

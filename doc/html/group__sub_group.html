@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -114,6 +114,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga8a37b2d5290da3aecc05483d79e7e254" id="r_ga8a37b2d5290da3aecc05483d79e7e254"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga8a37b2d5290da3aecc05483d79e7e254">natsSubscription_QueuedMsgs</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub, uint64_t *queuedMsgs)</td></tr>
 <tr class="memdesc:ga8a37b2d5290da3aecc05483d79e7e254"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gets the number of pending messages.  <br /></td></tr>
 <tr class="separator:ga8a37b2d5290da3aecc05483d79e7e254"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga6b7f4afb4fba85db1540dc32a7ee7043" id="r_ga6b7f4afb4fba85db1540dc32a7ee7043"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga6b7f4afb4fba85db1540dc32a7ee7043">natsSubscription_GetConnection</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub)</td></tr>
+<tr class="memdesc:ga6b7f4afb4fba85db1540dc32a7ee7043"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the connection that created this subscription.  <br /></td></tr>
+<tr class="separator:ga6b7f4afb4fba85db1540dc32a7ee7043"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga5a029a784c0a7f8b5800b48cc995db20" id="r_ga5a029a784c0a7f8b5800b48cc995db20"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__sub_group.html#ga5a029a784c0a7f8b5800b48cc995db20">natsSubscription_GetID</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *sub)</td></tr>
 <tr class="memdesc:ga5a029a784c0a7f8b5800b48cc995db20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gets the subscription id.  <br /></td></tr>
 <tr class="separator:ga5a029a784c0a7f8b5800b48cc995db20"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -332,6 +335,32 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject.">natsSubscription</a> object. </td></tr>
     <tr><td class="paramname">queuedMsgs</td><td>the location where to store the number of queued messages. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ga6b7f4afb4fba85db1540dc32a7ee7043" name="ga6b7f4afb4fba85db1540dc32a7ee7043"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga6b7f4afb4fba85db1540dc32a7ee7043">&#9670;&#160;</a></span>natsSubscription_GetConnection()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> * natsSubscription_GetConnection </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> *&#160;</td>
+          <td class="paramname"><em>sub</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Returns the connection that created this subscription. This is the case even if the subscription itself is no longer valid, say after <a class="el" href="group__sub_group.html#gaee87f8be0e6c2a4693ba2cea070583ba" title="Unsubscribes.">natsSubscription_Unsubscribe</a>.</p>
+<dl class="section note"><dt>Note</dt><dd>The pointer to the returned <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object is guaranteed to be valid at least until the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject.">natsSubscription</a> itself is destroyed. It can still be valid if the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> has not yet been destroyed.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">sub</td><td>the pointer to the <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject.">natsSubscription</a> object. </td></tr>
   </table>
   </dd>
 </dl>
@@ -970,7 +999,7 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>In order to make sure that an asynchronous subscription's message handler is no longer invoked once the subscription is closed (<a class="el" href="group__sub_group.html#gaee87f8be0e6c2a4693ba2cea070583ba" title="Unsubscribes.">natsSubscription_Unsubscribe</a>), the subscription should be closed from the message handler itslef.</p>
+<p>In order to make sure that an asynchronous subscription's message handler is no longer invoked once the subscription is closed (<a class="el" href="group__sub_group.html#gaee87f8be0e6c2a4693ba2cea070583ba" title="Unsubscribes.">natsSubscription_Unsubscribe</a>), the subscription should be closed from the message handler itself.</p>
 <p>If the application closes the subscription from a different thread and immediately frees resources needed in the message handler, there is a risk of a crash since the subscription's message handler may still be invoked one last time or already in the process of executing.</p>
 <p>To address this, the user can set a callback that will be invoked after the subscription is closed and the message handler has returned. This applies to asynchronous subscriptions using their own dispatcher or using the library's delivery thread pool.</p>
 <dl class="section note"><dt>Note</dt><dd>You don't need to call this function if you are not freeing resources needed in the message handler or if you always close the subscription from the message handler itself.</dd>

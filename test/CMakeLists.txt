@@ -77,3 +77,12 @@ foreach(LIST_FILE ${ALL_LISTS})
     endif()
   endforeach()
 endforeach()
+
+# Build the test program
+add_executable(test-shutdown test-shutdown.cpp)
+
+target_link_libraries(test-shutdown nats_static ${NATS_EXTRA_LIB})
+
+add_test(NAME test-shutdown
+  WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+  COMMAND test-shutdown)

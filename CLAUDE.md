@@ -89,6 +89,7 @@ test/
   certs/                    # TLS test certificates
   dylib/                    # Test for dynamic library loading without NATS calls
   check_cpp/                # C++ compatibility check
+  no_crash_on_exit/         # Test that library does not seg fault when main thread exit while nats_CloseAndWait is in progress
 examples/                   # Example programs
   getstarted/               # Simple getting-started examples
   stan/                     # NATS Streaming examples (deprecated)

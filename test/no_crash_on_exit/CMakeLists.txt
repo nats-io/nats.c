@@ -8,10 +8,6 @@ if(NOT NATS_BUILD_LIB_STATIC)
   return()
 endif()
 
-if(MSVC)
-  set_source_files_properties(check_cpp.cpp PROPERTIES COMPILE_FLAGS "/w")
-endif()
-
 # We need this to build the test program
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
@@ -20,6 +16,6 @@ if(NATS_BUILD_WITH_TLS)
 endif(NATS_BUILD_WITH_TLS)
 
 # Build the test program
-add_executable(check_cpp check_cpp.cpp)
+add_executable(nocrashonexit nocrashonexit.c)
 
-target_link_libraries(check_cpp nats_static ${NATS_EXTRA_LIB})
+target_link_libraries(nocrashonexit nats_static ${NATS_EXTRA_LIB})

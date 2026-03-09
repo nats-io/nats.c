@@ -17856,6 +17856,9 @@ void test_OpenCloseAndWait(void)
     natsThread_Join(t);
     natsThread_Destroy(t);
 
+    // Re-open to match the close at the end of the main().
+    nats_Open(-1);
+
     _destroyDefaultThreadArgs(&arg);
     _stopServer(pid);
 }

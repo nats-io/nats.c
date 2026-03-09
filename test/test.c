@@ -17876,6 +17876,9 @@ void test_CloseAndWaitNoNullLock(void)
     nats_test_internal_natsLib_Destructor();
     s = nats_CloseAndWait(10);
     testCond(s == NATS_OK);
+
+    natsLib *lib = nats_lib();
+    testCond(lib != NULL && lib->lock == NULL);
 }
 
 static void

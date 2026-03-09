@@ -319,6 +319,11 @@ nats_closeLib(bool wait, int64_t timeout)
     if (!nats_InitOnce(&gInitOnce, _doInitOnce))
         return NATS_ERR;
 
+    // this is needed because of unit tests, under normal condition _doInitOnce() 
+    // will be called first and only cleared after _finalCleanup() is called
+    if ( gLib.lock == NULL)
+        return NATS_ILLEGAL_STATE;
+
     natsMutex_Lock(gLib.lock);
 
     if (gLib.closed || !gLib.initialized)

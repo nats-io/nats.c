@@ -110,6 +110,8 @@ static const char *testServers[] = {"nats://127.0.0.1:1222",
 static void _startMockupServerThread(void *closure);
 static natsStatus _startMockupServer(natsSock *serverSock, const char *host, const char *port);
 static void _createConfFile(char *buf, int bufLen, const char *content);
+// glib.c Forward declaration for testing only
+void nats_test_internal_natsLib_Destructor(void);
 
 typedef natsStatus (*testCheckInfoCB)(char *buffer);
 
@@ -17858,6 +17860,22 @@ void test_OpenCloseAndWait(void)
 
     _destroyDefaultThreadArgs(&arg);
     _stopServer(pid);
+}
+
+// Test that calling nats_CloseAndWait after the global library was destroyed
+// does not cause a crash or unexpected error
+void test_CloseAndWaitNoNullLock(void)
+{
+    natsStatus s;
+    s = nats_Open(-1);
+    if (s != NATS_OK)
+        FAIL("nats_Open failed");
+
+    test("Open then CloseAndWait (wait=true) completes: ");
+    /* Simulate atexit(natsLib_Destructor) called first*/
+    nats_test_internal_natsLib_Destructor();
+    s = nats_CloseAndWait(10);
+    testCond(s == NATS_OK);
 }
 
 static void

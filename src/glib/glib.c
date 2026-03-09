@@ -81,6 +81,10 @@ natsLib_Destructor(void)
     // Destroy thread locals for the current thread.
     nats_ReleaseThreadMemory();
 
+    // this is not thread safe, but it's ok because we only call this from atexit()
+    if (gLib.lock == NULL)
+        return;
+
     // Do the final cleanup if possible
     natsMutex_Lock(gLib.lock);
     refs = gLib.refs;
@@ -366,6 +370,14 @@ nats_closeLib(bool wait, int64_t timeout)
     nats_signalDispatcherPoolToShutdown(&gLib.replyDispatchers);
 
     nats_ReleaseThreadMemory();
+    bool finalCleanupForWait = false;
+    if (wait)
+    {
+        natsMutex_Lock(gLib.lock);
+        finalCleanupForWait = gLib.finalCleanup;
+        gLib.finalCleanup = false;
+        natsMutex_Unlock(gLib.lock);
+    }
     _libTearDown();
 
     if (wait)
@@ -381,6 +393,8 @@ nats_closeLib(bool wait, int64_t timeout)
         if (s != NATS_OK)
             gLib.closeCompleteSignal = false;
         natsMutex_Unlock(gLib.lock);
+        if (finalCleanupForWait)
+            _finalCleanup();
 
         natsCondition_Destroy(cond);
     }
@@ -419,4 +433,12 @@ void nats_overrideDefaultOptionsWithConfig(natsOptions *opts)
     opts->writeDeadline = gLib.config.DefaultWriteDeadline;
     opts->useSharedDispatcher = gLib.config.DefaultToThreadPool;
     opts->useSharedReplyDispatcher = gLib.config.DefaultRepliesToThreadPool;
+}
+
+/**
+ This is used for testing only, used to simulate `atexit(natsLib_Destructor)` called first
+*/
+void nats_test_internal_natsLib_Destructor(void)
+{
+    natsLib_Destructor();
 }

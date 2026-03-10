@@ -212,6 +212,10 @@ js_unmarshalResponse(jsApiResponse *ar, nats_JSON **new_json, natsMsg *resp)
 
     memset(ar, 0, sizeof(jsApiResponse));
 
+    // Server can return zero length response
+    if (resp->dataLen == 0)
+        return NATS_OK;
+
     s = nats_JSONParse(&json, natsMsg_GetData(resp), natsMsg_GetDataLength(resp));
     if (s != NATS_OK)
         return NATS_UPDATE_ERR_STACK(s);
@@ -547,7 +551,7 @@ js_PublishMsg(jsPubAck **new_puback,jsCtx *js, natsMsg *msg,
     IFOK_JSR(s, natsConnection_RequestMsg(&resp, js->nc, msg, ttl));
     if (s == NATS_OK)
         s = js_unmarshalResponse(&ar, &json, resp);
-    if (s == NATS_OK)
+    if (s == NATS_OK && json != NULL)
     {
         if (js_apiResponseIsErr(&ar))
         {
@@ -569,6 +573,8 @@ js_PublishMsg(jsPubAck **new_puback,jsCtx *js, natsMsg *msg,
                 IFOK(s, nats_JSONGetULong(json, "seq", &(pa->Sequence)));
                 IFOK(s, nats_JSONGetBool(json, "duplicate", &(pa->Duplicate)));
                 IFOK(s, nats_JSONGetStr(json, "domain", &(pa->Domain)));
+                IFOK(s, nats_JSONGetStr(json, "batch", &(pa->Batch)));
+                IFOK(s, nats_JSONGetULong(json, "count", &(pa->Count)));
 
                 if (s == NATS_OK)
                     *new_puback = pa;
@@ -591,6 +597,7 @@ jsPubAck_Destroy(jsPubAck *pa)
 
     NATS_FREE(pa->Stream);
     NATS_FREE(pa->Domain);
+    NATS_FREE(pa->Batch);
     NATS_FREE(pa);
 }
 
@@ -625,7 +632,7 @@ _parsePubAck(natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, char *errTxt, size_t 
 
         // Now unmarshal the API response and check if there was an error.
         s = js_unmarshalResponse(&ar, &json, msg);
-        if (s == NATS_OK)
+        if (s == NATS_OK && json != NULL)
         {
             if (js_apiResponseIsErr(&ar))
             {
@@ -641,6 +648,8 @@ _parsePubAck(natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, char *errTxt, size_t 
                 IFOK(s, nats_JSONGetULong(json, "seq", &(pa->Sequence)));
                 IFOK(s, nats_JSONGetBool(json, "duplicate", &(pa->Duplicate)));
                 IFOK(s, nats_JSONGetStr(json, "domain", &(pa->Domain)));
+                IFOK(s, nats_JSONGetStr(json, "batch", &(pa->Batch)));
+                IFOK(s, nats_JSONGetULong(json, "count", &(pa->Count)));
             }
 
             js_freeApiRespContent(&ar);
@@ -3672,4 +3681,90 @@ js_setOnReleasedCb(jsCtx *js, js_onReleaseCb cb, void *arg)
     js->onReleaseCb     = cb;
     js->onReleaseCbArg  = arg;
     js_unlock(js);
+}
+
+natsStatus
+js_batchPublishAdd(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg,
+                   jsPubOptions *opts, jsErrCode *errCode)
+{
+    natsStatus          s = NATS_OK;
+    char                temp[64] = {'\0'};
+
+    natsMutex_Lock(ctx->mu);
+
+    s = natsMsgHeader_Set(msg, jsNatsBatchIdHdr, ctx->id);
+    if (s == NATS_OK)
+    {
+        if (snprintf(temp, sizeof(temp), "%d", ++ctx->count) < 1)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+            s = natsMsgHeader_Set(msg, jsNatsBatchSequenceHdr, temp);
+    }
+    if (s != NATS_OK)
+    {
+        ctx->count--;
+    }
+
+    IFOK(s, js_PublishMsg(new_puback, ctx->js, msg, opts, errCode));
+
+    natsMutex_Unlock(ctx->mu);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_batchPublishCommit(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg,
+                      jsPubOptions *opts, jsErrCode *errCode)
+{
+    natsStatus s = NATS_OK;
+
+    s = natsMsgHeader_Set(msg, jsNatsBatchCommit, "1");
+    IFOK(s, js_batchPublishAdd(new_puback, ctx, msg, opts, errCode));
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_startBatchPublish(jsAtomicBatchCtx **ctx, jsPubAck **new_puback, jsCtx *js,
+                     natsMsg *msg, jsPubOptions *opts, jsErrCode *errCode)
+{
+    jsAtomicBatchCtx *batchCtx = NULL;
+    natsStatus s = NATS_OK;
+
+    if ((ctx == NULL) || (js == NULL) || (*ctx != NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    batchCtx = NATS_CALLOC(1, sizeof(jsAtomicBatchCtx));
+    if (batchCtx == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+    batchCtx->id = NATS_MALLOC(NUID_BUFFER_LEN + 1);
+    if (batchCtx->id == NULL)
+    {
+        NATS_FREE(batchCtx);
+        return nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    batchCtx->js = js;
+    s = natsMutex_Create(&batchCtx->mu);
+    IFOK(s, natsNUID_Next(batchCtx->id, NUID_BUFFER_LEN + 1));
+    if (s != NATS_OK)
+    {
+        js_destroyAtomicBatchCtx(batchCtx);
+        return NATS_UPDATE_ERR_STACK(s);
+    }
+
+    *ctx = batchCtx;
+    s = js_batchPublishAdd(new_puback, *ctx, msg, opts, errCode);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+js_destroyAtomicBatchCtx(jsAtomicBatchCtx *ctx)
+{
+    if (ctx == NULL)
+        return;
+
+    natsMutex_Destroy(ctx->mu);
+    NATS_FREE(ctx->id);
+    NATS_FREE(ctx);
 }

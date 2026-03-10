@@ -17,12 +17,29 @@
 // natsp.h to avoid incomplete type errors such as C2079.
 #include <natsp.h>
 
+class App
+{
+public:
+    ~App() {
+        // cleanup library
+        nats_CloseAndWait(10);
+    }
+    void open() {
+        nats_Open(-1);
+        // do work...
+    }
+};
+
+App app;
+
 int main(int argc, char **argv)
 {
+    // calling open in main an not in the global scope
+    app.open();
+
     // jsOptionsPullSubscribeAsync opts should be accessible
     jsFetch fetch;
     fetch.opts.Timeout = 1;
 
-    printf("OK\n");
     return 0;
 }

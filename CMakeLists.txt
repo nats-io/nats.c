@@ -337,4 +337,7 @@ endif()
 add_subdirectory(test)
 add_subdirectory(test/dylib)
 add_subdirectory(test/check_cpp)
+if(NOT WIN32)
+  add_subdirectory(test/no_crash_on_exit)
+endif()
 #----------------------------

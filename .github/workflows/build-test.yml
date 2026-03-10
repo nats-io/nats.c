@@ -188,6 +188,9 @@ jobs:
           bin/nonats
           # Test C++ compiler compatibility
           bin/check_cpp
+          # Test no crash on thread exit while nats_CloseAndWait in progress
+          ../test/no_crash_on_exit/run.sh
+          # Rest of the test suite
           ctest -L 'test' --timeout 60 --output-on-failure --repeat-until-fail ${{ inputs.repeat }}
 
       - name: Upload coverage reports to Codecov

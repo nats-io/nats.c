@@ -73,8 +73,6 @@ _finalCleanup(void)
 static void
 natsLib_Destructor(void)
 {
-    int refs = 0;
-
     if (!(gLib.wasOpenedOnce))
         return;
 
@@ -83,19 +81,18 @@ natsLib_Destructor(void)
 
     // Do the final cleanup if possible
     natsMutex_Lock(gLib.lock);
-    refs = gLib.refs;
-    if (refs > 0)
+    if ((gLib.refs != 0) || (gLib.closeCompleteCond != NULL))
     {
         // If some thread is still around when the process exits and has a
-        // reference to the library, then don't do the final cleanup now.
+        // reference to the library, or if there is a call to nats_CloseAndWait,
+        // then don't do the final cleanup now.
         // If the process has not fully exited when the lib's last reference
         // is decremented, the final cleanup will be executed from that thread.
         gLib.finalCleanup = true;
+        natsMutex_Unlock(gLib.lock);
+        return;
     }
     natsMutex_Unlock(gLib.lock);
-
-    if (refs != 0)
-        return;
 
     _finalCleanup();
 }
@@ -120,21 +117,18 @@ _freeLib(void)
     memset((void *)(offset + (char *)&gLib), 0, sizeof(natsLib) - offset);
 
     natsMutex_Lock(gLib.lock);
-    callFinalCleanup = gLib.finalCleanup;
     if (gLib.closeCompleteCond != NULL)
     {
-        if (gLib.closeCompleteSignal)
-        {
-            *gLib.closeCompleteBool = true;
-            natsCondition_Signal(gLib.closeCompleteCond);
-        }
-        gLib.closeCompleteCond = NULL;
-        gLib.closeCompleteBool = NULL;
-        gLib.closeCompleteSignal = false;
+        *gLib.closeCompleteBool = true;
+        natsCondition_Signal(gLib.closeCompleteCond);
+    }
+    else
+    {
+        callFinalCleanup  = gLib.finalCleanup;
+        gLib.finalCleanup = false;
     }
     gLib.closed = false;
     gLib.initialized = false;
-    gLib.finalCleanup = false;
     natsMutex_Unlock(gLib.lock);
 
     if (callFinalCleanup)
@@ -308,7 +302,6 @@ nats_closeLib(bool wait, int64_t timeout)
     natsStatus s = NATS_OK;
     natsCondition *cond = NULL;
     bool complete = false;
-    // int             i;
 
     // This is to protect against a call to nats_Close() while there
     // was no prior call to nats_Open(), either directly or indirectly.
@@ -340,7 +333,6 @@ nats_closeLib(bool wait, int64_t timeout)
         }
         gLib.closeCompleteCond = cond;
         gLib.closeCompleteBool = &complete;
-        gLib.closeCompleteSignal = true;
     }
 
     gLib.closed = true;
@@ -370,6 +362,8 @@ nats_closeLib(bool wait, int64_t timeout)
 
     if (wait)
     {
+        bool cleanup = false;
+
         natsMutex_Lock(gLib.lock);
         while ((s != NATS_TIMEOUT) && !complete)
         {
@@ -378,11 +372,16 @@ nats_closeLib(bool wait, int64_t timeout)
             else
                 s = natsCondition_TimedWait(cond, gLib.lock, timeout);
         }
-        if (s != NATS_OK)
-            gLib.closeCompleteSignal = false;
+        cleanup = gLib.finalCleanup;
+        gLib.closeCompleteCond = NULL;
+        gLib.closeCompleteBool = NULL;
+        gLib.finalCleanup      = false;
         natsMutex_Unlock(gLib.lock);
 
         natsCondition_Destroy(cond);
+
+        if (cleanup)
+            _finalCleanup();
     }
 
     return s;

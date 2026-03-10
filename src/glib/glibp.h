@@ -97,7 +97,6 @@ typedef struct __natsLib
     bool closed;
     natsCondition *closeCompleteCond;
     bool *closeCompleteBool;
-    bool closeCompleteSignal;
     bool finalCleanup;
     // Do not move 'refs' without checking _freeLib()
     int refs;

@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -142,10 +142,10 @@ Functions</h2></td></tr>
 <tr class="memdesc:gaf7ea0ad61e9d4077d536be882e78802e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lists information about objects in the object store.  <br /></td></tr>
 <tr class="separator:gaf7ea0ad61e9d4077d536be882e78802e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaea3a2dbd39cd6e69a01391548add9a13" id="r_gaea3a2dbd39cd6e69a01391548add9a13"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__obs_mgt.html#gaea3a2dbd39cd6e69a01391548add9a13">objStoreInfoList_Destroy</a> (<a class="el" href="structobj_store_info_list.html">objStoreInfoList</a> *list)</td></tr>
-<tr class="memdesc:gaea3a2dbd39cd6e69a01391548add9a13"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys the list of object informations.  <br /></td></tr>
+<tr class="memdesc:gaea3a2dbd39cd6e69a01391548add9a13"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys the list of object information.  <br /></td></tr>
 <tr class="separator:gaea3a2dbd39cd6e69a01391548add9a13"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga587bf1e11af52cdd0ef356aadb63aafe" id="r_ga587bf1e11af52cdd0ef356aadb63aafe"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__obs_mgt.html#ga587bf1e11af52cdd0ef356aadb63aafe">objStore_Status</a> (<a class="el" href="structobj_store_status.html">objStoreStatus</a> **new_status, <a class="el" href="group__types_group.html#ga0dbdf6ef78b63bfeeb8551519ba57c5d">objStore</a> *obs)</td></tr>
-<tr class="memdesc:ga587bf1e11af52cdd0ef356aadb63aafe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retreive the status and configuration of the bucket.  <br /></td></tr>
+<tr class="memdesc:ga587bf1e11af52cdd0ef356aadb63aafe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retrieve the status and configuration of the bucket.  <br /></td></tr>
 <tr class="separator:ga587bf1e11af52cdd0ef356aadb63aafe"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga7ef04461459b3b1171f07950eb434712" id="r_ga7ef04461459b3b1171f07950eb434712"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__obs_mgt.html#ga7ef04461459b3b1171f07950eb434712">objStoreStatus_Destroy</a> (<a class="el" href="structobj_store_status.html">objStoreStatus</a> *status)</td></tr>
 <tr class="memdesc:ga7ef04461459b3b1171f07950eb434712"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys the object store status object.  <br /></td></tr>
@@ -696,8 +696,8 @@ Functions</h2></td></tr>
 <p>This function will return a <a class="el" href="structobj_store_info_list.html">objStoreInfoList</a> object that contains the <a class="el" href="structobj_store_info.html">objStoreInfo</a> for objects in the store.</p>
 <p>If the object store is empty, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ad0229a12b17d3d12a28efed6213720d8">NATS_NOT_FOUND</a>.</p>
 <p>To get information about deleted objects, initialize the options with <a class="el" href="group__obs_mgt.html#ga69d20b8cad08d88d6e35b29ce5cdd25c" title="Initializes an Object Store options structure.">objStoreOptions_Init</a>, then set <a class="el" href="structobj_store_options.html#ab64a09119339521ead3ea4b7e5c3c8b7" title="ShowDeleted includes deleted object in the result.">objStoreOptions.ShowDeleted</a> to true and pass the options to this call.</p>
-<dl class="section note"><dt>Note</dt><dd>The returned <a class="el" href="structobj_store_info_list.html">objStoreInfoList</a> object needs be destroyed using <a class="el" href="group__obs_mgt.html#gaea3a2dbd39cd6e69a01391548add9a13" title="Destroys the list of object informations.">objStoreInfoList_Destroy</a> when no longer needed to free allocated memory.</dd></dl>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__obs_mgt.html#gaea3a2dbd39cd6e69a01391548add9a13" title="Destroys the list of object informations.">objStoreInfoList_Destroy</a></dd></dl>
+<dl class="section note"><dt>Note</dt><dd>The returned <a class="el" href="structobj_store_info_list.html">objStoreInfoList</a> object needs be destroyed using <a class="el" href="group__obs_mgt.html#gaea3a2dbd39cd6e69a01391548add9a13" title="Destroys the list of object information.">objStoreInfoList_Destroy</a> when no longer needed to free allocated memory.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__obs_mgt.html#gaea3a2dbd39cd6e69a01391548add9a13" title="Destroys the list of object information.">objStoreInfoList_Destroy</a></dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">new_list</td><td>the location where to store the pointer to the <a class="el" href="structobj_store_info_list.html">objStoreInfoList</a> object. </td></tr>
@@ -724,7 +724,7 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Releases memory allocated for this list of object store informations.</p>
+<p>Releases memory allocated for this list of object store information.</p>
 <dl class="section warning"><dt>Warning</dt><dd>All <a class="el" href="structobj_store_info.html">objStoreInfo</a> objects contained in the list will become invalid after this call.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">

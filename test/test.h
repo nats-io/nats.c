@@ -366,4 +366,3 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
 {
     return _startServerImpl(natsServerExe, url, cmdLineOpts, checkStart);
 }
-

@@ -47,7 +47,7 @@ const char       *jsDigits               = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ
 const int        jsBase                  = 62;
 const int64_t    jsOrderedHBInterval     = NATS_SECONDS_TO_NANOS(5);
 
-#define jsReplyTokenSize    (8)
+#define jsReplyTokenSize    (24)
 #define jsDefaultMaxMsgs    (512 * 1024)
 
 #define jsLastConsumerSeqHdr    "Nats-Last-Consumer"
@@ -754,6 +754,139 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
 }
 
 static void
+_dispatchIncomingAsyncResp(void *closure)
+{
+    natsMsg *msg = NULL;
+    jsCtx   *js  = (jsCtx*) closure;
+
+    if (js == NULL || js->msgList.cond == NULL)
+        return;
+
+    while (true)
+    {
+        natsMutex_Lock(js->msgList.mu);
+        natsCondition_Wait(js->msgList.cond, js->msgList.mu);
+        if (js->closed)
+        {
+            js_unlock(js);
+            break;
+        }
+        if (js->msgList.head == NULL)
+        {
+            natsMutex_Unlock(js->msgList.mu);
+            continue;
+        }
+
+        while (js->msgList.head != NULL && msg == NULL)
+        {
+            msg = js->msgList.head->msg;
+            js->msgList.head = js->msgList.head->next;
+            if (js->msgList.head == NULL)
+            {
+                js->msgList.tail = NULL;
+            }
+
+            natsMutex_Unlock(js->msgList.mu);
+
+            js_handleAsyncReply(js, msg);
+
+            msg = NULL;
+            natsMutex_Lock(js->msgList.mu);
+        }
+        natsMutex_Unlock(js->msgList.mu);
+    }
+}
+
+void
+js_handleAsyncReply(jsCtx *js, natsMsg *msg)
+{
+    const char      *subject    = natsMsg_GetSubject(msg);
+    char            *id         = NULL;
+    natsMsg         *pmsg       = NULL;
+    char            errTxt[256] = {'\0'};
+    jsPubAckErr     pae;
+    jsPubAck        pa;
+    struct jsOptionsPublishAsync *opa = NULL;
+
+    if ((subject == NULL) || (int) strlen(subject) <= js->rpreLen)
+    {
+        natsMsg_Destroy(msg);
+        return;
+    }
+
+    id = (char*) (subject+js->nc->reqIdOffset);
+
+    js_lock(js);
+
+    pmsg = natsStrHash_Remove(js->pm, id);
+    if (pmsg == NULL)
+    {
+        js_unlock(js);
+        natsMsg_Destroy(msg);
+        return;
+    }
+
+    opa = &(js->opts.PublishAsync);
+    if (opa->AckHandler)
+    {
+        jsPubAckErr *ppae   = NULL;
+        jsPubAck    *ppa    = NULL;
+
+        // If _parsePubAck returns an error, we will set the pointer ppae to
+        // our stack variable 'pae', otherwise, set the pointer ppa to the
+        // stack variable 'pa', which is the jsPubAck (positive ack).
+        if (_parsePubAck(msg, &pa, &pae, errTxt, sizeof(errTxt)) != NATS_OK)
+            ppae = &pae;
+        else
+            ppa = &pa;
+
+        // Invoke the handler with pointer to either jsPubAck or jsPubAckErr.
+        js_unlock(js);
+
+        (opa->AckHandler)(js, pmsg, ppa, ppae, opa->AckHandlerClosure);
+
+        js_lock(js);
+
+        _freePubAck(ppa);
+        // Set pmsg to NULL because user was responsible for destroying the message.
+        pmsg = NULL;
+    }
+    else if ((opa->ErrHandler != NULL) && (_parsePubAck(msg, NULL, &pae, errTxt, sizeof(errTxt)) != NATS_OK))
+    {
+        // We will invoke CB only if there is any kind of error.
+        // Associate the message with the pubAckErr object.
+        pae.Msg = pmsg;
+        js_unlock(js);
+
+        (opa->ErrHandler)(js, &pae, opa->ErrHandlerClosure);
+
+        js_lock(js);
+
+        // If the user resent the message, pae->Msg will have been cleared.
+        // In this case, do not destroy the message. Do not blindly destroy
+        // an address that could have been set, so destroy only if pmsg
+        // is same value than pae->Msg.
+        if (pae.Msg != pmsg)
+            pmsg = NULL;
+    }
+
+    // Now that the callback has returned, decrement the number of pending messages.
+    js->pmcount--;
+
+    // If there are callers waiting for async pub completion, or stalled async
+    // publish calls and we are now below max pending, broadcast to unblock them.
+    if (((js->pacw > 0) && (js->pmcount == 0))
+        || ((js->stalled > 0) && (js->pmcount <= opa->MaxPending)))
+    {
+        natsCondition_Broadcast(js->cond);
+    }
+    js_unlock(js);
+
+    natsMsg_Destroy(pmsg);
+    natsMsg_Destroy(msg);
+}
+
+static void
 _subComplete(void *closure)
 {
     js_release((jsCtx*) closure);
@@ -1010,6 +1143,84 @@ _registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg, int64
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_registerPubMsg2(natsConnection **nc, char *reply, int replyLen, jsCtx *js, natsMsg *msg, int64_t mw)
+{
+    natsStatus  s       = NATS_OK;
+    bool        release = false;
+    int64_t     maxp    = 0;
+    respInfo    *resp   = NULL;
+    char        *id     = NULL;
+
+    s = natsConn_addRespInfo(&resp, js->nc, js, reply, replyLen);
+    id = reply+js->nc->reqIdOffset;
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    js_lock(js);
+
+    if (js->pm == NULL)
+    {
+        s = natsCondition_Create(&(js->cond));
+        IFOK(s, natsStrHash_Create(&(js->pm), 64));
+    }
+    if (s != NATS_OK)
+    {
+        return NATS_UPDATE_ERR_STACK(s);
+    }
+
+    // If the dispatch thread is not running, start it
+    if (js->msgList.t == NULL) {
+        s = natsCondition_Create(&(js->msgList.cond));
+        IFOK(s, natsMutex_Create(&(js->msgList.mu)));
+        if (s == NATS_OK)
+        {
+            s = natsThread_Create(&js->msgList.t, _dispatchIncomingAsyncResp, (void*) js);
+            if (s != NATS_OK)
+            {
+                natsCondition_Destroy(js->msgList.cond);
+                js->msgList.cond = NULL;
+            }
+        }
+    }
+
+    maxp = js->opts.PublishAsync.MaxPending;
+    js->pmcount++;
+
+    if ((s == NATS_OK)
+            && (maxp > 0)
+            && (js->pmcount > maxp))
+    {
+        int64_t target = nats_setTargetTime(js->opts.PublishAsync.StallWait);
+
+        _retain(js);
+
+        js->stalled++;
+        while ((s != NATS_TIMEOUT) && (js->pmcount > maxp))
+            s = natsCondition_AbsoluteTimedWait(js->cond, js->mu, target);
+        js->stalled--;
+
+        if (s == NATS_TIMEOUT)
+            s = nats_setError(s, "%s", "stalled with too many outstanding async published messages");
+
+        release = true;
+    }
+    if ((s == NATS_OK) && (mw > 0))
+        s = _trackPublishAsyncTimeout(js, reply, mw);
+    if (s == NATS_OK)
+        s = natsStrHash_Set(js->pm, id, true, msg, NULL);
+    if (s == NATS_OK)
+        *nc = js->nc;
+    else
+        js->pmcount--;
+    if (release)
+        js_unlockAndRelease(js);
+    else
+        js_unlock(js);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 natsStatus
 js_PublishAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
                 jsPubOptions *opts)
@@ -1052,7 +1263,7 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
     }
 
     // On success, the context will be retained.
-    IFOK(s, _registerPubMsg(&nc, reply, js, *msg, mw));
+    IFOK(s, _registerPubMsg2(&nc, reply, sizeof(replyBuf), js, *msg, mw));
     if (s == NATS_OK)
     {
         s = natsConn_publish(nc, *msg, (const char*) reply, false);
@@ -3672,4 +3883,53 @@ js_setOnReleasedCb(jsCtx *js, js_onReleaseCb cb, void *arg)
     js->onReleaseCb     = cb;
     js->onReleaseCbArg  = arg;
     js_unlock(js);
+}
+
+natsStatus
+js_newAsyncMessageEntry(jsCtx *js, natsMsg *msg)
+{
+    jsAsyncMessageEntry *entry = NATS_MALLOC(sizeof(jsAsyncMessageEntry));
+    if (entry == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    entry->msg = msg;
+    entry->next = NULL;
+
+    natsMutex_Lock(js->msgList.mu);
+    if (js->msgList.tail == NULL)
+    {
+        js->msgList.head = entry;
+        js->msgList.tail = entry;
+    }
+    else
+    {
+        js->msgList.tail->next = entry;
+        js->msgList.tail = entry;
+    }
+    natsMutex_Unlock(js->msgList.mu);
+
+    natsCondition_Signal(js->msgList.cond);
+
+    return NATS_OK;
+}
+
+void
+js_destroyAsyncMessageEntry(jsAsyncMessageEntry *entry)
+{
+    natsMsg_Destroy(entry->msg);
+    NATS_FREE(entry);
+}
+
+void
+js_destroyAsyncMessageList(jsAsyncMessageList *list)
+{
+    jsAsyncMessageEntry *entry = list->head;
+    while (entry != NULL)
+    {
+        jsAsyncMessageEntry *next = entry->next;
+        js_destroyAsyncMessageEntry(entry);
+        entry = next;
+    }
+    list->head = NULL;
+    list->tail = NULL;
 }

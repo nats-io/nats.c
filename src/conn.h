@@ -111,13 +111,13 @@ void
 natsConn_processAsyncINFO(natsConnection *nc, char *buf, int len);
 
 natsStatus
-natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox);
+natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, jsCtx *js, char *respInbox, int respInboxSize);
 
 void
-natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock);
+natsConn_disposeRespInfo(respMuxer *mux, respInfo *resp, bool needsLock);
 
 natsStatus
-natsConn_initResp(natsConnection *nc, natsMsgHandler cb);
+natsConn_initResp(natsConnection *nc);
 
 void
 natsConn_destroyRespPool(natsConnection *nc);
@@ -159,5 +159,8 @@ natsConn_close(natsConnection *nc);
 
 void
 natsConn_destroy(natsConnection *nc, bool fromPublicDestroy);
+
+void
+natsConnection_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 
 #endif /* CONN_H_ */

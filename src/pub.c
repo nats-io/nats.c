@@ -19,6 +19,7 @@
 #include "msg.h"
 #include "nuid.h"
 #include "mem.h"
+#include "js.h"
 
 static const char *digits = "0123456789";
 
@@ -336,38 +337,49 @@ _oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static void
-_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+long int counter = 0;
+
+void
+natsConnection_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     char        *rt   = NULL;
     const char  *subj = NULL;
     respInfo    *resp = NULL;
     bool        dmsg  = true;
+    respMuxer   *mux   = NULL;
 
-    natsConn_Lock(nc);
-    if (natsConn_isClosed(nc))
-    {
-        natsConn_Unlock(nc);
+    if (nc == NULL) {
         natsMsg_Destroy(msg);
         return;
     }
+
+    mux = &nc->respMx;
+    natsMutex_Lock(mux->mu);
+
+    if (mux->ncClosed)
+    {
+        natsMutex_Unlock(mux->mu);
+        natsMsg_Destroy(msg);
+        return;
+    }
+
     subj = natsMsg_GetSubject(msg);
     // We look for the reply token by first checking that the message subject
     // prefix matches the subscription's subject (without the last '*').
     // It is possible that it does not due to subject rewrite (JetStream).
     if (((int) strlen(subj) > nc->reqIdOffset)
-        && (memcmp((const void*) sub->subject, (const void*) subj, strlen(sub->subject) - 1) == 0))
+        && (memcmp((const void*) sub->subject, (const void*) subj, strlen(sub->subject) - NATS_SUBJECT_QUALIFIER_LEN - 1) == 0))
     {
         rt = (char*) (natsMsg_GetSubject(msg) + nc->reqIdOffset);
-        resp = (respInfo*) natsStrHash_Remove(nc->respMap, rt);
+        resp = (respInfo*) natsStrHash_Remove(mux->respMap, rt);
     }
-    else if (natsStrHash_Count(nc->respMap) == 1)
+    else if (natsStrHash_Count(mux->respMap) == 1)
     {
         // Only if the subject is completely different, we assume that it
         // could be the server that has rewritten the subject and so if there
         // is a single entry, use that.
         void *value = NULL;
-        natsStrHash_RemoveSingle(nc->respMap, NULL, &value);
+        natsStrHash_RemoveSingle(mux->respMap, NULL, &value);
         resp = (respInfo*) value;
     }
     if (resp != NULL)
@@ -380,13 +392,30 @@ _respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *clos
         {
             // Do not destroy the message since it is being used.
             dmsg = false;
-            resp->msg = msg;
-            resp->removed = true;
-            natsCondition_Signal(resp->cond);
+
+            if (resp->js != NULL) {
+                // Dispatch to JS
+                if (js_newAsyncMessageEntry(resp->js, msg) != NATS_OK)
+                    resp->removed = false;
+                else
+                {
+                    natsCondition_Signal(resp->js->msgList.cond);
+                    resp->msg = NULL;
+                    natsMutex_Unlock(resp->mu);
+
+                    natsConn_disposeRespInfo(&nc->respMx, resp, true);
+                }
+            } else
+            {
+                resp->msg = msg;
+                resp->removed = true;
+                natsCondition_Signal(resp->cond);
+                natsMutex_Unlock(resp->mu);
+            }
         }
-        natsMutex_Unlock(resp->mu);
     }
-    natsConn_Unlock(nc);
+    natsMutex_Unlock(mux->mu);
+
 
     if (dmsg)
         natsMsg_Destroy(msg);
@@ -399,7 +428,8 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     natsStatus          s           = NATS_OK;
     respInfo            *resp       = NULL;
     bool                needsRemoval= true;
-    char                respInboxBuf[32 + NUID_BUFFER_LEN + NATS_MAX_REQ_ID_LEN + 1]; // <inbox prefix>.<nuid>.<reqId>
+    char                respInboxBuf[32 + NUID_BUFFER_LEN + NATS_SUBJECT_QUALIFIER_LEN +
+                                     NATS_MAX_REQ_ID_LEN + 1]; // <inbox prefix>.<nuid>.nc.<reqId>
     char                *respInbox = respInboxBuf;
 
     if ((replyMsg == NULL) || (nc == NULL) || (m == NULL))
@@ -436,11 +466,7 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     // the connection object.
     natsConn_retain(nc);
 
-    // Setup only once (but could be more if natsConn_initResp() returns != OK)
-    if (nc->respMux == NULL)
-        s = natsConn_initResp(nc, _respHandler);
-    if (s == NATS_OK)
-        s = natsConn_addRespInfo(&resp, nc, respInbox);
+    s = natsConn_addRespInfo(&resp, nc, NULL, respInbox, sizeof(respInboxBuf));
 
     natsConn_Unlock(nc);
 
@@ -489,12 +515,12 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     // Common to success or if we failed to create the sub, send the request...
     if (needsRemoval)
     {
-        natsConn_Lock(nc);
-        if (nc->respMap != NULL)
-            natsStrHash_Remove(nc->respMap, respInbox+nc->reqIdOffset);
-        natsConn_Unlock(nc);
+        natsMutex_Lock(nc->respMx.mu);
+        if (nc->respMx.respMap != NULL)
+            natsStrHash_Remove(nc->respMx.respMap, respInbox+nc->reqIdOffset);
+        natsMutex_Unlock(nc->respMx.mu);
     }
-    natsConn_disposeRespInfo(nc, resp, true);
+    natsConn_disposeRespInfo(&nc->respMx, resp, true);
 
     natsConn_release(nc);
 

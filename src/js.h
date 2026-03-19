@@ -299,3 +299,12 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch);
 
 void
 js_setOnReleasedCb(jsCtx *js, js_onReleaseCb cb, void *arg);
+
+void
+js_handleAsyncReply(jsCtx *js, natsMsg *msg);
+
+void
+js_destroyAsyncMessageEntry(jsAsyncMessageEntry *entry);
+
+natsStatus
+js_newAsyncMessageEntry(jsCtx *js, natsMsg *msg);

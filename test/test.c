@@ -8319,9 +8319,9 @@ void test_RequestPool(void)
     test("Pool not growing: ");
     for (i=0; (i<RESP_INFO_POOL_MAX_SIZE); i++)
         natsConnection_RequestString(&msg, nc, "foo", "test", 1);
-    natsMutex_Lock(nc->mu);
-    testCond(nc->respPoolSize == 1);
-    natsMutex_Unlock(nc->mu);
+    natsMutex_Lock(nc->respMx.mu);
+    testCond(nc->respMx.respPoolSize == 1);
+    natsMutex_Unlock(nc->respMx.mu);
 
     test("Pool max size: ");
     for (i=0; i<numThreads; i++)
@@ -8339,9 +8339,9 @@ void test_RequestPool(void)
             natsThread_Destroy(threads[i]);
         }
     }
-    natsMutex_Lock(nc->mu);
-    testCond((s == NATS_OK) && (nc->respPoolSize == RESP_INFO_POOL_MAX_SIZE));
-    natsMutex_Unlock(nc->mu);
+    natsMutex_Lock(nc->respMx.mu);
+    testCond((s == NATS_OK) && (nc->respMx.respPoolSize == RESP_INFO_POOL_MAX_SIZE));
+    natsMutex_Unlock(nc->respMx.mu);
 
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
@@ -33042,7 +33042,7 @@ void test_JetStreamOrderedConsumerWithAutoUnsub(void)
     // Wait a bit to make sure we are not receiving more than expected,
     // and give a chance for the server to process the auto-unsub
     // protocol.
-    nats_Sleep(500);
+    nats_Sleep(750);
 
     test("Check count: ");
     natsMutex_Lock(args.m);

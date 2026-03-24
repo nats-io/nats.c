@@ -178,6 +178,20 @@ _clearServerInfo(natsServerInfo *si)
 }
 
 static void
+natsConn_destroyRespMuxer(natsConnection *nc)
+{
+    respMuxer *mux = &(nc->respMx);
+
+    natsConn_destroyRespPool(nc);
+    natsInbox_Destroy(mux->subj);
+    natsStrHash_Destroy(mux->respMap);
+
+    mux->subj = NULL;
+    mux->sub = NULL;
+    mux->respMap = NULL;
+}
+
+static void
 _freeConn(natsConnection *nc)
 {
     if (nc == NULL)
@@ -200,16 +214,13 @@ _freeConn(natsConnection *nc)
         SSL_free(nc->sockCtx.ssl);
     natsMutex_Destroy(nc->sockCtx.sslMu);
     NATS_FREE(nc->el.buffer);
-    natsConn_destroyRespPool(nc);
     natsCondition_Destroy(nc->reconnectCond);
     natsCondition_Destroy(nc->drainCond);
     natsMutex_Destroy(nc->subsMu);
     natsMutex_Destroy(nc->servicesMu);
-    natsInbox_Destroy(nc->respMx.subj);
-    natsStrHash_Destroy(nc->respMx.respMap);
-    natsMutex_Destroy(nc->respMx.mu);
     natsMutex_Destroy(nc->mu);
     NATS_FREE(nc->services);
+    natsMutex_Destroy(nc->respMx.mu);
 
     NATS_FREE(nc);
 
@@ -1342,17 +1353,20 @@ natsConn_destroyRespPool(natsConnection *nc)
     int      i;
     respInfo *info;
     respMuxer *mux = &(nc->respMx);
+
     if(mux->respPool == NULL)
+    {
         return;
+    }
 
     for (i = 0; i < mux->respPoolIdx; i++)
     {
         info = mux->respPool[i];
-
         info->pooled = false;
         natsConn_disposeRespInfo(mux, info, false);
     }
     NATS_FREE(mux->respPool);
+    mux->respPool = NULL;
 }
 
 // Creates a new respInfo object, binds it to the request's specific
@@ -1364,6 +1378,14 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, jsCtx *js, char *re
     natsStatus s = NATS_OK;
     respMuxer  *mux = &(nc->respMx);
     respInfo    *resp  = NULL;
+
+    natsConn_Lock(nc);
+    if (natsConn_isClosed(nc))
+    {
+        natsConn_Unlock(nc);
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    }
+    natsConn_Unlock(nc);
 
     natsMutex_Lock(mux->mu);
     if (mux->sub == NULL)
@@ -2740,7 +2762,10 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     natsConn_Unlock(nc);
 
     if (sub != NULL)
+    {
         natsSub_release(sub);
+        natsConn_destroyRespMuxer(nc);
+    }
 
     _joinThreads(&ttj);
 

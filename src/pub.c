@@ -395,16 +395,13 @@ natsConnection_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *m
 
             if (resp->js != NULL) {
                 // Dispatch to JS
-                if (js_newAsyncMessageEntry(resp->js, msg) != NATS_OK)
-                    resp->removed = false;
-                else
+                if (js_newAsyncMessageEntry(resp->js, msg) == NATS_OK)
                 {
                     natsCondition_Signal(resp->js->msgList.cond);
                     resp->msg = NULL;
                     natsMutex_Unlock(resp->mu);
-
-                    natsConn_disposeRespInfo(&nc->respMx, resp, true);
                 }
+                natsConn_disposeRespInfo(&nc->respMx, resp, true);
             } else
             {
                 resp->msg = msg;

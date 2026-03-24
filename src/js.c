@@ -151,9 +151,6 @@ _destroyPMInfo(pmInfo *pmi)
 void
 jsAsyncMessageList_destroy(jsAsyncMessageList *list)
 {
-    jsAsyncMessageEntry *entry = NULL;
-    jsAsyncMessageEntry *next = NULL;
-
     if (list->mu == NULL)
         return;
 
@@ -161,26 +158,35 @@ jsAsyncMessageList_destroy(jsAsyncMessageList *list)
     list->closed = true;
     natsMutex_Unlock(list->mu);
     natsCondition_Signal(list->cond);
-    if (list->t != NULL)
+
+    // Do not join the thread or clean up list resources here. The dispatch
+    // thread may be inside a user callback that is itself waiting for the
+    // caller to signal something (e.g. a test waiting for jsCtx_Destroy to
+    // return before unblocking the callback). Joining here would deadlock in
+    // that case. The dispatch thread holds a retain on js and is responsible
+    // for draining any remaining messages and destroying list->mu, list->cond,
+    // and list->t when it exits.
+    //
+    // If no thread was ever created, clean up inline since no dispatch thread
+    // will do it.
+    if (list->t == NULL)
     {
-        natsThread_Join(list->t);
-        natsThread_Destroy(list->t);
+        jsAsyncMessageEntry *entry = list->head;
+        jsAsyncMessageEntry *next  = NULL;
+
+        while (entry != NULL)
+        {
+            next = entry->next;
+            natsMsg_Destroy(entry->msg);
+            NATS_FREE(entry);
+            entry = next;
+        }
+        list->head = NULL;
+        list->tail = NULL;
+
+        natsCondition_Destroy(list->cond);
+        natsMutex_Destroy(list->mu);
     }
-
-    entry = list->head;
-    while (entry != NULL)
-    {
-        next = entry->next;
-        natsMsg_Destroy(entry->msg);
-        NATS_FREE(entry);
-        entry = next;
-    }
-
-    list->head = NULL;
-    list->tail = NULL;
-
-    natsCondition_Destroy(list->cond);
-    natsMutex_Destroy(list->mu);
 }
 
 void
@@ -199,9 +205,10 @@ jsCtx_Destroy(jsCtx *js)
         return;
     }
     js->closed = true;
+
     // Iterate through NC's hash and mark references to this context as closed
-    natsMutex_Lock(js->nc->respMx.mu);
     respmux = &(js->nc->respMx);
+    natsMutex_Lock(js->nc->respMx.mu);
     if (respmux->respMap != NULL)
     {
         natsStrHashIter iter;
@@ -821,54 +828,87 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
 static void
 _dispatchIncomingAsyncResp(void *closure)
 {
-    natsMsg *msg = NULL;
-    jsAsyncMessageEntry *entry;
-    jsCtx   *js  = (jsCtx*) closure;
+    natsMsg              *msg   = NULL;
+    jsAsyncMessageEntry  *entry = NULL;
+    jsAsyncMessageEntry  *next  = NULL;
+    jsCtx                *js    = (jsCtx*) closure;
+    jsAsyncMessageList   *list;
 
     if (js == NULL || js->msgList.cond == NULL)
         return;
 
-    // Retain js for the lifetime of this thread. Without this, a user callback
-    // invoking jsCtx_Destroy() on this thread could free js before we return,
-    // since jsAsyncMessageList_destroy() skips the thread join for self-joins.
+    list = &js->msgList;
+
+    // Retain js for the lifetime of this thread. jsAsyncMessageList_destroy()
+    // never joins this thread (to avoid deadlocking when a user callback calls
+    // jsCtx_Destroy() and then waits for the caller to signal it). We therefore
+    // own cleanup of list->mu, list->cond, and list->t on exit.
     js_retain(js);
 
     while (true)
     {
-        natsMutex_Lock(js->msgList.mu);
-        natsCondition_Wait(js->msgList.cond, js->msgList.mu);
+        natsMutex_Lock(list->mu);
+        natsCondition_Wait(list->cond, list->mu);
 
-        if (js->msgList.closed)
+        if (list->closed)
         {
-            natsMutex_Unlock(js->msgList.mu);
+            natsMutex_Unlock(list->mu);
             break;
         }
 
-        while (js->msgList.head != NULL)
+        while (list->head != NULL)
         {
-            msg = js->msgList.head->msg;
-            entry = js->msgList.head;
-            js->msgList.head = js->msgList.head->next;
-            if (js->msgList.head == NULL)
-            {
-                js->msgList.tail = NULL;
-            }
+            msg   = list->head->msg;
+            entry = list->head;
+            list->head = list->head->next;
+            if (list->head == NULL)
+                list->tail = NULL;
 
-            natsMutex_Unlock(js->msgList.mu);
+            natsMutex_Unlock(list->mu);
             NATS_FREE(entry);
             js_handleAsyncReply(js, msg);
-            // If jsCtx_Destroy was called from within the handler (same thread),
-            // jsAsyncMessageList_destroy has already destroyed list->mu — do not
-            // attempt to re-lock it. js itself is still alive due to our retain.
-            if (js->msgList.closed)
-                goto exit;
-            natsMutex_Lock(js->msgList.mu);
+            // list->closed may now be true either because jsCtx_Destroy() was
+            // called from within the handler (same thread, mu already destroyed)
+            // or from an external thread (mu still valid). In both cases we must
+            // not attempt to re-lock mu; fall through to the drain/cleanup below.
+            if (list->closed)
+                goto drain;
+            natsMutex_Lock(list->mu);
         }
 
-        natsMutex_Unlock(js->msgList.mu);
+        natsMutex_Unlock(list->mu);
     }
 
-exit:
+drain:
+    // Drain any messages that were queued but not yet dispatched.
+    entry = list->head;
+    list->head = NULL;
+    list->tail = NULL;
+    while (entry != NULL)
+    {
+        next = entry->next;
+        natsMsg_Destroy(entry->msg);
+        NATS_FREE(entry);
+        entry = next;
+    }
+
+    // We own cleanup of the list's synchronization primitives and thread handle
+    // because jsAsyncMessageList_destroy() never joins us.
+    // In the self-join case jsAsyncMessageList_destroy() already destroyed these;
+    // skip if already NULL to avoid a double-free.
+    if (list->cond != NULL)
+    {
+        natsCondition_Destroy(list->cond);
+        list->cond = NULL;
+    }
+    if (list->mu != NULL)
+    {
+        natsMutex_Destroy(list->mu);
+        list->mu = NULL;
+    }
+    natsThread_Destroy(list->t);
+    list->t = NULL;
+
     js_release(js);
 }
 
@@ -1220,7 +1260,7 @@ _registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg, int64
 }
 
 static natsStatus
-_registerPubMsg2(natsConnection **nc, char *reply, int replyLen, jsCtx *js, natsMsg *msg, int64_t mw)
+_registerPubMsgSharedSub(natsConnection **nc, char *reply, int replyLen, jsCtx *js, natsMsg *msg, int64_t mw)
 {
     natsStatus  s       = NATS_OK;
     bool        release = false;
@@ -1338,8 +1378,11 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
         s = _setHeadersFromOptions(*msg, opts);
     }
 
+    // Question: Should the shared sub be a config option in jsOptions? All of the
+    // tests pass as normal, but I'm concerned this may create performance issues
+    // or edge case behaviour changes?
     // On success, the context will be retained.
-    IFOK(s, _registerPubMsg2(&nc, reply, sizeof(replyBuf), js, *msg, mw));
+    IFOK(s, _registerPubMsgSharedSub(&nc, reply, sizeof(replyBuf), js, *msg, mw));
     if (s == NATS_OK)
     {
         s = natsConn_publish(nc, *msg, (const char*) reply, false);

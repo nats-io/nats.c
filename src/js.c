@@ -149,9 +149,45 @@ _destroyPMInfo(pmInfo *pmi)
 }
 
 void
+jsAsyncMessageList_destroy(jsAsyncMessageList *list)
+{
+    jsAsyncMessageEntry *entry = NULL;
+    jsAsyncMessageEntry *next = NULL;
+
+    if (list->mu == NULL)
+        return;
+
+    natsMutex_Lock(list->mu);
+    list->closed = true;
+    natsMutex_Unlock(list->mu);
+    natsCondition_Signal(list->cond);
+    if (list->t != NULL)
+    {
+        natsThread_Join(list->t);
+        natsThread_Destroy(list->t);
+    }
+
+    entry = list->head;
+    while (entry != NULL)
+    {
+        next = entry->next;
+        natsMsg_Destroy(entry->msg);
+        NATS_FREE(entry);
+        entry = next;
+    }
+
+    list->head = NULL;
+    list->tail = NULL;
+
+    natsCondition_Destroy(list->cond);
+    natsMutex_Destroy(list->mu);
+}
+
+void
 jsCtx_Destroy(jsCtx *js)
 {
     pmInfo *pm;
+    respMuxer *respmux;
 
     if (js == NULL)
         return;
@@ -163,11 +199,40 @@ jsCtx_Destroy(jsCtx *js)
         return;
     }
     js->closed = true;
+    // Iterate through NC's hash and mark references to this context as closed
+    natsMutex_Lock(js->nc->respMx.mu);
+    respmux = &(js->nc->respMx);
+    if (respmux->respMap != NULL)
+    {
+        natsStrHashIter iter;
+        void            *v = NULL;
+
+        natsStrHashIter_Init(&iter, respmux->respMap);
+        while (natsStrHashIter_Next(&iter, NULL, &v))
+        {
+            respInfo *resp = (respInfo*) v;
+            if (resp->js == js)
+            {
+                natsMutex_Lock(resp->mu);
+                resp->closed = true;
+                natsMutex_Unlock(resp->mu);
+            }
+        }
+    }
+    natsMutex_Unlock(js->nc->respMx.mu);
+
     if (js->rsub != NULL)
     {
         natsSubscription_Destroy(js->rsub);
         js->rsub = NULL;
     }
+    // Release js->mu before joining the dispatch thread: the dispatch thread
+    // calls js_release() at exit, which needs js->mu. Holding it here would
+    // deadlock. js remains alive because the dispatch thread's retain keeps
+    // refs > 0 until after the join completes.
+    js_unlock(js);
+    jsAsyncMessageList_destroy(&(js->msgList));
+    js_lock(js);
     if ((js->pm != NULL) && natsStrHash_Count(js->pm) > 0)
     {
         natsStrHashIter iter;
@@ -757,29 +822,32 @@ static void
 _dispatchIncomingAsyncResp(void *closure)
 {
     natsMsg *msg = NULL;
+    jsAsyncMessageEntry *entry;
     jsCtx   *js  = (jsCtx*) closure;
 
     if (js == NULL || js->msgList.cond == NULL)
         return;
 
+    // Retain js for the lifetime of this thread. Without this, a user callback
+    // invoking jsCtx_Destroy() on this thread could free js before we return,
+    // since jsAsyncMessageList_destroy() skips the thread join for self-joins.
+    js_retain(js);
+
     while (true)
     {
         natsMutex_Lock(js->msgList.mu);
         natsCondition_Wait(js->msgList.cond, js->msgList.mu);
-        if (js->closed)
-        {
-            js_unlock(js);
-            break;
-        }
-        if (js->msgList.head == NULL)
+
+        if (js->msgList.closed)
         {
             natsMutex_Unlock(js->msgList.mu);
-            continue;
+            break;
         }
 
-        while (js->msgList.head != NULL && msg == NULL)
+        while (js->msgList.head != NULL)
         {
             msg = js->msgList.head->msg;
+            entry = js->msgList.head;
             js->msgList.head = js->msgList.head->next;
             if (js->msgList.head == NULL)
             {
@@ -787,14 +855,21 @@ _dispatchIncomingAsyncResp(void *closure)
             }
 
             natsMutex_Unlock(js->msgList.mu);
-
+            NATS_FREE(entry);
             js_handleAsyncReply(js, msg);
-
-            msg = NULL;
+            // If jsCtx_Destroy was called from within the handler (same thread),
+            // jsAsyncMessageList_destroy has already destroyed list->mu — do not
+            // attempt to re-lock it. js itself is still alive due to our retain.
+            if (js->msgList.closed)
+                goto exit;
             natsMutex_Lock(js->msgList.mu);
         }
+
         natsMutex_Unlock(js->msgList.mu);
     }
+
+exit:
+    js_release(js);
 }
 
 void
@@ -987,7 +1062,7 @@ _timeoutPubAsync(natsTimer *t, void *closure)
     while (((pm = js->pmHead) != NULL) && (pm->deadline <= now))
     {
         // Check if the corresponding message is still in the hashtable.
-        char *id = (pm->subject+js->rpreLen);
+        char *id = (pm->subject+js->nc->reqIdOffset);
         if (natsStrHash_Get(js->pm, id) != NULL)
         {
             natsMsg *m = NULL;
@@ -997,9 +1072,10 @@ _timeoutPubAsync(natsTimer *t, void *closure)
                 natsMsg_setTimeout(m);
 
                 // Best attempt, ignore NATS_SLOW_CONSUMER errors which may be returned here.
-                nats_lockSubAndDispatcher(js->rsub);
-                natsSub_enqueueUserMessage(js->rsub, m);
-                nats_unlockSubAndDispatcher(js->rsub);
+                if (js_newAsyncMessageEntry(js, m) != NATS_OK)
+                    natsMsg_Destroy(m);
+                else
+                    natsCondition_Signal(js->msgList.cond);
             }
         }
         // Remove from the list.
@@ -3888,7 +3964,18 @@ js_setOnReleasedCb(jsCtx *js, js_onReleaseCb cb, void *arg)
 natsStatus
 js_newAsyncMessageEntry(jsCtx *js, natsMsg *msg)
 {
-    jsAsyncMessageEntry *entry = NATS_MALLOC(sizeof(jsAsyncMessageEntry));
+    jsAsyncMessageEntry *entry = NULL;
+    bool is_closed = false;
+
+    if (js->msgList.mu == NULL)
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    natsMutex_Lock(js->msgList.mu);
+    is_closed = js->closed;
+    natsMutex_Unlock(js->msgList.mu);
+    if (is_closed)
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+
+    entry =  NATS_MALLOC(sizeof(jsAsyncMessageEntry));
     if (entry == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
@@ -3918,18 +4005,4 @@ js_destroyAsyncMessageEntry(jsAsyncMessageEntry *entry)
 {
     natsMsg_Destroy(entry->msg);
     NATS_FREE(entry);
-}
-
-void
-js_destroyAsyncMessageList(jsAsyncMessageList *list)
-{
-    jsAsyncMessageEntry *entry = list->head;
-    while (entry != NULL)
-    {
-        jsAsyncMessageEntry *next = entry->next;
-        js_destroyAsyncMessageEntry(entry);
-        entry = next;
-    }
-    list->head = NULL;
-    list->tail = NULL;
 }

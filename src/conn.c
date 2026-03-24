@@ -1342,8 +1342,10 @@ natsConn_destroyRespPool(natsConnection *nc)
     int      i;
     respInfo *info;
     respMuxer *mux = &(nc->respMx);
+    if(mux->respPool == NULL)
+        return;
 
-    for (i = 0; i < mux->respPoolSize; i++)
+    for (i = 0; i < mux->respPoolIdx; i++)
     {
         info = mux->respPool[i];
 
@@ -1369,6 +1371,12 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, jsCtx *js, char *re
         natsMutex_Unlock(mux->mu);
         s = natsConn_initResp(nc);
         natsMutex_Lock(mux->mu);
+    }
+
+    if (s != NATS_OK)
+    {
+        natsMutex_Unlock(mux->mu);
+        return NATS_UPDATE_ERR_STACK(s);
     }
 
     if (mux->respPoolIdx > 0)
@@ -1399,6 +1407,8 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, jsCtx *js, char *re
         // Build the response inbox
         memcpy(respInbox, mux->subj, nc->reqIdOffset-3);
         respInbox[nc->reqIdOffset-4] = '.';
+        // Outside of setting the js field, is the nc/js distinction actually needed?
+        // It's only used for pulling the resp info, which happens in the same place anyway
         if (js != NULL)
         {
             memcpy(respInbox+nc->reqIdOffset-3, NATS_SUBJECT_JS_QUALIFIER, 3);
@@ -1598,6 +1608,10 @@ _clearPendingRequestCalls(natsConnection *nc, natsStatus reason)
         natsCondition_Signal(val->cond);
         natsMutex_Unlock(val->mu);
         natsStrHashIter_RemoveCurrent(&iter);
+        // JS async publish entries have no blocking caller to dispose them;
+        // do it here now that we have removed the entry from the map.
+        if (val->js != NULL)
+            natsConn_disposeRespInfo(&nc->respMx, val, false);
     }
     natsStrHashIter_Done(&iter);
 }

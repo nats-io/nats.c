@@ -398,8 +398,8 @@ typedef struct __jsAsyncMessageList
     jsAsyncMessageEntry  *head;
     jsAsyncMessageEntry  *tail;
     natsCondition        *cond;
-    int                  count;
     natsThread           *t;
+    bool                 closed;
 
 } jsAsyncMessageList;
 

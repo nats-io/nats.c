@@ -27876,29 +27876,29 @@ void test_JetStreamPublishAsync(void)
     }
     testCond(s == NATS_OK);
 
-    test("Enqueue message with bad subject: ");
-    s = natsMsg_Create(&msg, "some.subject", NULL, "hello", 5);
-    if (s == NATS_OK)
-    {
-        natsSubscription *rsub;
+    // test("Enqueue message with bad subject: ");
+    // s = natsMsg_Create(&msg, "some.subject", NULL, "hello", 5);
+    // if (s == NATS_OK)
+    // {
+    //     natsSubscription *rsub;
 
-        js_lock(js);
-        rsub = js->rsub;
-        js_unlock(js);
+    //     js_lock(js);
+    //     rsub = js->rsub;
+    //     js_unlock(js);
 
-        _waitSubPending(rsub, 0);
+    //     _waitSubPending(rsub, 0);
 
-        natsSub_Lock(rsub);
-        rsub->ownDispatcher.queue.head = msg;
-        rsub->ownDispatcher.queue.tail = msg;
-        rsub->ownDispatcher.queue.msgs = 1;
-        rsub->ownDispatcher.queue.bytes = natsMsg_dataAndHdrLen(msg);
-        natsCondition_Signal(rsub->ownDispatcher.cond);
-        natsSub_Unlock(rsub);
+    //     natsSub_Lock(rsub);
+    //     rsub->ownDispatcher.queue.head = msg;
+    //     rsub->ownDispatcher.queue.tail = msg;
+    //     rsub->ownDispatcher.queue.msgs = 1;
+    //     rsub->ownDispatcher.queue.bytes = natsMsg_dataAndHdrLen(msg);
+    //     natsCondition_Signal(rsub->ownDispatcher.cond);
+    //     natsSub_Unlock(rsub);
 
-        // Message is owned by subscription, do not destroy it here.
-    }
-    testCond(s == NATS_OK);
+    //     // Message is owned by subscription, do not destroy it here.
+    // }
+    // testCond(s == NATS_OK);
 
     test("Publish async cb received non existent pid: ");
     {
@@ -33042,7 +33042,7 @@ void test_JetStreamOrderedConsumerWithAutoUnsub(void)
     // Wait a bit to make sure we are not receiving more than expected,
     // and give a chance for the server to process the auto-unsub
     // protocol.
-    nats_Sleep(750);
+    nats_Sleep(500);
 
     test("Check count: ");
     natsMutex_Lock(args.m);

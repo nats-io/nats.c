@@ -337,8 +337,6 @@ _oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-long int counter = 0;
-
 void
 natsConnection_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
@@ -390,20 +388,21 @@ natsConnection_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *m
         // the message.
         if (!resp->removed)
         {
-            // Do not destroy the message since it is being used.
-            dmsg = false;
-
             if (resp->js != NULL) {
                 // Dispatch to JS
                 if (js_newAsyncMessageEntry(resp->js, msg) == NATS_OK)
                 {
-                    natsCondition_Signal(resp->js->msgList.cond);
+                    // Do not destroy the message since it is being used.
+                    dmsg = false;
                     resp->msg = NULL;
-                    natsMutex_Unlock(resp->mu);
                 }
+                natsMutex_Unlock(resp->mu);
                 natsConn_disposeRespInfo(&nc->respMx, resp, true);
-            } else
+            }
+            else
             {
+                // Do not destroy the message since it is being used.
+                dmsg = false;
                 resp->msg = msg;
                 resp->removed = true;
                 natsCondition_Signal(resp->cond);

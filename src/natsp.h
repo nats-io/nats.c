@@ -873,17 +873,6 @@ struct __natsConnection
     // which will prevent user from calling Close and/or Destroy.
     bool                stanOwned;
 
-    // New Request style
-    // char                respId[NATS_MAX_REQ_ID_LEN+1];
-    // int                 respIdPos;
-    // char                respIdVal;
-    // char                *respSub;   // The wildcard subject
-    // natsSubscription    *respMux;   // A single response subscription
-    // natsStrHash         *respMap;   // Request map for the response msg
-    // respInfo            **respPool;
-    // int                 respPoolSize;
-    // int                 respPoolIdx;
-
     // Response handler for combined core and js subscription
     respMuxer           respMx;
 

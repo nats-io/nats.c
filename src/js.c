@@ -1282,6 +1282,7 @@ _registerPubMsgSharedSub(natsConnection **nc, char *reply, int replyLen, jsCtx *
     }
     if (s != NATS_OK)
     {
+        natsConn_disposeRespInfo(&(js->nc->respMx), resp, true);
         return NATS_UPDATE_ERR_STACK(s);
     }
 
@@ -1289,14 +1290,13 @@ _registerPubMsgSharedSub(natsConnection **nc, char *reply, int replyLen, jsCtx *
     if (js->msgList.t == NULL) {
         s = natsCondition_Create(&(js->msgList.cond));
         IFOK(s, natsMutex_Create(&(js->msgList.mu)));
-        if (s == NATS_OK)
+        IFOK(s, natsThread_Create(&js->msgList.t, _dispatchIncomingAsyncResp, (void*) js));
+        if (s != NATS_OK)
         {
-            s = natsThread_Create(&js->msgList.t, _dispatchIncomingAsyncResp, (void*) js);
-            if (s != NATS_OK)
-            {
-                natsCondition_Destroy(js->msgList.cond);
-                js->msgList.cond = NULL;
-            }
+            natsCondition_Destroy(js->msgList.cond);
+            natsMutex_Destroy(js->msgList.mu);
+            js->msgList.mu = NULL;
+            js->msgList.cond = NULL;
         }
     }
 
@@ -4010,11 +4010,11 @@ js_newAsyncMessageEntry(jsCtx *js, natsMsg *msg)
     jsAsyncMessageEntry *entry = NULL;
     bool is_closed = false;
 
-    if (js->msgList.mu == NULL)
-        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
-    natsMutex_Lock(js->msgList.mu);
+    js_lock(js);
     is_closed = js->closed;
-    natsMutex_Unlock(js->msgList.mu);
+    is_closed |= natsConn_isClosed(js->nc);
+    js_unlock(js);
+
     if (is_closed)
         return nats_setDefaultError(NATS_CONNECTION_CLOSED);
 

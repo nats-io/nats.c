@@ -1359,7 +1359,7 @@ natsConn_destroyRespPool(natsConnection *nc)
         return;
     }
 
-    for (i = 0; i < mux->respPoolIdx; i++)
+    for (i = 0; i < mux->respPoolSize; i++)
     {
         info = mux->respPool[i];
         info->pooled = false;
@@ -1557,18 +1557,15 @@ natsConn_initResp(natsConnection *nc)
 {
     natsStatus s = NATS_OK;
     respMuxer *mux = &(nc->respMx);
-    bool create = false;
     natsSubscription *sub = NULL;
 
     natsMutex_Lock(mux->mu);
-    create = mux->sub == NULL ? true : false;
-    natsMutex_Unlock(mux->mu);
 
-    if (!create)
+    if (mux->sub != NULL)
     {
+        natsMutex_Unlock(mux->mu);
         return NATS_OK;
     }
-
 
     mux->respPool = NATS_CALLOC(RESP_INFO_POOL_MAX_SIZE, sizeof(respInfo*));
     if (mux->respPool == NULL)
@@ -1590,11 +1587,7 @@ natsConn_initResp(natsConnection *nc)
     }
 
     if (s == NATS_OK)
-    {
-        natsMutex_Lock(mux->mu);
         mux->sub = sub;
-        natsMutex_Unlock(mux->mu);
-    }
     else
     {
         natsInbox_Destroy(mux->subj);
@@ -1604,6 +1597,7 @@ natsConn_initResp(natsConnection *nc)
         NATS_FREE(mux->respPool);
         mux->respPool = NULL;
     }
+    natsMutex_Unlock(mux->mu);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

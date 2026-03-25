@@ -366,7 +366,7 @@ natsConnection_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *m
     // prefix matches the subscription's subject (without the last '*').
     // It is possible that it does not due to subject rewrite (JetStream).
     if (((int) strlen(subj) > nc->reqIdOffset)
-        && (memcmp((const void*) sub->subject, (const void*) subj, strlen(sub->subject) - NATS_SUBJECT_QUALIFIER_LEN - 1) == 0))
+        && (memcmp((const void*) sub->subject, (const void*) subj, strlen(sub->subject) - NATS_SUBJECT_QUALIFIER_LEN) == 0))
     {
         rt = (char*) (natsMsg_GetSubject(msg) + nc->reqIdOffset);
         resp = (respInfo*) natsStrHash_Remove(mux->respMap, rt);
@@ -409,6 +409,8 @@ natsConnection_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *m
                 natsMutex_Unlock(resp->mu);
             }
         }
+        else
+            natsMutex_Unlock(resp->mu);
     }
     natsMutex_Unlock(mux->mu);
 

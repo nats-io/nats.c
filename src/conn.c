@@ -189,6 +189,8 @@ natsConn_destroyRespMuxer(natsConnection *nc)
     mux->subj = NULL;
     mux->sub = NULL;
     mux->respMap = NULL;
+
+    mux->ncClosed = true;
 }
 
 static void

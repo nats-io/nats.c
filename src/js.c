@@ -1388,7 +1388,7 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
         s = natsConn_publish(nc, *msg, (const char*) reply, false);
         if (s != NATS_OK)
         {
-            char *id = reply+js->rpreLen;
+            char *id = reply+js->nc->reqIdOffset;
 
             // The message may or may not have been sent, we don't know for sure.
             // We are going to attempt to remove from the map. If we can, then

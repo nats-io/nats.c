@@ -178,6 +178,22 @@ _clearServerInfo(natsServerInfo *si)
 }
 
 static void
+natsConn_destroyRespMuxer(natsConnection *nc)
+{
+    respMuxer *mux = &(nc->respMx);
+
+    natsConn_destroyRespPool(nc);
+    natsInbox_Destroy(mux->subj);
+    natsStrHash_Destroy(mux->respMap);
+
+    mux->subj = NULL;
+    mux->sub = NULL;
+    mux->respMap = NULL;
+
+    mux->ncClosed = true;
+}
+
+static void
 _freeConn(natsConnection *nc)
 {
     if (nc == NULL)
@@ -200,15 +216,13 @@ _freeConn(natsConnection *nc)
         SSL_free(nc->sockCtx.ssl);
     natsMutex_Destroy(nc->sockCtx.sslMu);
     NATS_FREE(nc->el.buffer);
-    natsConn_destroyRespPool(nc);
-    natsInbox_Destroy(nc->respSub);
-    natsStrHash_Destroy(nc->respMap);
     natsCondition_Destroy(nc->reconnectCond);
     natsCondition_Destroy(nc->drainCond);
     natsMutex_Destroy(nc->subsMu);
     natsMutex_Destroy(nc->servicesMu);
     natsMutex_Destroy(nc->mu);
     NATS_FREE(nc->services);
+    natsMutex_Destroy(nc->respMx.mu);
 
     NATS_FREE(nc);
 
@@ -1301,7 +1315,7 @@ _clearPendingFlushRequests(natsConnection *nc)
 // Dispose of the respInfo object.
 // The boolean `needsLock` indicates if connection lock is required or not.
 void
-natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock)
+natsConn_disposeRespInfo(respMuxer *mux, respInfo *resp, bool needsLock)
 {
     if (resp == NULL)
         return;
@@ -1322,15 +1336,15 @@ natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock)
     else
     {
         if (needsLock)
-            natsConn_Lock(nc);
+            natsMutex_Lock(mux->mu);
 
         resp->closed = false;
         resp->closedSts = NATS_OK;
         resp->removed = false;
-        nc->respPool[nc->respPoolIdx++] = resp;
+        mux->respPool[mux->respPoolIdx++] = resp;
 
         if (needsLock)
-            natsConn_Unlock(nc);
+            natsMutex_Unlock(mux->mu);
     }
 }
 
@@ -1340,28 +1354,58 @@ natsConn_destroyRespPool(natsConnection *nc)
 {
     int      i;
     respInfo *info;
+    respMuxer *mux = &(nc->respMx);
 
-    for (i=0; i<nc->respPoolSize; i++)
+    if(mux->respPool == NULL)
     {
-        info = nc->respPool[i];
-        info->pooled = false;
-        natsConn_disposeRespInfo(nc, info, false);
+        return;
     }
-    NATS_FREE(nc->respPool);
+
+    for (i = 0; i < mux->respPoolSize; i++)
+    {
+        info = mux->respPool[i];
+        info->pooled = false;
+        natsConn_disposeRespInfo(mux, info, false);
+    }
+    NATS_FREE(mux->respPool);
+    mux->respPool = NULL;
 }
 
 // Creates a new respInfo object, binds it to the request's specific
 // subject (that is set in respInbox). The respInfo object is returned.
 // Connection's lock is held on entry.
 natsStatus
-natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox)
+natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, jsCtx *js, char *respInbox, int respInboxSize)
 {
+    natsStatus s = NATS_OK;
+    respMuxer  *mux = &(nc->respMx);
     respInfo    *resp  = NULL;
-    natsStatus  s      = NATS_OK;
 
-    if (nc->respPoolIdx > 0)
+    natsConn_Lock(nc);
+    if (natsConn_isClosed(nc))
     {
-        resp = nc->respPool[--nc->respPoolIdx];
+        natsConn_Unlock(nc);
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    }
+    natsConn_Unlock(nc);
+
+    natsMutex_Lock(mux->mu);
+    if (mux->sub == NULL)
+    {
+        natsMutex_Unlock(mux->mu);
+        s = natsConn_initResp(nc);
+        natsMutex_Lock(mux->mu);
+    }
+
+    if (s != NATS_OK)
+    {
+        natsMutex_Unlock(mux->mu);
+        return NATS_UPDATE_ERR_STACK(s);
+    }
+
+    if (mux->respPoolIdx > 0)
+    {
+        resp = mux->respPool[--mux->respPoolIdx];
     }
     else
     {
@@ -1372,72 +1416,92 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox)
             s = natsMutex_Create(&(resp->mu));
         if (s == NATS_OK)
             s = natsCondition_Create(&(resp->cond));
-        if ((s == NATS_OK) && (nc->respPoolSize < RESP_INFO_POOL_MAX_SIZE))
+        if ((s == NATS_OK) && (mux->respPoolSize < RESP_INFO_POOL_MAX_SIZE))
         {
             resp->pooled = true;
-            nc->respPoolSize++;
+            mux->respPoolSize++;
         }
     }
 
     if (s == NATS_OK)
     {
-        nc->respId[nc->respIdPos] = '0' + nc->respIdVal;
-        nc->respId[nc->respIdPos + 1] = '\0';
+        mux->id[mux->idPos] = '0' + mux->idVal;
+        mux->id[mux->idPos + 1] = '\0';
 
         // Build the response inbox
-        memcpy(respInbox, nc->respSub, nc->reqIdOffset);
-        respInbox[nc->reqIdOffset-1] = '.';
-        memcpy(respInbox+nc->reqIdOffset, nc->respId, nc->respIdPos + 2); // copy the '\0' of respId
-
-        nc->respIdVal++;
-        if (nc->respIdVal == 10)
+        memcpy(respInbox, mux->subj, nc->reqIdOffset-3);
+        respInbox[nc->reqIdOffset-4] = '.';
+        // Outside of setting the js field, is the nc/js distinction actually needed?
+        // It's only used for pulling the resp info, which happens in the same place anyway
+        if (js != NULL)
         {
-            nc->respIdVal = 0;
-            if (nc->respIdPos > 0)
+            memcpy(respInbox+nc->reqIdOffset-3, NATS_SUBJECT_JS_QUALIFIER, 3);
+            s = natsNUID_Next(respInbox+nc->reqIdOffset, respInboxSize - (nc->reqIdOffset));
+            if (s == NATS_OK)
             {
-                bool shift = true;
-                int  i, j;
+                respInbox[respInboxSize - 1] = '\0';
+            }
+        }
+        else
+        {
+            memcpy(respInbox+nc->reqIdOffset-3, NATS_SUBJECT_CORE_QUALIFIER, 3);
+            memcpy(respInbox+nc->reqIdOffset, mux->id, mux->idPos + 2); // copy the '\0' of respId
 
-                for (i=nc->respIdPos-1; i>=0; i--)
+            mux->idVal++;
+            if (mux->idVal == 10)
+            {
+                mux->idVal = 0;
+                if (mux->idPos > 0)
                 {
-                    if (nc->respId[i] != '9')
+                    bool shift = true;
+                    int  i, j;
+
+                    for (i=mux->idPos-1; i>=0; i--)
                     {
-                        nc->respId[i]++;
+                        if (mux->id[i] != '9')
+                        {
+                            mux->id[i]++;
 
-                        for (j=i+1; j<=nc->respIdPos-1; j++)
-                            nc->respId[j] = '0';
+                            for (j=i+1; j<=mux->idPos-1; j++)
+                                mux->id[j] = '0';
 
-                        shift = false;
-                        break;
+                            shift = false;
+                            break;
+                        }
+                    }
+                    if (shift)
+                    {
+                        mux->id[0] = '1';
+
+                        for (i=1; i<=mux->idPos; i++)
+                            mux->id[i] = '0';
+
+                        mux->idPos++;
                     }
                 }
-                if (shift)
+                else
                 {
-                    nc->respId[0] = '1';
-
-                    for (i=1; i<=nc->respIdPos; i++)
-                        nc->respId[i] = '0';
-
-                    nc->respIdPos++;
+                    mux->id[0] = '1';
+                    mux->idPos++;
                 }
+                if (mux->idPos == NATS_MAX_REQ_ID_LEN)
+                    mux->idPos = 0;
             }
-            else
-            {
-                nc->respId[0] = '1';
-                nc->respIdPos++;
-            }
-            if (nc->respIdPos == NATS_MAX_REQ_ID_LEN)
-                nc->respIdPos = 0;
         }
 
-        s = natsStrHash_Set(nc->respMap, respInbox+nc->reqIdOffset, true,
+        s = natsStrHash_Set(mux->respMap, respInbox+nc->reqIdOffset, true,
                             (void*) resp, NULL);
     }
 
     if (s == NATS_OK)
+        resp->js = js;
+
+    if (s == NATS_OK)
         *newResp = resp;
     else
-        natsConn_disposeRespInfo(nc, resp, false);
+        natsConn_disposeRespInfo(mux, resp, false);
+
+    natsMutex_Unlock(mux->mu);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -1491,37 +1555,51 @@ natsConn_newInbox(natsConnection *nc, natsInbox **newInbox)
 // Initialize some of the connection's fields used for request/reply mapping.
 // Connection's lock is held on entry.
 natsStatus
-natsConn_initResp(natsConnection *nc, natsMsgHandler cb)
+natsConn_initResp(natsConnection *nc)
 {
     natsStatus s = NATS_OK;
+    respMuxer *mux = &(nc->respMx);
+    natsSubscription *sub = NULL;
 
-    nc->respPool = NATS_CALLOC(RESP_INFO_POOL_MAX_SIZE, sizeof(respInfo*));
-    if (nc->respPool == NULL)
+    natsMutex_Lock(mux->mu);
+
+    if (mux->sub != NULL)
+    {
+        natsMutex_Unlock(mux->mu);
+        return NATS_OK;
+    }
+
+    mux->respPool = NATS_CALLOC(RESP_INFO_POOL_MAX_SIZE, sizeof(respInfo*));
+    if (mux->respPool == NULL)
         s = nats_setDefaultError(NATS_NO_MEMORY);
     if (s == NATS_OK)
-        s = natsStrHash_Create(&nc->respMap, 4);
+        s = natsStrHash_Create(&mux->respMap, 4);
     if (s == NATS_OK)
-        s = natsConn_newInbox(nc, (natsInbox**) &nc->respSub);
+        s = natsConn_newInbox(nc, (natsInbox**) &mux->subj);
     if (s == NATS_OK)
     {
         char *inbox = NULL;
 
-        if (nats_asprintf(&inbox, "%s.*", nc->respSub) < 0)
+        if (nats_asprintf(&inbox, "%s.*.*", mux->subj) < 0)
             s = nats_setDefaultError(NATS_NO_MEMORY);
         else
-            s = natsConn_subscribeNoPoolNoLock(&(nc->respMux), nc, inbox, cb, (void*) nc);
+            s = natsConn_subscribeNoPoolNoLock(&sub, nc, inbox, natsConnection_respHandler, (void*) nc);
 
         NATS_FREE(inbox);
     }
-    if (s != NATS_OK)
+
+    if (s == NATS_OK)
+        mux->sub = sub;
+    else
     {
-        natsInbox_Destroy(nc->respSub);
-        nc->respSub = NULL;
-        natsStrHash_Destroy(nc->respMap);
-        nc->respMap = NULL;
-        NATS_FREE(nc->respPool);
-        nc->respPool = NULL;
+        natsInbox_Destroy(mux->subj);
+        mux->subj = NULL;
+        natsStrHash_Destroy(mux->respMap);
+        mux->respMap = NULL;
+        NATS_FREE(mux->respPool);
+        mux->respPool = NULL;
     }
+    natsMutex_Unlock(mux->mu);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -1534,10 +1612,10 @@ _clearPendingRequestCalls(natsConnection *nc, natsStatus reason)
     natsStrHashIter iter;
     void            *p = NULL;
 
-    if (nc->respMap == NULL)
+    if (nc->respMx.respMap == NULL)
         return;
 
-    natsStrHashIter_Init(&iter, nc->respMap);
+    natsStrHashIter_Init(&iter, nc->respMx.respMap);
     while (natsStrHashIter_Next(&iter, NULL, &p))
     {
         respInfo *val = (respInfo*) p;
@@ -1548,6 +1626,10 @@ _clearPendingRequestCalls(natsConnection *nc, natsStatus reason)
         natsCondition_Signal(val->cond);
         natsMutex_Unlock(val->mu);
         natsStrHashIter_RemoveCurrent(&iter);
+        // JS async publish entries have no blocking caller to dispose them;
+        // do it here now that we have removed the entry from the map.
+        if (val->js != NULL)
+            natsConn_disposeRespInfo(&nc->respMx, val, false);
     }
     natsStrHashIter_Done(&iter);
 }
@@ -2670,13 +2752,16 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     if (doCBs && !nc->rle && postDisconnectedCb && sockWasActive)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
-    sub = nc->respMux;
-    nc->respMux = NULL;
+    sub = nc->respMx.sub;
+    nc->respMx.sub = NULL;
 
     natsConn_Unlock(nc);
 
     if (sub != NULL)
+    {
         natsSub_release(sub);
+        natsConn_destroyRespMuxer(nc);
+    }
 
     _joinThreads(&ttj);
 
@@ -3335,6 +3420,8 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
         s = natsCondition_Create(&(nc->reconnectCond));
     if (s == NATS_OK)
         s = natsCondition_Create(&(nc->drainCond));
+    if (s == NATS_OK)
+        s = natsMutex_Create(&(nc->respMx.mu));
 
     if (s == NATS_OK)
     {
@@ -3344,7 +3431,7 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
             nc->inboxPfx = NATS_DEFAULT_INBOX_PRE;
 
         nc->inboxPfxLen = (int) strlen(nc->inboxPfx);
-        nc->reqIdOffset = nc->inboxPfxLen+NUID_BUFFER_LEN+1;
+        nc->reqIdOffset = nc->inboxPfxLen+NUID_BUFFER_LEN+NATS_SUBJECT_QUALIFIER_LEN+1;
     }
 
     if (s == NATS_OK)
@@ -3713,7 +3800,7 @@ _iterateSubsAndInvokeFunc(natsStatus callerSts, natsConnection *nc, subIterFunc 
     while (natsHashIter_Next(&iter, NULL, &p))
     {
         sub = (natsSubscription*) p;
-        if (nc->drainExcludeRespMux && (sub == nc->respMux))
+        if (nc->drainExcludeRespMux && (sub == nc->respMx.sub))
             continue;
         ls = (f)(callerSts, nc, sub);
         s = (s == NATS_OK ? ls : s);
@@ -3861,18 +3948,18 @@ _flushAndDrain(void *closure)
                 natsConn_Lock(nc);
                 // Now that we are under the lock, make sure that nc->respMux
                 // has not been removed by the time we get here.
-                natsMutex_Lock(nc->subsMu);
-                if (nc->respMux != NULL)
+                natsMutex_Lock(nc->respMx.mu);
+                if (nc->respMx.sub != NULL)
                 {
                     subsDone = false;
                     nc->drainExcludeRespMux = false;
                     nc->drainSubCountTarget = 0;
-                    s = _enqueUnsubProto(NATS_OK, nc, nc->respMux);
+                    s = _enqueUnsubProto(NATS_OK, nc, nc->respMx.sub);
                     if (s == NATS_OK)
-                        s = _initSubDrain(NATS_OK, nc, nc->respMux);
+                        s = _initSubDrain(NATS_OK, nc, nc->respMx.sub);
                 }
                 // If respMux is NULL, `subsDone` is true, so we will exit the loop.
-                natsMutex_Unlock(nc->subsMu);
+                natsMutex_Unlock(nc->respMx.mu);
                 natsConn_Unlock(nc);
             }
         }
@@ -3954,7 +4041,7 @@ _drain(natsConnection *nc, int64_t timeout)
             nc->drainSubSignalOnRemove = true;
             // Exclude respMux if it exists and there are more than 1
             // subscriptions present in the list at this time.
-            nc->drainExcludeRespMux = ((nc->respMux != NULL) && (subs > 1) ? true : false);
+            nc->drainExcludeRespMux = ((nc->respMx.sub != NULL) && (subs > 1) ? true : false);
             // If we exclude respMux, then we will wait for the number of subscriptions
             // to fall down to 1, otherwise to 0.
             nc->drainSubCountTarget = (nc->drainExcludeRespMux ? 1 : 0);

@@ -94,6 +94,10 @@
 #define NATS_DEFAULT_INBOX_PRE      "_INBOX."
 #define NATS_DEFAULT_INBOX_PRE_LEN  (7)
 
+#define NATS_SUBJECT_CORE_QUALIFIER     "nc."
+#define NATS_SUBJECT_JS_QUALIFIER  "js."
+#define NATS_SUBJECT_QUALIFIER_LEN (3)
+
 #define NATS_MAX_REQ_ID_LEN (19) // to display 2^63-1 number
 
 #define WAIT_FOR_READ       (0)
@@ -381,6 +385,24 @@ typedef struct __pmInfo
 
 typedef void (*js_onReleaseCb)(void *arg);
 
+typedef struct __jsAsyncMessageEntry
+{
+    natsMsg                      *msg;
+    struct __jsAsyncMessageEntry *next;
+
+} jsAsyncMessageEntry;
+
+typedef struct __jsAsyncMessageList
+{
+    natsMutex            *mu;
+    jsAsyncMessageEntry  *head;
+    jsAsyncMessageEntry  *tail;
+    natsCondition        *cond;
+    natsThread           *t;
+    bool                 closed;
+
+} jsAsyncMessageList;
+
 struct __jsCtx
 {
     natsMutex		    *mu;
@@ -401,6 +423,8 @@ struct __jsCtx
     bool                closed;
     js_onReleaseCb      onReleaseCb;
     void                *onReleaseCbArg;
+    jsAsyncMessageList  msgList;
+
 };
 
 typedef struct __jsFetch
@@ -753,12 +777,29 @@ typedef struct __respInfo
     natsMutex           *mu;
     natsCondition       *cond;
     natsMsg             *msg;
+    jsCtx               *js;
     bool                closed;
     natsStatus          closedSts;
     bool                removed;
     bool                pooled;
 
 } respInfo;
+
+typedef struct __respMuxer
+{
+    natsMutex           *mu;
+    char                id[NATS_MAX_REQ_ID_LEN+1];
+    int                 idPos;
+    char                idVal;
+    char                *subj;
+    natsSubscription    *sub;
+    natsStrHash         *respMap;
+    respInfo            **respPool;
+    int                 respPoolSize;
+    int                 respPoolIdx;
+    bool                ncClosed;
+
+} respMuxer;
 
 // Used internally for testing and allow to alter/suppress an incoming message
 typedef void (*natsMsgFilter)(natsConnection *nc, natsMsg **msg, void* closure);
@@ -832,16 +873,8 @@ struct __natsConnection
     // which will prevent user from calling Close and/or Destroy.
     bool                stanOwned;
 
-    // New Request style
-    char                respId[NATS_MAX_REQ_ID_LEN+1];
-    int                 respIdPos;
-    char                respIdVal;
-    char                *respSub;   // The wildcard subject
-    natsSubscription    *respMux;   // A single response subscription
-    natsStrHash         *respMap;   // Request map for the response msg
-    respInfo            **respPool;
-    int                 respPoolSize;
-    int                 respPoolIdx;
+    // Response handler for combined core and js subscription
+    respMuxer           respMx;
 
     // For inboxes. We now support custom prefixes, so we can't rely
     // on constants based on hardcoded "_INBOX." prefix.

@@ -47,7 +47,7 @@ const char       *jsDigits               = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ
 const int        jsBase                  = 62;
 const int64_t    jsOrderedHBInterval     = NATS_SECONDS_TO_NANOS(5);
 
-#define jsReplyTokenSize    (8)
+#define jsReplyTokenSize    (24)
 #define jsDefaultMaxMsgs    (512 * 1024)
 
 #define jsLastConsumerSeqHdr    "Nats-Last-Consumer"
@@ -149,9 +149,51 @@ _destroyPMInfo(pmInfo *pmi)
 }
 
 void
+jsAsyncMessageList_destroy(jsAsyncMessageList *list)
+{
+    if (list->mu == NULL)
+        return;
+
+    natsMutex_Lock(list->mu);
+    list->closed = true;
+    natsMutex_Unlock(list->mu);
+    natsCondition_Signal(list->cond);
+
+    // Do not join the thread or clean up list resources here. The dispatch
+    // thread may be inside a user callback that is itself waiting for the
+    // caller to signal something (e.g. a test waiting for jsCtx_Destroy to
+    // return before unblocking the callback). Joining here would deadlock in
+    // that case. The dispatch thread holds a retain on js and is responsible
+    // for draining any remaining messages and destroying list->mu, list->cond,
+    // and list->t when it exits.
+    //
+    // If no thread was ever created, clean up inline since no dispatch thread
+    // will do it.
+    if (list->t == NULL)
+    {
+        jsAsyncMessageEntry *entry = list->head;
+        jsAsyncMessageEntry *next  = NULL;
+
+        while (entry != NULL)
+        {
+            next = entry->next;
+            natsMsg_Destroy(entry->msg);
+            NATS_FREE(entry);
+            entry = next;
+        }
+        list->head = NULL;
+        list->tail = NULL;
+
+        natsCondition_Destroy(list->cond);
+        natsMutex_Destroy(list->mu);
+    }
+}
+
+void
 jsCtx_Destroy(jsCtx *js)
 {
     pmInfo *pm;
+    respMuxer *respmux;
 
     if (js == NULL)
         return;
@@ -163,11 +205,41 @@ jsCtx_Destroy(jsCtx *js)
         return;
     }
     js->closed = true;
+
+    // Iterate through NC's hash and mark references to this context as closed
+    respmux = &(js->nc->respMx);
+    natsMutex_Lock(js->nc->respMx.mu);
+    if (respmux->respMap != NULL)
+    {
+        natsStrHashIter iter;
+        void            *v = NULL;
+
+        natsStrHashIter_Init(&iter, respmux->respMap);
+        while (natsStrHashIter_Next(&iter, NULL, &v))
+        {
+            respInfo *resp = (respInfo*) v;
+            if (resp->js == js)
+            {
+                natsMutex_Lock(resp->mu);
+                resp->closed = true;
+                natsMutex_Unlock(resp->mu);
+            }
+        }
+    }
+    natsMutex_Unlock(js->nc->respMx.mu);
+
     if (js->rsub != NULL)
     {
         natsSubscription_Destroy(js->rsub);
         js->rsub = NULL;
     }
+    // Release js->mu before joining the dispatch thread: the dispatch thread
+    // calls js_release() at exit, which needs js->mu. Holding it here would
+    // deadlock. js remains alive because the dispatch thread's retain keeps
+    // refs > 0 until after the join completes.
+    js_unlock(js);
+    jsAsyncMessageList_destroy(&(js->msgList));
+    js_lock(js);
     if ((js->pm != NULL) && natsStrHash_Count(js->pm) > 0)
     {
         natsStrHashIter iter;
@@ -754,6 +826,182 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
 }
 
 static void
+_dispatchIncomingAsyncResp(void *closure)
+{
+    natsMsg              *msg   = NULL;
+    jsAsyncMessageEntry  *entry = NULL;
+    jsAsyncMessageEntry  *next  = NULL;
+    jsCtx                *js    = (jsCtx*) closure;
+    jsAsyncMessageList   *list;
+
+    if (js == NULL || js->msgList.cond == NULL)
+        return;
+
+    list = &js->msgList;
+
+    // Retain js for the lifetime of this thread. jsAsyncMessageList_destroy()
+    // never joins this thread (to avoid deadlocking when a user callback calls
+    // jsCtx_Destroy() and then waits for the caller to signal it). We therefore
+    // own cleanup of list->mu, list->cond, and list->t on exit.
+    js_retain(js);
+
+    while (true)
+    {
+        natsMutex_Lock(list->mu);
+        natsCondition_Wait(list->cond, list->mu);
+
+        if (list->closed)
+        {
+            natsMutex_Unlock(list->mu);
+            break;
+        }
+
+        while (list->head != NULL)
+        {
+            msg   = list->head->msg;
+            entry = list->head;
+            list->head = list->head->next;
+            if (list->head == NULL)
+                list->tail = NULL;
+
+            natsMutex_Unlock(list->mu);
+            NATS_FREE(entry);
+            js_handleAsyncReply(js, msg);
+            // list->closed may now be true either because jsCtx_Destroy() was
+            // called from within the handler (same thread, mu already destroyed)
+            // or from an external thread (mu still valid). In both cases we must
+            // not attempt to re-lock mu; fall through to the drain/cleanup below.
+            if (list->closed)
+                goto drain;
+            natsMutex_Lock(list->mu);
+        }
+
+        natsMutex_Unlock(list->mu);
+    }
+
+drain:
+    // Drain any messages that were queued but not yet dispatched.
+    entry = list->head;
+    list->head = NULL;
+    list->tail = NULL;
+    while (entry != NULL)
+    {
+        next = entry->next;
+        natsMsg_Destroy(entry->msg);
+        NATS_FREE(entry);
+        entry = next;
+    }
+
+    // We own cleanup of the list's synchronization primitives and thread handle
+    // because jsAsyncMessageList_destroy() never joins us.
+    // In the self-join case jsAsyncMessageList_destroy() already destroyed these;
+    // skip if already NULL to avoid a double-free.
+    if (list->cond != NULL)
+    {
+        natsCondition_Destroy(list->cond);
+        list->cond = NULL;
+    }
+    if (list->mu != NULL)
+    {
+        natsMutex_Destroy(list->mu);
+        list->mu = NULL;
+    }
+    natsThread_Destroy(list->t);
+    list->t = NULL;
+
+    js_release(js);
+}
+
+void
+js_handleAsyncReply(jsCtx *js, natsMsg *msg)
+{
+    const char      *subject    = natsMsg_GetSubject(msg);
+    char            *id         = NULL;
+    natsMsg         *pmsg       = NULL;
+    char            errTxt[256] = {'\0'};
+    jsPubAckErr     pae;
+    jsPubAck        pa;
+    struct jsOptionsPublishAsync *opa = NULL;
+
+    if ((subject == NULL) || (int) strlen(subject) <= js->rpreLen)
+    {
+        natsMsg_Destroy(msg);
+        return;
+    }
+
+    id = (char*) (subject+js->nc->reqIdOffset);
+
+    js_lock(js);
+
+    pmsg = natsStrHash_Remove(js->pm, id);
+    if (pmsg == NULL)
+    {
+        js_unlock(js);
+        natsMsg_Destroy(msg);
+        return;
+    }
+
+    opa = &(js->opts.PublishAsync);
+    if (opa->AckHandler)
+    {
+        jsPubAckErr *ppae   = NULL;
+        jsPubAck    *ppa    = NULL;
+
+        // If _parsePubAck returns an error, we will set the pointer ppae to
+        // our stack variable 'pae', otherwise, set the pointer ppa to the
+        // stack variable 'pa', which is the jsPubAck (positive ack).
+        if (_parsePubAck(msg, &pa, &pae, errTxt, sizeof(errTxt)) != NATS_OK)
+            ppae = &pae;
+        else
+            ppa = &pa;
+
+        // Invoke the handler with pointer to either jsPubAck or jsPubAckErr.
+        js_unlock(js);
+
+        (opa->AckHandler)(js, pmsg, ppa, ppae, opa->AckHandlerClosure);
+
+        js_lock(js);
+
+        _freePubAck(ppa);
+        // Set pmsg to NULL because user was responsible for destroying the message.
+        pmsg = NULL;
+    }
+    else if ((opa->ErrHandler != NULL) && (_parsePubAck(msg, NULL, &pae, errTxt, sizeof(errTxt)) != NATS_OK))
+    {
+        // We will invoke CB only if there is any kind of error.
+        // Associate the message with the pubAckErr object.
+        pae.Msg = pmsg;
+        js_unlock(js);
+
+        (opa->ErrHandler)(js, &pae, opa->ErrHandlerClosure);
+
+        js_lock(js);
+
+        // If the user resent the message, pae->Msg will have been cleared.
+        // In this case, do not destroy the message. Do not blindly destroy
+        // an address that could have been set, so destroy only if pmsg
+        // is same value than pae->Msg.
+        if (pae.Msg != pmsg)
+            pmsg = NULL;
+    }
+
+    // Now that the callback has returned, decrement the number of pending messages.
+    js->pmcount--;
+
+    // If there are callers waiting for async pub completion, or stalled async
+    // publish calls and we are now below max pending, broadcast to unblock them.
+    if (((js->pacw > 0) && (js->pmcount == 0))
+        || ((js->stalled > 0) && (js->pmcount <= opa->MaxPending)))
+    {
+        natsCondition_Broadcast(js->cond);
+    }
+    js_unlock(js);
+
+    natsMsg_Destroy(pmsg);
+    natsMsg_Destroy(msg);
+}
+
+static void
 _subComplete(void *closure)
 {
     js_release((jsCtx*) closure);
@@ -854,7 +1102,7 @@ _timeoutPubAsync(natsTimer *t, void *closure)
     while (((pm = js->pmHead) != NULL) && (pm->deadline <= now))
     {
         // Check if the corresponding message is still in the hashtable.
-        char *id = (pm->subject+js->rpreLen);
+        char *id = (pm->subject+js->nc->reqIdOffset);
         if (natsStrHash_Get(js->pm, id) != NULL)
         {
             natsMsg *m = NULL;
@@ -864,9 +1112,10 @@ _timeoutPubAsync(natsTimer *t, void *closure)
                 natsMsg_setTimeout(m);
 
                 // Best attempt, ignore NATS_SLOW_CONSUMER errors which may be returned here.
-                nats_lockSubAndDispatcher(js->rsub);
-                natsSub_enqueueUserMessage(js->rsub, m);
-                nats_unlockSubAndDispatcher(js->rsub);
+                if (js_newAsyncMessageEntry(js, m) != NATS_OK)
+                    natsMsg_Destroy(m);
+                else
+                    natsCondition_Signal(js->msgList.cond);
             }
         }
         // Remove from the list.
@@ -1010,6 +1259,84 @@ _registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg, int64
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_registerPubMsgSharedSub(natsConnection **nc, char *reply, int replyLen, jsCtx *js, natsMsg *msg, int64_t mw)
+{
+    natsStatus  s       = NATS_OK;
+    bool        release = false;
+    int64_t     maxp    = 0;
+    respInfo    *resp   = NULL;
+    char        *id     = NULL;
+
+    s = natsConn_addRespInfo(&resp, js->nc, js, reply, replyLen);
+    id = reply+js->nc->reqIdOffset;
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    js_lock(js);
+
+    if (js->pm == NULL)
+    {
+        s = natsCondition_Create(&(js->cond));
+        IFOK(s, natsStrHash_Create(&(js->pm), 64));
+    }
+    if (s != NATS_OK)
+    {
+        natsConn_disposeRespInfo(&(js->nc->respMx), resp, true);
+        return NATS_UPDATE_ERR_STACK(s);
+    }
+
+    // If the dispatch thread is not running, start it
+    if (js->msgList.t == NULL) {
+        s = natsCondition_Create(&(js->msgList.cond));
+        IFOK(s, natsMutex_Create(&(js->msgList.mu)));
+        IFOK(s, natsThread_Create(&js->msgList.t, _dispatchIncomingAsyncResp, (void*) js));
+        if (s != NATS_OK)
+        {
+            natsCondition_Destroy(js->msgList.cond);
+            natsMutex_Destroy(js->msgList.mu);
+            js->msgList.mu = NULL;
+            js->msgList.cond = NULL;
+        }
+    }
+
+    maxp = js->opts.PublishAsync.MaxPending;
+    js->pmcount++;
+
+    if ((s == NATS_OK)
+            && (maxp > 0)
+            && (js->pmcount > maxp))
+    {
+        int64_t target = nats_setTargetTime(js->opts.PublishAsync.StallWait);
+
+        _retain(js);
+
+        js->stalled++;
+        while ((s != NATS_TIMEOUT) && (js->pmcount > maxp))
+            s = natsCondition_AbsoluteTimedWait(js->cond, js->mu, target);
+        js->stalled--;
+
+        if (s == NATS_TIMEOUT)
+            s = nats_setError(s, "%s", "stalled with too many outstanding async published messages");
+
+        release = true;
+    }
+    if ((s == NATS_OK) && (mw > 0))
+        s = _trackPublishAsyncTimeout(js, reply, mw);
+    if (s == NATS_OK)
+        s = natsStrHash_Set(js->pm, id, true, msg, NULL);
+    if (s == NATS_OK)
+        *nc = js->nc;
+    else
+        js->pmcount--;
+    if (release)
+        js_unlockAndRelease(js);
+    else
+        js_unlock(js);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 natsStatus
 js_PublishAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
                 jsPubOptions *opts)
@@ -1051,14 +1378,17 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
         s = _setHeadersFromOptions(*msg, opts);
     }
 
+    // Question: Should the shared sub be a config option in jsOptions? All of the
+    // tests pass as normal, but I'm concerned this may create performance issues
+    // or edge case behaviour changes?
     // On success, the context will be retained.
-    IFOK(s, _registerPubMsg(&nc, reply, js, *msg, mw));
+    IFOK(s, _registerPubMsgSharedSub(&nc, reply, sizeof(replyBuf), js, *msg, mw));
     if (s == NATS_OK)
     {
         s = natsConn_publish(nc, *msg, (const char*) reply, false);
         if (s != NATS_OK)
         {
-            char *id = reply+js->rpreLen;
+            char *id = reply+js->nc->reqIdOffset;
 
             // The message may or may not have been sent, we don't know for sure.
             // We are going to attempt to remove from the map. If we can, then
@@ -3672,4 +4002,50 @@ js_setOnReleasedCb(jsCtx *js, js_onReleaseCb cb, void *arg)
     js->onReleaseCb     = cb;
     js->onReleaseCbArg  = arg;
     js_unlock(js);
+}
+
+natsStatus
+js_newAsyncMessageEntry(jsCtx *js, natsMsg *msg)
+{
+    jsAsyncMessageEntry *entry = NULL;
+    bool is_closed = false;
+
+    js_lock(js);
+    is_closed = js->closed;
+    is_closed |= natsConn_isClosed(js->nc);
+    js_unlock(js);
+
+    if (is_closed)
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+
+    entry =  NATS_MALLOC(sizeof(jsAsyncMessageEntry));
+    if (entry == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    entry->msg = msg;
+    entry->next = NULL;
+
+    natsMutex_Lock(js->msgList.mu);
+    if (js->msgList.tail == NULL)
+    {
+        js->msgList.head = entry;
+        js->msgList.tail = entry;
+    }
+    else
+    {
+        js->msgList.tail->next = entry;
+        js->msgList.tail = entry;
+    }
+    natsMutex_Unlock(js->msgList.mu);
+
+    natsCondition_Signal(js->msgList.cond);
+
+    return NATS_OK;
+}
+
+void
+js_destroyAsyncMessageEntry(jsAsyncMessageEntry *entry)
+{
+    natsMsg_Destroy(entry->msg);
+    NATS_FREE(entry);
 }

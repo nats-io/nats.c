@@ -8319,9 +8319,9 @@ void test_RequestPool(void)
     test("Pool not growing: ");
     for (i=0; (i<RESP_INFO_POOL_MAX_SIZE); i++)
         natsConnection_RequestString(&msg, nc, "foo", "test", 1);
-    natsMutex_Lock(nc->mu);
-    testCond(nc->respPoolSize == 1);
-    natsMutex_Unlock(nc->mu);
+    natsMutex_Lock(nc->respMx.mu);
+    testCond(nc->respMx.respPoolSize == 1);
+    natsMutex_Unlock(nc->respMx.mu);
 
     test("Pool max size: ");
     for (i=0; i<numThreads; i++)
@@ -8339,9 +8339,9 @@ void test_RequestPool(void)
             natsThread_Destroy(threads[i]);
         }
     }
-    natsMutex_Lock(nc->mu);
-    testCond((s == NATS_OK) && (nc->respPoolSize == RESP_INFO_POOL_MAX_SIZE));
-    natsMutex_Unlock(nc->mu);
+    natsMutex_Lock(nc->respMx.mu);
+    testCond((s == NATS_OK) && (nc->respMx.respPoolSize == RESP_INFO_POOL_MAX_SIZE));
+    natsMutex_Unlock(nc->respMx.mu);
 
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
@@ -27873,30 +27873,6 @@ void test_JetStreamPublishAsync(void)
             s = natsCondition_TimedWait(args.c, args.m, 2000);
         args.msgReceived = false;
         natsMutex_Unlock(args.m);
-    }
-    testCond(s == NATS_OK);
-
-    test("Enqueue message with bad subject: ");
-    s = natsMsg_Create(&msg, "some.subject", NULL, "hello", 5);
-    if (s == NATS_OK)
-    {
-        natsSubscription *rsub;
-
-        js_lock(js);
-        rsub = js->rsub;
-        js_unlock(js);
-
-        _waitSubPending(rsub, 0);
-
-        natsSub_Lock(rsub);
-        rsub->ownDispatcher.queue.head = msg;
-        rsub->ownDispatcher.queue.tail = msg;
-        rsub->ownDispatcher.queue.msgs = 1;
-        rsub->ownDispatcher.queue.bytes = natsMsg_dataAndHdrLen(msg);
-        natsCondition_Signal(rsub->ownDispatcher.cond);
-        natsSub_Unlock(rsub);
-
-        // Message is owned by subscription, do not destroy it here.
     }
     testCond(s == NATS_OK);
 

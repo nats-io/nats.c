@@ -408,8 +408,8 @@ struct __jsAtomicBatchCtx
     natsMutex   *mu;
     char        *id;
     jsCtx       *js;
-    int         count;
-    bool        done;
+    uint64_t    count;
+
 };
 
 typedef struct __jsFetch

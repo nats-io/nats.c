@@ -7552,58 +7552,58 @@ js_PublishAsyncComplete(jsCtx *js, jsPubOptions *opts);
 NATS_EXTERN natsStatus
 js_PublishAsyncGetPendingList(natsMsgList *pending, jsCtx *js);
 
-/** \brief Starts an atomic batch publish
+/** \brief Starts an atomic batch publish.
  *
  * This call initializes an atomic batch publish and sends the first message.
  *
- * \note The returned ctx must be destroyed with #js_destroyAtomicBatchCtx
+ * \note The returned context must be destroyed with #js_DestroyAtomicBatchCtx
  * after the publish is committed or aborted.
  * \note The returned #jsPubAck object needs to be destroyed with #jsPubAck_Destroy
  * when no longer needed.
  *
- * @param ctx Where to store the atomic batch ctx for subsequent publishes
+ * @param ctx Where to store the atomic batch context for subsequent publishes.
  * @param new_puback Where to store the pub ack for the first message, or `NULL` if not needed.
  * @param js the pointer to the #jsCtx object.
  * @param msg the message to publish as part of this batch.
  * @param opts the publish options, possibly `NULL`.
- * @param errCode the location where to store the JetStream specific error code, possibly `NULL`
+ * @param errCode the location where to store the JetStream specific error code, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-js_startBatchPublish(jsAtomicBatchCtx **ctx, jsPubAck **new_puback, jsCtx *js,
+js_StartBatchPublish(jsAtomicBatchCtx **ctx, jsPubAck **new_puback, jsCtx *js,
                      natsMsg *msg, jsPubOptions *opts, jsErrCode *errCode);
 
-/** \brief Adds a message to the batch publish
+/** \brief Adds a message to the batch publish.
  *
- * This call adds a message to the batch publish initialized by #js_startBatchPublish.
+ * This call adds a message to the batch publish initialized by #js_StartBatchPublish.
  *
- * \note The returned #jsPubAck object needs to be destroyed with #jsPubAck_Destroy
+ * \note The returned #jsPubAck object needs to be destroyed with #jsPubAck_Destroy.
  *
  * @param new_puback Where to store the pub ack for this message, or `NULL` if not needed.
- * @param ctx the atomic batch ctx returned by #js_startBatchPublish.
+ * @param ctx the atomic batch context returned by #js_StartBatchPublish.
  * @param msg the message to publish as part of this batch.
  * @param opts the publish options, possibly `NULL`.
- * @param errCode the location where to store the JetStream specific error code, possibly `NULL`
+ * @param errCode the location where to store the JetStream specific error code, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-js_batchPublishAdd(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg,
+js_BatchPublishAdd(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg,
                    jsPubOptions *opts, jsErrCode *errCode);
 
-/** \brief Commits the batch publish
+/** \brief Commits the batch publish.
  *
- * This call commits the batch publish initialized by #js_startBatchPublish
- * and added to by #js_batchPublishAdd.
+ * This call commits the batch publish initialized by #js_StartBatchPublish
+ * and added to by #js_BatchPublishAdd.
  *
- * \note The returned #jsPubAck object needs to be destroyed with #jsPubAck_Destroy
- * \note After this call, the ctx should be destroyed with #js_destroyAtomicBatchCtx.
+ * \note The returned #jsPubAck object needs to be destroyed with #jsPubAck_Destroy.
+ * \note After this call, the context should be destroyed with #js_DestroyAtomicBatchCtx.
  *
  * @param new_puback Where to store the pub ack for the commit, or `NULL` if not needed.
- * @param ctx the atomic batch ctx returned by #js_startBatchPublish.
+ * @param ctx the atomic batch context returned by #js_StartBatchPublish.
  * @param msg the message to publish as part of this batch.
  * @param opts the publish options, possibly `NULL`.
- * @param errCode the location where to store the JetStream specific error code, possibly `NULL`
+ * @param errCode the location where to store the JetStream specific error code, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-js_batchPublishCommit(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg,
+js_BatchPublishCommit(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg,
                       jsPubOptions *opts, jsErrCode *errCode);
 
 
@@ -7614,7 +7614,7 @@ js_batchPublishCommit(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg
  * @param ctx the pointer to the #jsAtomicBatchCtx object.
  */
 NATS_EXTERN void
-js_destroyAtomicBatchCtx(jsAtomicBatchCtx *ctx);
+js_DestroyAtomicBatchCtx(jsAtomicBatchCtx *ctx);
 
 /** @} */ // end of jsPubGroup
 

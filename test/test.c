@@ -40369,11 +40369,37 @@ void test_JetStreamAtomicBatchPublish(void)
     IFOK(s, js_AddStream(NULL, js, &sc, NULL, NULL));
     testCond(s == NATS_OK);
 
-    test("Create batch context: ");
+    test ("Create message: ");
     s = natsMsg_Create(&msg, "foo", NULL, "hello", 5);
-    IFOK(s, js_startBatchPublish(&batch_ctx, NULL, js, msg, NULL, NULL));
+    testCond(s == NATS_OK);
+
+    test("Create batch (bad args): ");
+    s = js_StartBatchPublish(NULL, NULL, js, msg, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_StartBatchPublish(&batch_ctx, NULL, NULL, msg, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+       s = js_StartBatchPublish(&batch_ctx, NULL, js, NULL, NULL, NULL);
+    testCond((s == NATS_INVALID_ARG) && (batch_ctx == NULL));
+    nats_clearLastError();
+
+    test("Create batch context: ");
+    s = js_StartBatchPublish(&batch_ctx, NULL, js, msg, NULL, NULL);
     testCond(s == NATS_OK);
     natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Publish message (bad args): ");
+    s = natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+    if (s == NATS_OK) {
+        s = js_BatchPublishAdd(NULL, NULL, msg, NULL, NULL);
+        if (s == NATS_INVALID_ARG)
+            s = js_BatchPublishAdd(NULL, batch_ctx, NULL, NULL, NULL);
+    }
+    testCond((s == NATS_INVALID_ARG) && (batch_ctx != NULL));
+    nats_clearLastError();
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    s = NATS_OK;
 
     test("Publish 98 messages: ");
     for (uint64_t i = 0; (i < msg_count) && (s == NATS_OK); i++)
@@ -40381,28 +40407,45 @@ void test_JetStreamAtomicBatchPublish(void)
         char data[12];
         snprintf(data, sizeof(data), "%" PRIu64, i);
         s = natsMsg_Create(&msg, "foo", NULL, data, strlen(data));
-        IFOK(s, js_batchPublishAdd(NULL, batch_ctx, msg, NULL, NULL));
+        IFOK(s, js_BatchPublishAdd(NULL, batch_ctx, msg, NULL, NULL));
         natsMsg_Destroy(msg);
+        msg = NULL;
     }
     testCond(s == NATS_OK);
 
+    test("Commit batch (bad args): ");
+    s = js_BatchPublishCommit(NULL, NULL, NULL, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+        s = js_BatchPublishCommit(NULL, batch_ctx, NULL, NULL, NULL);
+    if (s == NATS_INVALID_ARG)
+    {
+        s = natsMsg_Create(&msg, "foo", NULL, "hello", 5);
+        IFOK(s, js_BatchPublishCommit(NULL, NULL, msg, NULL, NULL));
+    }
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
     test("Commit batch: ");
     s = natsMsg_Create(&msg, "foo", NULL, "end", 3);
-    IFOK(s, js_batchPublishCommit(&new_puback, batch_ctx, msg, NULL, NULL));
+    IFOK(s, js_BatchPublishCommit(&new_puback, batch_ctx, msg, NULL, NULL));
     testCond((s == NATS_OK) && (new_puback != NULL) && (new_puback->Count == msg_count + 2));
 
     jsPubAck_Destroy(new_puback);
     new_puback = NULL;
-    js_destroyAtomicBatchCtx(batch_ctx);
+    js_DestroyAtomicBatchCtx(batch_ctx);
     batch_ctx = NULL;
     natsMsg_Destroy(msg);
+    msg = NULL;
 
     // Out of sequence error test
     test("Create batch context: ");
     s = natsMsg_Create(&msg, "foo", NULL, "hello", 5);
-    IFOK(s, js_startBatchPublish(&batch_ctx, NULL, js, msg, NULL, NULL));
+    IFOK(s, js_StartBatchPublish(&batch_ctx, NULL, js, msg, NULL, NULL));
     testCond(s == NATS_OK);
     natsMsg_Destroy(msg);
+    msg = NULL;
 
     test("Publish 98 messages: ");
     for (uint64_t i = 0; (i < msg_count) && (s == NATS_OK); i++)
@@ -40410,33 +40453,37 @@ void test_JetStreamAtomicBatchPublish(void)
         char data[12];
         snprintf(data, sizeof(data), "%" PRIu64, i);
         s = natsMsg_Create(&msg, "foo", NULL, data, strlen(data));
-        IFOK(s, js_batchPublishAdd(NULL, batch_ctx, msg, NULL, NULL));
+        IFOK(s, js_BatchPublishAdd(NULL, batch_ctx, msg, NULL, NULL));
         natsMsg_Destroy(msg);
+        msg = NULL;
     }
     testCond(s == NATS_OK);
 
     test("Increment count, commit batch and expect error: ");
     batch_ctx->count++;
     s = natsMsg_Create(&msg, "foo", NULL, "end", 3);
-    IFOK(s, js_batchPublishCommit(&new_puback, batch_ctx, msg, NULL, NULL));
+    IFOK(s, js_BatchPublishCommit(&new_puback, batch_ctx, msg, NULL, NULL));
     testCond((s == NATS_ERR));
     nats_clearLastError();
 
     jsPubAck_Destroy(new_puback);
     new_puback = NULL;
-    js_destroyAtomicBatchCtx(batch_ctx);
+    js_DestroyAtomicBatchCtx(batch_ctx);
     batch_ctx = NULL;
     natsMsg_Destroy(msg);
+    msg = NULL;
 
     // Two batch publishes
     test("Create 2 batch contexts: ");
     s = natsMsg_Create(&msg, "foo", NULL, "hello", 5);
     IFOK(s, natsMsg_Create(&msg2, "foo", NULL, "hello", 5));
-    IFOK(s, js_startBatchPublish(&batch_ctx, NULL, js, msg, NULL, NULL));
-    IFOK(s, js_startBatchPublish(&ctx2, NULL, js, msg, NULL, NULL));
+    IFOK(s, js_StartBatchPublish(&batch_ctx, NULL, js, msg, NULL, NULL));
+    IFOK(s, js_StartBatchPublish(&ctx2, NULL, js, msg, NULL, NULL));
     testCond(s == NATS_OK);
     natsMsg_Destroy(msg);
+    msg = NULL;
     natsMsg_Destroy(msg2);
+    msg2 = NULL;
 
     test("Publish 98 messages to each: ");
     for (uint64_t i = 0; (i < msg_count) && (s == NATS_OK); i++)
@@ -40445,18 +40492,20 @@ void test_JetStreamAtomicBatchPublish(void)
         snprintf(data, sizeof(data), "%" PRIu64, i);
         s = natsMsg_Create(&msg, "foo", NULL, data, strlen(data));
         IFOK(s, natsMsg_Create(&msg2, "foo", NULL, data, strlen(data)));
-        IFOK(s, js_batchPublishAdd(NULL, batch_ctx, msg, NULL, NULL));
-        IFOK(s, js_batchPublishAdd(NULL, ctx2, msg, NULL, NULL));
+        IFOK(s, js_BatchPublishAdd(NULL, batch_ctx, msg, NULL, NULL));
+        IFOK(s, js_BatchPublishAdd(NULL, ctx2, msg, NULL, NULL));
         natsMsg_Destroy(msg);
+        msg = NULL;
         natsMsg_Destroy(msg2);
+        msg2 = NULL;
     }
     testCond(s == NATS_OK);
 
     test("Commit both batches batch: ");
     s = natsMsg_Create(&msg, "foo", NULL, "end", 3);
     IFOK(s, natsMsg_Create(&msg2, "foo", NULL, "end", 3));
-    IFOK(s, js_batchPublishCommit(&new_puback, batch_ctx, msg, NULL, NULL));
-    IFOK(s, js_batchPublishCommit(&puback2, ctx2, msg, NULL, NULL));
+    IFOK(s, js_BatchPublishCommit(&new_puback, batch_ctx, msg, NULL, NULL));
+    IFOK(s, js_BatchPublishCommit(&puback2, ctx2, msg, NULL, NULL));
     testCond((s == NATS_OK)   &&
         ((new_puback != NULL) && (new_puback->Count == msg_count + 2)) &&
         ((puback2 != NULL)    && (puback2->Count == msg_count + 2)));
@@ -40464,9 +40513,9 @@ void test_JetStreamAtomicBatchPublish(void)
     jsPubAck_Destroy(new_puback);
     new_puback = NULL;
     jsPubAck_Destroy(puback2);
-    js_destroyAtomicBatchCtx(batch_ctx);
+    js_DestroyAtomicBatchCtx(batch_ctx);
     batch_ctx = NULL;
-    js_destroyAtomicBatchCtx(ctx2);
+    js_DestroyAtomicBatchCtx(ctx2);
     batch_ctx = NULL;
     natsMsg_Destroy(msg);
     natsMsg_Destroy(msg2);

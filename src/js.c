@@ -635,7 +635,7 @@ _parsePubAck(natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, char *errTxt, size_t 
 
         // Now unmarshal the API response and check if there was an error.
         s = js_unmarshalResponse(&ar, &json, msg);
-        if (s == NATS_OK && json != NULL)
+        if (s == NATS_OK)
         {
             if (js_apiResponseIsErr(&ar))
             {
@@ -647,12 +647,15 @@ _parsePubAck(natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, char *errTxt, size_t 
             else if (pa != NULL)
             {
                 memset(pa, 0, sizeof(jsPubAck));
-                s = nats_JSONGetStr(json, "stream", &(pa->Stream));
-                IFOK(s, nats_JSONGetULong(json, "seq", &(pa->Sequence)));
-                IFOK(s, nats_JSONGetBool(json, "duplicate", &(pa->Duplicate)));
-                IFOK(s, nats_JSONGetStr(json, "domain", &(pa->Domain)));
-                IFOK(s, nats_JSONGetStr(json, "batch", &(pa->Batch)));
-                IFOK(s, nats_JSONGetULong(json, "count", &(pa->Count)));
+                if (json != NULL)
+                {
+                    s = nats_JSONGetStr(json, "stream", &(pa->Stream));
+                    IFOK(s, nats_JSONGetULong(json, "seq", &(pa->Sequence)));
+                    IFOK(s, nats_JSONGetBool(json, "duplicate", &(pa->Duplicate)));
+                    IFOK(s, nats_JSONGetStr(json, "domain", &(pa->Domain)));
+                    IFOK(s, nats_JSONGetStr(json, "batch", &(pa->Batch)));
+                    IFOK(s, nats_JSONGetULong(json, "count", &(pa->Count)));
+                }
             }
 
             js_freeApiRespContent(&ar);

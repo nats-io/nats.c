@@ -42,6 +42,9 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsExpectedLastMsgIdHdr         "Nats-Expected-Last-Msg-Id"
 #define jsConsumerStalledHdr           "Nats-Consumer-Stalled"
 #define jsConsumerPinIDHdr             "Nats-Pin-Id"
+#define jsNatsBatchIdHdr               "Nats-Batch-Id"
+#define jsNatsBatchSequenceHdr         "Nats-Batch-Sequence"
+#define jsNatsBatchCommit              "Nats-Batch-Commit"
 
 #define jsErrStreamNameRequired             "stream name is required"
 #define jsErrConsumerNameRequired           "consumer name is required"

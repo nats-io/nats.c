@@ -7556,7 +7556,7 @@ js_PublishAsyncGetPendingList(natsMsgList *pending, jsCtx *js);
  *
  * This call initializes an atomic batch publish and sends the first message.
  *
- * \note The returned context must be destroyed with #js_DestroyAtomicBatchCtx
+ * \note The returned context must be destroyed with #jsAtomicBatchCtx_Destroy
  * after the publish is committed or aborted.
  * \note The returned #jsPubAck object needs to be destroyed with #jsPubAck_Destroy
  * when no longer needed.
@@ -7574,12 +7574,12 @@ js_BatchPublishStart(jsAtomicBatchCtx **ctx, jsPubAck **new_puback, jsCtx *js,
 
 /** \brief Adds a message to the batch publish.
  *
- * This call adds a message to the batch publish initialized by #js_StartBatchPublish.
+ * This call adds a message to the batch publish initialized by #js_BatchPublishStart.
  *
  * \note The returned #jsPubAck object needs to be destroyed with #jsPubAck_Destroy.
  *
  * @param new_puback Where to store the pub ack for this message, or `NULL` if not needed.
- * @param ctx the atomic batch context returned by #js_StartBatchPublish.
+ * @param ctx the atomic batch context returned by #js_BatchPublishStart.
  * @param msg the message to publish as part of this batch.
  * @param opts the publish options, possibly `NULL`.
  * @param errCode the location where to store the JetStream specific error code, possibly `NULL`.
@@ -7590,14 +7590,14 @@ js_BatchPublishAdd(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg,
 
 /** \brief Commits the batch publish.
  *
- * This call commits the batch publish initialized by #js_StartBatchPublish
+ * This call commits the batch publish initialized by #js_BatchPublishStart
  * and added to by #js_BatchPublishAdd.
  *
  * \note The returned #jsPubAck object needs to be destroyed with #jsPubAck_Destroy.
- * \note After this call, the context should be destroyed with #js_DestroyAtomicBatchCtx.
+ * \note After this call, the context should be destroyed with #jsAtomicBatchCtx_Destroy.
  *
  * @param new_puback Where to store the pub ack for the commit, or `NULL` if not needed.
- * @param ctx the atomic batch context returned by #js_StartBatchPublish.
+ * @param ctx the atomic batch context returned by #js_BatchPublishStart.
  * @param msg the message to publish as part of this batch.
  * @param opts the publish options, possibly `NULL`.
  * @param errCode the location where to store the JetStream specific error code, possibly `NULL`.

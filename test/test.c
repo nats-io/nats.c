@@ -40374,16 +40374,16 @@ void test_JetStreamAtomicBatchPublish(void)
     testCond(s == NATS_OK);
 
     test("Create batch (bad args): ");
-    s = js_StartBatchPublish(NULL, NULL, js, msg, NULL, NULL);
+    s = js_BatchPublishStart(NULL, NULL, js, msg, NULL, NULL);
     if (s == NATS_INVALID_ARG)
-        s = js_StartBatchPublish(&batch_ctx, NULL, NULL, msg, NULL, NULL);
+        s = js_BatchPublishStart(&batch_ctx, NULL, NULL, msg, NULL, NULL);
     if (s == NATS_INVALID_ARG)
-       s = js_StartBatchPublish(&batch_ctx, NULL, js, NULL, NULL, NULL);
+       s = js_BatchPublishStart(&batch_ctx, NULL, js, NULL, NULL, NULL);
     testCond((s == NATS_INVALID_ARG) && (batch_ctx == NULL));
     nats_clearLastError();
 
     test("Create batch context: ");
-    s = js_StartBatchPublish(&batch_ctx, NULL, js, msg, NULL, NULL);
+    s = js_BatchPublishStart(&batch_ctx, NULL, js, msg, NULL, NULL);
     testCond(s == NATS_OK);
     natsMsg_Destroy(msg);
     msg = NULL;
@@ -40434,7 +40434,7 @@ void test_JetStreamAtomicBatchPublish(void)
 
     jsPubAck_Destroy(new_puback);
     new_puback = NULL;
-    js_DestroyAtomicBatchCtx(batch_ctx);
+    jsAtomicBatchCtx_Destroy(batch_ctx);
     batch_ctx = NULL;
     natsMsg_Destroy(msg);
     msg = NULL;
@@ -40442,7 +40442,7 @@ void test_JetStreamAtomicBatchPublish(void)
     // Out of sequence error test
     test("Create batch context: ");
     s = natsMsg_Create(&msg, "foo", NULL, "hello", 5);
-    IFOK(s, js_StartBatchPublish(&batch_ctx, NULL, js, msg, NULL, NULL));
+    IFOK(s, js_BatchPublishStart(&batch_ctx, NULL, js, msg, NULL, NULL));
     testCond(s == NATS_OK);
     natsMsg_Destroy(msg);
     msg = NULL;
@@ -40468,7 +40468,7 @@ void test_JetStreamAtomicBatchPublish(void)
 
     jsPubAck_Destroy(new_puback);
     new_puback = NULL;
-    js_DestroyAtomicBatchCtx(batch_ctx);
+    jsAtomicBatchCtx_Destroy(batch_ctx);
     batch_ctx = NULL;
     natsMsg_Destroy(msg);
     msg = NULL;
@@ -40477,8 +40477,8 @@ void test_JetStreamAtomicBatchPublish(void)
     test("Create 2 batch contexts: ");
     s = natsMsg_Create(&msg, "foo", NULL, "hello", 5);
     IFOK(s, natsMsg_Create(&msg2, "foo", NULL, "hello", 5));
-    IFOK(s, js_StartBatchPublish(&batch_ctx, NULL, js, msg, NULL, NULL));
-    IFOK(s, js_StartBatchPublish(&ctx2, NULL, js, msg, NULL, NULL));
+    IFOK(s, js_BatchPublishStart(&batch_ctx, NULL, js, msg, NULL, NULL));
+    IFOK(s, js_BatchPublishStart(&ctx2, NULL, js, msg, NULL, NULL));
     testCond(s == NATS_OK);
     natsMsg_Destroy(msg);
     msg = NULL;
@@ -40513,9 +40513,9 @@ void test_JetStreamAtomicBatchPublish(void)
     jsPubAck_Destroy(new_puback);
     new_puback = NULL;
     jsPubAck_Destroy(puback2);
-    js_DestroyAtomicBatchCtx(batch_ctx);
+    jsAtomicBatchCtx_Destroy(batch_ctx);
     batch_ctx = NULL;
-    js_DestroyAtomicBatchCtx(ctx2);
+    jsAtomicBatchCtx_Destroy(ctx2);
     batch_ctx = NULL;
     natsMsg_Destroy(msg);
     natsMsg_Destroy(msg2);

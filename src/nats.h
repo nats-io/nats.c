@@ -7569,7 +7569,7 @@ js_PublishAsyncGetPendingList(natsMsgList *pending, jsCtx *js);
  * @param errCode the location where to store the JetStream specific error code, possibly `NULL`.
  */
 NATS_EXTERN natsStatus
-js_StartBatchPublish(jsAtomicBatchCtx **ctx, jsPubAck **new_puback, jsCtx *js,
+js_BatchPublishStart(jsAtomicBatchCtx **ctx, jsPubAck **new_puback, jsCtx *js,
                      natsMsg *msg, jsPubOptions *opts, jsErrCode *errCode);
 
 /** \brief Adds a message to the batch publish.
@@ -7614,7 +7614,7 @@ js_BatchPublishCommit(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg
  * @param ctx the pointer to the #jsAtomicBatchCtx object.
  */
 NATS_EXTERN void
-js_DestroyAtomicBatchCtx(jsAtomicBatchCtx *ctx);
+jsAtomicBatchCtx_Destroy(jsAtomicBatchCtx *ctx);
 
 /** @} */ // end of jsPubGroup
 

@@ -3704,7 +3704,7 @@ js_BatchPublishAdd(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg,
     s = natsMsgHeader_Set(msg, jsNatsBatchIdHdr, ctx->id);
     if (s == NATS_OK)
     {
-        if (snprintf(temp, sizeof(temp), "%lu", ctx->count+1) < 1)
+        if (snprintf(temp, sizeof(temp), "%" PRIu64, ctx->count+1) < 1)
             s = nats_setDefaultError(NATS_NO_MEMORY);
         else
             s = natsMsgHeader_Set(msg, jsNatsBatchSequenceHdr, temp);
@@ -3736,13 +3736,13 @@ js_BatchPublishCommit(jsPubAck **new_puback, jsAtomicBatchCtx *ctx, natsMsg *msg
 }
 
 natsStatus
-js_StartBatchPublish(jsAtomicBatchCtx **ctx, jsPubAck **new_puback, jsCtx *js,
+js_BatchPublishStart(jsAtomicBatchCtx **ctx, jsPubAck **new_puback, jsCtx *js,
                      natsMsg *msg, jsPubOptions *opts, jsErrCode *errCode)
 {
     jsAtomicBatchCtx *batchCtx = NULL;
     natsStatus s = NATS_OK;
 
-    if ((ctx == NULL) || (js == NULL) || (*ctx != NULL) || (msg == NULL))
+    if ((ctx == NULL) || (js == NULL) || (msg == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     batchCtx = NATS_CALLOC(1, sizeof(jsAtomicBatchCtx));
@@ -3761,7 +3761,7 @@ js_StartBatchPublish(jsAtomicBatchCtx **ctx, jsPubAck **new_puback, jsCtx *js,
     IFOK(s, natsNUID_Next(batchCtx->id, NUID_BUFFER_LEN + 1));
     if (s != NATS_OK)
     {
-        js_DestroyAtomicBatchCtx(batchCtx);
+        jsAtomicBatchCtx_Destroy(batchCtx);
         return NATS_UPDATE_ERR_STACK(s);
     }
 
@@ -3772,7 +3772,7 @@ js_StartBatchPublish(jsAtomicBatchCtx **ctx, jsPubAck **new_puback, jsCtx *js,
 }
 
 void
-js_DestroyAtomicBatchCtx(jsAtomicBatchCtx *ctx)
+jsAtomicBatchCtx_Destroy(jsAtomicBatchCtx *ctx)
 {
     if (ctx == NULL)
         return;

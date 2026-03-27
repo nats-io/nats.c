@@ -16,11 +16,11 @@ jobs:
     name: "Benchmark with latest server version"
     steps:
       - name: Checkout nats.c
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with: ${{ github.ref }}
 
       - name: "Checkout dependencies (nats.c.deps)"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: nats-io/nats.c.deps
           path: deps
@@ -58,19 +58,19 @@ jobs:
       - name: "Download nats-server version main"
         working-directory: ./build
         run: |
-            for c in 1 2 3 4 5
-            do
-                echo "Attempt $c to download binary for main"
-                rm -f ./nats-server
-                curl -sf "https://binaries.nats.dev/nats-io/nats-server/v2@$rel" | PREFIX=. sh
-                # We are sometimes getting nats-server of size 0. Make sure we have a
-                # working nats-server by making sure we get a version number.
-                v="$(./nats-server -v)"
-                if [ "$v" != "" ]; then
-                break
-                fi
-            done
-            mv ./nats-server ../deps/nats-server/nats-server
+          for c in 1 2 3 4 5
+          do
+              echo "Attempt $c to download binary for main"
+              rm -f ./nats-server
+              curl -sf "https://binaries.nats.dev/nats-io/nats-server/v2@$rel" | PREFIX=. sh
+              # We are sometimes getting nats-server of size 0. Make sure we have a
+              # working nats-server by making sure we get a version number.
+              v="$(./nats-server -v)"
+              if [ "$v" != "" ]; then
+              break
+              fi
+          done
+          mv ./nats-server ../deps/nats-server/nats-server
 
       - name: "Cache for base benchmark for main"
         id: cache-base-bench
@@ -89,7 +89,7 @@ jobs:
 
       - name: "Checkout nats.c for main"
         if: steps.cache-base-bench.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: main
           clean: false
@@ -108,7 +108,7 @@ jobs:
           ctest -L 'bench' --timeout 600 -VV | tee bench-main.log
 
       - name: "Checkout branch"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
           clean: false

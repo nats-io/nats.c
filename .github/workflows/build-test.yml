@@ -73,10 +73,10 @@ jobs:
     name: "${{ inputs.ubuntu_version }} - nats:${{ inputs.server_version }}"
     steps:
       - name: Checkout nats.c
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: "Checkout dependencies (nats.c.deps)"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: nats-io/nats.c.deps
           path: deps

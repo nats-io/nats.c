@@ -3,8 +3,8 @@ name: Update Docs
 on:
   push:
     branches:
-        - main
-        - release_*
+      - main
+      - release_*
 
 jobs:
   update-docs:
@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Doxygen
         run: |

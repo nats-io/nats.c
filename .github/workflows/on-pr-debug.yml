@@ -52,8 +52,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-          pooled_dispatch: [pool, NO-pool]
-          write_deadline: [write_deadline, NO-write_deadline]
+        pooled_dispatch: [pool, NO-pool]
+        write_deadline: [write_deadline, NO-write_deadline]
     uses: ./.github/workflows/build-test.yml
     with:
       coverage: ON
@@ -107,7 +107,7 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Checkout nats.c
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build
         env:

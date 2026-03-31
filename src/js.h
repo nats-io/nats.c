@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef JS_H_
+#define JS_H_
+
 #include "natsp.h"
 #include "util.h"
 
@@ -302,3 +305,8 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch);
 
 void
 js_setOnReleasedCb(jsCtx *js, js_onReleaseCb cb, void *arg);
+
+void
+js_addReplyInfoToList(replyInfo *reply);
+
+#endif /* JS_H_ */

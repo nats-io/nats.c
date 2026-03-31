@@ -336,71 +336,13 @@ _oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static void
-_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
-{
-    char        *rt   = NULL;
-    const char  *subj = NULL;
-    respInfo    *resp = NULL;
-    bool        dmsg  = true;
-
-    natsConn_Lock(nc);
-    if (natsConn_isClosed(nc))
-    {
-        natsConn_Unlock(nc);
-        natsMsg_Destroy(msg);
-        return;
-    }
-    subj = natsMsg_GetSubject(msg);
-    // We look for the reply token by first checking that the message subject
-    // prefix matches the subscription's subject (without the last '*').
-    // It is possible that it does not due to subject rewrite (JetStream).
-    if (((int) strlen(subj) > nc->reqIdOffset)
-        && (memcmp((const void*) sub->subject, (const void*) subj, strlen(sub->subject) - 1) == 0))
-    {
-        rt = (char*) (natsMsg_GetSubject(msg) + nc->reqIdOffset);
-        resp = (respInfo*) natsStrHash_Remove(nc->respMap, rt);
-    }
-    else if (natsStrHash_Count(nc->respMap) == 1)
-    {
-        // Only if the subject is completely different, we assume that it
-        // could be the server that has rewritten the subject and so if there
-        // is a single entry, use that.
-        void *value = NULL;
-        natsStrHash_RemoveSingle(nc->respMap, NULL, &value);
-        resp = (respInfo*) value;
-    }
-    if (resp != NULL)
-    {
-        natsMutex_Lock(resp->mu);
-        // Check for the race where the requestor has already timed-out.
-        // If so, resp->removed will be true, in which case simply discard
-        // the message.
-        if (!resp->removed)
-        {
-            // Do not destroy the message since it is being used.
-            dmsg = false;
-            resp->msg = msg;
-            resp->removed = true;
-            natsCondition_Signal(resp->cond);
-        }
-        natsMutex_Unlock(resp->mu);
-    }
-    natsConn_Unlock(nc);
-
-    if (dmsg)
-        natsMsg_Destroy(msg);
-}
-
 natsStatus
 natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
                           natsMsg *m, int64_t timeout)
 {
-    natsStatus          s           = NATS_OK;
-    respInfo            *resp       = NULL;
-    bool                needsRemoval= true;
-    char                respInboxBuf[32 + NUID_BUFFER_LEN + NATS_MAX_REQ_ID_LEN + 1]; // <inbox prefix>.<nuid>.<reqId>
-    char                *respInbox = respInboxBuf;
+    natsStatus      s       = NATS_OK;
+    replyInfo       *reply  = NULL;
+    repliesMuxer    *mux    = NULL;
 
     if ((replyMsg == NULL) || (nc == NULL) || (m == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -419,87 +361,26 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
         return _oldRequestMsg(replyMsg, nc, m, timeout);
     }
 
-    // If the custom inbox prefix is more than the reserved 32 characters
-    // in respInboxBuf, then we need to allocate...
-    if (nc->inboxPfxLen > 32)
-    {
-        respInbox = NATS_MALLOC(nc->inboxPfxLen + NUID_BUFFER_LEN + NATS_MAX_REQ_ID_LEN + 1);
-        if (respInbox == NULL)
-        {
-            natsConn_Unlock(nc);
-            return nats_setDefaultError(NATS_NO_MEMORY);
-        }
-    }
-
     // Since we are going to release the lock and connection
     // may be closed while we wait for reply, we need to retain
     // the connection object.
-    natsConn_retain(nc);
+    natsConn_retainLocked(nc);
 
-    // Setup only once (but could be more if natsConn_initResp() returns != OK)
-    if (nc->respMux == NULL)
-        s = natsConn_initResp(nc, _respHandler);
-    if (s == NATS_OK)
-        s = natsConn_addRespInfo(&resp, nc, respInbox);
+    mux = &nc->repliesMux;
+    s = repliesMuxer_add(&reply, mux, NULL);
 
     natsConn_Unlock(nc);
 
     if (s == NATS_OK)
     {
-        s = natsConn_publish(nc, m, (const char*) respInbox, true);
-        if (s == NATS_OK)
-        {
-            natsMutex_Lock(resp->mu);
-            while ((s != NATS_TIMEOUT) && (resp->msg == NULL) && !resp->closed)
-                s = natsCondition_TimedWait(resp->cond, resp->mu, timeout);
-
-            // If we have a message, deliver it.
-            if (resp->msg != NULL)
-            {
-                // In case of race where s != NATS_OK but we got the message,
-                // we need to override status and set it to OK.
-                s = NATS_OK;
-
-                // For servers that support it, we may receive an empty message
-                // with a 503 status header. If that is the case, return NULL
-                // message and NATS_NO_RESPONDERS error.
-                if (natsMsg_IsNoResponders(resp->msg))
-                {
-                    natsMsg_Destroy(resp->msg);
-                    s = NATS_NO_RESPONDERS;
-                }
-                else
-                    *replyMsg = resp->msg;
-            }
-            else
-            {
-                // Set the correct error status that we return to the user
-                if (resp->closed)
-                    s = resp->closedSts;
-                else
-                    s = NATS_TIMEOUT;
-            }
-            resp->msg = NULL;
-            needsRemoval = !resp->removed;
-            // Signal to _respHandler that we are no longer interested.
-            resp->removed = true;
-            natsMutex_Unlock(resp->mu);
-        }
+        natsStatus ps = natsConn_publish(nc, m, (const char*) reply->inbox, true);
+        // Regardless if the publish status `ps` is ok or not, invoke this
+        // function. It will take into account this status but will properly
+        // handle the `reply` in all cases.
+        s = repliesMuxer_waitReplyReceived(replyMsg, mux, reply, ps, timeout);
     }
-    // Common to success or if we failed to create the sub, send the request...
-    if (needsRemoval)
-    {
-        natsConn_Lock(nc);
-        if (nc->respMap != NULL)
-            natsStrHash_Remove(nc->respMap, respInbox+nc->reqIdOffset);
-        natsConn_Unlock(nc);
-    }
-    natsConn_disposeRespInfo(nc, resp, true);
 
     natsConn_release(nc);
-
-    if (respInbox != respInboxBuf)
-        NATS_FREE(respInbox);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

@@ -18,10 +18,8 @@
 #include "mem.h"
 #include "conn.h"
 #include "util.h"
-#include "opts.h"
 #include "sub.h"
 #include "dispatch.h"
-#include "glib/glib.h"
 
 #ifdef DEV_MODE
 // For type safety
@@ -30,12 +28,12 @@ void js_lock(jsCtx *js)   { natsMutex_Lock(js->mu);   }
 void js_unlock(jsCtx *js) { natsMutex_Unlock(js->mu); }
 
 static void _retain(jsCtx *js)  { js->refs++; }
-static void _release(jsCtx *js) { js->refs--; }
+static int  _release(jsCtx *js) { return --(js->refs); }
 
 #else
 
 #define _retain(js)         ((js)->refs++)
-#define _release(js)        ((js)->refs--)
+#define _release(js)        (--((js)->refs))
 
 #endif // DEV_MODE
 
@@ -43,11 +41,8 @@ static void _release(jsCtx *js) { js->refs--; }
 const char*      jsDefaultAPIPrefix      = "$JS.API";
 const int64_t    jsDefaultRequestWait    = 5000;
 const int64_t    jsDefaultStallWait      = 200;
-const char       *jsDigits               = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-const int        jsBase                  = 62;
 const int64_t    jsOrderedHBInterval     = NATS_SECONDS_TO_NANOS(5);
 
-#define jsReplyTokenSize    (8)
 #define jsDefaultMaxMsgs    (512 * 1024)
 
 #define jsLastConsumerSeqHdr    "Nats-Last-Consumer"
@@ -85,9 +80,7 @@ _freeContext(jsCtx *js)
     js_onReleaseCb  cb      = NULL;
 
     natsStrHash_Destroy(js->pm);
-    natsSubscription_Destroy(js->rsub);
     _destroyOptions(&(js->opts));
-    NATS_FREE(js->rpre);
     natsCondition_Destroy(js->cond);
     natsMutex_Destroy(js->mu);
     natsTimer_Destroy(js->pmtmr);
@@ -106,35 +99,33 @@ void
 js_retain(jsCtx *js)
 {
     js_lock(js);
-    js->refs++;
+    _retain(js);
     js_unlock(js);
 }
 
 void
 js_release(jsCtx *js)
 {
-    bool doFree;
+    int refs;
 
     if (js == NULL)
         return;
 
     js_lock(js);
-    doFree = (--(js->refs) == 0);
+    refs = _release(js);
     js_unlock(js);
 
-    if (doFree)
+    if (refs == 0)
         _freeContext(js);
 }
 
 static void
 js_unlockAndRelease(jsCtx *js)
 {
-    bool doFree;
-
-    doFree = (--(js->refs) == 0);
+    int refs = _release(js);
     js_unlock(js);
 
-    if (doFree)
+    if (refs == 0)
         _freeContext(js);
 }
 
@@ -151,7 +142,8 @@ _destroyPMInfo(pmInfo *pmi)
 void
 jsCtx_Destroy(jsCtx *js)
 {
-    pmInfo *pm;
+    pmInfo          *pm;
+    repliesMuxer    *mux;
 
     if (js == NULL)
         return;
@@ -163,24 +155,13 @@ jsCtx_Destroy(jsCtx *js)
         return;
     }
     js->closed = true;
-    if (js->rsub != NULL)
-    {
-        natsSubscription_Destroy(js->rsub);
-        js->rsub = NULL;
-    }
-    if ((js->pm != NULL) && natsStrHash_Count(js->pm) > 0)
-    {
-        natsStrHashIter iter;
-        void            *v = NULL;
 
-        natsStrHashIter_Init(&iter, js->pm);
-        while (natsStrHashIter_Next(&iter, NULL, &v))
-        {
-            natsMsg *msg = (natsMsg*) v;
-            natsStrHashIter_RemoveCurrent(&iter);
-            natsMsg_Destroy(msg);
-        }
-    }
+    mux = &js->nc->repliesMux;
+    natsMutex_Lock(mux->mu);
+    js->rClosed = true;
+    repliesMuxer_errorAll(mux, js, NATS_CONNECTION_CLOSED, false);
+    natsMutex_Unlock(mux->mu);
+
     while ((pm = js->pmHead) != NULL)
     {
         js->pmHead = pm->next;
@@ -300,9 +281,6 @@ natsConnection_JetStream(jsCtx **new_js, natsConnection *nc, jsOptions *opts)
     // we properly release the NATS connection.
     natsConn_retain(nc);
     js->nc = nc;
-    // This will be immutable and is computed based on the possible custom
-    // inbox prefix length (or the default "_INBOX.")
-    js->rpreLen = nc->inboxPfxLen+jsReplyTokenSize+1;
 
     s = natsMutex_Create(&(js->mu));
     if (s == NATS_OK)
@@ -615,26 +593,21 @@ _freePubAck(jsPubAck *pa)
 }
 
 static natsStatus
-_parsePubAck(natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, char *errTxt, size_t errTxtSize)
+_parsePubAck(replyInfo *reply, jsPubAck *pa, jsPubAckErr *pae, char *errTxt, size_t errTxtSize)
 {
     natsStatus  s       = NATS_OK;
     jsErrCode   jerr    = 0;
 
-    if (natsMsg_isTimeout(msg))
-    {
-        s = NATS_TIMEOUT;
-    }
-    else if (natsMsg_IsNoResponders(msg))
-    {
+    s = reply->err;
+    if ((s == NATS_OK) && natsMsg_IsNoResponders(reply->msg))
         s = NATS_NO_RESPONDERS;
-    }
-    else
+    if (s == NATS_OK)
     {
         nats_JSON           *json = NULL;
         jsApiResponse       ar;
 
         // Now unmarshal the API response and check if there was an error.
-        s = js_unmarshalResponse(&ar, &json, msg);
+        s = js_unmarshalResponse(&ar, &json, reply->msg);
         if (s == NATS_OK)
         {
             if (js_apiResponseIsErr(&ar))
@@ -679,24 +652,13 @@ _parsePubAck(natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, char *errTxt, size_t 
 }
 
 static void
-_handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+_handleReplyInfo(jsCtx *js, char *id, replyInfo *reply)
 {
-    const char      *subject    = natsMsg_GetSubject(msg);
-    char            *id         = NULL;
-    jsCtx           *js         = (jsCtx*) closure;
     natsMsg         *pmsg       = NULL;
     char            errTxt[256] = {'\0'};
     jsPubAckErr     pae;
     jsPubAck        pa;
     struct jsOptionsPublishAsync *opa = NULL;
-
-    if ((subject == NULL) || (int) strlen(subject) <= js->rpreLen)
-    {
-        natsMsg_Destroy(msg);
-        return;
-    }
-
-    id = (char*) (subject+js->rpreLen);
 
     js_lock(js);
 
@@ -704,7 +666,7 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
     if (pmsg == NULL)
     {
         js_unlock(js);
-        natsMsg_Destroy(msg);
+        natsMsg_Destroy(reply->msg);
         return;
     }
 
@@ -717,7 +679,7 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
         // If _parsePubAck returns an error, we will set the pointer ppae to
         // our stack variable 'pae', otherwise, set the pointer ppa to the
         // stack variable 'pa', which is the jsPubAck (positive ack).
-        if (_parsePubAck(msg, &pa, &pae, errTxt, sizeof(errTxt)) != NATS_OK)
+        if (_parsePubAck(reply, &pa, &pae, errTxt, sizeof(errTxt)) != NATS_OK)
             ppae = &pae;
         else
             ppa = &pa;
@@ -733,7 +695,7 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
         // Set pmsg to NULL because user was responsible for destroying the message.
         pmsg = NULL;
     }
-    else if ((opa->ErrHandler != NULL) && (_parsePubAck(msg, NULL, &pae, errTxt, sizeof(errTxt)) != NATS_OK))
+    else if ((opa->ErrHandler != NULL) && (_parsePubAck(reply, NULL, &pae, errTxt, sizeof(errTxt)) != NATS_OK))
     {
         // We will invoke CB only if there is any kind of error.
         // Associate the message with the pubAckErr object.
@@ -765,99 +727,67 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void 
     js_unlock(js);
 
     natsMsg_Destroy(pmsg);
-    natsMsg_Destroy(msg);
+    natsMsg_Destroy(reply->msg);
 }
 
 static void
-_subComplete(void *closure)
+_repliesHandler(void *closure)
 {
-    js_release((jsCtx*) closure);
-}
+    // We are guaranteed to have a valid (retained) "js" and "js->nc" for
+    // the duration of this thread.
+    jsCtx           *js    = (jsCtx*) closure;
+    repliesMuxer    *mux   = &js->nc->repliesMux;
+    replyInfo       *reply = NULL;
+    replyInfo       *list  = NULL;
+    int             offset = mux->idOffset;
 
-static natsStatus
-_newAsyncReply(char *reply, jsCtx *js)
-{
-    natsStatus  s           = NATS_OK;
-
-    // Create the internal objects if it is the first time that we are doing
-    // an async publish.
-    if (js->rsub == NULL)
+    natsMutex_Lock(mux->mu);
+    while (true)
     {
-        s = natsCondition_Create(&(js->cond));
-        IFOK(s, natsStrHash_Create(&(js->pm), 64));
-        if (s == NATS_OK)
-        {
-            js->rpre = NATS_MALLOC(js->rpreLen+1);
-            if (js->rpre == NULL)
-                s = nats_setDefaultError(NATS_NO_MEMORY);
-            else
-            {
-                char nuid[NUID_BUFFER_LEN+1];
+        while ((js->rHead == NULL) && !js->rClosed)
+            natsCondition_Wait(mux->cond, mux->mu);
 
-                s = natsNUID_Next(nuid, sizeof(nuid));
-                if (s == NATS_OK)
-                {
-                    memcpy(js->rpre, js->nc->inboxPfx, js->nc->inboxPfxLen);
-                    memcpy(js->rpre+js->nc->inboxPfxLen, nuid+((int)strlen(nuid)-jsReplyTokenSize), jsReplyTokenSize);
-                    js->rpre[js->rpreLen-1] = '.';
-                    js->rpre[js->rpreLen]   = '\0';
-                }
-            }
-        }
-        if (s == NATS_OK)
-        {
-            char *subj = NULL;
+        // End the loop only when we have drained all replies.
+        if ((js->rHead == NULL) && js->closed)
+            break;
 
-            if (nats_asprintf(&subj, "%s*", js->rpre) < 0)
-                s = nats_setDefaultError(NATS_NO_MEMORY);
-            else
-                s = natsConn_subscribeNoPool(&(js->rsub), js->nc, subj, _handleAsyncReply, (void*) js);
-            if (s == NATS_OK)
-            {
-                _retain(js);
-                natsSubscription_SetPendingLimits(js->rsub, -1, -1);
-                natsSubscription_SetOnCompleteCB(js->rsub, _subComplete, (void*) js);
-            }
-            NATS_FREE(subj);
-        }
-        if (s != NATS_OK)
+        list = js->rHead;
+        js->rHead = NULL;
+        js->rTail = NULL;
+        natsMutex_Unlock(mux->mu);
+
+        reply = list;
+        while (reply != NULL)
         {
-            // Undo the things we created so we retry again next time.
-            // It is either that or we have to always check individual
-            // objects to know if we have to create them.
-            NATS_FREE(js->rpre);
-            js->rpre = NULL;
-            natsStrHash_Destroy(js->pm);
-            js->pm = NULL;
-            natsCondition_Destroy(js->cond);
-            js->cond = NULL;
+            _handleReplyInfo(js, reply->inbox+offset, reply);
+            reply = reply->next;
+        }
+
+        natsMutex_Lock(mux->mu);
+        while (list != NULL)
+        {
+            reply = list;
+            list = list->next;
+            reply->msg = NULL;
+            repliesMuxer_dispose(mux, reply, false);
         }
     }
-    if (s == NATS_OK)
-    {
-        int64_t l;
-        int     i;
+    natsMutex_Unlock(mux->mu);
 
-        memcpy(reply, js->rpre, js->rpreLen);
-        l = nats_Rand64();
-        for (i=0; i < jsReplyTokenSize; i++)
-        {
-            reply[js->rpreLen+i] = jsDigits[l%jsBase];
-            l /= jsBase;
-        }
-        reply[js->rpreLen+jsReplyTokenSize] = '\0';
-    }
-
-    return NATS_UPDATE_ERR_STACK(s);
+    js_lock(js);
+    natsThread_Detach(js->rht);
+    natsThread_Destroy(js->rht);
+    js_unlockAndRelease(js);
 }
 
 static void
 _timeoutPubAsync(natsTimer *t, void *closure)
 {
-    jsCtx   *js = (jsCtx*) closure;
-    pmInfo  *pm = NULL;
-    int64_t now = nats_Now();
-    int64_t next= 0;
+    jsCtx           *js = (jsCtx*) closure;
+    pmInfo          *pm = NULL;
+    int64_t         now = nats_Now();
+    int64_t         next= 0;
+    repliesMuxer    *mux= &js->nc->repliesMux;
 
     js_lock(js);
     if (js->closed)
@@ -868,22 +798,8 @@ _timeoutPubAsync(natsTimer *t, void *closure)
 
     while (((pm = js->pmHead) != NULL) && (pm->deadline <= now))
     {
-        // Check if the corresponding message is still in the hashtable.
-        char *id = (pm->subject+js->rpreLen);
-        if (natsStrHash_Get(js->pm, id) != NULL)
-        {
-            natsMsg *m = NULL;
-
-            if (natsMsg_Create(&m, pm->subject, NULL, NULL, 0) == NATS_OK)
-            {
-                natsMsg_setTimeout(m);
-
-                // Best attempt, ignore NATS_SLOW_CONSUMER errors which may be returned here.
-                nats_lockSubAndDispatcher(js->rsub);
-                natsSub_enqueueUserMessage(js->rsub, m);
-                nats_unlockSubAndDispatcher(js->rsub);
-            }
-        }
+        char *id = (pm->subject+mux->idOffset);
+        repliesMuxer_error(mux, id, NATS_TIMEOUT);
         // Remove from the list.
         js->pmHead = pm->next;
         _destroyPMInfo(pm);
@@ -976,24 +892,56 @@ _trackPublishAsyncTimeout(jsCtx *js, char *subject, int64_t mw)
 }
 
 static natsStatus
-_registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg, int64_t mw)
+_initRepliesHandler(jsCtx *js)
 {
-    natsStatus  s       = NATS_OK;
-    char        *id     = NULL;
-    bool        release = false;
-    int64_t     maxp    = 0;
+    natsStatus s = NATS_OK;
+
+    // Initialize fields that need to be.
+
+    if (js->cond == NULL)
+        s = natsCondition_Create(&(js->cond));
+    if ((s == NATS_OK) && (js->pm == NULL))
+        s = natsStrHash_Create(&(js->pm), 64);
+
+    // Do this one last.
+    if ((s == NATS_OK) && (js->rht == NULL))
+    {
+        _retain(js);
+        s = natsThread_Create(&(js->rht), _repliesHandler, (void*) js);
+        if (s != NATS_OK)
+            _release(js);
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_registerPubMsg(replyInfo **newReply, jsCtx *js, natsMsg *msg, int64_t mw)
+{
+    natsStatus      s       = NATS_OK;
+    bool            release = false;
+    int64_t         maxp    = 0;
+    repliesMuxer    *mux    = &js->nc->repliesMux;
+    replyInfo       *reply  = NULL;
+
+    *newReply = NULL;
+
+    // Invoke this outside of the JS lock because it could result in the
+    // need to initialize the muxer that will then need the connection lock
+    // to create the replies wildcard subscription.
+    s = repliesMuxer_add(&reply, mux, js);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
 
     js_lock(js);
 
     maxp = js->opts.PublishAsync.MaxPending;
-
     js->pmcount++;
-    s = _newAsyncReply(reply, js);
-    if (s == NATS_OK)
-        id = reply+js->rpreLen;
-    if ((s == NATS_OK)
-            && (maxp > 0)
-            && (js->pmcount > maxp))
+
+    // If we did not yet initialize the state, do it now.
+    if (js->rht == NULL)
+        s = _initRepliesHandler(js);
+
+    if ((s == NATS_OK) && (maxp > 0) && (js->pmcount > maxp))
     {
         int64_t target = nats_setTargetTime(js->opts.PublishAsync.StallWait);
 
@@ -1010,19 +958,39 @@ _registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg, int64
         release = true;
     }
     if ((s == NATS_OK) && (mw > 0))
-        s = _trackPublishAsyncTimeout(js, reply, mw);
+        s = _trackPublishAsyncTimeout(js, reply->inbox, mw);
     if (s == NATS_OK)
-        s = natsStrHash_Set(js->pm, id, true, msg, NULL);
+        s = natsStrHash_Set(js->pm, reply->inbox+mux->idOffset, true, msg, NULL);
+
     if (s == NATS_OK)
-        *nc = js->nc;
+    {
+        *newReply = reply;
+    }
     else
+    {
         js->pmcount--;
+        repliesMuxer_removeAndDispose(mux, reply);
+    }
     if (release)
         js_unlockAndRelease(js);
     else
         js_unlock(js);
 
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+// This will add the `reply` to the list.
+// The JS's connection's muxer lock is held on entry.
+void
+js_addReplyInfoToList(replyInfo *reply)
+{
+    jsCtx *js = reply->js;
+
+    if (js->rTail != NULL)
+        js->rTail->next = reply;
+    js->rTail = reply;
+    if (js->rHead == NULL)
+        js->rHead = reply;
 }
 
 natsStatus
@@ -1044,21 +1012,12 @@ js_PublishAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
 natsStatus
 js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
 {
-    natsStatus      s   = NATS_OK;
-    natsConnection  *nc = NULL;
-    char            replyBuf[32 + jsReplyTokenSize + 1];
-    char            *reply = replyBuf;
-    int64_t         mw = 0;
+    natsStatus  s       = NATS_OK;
+    replyInfo   *reply  = NULL;
+    int64_t     mw      = 0;
 
     if ((js == NULL) || (msg == NULL) || (*msg == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
-
-    if (js->rpreLen > 32)
-    {
-        reply = NATS_MALLOC(js->rpreLen + jsReplyTokenSize + 1);
-        if (reply == NULL)
-            return nats_setDefaultError(NATS_NO_MEMORY);
-    }
 
     if (opts != NULL)
     {
@@ -1066,14 +1025,15 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
         s = _setHeadersFromOptions(*msg, opts);
     }
 
-    // On success, the context will be retained.
-    IFOK(s, _registerPubMsg(&nc, reply, js, *msg, mw));
+    IFOK(s, _registerPubMsg(&reply, js, *msg, mw));
     if (s == NATS_OK)
     {
-        s = natsConn_publish(nc, *msg, (const char*) reply, false);
+        s = natsConn_publish(js->nc, *msg, reply->inbox, false);
         if (s != NATS_OK)
         {
-            char *id = reply+js->rpreLen;
+            repliesMuxer    *mux = &js->nc->repliesMux;
+            char            *id  = reply->inbox+mux->idOffset;
+            bool            rm   = false;
 
             // The message may or may not have been sent, we don't know for sure.
             // We are going to attempt to remove from the map. If we can, then
@@ -1081,12 +1041,20 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
             // it means that its ack has already been processed, so we consider
             // this call a success. If there was a pub ack failure, it is handled
             // with the error callback, but regardless, the library owns the message.
+            rm = (repliesMuxer_remove(mux, id) != NULL ? true : false);
             js_lock(js);
-            // If msg no longer in map, Remove() will return NULL.
-            if (natsStrHash_Remove(js->pm, id) == NULL)
-                s = NATS_OK;
-            else
+            if (rm)
+            {
+                natsStrHash_Remove(js->pm, id);
+                repliesMuxer_dispose(mux, reply, true);
                 js->pmcount--;
+            }
+            else
+            {
+                // Was not removed, so consider that the pubAck is being (or has
+                // been) delivered, so consider a success.
+                s = NATS_OK;
+            }
             js_unlock(js);
         }
     }
@@ -1096,9 +1064,6 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
     // they would call with natsMsg_Destroy(NULL), which is a no-op.
     if (s == NATS_OK)
         *msg = NULL;
-
-    if (reply != replyBuf)
-        NATS_FREE(reply);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

@@ -45,10 +45,6 @@
 #define natsMsg_clearNoDestroy(m)   ((m)->flags  &= ~(1 << 2))
 #define natsMsg_noDestroyFlag       (1 << 2)
 
-#define natsMsg_setTimeout(m)       ((m)->flags  |=  (1 << 3))
-#define natsMsg_isTimeout(m)        (((m)->flags &   (1 << 3)) != 0)
-#define natsMsg_clearTimeout(m)     ((m)->flags  &= ~(1 << 3))
-
 #define natsMsg_dataAndHdrLen(m)    ((m)->dataLen + (m)->hdrLen)
 
 struct __natsMsg

@@ -1,4 +1,4 @@
-// Copyright 2015-2025 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -94,7 +94,8 @@
 #define NATS_DEFAULT_INBOX_PRE      "_INBOX."
 #define NATS_DEFAULT_INBOX_PRE_LEN  (7)
 
-#define NATS_MAX_REQ_ID_LEN (19) // to display 2^63-1 number
+#define NATS_MAX_REQ_ID_LEN     (16) // to display FFFFFFFFFFFFFFFF number
+#define NATS_MAX_REQ_SUFFIX_LEN (NUID_BUFFER_LEN + 1 + NATS_MAX_REQ_ID_LEN + 1) // for '<nuid>.<max req_id>\0'
 
 #define WAIT_FOR_READ       (0)
 #define WAIT_FOR_WRITE      (1)
@@ -371,6 +372,7 @@ struct __natsOptions
     // (regardless of reconnect policy).
     bool ignoreAuthErrAbort;
 };
+
 typedef struct __pmInfo
 {
     char                *subject;
@@ -392,15 +394,17 @@ struct __jsCtx
     natsTimer           *pmtmr;
     pmInfo              *pmHead;
     pmInfo              *pmTail;
-    natsSubscription    *rsub;
-    char                *rpre;
-    int                 rpreLen;
     int                 pacw;
     int64_t             pmcount;
     int                 stalled;
     bool                closed;
     js_onReleaseCb      onReleaseCb;
     void                *onReleaseCbArg;
+    natsThread          *rht;       // replies handler thread.
+    // Those will be protected by the connection's muxer's lock.
+    struct __replyInfo  *rHead;     // replies list head.
+    struct __replyInfo  *rTail;     // replies list tail.
+    bool                rClosed;    // context is destroyed, end processing of replies.
 };
 
 struct __jsAtomicBatchCtx
@@ -757,17 +761,42 @@ typedef struct __natsSockCtx
 
 } natsSockCtx;
 
-typedef struct __respInfo
+typedef struct __replyInfo
 {
-    natsMutex           *mu;
-    natsCondition       *cond;
+    struct __replyInfo  *next;
+    char                *inbox;
     natsMsg             *msg;
-    bool                closed;
-    natsStatus          closedSts;
-    bool                removed;
+    jsCtx               *js;
+    natsStatus          err;
     bool                pooled;
 
-} respInfo;
+} replyInfo;
+
+typedef struct __repliesMuxer
+{
+    // This lock protects access to the other fields and manipulation of the
+    // `replyInfo` object by the thread that gets notification that the response
+    // was received (or request is being failed, such as disconnect/closed).
+    // Note that `cond`, `subj`, `sub`, `map` and `pool` are set under both
+    // the connection and muxer lock, so it is safe for code to access/check
+    // them under any of those.
+    // Code invoked under this lock should not acquire the connection or JS locks.
+    natsMutex           *mu;
+    // Back-reference to the connection this muxer belongs to. This is just
+    // so that "muxer" APIs (that need internally the connection) don't require
+    // the connection pointer as parameter.
+    natsConnection      *nc;
+    natsCondition       *cond;
+    char                *subj;
+    natsSubscription    *sub;
+    natsStrHash         *map;
+    uint64_t            idVal;
+    replyInfo           **pool;
+    int                 poolSize;
+    int                 poolIdx;
+    int                 idOffset;
+
+} repliesMuxer;
 
 // Used internally for testing and allow to alter/suppress an incoming message
 typedef void (*natsMsgFilter)(natsConnection *nc, natsMsg **msg, void* closure);
@@ -841,22 +870,13 @@ struct __natsConnection
     // which will prevent user from calling Close and/or Destroy.
     bool                stanOwned;
 
-    // New Request style
-    char                respId[NATS_MAX_REQ_ID_LEN+1];
-    int                 respIdPos;
-    char                respIdVal;
-    char                *respSub;   // The wildcard subject
-    natsSubscription    *respMux;   // A single response subscription
-    natsStrHash         *respMap;   // Request map for the response msg
-    respInfo            **respPool;
-    int                 respPoolSize;
-    int                 respPoolIdx;
+    // Replies handler for combined core and js subscription.
+    repliesMuxer        repliesMux;
 
     // For inboxes. We now support custom prefixes, so we can't rely
     // on constants based on hardcoded "_INBOX." prefix.
     const char          *inboxPfx;
     int                 inboxPfxLen;
-    int                 reqIdOffset;
 
     struct
     {

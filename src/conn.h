@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,7 +16,7 @@
 
 #include "natsp.h"
 
-#define RESP_INFO_POOL_MAX_SIZE (10)
+#define REPLIES_INFO_POOL_MAX_SIZE (64)
 
 #ifdef DEV_MODE
 // For type safety
@@ -39,6 +39,11 @@ natsConn_create(natsConnection **newConn, natsOptions *options);
 
 void
 natsConn_retain(natsConnection *nc);
+
+// This is to be invoked from outside conn.c but if already under the
+// connection's lock.
+void
+natsConn_retainLocked(natsConnection *nc);
 
 void
 natsConn_release(natsConnection *nc);
@@ -111,16 +116,26 @@ void
 natsConn_processAsyncINFO(natsConnection *nc, char *buf, int len);
 
 natsStatus
-natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox);
+repliesMuxer_add(replyInfo **newReply, repliesMuxer *mux, jsCtx *js);
+
+replyInfo*
+repliesMuxer_remove(repliesMuxer *mux, char *id);
 
 void
-natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock);
+repliesMuxer_removeAndDispose(repliesMuxer *mux, replyInfo *reply);
+
+void
+repliesMuxer_dispose(repliesMuxer *mux, replyInfo *reply, bool needsLock);
+
+void
+repliesMuxer_errorAll(repliesMuxer *mux, jsCtx *js, natsStatus reason, bool needsLock);
+
+void
+repliesMuxer_error(repliesMuxer *mux, char *id, natsStatus reason);
 
 natsStatus
-natsConn_initResp(natsConnection *nc, natsMsgHandler cb);
-
-void
-natsConn_destroyRespPool(natsConnection *nc);
+repliesMuxer_waitReplyReceived(natsMsg **replyMsg, repliesMuxer *mux, replyInfo *reply,
+                               natsStatus pubSts, int64_t timeout);
 
 natsStatus
 natsConn_publish(natsConnection *nc, natsMsg *msg, const char *reply, bool directFlush);

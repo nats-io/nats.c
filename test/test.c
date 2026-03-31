@@ -8293,8 +8293,8 @@ void test_RequestPool(void)
     natsConnection      *nc = NULL;
     natsSubscription    *sub = NULL;
     natsMsg             *msg = NULL;
-    int                 numThreads = RESP_INFO_POOL_MAX_SIZE+5;
-    natsThread          *threads[RESP_INFO_POOL_MAX_SIZE+5];
+    int                 numThreads = REPLIES_INFO_POOL_MAX_SIZE+5;
+    natsThread          *threads[REPLIES_INFO_POOL_MAX_SIZE+5];
 
     pid = _startServer("nats://127.0.0.1:4222", NULL, true);
     CHECK_SERVER_STARTED(pid);
@@ -8317,11 +8317,11 @@ void test_RequestPool(void)
     // With current implementation, the pool should not
     // increase at all.
     test("Pool not growing: ");
-    for (i=0; (i<RESP_INFO_POOL_MAX_SIZE); i++)
+    for (i=0; (i<REPLIES_INFO_POOL_MAX_SIZE); i++)
         natsConnection_RequestString(&msg, nc, "foo", "test", 1);
-    natsMutex_Lock(nc->mu);
-    testCond(nc->respPoolSize == 1);
-    natsMutex_Unlock(nc->mu);
+    natsMutex_Lock(nc->repliesMux.mu);
+    testCond(nc->repliesMux.poolSize == 1);
+    natsMutex_Unlock(nc->repliesMux.mu);
 
     test("Pool max size: ");
     for (i=0; i<numThreads; i++)
@@ -8339,9 +8339,9 @@ void test_RequestPool(void)
             natsThread_Destroy(threads[i]);
         }
     }
-    natsMutex_Lock(nc->mu);
-    testCond((s == NATS_OK) && (nc->respPoolSize == RESP_INFO_POOL_MAX_SIZE));
-    natsMutex_Unlock(nc->mu);
+    natsMutex_Lock(nc->repliesMux.mu);
+    testCond((s == NATS_OK) && (nc->repliesMux.poolSize == REPLIES_INFO_POOL_MAX_SIZE));
+    natsMutex_Unlock(nc->repliesMux.mu);
 
     natsSubscription_Destroy(sub);
     natsConnection_Destroy(nc);
@@ -27536,6 +27536,10 @@ _jsPubAckErrHandler(jsCtx *js, jsPubAckErr *pae, void *closure)
         args->closed = true;
         natsCondition_Broadcast(args->c);
     }
+    else if (strcmp(natsMsg_GetData(pae->Msg), "fail4") == 0)
+    {
+        natsCondition_Broadcast(args->c);
+    }
     else if (strcmp(natsMsg_GetData(pae->Msg), "block") == 0)
     {
         while (!args->done)
@@ -27746,9 +27750,13 @@ void test_JetStreamPublishAsync(void)
 
     test("Send new failed messages which will block cb: ");
     s = js_PublishAsync(js, "foo", "fail3", 5, &opts);
-    // Send another message, which should not be delivered to CB
-    // since we will destroy context from CB on releasing CB
-    // after fail3 msg is processed.
+    // The pubAck handler will block on "fail3" and the context
+    // will be destroyed when we release it. We send another
+    // message here that will be delivered since it is likely
+    // that the library will receive it and transfer to the
+    // thread handling replies. It is possible however that
+    // we get an error "NATS_CONNECTION_CLOSED" if the context
+    // were to be destroyed before the pubAck is received.
     IFOK(s, js_PublishAsync(js, "foo", "fail4", 5, &opts));
     testCond(s == NATS_OK);
 
@@ -27768,10 +27776,11 @@ void test_JetStreamPublishAsync(void)
     natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
-    test("Check that last msg was not delivered to CB: ");
+    test("Check that last msg was delivered to CB: ");
     natsMutex_Lock(args.m);
-    // cb has seen: fail1, fail2 twice, fail3, so sum == 4
-    s = (args.sum == 4 ? NATS_OK: NATS_ERR);
+    // cb has seen: fail1, fail2 twice, fail3, fail4 so sum == 5
+    while ((s != NATS_TIMEOUT) && (args.sum != 5))
+        s = natsCondition_TimedWait(args.c, args.m, 2000);
     natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
 
@@ -27878,34 +27887,10 @@ void test_JetStreamPublishAsync(void)
     }
     testCond(s == NATS_OK);
 
-    test("Enqueue message with bad subject: ");
-    s = natsMsg_Create(&msg, "some.subject", NULL, "hello", 5);
-    if (s == NATS_OK)
-    {
-        natsSubscription *rsub;
-
-        js_lock(js);
-        rsub = js->rsub;
-        js_unlock(js);
-
-        _waitSubPending(rsub, 0);
-
-        natsSub_Lock(rsub);
-        rsub->ownDispatcher.queue.head = msg;
-        rsub->ownDispatcher.queue.tail = msg;
-        rsub->ownDispatcher.queue.msgs = 1;
-        rsub->ownDispatcher.queue.bytes = natsMsg_dataAndHdrLen(msg);
-        natsCondition_Signal(rsub->ownDispatcher.cond);
-        natsSub_Unlock(rsub);
-
-        // Message is owned by subscription, do not destroy it here.
-    }
-    testCond(s == NATS_OK);
-
     test("Publish async cb received non existent pid: ");
     {
         char subj[64];
-        snprintf(subj, sizeof(subj), "%sabcdefgh", js->rpre);
+        snprintf(subj, sizeof(subj), "%s.abcdefgh", js->nc->repliesMux.subj);
         s = natsConnection_Publish(nc, subj, NULL, 0);
     }
     testCond(s == NATS_OK);
@@ -40407,7 +40392,7 @@ void test_JetStreamAtomicBatchPublish(void)
     test("Publish 98 messages: ");
     for (uint64_t i = 0; (i < msg_count) && (s == NATS_OK); i++)
     {
-        char data[12];
+        char data[32];
         snprintf(data, sizeof(data), "%" PRIu64, i);
         s = natsMsg_Create(&msg, "foo", NULL, data, strlen(data));
         IFOK(s, js_BatchPublishAdd(NULL, batch_ctx, msg, NULL, NULL));
@@ -40453,7 +40438,7 @@ void test_JetStreamAtomicBatchPublish(void)
     test("Publish 98 messages: ");
     for (uint64_t i = 0; (i < msg_count) && (s == NATS_OK); i++)
     {
-        char data[12];
+        char data[32];
         snprintf(data, sizeof(data), "%" PRIu64, i);
         s = natsMsg_Create(&msg, "foo", NULL, data, strlen(data));
         IFOK(s, js_BatchPublishAdd(NULL, batch_ctx, msg, NULL, NULL));
@@ -40491,7 +40476,7 @@ void test_JetStreamAtomicBatchPublish(void)
     test("Publish 98 messages to each: ");
     for (uint64_t i = 0; (i < msg_count) && (s == NATS_OK); i++)
     {
-        char data[12];
+        char data[32];
         snprintf(data, sizeof(data), "%" PRIu64, i);
         s = natsMsg_Create(&msg, "foo", NULL, data, strlen(data));
         IFOK(s, natsMsg_Create(&msg2, "foo", NULL, data, strlen(data)));

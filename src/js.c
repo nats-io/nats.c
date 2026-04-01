@@ -28,12 +28,12 @@ void js_lock(jsCtx *js)   { natsMutex_Lock(js->mu);   }
 void js_unlock(jsCtx *js) { natsMutex_Unlock(js->mu); }
 
 static void _retain(jsCtx *js)  { js->refs++; }
-static int  _release(jsCtx *js) { return --(js->refs); }
+static void _release(jsCtx *js) { js->refs--; }
 
 #else
 
 #define _retain(js)         ((js)->refs++)
-#define _release(js)        (--((js)->refs))
+#define _release(js)        ((js)->refs--)
 
 #endif // DEV_MODE
 
@@ -99,33 +99,35 @@ void
 js_retain(jsCtx *js)
 {
     js_lock(js);
-    _retain(js);
+    js->refs++;
     js_unlock(js);
 }
 
 void
 js_release(jsCtx *js)
 {
-    int refs;
+    bool doFree;
 
     if (js == NULL)
         return;
 
     js_lock(js);
-    refs = _release(js);
+    doFree = (--(js->refs) == 0);
     js_unlock(js);
 
-    if (refs == 0)
+    if (doFree)
         _freeContext(js);
 }
 
 static void
 js_unlockAndRelease(jsCtx *js)
 {
-    int refs = _release(js);
+    bool doFree;
+
+    doFree = (--(js->refs) == 0);
     js_unlock(js);
 
-    if (refs == 0)
+    if (doFree)
         _freeContext(js);
 }
 

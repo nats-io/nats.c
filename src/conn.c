@@ -1402,7 +1402,7 @@ _repliesMuxerInit(repliesMuxer *mux)
 
     natsConn_Lock(mux->nc);
     // Now that we are under the connection lock, to resolve possible "races"
-    // between several threads calling `natsConn_addreplyInfo()` that lead here,
+    // between several threads calling `repliesMuxer_add()` that lead here,
     // we need to check if the initialization was already done. We do that by
     // checking if the `sub` pointer is set or not.
     if (mux->sub != NULL)
@@ -1448,8 +1448,9 @@ _repliesMuxerInit(repliesMuxer *mux)
     else
     {
         NATS_FREE(subj);
-        natsStrHash_Destroy(map);
         NATS_FREE(pool);
+        natsStrHash_Destroy(map);
+        natsCondition_Destroy(cond);
     }
     natsConn_Unlock(mux->nc);
 

@@ -1501,7 +1501,7 @@ repliesMuxer_dispose(repliesMuxer *mux, replyInfo *reply, bool needsLock)
 //
 // No connection/JS lock should be held on entry. This function will acquire
 // the muxer lock, but if the muxer has not yet been initialized, it will
-// release that lock, and then invoke `_repliexMuxerInit` (which will acquire
+// release that lock, and then invoke `_repliesMuxerInit` (which will acquire
 // the connection and muxer lock), then reacquire the muxer lock.
 natsStatus
 repliesMuxer_add(replyInfo **newReply, repliesMuxer *mux, jsCtx *js)
@@ -2886,7 +2886,7 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     if (doCBs && !nc->rle && postDisconnectedCb && sockWasActive)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
-    // The `nc->repliesMuxer.sub` is set in `_repliexMuxerInit` under the
+    // The `nc->repliesMuxer.sub` is set in `_repliesMuxerInit` under the
     // connection's lock. We don't need the muxer lock to grab the reference
     // to the sub. Do not set the sub to `NULL` to avoid "races" between JS that
     // may be in trying to add a `replyInfo` and would then init the muxer again.

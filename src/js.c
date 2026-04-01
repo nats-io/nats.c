@@ -748,7 +748,7 @@ _repliesHandler(void *closure)
             natsCondition_Wait(mux->cond, mux->mu);
 
         // End the loop only when we have drained all replies.
-        if ((js->rHead == NULL) && js->closed)
+        if ((js->rHead == NULL) && js->rClosed)
             break;
 
         list = js->rHead;

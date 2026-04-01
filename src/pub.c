@@ -367,10 +367,9 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     natsConn_retainLocked(nc);
 
     mux = &nc->repliesMux;
-    s = repliesMuxer_add(&reply, mux, NULL);
-
     natsConn_Unlock(nc);
 
+    s = repliesMuxer_add(&reply, mux, NULL);
     if (s == NATS_OK)
     {
         natsStatus ps = natsConn_publish(nc, m, (const char*) reply->inbox, true);

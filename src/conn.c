@@ -2798,10 +2798,13 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     // to ensure that server has received all pending data.
     // Note that _flushTimeout will release the lock and wait
     // for PONG so this is why we do this early in that function.
+    // Note: Do not check for `nc->bw` length, because even if 0,
+    // it could be that we just wrote data into the socket and the
+    // buffer is currently empty, but we should still send the PING
+    // out to ensure data is fully flushed.
     if (fromPublicClose
             && (nc->status == NATS_CONN_STATUS_CONNECTED)
-            && nc->sockCtx.fdActive
-            && (natsBuf_Len(nc->bw) > 0))
+            && nc->sockCtx.fdActive)
     {
         _flushTimeout(nc, 500);
     }

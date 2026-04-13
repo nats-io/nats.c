@@ -34,7 +34,7 @@ jobs:
           echo "SOURCE_SHA=$(git log -1 --pretty=%h)" >> $GITHUB_OUTPUT
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         if: steps.update.outputs.CHANGES == 'true'
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

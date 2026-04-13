@@ -110,8 +110,11 @@ _freeSub(natsSubscription *sub)
     if (sub == NULL)
         return;
 
-    _freeControlMessages(sub);
     _cleanupOwnDispatcher(sub);
+    // Make sure to do this after (and not before) destroying messages in the
+    // queue in case the control messages are in there, otherwise it would cause
+    // a double free.
+    _freeControlMessages(sub);
 
     NATS_FREE(sub->subject);
     NATS_FREE(sub->queue);

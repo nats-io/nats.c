@@ -1233,7 +1233,7 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
 
     if (js->nc->inboxPfxLen > 32)
     {
-        reply = NATS_MALLOC(NATS_MAX_JS_RESP_SUFFIX_LEN);
+        reply = NATS_MALLOC(js->nc->inboxPfxLen + NATS_MAX_JS_RESP_SUFFIX_LEN);
         if (reply == NULL)
             return nats_setDefaultError(NATS_NO_MEMORY);
     }

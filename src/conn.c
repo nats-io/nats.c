@@ -1412,17 +1412,20 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox)
             s = natsMutex_Create(&(resp->mu));
         if (s == NATS_OK)
             s = natsCondition_Create(&(resp->cond));
+        if (s != NATS_OK)
+        {
+            _freeRespInfo(resp);
+            natsMutex_Unlock(mux->mu);
+            return NATS_UPDATE_ERR_STACK(s);
+        }
     }
 
-    if (s == NATS_OK)
-    {
-        // Build the response inbox
-        char *idBuf = respInbox+mux->idOffset;
-        memcpy(respInbox, mux->respPfx, mux->idOffset);
-        nats_encodeRespID(idBuf, mux->idVal++, false);
+    // Build the response inbox
+    char *idBuf = respInbox+mux->idOffset;
+    memcpy(respInbox, mux->respPfx, mux->idOffset);
+    nats_encodeRespID(idBuf, mux->idVal++, false);
 
-        s = natsStrHash_Set(mux->map, idBuf, true, (void*) resp, NULL);
-    }
+    s = natsStrHash_Set(mux->map, idBuf, true, (void*) resp, NULL);
 
     if (s == NATS_OK)
         *newResp = resp;
@@ -1505,7 +1508,6 @@ natsConn_removeJsCtxFromRespMuxer(natsConnection *nc, jsCtx *js)
     respMuxer *mux = &nc->respMux;
 
     natsMutex_Lock(mux->mu);
-    mux = &nc->respMux;
     if (mux->js == js)
         mux->js = NULL;
     else
@@ -1580,7 +1582,7 @@ _respHandler(natsConnection *nc, natsMsg *msg)
     mux = &nc->respMux;
     if (strncmp(subj, mux->respPfx, mux->respPfxLen) == 0)
     {
-        // This will point to the character pas the prefix, which even with
+        // This will point to the character past the prefix, which even with
         // a corrupted input (unlikely otherwise would not be deliverd) would
         // point to the `\0` terminal character, so it is safe to dereference it.
         const char *marker = (subj+mux->respPfxLen);

@@ -1583,7 +1583,7 @@ _respHandler(natsConnection *nc, natsMsg *msg)
     if (strncmp(subj, mux->respPfx, mux->respPfxLen) == 0)
     {
         // This will point to the character past the prefix, which even with
-        // a corrupted input (unlikely otherwise would not be deliverd) would
+        // a corrupted input (unlikely otherwise would not be delivered) would
         // point to the `\0` terminal character, so it is safe to dereference it.
         const char *marker = (subj+mux->respPfxLen);
 
@@ -3216,28 +3216,33 @@ _drainJsDispatchers(natsConnection *nc)
 {
     respMuxer       *mux    = &nc->respMux;
     void            *p      = NULL;
+    int             jsDisp  = 0;
     natsHashIter    iter;
 
     // Set this to false so we don't do this operation again on the
     // next PONG protocol.
     mux->drain = false;
 
+    natsMutex_Lock(mux->mu);
     // Update the dispatchers count needing draining and submit the
     // drain message to JS dispatchers.
-    // We need the nc->subsMu lock to update `nc->drainJsDispatchers`.
-    natsMutex_Lock(nc->subsMu);
     if (mux->js != NULL)
     {
-        nc->drainJsDispatchers++;
+        jsDisp++;
         js_submitRespDrainMsg(mux->js);
     }
     natsHashIter_Init(&iter, mux->jsCtxs);
     while (natsHashIter_Next(&iter, NULL, &p))
     {
-        nc->drainJsDispatchers++;
+        jsDisp++;
         js_submitRespDrainMsg((jsCtx*) p);
     }
     natsHashIter_Done(&iter);
+    natsMutex_Unlock(mux->mu);
+
+    // We need the nc->subsMu lock to update `nc->drainJsDispatchers`.
+    natsMutex_Lock(nc->subsMu);
+    nc->drainJsDispatchers = jsDisp;
     natsMutex_Unlock(nc->subsMu);
 }
 

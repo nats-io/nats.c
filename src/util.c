@@ -2842,10 +2842,10 @@ nats_marshalHeader(natsBuffer *buf, bool omitEmpty, bool comma, const char *fiel
 // The caller guarantees that the buffer is big enough to encode the maximum
 // uint64_t value (buffer at least NATS_MAX_RESP_ID_LEN bytes).
 //
-// Interesting note: unit benchmark of this function would lead better results
-// if the encoding stopped when the remainder is 0, however, used in the context
-// of JetStream, there is a performance advantage of writting the whole thing,
-// Need to figure out the reason.
+// Interesting note: unit benchmark of this function obviously shows that
+// it is faster to have the encoding stop when the remainder is 0, however,
+// used in the context of JetStream, it looks like using full encoding
+// yields better results. Need to figure out the reason.
 void
 nats_encodeRespID(char *buffer, uint64_t id, bool shortest)
 {

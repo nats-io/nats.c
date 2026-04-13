@@ -953,10 +953,16 @@ _initAsyncReplies(jsCtx *js, jsAsyncReplies *ar)
         s = natsCondition_Create(&rCond);
         IFOK(s, natsMsg_Create(&dMsg, "drain", NULL, NULL, 0));
         IFOK(s, natsConn_addJsCtxToRespMuxer(&ctxID, nc, js));
-        if ((s == NATS_OK) && (nats_asprintf(&pfx, "%.*s%" PRId64 ".",
-            nc->respMux.respPfxLen, nc->respMux.respPfx, ctxID) < 0))
+        if (s == NATS_OK)
         {
-            s = nats_setDefaultError(NATS_NO_MEMORY);
+            // Set early so error-path removal uses correct ID.
+            ar->ctxID = ctxID;
+            // Build the response prefix string.
+            if (nats_asprintf(&pfx, "%.*s%" PRId64 ".",
+                nc->respMux.respPfxLen, nc->respMux.respPfx, ctxID) < 0)
+            {
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+            }
         }
         if (s == NATS_OK)
         {
@@ -979,7 +985,6 @@ _initAsyncReplies(jsCtx *js, jsAsyncReplies *ar)
         ar->repliesPfx  = pfx;
         ar->idOffset    = (int) strlen(pfx);
         ar->sub         = sub;
-        ar->ctxID       = ctxID;
         ar->dispatcher  = t;
         ar->cond        = rCond;
         ar->drainMsg    = dMsg;

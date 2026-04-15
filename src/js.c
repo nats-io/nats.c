@@ -607,6 +607,7 @@ js_PublishMsg(jsPubAck **new_puback,jsCtx *js, natsMsg *msg,
                 IFOK(s, nats_JSONGetStr(json, "domain", &(pa->Domain)));
                 IFOK(s, nats_JSONGetStr(json, "batch", &(pa->Batch)));
                 IFOK(s, nats_JSONGetULong(json, "count", &(pa->Count)));
+                IFOK(s, nats_JSONGetStr(json, "val", &(pa->Val)));
 
                 if (s == NATS_OK)
                     *new_puback = pa;
@@ -633,6 +634,7 @@ jsPubAck_Destroy(jsPubAck *pa)
     NATS_FREE(pa->Stream);
     NATS_FREE(pa->Domain);
     NATS_FREE(pa->Batch);
+    NATS_FREE(pa->Val);
     NATS_FREE(pa);
 }
 

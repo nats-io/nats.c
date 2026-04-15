@@ -24456,6 +24456,7 @@ void test_JetStreamMarshalStreamConfig(void)
         .MaxAckPending = 99,
     };
     sc.AllowAtomic = true;
+    sc.AllowMsgCounter = true;
 
     test("Marshal stream config: ");
     s = js_marshalStreamConfig(&buf, &sc);
@@ -24540,6 +24541,7 @@ void test_JetStreamMarshalStreamConfig(void)
                 && (rsc->ConsumerLimits.MaxAckPending == 99)
                 && (rsc->PersistMode == js_PersistAsync)
                 && (rsc->AllowAtomic == true)
+                && (rsc->AllowMsgCounter == true)
                 );
     js_destroyStreamConfig(rsc);
     rsc = NULL;

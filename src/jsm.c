@@ -792,6 +792,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_JSONGetBool(jcfg, "allow_msg_ttl", &(cfg->AllowMsgTTL)));
     IFOK(s, _unmarshalPersistModeType(jcfg, &(cfg->PersistMode)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_atomic", &(cfg->AllowAtomic)));
+    IFOK(s, nats_JSONGetBool(jcfg, "allow_msg_counter", &(cfg->AllowMsgCounter)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -927,6 +928,8 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         s = natsBuf_Append(buf, ",\"allow_msg_ttl\":true", -1);
     if ((s == NATS_OK) && cfg->SubjectDeleteMarkerTTL > 0)
         s = nats_marshalLong(buf, true, "subject_delete_marker_ttl", cfg->SubjectDeleteMarkerTTL);
+    if ((s == NATS_OK) && cfg->AllowMsgCounter)
+        s = natsBuf_Append(buf, ",\"allow_msg_counter\":true", -1);
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 

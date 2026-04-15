@@ -966,6 +966,7 @@ GET_NEXT:
         {
             natsMutex_Unlock(w->mu);
             _releaseWatcher(w);
+            natsMsg_Destroy(msg);
             return NATS_ILLEGAL_STATE;
         }
         w->refs--;

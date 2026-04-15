@@ -1110,6 +1110,8 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
     IFOK(s, natsMutex_Create(&(w->mu)));
     if (s == NATS_OK)
     {
+        bool updatesOnly = false;
+
         // Use ordered consumer to deliver results
 
         jsSubOptions_Init(&so);
@@ -1121,7 +1123,10 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
             if (opts->MetaOnly)
                 so.Config.HeadersOnly = true;
             if (opts->UpdatesOnly)
+            {
                 so.Config.DeliverPolicy = js_DeliverNew;
+                updatesOnly = true;
+            }
             if (opts->IgnoreDeletes)
                 w->ignoreDel = true;
             if (opts->Heartbeat > 0)
@@ -1131,6 +1136,9 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
             {
                 so.Config.DeliverPolicy = js_DeliverByStartSequence;
                 so.Config.OptStartSeq   = opts->ResumeFromRevision;
+                // We are not changing the user provided option `opts->UpdateOnly`,
+                // but indicate that we are not doing updateOnly.
+                updatesOnly = false;
             }
         }
         // Need to explicitly bind to the stream here because the subject
@@ -1143,7 +1151,7 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
             natsSubscription *sub = w->sub;
 
             natsSub_Lock(sub);
-            if ((opts == NULL) || !opts->UpdatesOnly)
+            if ((opts == NULL) || !updatesOnly)
             {
                 if ((sub->jsi != NULL) && (sub->jsi->pending == 0))
                 {

@@ -34959,7 +34959,7 @@ void test_KeyValueWatch(void)
     ws = w->sub->subject;
     natsMutex_Unlock(w->mu);
     s = natsConnection_SubscribeSync(&sub, nc2, ws);
-    IFOK(s, natsSubscription_NextMsg(&msg, sub, 200))
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 200));
     if (s == NATS_OK)
     {
         int jct = 0;
@@ -34995,10 +34995,14 @@ void test_KeyValueWatch(void)
 
     kvWatchOptions_Init(&o);
     o.ResumeFromRevision = 2;
+    // The following is incompatible with the above option. There won't be an
+    // error returned, just should be ignored.
+    o.UpdatesOnly = true;
     s = kvStore_WatchAll(&w, kv, &o);
     testCond((s == NATS_OK) && (w != NULL));
 
     testCond(_expectUpdate(w, "reconnected", "true", 2));
+    testCond(_expectInitDone(w));
 
     kvWatcher_Destroy(w);
     kvStore_Destroy(kv);

@@ -1600,6 +1600,9 @@ typedef struct kvWatchOptions
          * If this is set to a positive value, the watcher will resume from this
          * specific revision.
          *
+         * \note This is intended for watchers that have restarted watching and
+         * have maintained some state of where they were in the watch.
+         *
          * \warning #IncludeHistory and #UpdatesOnly options will be ignored.
          */
         uint64_t        ResumeFromRevision;

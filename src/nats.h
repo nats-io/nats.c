@@ -1562,7 +1562,9 @@ typedef struct kvWatchOptions
 
         /** \brief Receive all history per subject, not just the last one.
          *
-         * This is actually the default behavior.
+         * If not set, only the latest value per key is delivered as the initial snapshot.
+         *
+         * \warning This option is ignored if #ResumeFromRevision is set.
          */
         bool            IncludeHistory;
 
@@ -1572,20 +1574,22 @@ typedef struct kvWatchOptions
          */
         bool            MetaOnly;
 
+        /** \brief  How long to wait for some operations to complete.
+         *
+         * Expressed in milliseconds.
+         */
+        int64_t         Timeout;
+
         /** \brief Only receive updates, no initial snapshot.
          *
          * If set to `true`, the initial snapshot will not be received. Only new
          * updates after the watcher is created will be received.
          *
          * \note If this is set, #IncludeHistory option is ignored.
+         *
+         * \warning This option is ignored if #ResumeFromRevision is set.
          */
         bool            UpdatesOnly;
-
-        /** \brief  How long to wait for some operations to complete.
-         *
-         * Expressed in milliseconds.
-         */
-        int64_t         Timeout;
 
         /** \brief Heartbeat used by the internal ordered consumer.
          *

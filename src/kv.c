@@ -1136,7 +1136,7 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
             {
                 so.Config.DeliverPolicy = js_DeliverByStartSequence;
                 so.Config.OptStartSeq   = opts->ResumeFromRevision;
-                // We are not changing the user provided option `opts->UpdateOnly`,
+                // We are not changing the user provided option `opts->UpdatesOnly`,
                 // but indicate that we are not doing updateOnly.
                 updatesOnly = false;
             }

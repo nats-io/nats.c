@@ -1554,11 +1554,15 @@ typedef struct kvConfig
  */
 typedef struct kvWatchOptions
 {
-        bool            IgnoreDeletes;
-        bool            IncludeHistory;
-        bool            MetaOnly;
-        int64_t         Timeout;        ///< How long to wait (in milliseconds) for some operations to complete.
-        bool            UpdatesOnly;    ///< Only receive updates, no initial snapshot.
+        bool            IgnoreDeletes;          ///< Do not receive delete markers.
+        bool            IncludeHistory;         ///< Receive all history per subject, not just the last one.
+        bool            MetaOnly;               ///< Only receive the meta data of the entry.
+        bool            UpdatesOnly;            ///< Only receive updates, no initial snapshot.
+        int64_t         Timeout;                ///< How long to wait (in milliseconds) for some operations to complete.
+        int64_t         Heartbeat;              ///< Hearbeat used by the internal ordered consumer (expressed in
+                                                ///  nanoseconds, similar to #jsConsumerConfig.Hearbeat). If not specified,
+                                                ///  a default value of 5 seconds is used.
+        uint64_t        ResumeFromRevision;     ///< If set to a positive value, resume from this specific revision.
 
 } kvWatchOptions;
 

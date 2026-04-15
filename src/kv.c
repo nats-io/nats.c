@@ -1124,6 +1124,13 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
                 so.Config.DeliverPolicy = js_DeliverNew;
             if (opts->IgnoreDeletes)
                 w->ignoreDel = true;
+            if (opts->Heartbeat > 0)
+                so.Config.Heartbeat = opts->Heartbeat;
+            if (opts->ResumeFromRevision > 0)
+            {
+                so.Config.DeliverPolicy = js_DeliverByStartSequence;
+                so.Config.OptStartSeq   = opts->ResumeFromRevision;
+            }
         }
         // Need to explicitly bind to the stream here because the subject
         // we construct may not help find the stream when using mirrors.

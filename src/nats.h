@@ -1554,15 +1554,55 @@ typedef struct kvConfig
  */
 typedef struct kvWatchOptions
 {
-        bool            IgnoreDeletes;          ///< Do not receive delete markers.
-        bool            IncludeHistory;         ///< Receive all history per subject, not just the last one.
-        bool            MetaOnly;               ///< Only receive the meta data of the entry.
-        bool            UpdatesOnly;            ///< Only receive updates, no initial snapshot.
-        int64_t         Timeout;                ///< How long to wait (in milliseconds) for some operations to complete.
-        int64_t         Heartbeat;              ///< Hearbeat used by the internal ordered consumer (expressed in
-                                                ///  nanoseconds, similar to #jsConsumerConfig.Hearbeat). If not specified,
-                                                ///  a default value of 5 seconds is used.
-        uint64_t        ResumeFromRevision;     ///< If set to a positive value, resume from this specific revision.
+        /** \brief Do not receive delete markers.
+         *
+         * If this is set to `true`, the watcher will not receive delete markers.
+         */
+        bool            IgnoreDeletes;
+
+        /** \brief Receive all history per subject, not just the last one.
+         *
+         * This is actually the default behavior.
+         */
+        bool            IncludeHistory;
+
+        /** \brief Only receive the meta data of the entry.
+         *
+         * The entry will not contain the actual content of entry.
+         */
+        bool            MetaOnly;
+
+        /** \brief Only receive updates, no initial snapshot.
+         *
+         * If set to `true`, the initial snapshot will not be received. Only new
+         * updates after the watcher is created will be received.
+         *
+         * \note If this is set, #IncludeHistory option is ignored.
+         */
+        bool            UpdatesOnly;
+
+        /** \brief  How long to wait for some operations to complete.
+         *
+         * Expressed in milliseconds.
+         */
+        int64_t         Timeout;
+
+        /** \brief Heartbeat used by the internal ordered consumer.
+         *
+         * Expressed in nanoseconds, similar to #jsConsumerConfig.Heartbeat.
+         *
+         * \note If not specified, a default value of 5 seconds is used.
+         */
+        int64_t         Heartbeat;
+
+        /** \brief Resume from this specific revision.
+         *
+         * If this is set to a positive value, the watcher will resume from this
+         * specific revision.
+         *
+         * \warning #IncludeHistory and #UpdatesOnly options will be ignored.
+         */
+        uint64_t        ResumeFromRevision;
 
 } kvWatchOptions;
 

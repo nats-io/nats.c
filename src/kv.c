@@ -1126,6 +1126,7 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
                 w->ignoreDel = true;
             if (opts->Heartbeat > 0)
                 so.Config.Heartbeat = opts->Heartbeat;
+            // If this is set, it will override IncludeHistory and/or UpdatesOnly.
             if (opts->ResumeFromRevision > 0)
             {
                 so.Config.DeliverPolicy = js_DeliverByStartSequence;

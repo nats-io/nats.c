@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -146,7 +146,7 @@ Typedefs</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>If specified in microServiceConfig, this callback is invoked for internal errors (e.g. message delivery failures) related to a microservice. If the error is associated with an endpoint, the ep parameter points at the endpoint. However, this handler may be invoked for errors happening in monitoring subjects, in which case ep is NULL.</p>
-<p>The error handler is invoked asynchronously, in a separate theread.</p>
+<p>The error handler is invoked asynchronously, in a separate thread.</p>
 <p>The error handler is not invoked for microservice-level errors that are sent back to the client as responses. Note that the error counts in microEndpointStats include both internal and service-level errors.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">

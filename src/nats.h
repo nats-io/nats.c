@@ -1554,11 +1554,62 @@ typedef struct kvConfig
  */
 typedef struct kvWatchOptions
 {
+        /** \brief Do not receive delete markers.
+         *
+         * If this is set to `true`, the watcher will not receive delete markers.
+         */
         bool            IgnoreDeletes;
+
+        /** \brief Receive all history per subject, not just the last one.
+         *
+         * If not set, only the latest value per key is delivered as the initial snapshot.
+         *
+         * \warning This option is ignored if #ResumeFromRevision is set.
+         */
         bool            IncludeHistory;
+
+        /** \brief Only receive the meta data of the entry.
+         *
+         * The entry will not contain the actual content of entry.
+         */
         bool            MetaOnly;
-        int64_t         Timeout;        ///< How long to wait (in milliseconds) for some operations to complete.
-        bool            UpdatesOnly;    ///< Only receive updates, no initial snapshot.
+
+        /** \brief How long to wait for some operations to complete.
+         *
+         * Expressed in milliseconds.
+         */
+        int64_t         Timeout;
+
+        /** \brief Only receive updates, no initial snapshot.
+         *
+         * If set to `true`, the initial snapshot will not be received. Only new
+         * updates after the watcher is created will be received.
+         *
+         * \note If this is set, #IncludeHistory option is ignored.
+         *
+         * \warning This option is ignored if #ResumeFromRevision is set.
+         */
+        bool            UpdatesOnly;
+
+        /** \brief Heartbeat used by the internal ordered consumer.
+         *
+         * Expressed in nanoseconds, similar to #jsConsumerConfig.Heartbeat.
+         *
+         * \note If not specified, a default value of 5 seconds is used.
+         */
+        int64_t         Heartbeat;
+
+        /** \brief Resume from this specific revision.
+         *
+         * If this is set to a positive value, the watcher will resume from this
+         * specific revision.
+         *
+         * \note This is intended for watchers that have restarted watching and
+         * have maintained some state of where they were in the watch.
+         *
+         * \warning #IncludeHistory and #UpdatesOnly options will be ignored.
+         */
+        uint64_t        ResumeFromRevision;
 
 } kvWatchOptions;
 

@@ -34718,11 +34718,18 @@ void test_KeyValueWatch(void)
     kvWatcher           *w  = NULL;
     kvEntry             *e  = NULL;
     natsThread          *t  = NULL;
+    natsConnection      *nc2= NULL;
+    natsOptions         *o2 = NULL;
+    jsCtx               *js2= NULL;
+    natsSubscription    *sub= NULL;
+    natsMsg             *msg= NULL;
+    char                *ws = NULL;
     int                 plc = 0;
     int                 plb = 0;
     kvConfig            kvc;
     int64_t             start;
     int                 i;
+    struct threadArg    arg;
 
     JS_SETUP(2, 6, 2);
 
@@ -34909,7 +34916,100 @@ void test_KeyValueWatch(void)
     testCond((s == NATS_TIMEOUT) && (e == NULL));
     nats_clearLastError();
     kvWatcher_Destroy(w);
+    w = NULL;
     kvStore_Destroy(kv);
+    kv = NULL;
+
+    test("Delete kv: ");
+    s = js_DeleteKeyValue(js, "WATCH");
+    testCond(s == NATS_OK);
+
+    test("Connect with reconnect cb: ");
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&o2));
+    IFOK(s, natsOptions_SetReconnectWait(o2, 100));
+    IFOK(s, natsOptions_SetReconnectJitter(o2, 0, 0));
+    IFOK(s, natsOptions_SetReconnectedCB(o2, _reconnectedCb, (void*) &arg));
+    IFOK(s, natsOptions_SetErrorHandler(o2, _dummyErrHandler, NULL));
+    IFOK(s, natsConnection_Connect(&nc2, o2));
+    IFOK(s, natsConnection_JetStream(&js2, nc2, NULL));
+    testCond(s == NATS_OK);
+
+    test("Create kv: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "WATCH";
+    s = js_CreateKeyValue(&kv, js2, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Create watcher: ");
+    kvWatchOptions_Init(&o);
+    o.Heartbeat = NATS_MILLIS_TO_NANOS(100);
+    s = kvStore_WatchAll(&w, kv, &o);
+    testCond((s == NATS_OK) && (w != NULL));
+
+    testCond(_expectInitDone(w));
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv, "connected", "true");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdate(w, "connected", "true", 1));
+
+    test("Check heartbeats: ");
+    natsMutex_Lock(w->mu);
+    ws = w->sub->subject;
+    natsMutex_Unlock(w->mu);
+    s = natsConnection_SubscribeSync(&sub, nc2, ws);
+    IFOK(s, natsSubscription_NextMsg(&msg, sub, 200));
+    if (s == NATS_OK)
+    {
+        int jct = 0;
+        s = (natsMsg_isJSCtrl(msg, &jct) && (jct == jsCtrlHeartbeat) ? NATS_OK : NATS_ERR);
+    }
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Disconnect, wait reconnect: ");
+    _stopServer(pid);
+    pid = NATS_INVALID_PID;
+    nats_Sleep(500);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && !arg.reconnected)
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv, "reconnected", "true");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdate(w, "reconnected", "true", 2));
+
+    kvWatcher_Destroy(w);
+    w = NULL;
+
+    test("Check resume from revision: ");
+
+    kvWatchOptions_Init(&o);
+    o.ResumeFromRevision = 2;
+    // The following is incompatible with the above option. There won't be an
+    // error returned, just should be ignored.
+    o.UpdatesOnly = true;
+    s = kvStore_WatchAll(&w, kv, &o);
+    testCond((s == NATS_OK) && (w != NULL));
+
+    testCond(_expectUpdate(w, "reconnected", "true", 2));
+    testCond(_expectInitDone(w));
+
+    kvWatcher_Destroy(w);
+    kvStore_Destroy(kv);
+    jsCtx_Destroy(js2);
+    natsConnection_Destroy(nc2);
+    natsOptions_Destroy(o2);
+    _destroyDefaultThreadArgs(&arg);
 
     JS_TEARDOWN;
 }

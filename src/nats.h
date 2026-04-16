@@ -1574,7 +1574,7 @@ typedef struct kvWatchOptions
          */
         bool            MetaOnly;
 
-        /** \brief  How long to wait for some operations to complete.
+        /** \brief How long to wait for some operations to complete.
          *
          * Expressed in milliseconds.
          */

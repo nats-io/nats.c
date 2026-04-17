@@ -1,3 +1,5 @@
+_test(BenchJetStreamPubAsync)
+_test(BenchRequestReply)
 _test(BenchSubscribeAsync_Large)
 _test(BenchSubscribeAsync_Small)
 _test(BenchSubscribeAsync_Inject)

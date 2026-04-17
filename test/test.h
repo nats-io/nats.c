@@ -11,8 +11,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "natsp.h"
-#include "comsock.h"
+#ifndef _WIN32
+#include <dirent.h>
+#include <sys/stat.h>
+#include <execinfo.h>
+#endif
+
+#include "../src/natsp.h"
+#include "../src/comsock.h"
+
+#define test(s)         { printf("#%02d ", ++tests); printf("%s", (s)); fflush(stdout); }
+#define testf(s, ...)   { printf("#%02d ", ++tests); printf((s), __VA_ARGS__); fflush(stdout); }
+
+#ifdef _WIN32
+#define testCond(c)         if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; return; }
+#define testCondNoReturn(c) if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; }
+#else
+#define testCond(c)         if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; return; }
+#define testCondNoReturn(c) if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; }
+#endif
 
 #if defined(NATS_HAS_STREAMING)
 static const char *clusterName = "test-cluster";
@@ -367,3 +384,95 @@ _startServer(const char *url, const char *cmdLineOpts, bool checkStart)
     return _startServerImpl(natsServerExe, url, cmdLineOpts, checkStart);
 }
 
+static void
+_makeUniqueDir(char *buf, int bufLen, const char *path)
+{
+    int n;
+
+    if ((int) strlen(path) + 1 + NUID_BUFFER_LEN + 1 > bufLen)
+        abort();
+
+    n = snprintf(buf, bufLen, "%s", path);
+    natsNUID_Next(buf+n, NUID_BUFFER_LEN+1);
+    buf[n+NUID_BUFFER_LEN+1] = '\0';
+}
+
+static void
+rmtree(const char *path)
+{
+#ifdef _WIN32
+    WIN32_FIND_DATA ffd;
+    HANDLE          hFind = INVALID_HANDLE_VALUE;
+    char            *dir  = NULL;
+
+    if (nats_asprintf(&dir, "%s\\*", path) < 0)
+        abort();
+
+    hFind = FindFirstFile(dir, &ffd);
+    if (hFind == INVALID_HANDLE_VALUE)
+    {
+        free(dir);
+        return;
+    }
+
+    do
+    {
+        char *fullPath = NULL;
+
+        if (!strcmp(ffd.cFileName, ".") || !strcmp(ffd.cFileName, ".."))
+            continue;
+
+        if (nats_asprintf(&fullPath, "%s\\%s", path, ffd.cFileName) < 0)
+            abort();
+
+        if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            rmtree(fullPath);
+        else
+            DeleteFile(fullPath);
+        free(fullPath);
+    }
+    while (FindNextFile(hFind, &ffd) != 0);
+
+    FindClose(hFind);
+    RemoveDirectory(path);
+    free(dir);
+
+#else
+    DIR             *dir;
+    struct stat     statPath, statEntry;
+    struct dirent   *entry;
+
+    memset(&statPath, 0, sizeof(struct stat));
+
+    stat(path, &statPath);
+    if (S_ISDIR(statPath.st_mode) == 0)
+        return;
+
+    if ((dir = opendir(path)) == NULL)
+        return;
+
+    while ((entry = readdir(dir)) != NULL)
+    {
+        char *fullPath = NULL;
+
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
+            continue;
+
+        if (nats_asprintf(&fullPath, "%s/%s", path, entry->d_name) < 0)
+            abort();
+
+        memset(&statEntry, 0, sizeof(struct stat));
+        stat(fullPath, &statEntry);
+
+        if (S_ISDIR(statEntry.st_mode) != 0)
+            rmtree(fullPath);
+        else
+            unlink(fullPath);
+
+        free(fullPath);
+    }
+
+    closedir(dir);
+    rmdir(path);
+#endif
+}

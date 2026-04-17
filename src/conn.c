@@ -1348,7 +1348,7 @@ _clearPendingFlushRequests(natsConnection *nc)
 }
 
 // Dispose of the respInfo object.
-// Muxer lock held on entry.
+// Connection lock held on entry.
 void
 natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp)
 {

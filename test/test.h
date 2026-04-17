@@ -13,7 +13,6 @@
 
 #ifndef _WIN32
 #include <dirent.h>
-#include <sys/stat.h>
 #include <execinfo.h>
 #endif
 
@@ -438,38 +437,40 @@ rmtree(const char *path)
     free(dir);
 
 #else
-    DIR             *dir;
-    struct stat     statPath, statEntry;
+    DIR             *dir = NULL;
+    int             dfd  = -1;
     struct dirent   *entry;
 
-    memset(&statPath, 0, sizeof(struct stat));
-
-    stat(path, &statPath);
-    if (S_ISDIR(statPath.st_mode) == 0)
+    dfd = open(path, O_RDONLY | O_DIRECTORY);
+    if (dfd < 0)
         return;
 
-    if ((dir = opendir(path)) == NULL)
+    dir = fdopendir(dfd);
+    if (dir == NULL)
+    {
+        close(dfd);
         return;
+    }
 
     while ((entry = readdir(dir)) != NULL)
     {
-        char *fullPath = NULL;
-
         if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
             continue;
 
-        if (nats_asprintf(&fullPath, "%s/%s", path, entry->d_name) < 0)
-            abort();
+        if (unlinkat(dfd, entry->d_name, 0) == 0)
+            continue;
 
-        memset(&statEntry, 0, sizeof(struct stat));
-        stat(fullPath, &statEntry);
+        if ((errno == EISDIR) || (errno == EPERM))
+        {
+            char *fullPath = NULL;
 
-        if (S_ISDIR(statEntry.st_mode) != 0)
+            if (nats_asprintf(&fullPath, "%s/%s", path, entry->d_name) < 0)
+                abort();
+
             rmtree(fullPath);
-        else
-            unlink(fullPath);
-
-        free(fullPath);
+            free(fullPath);
+            unlinkat(dfd, entry->d_name, AT_REMOVEDIR);
+        }
     }
 
     closedir(dir);

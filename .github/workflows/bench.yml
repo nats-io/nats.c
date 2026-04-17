@@ -116,4 +116,4 @@ jobs:
       - name: "Compare benchmark to main"
         run: |
           cd build
-          go run ../test/bench_diff/main.go bench-main.log bench.log
+          go run ../tools/bench_diff/main.go bench-main.log bench.log

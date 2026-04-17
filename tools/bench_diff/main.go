@@ -125,6 +125,11 @@ func main() {
 		fmt.Fprintln(w, "Name\tBase msgs/sec\tBench msgs/sec\tDifference\t")
 		fmt.Fprintln(w, "\t\t\t\t")
 		for i, d := range td {
+			if i >= len(bd) || d.Name != bd[i].Name {
+				fmt.Fprintln(w, "\t\t\t\t")
+				fmt.Fprintf(w, "WARNING: no data for %q in bench, stopping\n", d.Name)
+				break
+			}
 			bp := bd[i].Perf
 			perf := ((float64(bp) / float64(d.Perf)) - 1) * 100
 			fmt.Fprintf(w, "%s\t%d\t%d\t%+.2f%%\t\n", d.Name, d.Perf, bp, perf)

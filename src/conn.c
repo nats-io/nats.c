@@ -1379,7 +1379,7 @@ natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp)
 
 // Creates a new respInfo object, binds it to the request's specific
 // subject (that is set in respInbox). The respInfo object is returned.
-// Connection's lock is held on entry.
+// Connection lock held on entry.
 natsStatus
 natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox)
 {
@@ -1570,7 +1570,7 @@ _respHandler(natsConnection *nc, natsMsg *msg)
 
     subj = msg->subject;
     // We look for the reply token by first checking that the message subject
-    // prefix matches the subscription's subject (without the last '*.*').
+    // prefix matches the subscription's subject (without the last '*').
     // It is possible that it does not due to subject rewrite (JetStream).
     //
     // Note: the muxer fields accessed here are immutable at this point, so we
@@ -1667,7 +1667,7 @@ natsConn_getNewSID(natsConnection *nc)
 }
 
 // Initialize some of the connection's fields used for request/reply mapping.
-// Connection's lock is held on entry.
+// Connection lock held on entry.
 natsStatus
 natsConn_initRespMuxer(natsConnection *nc)
 {
@@ -1732,7 +1732,7 @@ natsConn_initRespMuxer(natsConnection *nc)
 }
 
 // This will clear any pending Request calls.
-// Connection lock is held on entry.
+// Connection lock held on entry.
 static void
 _clearPendingRequestCalls(natsConnection *nc, natsStatus reason)
 {
@@ -3431,7 +3431,7 @@ natsConn_subscribeImpl(natsSubscription **newSub,
 }
 
 // Will queue an UNSUB protocol, making sure it is not flushed in place.
-// The connection lock is held on entry.
+// Connection lock held on entry.
 natsStatus
 natsConn_enqueueUnsubProto(natsConnection *nc, int64_t sid)
 {
@@ -3949,7 +3949,7 @@ typedef natsStatus (*subIterFunc)(natsStatus callerSts, natsConnection *nc, nats
 // If the callback returns an error, the iteration continues and the first
 // non NATS_OK error is returned.
 //
-// Connection lock is held on entry.
+// Connection lock held on entry.
 static natsStatus
 _iterateSubsAndInvokeFunc(natsStatus callerSts, natsConnection *nc, subIterFunc f)
 {

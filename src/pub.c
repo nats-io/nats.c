@@ -343,7 +343,7 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     natsStatus          s           = NATS_OK;
     respInfo            *resp       = NULL;
     bool                removeResp  = true;
-    char                respInboxBuf[32 + NATS_MAX_RESP_SUFFIX_LEN]; // '<inbox_prefix>.<resp_prefix>.0.<respId>\0'
+    char                respInboxBuf[32 + NATS_MAX_RESP_SUFFIX_LEN]; // '<inbox_prefix>.<resp_prefix>.0_<respId>\0'
     char                *respInbox = respInboxBuf;
 
     if ((replyMsg == NULL) || (nc == NULL) || (m == NULL))

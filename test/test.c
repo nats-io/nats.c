@@ -27365,7 +27365,7 @@ void test_JetStreamPublishMuxReplies(void)
                 s = NATS_ERR;
             else if (mux->sid == 0)
                 s = NATS_ERR;
-            else if (strstr(mux->wcSubject, ".*.*") == NULL)
+            else if (strstr(mux->wcSubject, ".*") == NULL)
                 s = NATS_ERR;
             else if (strstr(mux->respPfx, ar->repliesPfx) != NULL)
                 s = NATS_ERR;
@@ -27404,7 +27404,7 @@ void test_JetStreamPublishMuxReplies(void)
     test("Check inbox: ");
     s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond((s == NATS_OK)
-        && (strstr(natsMsg_GetSubject(msg), ".1.00000000000") != NULL));
+        && (strstr(natsMsg_GetSubject(msg), ".1_00000000000") != NULL));
     natsMsg_Destroy(msg);
     msg = NULL;
 
@@ -27429,7 +27429,7 @@ void test_JetStreamPublishMuxReplies(void)
     test("Check inbox: ");
     s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond((s == NATS_OK)
-        && (strstr(natsMsg_GetSubject(msg), ".2.00000000000") != NULL));
+        && (strstr(natsMsg_GetSubject(msg), ".2_00000000000") != NULL));
     natsMsg_Destroy(msg);
     msg = NULL;
 
@@ -27449,7 +27449,7 @@ void test_JetStreamPublishMuxReplies(void)
     test("Check that ctxID not reused: ");
     s = natsSubscription_NextMsg(&msg, sub, 1000);
     testCond((s == NATS_OK)
-        && (strstr(natsMsg_GetSubject(msg), ".3.00000000000") != NULL));
+        && (strstr(natsMsg_GetSubject(msg), ".3_00000000000") != NULL));
     natsMsg_Destroy(msg);
     msg = NULL;
 

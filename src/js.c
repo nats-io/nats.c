@@ -958,8 +958,8 @@ _initAsyncReplies(jsCtx *js, jsAsyncReplies *ar)
             // Set early so error-path removal uses correct ID.
             ar->ctxID = ctxID;
             // Build the response prefix string.
-            if (nats_asprintf(&pfx, "%.*s%" PRId64 ".",
-                nc->respMux.respPfxLen, nc->respMux.respPfx, ctxID) < 0)
+            if (nats_asprintf(&pfx, "%.*s%" PRId64 "_",
+                nc->respMux.subjPfxLen, nc->respMux.respPfx, ctxID) < 0)
             {
                 s = nats_setDefaultError(NATS_NO_MEMORY);
             }

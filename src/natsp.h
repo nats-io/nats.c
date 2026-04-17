@@ -98,7 +98,7 @@
 #define NATS_MAX_RESP_ID_LEN (11)
 // To encode a random response prefix.
 #define NATS_RESP_PREFIX_LEN (12)
-// To encode "<resp_prefix>.0.<respID>\0".
+// To encode "<resp_prefix>.0_<respID>\0".
 #define NATS_MAX_RESP_SUFFIX_LEN (NATS_RESP_PREFIX_LEN + 3 + NATS_MAX_RESP_ID_LEN + 1)
 
 // To encode a JS Context ID starting at 1 (2^63-1). Note that this number
@@ -106,7 +106,7 @@
 // user got from a connection (likely to be 1 or 2 at most?). Still, let's
 // not assume and use the highest possible value.
 #define NATS_MAX_JS_CTX_ID_LEN (19)
-// To encode "<resp_prefix>.<JsCtxID>.<respID>\0".
+// To encode "<resp_prefix>.<JsCtxID>_<respID>\0".
 #define NATS_MAX_JS_RESP_SUFFIX_LEN (NATS_RESP_PREFIX_LEN + 1 + NATS_MAX_JS_CTX_ID_LEN + 1 + NATS_MAX_RESP_ID_LEN + 1)
 
 #define WAIT_FOR_READ       (0)
@@ -806,10 +806,10 @@ typedef void (*natsMsgFilter)(natsConnection *nc, natsMsg **msg, void* closure);
 // connection lock.
 typedef struct __respMuxer
 {
-    char                *respPfx;   // The response subject prefix for NATS core: `<inbox_prefix>.<resp_prefix>.0.`.
-    int                 respPfxLen; // Length of above prefix but without the last `0.`.
+    char                *respPfx;   // The response subject prefix for NATS core: `<inbox_prefix>.<resp_prefix>.0_`.
+    int                 subjPfxLen; // Above subject length but without the trailing `0_`.
     int                 idOffset;   // The offset of where the response ID starts in the subject.
-    char                *wcSubject; // The wildcard "subscription" subject.
+    char                *wcSubject; // The wildcard "subscription" subject: `<inbox_prefix>.<resp_prefix>.*`.
     bool                init;       // Set to `true` if response handling fields are fully initialized.
     bool                drain;      // Set to `true` to indicate that we are draining the muxer.
     int64_t             sid;        // The ID of the wildcard "subscription" (requires nc->subsMu lock).

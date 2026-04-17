@@ -1577,24 +1577,24 @@ _respHandler(natsConnection *nc, natsMsg *msg)
     // do this check outside of the connection lock. This helps performance
     // in parallel requests.
     mux = &nc->respMux;
-    if (strncmp(subj, mux->respPfx, mux->respPfxLen) == 0)
+    if (strncmp(subj, mux->respPfx, mux->subjPfxLen) == 0)
     {
         // This will point to the character past the prefix, which even with
-        // a corrupted input (unlikely otherwise would not be delivered) would
-        // point to the `\0` terminal character, so it is safe to dereference it.
-        const char *marker = (subj+mux->respPfxLen);
+        // a corrupted input (unlikely otherwise message would not be delivered)
+        // would point to the `\0` terminal character, so it is safe to dereference it.
+        const char *marker = (subj+mux->subjPfxLen);
 
-        // If '0.', then it is core
-        if ((*marker == '0') && (*(marker+1) == '.'))
+        // If '0_', then it is core
+        if ((*marker == '0') && (*(marker+1) == '_'))
             kind = RESP_HANDLER_CORE_KIND;
         else
         {
             kind = RESP_HANDLER_JS_KIND;
-            if ((*marker == '1') && (*(marker+1) == '.'))
+            if ((*marker == '1') && (*(marker+1) == '_'))
                 ctxID = 1;
             else
             {
-                char *end = strchr(marker, '.');
+                char *end = strchr(marker, '_');
                 if (end != NULL)
                 {
                     int ctxLen = (int) (end-marker);
@@ -1684,12 +1684,12 @@ natsConn_initRespMuxer(natsConnection *nc)
         s = natsHash_Create(&jsCtxs, 4);
     if (s == NATS_OK)
         s = natsNUID_Next(inbox, sizeof(inbox));
-    if ((s == NATS_OK) && (nats_asprintf(&pfx, "%s%.*s.0.",
+    if ((s == NATS_OK) && (nats_asprintf(&pfx, "%s%.*s.0_",
         nc->inboxPfx, NATS_RESP_PREFIX_LEN, (inbox + NUID_BUFFER_LEN-NATS_RESP_PREFIX_LEN)) < 0))
     {
         s = nats_setDefaultError(NATS_NO_MEMORY);
     }
-    if ((s == NATS_OK) && (nats_asprintf(&subj, "%.*s*.*", (int) strlen(pfx)-2, pfx) < 0))
+    if ((s == NATS_OK) && (nats_asprintf(&subj, "%.*s*", (int) strlen(pfx)-2, pfx) < 0))
         s = nats_setDefaultError(NATS_NO_MEMORY);
     if (s == NATS_OK)
     {
@@ -1710,7 +1710,7 @@ natsConn_initRespMuxer(natsConnection *nc)
 
         mux->wcSubject  = subj;
         mux->respPfx    = pfx;
-        mux->respPfxLen = (int) strlen(pfx) - 2;
+        mux->subjPfxLen = (int) strlen(pfx) - 2;
         mux->map        = map;
         mux->jsCtxs     = jsCtxs;
         natsMutex_Lock(nc->subsMu);

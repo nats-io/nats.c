@@ -434,8 +434,9 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
             natsMutex_Unlock(resp->mu);
         }
         // Common to success, failure to send the request or timeout.
+        natsConn_Lock(nc);
         natsConn_removeAndDisposeRespInfo(nc, removeResp, respInbox+nc->respMux.idOffset, resp);
-        natsConn_release(nc);
+        natsConn_unlockAndRelease(nc);
     }
 
     if (respInbox != respInboxBuf)

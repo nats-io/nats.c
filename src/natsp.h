@@ -800,23 +800,19 @@ typedef struct __respInfo
 // Used internally for testing and allow to alter/suppress an incoming message
 typedef void (*natsMsgFilter)(natsConnection *nc, natsMsg **msg, void* closure);
 
+// Used for the handling of multiplexed responses.
+//
+// Fields are either immutable (after muxer initialization) or protected by the
+// connection lock.
 typedef struct __respMuxer
 {
-    // The following fields are set under the connection lock.
-    //
-    // These are immutable once the muxer has been initialized.
     char                *respPfx;   // The response subject prefix for NATS core: `<inbox_prefix>.<resp_prefix>.0.`.
     int                 respPfxLen; // Length of above prefix but without the last `0.`.
     int                 idOffset;   // The offset of where the response ID starts in the subject.
     char                *wcSubject; // The wildcard "subscription" subject.
     bool                init;       // Set to `true` if response handling fields are fully initialized.
-    // This is set when connection drain is initiated.
     bool                drain;      // Set to `true` to indicate that we are draining the muxer.
-    // This is checked under the connection's `subsMu` lock in `processMsg()`,
-    // so we set it also under that lock for good measure.
-    int64_t             sid;        // The ID of the wildcard "subscription".
-
-    natsMutex           *mu;        // Mutex protecting the fields below.
+    int64_t             sid;        // The ID of the wildcard "subscription" (requires nc->subsMu lock).
     natsStrHash         *map;       // Request map for the response msg.
     respInfo            *pool;      // The head of a linked linst of pooled `respInfo` objects.
     int                 poolSize;   // The current size of the pool.

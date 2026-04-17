@@ -210,7 +210,6 @@ _destroyRespMuxer(respMuxer *mux)
     NATS_FREE(mux->wcSubject);
     natsHash_Destroy(mux->jsCtxs);
     natsStrHash_Destroy(mux->map);
-    natsMutex_Destroy(mux->mu);
     // The muxer is an embedded structure in `natsConnection`, so don't free `mux`.
 }
 
@@ -1396,7 +1395,6 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox)
             return NATS_UPDATE_ERR_STACK(s);
     }
 
-    natsMutex_Lock(mux->mu);
     resp = mux->pool;
     if (resp != NULL)
     {
@@ -1415,7 +1413,6 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox)
         if (s != NATS_OK)
         {
             _freeRespInfo(resp);
-            natsMutex_Unlock(mux->mu);
             return NATS_UPDATE_ERR_STACK(s);
         }
     }
@@ -1431,23 +1428,21 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox)
         *newResp = resp;
     else
         natsConn_disposeRespInfo(nc, resp);
-    natsMutex_Unlock(mux->mu);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 // Remove (if `remove` is true) the `respInfo` with the given `id` from the map
 // and dispose of the `resp` object.
+// Connection lock held on entry.
 void
 natsConn_removeAndDisposeRespInfo(natsConnection *nc, bool remove, char *id, respInfo *resp)
 {
     respMuxer *mux = &nc->respMux;
 
-    natsMutex_Lock(mux->mu);
     if (remove)
         natsStrHash_Remove(mux->map, id);
     natsConn_disposeRespInfo(nc, resp);
-    natsMutex_Unlock(mux->mu);
 }
 
 natsStatus
@@ -1473,7 +1468,6 @@ natsConn_addJsCtxToRespMuxer(int64_t *newCtxID, natsConnection *nc, jsCtx *js)
     mux = &nc->respMux;
     if (!mux->init)
         s = natsConn_initRespMuxer(nc);
-    natsMutex_Lock(mux->mu);
     if (s == NATS_OK)
     {
         // If the jsID value reaches the max (INT64_MAX), reset it to 1 (but
@@ -1497,7 +1491,6 @@ natsConn_addJsCtxToRespMuxer(int64_t *newCtxID, natsConnection *nc, jsCtx *js)
         if (s == NATS_OK)
             *newCtxID = ctxID;
     }
-    natsMutex_Unlock(mux->mu);
     natsConn_Unlock(nc);
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -1507,12 +1500,12 @@ natsConn_removeJsCtxFromRespMuxer(natsConnection *nc, jsCtx *js)
 {
     respMuxer *mux = &nc->respMux;
 
-    natsMutex_Lock(mux->mu);
+    natsConn_Lock(nc);
     if (mux->js == js)
         mux->js = NULL;
     else
         natsHash_Remove(mux->jsCtxs, js->asyncReplies.ctxID);
-    natsMutex_Unlock(mux->mu);
+    natsConn_Unlock(nc);
 }
 
 natsStatus
@@ -1614,7 +1607,7 @@ _respHandler(natsConnection *nc, natsMsg *msg)
     else
         kind = RESP_HANDLER_SUBJ_REWRITE_KIND;
 
-    natsMutex_Lock(mux->mu);
+    natsConn_Lock(nc);
     if (kind == RESP_HANDLER_CORE_KIND)
     {
         char *id = (char*) (subj+mux->idOffset);
@@ -1653,7 +1646,7 @@ _respHandler(natsConnection *nc, natsMsg *msg)
         natsCondition_Signal(resp->cond);
         natsMutex_Unlock(resp->mu);
     }
-    natsMutex_Unlock(mux->mu);
+    natsConn_Unlock(nc);
 
     if (dmsg)
         natsMsg_Destroy(msg);
@@ -1753,7 +1746,6 @@ _clearPendingRequestCalls(natsConnection *nc, natsStatus reason)
     if (mux->map == NULL)
         return;
 
-    natsMutex_Lock(mux->mu);
     natsStrHashIter_Init(&iter, mux->map);
     while (natsStrHashIter_Next(&iter, NULL, &p))
     {
@@ -1765,7 +1757,6 @@ _clearPendingRequestCalls(natsConnection *nc, natsStatus reason)
         natsStrHashIter_RemoveCurrent(&iter);
     }
     natsStrHashIter_Done(&iter);
-    natsMutex_Unlock(mux->mu);
 }
 
 static void
@@ -3228,7 +3219,6 @@ _drainJsDispatchers(natsConnection *nc)
     // next PONG protocol.
     mux->drain = false;
 
-    natsMutex_Lock(mux->mu);
     // Update the dispatchers count needing draining and submit the
     // drain message to JS dispatchers.
     if (mux->js != NULL)
@@ -3243,7 +3233,6 @@ _drainJsDispatchers(natsConnection *nc)
         js_submitRespDrainMsg((jsCtx*) p);
     }
     natsHashIter_Done(&iter);
-    natsMutex_Unlock(mux->mu);
 
     // We need the nc->subsMu lock to update `nc->drainJsDispatchers`.
     natsMutex_Lock(nc->subsMu);
@@ -3613,11 +3602,6 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
         // nc->inboxPfx includes the separator `.` (such as `_INBOX.`) even
         // for the user defined one.
         nc->inboxPfxLen = (int) strlen(nc->inboxPfx);
-    }
-    if (s == NATS_OK)
-        s = natsMutex_Create(&(nc->respMux.mu));
-    if (s == NATS_OK)
-    {
         // Point to where the response ID starts in "<inbox_prefix>.<resp_prefix>.0.<respID>".
         nc->respMux.idOffset = nc->inboxPfxLen+NATS_RESP_PREFIX_LEN+3;
     }
@@ -4026,7 +4010,8 @@ _initRespMuxerDrain(natsConnection *nc)
     int64_t         sid     = 0;
     natsHashIter    iter;
 
-    natsMutex_Lock(mux->mu);
+    natsConn_Lock(nc);
+
     // Initiate draining of JetStream responses dispatchers.
     if (mux->js != NULL)
         js_initRespDrain(mux->js);
@@ -4034,9 +4019,6 @@ _initRespMuxerDrain(natsConnection *nc)
     while (natsHashIter_Next(&iter, NULL, &p))
         js_initRespDrain((jsCtx*) p);
     natsHashIter_Done(&iter);
-    natsMutex_Unlock(mux->mu);
-
-    natsConn_Lock(nc);
     // Indicate that we are initiating a drain of the muxer.
     // Set this under the connection lock since this is the lock we are acquiring
     // in processing of a PONG (where we are going to check this flag).

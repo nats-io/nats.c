@@ -1,4 +1,4 @@
-// Copyright 2015-2025 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -178,6 +178,42 @@ _clearServerInfo(natsServerInfo *si)
 }
 
 static void
+_freeRespInfo(respInfo *resp)
+{
+    if (resp == NULL)
+        return;
+
+    natsMsg_Destroy(resp->msg);
+    natsMutex_Destroy(resp->mu);
+    natsCondition_Destroy(resp->cond);
+    NATS_FREE(resp);
+}
+
+static void
+_destroyRespPool(respMuxer *mux)
+{
+    respInfo *info;
+
+    while ((info=mux->pool) != NULL)
+    {
+        mux->pool = info->next;
+        mux->poolSize--;
+        _freeRespInfo(info);
+    }
+}
+
+static void
+_destroyRespMuxer(respMuxer *mux)
+{
+    _destroyRespPool(mux);
+    NATS_FREE(mux->respPfx);
+    NATS_FREE(mux->wcSubject);
+    natsHash_Destroy(mux->jsCtxs);
+    natsStrHash_Destroy(mux->map);
+    // The muxer is an embedded structure in `natsConnection`, so don't free `mux`.
+}
+
+static void
 _freeConn(natsConnection *nc)
 {
     if (nc == NULL)
@@ -200,9 +236,7 @@ _freeConn(natsConnection *nc)
         SSL_free(nc->sockCtx.ssl);
     natsMutex_Destroy(nc->sockCtx.sslMu);
     NATS_FREE(nc->el.buffer);
-    natsConn_destroyRespPool(nc);
-    natsInbox_Destroy(nc->respSub);
-    natsStrHash_Destroy(nc->respMap);
+    _destroyRespMuxer(&nc->respMux);
     natsCondition_Destroy(nc->reconnectCond);
     natsCondition_Destroy(nc->drainCond);
     natsMutex_Destroy(nc->subsMu);
@@ -226,6 +260,15 @@ natsConn_retain(natsConnection *nc)
     nc->refs++;
 
     natsConn_Unlock(nc);
+}
+
+void
+natsConn_retainLocked(natsConnection *nc)
+{
+    if (nc == NULL)
+        return;
+
+    _retain(nc);
 }
 
 void
@@ -1142,6 +1185,8 @@ natsConn_sendSubProto(natsConnection *nc, const char *subject, const char *queue
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// Resend registered subscriptions' SUB protocol, and possibly the muxer.
+// Connection lock held on entry.
 static natsStatus
 _resendSubscriptions(natsConnection *nc)
 {
@@ -1223,6 +1268,10 @@ _resendSubscriptions(natsConnection *nc)
         nats_unlockSubAndDispatcher(sub);
     }
 
+    // Do the muxer if applicable.
+    if ((s == NATS_OK) && nc->respMux.sid > 0)
+        s = natsConn_sendSubProto(nc, nc->respMux.wcSubject, NULL, nc->respMux.sid);
+
     NATS_FREE(subs);
 
     return s;
@@ -1299,12 +1348,21 @@ _clearPendingFlushRequests(natsConnection *nc)
 }
 
 // Dispose of the respInfo object.
-// The boolean `needsLock` indicates if connection lock is required or not.
+// Connection lock held on entry.
 void
-natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock)
+natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp)
 {
+    respMuxer *mux;
+
     if (resp == NULL)
         return;
+
+    mux = &nc->respMux;
+    if (mux->poolSize == RESP_INFO_POOL_MAX_SIZE)
+    {
+        _freeRespInfo(resp);
+        return;
+    }
 
     // Destroy the message if present in the respInfo object. If it has
     // been returned to the RequestX() calls, resp->msg will be NULL here.
@@ -1313,55 +1371,35 @@ natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock)
         natsMsg_Destroy(resp->msg);
         resp->msg = NULL;
     }
-    if (!resp->pooled)
-    {
-        natsCondition_Destroy(resp->cond);
-        natsMutex_Destroy(resp->mu);
-        NATS_FREE(resp);
-    }
-    else
-    {
-        if (needsLock)
-            natsConn_Lock(nc);
-
-        resp->closed = false;
-        resp->closedSts = NATS_OK;
-        resp->removed = false;
-        nc->respPool[nc->respPoolIdx++] = resp;
-
-        if (needsLock)
-            natsConn_Unlock(nc);
-    }
-}
-
-// Destroy the pool of respInfo objects.
-void
-natsConn_destroyRespPool(natsConnection *nc)
-{
-    int      i;
-    respInfo *info;
-
-    for (i=0; i<nc->respPoolSize; i++)
-    {
-        info = nc->respPool[i];
-        info->pooled = false;
-        natsConn_disposeRespInfo(nc, info, false);
-    }
-    NATS_FREE(nc->respPool);
+    resp->closedSts = NATS_OK;
+    resp->next = mux->pool;
+    mux->pool = resp;
+    mux->poolSize++;
 }
 
 // Creates a new respInfo object, binds it to the request's specific
 // subject (that is set in respInbox). The respInfo object is returned.
-// Connection's lock is held on entry.
+// Connection lock held on entry.
 natsStatus
 natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox)
 {
     respInfo    *resp  = NULL;
+    respMuxer   *mux   = &nc->respMux;
     natsStatus  s      = NATS_OK;
 
-    if (nc->respPoolIdx > 0)
+    // Make sure muxer is initialized.
+    if (!mux->init)
     {
-        resp = nc->respPool[--nc->respPoolIdx];
+        s = natsConn_initRespMuxer(nc);
+        if (s != NATS_OK)
+            return NATS_UPDATE_ERR_STACK(s);
+    }
+
+    resp = mux->pool;
+    if (resp != NULL)
+    {
+        mux->pool = resp->next;
+        mux->poolSize--;
     }
     else
     {
@@ -1372,74 +1410,102 @@ natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox)
             s = natsMutex_Create(&(resp->mu));
         if (s == NATS_OK)
             s = natsCondition_Create(&(resp->cond));
-        if ((s == NATS_OK) && (nc->respPoolSize < RESP_INFO_POOL_MAX_SIZE))
+        if (s != NATS_OK)
         {
-            resp->pooled = true;
-            nc->respPoolSize++;
+            _freeRespInfo(resp);
+            return NATS_UPDATE_ERR_STACK(s);
         }
     }
 
-    if (s == NATS_OK)
-    {
-        nc->respId[nc->respIdPos] = '0' + nc->respIdVal;
-        nc->respId[nc->respIdPos + 1] = '\0';
+    // Build the response inbox
+    char *idBuf = respInbox+mux->idOffset;
+    memcpy(respInbox, mux->respPfx, mux->idOffset);
+    nats_encodeRespID(idBuf, mux->idVal++, false);
 
-        // Build the response inbox
-        memcpy(respInbox, nc->respSub, nc->reqIdOffset);
-        respInbox[nc->reqIdOffset-1] = '.';
-        memcpy(respInbox+nc->reqIdOffset, nc->respId, nc->respIdPos + 2); // copy the '\0' of respId
-
-        nc->respIdVal++;
-        if (nc->respIdVal == 10)
-        {
-            nc->respIdVal = 0;
-            if (nc->respIdPos > 0)
-            {
-                bool shift = true;
-                int  i, j;
-
-                for (i=nc->respIdPos-1; i>=0; i--)
-                {
-                    if (nc->respId[i] != '9')
-                    {
-                        nc->respId[i]++;
-
-                        for (j=i+1; j<=nc->respIdPos-1; j++)
-                            nc->respId[j] = '0';
-
-                        shift = false;
-                        break;
-                    }
-                }
-                if (shift)
-                {
-                    nc->respId[0] = '1';
-
-                    for (i=1; i<=nc->respIdPos; i++)
-                        nc->respId[i] = '0';
-
-                    nc->respIdPos++;
-                }
-            }
-            else
-            {
-                nc->respId[0] = '1';
-                nc->respIdPos++;
-            }
-            if (nc->respIdPos == NATS_MAX_REQ_ID_LEN)
-                nc->respIdPos = 0;
-        }
-
-        s = natsStrHash_Set(nc->respMap, respInbox+nc->reqIdOffset, true,
-                            (void*) resp, NULL);
-    }
+    s = natsStrHash_Set(mux->map, idBuf, true, (void*) resp, NULL);
 
     if (s == NATS_OK)
         *newResp = resp;
     else
-        natsConn_disposeRespInfo(nc, resp, false);
+        natsConn_disposeRespInfo(nc, resp);
 
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+// Remove (if `remove` is true) the `respInfo` with the given `id` from the map
+// and dispose of the `resp` object.
+// Connection lock held on entry.
+void
+natsConn_removeAndDisposeRespInfo(natsConnection *nc, bool remove, char *id, respInfo *resp)
+{
+    respMuxer *mux = &nc->respMux;
+
+    if (remove)
+        natsStrHash_Remove(mux->map, id);
+    natsConn_disposeRespInfo(nc, resp);
+}
+
+natsStatus
+natsConn_addJsCtxToRespMuxer(int64_t *newCtxID, natsConnection *nc, jsCtx *js)
+{
+    natsStatus  s       = NATS_OK;
+    respMuxer   *mux    = NULL;
+    int64_t     ctxID   = 0;
+
+    *newCtxID = 0;
+
+    natsConn_Lock(nc);
+    if (natsConn_isClosed(nc))
+    {
+        natsConn_Unlock(nc);
+        return nats_setDefaultError(NATS_CONNECTION_CLOSED);
+    }
+    if (natsConn_isDraining(nc))
+    {
+        natsConn_Unlock(nc);
+        return nats_setDefaultError(NATS_DRAINING);
+    }
+    mux = &nc->respMux;
+    if (!mux->init)
+        s = natsConn_initRespMuxer(nc);
+    if (s == NATS_OK)
+    {
+        // If the jsID value reaches the max (INT64_MAX), reset it to 1 (but
+        // it will then be bumped to 2). It would take thousands of years
+        // at more than 10 million calls per second to reach the limit.
+        if (mux->jsID == INT64_MAX)
+            mux->jsID = 1;
+        // Bump the counter and use the new value.
+        ctxID = ++(mux->jsID);
+        // Optimization: for the first context added, store directly in mux->js.
+        if (ctxID == 1)
+            mux->js = js;
+        else
+        {
+            if (natsHash_Get(mux->jsCtxs, ctxID) != NULL)
+                s = nats_setError(NATS_ILLEGAL_STATE, "%s", jsErrNoContextIDAvailable);
+            else
+                s = natsHash_Set(mux->jsCtxs, ctxID, (void*) js, NULL);
+        }
+
+        if (s == NATS_OK)
+            *newCtxID = ctxID;
+    }
+    natsConn_Unlock(nc);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+natsConn_removeJsCtxFromRespMuxer(natsConnection *nc, jsCtx *js)
+{
+    respMuxer *mux = &nc->respMux;
+
+    natsConn_Lock(nc);
+    if (mux->js == js)
+        mux->js = NULL;
+    else
+        natsHash_Remove(mux->jsCtxs, js->asyncReplies.ctxID);
+    natsConn_Unlock(nc);
 }
 
 natsStatus
@@ -1488,63 +1554,204 @@ natsConn_newInbox(natsConnection *nc, natsInbox **newInbox)
     return s;
 }
 
-// Initialize some of the connection's fields used for request/reply mapping.
-// Connection's lock is held on entry.
-natsStatus
-natsConn_initResp(natsConnection *nc, natsMsgHandler cb)
-{
-    natsStatus s = NATS_OK;
+#define RESP_HANDLER_CORE_KIND          (1)
+#define RESP_HANDLER_JS_KIND            (2)
+#define RESP_HANDLER_SUBJ_REWRITE_KIND  (3)
 
-    nc->respPool = NATS_CALLOC(RESP_INFO_POOL_MAX_SIZE, sizeof(respInfo*));
-    if (nc->respPool == NULL)
+static void
+_respHandler(natsConnection *nc, natsMsg *msg)
+{
+    const char  *subj   = NULL;
+    respInfo    *resp   = NULL;
+    bool        dmsg    = true;
+    int         kind    = 0; // will be set down below;
+    int64_t     ctxID   = 0;
+    respMuxer   *mux;
+
+    subj = msg->subject;
+    // We look for the reply token by first checking that the message subject
+    // prefix matches the subscription's subject (without the last '*').
+    // It is possible that it does not due to subject rewrite (JetStream).
+    //
+    // Note: the muxer fields accessed here are immutable at this point, so we
+    // do this check outside of the connection lock. This helps performance
+    // in parallel requests.
+    mux = &nc->respMux;
+    if (strncmp(subj, mux->respPfx, mux->subjPfxLen) == 0)
+    {
+        // This will point to the character past the prefix, which even with
+        // a corrupted input (unlikely otherwise message would not be delivered)
+        // would point to the `\0` terminal character, so it is safe to dereference it.
+        const char *marker = (subj+mux->subjPfxLen);
+
+        // If '0_', then it is core
+        if ((*marker == '0') && (*(marker+1) == '_'))
+            kind = RESP_HANDLER_CORE_KIND;
+        else
+        {
+            kind = RESP_HANDLER_JS_KIND;
+            if ((*marker == '1') && (*(marker+1) == '_'))
+                ctxID = 1;
+            else
+            {
+                char *end = strchr(marker, '_');
+                if (end != NULL)
+                {
+                    int ctxLen = (int) (end-marker);
+                    if (ctxLen <= NATS_MAX_JS_CTX_ID_LEN)
+                        ctxID = nats_ParseInt64(marker, ctxLen);
+                }
+            }
+        }
+    }
+    else
+        kind = RESP_HANDLER_SUBJ_REWRITE_KIND;
+
+    natsConn_Lock(nc);
+    if (kind == RESP_HANDLER_CORE_KIND)
+    {
+        char *id = (char*) (subj+mux->idOffset);
+        resp = (respInfo*) natsStrHash_Remove(mux->map, id);
+    }
+    else if (kind == RESP_HANDLER_JS_KIND)
+    {
+        jsCtx *js = NULL;
+
+        if (ctxID == 1)
+            js = mux->js;
+        else if (ctxID > 1)
+            js = (jsCtx*) natsHash_Get(mux->jsCtxs, ctxID);
+        // else we will have js == NULL so will fallthrough and delete the message.
+        if (js != NULL)
+        {
+            dmsg = false;
+            js_submitRespMsg(js, msg);
+        }
+    }
+    else if (kind == RESP_HANDLER_SUBJ_REWRITE_KIND)
+    {
+        // Only if the subject is completely different, we assume that it
+        // could be the server that has rewritten the subject and so if there
+        // is a single entry, use that.
+        void *value = NULL;
+        natsStrHash_RemoveSingle(mux->map, NULL, &value);
+        resp = (respInfo*) value;
+    }
+    if (resp != NULL)
+    {
+        // Do not destroy the message since it is being used.
+        dmsg = false;
+        natsMutex_Lock(resp->mu);
+        resp->msg = msg;
+        natsCondition_Signal(resp->cond);
+        natsMutex_Unlock(resp->mu);
+    }
+    natsConn_Unlock(nc);
+
+    if (dmsg)
+        natsMsg_Destroy(msg);
+}
+
+// Assign a new subscription ID. If the connection's global subscription ID
+// has reached the max (INT64_MAX), then it resets to 1. It would take
+// thousands of years at 10 million calls per second to reach it.
+//
+// Connection's `subsMu` lock is held on entry.
+int64_t
+natsConn_getNewSID(natsConnection *nc)
+{
+    if (nc->ssid == INT64_MAX)
+        nc->ssid = 0;
+
+    return ++(nc->ssid);
+}
+
+// Initialize some of the connection's fields used for request/reply mapping.
+// Connection lock held on entry.
+natsStatus
+natsConn_initRespMuxer(natsConnection *nc)
+{
+    natsStatus          s       = NATS_OK;
+    natsStrHash         *map    = NULL;
+    natsHash            *jsCtxs = NULL;
+    char                *pfx    = NULL;
+    char                *subj   = NULL;
+    int64_t             sid     = 0;
+    char                inbox[NUID_BUFFER_LEN+1];
+
+    s = natsStrHash_Create(&map, 4);
+    if (s == NATS_OK)
+        s = natsHash_Create(&jsCtxs, 4);
+    if (s == NATS_OK)
+        s = natsNUID_Next(inbox, sizeof(inbox));
+    if ((s == NATS_OK) && (nats_asprintf(&pfx, "%s%.*s.0_",
+        nc->inboxPfx, NATS_RESP_PREFIX_LEN, (inbox + NUID_BUFFER_LEN-NATS_RESP_PREFIX_LEN)) < 0))
+    {
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    if ((s == NATS_OK) && (nats_asprintf(&subj, "%.*s*", (int) strlen(pfx)-2, pfx) < 0))
         s = nats_setDefaultError(NATS_NO_MEMORY);
     if (s == NATS_OK)
-        s = natsStrHash_Create(&nc->respMap, 4);
-    if (s == NATS_OK)
-        s = natsConn_newInbox(nc, (natsInbox**) &nc->respSub);
-    if (s == NATS_OK)
     {
-        char *inbox = NULL;
+        natsMutex_Lock(nc->subsMu);
+        sid = natsConn_getNewSID(nc);
+        natsMutex_Unlock(nc->subsMu);
 
-        if (nats_asprintf(&inbox, "%s.*", nc->respSub) < 0)
-            s = nats_setDefaultError(NATS_NO_MEMORY);
-        else
-            s = natsConn_subscribeNoPoolNoLock(&(nc->respMux), nc, inbox, cb, (void*) nc);
-
-        NATS_FREE(inbox);
+        // We resend the protocol on reconnect, so if we are reconnecting, don't do it here.
+        if (!natsConn_isReconnecting(nc))
+        {
+            SET_WRITE_DEADLINE(nc);
+            s = natsConn_sendSubProto(nc, subj, NULL, sid);
+        }
     }
-    if (s != NATS_OK)
+    if (s == NATS_OK)
     {
-        natsInbox_Destroy(nc->respSub);
-        nc->respSub = NULL;
-        natsStrHash_Destroy(nc->respMap);
-        nc->respMap = NULL;
-        NATS_FREE(nc->respPool);
-        nc->respPool = NULL;
+        respMuxer *mux = &nc->respMux;
+
+        mux->wcSubject  = subj;
+        mux->respPfx    = pfx;
+        mux->subjPfxLen = (int) strlen(pfx) - 2;
+        mux->map        = map;
+        mux->jsCtxs     = jsCtxs;
+        natsMutex_Lock(nc->subsMu);
+        mux->sid        = sid;
+        natsMutex_Unlock(nc->subsMu);
+        mux->init       = true;
+    }
+    else
+    {
+        if (sid > 0)
+            natsConn_sendUnsubProto(nc, sid, 0);
+        NATS_FREE(subj);
+        NATS_FREE(pfx);
+        natsHash_Destroy(jsCtxs);
+        natsStrHash_Destroy(map);
     }
 
     return NATS_UPDATE_ERR_STACK(s);
 }
 
 // This will clear any pending Request calls.
-// Lock is assumed to be held by the caller.
+// Connection lock held on entry.
 static void
 _clearPendingRequestCalls(natsConnection *nc, natsStatus reason)
 {
     natsStrHashIter iter;
-    void            *p = NULL;
+    void            *p      = NULL;
+    respMuxer       *mux    = &nc->respMux;
 
-    if (nc->respMap == NULL)
+    // This function is invoked even if the muxer has not been initialized
+    // (that is, there were no requests), so return early if the muxer's
+    // map has not been created.
+    if (mux->map == NULL)
         return;
 
-    natsStrHashIter_Init(&iter, nc->respMap);
+    natsStrHashIter_Init(&iter, mux->map);
     while (natsStrHashIter_Next(&iter, NULL, &p))
     {
         respInfo *val = (respInfo*) p;
         natsMutex_Lock(val->mu);
-        val->closed = true;
         val->closedSts = reason;
-        val->removed = true;
         natsCondition_Signal(val->cond);
         natsMutex_Unlock(val->mu);
         natsStrHashIter_RemoveCurrent(&iter);
@@ -2572,7 +2779,6 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     bool                    detach = false;
     bool                    postClosedCb = false;
     bool                    postDisconnectedCb = false;
-    natsSubscription        *sub = NULL;
 
     natsOptions_lock(nc->opts);
     postClosedCb = (nc->opts->closedCb != NULL);
@@ -2673,13 +2879,7 @@ _close(natsConnection *nc, natsConnStatus status, bool fromPublicClose, bool doC
     if (doCBs && !nc->rle && postDisconnectedCb && sockWasActive)
         natsAsyncCb_PostConnHandler(nc, ASYNC_DISCONNECTED);
 
-    sub = nc->respMux;
-    nc->respMux = NULL;
-
     natsConn_Unlock(nc);
-
-    if (sub != NULL)
-        natsSub_release(sub);
 
     _joinThreads(&ttj);
 
@@ -2738,6 +2938,7 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
     natsMsg          *msg = NULL;
     bool             sc   = false;
     bool             sm   = false;
+    int64_t          sid  = 0;
     // For JetStream cases
     jsSub            *jsi    = NULL;
     bool             ctrlMsg = false;
@@ -2773,7 +2974,14 @@ natsConn_processMsg(natsConnection *nc, char *buf, int bufLen)
         natsMutex_Lock(nc->subsMu);
     }
 
-    sub = natsHash_Get(nc->subs, nc->ps->ma.sid);
+    sid = nc->ps->ma.sid;
+    if (sid == nc->respMux.sid)
+    {
+        natsMutex_Unlock(nc->subsMu);
+        _respHandler(nc, msg);
+        return NATS_OK;
+    }
+    sub = natsHash_Get(nc->subs, sid);
     if (sub == NULL)
     {
         natsMutex_Unlock(nc->subsMu);
@@ -2997,6 +3205,41 @@ natsConn_processPing(natsConnection *nc)
     natsConn_Unlock(nc);
 }
 
+// Will submit a drain message to all registered JetStream contexts.
+// Connection lock held on entry.
+static void
+_drainJsDispatchers(natsConnection *nc)
+{
+    respMuxer       *mux    = &nc->respMux;
+    void            *p      = NULL;
+    int             jsDisp  = 0;
+    natsHashIter    iter;
+
+    // Set this to false so we don't do this operation again on the
+    // next PONG protocol.
+    mux->drain = false;
+
+    // Update the dispatchers count needing draining and submit the
+    // drain message to JS dispatchers.
+    if (mux->js != NULL)
+    {
+        jsDisp++;
+        js_submitRespDrainMsg(mux->js);
+    }
+    natsHashIter_Init(&iter, mux->jsCtxs);
+    while (natsHashIter_Next(&iter, NULL, &p))
+    {
+        jsDisp++;
+        js_submitRespDrainMsg((jsCtx*) p);
+    }
+    natsHashIter_Done(&iter);
+
+    // We need the nc->subsMu lock to update `nc->drainJsDispatchers`.
+    natsMutex_Lock(nc->subsMu);
+    nc->drainJsDispatchers = jsDisp;
+    natsMutex_Unlock(nc->subsMu);
+}
+
 void
 natsConn_processPong(natsConnection *nc)
 {
@@ -3023,6 +3266,10 @@ natsConn_processPong(natsConnection *nc)
     }
 
     nc->pout = 0;
+
+    // This flag is set under the connection's lock.
+    if (nc->respMux.drain)
+        _drainJsDispatchers(nc);
 
     natsConn_Unlock(nc);
 }
@@ -3058,8 +3305,8 @@ natsConn_removeSubscription(natsConnection *nc, natsSubscription *removedSub)
     {
         natsSub_close(sub, false);
 
-        // If required, signal when count is down to what the connection wants it to be.
-        if (nc->drainSubSignalOnRemove && (natsHash_Count(nc->subs) == nc->drainSubCountTarget))
+        // If required, signal when count is down to 0.
+        if (nc->drainSubSignalOnRemove && (natsHash_Count(nc->subs) == 0))
             natsCondition_Signal(nc->drainCond);
     }
 
@@ -3126,11 +3373,12 @@ natsConn_subscribeImpl(natsSubscription **newSub,
         return nats_setDefaultError(NATS_DRAINING);
     }
 
+    _retain(nc);
     s = natsSub_create(&sub, nc, subj, queue, timeout, cb, cbClosure, preventUseOfLibDlvPool, jsi);
     if (s == NATS_OK)
     {
         natsMutex_Lock(nc->subsMu);
-        sub->sid = ++(nc->ssid);
+        sub->sid = natsConn_getNewSID(nc);
         s = natsConn_addSubcription(nc, sub);
         natsMutex_Unlock(nc->subsMu);
     }
@@ -3159,16 +3407,21 @@ natsConn_subscribeImpl(natsSubscription **newSub,
     {
         *newSub = sub;
     }
-    else if (sub != NULL)
+    else
     {
-        // A delivery thread may have been started, but the subscription not
-        // added to the connection's subscription map. So this is necessary
-        // for the delivery thread to unroll.
-        natsSub_close(sub, false);
+        if (sub != NULL)
+        {
+            // A delivery thread may have been started, but the subscription not
+            // added to the connection's subscription map. So this is necessary
+            // for the delivery thread to unroll.
+            natsSub_close(sub, false);
 
-        natsConn_removeSubscription(nc, sub);
+            natsConn_removeSubscription(nc, sub);
 
-        natsSub_release(sub);
+            natsSub_release(sub);
+        }
+        // Compensate for the `_retain()` done before calling `natsSub_create`.
+        _release(nc);
     }
 
     if (lock)
@@ -3178,7 +3431,7 @@ natsConn_subscribeImpl(natsSubscription **newSub,
 }
 
 // Will queue an UNSUB protocol, making sure it is not flushed in place.
-// The connection lock is held on entry.
+// Connection lock held on entry.
 natsStatus
 natsConn_enqueueUnsubProto(natsConnection *nc, int64_t sid)
 {
@@ -3346,8 +3599,11 @@ natsConn_create(natsConnection **newConn, natsOptions *options)
         else
             nc->inboxPfx = NATS_DEFAULT_INBOX_PRE;
 
+        // nc->inboxPfx includes the separator `.` (such as `_INBOX.`) even
+        // for the user defined one.
         nc->inboxPfxLen = (int) strlen(nc->inboxPfx);
-        nc->reqIdOffset = nc->inboxPfxLen+NUID_BUFFER_LEN+1;
+        // Point to where the response ID starts in "<inbox_prefix>.<resp_prefix>.0.<respID>".
+        nc->respMux.idOffset = nc->inboxPfxLen+NATS_RESP_PREFIX_LEN+3;
     }
 
     if (s == NATS_OK)
@@ -3693,10 +3949,7 @@ typedef natsStatus (*subIterFunc)(natsStatus callerSts, natsConnection *nc, nats
 // If the callback returns an error, the iteration continues and the first
 // non NATS_OK error is returned.
 //
-// This is used exclusively for the drain code. Should that change, modify
-// the code to take into account the check for "nc->drainExcludeRespMux" below.
-//
-// Connection lock is held on entry.
+// Connection lock held on entry.
 static natsStatus
 _iterateSubsAndInvokeFunc(natsStatus callerSts, natsConnection *nc, subIterFunc f)
 {
@@ -3716,8 +3969,6 @@ _iterateSubsAndInvokeFunc(natsStatus callerSts, natsConnection *nc, subIterFunc 
     while (natsHashIter_Next(&iter, NULL, &p))
     {
         sub = (natsSubscription*) p;
-        if (nc->drainExcludeRespMux && (sub == nc->respMux))
-            continue;
         ls = (f)(callerSts, nc, sub);
         s = (s == NATS_OK ? ls : s);
     }
@@ -3728,7 +3979,7 @@ _iterateSubsAndInvokeFunc(natsStatus callerSts, natsConnection *nc, subIterFunc 
 }
 
 static natsStatus
-_enqueUnsubProto(natsStatus callerSts, natsConnection *nc, natsSubscription *sub)
+_enqueueUnsubProto(natsStatus callerSts, natsConnection *nc, natsSubscription *sub)
 {
     natsStatus  s;
     int64_t     sid;
@@ -3742,10 +3993,55 @@ _enqueUnsubProto(natsStatus callerSts, natsConnection *nc, natsSubscription *sub
 }
 
 static natsStatus
-_initSubDrain(natsStatus callerSts, natsConnection *nc, natsSubscription *sub)
+_initSubDrain(natsStatus ignored, natsConnection *nc, natsSubscription *sub)
 {
     natsSub_initDrain(sub);
     return NATS_OK;
+}
+
+// Initiates the drain for the response muxer's internal "subscription"
+// but also the JetStream contexts dispatchers (if any).
+static natsStatus
+_initRespMuxerDrain(natsConnection *nc)
+{
+    natsStatus      s       = NATS_OK;
+    respMuxer       *mux    = &nc->respMux;
+    void            *p      = NULL;
+    int64_t         sid     = 0;
+    natsHashIter    iter;
+
+    natsConn_Lock(nc);
+
+    // Initiate draining of JetStream responses dispatchers.
+    if (mux->js != NULL)
+        js_initRespDrain(mux->js);
+    natsHashIter_Init(&iter, mux->jsCtxs);
+    while (natsHashIter_Next(&iter, NULL, &p))
+        js_initRespDrain((jsCtx*) p);
+    natsHashIter_Done(&iter);
+    // Indicate that we are initiating a drain of the muxer.
+    // Set this under the connection lock since this is the lock we are acquiring
+    // in processing of a PONG (where we are going to check this flag).
+    mux->drain = true;
+    // Send the UNSUB protocol for the muxer's SID.
+    natsMutex_Lock(nc->subsMu);
+    sid = mux->sid;
+    natsMutex_Unlock(nc->subsMu);
+    s = natsConn_sendUnsubProto(nc, sid, 0);
+    natsConn_Unlock(nc);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+natsConn_jsDispatcherDrained(natsConnection *nc)
+{
+    // The drain code is protected by nc->subsMu, not nc->mu.
+    natsMutex_Lock(nc->subsMu);
+    if (nc->drainJsDispatchers > 0)
+        nc->drainJsDispatchers--;
+    natsCondition_Broadcast(nc->drainCond);
+    natsMutex_Unlock(nc->subsMu);
 }
 
 static natsStatus
@@ -3773,7 +4069,6 @@ _flushAndDrain(void *closure)
     natsThread      *t       = NULL;
     int64_t         timeout  = 0;
     int64_t         deadline = 0;
-    bool            doSubs   = false;
     bool            subsDone = false;
     bool            timedOut = false;
     bool            closed   = false;
@@ -3786,13 +4081,10 @@ _flushAndDrain(void *closure)
     timeout = nc->drainTimeout;
     closed  = natsConn_isClosed(nc);
     natsMutex_Lock(nc->subsMu);
-    // If nc->drainSubSignalOnRemove is true, it means that we started this
-    // thread knowing that there were subscriptions that need to be drained.
-    doSubs = nc->drainSubSignalOnRemove;
-    // This tells us if we have excluded the nc->respMux internal subscription
-    // from the drain process. If so, we will first do all "users" subscriptions
-    // and then finish with the nc->respMux subscription.
-    exRespMux = nc->drainExcludeRespMux;
+    // If the responses muxer has been used (either core requests or JetStream
+    // using the responses muxer), then do all the subscriptions first, then
+    // we will deal with the muxer's "subscription".
+    exRespMux = (nc->respMux.sid > 0 ? true : false);
     natsMutex_Unlock(nc->subsMu);
     natsConn_Unlock(nc);
 
@@ -3802,7 +4094,7 @@ _flushAndDrain(void *closure)
         deadline = nats_setTargetTime(timeout);
 
     start = nats_Now();
-    if (!closed && doSubs)
+    if (!closed)
     {
         int max = (exRespMux ? 2 : 1);
         int i   = 0;
@@ -3841,7 +4133,9 @@ _flushAndDrain(void *closure)
                 closed = nc->drainConnClosed;
                 if (!closed)
                 {
-                    subsDone = (natsHash_Count(nc->subs) == nc->drainSubCountTarget ? true : false);
+                    subsDone = (natsHash_Count(nc->subs) == 0 ? true : false);
+                    // Check for JS dispatchers too.
+                    subsDone &= (nc->drainJsDispatchers > 0 ? false : true);
                     if (!subsDone)
                     {
                         if (timeout == 0)
@@ -3853,30 +4147,19 @@ _flushAndDrain(void *closure)
                 natsMutex_Unlock(nc->subsMu);
             }
 
-            // If we are done with the subscriptions and we did exclude
-            // nc->respMux (and connection was not closed), now is the
-            // time to drain the nc->respMux subscription.
+            // If we are done with the subscriptions and we did exclude the
+            // muxer, so now we are going to do the muxer.
             if ((s == NATS_OK) && subsDone && exRespMux && !closed)
             {
-                // We are no longer excluding the respMux subscription.
+                // We are no longer excluding the muxer's "subscription".
                 exRespMux = false;
 
-                natsConn_Lock(nc);
-                // Now that we are under the lock, make sure that nc->respMux
-                // has not been removed by the time we get here.
-                natsMutex_Lock(nc->subsMu);
-                if (nc->respMux != NULL)
-                {
-                    subsDone = false;
-                    nc->drainExcludeRespMux = false;
-                    nc->drainSubCountTarget = 0;
-                    s = _enqueUnsubProto(NATS_OK, nc, nc->respMux);
-                    if (s == NATS_OK)
-                        s = _initSubDrain(NATS_OK, nc, nc->respMux);
-                }
-                // If respMux is NULL, `subsDone` is true, so we will exit the loop.
-                natsMutex_Unlock(nc->subsMu);
-                natsConn_Unlock(nc);
+                // Reset since we still have the muxer to flush and possibly
+                // JetStream dispatchers that use the muxer.
+                subsDone = false;
+
+                // Initiate the drain process for the responses muxer.
+                s = _initRespMuxerDrain(nc);
             }
         }
 
@@ -3886,8 +4169,6 @@ _flushAndDrain(void *closure)
         if (!closed && !subsDone)
         {
             natsConn_Lock(nc);
-            // Clear the flag that could have excluded the nc->respMux for the call below.
-            nc->drainExcludeRespMux = false;
             _iterateSubsAndInvokeFunc(NATS_TIMEOUT, nc, _setSubDrainStatus);
             natsConn_Unlock(nc);
             _pushDrainErr(nc, NATS_TIMEOUT, "timeout waiting for subscriptions to drain");
@@ -3948,24 +4229,13 @@ _drain(natsConnection *nc, int64_t timeout)
         s = nats_setError(NATS_ILLEGAL_STATE, "%s", "Illegal to call Drain while the connection is reconnecting");
     else if (!natsConn_isDraining(nc))
     {
-        int subs = 0;
-
         natsMutex_Lock(nc->subsMu);
-        if ((subs = natsHash_Count(nc->subs)) > 0)
-        {
-            // We want to be signaled when the "last" subscription is removed.
-            nc->drainSubSignalOnRemove = true;
-            // Exclude respMux if it exists and there are more than 1
-            // subscriptions present in the list at this time.
-            nc->drainExcludeRespMux = ((nc->respMux != NULL) && (subs > 1) ? true : false);
-            // If we exclude respMux, then we will wait for the number of subscriptions
-            // to fall down to 1, otherwise to 0.
-            nc->drainSubCountTarget = (nc->drainExcludeRespMux ? 1 : 0);
-        }
+        // We want to be signaled when the "last" subscription is removed.
+        nc->drainSubSignalOnRemove = ((natsHash_Count(nc->subs) > 0) ? true : false);
         natsMutex_Unlock(nc->subsMu);
 
         // Enqueue UNSUB protocol for all current subscriptions.
-        s = _iterateSubsAndInvokeFunc(NATS_OK, nc, _enqueUnsubProto);
+        s = _iterateSubsAndInvokeFunc(NATS_OK, nc, _enqueueUnsubProto);
         if (s == NATS_OK)
         {
             nc->drainTimeout = timeout;

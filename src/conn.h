@@ -1,4 +1,4 @@
-// Copyright 2015-2021 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -39,6 +39,14 @@ natsConn_create(natsConnection **newConn, natsOptions *options);
 
 void
 natsConn_retain(natsConnection *nc);
+
+// This is to be invoked from outside conn.c but if already under the
+// connection's lock.
+void
+natsConn_retainLocked(natsConnection *nc);
+
+void
+natsConn_unlockAndRelease(natsConnection *nc);
 
 void
 natsConn_release(natsConnection *nc);
@@ -105,6 +113,9 @@ bool
 natsConn_isDrainingPubs(natsConnection *nc);
 
 void
+natsConn_jsDispatcherDrained(natsConnection *nc);
+
+void
 natsConn_removeSubscription(natsConnection *nc, natsSubscription *sub);
 
 void
@@ -114,13 +125,20 @@ natsStatus
 natsConn_addRespInfo(respInfo **newResp, natsConnection *nc, char *respInbox);
 
 void
-natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp, bool needsLock);
-
-natsStatus
-natsConn_initResp(natsConnection *nc, natsMsgHandler cb);
+natsConn_disposeRespInfo(natsConnection *nc, respInfo *resp);
 
 void
-natsConn_destroyRespPool(natsConnection *nc);
+natsConn_removeAndDisposeRespInfo(natsConnection *nc, bool remove, char *id, respInfo *resp);
+
+natsStatus
+natsConn_initRespMuxer(natsConnection *nc);
+
+natsStatus
+natsConn_addJsCtxToRespMuxer(int64_t *newCtxID, natsConnection *nc, jsCtx *js);
+
+void
+natsConn_removeJsCtxFromRespMuxer(natsConnection *nc, jsCtx *js);
+
 
 natsStatus
 natsConn_publish(natsConnection *nc, natsMsg *msg, const char *reply, bool directFlush);
@@ -130,6 +148,9 @@ natsConn_userCreds(char **userJWT, char **customErrTxt, void *closure);
 
 natsStatus
 natsConn_signatureHandler(char **customErrTxt, unsigned char **sig, int *sigLen, const char *nonce, void *closure);
+
+int64_t
+natsConn_getNewSID(natsConnection *nc);
 
 natsStatus
 natsConn_sendSubProto(natsConnection *nc, const char *subject, const char *queue, int64_t sid);

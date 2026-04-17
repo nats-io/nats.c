@@ -990,7 +990,7 @@ _initAsyncReplies(jsCtx *js, jsAsyncReplies *ar)
         ar->drainMsg    = dMsg;
         ar->init        = true;
     }
-    if (s != NATS_OK)
+    else
     {
         NATS_FREE(pfx);
         natsMsg_Destroy(dMsg);

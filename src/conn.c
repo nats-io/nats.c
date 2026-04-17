@@ -1561,13 +1561,17 @@ natsConn_newInbox(natsConnection *nc, natsInbox **newInbox)
     return s;
 }
 
+#define RESP_HANDLER_CORE_KIND          (1)
+#define RESP_HANDLER_JS_KIND            (2)
+#define RESP_HANDLER_SUBJ_REWRITE_KIND  (3)
+
 static void
 _respHandler(natsConnection *nc, natsMsg *msg)
 {
     const char  *subj   = NULL;
     respInfo    *resp   = NULL;
     bool        dmsg    = true;
-    int         kind    = 0; // 1 will be core, 2 JS, 3 subject rewrite.
+    int         kind    = 0; // will be set down below;
     int64_t     ctxID   = 0;
     respMuxer   *mux;
 
@@ -1589,10 +1593,10 @@ _respHandler(natsConnection *nc, natsMsg *msg)
 
         // If '0.', then it is core
         if ((*marker == '0') && (*(marker+1) == '.'))
-            kind = 1;
+            kind = RESP_HANDLER_CORE_KIND;
         else
         {
-            kind = 2;
+            kind = RESP_HANDLER_JS_KIND;
             if ((*marker == '1') && (*(marker+1) == '.'))
                 ctxID = 1;
             else
@@ -1608,14 +1612,15 @@ _respHandler(natsConnection *nc, natsMsg *msg)
         }
     }
     else
-        kind = 3;
+        kind = RESP_HANDLER_SUBJ_REWRITE_KIND;
+
     natsMutex_Lock(mux->mu);
-    if (kind == 1)
+    if (kind == RESP_HANDLER_CORE_KIND)
     {
         char *id = (char*) (subj+mux->idOffset);
         resp = (respInfo*) natsStrHash_Remove(mux->map, id);
     }
-    else if (kind == 2)
+    else if (kind == RESP_HANDLER_JS_KIND)
     {
         jsCtx *js = NULL;
 
@@ -1630,7 +1635,7 @@ _respHandler(natsConnection *nc, natsMsg *msg)
             js_submitRespMsg(js, msg);
         }
     }
-    else if (kind == 3)
+    else if (kind == RESP_HANDLER_SUBJ_REWRITE_KIND)
     {
         // Only if the subject is completely different, we assume that it
         // could be the server that has rewritten the subject and so if there

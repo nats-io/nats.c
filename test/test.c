@@ -15,32 +15,24 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
-#ifdef _WIN32
-#else
-#include <dirent.h>
-#include <sys/stat.h>
-#include <execinfo.h>
-#endif
 
-#include "buf.h"
-#include "timer.h"
-#include "url.h"
-#include "opts.h"
+#include "../src/buf.h"
+#include "../src/timer.h"
+#include "../src/url.h"
+#include "../src/opts.h"
 #include "../src/util.h"
-#include "hash.h"
-#include "conn.h"
-#include "sub.h"
-#include "msg.h"
-#include "stats.h"
-#include "crypto.h"
-#include "nkeys.h"
-#include "parser.h"
-#include "js.h"
-#include "kv.h"
-#include "microp.h"
-#include "glib/glibp.h"
-#include "object.h"
+#include "../src/hash.h"
+#include "../src/conn.h"
+#include "../src/sub.h"
+#include "../src/msg.h"
+#include "../src/crypto.h"
+#include "../src/nkeys.h"
+#include "../src/parser.h"
+#include "../src/js.h"
+#include "../src/kv.h"
+#include "../src/microp.h"
+#include "../src/glib/glibp.h"
+#include "../src/object.h"
 
 #if defined(NATS_HAS_STREAMING)
 
@@ -86,17 +78,6 @@ static const char *natsStreamingServerExe = "nats-streaming-server";
 
 natsMutex *slMu  = NULL;
 natsHash  *slMap = NULL;
-
-#define test(s)         { printf("#%02d ", ++tests); printf("%s", (s)); fflush(stdout); }
-#define testf(s, ...)   { printf("#%02d ", ++tests); printf((s), __VA_ARGS__); fflush(stdout); }
-
-#ifdef _WIN32
-#define testCond(c)         if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; return; }
-#define testCondNoReturn(c) if(c) { printf("PASSED\n"); fflush(stdout); } else { printf("FAILED\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; }
-#else
-#define testCond(c)         if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; return; }
-#define testCondNoReturn(c) if(c) { printf("\033[0;32mPASSED\033[0;0m\n"); fflush(stdout); } else { printf("\033[0;31mFAILED\033[0;0m\n"); nats_PrintLastErrorStack(stdout); fflush(stdout); failed=true; }
-#endif
 
 static const char *testServers[] = {"nats://127.0.0.1:1222",
                                     "nats://127.0.0.1:1223",
@@ -4770,6 +4751,34 @@ void test_natsJSON(void)
 
 }
 
+void test_natsEncodeRespID(void)
+{
+    char        buffer[256];
+    uint64_t    values[] = {0, 10, 61, 62, 124, 237, 0xFFFFFFFFFFFFFFFF};
+    const char  *resultShort[]= {"0", "A", "z", "01", "02", "p3", "FYHA61aHgyL"};
+    const char  *resultLong[]= {"00000000000", "A0000000000", "z0000000000", "01000000000", "02000000000",
+                                "p3000000000", "FYHA61aHgyL"};
+    int         i;
+
+    for (i=0; i<(int)(sizeof(values)/sizeof(uint64_t)); i++)
+    {
+        snprintf(buffer, sizeof(buffer), "Encode (short) %" PRIu64 ": ", values[i]);
+        test(buffer);
+        buffer[0] = '\0';
+        nats_encodeRespID(buffer, values[i], true);
+        testCond(strcmp(buffer, resultShort[i]) == 0);
+    }
+
+    for (i=0; i<(int)(sizeof(values)/sizeof(uint64_t)); i++)
+    {
+        snprintf(buffer, sizeof(buffer), "Encode (long) %" PRIu64 ": ", values[i]);
+        test(buffer);
+        buffer[0] = '\0';
+        nats_encodeRespID(buffer, values[i], false);
+        testCond(strcmp(buffer, resultLong[i]) == 0);
+    }
+}
+
 void test_natsEncodeTimeUTC(void)
 {
     natsStatus  s;
@@ -8320,7 +8329,7 @@ void test_RequestPool(void)
     for (i=0; (i<RESP_INFO_POOL_MAX_SIZE); i++)
         natsConnection_RequestString(&msg, nc, "foo", "test", 1);
     natsMutex_Lock(nc->mu);
-    testCond(nc->respPoolSize == 1);
+    testCond(nc->respMux.poolSize == 1);
     natsMutex_Unlock(nc->mu);
 
     test("Pool max size: ");
@@ -8340,7 +8349,7 @@ void test_RequestPool(void)
         }
     }
     natsMutex_Lock(nc->mu);
-    testCond((s == NATS_OK) && (nc->respPoolSize == RESP_INFO_POOL_MAX_SIZE));
+    testCond((s == NATS_OK) && (nc->respMux.poolSize == RESP_INFO_POOL_MAX_SIZE));
     natsMutex_Unlock(nc->mu);
 
     natsSubscription_Destroy(sub);
@@ -23768,99 +23777,6 @@ void test_SSLURLSchemeNonTLSBuild(void)
 }
 
 static void
-rmtree(const char *path)
-{
-#ifdef _WIN32
-    WIN32_FIND_DATA ffd;
-    HANDLE          hFind = INVALID_HANDLE_VALUE;
-    char            *dir  = NULL;
-
-    if (nats_asprintf(&dir, "%s\\*", path) < 0)
-        abort();
-
-    hFind = FindFirstFile(dir, &ffd);
-    if (hFind == INVALID_HANDLE_VALUE)
-    {
-        free(dir);
-        return;
-    }
-
-    do
-    {
-        char *fullPath = NULL;
-
-        if (!strcmp(ffd.cFileName, ".") || !strcmp(ffd.cFileName, ".."))
-            continue;
-
-        if (nats_asprintf(&fullPath, "%s\\%s", path, ffd.cFileName) < 0)
-            abort();
-
-        if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-            rmtree(fullPath);
-        else
-            DeleteFile(fullPath);
-        free(fullPath);
-    }
-    while (FindNextFile(hFind, &ffd) != 0);
-
-    FindClose(hFind);
-    RemoveDirectory(path);
-    free(dir);
-
-#else
-    DIR             *dir;
-    struct stat     statPath, statEntry;
-    struct dirent   *entry;
-
-    memset(&statPath, 0, sizeof(struct stat));
-
-    stat(path, &statPath);
-    if (S_ISDIR(statPath.st_mode) == 0)
-        return;
-
-    if ((dir = opendir(path)) == NULL)
-        return;
-
-    while ((entry = readdir(dir)) != NULL)
-    {
-        char *fullPath = NULL;
-
-        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
-            continue;
-
-        if (nats_asprintf(&fullPath, "%s/%s", path, entry->d_name) < 0)
-            abort();
-
-        memset(&statEntry, 0, sizeof(struct stat));
-        stat(fullPath, &statEntry);
-
-        if (S_ISDIR(statEntry.st_mode) != 0)
-            rmtree(fullPath);
-        else
-            unlink(fullPath);
-
-        free(fullPath);
-    }
-
-    closedir(dir);
-    rmdir(path);
-#endif
-}
-
-static void
-_makeUniqueDir(char *buf, int bufLen, const char *path)
-{
-    int n;
-
-    if ((int) strlen(path) + 1 + NUID_BUFFER_LEN + 1 > bufLen)
-        abort();
-
-    n = snprintf(buf, bufLen, "%s", path);
-    natsNUID_Next(buf+n, NUID_BUFFER_LEN+1);
-    buf[n+NUID_BUFFER_LEN+1] = '\0';
-}
-
-static void
 _createConfFile(char *buf, int bufLen, const char *content)
 {
     FILE *f = NULL;
@@ -27354,6 +27270,453 @@ void test_JetStreamPublish(void)
     remove(confFile);
 }
 
+static void
+_jsAckHandlerMuxer(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, void *closure)
+{
+    natsStatus          s       = NATS_OK;
+    struct threadArg    *args   = (struct threadArg*) closure;
+
+    natsMutex_Lock(args->m);
+    args->sum++;
+    if ((strcmp(natsMsg_GetData(msg), "block") == 0)
+        || (strcmp(natsMsg_GetData(msg), "sleep") == 0))
+    {
+        args->msgReceived = true;
+        natsCondition_Broadcast(args->c);
+
+        while ((s != NATS_TIMEOUT) && !args->closed)
+            s = natsCondition_TimedWait(args->c, args->m, 2000);
+        args->status = s;
+
+        if ((s == NATS_OK) && (strcmp(natsMsg_GetData(msg), "sleep") == 0))
+        {
+            natsMutex_Unlock(args->m);
+            nats_Sleep(1000);
+            natsMutex_Lock(args->m);
+        }
+    }
+    natsCondition_Broadcast(args->c);
+    natsMutex_Unlock(args->m);
+    natsMsg_Destroy(msg);
+}
+
+void test_JetStreamPublishMuxReplies(void)
+{
+    natsStatus          s;
+    jsOptions           o;
+    jsStreamConfig      cfg;
+    natsMsg             *msg = NULL;
+    natsSubscription    *sub = NULL;
+    jsCtx               *js2 = NULL;
+    jsCtx               *js3 = NULL;
+    struct threadArg    args1;
+    struct threadArg    args2;
+
+    JS_SETUP(2, 12, 0);
+
+    s = _createDefaultThreadArgsForCbTests(&args1);
+    IFOK(s, _createDefaultThreadArgsForCbTests(&args2));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Add stream: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "TEST";
+    cfg.Subjects = (const char*[1]){"foo"};
+    cfg.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "_INBOX.>");
+    testCond(s == NATS_OK);
+
+    test("Publish async ok: ");
+    s = js_PublishAsync(js, "foo", (const void*) "ok", 2, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check inbox: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    if (s == NATS_OK)
+    {
+        jsAsyncReplies *ar;
+        js_lock(js);
+        ar = &js->asyncReplies;
+        if (!ar->init)
+            s = NATS_ERR;
+        else if (ar->sub == NULL)
+            s = NATS_ERR;
+        else if (strstr(ar->sub->subject, ".*.*") != NULL)
+            s = NATS_ERR;
+        else if (strstr(ar->sub->subject, ".*") == NULL)
+            s = NATS_ERR;
+        else if (strstr(natsMsg_GetSubject(msg), ar->repliesPfx) != natsMsg_GetSubject(msg))
+            s = NATS_ERR;
+        else if (strstr(natsMsg_GetSubject(msg), ".00000000000") == NULL)
+            s = NATS_ERR;
+        else
+        {
+            respMuxer *mux;
+            natsConn_Lock(js->nc);
+            mux = &js->nc->respMux;
+            // Connection muxer should have been initialized during AddStream.
+            if (!mux->init)
+                s = NATS_ERR;
+            else if (mux->sid == 0)
+                s = NATS_ERR;
+            else if (strstr(mux->wcSubject, ".*") == NULL)
+                s = NATS_ERR;
+            else if (strstr(mux->respPfx, ar->repliesPfx) != NULL)
+                s = NATS_ERR;
+            natsConn_Unlock(js->nc);
+        }
+        js_unlock(js);
+    }
+    testCond(s == NATS_OK);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Publish async ok: ");
+    s = js_PublishAsync(js, "foo", (const void*) "ok", 2, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check inbox: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK) && (strstr(natsMsg_GetSubject(msg), ".10000000000") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Prepare JS options: ");
+    s = jsOptions_Init(&o);
+    if (s == NATS_OK)
+        o.PublishAsync.MuxReplies = true;
+    testCond(s == NATS_OK);
+
+    test("Get context: ");
+    s = natsConnection_JetStream(&js2, nc, &o);
+    testCond(s == NATS_OK);
+
+    test("Publish async ok: ");
+    s = js_PublishAsync(js2, "foo", (const void*) "ok", 2, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check inbox: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+        && (strstr(natsMsg_GetSubject(msg), ".1_00000000000") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Publish to other JS still ok: ");
+    s = js_PublishAsync(js, "foo", (const void*) "ok", 2, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check inbox: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK) && (strstr(natsMsg_GetSubject(msg), ".20000000000") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("New context: ");
+    s = natsConnection_JetStream(&js3, nc, &o);
+    testCond(s == NATS_OK);
+
+    test("Publish async ok: ");
+    s = js_PublishAsync(js3, "foo", (const void*) "ok", 2, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check inbox: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+        && (strstr(natsMsg_GetSubject(msg), ".2_00000000000") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Destroy js2: ");
+    jsCtx_Destroy(js2);
+    js2 = NULL;
+    testCond(s == NATS_OK);
+
+    test("Recreate context: ");
+    s = natsConnection_JetStream(&js2, nc, &o);
+    testCond(s == NATS_OK);
+
+    test("Publish async ok: ");
+    s = js_PublishAsync(js2, "foo", (const void*) "ok", 2, NULL);
+    testCond(s == NATS_OK);
+
+    test("Check that ctxID not reused: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK)
+        && (strstr(natsMsg_GetSubject(msg), ".3_00000000000") != NULL));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    jsCtx_Destroy(js2);
+    js2 = NULL;
+
+    test("New context: ");
+    s = natsConnection_JetStream(&js2, nc, &o);
+    testCond(s == NATS_OK);
+
+    test("Simulate ctxID rollover with failure: ");
+    natsConn_Lock(nc);
+    nc->respMux.jsID = 0x7FFFFFFFFFFFFFFF;
+    natsConn_Unlock(nc);
+    s = js_PublishAsync(js2, "foo", (const void*) "ok", 2, NULL);
+    testCond((s == NATS_ILLEGAL_STATE)
+                && (strstr(nats_GetLastError(NULL), jsErrNoContextIDAvailable) != NULL));
+    nats_clearLastError();
+
+    jsCtx_Destroy(js2);
+    js2 = NULL;
+    jsCtx_Destroy(js3);
+    js3 = NULL;
+
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("New context: ");
+    s = natsConnection_JetStream(&js2, nc, &o);
+    testCond(s == NATS_OK);
+
+    test("Simulate ctxID rollover no failure: ");
+    natsConn_Lock(nc);
+    nc->respMux.jsID = 0x7FFFFFFFFFFFFFFF;
+    natsConn_Unlock(nc);
+    s = js_PublishAsync(js2, "foo", (const void*) "ok", 2, NULL);
+    testCond(s == NATS_OK);
+
+    jsCtx_Destroy(js2);
+    js2 = NULL;
+
+    natsConn_Lock(nc);
+    nc->respMux.jsID = 100;
+    natsConn_Unlock(nc);
+
+    // Check pubAckHandler of one does not block other
+    test("Get 2 contexts: ");
+    o.PublishAsync.AckHandler           = _jsAckHandlerMuxer;
+    o.PublishAsync.AckHandlerClosure    = (void*) &args1;
+    s = natsConnection_JetStream(&js2, nc, &o);
+    if (s == NATS_OK)
+    {
+        o.PublishAsync.AckHandlerClosure = (void*) &args2;
+        s = natsConnection_JetStream(&js3, nc, &o);
+    }
+    testCond(s == NATS_OK);
+
+    test("Publish with js2 that blocks pubAckHandler: ");
+    s = js_PublishAsync(js2, "foo", (const void*) "block", 5, NULL);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args1.m);
+        while ((s != NATS_TIMEOUT) && !args1.msgReceived)
+            s = natsCondition_TimedWait(args1.c, args1.m, 1000);
+        natsMutex_Unlock(args1.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Publish with js3 should not block: ");
+    s = js_PublishAsync(js3, "foo", (const void*) "ok", 2, NULL);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args2.m);
+        while ((s != NATS_TIMEOUT) && args2.sum != 1)
+            s = natsCondition_TimedWait(args2.c, args2.m, 1000);
+        natsMutex_Unlock(args2.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("PubAcks not dispatched if ctx destroyed: ");
+    // While js2's pubAck handler is still blocked, published more messages
+    // and they should not be dispatched if the context is destroyed.
+    s = js_PublishAsync(js2, "foo", (const void*) "ok1", 3, NULL);
+    IFOK(s, js_PublishAsync(js2, "foo", (const void*) "ok2", 3, NULL));
+    if (s == NATS_OK)
+    {
+        nats_Sleep(250);
+        jsCtx_Destroy(js2);
+        js2 = NULL;
+        // Release the pubAck handler.
+        natsMutex_Lock(args1.m);
+        args1.closed = true;
+        natsCondition_Broadcast(args1.c);
+        natsMutex_Unlock(args1.m);
+        // Pause a bit and make sure that `sum` is only 1.
+        nats_Sleep(250);
+        natsMutex_Lock(args1.m);
+        while ((s != NATS_TIMEOUT) && args1.sum != 1)
+            s = natsCondition_TimedWait(args1.c, args1.m, 1000);
+        IFOK(s, args1.status);
+        natsMutex_Unlock(args1.m);
+    }
+    testCond(s == NATS_OK);
+
+    jsCtx_Destroy(js3);
+    js3 = NULL;
+
+    _destroyDefaultThreadArgs(&args1);
+    _destroyDefaultThreadArgs(&args2);
+    JS_TEARDOWN;
+}
+
+void test_JetStreamPublishMuxRepliesDrain(void)
+{
+    natsStatus          s;
+    jsOptions           o;
+    jsStreamConfig      cfg;
+    jsCtx               *js2 = NULL;
+    jsCtx               *js3 = NULL;
+    int64_t             start;
+    int                 i;
+    struct threadArg    args1;
+    struct threadArg    args2;
+
+    JS_SETUP(2, 12, 0);
+
+    s = _createDefaultThreadArgsForCbTests(&args1);
+    IFOK(s, _createDefaultThreadArgsForCbTests(&args2));
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Add stream: ");
+    jsStreamConfig_Init(&cfg);
+    cfg.Name = "TEST";
+    cfg.Subjects = (const char*[1]){"foo"};
+    cfg.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Get contexts: ");
+    s = jsOptions_Init(&o);
+    if (s == NATS_OK)
+    {
+        o.PublishAsync.MuxReplies = true;
+        o.PublishAsync.AckHandler = _jsAckHandlerMuxer;
+        o.PublishAsync.AckHandlerClosure = (void*) &args1;
+        s = natsConnection_JetStream(&js2, nc, &o);
+    }
+    if (s == NATS_OK)
+    {
+        o.PublishAsync.AckHandlerClosure = (void*) &args2;
+        s = natsConnection_JetStream(&js3, nc, &o);
+    }
+    testCond(s == NATS_OK);
+
+    test("Block pub ack handlers: ");
+    s = js_PublishAsync(js2, "foo", (const void*) "sleep", 5, NULL);
+    IFOK(s, js_PublishAsync(js3, "foo", (const void*) "sleep", 5, NULL));
+    testCond(s == NATS_OK);
+
+    test("Wait to be blocked: ");
+    natsMutex_Lock(args1.m);
+    while ((s != NATS_OK) && !args1.msgReceived)
+        s = natsCondition_TimedWait(args1.c, args1.m, 1000);
+    IFOK(s, args1.status);
+    natsMutex_Unlock(args1.m);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args2.m);
+        while ((s != NATS_OK) && !args2.msgReceived)
+            s = natsCondition_TimedWait(args2.c, args2.m, 1000);
+        IFOK(s, args2.status);
+        natsMutex_Unlock(args2.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Publish more: ");
+    s = js_PublishAsync(js2, "foo", (const void*) "ok1", 3, NULL);
+    IFOK(s, js_PublishAsync(js2, "foo", (const void*) "ok2", 3, NULL));
+    IFOK(s, js_PublishAsync(js3, "foo", (const void*) "ok1", 3, NULL));
+    IFOK(s, js_PublishAsync(js3, "foo", (const void*) "ok2", 3, NULL));
+    testCond(s == NATS_OK);
+
+    test("Wait to be queued and have handlers sleep: ");
+    nats_Sleep(250);
+    natsMutex_Lock(args1.m);
+    args1.closed = true;
+    natsCondition_Broadcast(args1.c);
+    natsMutex_Unlock(args1.m);
+    natsMutex_Lock(args2.m);
+    args2.closed = true;
+    natsCondition_Broadcast(args2.c);
+    natsMutex_Unlock(args2.m);
+    testCond(true);
+
+    test("Drain conn drains JS dispatchers: ");
+    start = nats_Now();
+    // Call drain with a large enough timeout. Drain doesn't block,
+    // we have to wait for the connection status to be closed.
+    // We should succeed but it should take at least the amount
+    // of time that we sleep in the pub ack handlers when getting
+    // the first message(s).
+    s = natsConnection_DrainTimeout(nc, 5000);
+    if (s == NATS_OK)
+    {
+        s = NATS_ERR;
+        for (i=0; i<60; i++)
+        {
+            if (natsConnection_IsClosed(nc))
+            {
+                s = NATS_OK;
+                break;
+            }
+            nats_Sleep(100);
+        }
+    }
+    testCond((s == NATS_OK) && (nats_Now()-start > 900));
+
+    test("Check all were dispatched: ");
+    natsMutex_Lock(args1.m);
+    while ((s != NATS_TIMEOUT) && args1.sum != 3)
+        s = natsCondition_TimedWait(args1.c, args1.m, 1000);
+    IFOK(s, args1.status);
+    natsMutex_Unlock(args1.m);
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(args2.m);
+        while ((s != NATS_TIMEOUT) && args2.sum != 3)
+            s = natsCondition_TimedWait(args2.c, args2.m, 1000);
+        IFOK(s, args2.status);
+        natsMutex_Unlock(args2.m);
+    }
+    testCond(s == NATS_OK);
+
+    test("Check that dispatcher threads have exited: ");
+    s = NATS_ERR;
+    for (i=0; i<10; i++)
+    {
+        bool ok;
+        js_lock(js2);
+        ok = (js2->asyncReplies.dispatcher == NULL ? true : false);
+        js_unlock(js2);
+        if (ok)
+        {
+            js_lock(js3);
+            ok = (js3->asyncReplies.dispatcher == NULL ? true : false);
+            js_unlock(js3);
+            if (ok)
+            {
+                s = NATS_OK;
+                break;
+            }
+        }
+        nats_Sleep(100);
+    }
+    testCond(s == NATS_OK);
+
+    jsCtx_Destroy(js2);
+    js2 = NULL;
+    jsCtx_Destroy(js3);
+    js3 = NULL;
+
+    _destroyDefaultThreadArgs(&args1);
+    _destroyDefaultThreadArgs(&args2);
+
+    JS_TEARDOWN;
+}
+
 void test_JetStreamPublishTTL(void)
 {
     natsStatus          s;
@@ -27427,6 +27790,7 @@ void test_JetStreamPublishTTL(void)
     test("Publish an Async message with a 1s TTL: ");
     s = js_PublishAsync(js, "foo", "goodbye", 7, &opts);
     IFOK(s, js_PublishAsyncComplete(js, &opts));
+    testCond(s == NATS_OK);
 
     test("Get the async (last) message back immediately: ");
     s = js_GetLastMsg(&msg, js, "TEST", "foo", NULL, &jerr);
@@ -27572,7 +27936,8 @@ _jsPubAckErrHandler(jsCtx *js, jsPubAckErr *pae, void *closure)
     natsMutex_Unlock(args->m);
 }
 
-void test_JetStreamPublishAsync(void)
+static void
+_jetStreamPublishAsync(bool withMuxer)
 {
     natsStatus          s;
     natsSubscription    *sub= NULL;
@@ -27608,6 +27973,7 @@ void test_JetStreamPublishAsync(void)
     s = jsOptions_Init(&o);
     if (s == NATS_OK)
     {
+        o.PublishAsync.MuxReplies        = withMuxer;
         o.PublishAsync.ErrHandler        = _jsPubAckErrHandler;
         o.PublishAsync.ErrHandlerClosure = &args;
     }
@@ -27784,6 +28150,7 @@ void test_JetStreamPublishAsync(void)
     nats_clearLastError();
 
     test("Recreate context: ");
+    o.PublishAsync.MuxReplies        = withMuxer;
     o.PublishAsync.MaxPending        = 1;
     o.PublishAsync.StallWait         = 100;
     o.PublishAsync.ErrHandler        = _jsPubAckErrHandler;
@@ -27860,6 +28227,7 @@ void test_JetStreamPublishAsync(void)
     s = jsOptions_Init(&o);
     if (s == NATS_OK)
     {
+        o.PublishAsync.MuxReplies        = withMuxer;
         o.PublishAsync.ErrHandler        = _jsPubAckErrHandler;
         o.PublishAsync.ErrHandlerClosure = &args;
     }
@@ -27878,34 +28246,12 @@ void test_JetStreamPublishAsync(void)
     }
     testCond(s == NATS_OK);
 
-    test("Enqueue message with bad subject: ");
-    s = natsMsg_Create(&msg, "some.subject", NULL, "hello", 5);
-    if (s == NATS_OK)
-    {
-        natsSubscription *rsub;
-
-        js_lock(js);
-        rsub = js->rsub;
-        js_unlock(js);
-
-        _waitSubPending(rsub, 0);
-
-        natsSub_Lock(rsub);
-        rsub->ownDispatcher.queue.head = msg;
-        rsub->ownDispatcher.queue.tail = msg;
-        rsub->ownDispatcher.queue.msgs = 1;
-        rsub->ownDispatcher.queue.bytes = natsMsg_dataAndHdrLen(msg);
-        natsCondition_Signal(rsub->ownDispatcher.cond);
-        natsSub_Unlock(rsub);
-
-        // Message is owned by subscription, do not destroy it here.
-    }
-    testCond(s == NATS_OK);
-
     test("Publish async cb received non existent pid: ");
     {
-        char subj[64];
-        snprintf(subj, sizeof(subj), "%sabcdefgh", js->rpre);
+        char subj[256];
+        natsConn_Lock(js->nc);
+        snprintf(subj, sizeof(subj), "%sabcdefgh", js->asyncReplies.repliesPfx);
+        natsConn_Unlock(js->nc);
         s = natsConnection_Publish(nc, subj, NULL, 0);
     }
     testCond(s == NATS_OK);
@@ -28043,6 +28389,7 @@ void test_JetStreamPublishAsync(void)
     test("Publish timeout: ");
     jsCtx_Destroy(js);
     js = NULL;
+    o.PublishAsync.MuxReplies = withMuxer;
     o.PublishAsync.ErrHandler = _jsPubAckErrHandler;
     o.PublishAsync.ErrHandlerClosure = (void*) &args;
     s = natsConnection_JetStream(&js, nc, &o);
@@ -28063,6 +28410,16 @@ void test_JetStreamPublishAsync(void)
 
     JS_TEARDOWN;
     _destroyDefaultThreadArgs(&args);
+}
+
+void test_JetStreamPublishAsync(void)
+{
+    _jetStreamPublishAsync(false);
+}
+
+void test_JetStreamPublishAsyncWithMuxer(void)
+{
+    _jetStreamPublishAsync(true);
 }
 
 static void
@@ -28147,13 +28504,13 @@ _checkPubAckResult(natsStatus s, struct threadArg *args)
     return s;
 }
 
-void test_JetStreamPublishAckHandler(void)
+static void
+_jetStreamPublishAckHandler(bool withMuxer)
 {
     natsStatus          s;
     jsOptions           o;
     jsStreamConfig      cfg;
     jsPubOptions        opts;
-    // natsMsg             *msg = NULL;
     struct threadArg    args;
 
 
@@ -28169,6 +28526,7 @@ void test_JetStreamPublishAckHandler(void)
     s = jsOptions_Init(&o);
     if (s == NATS_OK)
     {
+        o.PublishAsync.MuxReplies        = withMuxer;
         o.PublishAsync.AckHandler        = _jsPubAckHandler;
         o.PublishAsync.AckHandlerClosure = &args;
     }
@@ -28257,6 +28615,16 @@ void test_JetStreamPublishAckHandler(void)
 
     JS_TEARDOWN;
     _destroyDefaultThreadArgs(&args);
+}
+
+void test_JetStreamPublishAckHandler(void)
+{
+    _jetStreamPublishAckHandler(false);
+}
+
+void test_JetStreamPublishAckHandlerWithMuxer(void)
+{
+    _jetStreamPublishAckHandler(true);
 }
 
 static void
@@ -28831,6 +29199,7 @@ void test_JetStreamSubscribe(void)
     IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", "delcons1", NULL, &jerr));
     testCond((s == NATS_NOT_FOUND) && (ci == NULL) && (jerr == JSConsumerNotFoundErr)
                 && (nats_GetLastError(NULL) == NULL));
+    nats_clearLastError();
     natsSubscription_Destroy(sub);
     sub = NULL;
 
@@ -28846,6 +29215,7 @@ void test_JetStreamSubscribe(void)
     IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", "delcons2", NULL, &jerr));
     testCond((s == NATS_NOT_FOUND) && (ci == NULL) && (jerr == JSConsumerNotFoundErr)
                 && (nats_GetLastError(NULL) == NULL));
+    nats_clearLastError();
     natsSubscription_Destroy(sub);
     sub = NULL;
 
@@ -28855,12 +29225,14 @@ void test_JetStreamSubscribe(void)
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
 
+    _waitSubPending(sub, 3);
+
     test("Drain deletes consumer: ");
     s = natsSubscription_Drain(sub);
-    for (i=0; i<3; i++)
+    for (i=0; (s == NATS_OK) && (i<3); i++)
     {
         natsMsg *msg = NULL;
-        IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+        s = natsSubscription_NextMsg(&msg, sub, 1000);
         IFOK(s, natsMsg_Ack(msg, NULL));
         natsMsg_Destroy(msg);
         msg = NULL;
@@ -28869,6 +29241,7 @@ void test_JetStreamSubscribe(void)
     IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", "delcons2sync", NULL, &jerr));
     testCond((s == NATS_NOT_FOUND) && (ci == NULL) && (jerr == JSConsumerNotFoundErr)
                 && (nats_GetLastError(NULL) == NULL));
+    nats_clearLastError();
     natsSubscription_Destroy(sub);
     sub = NULL;
 
@@ -28880,12 +29253,14 @@ void test_JetStreamSubscribe(void)
         s = js_SubscribeSyncMulti(&sub, js, subjects, numSubjects, NULL, &so, &jerr);
         testCond((s == NATS_OK) && (jerr == 0));
 
+        _waitSubPending(sub, 5);
+
         test("Drain deletes consumer: ");
         s = natsSubscription_Drain(sub);
-        for (i = 0; i < 5; i++)
+        for (i = 0; (s == NATS_OK) && (i < 5); i++)
         {
             natsMsg *msg = NULL;
-            IFOK(s, natsSubscription_NextMsg(&msg, sub, 1000));
+            s = natsSubscription_NextMsg(&msg, sub, 1000);
             IFOK(s, natsMsg_Ack(msg, NULL));
             natsMsg_Destroy(msg);
             msg = NULL;
@@ -28893,6 +29268,7 @@ void test_JetStreamSubscribe(void)
         IFOK(s, natsSubscription_WaitForDrainCompletion(sub, 1000));
         IFOK(s, js_GetConsumerInfo(&ci, js, "TEST", "delcons3sync", NULL, &jerr));
         testCond((s == NATS_NOT_FOUND) && (ci == NULL) && (jerr == JSConsumerNotFoundErr) && (nats_GetLastError(NULL) == NULL));
+        nats_clearLastError();
         natsSubscription_Destroy(sub);
         sub = NULL;
     }
@@ -40507,7 +40883,7 @@ void test_JetStreamAtomicBatchPublish(void)
     test("Publish 98 messages: ");
     for (uint64_t i = 0; (i < msg_count) && (s == NATS_OK); i++)
     {
-        char data[12];
+        char data[32];
         snprintf(data, sizeof(data), "%" PRIu64, i);
         s = natsMsg_Create(&msg, "foo", NULL, data, strlen(data));
         IFOK(s, js_BatchPublishAdd(NULL, batch_ctx, msg, NULL, NULL));
@@ -40553,7 +40929,7 @@ void test_JetStreamAtomicBatchPublish(void)
     test("Publish 98 messages: ");
     for (uint64_t i = 0; (i < msg_count) && (s == NATS_OK); i++)
     {
-        char data[12];
+        char data[32];
         snprintf(data, sizeof(data), "%" PRIu64, i);
         s = natsMsg_Create(&msg, "foo", NULL, data, strlen(data));
         IFOK(s, js_BatchPublishAdd(NULL, batch_ctx, msg, NULL, NULL));
@@ -40591,7 +40967,7 @@ void test_JetStreamAtomicBatchPublish(void)
     test("Publish 98 messages to each: ");
     for (uint64_t i = 0; (i < msg_count) && (s == NATS_OK); i++)
     {
-        char data[12];
+        char data[32];
         snprintf(data, sizeof(data), "%" PRIu64, i);
         s = natsMsg_Create(&msg, "foo", NULL, data, strlen(data));
         IFOK(s, natsMsg_Create(&msg2, "foo", NULL, data, strlen(data)));
@@ -42979,9 +43355,11 @@ int main(int argc, char **argv)
     if (failed)
     {
         printf("*** TEST FAILED ***\n");
+        fflush(stdout);
         return 1;
     }
 
     printf("ALL PASSED\n");
+    fflush(stdout);
     return 0;
 }

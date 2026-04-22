@@ -29,7 +29,7 @@ if(NATS_BUILD_STREAMING)
 endif(NATS_BUILD_STREAMING)
 
 # Build the test program
-add_executable(testsuite test.c bench_sub_async.c)
+add_executable(testsuite test.c bench.c)
 
 # Link statically with the library
 target_link_libraries(testsuite nats_static ${NATS_EXTRA_LIB})
@@ -62,7 +62,7 @@ foreach(LIST_FILE ${ALL_LISTS})
       COMMAND testsuite ${TEST_NAME})
 
     if(${LIST_FILE} STREQUAL ${BENCH_LIST})
-      set_tests_properties(${TEST_NAME} PROPERTIES LABELS "bench")
+      set_tests_properties(${TEST_NAME} PROPERTIES LABELS "bench" PASS_REGULAR_EXPRESSION "ALL PASSED")
     else()
       # Make sure the test passes
       set_tests_properties(${TEST_NAME} PROPERTIES PASS_REGULAR_EXPRESSION "ALL PASSED")

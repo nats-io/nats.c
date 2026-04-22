@@ -336,70 +336,14 @@ _oldRequestMsg(natsMsg **replyMsg, natsConnection *nc,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-static void
-_respHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
-{
-    char        *rt   = NULL;
-    const char  *subj = NULL;
-    respInfo    *resp = NULL;
-    bool        dmsg  = true;
-
-    natsConn_Lock(nc);
-    if (natsConn_isClosed(nc))
-    {
-        natsConn_Unlock(nc);
-        natsMsg_Destroy(msg);
-        return;
-    }
-    subj = natsMsg_GetSubject(msg);
-    // We look for the reply token by first checking that the message subject
-    // prefix matches the subscription's subject (without the last '*').
-    // It is possible that it does not due to subject rewrite (JetStream).
-    if (((int) strlen(subj) > nc->reqIdOffset)
-        && (memcmp((const void*) sub->subject, (const void*) subj, strlen(sub->subject) - 1) == 0))
-    {
-        rt = (char*) (natsMsg_GetSubject(msg) + nc->reqIdOffset);
-        resp = (respInfo*) natsStrHash_Remove(nc->respMap, rt);
-    }
-    else if (natsStrHash_Count(nc->respMap) == 1)
-    {
-        // Only if the subject is completely different, we assume that it
-        // could be the server that has rewritten the subject and so if there
-        // is a single entry, use that.
-        void *value = NULL;
-        natsStrHash_RemoveSingle(nc->respMap, NULL, &value);
-        resp = (respInfo*) value;
-    }
-    if (resp != NULL)
-    {
-        natsMutex_Lock(resp->mu);
-        // Check for the race where the requestor has already timed-out.
-        // If so, resp->removed will be true, in which case simply discard
-        // the message.
-        if (!resp->removed)
-        {
-            // Do not destroy the message since it is being used.
-            dmsg = false;
-            resp->msg = msg;
-            resp->removed = true;
-            natsCondition_Signal(resp->cond);
-        }
-        natsMutex_Unlock(resp->mu);
-    }
-    natsConn_Unlock(nc);
-
-    if (dmsg)
-        natsMsg_Destroy(msg);
-}
-
 natsStatus
 natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
                           natsMsg *m, int64_t timeout)
 {
     natsStatus          s           = NATS_OK;
     respInfo            *resp       = NULL;
-    bool                needsRemoval= true;
-    char                respInboxBuf[32 + NUID_BUFFER_LEN + NATS_MAX_REQ_ID_LEN + 1]; // <inbox prefix>.<nuid>.<reqId>
+    bool                removeResp  = true;
+    char                respInboxBuf[32 + NATS_MAX_RESP_SUFFIX_LEN]; // '<inbox_prefix>.<resp_prefix>.0_<respId>\0'
     char                *respInbox = respInboxBuf;
 
     if ((replyMsg == NULL) || (nc == NULL) || (m == NULL))
@@ -423,7 +367,7 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
     // in respInboxBuf, then we need to allocate...
     if (nc->inboxPfxLen > 32)
     {
-        respInbox = NATS_MALLOC(nc->inboxPfxLen + NUID_BUFFER_LEN + NATS_MAX_REQ_ID_LEN + 1);
+        respInbox = NATS_MALLOC(nc->inboxPfxLen + NATS_MAX_RESP_SUFFIX_LEN);
         if (respInbox == NULL)
         {
             natsConn_Unlock(nc);
@@ -431,17 +375,14 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
         }
     }
 
-    // Since we are going to release the lock and connection
-    // may be closed while we wait for reply, we need to retain
-    // the connection object.
-    natsConn_retain(nc);
-
-    // Setup only once (but could be more if natsConn_initResp() returns != OK)
-    if (nc->respMux == NULL)
-        s = natsConn_initResp(nc, _respHandler);
+    s = natsConn_addRespInfo(&resp, nc, respInbox);
     if (s == NATS_OK)
-        s = natsConn_addRespInfo(&resp, nc, respInbox);
-
+    {
+        // Since we are going to release the lock and connection
+        // may be closed while we wait for reply, we need to retain
+        // the connection object.
+        natsConn_retainLocked(nc);
+    }
     natsConn_Unlock(nc);
 
     if (s == NATS_OK)
@@ -450,12 +391,19 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
         if (s == NATS_OK)
         {
             natsMutex_Lock(resp->mu);
-            while ((s != NATS_TIMEOUT) && (resp->msg == NULL) && !resp->closed)
+            // It is possible, due to pooling, that the `resp->cond` had been
+            // previously signaled after that the requestor had timed out. This
+            // means that we may then exit the "timed wait" immediately, but it
+            // is fine because we are checking for the state in the "while" loop.
+            while ((s != NATS_TIMEOUT) && (resp->msg == NULL) && (resp->closedSts == NATS_OK))
                 s = natsCondition_TimedWait(resp->cond, resp->mu, timeout);
 
             // If we have a message, deliver it.
             if (resp->msg != NULL)
             {
+                // No need to remove since it was done in `_respHandler`.
+                removeResp = false;
+
                 // In case of race where s != NATS_OK but we got the message,
                 // we need to override status and set it to OK.
                 s = NATS_OK;
@@ -470,33 +418,26 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
                 }
                 else
                     *replyMsg = resp->msg;
+
+                // Clear the message since we are either return it or we
+                // have already destroyed it.
+                resp->msg = NULL;
             }
-            else
+            else if (resp->closedSts != NATS_OK)
             {
+                // No need to remove since it was done in `_respHandler`.
+                removeResp = false;
                 // Set the correct error status that we return to the user
-                if (resp->closed)
-                    s = resp->closedSts;
-                else
-                    s = NATS_TIMEOUT;
+                s = resp->closedSts;
             }
-            resp->msg = NULL;
-            needsRemoval = !resp->removed;
-            // Signal to _respHandler that we are no longer interested.
-            resp->removed = true;
+            // else s == NATS_TIMEOUT (from the "while" loop)
             natsMutex_Unlock(resp->mu);
         }
-    }
-    // Common to success or if we failed to create the sub, send the request...
-    if (needsRemoval)
-    {
+        // Common to success, failure to send the request or timeout.
         natsConn_Lock(nc);
-        if (nc->respMap != NULL)
-            natsStrHash_Remove(nc->respMap, respInbox+nc->reqIdOffset);
-        natsConn_Unlock(nc);
+        natsConn_removeAndDisposeRespInfo(nc, removeResp, respInbox+nc->respMux.idOffset, resp);
+        natsConn_unlockAndRelease(nc);
     }
-    natsConn_disposeRespInfo(nc, resp, true);
-
-    natsConn_release(nc);
 
     if (respInbox != respInboxBuf)
         NATS_FREE(respInbox);

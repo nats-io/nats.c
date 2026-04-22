@@ -73,6 +73,7 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsErrInvalidDurableName             "invalid durable name"
 #define jsErrInvalidConsumerName            "invalid consumer name"
 #define jsErrConcurrentFetchNotAllowed      "concurrent fetch request not allowed"
+#define jsErrNoContextIDAvailable           "no context ID available for async publish acknowledgements (too many contexts have been created)"
 
 #define jsCtrlHeartbeat     (1)
 #define jsCtrlFlowControl   (2)
@@ -302,3 +303,12 @@ js_maybeFetchMore(natsSubscription *sub, jsFetch *fetch);
 
 void
 js_setOnReleasedCb(jsCtx *js, js_onReleaseCb cb, void *arg);
+
+void
+js_submitRespMsg(jsCtx *js, natsMsg *msg);
+
+void
+js_submitRespDrainMsg(jsCtx *js);
+
+void
+js_initRespDrain(jsCtx *js);

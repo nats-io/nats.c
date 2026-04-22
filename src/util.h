@@ -302,4 +302,7 @@ nats_unmarshalHeader(nats_JSON *json, const char *fieldName, natsHeader **header
 natsStatus
 nats_marshalHeader(natsBuffer *buf, bool omitEmpty, bool comma, const char *fieldName, natsHeader *header);
 
+void
+nats_encodeRespID(char *buffer, uint64_t id, bool shortest);
+
 #endif /* UTIL_H_ */

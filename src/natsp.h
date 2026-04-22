@@ -1,4 +1,4 @@
-// Copyright 2015-2025 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -94,7 +94,20 @@
 #define NATS_DEFAULT_INBOX_PRE      "_INBOX."
 #define NATS_DEFAULT_INBOX_PRE_LEN  (7)
 
-#define NATS_MAX_REQ_ID_LEN (19) // to display 2^63-1 number
+// To encode max uint64_t using some base 62 encoding.
+#define NATS_MAX_RESP_ID_LEN (11)
+// To encode a random response prefix.
+#define NATS_RESP_PREFIX_LEN (12)
+// To encode "<resp_prefix>.0_<respID>\0".
+#define NATS_MAX_RESP_SUFFIX_LEN (NATS_RESP_PREFIX_LEN + 3 + NATS_MAX_RESP_ID_LEN + 1)
+
+// To encode a JS Context ID starting at 1 (2^63-1). Note that this number
+// should never be that big, since it will be the number of JS contexts that
+// user got from a connection (likely to be 1 or 2 at most?). Still, let's
+// not assume and use the highest possible value.
+#define NATS_MAX_JS_CTX_ID_LEN (19)
+// To encode "<resp_prefix>.<JsCtxID>_<respID>\0".
+#define NATS_MAX_JS_RESP_SUFFIX_LEN (NATS_RESP_PREFIX_LEN + 1 + NATS_MAX_JS_CTX_ID_LEN + 1 + NATS_MAX_RESP_ID_LEN + 1)
 
 #define WAIT_FOR_READ       (0)
 #define WAIT_FOR_WRITE      (1)
@@ -373,13 +386,32 @@ struct __natsOptions
 };
 typedef struct __pmInfo
 {
-    char                *subject;
+    char                *id;
     int64_t             deadline;
     struct __pmInfo     *next;
 
 } pmInfo;
 
 typedef void (*js_onReleaseCb)(void *arg);
+
+typedef struct __jsAsyncReplies
+{
+    char                *repliesPfx;
+    natsSubscription    *sub;
+    int64_t             ctxID;
+    natsThread          *dispatcher;
+    natsMutex           *mu;
+    natsCondition       *cond;
+    natsMsg             *head;
+    natsMsg             *tail;
+    natsMsg             *drainMsg;
+    uint64_t            idVal;
+    int                 idOffset;
+    bool                init;
+    bool                draining;
+    bool                closed;
+
+} jsAsyncReplies;
 
 struct __jsCtx
 {
@@ -392,9 +424,7 @@ struct __jsCtx
     natsTimer           *pmtmr;
     pmInfo              *pmHead;
     pmInfo              *pmTail;
-    natsSubscription    *rsub;
-    char                *rpre;
-    int                 rpreLen;
+    jsAsyncReplies      asyncReplies;
     int                 pacw;
     int64_t             pmcount;
     int                 stalled;
@@ -759,18 +789,39 @@ typedef struct __natsSockCtx
 
 typedef struct __respInfo
 {
+    struct __respInfo   *next;
     natsMutex           *mu;
     natsCondition       *cond;
     natsMsg             *msg;
-    bool                closed;
     natsStatus          closedSts;
-    bool                removed;
-    bool                pooled;
 
 } respInfo;
 
 // Used internally for testing and allow to alter/suppress an incoming message
 typedef void (*natsMsgFilter)(natsConnection *nc, natsMsg **msg, void* closure);
+
+// Used for the handling of multiplexed responses.
+//
+// Fields are either immutable (after muxer initialization) or protected by the
+// connection lock.
+typedef struct __respMuxer
+{
+    char                *respPfx;   // The response subject prefix for NATS core: `<inbox_prefix>.<resp_prefix>.0_`.
+    int                 subjPfxLen; // Above subject length but without the trailing `0_`.
+    int                 idOffset;   // The offset of where the response ID starts in the subject.
+    char                *wcSubject; // The wildcard "subscription" subject: `<inbox_prefix>.<resp_prefix>.*`.
+    bool                init;       // Set to `true` if response handling fields are fully initialized.
+    bool                drain;      // Set to `true` to indicate that we are draining the muxer.
+    int64_t             sid;        // The ID of the wildcard "subscription" (requires nc->subsMu lock).
+    natsStrHash         *map;       // Request map for the response msg.
+    respInfo            *pool;      // The head of a linked linst of pooled `respInfo` objects.
+    int                 poolSize;   // The current size of the pool.
+    uint64_t            idVal;      // A counter for the response IDs.
+    jsCtx               *js;        // When the first JS context is added, it is stored here for faster speed.
+    int64_t             jsID;       // A counter representing JS context IDs used in response subjects.
+    natsHash            *jsCtxs;    // A map of JS contexts if more than one context are added.
+
+} respMuxer;
 
 struct __natsConnection
 {
@@ -832,9 +883,8 @@ struct __natsConnection
     bool                dontSendInPlace;
     // These below will be protected by the `subsMu` lock.
     natsCondition       *drainCond;
-    int                 drainSubCountTarget;
+    int                 drainJsDispatchers;
     bool                drainSubSignalOnRemove;
-    bool                drainExcludeRespMux;
     bool                drainConnClosed;
 
     // Set to true when owned by a Streaming connection,
@@ -842,21 +892,12 @@ struct __natsConnection
     bool                stanOwned;
 
     // New Request style
-    char                respId[NATS_MAX_REQ_ID_LEN+1];
-    int                 respIdPos;
-    char                respIdVal;
-    char                *respSub;   // The wildcard subject
-    natsSubscription    *respMux;   // A single response subscription
-    natsStrHash         *respMap;   // Request map for the response msg
-    respInfo            **respPool;
-    int                 respPoolSize;
-    int                 respPoolIdx;
+    respMuxer           respMux;
 
     // For inboxes. We now support custom prefixes, so we can't rely
     // on constants based on hardcoded "_INBOX." prefix.
     const char          *inboxPfx;
     int                 inboxPfxLen;
-    int                 reqIdOffset;
 
     struct
     {

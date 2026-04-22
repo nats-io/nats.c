@@ -106,6 +106,10 @@ static const char *base64EncodeURL= "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq
 static const char *base64EncodeStd= "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 static char        base64Padding  = '=';
 
+// This is used to encode response ID and JetStream muxer ID.
+static const char *respIDDigits    = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+static const int  respIDBase       = 62;
+
 static int base64Ints[] = {
     62, -1, -1, -1, 63, 52, 53, 54, 55, 56,
     57, 58, 59, 60, 61, -1, -1, -1, -1, -1,
@@ -2828,4 +2832,34 @@ nats_marshalHeader(natsBuffer *buf, bool omitEmpty, bool comma, const char *fiel
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+// Used to encode a response ID, which is a number of type `uint64_t` using
+// some base 62 encoding. Note that we don't reverse the result (which would
+// be proper encoding). We just want to encode the number in a more space
+// efficient way.
+//
+// The caller guarantees that the buffer is big enough to encode the maximum
+// uint64_t value (buffer at least NATS_MAX_RESP_ID_LEN bytes).
+//
+// Interesting note: unit benchmark of this function obviously shows that
+// it is faster to have the encoding stop when the remainder is 0, however,
+// used in the context of JetStream, it looks like using full encoding
+// yields better results. Need to figure out the reason.
+void
+nats_encodeRespID(char *buffer, uint64_t id, bool shortest)
+{
+    int i;
+
+    for (i=0; i<NATS_MAX_RESP_ID_LEN; i++)
+    {
+        buffer[i] = respIDDigits[id%respIDBase];
+        id /= respIDBase;
+        if (shortest && (id == 0))
+        {
+            buffer[i+1] = '\0';
+            return;
+        }
+    }
+    buffer[NATS_MAX_RESP_ID_LEN] = '\0';
 }

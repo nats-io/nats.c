@@ -1435,6 +1435,11 @@ typedef struct jsOptionsPublishAsync
 
         int64_t                 StallWait;              ///< Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.
 
+        bool                    MuxReplies;             ///< If `true` the replies to asynchronous publishes will be received
+                                                        ///  by the connection's responses multiplexer (avoids creating an internal
+                                                        ///  subscription per context). Works only if the connection has not been
+                                                        ///  created with #natsOptions_UseOldRequestStyle.
+
 } jsOptionsPublishAsync;
 
 /**

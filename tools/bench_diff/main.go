@@ -1,3 +1,16 @@
+// Copyright 2024-2026 The NATS Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -8,8 +21,10 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
+	"text/tabwriter"
 )
 
 const NOISE_THRESHOLD = 0.03
@@ -44,6 +59,11 @@ type DiffData struct {
 	} `json:"total"`
 }
 
+type MsgPerfData struct {
+	Name string `json:"name"`
+	Perf int    `json:"perf"`
+}
+
 func main() {
 	flag.Parse()
 
@@ -51,11 +71,11 @@ func main() {
 		log.Fatalf("usage: %s <main> <bench>", os.Args[0])
 	}
 
-	m, err := readFile(os.Args[1])
+	m, sm, err := readFile(os.Args[1])
 	if err != nil {
 		log.Fatal(err)
 	}
-	b, err := readFile(os.Args[2])
+	b, sb, err := readFile(os.Args[2])
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,12 +92,6 @@ func main() {
 		}
 	}
 
-	// bb, err := json.MarshalIndent(diff, "", "  ")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// fmt.Println(string(bb))
-
 	for key, d := range diff {
 		fmt.Printf("== %s ==\n", key)
 		fmt.Printf("Best: %.2f%%\n", d.Total.BestDiff*100)
@@ -89,6 +103,41 @@ func main() {
 				r.Subs, r.Threads, r.Messages, r.BaseAverage, r.BranchAverage, r.Diff*100)
 		}
 	}
+
+	fmt.Println()
+
+	ordered := make([]string, 0, len(sm))
+	for tn := range sm {
+		ordered = append(ordered, tn)
+	}
+	slices.Sort(ordered)
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.AlignRight)
+	for _, tn := range ordered {
+		fmt.Fprintf(w, "[ === %s === ]\t\t\t\t\n", tn)
+		bd, ok := sb[tn]
+		if !ok {
+			fmt.Fprintln(w, "WARNING: no data for this test in bench\t\t\t\t")
+			continue
+		}
+		td := sm[tn]
+		fmt.Fprintln(w, "\t\t\t\t")
+		fmt.Fprintln(w, "Name\tBase msgs/sec\tBench msgs/sec\tDifference\t")
+		fmt.Fprintln(w, "\t\t\t\t")
+		for i, d := range td {
+			if i >= len(bd) || d.Name != bd[i].Name {
+				fmt.Fprintln(w, "\t\t\t\t")
+				fmt.Fprintf(w, "WARNING: no data for %q in bench, stopping\n", d.Name)
+				break
+			}
+			bp := bd[i].Perf
+			perf := ((float64(bp) / float64(d.Perf)) - 1) * 100
+			fmt.Fprintf(w, "%s\t%d\t%d\t%+.2f%%\t\n", d.Name, d.Perf, bp, perf)
+		}
+		fmt.Fprintln(w, "\t\t\t\t")
+		fmt.Fprintln(w, "\t\t\t\t")
+	}
+	w.Flush()
 }
 
 func calculateDiff(main, bench map[Key]TestData) (*DiffData, error) {
@@ -136,13 +185,14 @@ func calculateDiff(main, bench map[Key]TestData) (*DiffData, error) {
 	return &diff, nil
 }
 
-func readFile(path string) (map[string]map[Key]TestData, error) {
+func readFile(path string) (map[string]map[Key]TestData, map[string][]MsgPerfData, error) {
 	r, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %w", err)
+		return nil, nil, fmt.Errorf("failed to open file: %w", err)
 	}
 	scanner := bufio.NewScanner(r)
 	result := make(map[string]map[Key]TestData)
+	simple := make(map[string][]MsgPerfData)
 	var benchName string
 	re := regexp.MustCompile(`^\d+: (.*)`)
 
@@ -163,7 +213,6 @@ func readFile(path string) (map[string]map[Key]TestData, error) {
 
 		line = strings.TrimPrefix(line, "\x1b[0;0m")
 		if strings.HasPrefix(line, "[") {
-			var data []TestData
 			jsonData := strings.Join([]string{line}, "")
 			for scanner.Scan() {
 				line := scanner.Text()
@@ -175,19 +224,28 @@ func readFile(path string) (map[string]map[Key]TestData, error) {
 					}
 				}
 			}
-			if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
-				return nil, fmt.Errorf("%s: failed to parse JSON data: %w", path, err)
-			}
+			if strings.HasPrefix(benchName, "BenchSubscribeAsync_") {
+				var data []TestData
+				if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
+					return nil, nil, fmt.Errorf("%s: failed to parse JSON data: %w", path, err)
+				}
 
-			hash := make(map[Key]TestData)
-			for _, d := range data {
-				hash[d.Key] = d
-			}
-			if benchName != "" {
-				result[benchName] = hash
+				hash := make(map[Key]TestData)
+				for _, d := range data {
+					hash[d.Key] = d
+				}
+				if benchName != "" {
+					result[benchName] = hash
+				}
+			} else {
+				var data []MsgPerfData
+				if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
+					return nil, nil, fmt.Errorf("%s: failed to parse JSON data: %w", path, err)
+				}
+				simple[benchName] = data
 			}
 		}
 	}
 
-	return result, nil
+	return result, simple, nil
 }

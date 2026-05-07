@@ -1277,6 +1277,15 @@ typedef struct jsDirectGetMsgOptions
         uint64_t        Sequence;               ///< Get the message at this sequence
         const char      *NextBySubject;         ///< Get the next message (based on sequence) for that subject
         const char      *LastBySubject;         ///< Get the last message on that subject
+        int             Batch;                  ///< Gets up to batch number of messages
+        int             MaxBytes;               ///< Limits to a maximum size of batched messages received in bytes
+        uint64_t        StartTime;              ///< get the first message at or newer than the time
+                                                ///  expressed in UTC time (number of nanoseconds since epoch)
+        const char      **MultiLastFor;         ///< Get the last message for each subject in the list (subjects can include wildcards)
+        int             MultiLastForLen;        ///< Number of subjects in the MultiLastFor list
+        uint64_t        UpToSeq;                ///< Get the last message for each subject in the list up to the sequence number
+        uint64_t        UpToTime;               ///< Get the last message for each subject in the list up to
+                                                ///  the time expressed in UTC time (number of nanoseconds since epoch)
 
 } jsDirectGetMsgOptions;
 

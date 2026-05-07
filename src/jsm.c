@@ -2148,6 +2148,7 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
             if (comma)
                 s = natsBuf_AppendByte(&buf, ',');
 
+            comma = true;
             IFOK(s, nats_marshalLong(&buf, false, "batch", (long) dgOpts->Batch));
         }
         if ((s == NATS_OK) && (dgOpts->MaxBytes > 0))
@@ -2155,6 +2156,7 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
             if (comma)
                 s = natsBuf_AppendByte(&buf, ',');
 
+            comma = true;
             IFOK(s, nats_marshalLong(&buf, false, "max_bytes", (long) dgOpts->MaxBytes));
         }
         if ((s == NATS_OK) && (dgOpts->StartTime > 0))
@@ -2162,6 +2164,7 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
             if (comma)
                 s = natsBuf_AppendByte(&buf, ',');
 
+            comma = true;
             IFOK(s, nats_marshalULong(&buf, false, "start_time", dgOpts->StartTime));
         }
         if ((s == NATS_OK) && (dgOpts->MultiLastFor != NULL))
@@ -2178,6 +2181,7 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
             if (comma)
                 s = natsBuf_AppendByte(&buf, ',');
 
+            comma = true;
             IFOK(s, nats_marshalULong(&buf, false, "up_to_seq", dgOpts->UpToSeq));
         }
         if ((s == NATS_OK) && (dgOpts->UpToTime > 0))
@@ -2185,6 +2189,7 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
             if (comma)
                 s = natsBuf_AppendByte(&buf, ',');
 
+            comma = true;
             IFOK(s, nats_marshalULong(&buf, false, "up_to_time", dgOpts->UpToTime));
         }
 

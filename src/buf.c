@@ -260,20 +260,20 @@ natsBuf_Destroy(natsBuffer *buf)
         memset(buf, 0, sizeof(natsBuffer));
 }
 
-char*
+const char*
 natsBuf_GetData(natsBuffer *buf)
 {
     return buf->data;
 }
 
-int*
+int
 natsBuf_GetLen(natsBuffer *buf)
 {
-    return &(buf->len);
+    return buf->len;
 }
 
-int*
+int
 natsBuf_GetCapacity(natsBuffer *buf)
 {
-    return &(buf->capacity);
+    return buf->capacity;
 }

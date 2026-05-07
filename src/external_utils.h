@@ -46,13 +46,13 @@ natsBuf_Consume(natsBuffer *buf, int n);
 NATS_EXTERN void
 natsBuf_Destroy(natsBuffer *buf);
 
-NATS_EXTERN char*
+NATS_EXTERN const char*
 natsBuf_GetData(natsBuffer *buf);
 
-NATS_EXTERN int*
+NATS_EXTERN int
 natsBuf_GetLen(natsBuffer *buf);
 
-NATS_EXTERN int*
+NATS_EXTERN int
 natsBuf_GetCapacity(natsBuffer *buf);
 
 #endif /* __NATS_EXTERNAL_UTILS_H_ */

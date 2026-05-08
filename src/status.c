@@ -76,6 +76,7 @@ static const char *statusText[] = {
     "Limit reached",
 
     "Jetstream Consumer PinID Mismatch",
+    "Invalid Configuration",
 };
 
 NATS_GLOBAL_STATIC_ASSERT(NATS_MAX_STATUS_VALUE == sizeof(statusText)/sizeof(statusText[0]), Incorrect_array_size);

@@ -651,6 +651,10 @@ typedef struct jsStreamConfig {
 
         /// @brief Enables sending atomic batch publishing into the stream
         bool                    AllowAtomic;
+
+        /// @brief Allow the message counter to be used for the stream.
+        /// Requires nats-server v2.12.0 or later.
+        bool AllowMsgCounter;
 } jsStreamConfig;
 
 /**
@@ -1236,6 +1240,7 @@ typedef struct jsPubAck
         bool            Duplicate;
         char            *Batch;
         uint64_t        Count;
+        char            *Value;
 
 } jsPubAck;
 

@@ -136,6 +136,9 @@ typedef enum
     NATS_PIN_ID_MISMATCH,               ///< Pin ID sent in the request does not match the currently pinned
                                         ///  consumer subscriber ID on the server.
 
+    NATS_INVALID_CONFIG,                ///< The config is not valid for the operation. For example, requesting
+                                        ///  counters when AllowMsgCounter has not been set on the stream configuration.
+
     NATS_MAX_STATUS_VALUE,              ///< Maximum status value, this element MUST be the last one
 
 } natsStatus;

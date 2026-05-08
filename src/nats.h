@@ -1240,7 +1240,7 @@ typedef struct jsPubAck
         bool            Duplicate;
         char            *Batch;
         uint64_t        Count;
-        char            *Val;
+        char            *Value;
 
 } jsPubAck;
 

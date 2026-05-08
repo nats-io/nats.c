@@ -2143,56 +2143,6 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
             IFOK(s, natsBuf_Append(&buf, dgOpts->NextBySubject, -1));
             IFOK(s, natsBuf_AppendByte(&buf, '"'));
         }
-        if ((s == NATS_OK) && (dgOpts->Batch > 0))
-        {
-            if (comma)
-                s = natsBuf_AppendByte(&buf, ',');
-
-            comma = true;
-            IFOK(s, nats_marshalLong(&buf, false, "batch", (long) dgOpts->Batch));
-        }
-        if ((s == NATS_OK) && (dgOpts->MaxBytes > 0))
-        {
-            if (comma)
-                s = natsBuf_AppendByte(&buf, ',');
-
-            comma = true;
-            IFOK(s, nats_marshalLong(&buf, false, "max_bytes", (long) dgOpts->MaxBytes));
-        }
-        if ((s == NATS_OK) && (dgOpts->StartTime > 0))
-        {
-            if (comma)
-                s = natsBuf_AppendByte(&buf, ',');
-
-            comma = true;
-            IFOK(s, nats_marshalULong(&buf, false, "start_time", dgOpts->StartTime));
-        }
-        if ((s == NATS_OK) && (dgOpts->MultiLastFor != NULL))
-        {
-            if (comma)
-                s = natsBuf_AppendByte(&buf, ',');
-
-            comma = true;
-            IFOK(s, nats_marshalStringArray(&buf, false, "multi_last", dgOpts->MultiLastFor, dgOpts->MultiLastForLen));
-
-        }
-        if ((s == NATS_OK) && (dgOpts->UpToSeq > 0))
-        {
-            if (comma)
-                s = natsBuf_AppendByte(&buf, ',');
-
-            comma = true;
-            IFOK(s, nats_marshalULong(&buf, false, "up_to_seq", dgOpts->UpToSeq));
-        }
-        if ((s == NATS_OK) && (dgOpts->UpToTime > 0))
-        {
-            if (comma)
-                s = natsBuf_AppendByte(&buf, ',');
-
-            comma = true;
-            IFOK(s, nats_marshalULong(&buf, false, "up_to_time", dgOpts->UpToTime));
-        }
-
         IFOK(s, natsBuf_AppendByte(&buf, '}'));
         // Send the request
         IFOK(s, natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), o.Wait));

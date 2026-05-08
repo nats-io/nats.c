@@ -259,21 +259,3 @@ natsBuf_Destroy(natsBuffer *buf)
     else
         memset(buf, 0, sizeof(natsBuffer));
 }
-
-const char*
-natsBuf_GetData(natsBuffer *buf)
-{
-    return buf->data;
-}
-
-int
-natsBuf_GetLen(natsBuffer *buf)
-{
-    return buf->len;
-}
-
-int
-natsBuf_GetCapacity(natsBuffer *buf)
-{
-    return buf->capacity;
-}

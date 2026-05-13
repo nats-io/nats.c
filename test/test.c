@@ -27279,7 +27279,8 @@ void test_JetStreamPublishSchedule(void)
     jsPubOptions        opts;
     jsErrCode           jerr = 0;
     natsSubscription    *sub = NULL;
-    natsMsg *msg = NULL;
+    natsMsg             *msg = NULL;
+    const char          *hvalue = NULL;
 
     JS_SETUP(2, 14, 0);
 
@@ -27289,10 +27290,11 @@ void test_JetStreamPublishSchedule(void)
 
     test("Add stream: ");
     cfg.Name = "TEST";
-    cfg.Subjects = (const char*[3]){"schedules", "real", "stop"};
-    cfg.SubjectsLen = 3;
+    cfg.Subjects = (const char*[5]){"schedules", "real", "stop", "src", "sched2"};
+    cfg.SubjectsLen = 5;
     cfg.AllowMsgTTL = true;
     cfg.AllowMsgSchedules = true;
+    cfg.AllowRollup = true;
 
     s = js_AddStream(NULL, js, &cfg, NULL, NULL);
     testCond(s == NATS_OK);
@@ -27371,6 +27373,34 @@ void test_JetStreamPublishSchedule(void)
     s = natsSubscription_NextMsg(&msg, sub, 1500);
     testCond(s == NATS_TIMEOUT);
     nats_clearLastError();
+
+    test("Publish source message: ");
+    s = js_Publish(NULL, js, "src", "from-source", 11, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Schedule publish with Source, TimeZone, Rollup: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.Schedule = "* * * * * *";
+    opts.Schedule.Target = "real";
+    opts.Schedule.Source = "src";
+    opts.Schedule.TimeZone = "UTC";
+    opts.Schedule.Rollup = true;
+    s = js_Publish(NULL, js, "sched2", "fallback", 8, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Receive message published from Source: ");
+    s = natsSubscription_NextMsg(&msg, sub, 2000);
+    testCond((s == NATS_OK) && (msg != NULL)
+        && (strcmp(natsMsg_GetSubject(msg), "real") == 0)
+        && (strcmp(natsMsg_GetData(msg), "from-source") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Cancel sched2: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.CancelScheduledSubject = "sched2";
+    s = js_Publish(NULL, js, "stop", "stop", 4, &opts, &jerr);
+    testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
     JS_TEARDOWN;

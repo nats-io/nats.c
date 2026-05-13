@@ -27301,6 +27301,46 @@ void test_JetStreamPublishSchedule(void)
     s = js_SubscribeSync(&sub, js, "real", NULL, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0));
 
+    test("Disabled per-msg schedule - error: ");
+    cfg.Name = "DISABLED";
+    cfg.Subjects = (const char*[1]){"bar"};
+    cfg.SubjectsLen = 1;
+    cfg.AllowMsgTTL = false;
+    cfg.AllowMsgSchedules = false;
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    if (s == NATS_OK)
+    {
+        jsPubOptions_Init(&opts);
+        opts.Schedule.Schedule = "@every 1s";
+        opts.Schedule.Target = "bar";
+        s = js_Publish(NULL, js, "bar", "hello", 5, &opts, &jerr);
+    }
+    testCond((s != NATS_OK) && (jerr != 0));
+    nats_clearLastError();
+    jerr = 0;
+
+    test("Publish schedule with negative TTL - error: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.Schedule = "@every 1s";
+    opts.Schedule.Target = "real";
+    opts.Schedule.TTL = -1000;
+    s = js_Publish(NULL, js, "schedules", "hello", 5, &opts, &jerr);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+    jerr = 0;
+
+    test("Publish schedule with conflicting cancel: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.Schedule = "@every 1s";
+    opts.Schedule.Target = "real";
+    opts.Schedule.TTL = 1000;
+    opts.Schedule.CancelScheduledSubject = "schedules";
+    s = js_Publish(NULL, js, "stop", "hello", 5, &opts, &jerr);
+    printf("s == %d\n", s);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+    jerr = 0;
+
     test("Schedule publish for every second: ");
     jsPubOptions_Init(&opts);
     opts.Schedule.Schedule = "@every 1s";

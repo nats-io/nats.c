@@ -286,6 +286,27 @@ typedef struct __jsCtx                  jsCtx;
 typedef struct __jsAtomicBatchCtx       jsAtomicBatchCtx;
 
 /**
+ * Options for scheduled jetstream messages; sent as part of #jsPubOptions.
+ *
+ * \note The stream must have AllowMsgSchedules configured
+ */
+typedef struct jsScheduleOptions {
+    const char  *Schedule;               ///< The schedule the message will be published on. Can be set as intervals (@every 1m),
+                                         ///  predefined schedules (@yearly, @monthly, @weekly, @daily, @hourly),
+                                         ///  or in a cron format (* * * * * *).
+    const char  *Target;                 ///< The subject the message will be delivered to.
+    const char  *Source;                 ///< Instructs the schedule to read the last message on the given subject and
+                                         ///  publish it to the target. If no message exists on the source subject, the
+                                         ///  schedule's own body and headers is published as a fallback. Wildcards are not supported.
+    int64_t     TTL;                     ///< When publishing sets a TTL on the message if the stream supports per message TTLs.
+    const char  *TimeZone;               ///< The time zone used for the Cron schedule. If not specified, the Cron schedule will be
+                                         ///  in UTC. Not allowed to be used if the schedule is not a Cron schedule.
+    bool        Rollup;                  ///< When publishing sets a Rollup on the message.
+    const char  *CancelScheduledSubject; ///< Subject of scheduled message to be canceled.
+
+} jsScheduleOptions;
+
+/**
  * JetStream publish options.
  *
  * These are options that you can provide to JetStream publish APIs.
@@ -302,15 +323,17 @@ typedef struct __jsAtomicBatchCtx       jsAtomicBatchCtx;
  */
 typedef struct jsPubOptions
 {
-        int64_t         MaxWait;                      ///< Amount of time (in milliseconds) to wait for a publish response, default will the context's Wait value.
-        const char      *MsgId;                       ///< Message ID used for de-duplication.
-        const char      *ExpectStream;                ///< Expected stream to respond from the publish call.
-        const char      *ExpectLastMsgId;             ///< Expected last message ID in the stream.
-        uint64_t        ExpectLastSeq;                ///< Expected last message sequence in the stream.
-        uint64_t        ExpectLastSubjectSeq;         ///< Expected last message sequence for the subject in the stream.
-        const char      *ExpectLastSubjectSeqSubject; ///< Expected subject for the sequence set with 'ExpectLastSubjectSeq'.
-        bool            ExpectNoMessage;              ///< Expected no message (that is, sequence == 0) for the subject in the stream.
-        int64_t         MsgTTL;                       ///< Message time to live (TTL) in milliseconds, used by the server to expire the message. Requires nats-server v2.11.0 or later.
+        int64_t           MaxWait;                      ///< Amount of time (in milliseconds) to wait for a publish response, default will the context's Wait value.
+        const char        *MsgId;                       ///< Message ID used for de-duplication.
+        const char        *ExpectStream;                ///< Expected stream to respond from the publish call.
+        const char        *ExpectLastMsgId;             ///< Expected last message ID in the stream.
+        uint64_t          ExpectLastSeq;                ///< Expected last message sequence in the stream.
+        uint64_t          ExpectLastSubjectSeq;         ///< Expected last message sequence for the subject in the stream.
+        const char        *ExpectLastSubjectSeqSubject; ///< Expected subject for the sequence set with 'ExpectLastSubjectSeq'.
+        bool              ExpectNoMessage;              ///< Expected no message (that is, sequence == 0) for the subject in the stream.
+        int64_t           MsgTTL;                       ///< Message time to live (TTL) in milliseconds, used by the server to expire the message. Requires nats-server v2.11.0 or later.
+        jsScheduleOptions Schedule;                     ///< Schedule options for the message, see #jsScheduleOptions.
+                                                        ///  Requires nats-server v2.14.0 or later.
 
 } jsPubOptions;
 
@@ -654,7 +677,12 @@ typedef struct jsStreamConfig {
 
         /// @brief Allow the message counter to be used for the stream.
         /// Requires nats-server v2.12.0 or later.
-        bool AllowMsgCounter;
+        bool                    AllowMsgCounter;
+
+        /// @brief Allow messages to be scheduled in the stream.
+        /// Requires nats-server v2.14.0 or later.
+        bool                    AllowMsgSchedules;
+
 } jsStreamConfig;
 
 /**

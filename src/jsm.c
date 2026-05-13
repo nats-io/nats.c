@@ -930,6 +930,8 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         s = nats_marshalLong(buf, true, "subject_delete_marker_ttl", cfg->SubjectDeleteMarkerTTL);
     if ((s == NATS_OK) && cfg->AllowMsgCounter)
         s = natsBuf_Append(buf, ",\"allow_msg_counter\":true", -1);
+    if ((s == NATS_OK) && cfg->AllowMsgSchedules)
+        s = natsBuf_Append(buf, ",\"allow_msg_schedules\":true", -1);
 
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 

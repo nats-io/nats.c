@@ -27272,6 +27272,70 @@ void test_JetStreamPublish(void)
     remove(confFile);
 }
 
+void test_JetStreamPublishSchedule(void)
+{
+    natsStatus          s;
+    jsStreamConfig      cfg;
+    jsPubOptions        opts;
+    jsErrCode           jerr = 0;
+    natsSubscription    *sub = NULL;
+    natsMsg *msg = NULL;
+
+    JS_SETUP(2, 14, 0);
+
+    test("Stream config init: ");
+    s = jsStreamConfig_Init(&cfg);
+    testCond(s == NATS_OK);
+
+    test("Add stream: ");
+    cfg.Name = "TEST";
+    cfg.Subjects = (const char*[3]){"schedules", "real", "stop"};
+    cfg.SubjectsLen = 3;
+    cfg.AllowMsgTTL = true;
+    cfg.AllowMsgSchedules = true;
+
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create sub: ");
+    s = js_SubscribeSync(&sub, js, "real", NULL, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Schedule publish for every second: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.Schedule = "@every 1s";
+    opts.Schedule.Target = "real";
+    opts.Schedule.TTL = 100000;
+    s = js_Publish(NULL, js, "schedules", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Check that the first message is received: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1500);
+    testCond((s == NATS_OK) && (strcmp(natsMsg_GetSubject(msg), "real") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check that a second message is received: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1500);
+    testCond((s == NATS_OK) && (strcmp(natsMsg_GetSubject(msg), "real") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Cancel the schedule: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.CancelScheduledSubject = "schedules";
+    s = js_Publish(NULL, js, "stop", "stop", 4, &opts, &jerr);
+    testCond(s == NATS_OK);
+
+    test("Verify messages stop: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1500);
+    testCond(s == NATS_TIMEOUT);
+    nats_clearLastError();
+
+    natsSubscription_Destroy(sub);
+    JS_TEARDOWN;
+}
+
 static void
 _jsAckHandlerMuxer(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, void *closure)
 {

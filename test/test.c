@@ -24457,6 +24457,7 @@ void test_JetStreamMarshalStreamConfig(void)
     };
     sc.AllowAtomic = true;
     sc.AllowMsgCounter = true;
+    sc.AllowMsgSchedules = true;
 
     test("Marshal stream config: ");
     s = js_marshalStreamConfig(&buf, &sc);
@@ -24542,6 +24543,7 @@ void test_JetStreamMarshalStreamConfig(void)
                 && (rsc->PersistMode == js_PersistAsync)
                 && (rsc->AllowAtomic == true)
                 && (rsc->AllowMsgCounter == true)
+                && (rsc->AllowMsgSchedules == true)
                 );
     js_destroyStreamConfig(rsc);
     rsc = NULL;
@@ -27338,7 +27340,6 @@ void test_JetStreamPublishSchedule(void)
     opts.Schedule.TTL = 1000;
     opts.Schedule.CancelScheduledSubject = "schedules";
     s = js_Publish(NULL, js, "stop", "hello", 5, &opts, &jerr);
-    printf("s == %d\n", s);
     testCond(s == NATS_INVALID_ARG);
     nats_clearLastError();
     jerr = 0;

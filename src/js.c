@@ -553,7 +553,9 @@ _setHeadersFromOptions(natsMsg *msg, jsPubOptions *opts)
         if (!nats_IsStringEmpty(opts->Schedule.Schedule) || !nats_IsStringEmpty(opts->Schedule.Target) ||
             !nats_IsStringEmpty(opts->Schedule.Source) || (opts->Schedule.TTL != 0) ||
             !nats_IsStringEmpty(opts->Schedule.TimeZone) || opts->Schedule.Rollup)
-            s = NATS_INVALID_ARG;
+            s = nats_setError(NATS_INVALID_ARG,
+                "option 'Schedule.CancelScheduledSubject' (%s) cannot be used with other schedule options",
+                opts->Schedule.CancelScheduledSubject);
 
         IFOK(s, natsMsgHeader_Set(msg, jsNatsSchedulerHdr, opts->Schedule.CancelScheduledSubject));
         IFOK(s, natsMsgHeader_Set(msg, jsNatsScheduleNextHdr, "purge"));

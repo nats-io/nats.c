@@ -793,6 +793,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, _unmarshalPersistModeType(jcfg, &(cfg->PersistMode)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_atomic", &(cfg->AllowAtomic)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_msg_counter", &(cfg->AllowMsgCounter)));
+    IFOK(s, nats_JSONGetBool(jcfg, "allow_msg_schedules", &(cfg->AllowMsgSchedules)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;

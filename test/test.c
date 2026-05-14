@@ -24457,6 +24457,7 @@ void test_JetStreamMarshalStreamConfig(void)
     };
     sc.AllowAtomic = true;
     sc.AllowMsgCounter = true;
+    sc.AllowMsgSchedules = true;
 
     test("Marshal stream config: ");
     s = js_marshalStreamConfig(&buf, &sc);
@@ -24542,6 +24543,7 @@ void test_JetStreamMarshalStreamConfig(void)
                 && (rsc->PersistMode == js_PersistAsync)
                 && (rsc->AllowAtomic == true)
                 && (rsc->AllowMsgCounter == true)
+                && (rsc->AllowMsgSchedules == true)
                 );
     js_destroyStreamConfig(rsc);
     rsc = NULL;
@@ -27270,6 +27272,138 @@ void test_JetStreamPublish(void)
 
     JS_TEARDOWN;
     remove(confFile);
+}
+
+void test_JetStreamPublishSchedule(void)
+{
+    natsStatus          s;
+    jsStreamConfig      cfg;
+    jsPubOptions        opts;
+    jsErrCode           jerr = 0;
+    natsSubscription    *sub = NULL;
+    natsMsg             *msg = NULL;
+
+    JS_SETUP(2, 14, 0);
+
+    test("Stream config init: ");
+    s = jsStreamConfig_Init(&cfg);
+    testCond(s == NATS_OK);
+
+    test("Add stream: ");
+    cfg.Name = "TEST";
+    cfg.Subjects = (const char*[5]){"schedules", "real", "stop", "src", "sched2"};
+    cfg.SubjectsLen = 5;
+    cfg.AllowMsgTTL = true;
+    cfg.AllowMsgSchedules = true;
+    cfg.AllowRollup = true;
+
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Create sub: ");
+    s = js_SubscribeSync(&sub, js, "real", NULL, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Disabled per-msg schedule - error: ");
+    cfg.Name = "DISABLED";
+    cfg.Subjects = (const char*[1]){"bar"};
+    cfg.SubjectsLen = 1;
+    cfg.AllowMsgTTL = false;
+    cfg.AllowMsgSchedules = false;
+    s = js_AddStream(NULL, js, &cfg, NULL, NULL);
+    if (s == NATS_OK)
+    {
+        jsPubOptions_Init(&opts);
+        opts.Schedule.Schedule = "@every 1s";
+        opts.Schedule.Target = "bar";
+        s = js_Publish(NULL, js, "bar", "hello", 5, &opts, &jerr);
+    }
+    testCond((s != NATS_OK) && (jerr != 0));
+    nats_clearLastError();
+    jerr = 0;
+
+    test("Publish schedule with negative TTL - error: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.Schedule = "@every 1s";
+    opts.Schedule.Target = "real";
+    opts.Schedule.TTL = -1000;
+    s = js_Publish(NULL, js, "schedules", "hello", 5, &opts, &jerr);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+    jerr = 0;
+
+    test("Publish schedule with conflicting cancel: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.Schedule = "@every 1s";
+    opts.Schedule.Target = "real";
+    opts.Schedule.TTL = 1000;
+    opts.Schedule.CancelScheduledSubject = "schedules";
+    s = js_Publish(NULL, js, "stop", "hello", 5, &opts, &jerr);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+    jerr = 0;
+
+    test("Schedule publish for every second: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.Schedule = "@every 1s";
+    opts.Schedule.Target = "real";
+    opts.Schedule.TTL = 100000;
+    s = js_Publish(NULL, js, "schedules", "hello", 5, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Check that the first message is received: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1500);
+    testCond((s == NATS_OK) && (strcmp(natsMsg_GetSubject(msg), "real") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Check that a second message is received: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1500);
+    testCond((s == NATS_OK) && (strcmp(natsMsg_GetSubject(msg), "real") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Cancel the schedule: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.CancelScheduledSubject = "schedules";
+    s = js_Publish(NULL, js, "stop", "stop", 4, &opts, &jerr);
+    testCond(s == NATS_OK);
+
+    test("Verify messages stop: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1500);
+    testCond(s == NATS_TIMEOUT);
+    nats_clearLastError();
+
+    test("Publish source message: ");
+    s = js_Publish(NULL, js, "src", "from-source", 11, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Schedule publish with Source, TimeZone, Rollup: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.Schedule = "* * * * * *";
+    opts.Schedule.Target = "real";
+    opts.Schedule.Source = "src";
+    opts.Schedule.TimeZone = "UTC";
+    opts.Schedule.Rollup = true;
+    s = js_Publish(NULL, js, "sched2", "fallback", 8, &opts, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Receive message published from Source: ");
+    s = natsSubscription_NextMsg(&msg, sub, 2000);
+    testCond((s == NATS_OK) && (msg != NULL)
+        && (strcmp(natsMsg_GetSubject(msg), "real") == 0)
+        && (strcmp(natsMsg_GetData(msg), "from-source") == 0));
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Cancel sched2: ");
+    jsPubOptions_Init(&opts);
+    opts.Schedule.CancelScheduledSubject = "sched2";
+    s = js_Publish(NULL, js, "stop", "stop", 4, &opts, &jerr);
+    testCond(s == NATS_OK);
+
+    natsSubscription_Destroy(sub);
+    JS_TEARDOWN;
 }
 
 static void

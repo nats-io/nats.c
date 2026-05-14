@@ -531,6 +531,38 @@ _setHeadersFromOptions(natsMsg *msg, jsPubOptions *opts)
             s = natsMsgHeader_Set(msg, jsMsgTTLHdr, nats_formatDurationMilli(temp, opts->MsgTTL));
     }
 
+    if ((s == NATS_OK) && !nats_IsStringEmpty(opts->Schedule.Schedule))
+        s = natsMsgHeader_Set(msg, jsNatsScheduleHdr, opts->Schedule.Schedule);
+    if ((s == NATS_OK) && !nats_IsStringEmpty(opts->Schedule.Target))
+        s = natsMsgHeader_Set(msg, jsNatsScheduleTargetHdr, opts->Schedule.Target);
+    if ((s == NATS_OK) && !nats_IsStringEmpty(opts->Schedule.Source))
+        s = natsMsgHeader_Set(msg, jsNatsScheduleSourceHdr, opts->Schedule.Source);
+    if ((s == NATS_OK) && opts->Schedule.TTL != 0)
+    {
+        if (opts->Schedule.TTL < 0)
+            s = nats_setError(NATS_INVALID_ARG, "option 'Schedule.TTL' (%" PRId64 ") cannot be negative", opts->Schedule.TTL);
+        else
+            s = natsMsgHeader_Set(msg, jsNatsScheduleTTLHdr, nats_formatDurationMilli(temp, opts->Schedule.TTL));
+    }
+    if ((s == NATS_OK) && !nats_IsStringEmpty(opts->Schedule.TimeZone))
+        s = natsMsgHeader_Set(msg, jsNatsScheduleTimeZoneHdr, opts->Schedule.TimeZone);
+    if ((s == NATS_OK) && opts->Schedule.Rollup)
+        s = natsMsgHeader_Set(msg, jsNatsScheduleRollupHdr, "sub");
+    if ((s == NATS_OK) && !nats_IsStringEmpty(opts->Schedule.CancelScheduledSubject))
+    {
+        if (!nats_IsStringEmpty(opts->Schedule.Schedule) || !nats_IsStringEmpty(opts->Schedule.Target) ||
+            !nats_IsStringEmpty(opts->Schedule.Source) || (opts->Schedule.TTL != 0) ||
+            !nats_IsStringEmpty(opts->Schedule.TimeZone) || opts->Schedule.Rollup)
+        {
+            s = nats_setError(NATS_INVALID_ARG,
+                "option 'Schedule.CancelScheduledSubject' (%s) cannot be used with other schedule options",
+                opts->Schedule.CancelScheduledSubject);
+        }
+
+        IFOK(s, natsMsgHeader_Set(msg, jsNatsSchedulerHdr, opts->Schedule.CancelScheduledSubject));
+        IFOK(s, natsMsgHeader_Set(msg, jsNatsScheduleNextHdr, "purge"));
+    }
+
     return NATS_UPDATE_ERR_STACK(s);
 }
 

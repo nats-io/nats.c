@@ -298,7 +298,7 @@ typedef struct jsScheduleOptions {
     const char  *Source;                 ///< Instructs the schedule to read the last message on the given subject and
                                          ///  publish it to the target. If no message exists on the source subject, the
                                          ///  schedule's own body and headers is published as a fallback. Wildcards are not supported.
-    int64_t     TTL;                     ///< When publishing sets a TTL on the message if the stream supports per message TTLs.
+    int64_t     TTL;                     ///< When publishing sets a TTL (in milliseconds) on the message if the stream supports per message TTLs.
     const char  *TimeZone;               ///< The time zone used for the Cron schedule. If not specified, the Cron schedule will be
                                          ///  in UTC. Not allowed to be used if the schedule is not a Cron schedule.
     bool        Rollup;                  ///< When publishing sets a Rollup on the message.

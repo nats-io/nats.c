@@ -27282,7 +27282,6 @@ void test_JetStreamPublishSchedule(void)
     jsErrCode           jerr = 0;
     natsSubscription    *sub = NULL;
     natsMsg             *msg = NULL;
-    const char          *hvalue = NULL;
 
     JS_SETUP(2, 14, 0);
 

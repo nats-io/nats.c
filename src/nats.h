@@ -1185,6 +1185,20 @@ typedef struct jsConsumerPauseResponse
 } jsConsumerPauseResponse;
 
 /**
+ * Response returned by js_ResetConsumer.
+ *
+ * \note: Consumer will be destroyed by jsConsumerResetResponse_Destroy. It should not be freed by the user.
+ *
+ * @see js_ResetConsumer
+ */
+typedef struct jsConsumerResetResponse
+{
+        jsConsumerInfo  *Consumer;      ///< Consumer info after the reset.
+        uint64_t        ResetSeq;       ///< Stream sequence the consumer was reset to.
+
+} jsConsumerResetResponse;
+
+/**
  * Reports on API calls to JetStream for this account.
  */
 typedef struct jsAPIStats
@@ -7345,6 +7359,34 @@ js_GetConsumerInfo(jsConsumerInfo **ci, jsCtx *js,
 NATS_EXTERN natsStatus
 js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
                       jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Resets the consumer's delivery state.
+ *
+ * Resets the consumer's delivery state without deleting and recreating it.
+ * Requires nats-server v2.14.0 or later.
+ *
+ * @param new_crr if not NULL, will receive the response of the operation.
+ * @param js the pointer to the #jsCtx context.
+ * @param stream the name of the stream.
+ * @param consumer the name of the consumer.
+ * @param seq stream sequence to reset to. Zero (the default) resets the consumer to its current ack floor.
+ * @param opts the pointer to the #jsOptions object, possibly `NULL`.
+ * @param errCode the location where to store the JetStream specific error code, or `NULL`
+ * if not needed.
+ */
+NATS_EXTERN natsStatus
+js_ResetConsumer(jsConsumerResetResponse **new_crr, jsCtx *js,
+                 const char *stream, const char *consumer,
+                 uint64_t seq, jsOptions *opts, jsErrCode *errCode);
+
+/** \brief Destroys the ResetConsumer response object.
+ *
+ * Releases memory allocated for this object.
+ *
+ * @param crr the pointer to the #jsConsumerResetResponse object.
+ */
+NATS_EXTERN void
+jsConsumerResetResponse_Destroy(jsConsumerResetResponse *crr);
 
 /** \brief Pauses a consumer.
  *

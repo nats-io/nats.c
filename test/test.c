@@ -34199,7 +34199,14 @@ void test_JetStreamConsumerReset(void)
     test("Reset consumer (no seq): ");
     s = js_ResetConsumer(&crr, js, "s1", "c1", 0, NULL, &jerr);
     testCond((s == NATS_OK) && (jerr == 0)
-                && (crr != NULL));
+                && (crr != NULL)
+                && (crr->Consumer != NULL)
+                && (crr->Consumer->Name != NULL)
+                && (strcmp(crr->Consumer->Name, "c1") == 0)
+                && (crr->Consumer->Stream != NULL)
+                && (strcmp(crr->Consumer->Stream, "s1") == 0)
+                && (crr->Consumer->Delivered.Consumer == 0)
+                && (crr->Consumer->NumRedelivered == 0));
     jsConsumerResetResponse_Destroy(crr);
     crr = NULL;
 

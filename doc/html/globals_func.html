@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -96,6 +96,9 @@ $(document).ready(function(){initNavTree('globals_func.html',''); initResizable(
 <h3><a id="index_j" name="index_j"></a>- j -</h3><ul>
 <li>js_AddConsumer()&#160;:&#160;<a class="el" href="group__js_assets_group.html#gaf2efb63db150e782d9007090b49d4115">nats.h</a></li>
 <li>js_AddStream()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga5efc5136d33ba52161e6732f88f1ee75">nats.h</a></li>
+<li>js_BatchPublishAdd()&#160;:&#160;<a class="el" href="group__js_pub_group.html#gaf44637b5cc52a8de250659f92e550d06">nats.h</a></li>
+<li>js_BatchPublishCommit()&#160;:&#160;<a class="el" href="group__js_pub_group.html#gaae89ff821d7c069667457237d7340b69">nats.h</a></li>
+<li>js_BatchPublishStart()&#160;:&#160;<a class="el" href="group__js_pub_group.html#gabb5a645fbc327dc71d70bdd484a1f0fc">nats.h</a></li>
 <li>js_ConsumerNames()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga690d19af55d12b82c8523d1861cef8d0">nats.h</a></li>
 <li>js_Consumers()&#160;:&#160;<a class="el" href="group__js_assets_group.html#gaf28097ede3e9ba9926fb00856e63ffd9">nats.h</a></li>
 <li>js_CreateKeyValue()&#160;:&#160;<a class="el" href="group__kv_group_mgt.html#gabc445bfe87112e56a6c73872fec6893e">nats.h</a></li>
@@ -126,6 +129,7 @@ $(document).ready(function(){initNavTree('globals_func.html',''); initResizable(
 <li>js_PullSubscribe()&#160;:&#160;<a class="el" href="group__js_sub_group.html#gaaeaddb73857aa4eb4901eec945ed27cd">nats.h</a></li>
 <li>js_PullSubscribeAsync()&#160;:&#160;<a class="el" href="group__js_sub_group.html#ga938d410675ab09fa8c21896ab61bed0a">nats.h</a></li>
 <li>js_PurgeStream()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga5a6a886c18a79caa403908bf7f7ef125">nats.h</a></li>
+<li>js_ResetConsumer()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga6c21fa1cb6f3709fa3cca1a02e35f7b8">nats.h</a></li>
 <li>js_StreamNames()&#160;:&#160;<a class="el" href="group__js_assets_group.html#gac3dfc87863dbbb3c959ecde4bce905bc">nats.h</a></li>
 <li>js_Streams()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga531d91de372f0dffb8d64abecf88b0c0">nats.h</a></li>
 <li>js_Subscribe()&#160;:&#160;<a class="el" href="group__js_sub_group.html#gaa686c6efd84ef963de1925108e896515">nats.h</a></li>
@@ -137,11 +141,13 @@ $(document).ready(function(){initNavTree('globals_func.html',''); initResizable(
 <li>js_UpdateObjectStore()&#160;:&#160;<a class="el" href="group__obs_group_mgt.html#gabd12d187b7700e89cf547a130394990f">nats.h</a></li>
 <li>js_UpdateStream()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga75a5c44304e24481c67e17fbccc15c31">nats.h</a></li>
 <li>jsAccountInfo_Destroy()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga7c8664b38fcce8497746367d35e5f60b">nats.h</a></li>
+<li>jsAtomicBatchCtx_Destroy()&#160;:&#160;<a class="el" href="group__js_pub_group.html#gab7e168dc9960c6df9660b7a4e62ee58c">nats.h</a></li>
 <li>jsConsumerConfig_Init()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga3381bb05c05bf4a8979adde68d37dd66">nats.h</a></li>
 <li>jsConsumerInfo_Destroy()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga9c1d5ed2f24ba836c10e415231f80088">nats.h</a></li>
 <li>jsConsumerInfoList_Destroy()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga421de40d8e91658353111c3f2ea90ec8">nats.h</a></li>
 <li>jsConsumerNamesList_Destroy()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga2ced0d190131460bf4608ab893dffc50">nats.h</a></li>
 <li>jsConsumerPauseResponse_Destroy()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga7a3c0d2b1c98a4696e39d3c1ce111a25">nats.h</a></li>
+<li>jsConsumerResetResponse_Destroy()&#160;:&#160;<a class="el" href="group__js_assets_group.html#gaf43b2959059f3390873c47454ee712ea">nats.h</a></li>
 <li>jsCtx_Destroy()&#160;:&#160;<a class="el" href="group__js_group.html#gacfa6ce3e60ea540e3331a09a7f3dc856">nats.h</a></li>
 <li>jsDirectGetMsgOptions_Init()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga8d835d47aed9c84ce3b8dcfea469f4cb">nats.h</a></li>
 <li>jsExternalStream_Init()&#160;:&#160;<a class="el" href="group__js_assets_group.html#ga81aebebcd79922104720da51e95020d4">nats.h</a></li>

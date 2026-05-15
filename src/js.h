@@ -168,6 +168,9 @@ extern const int64_t    jsDefaultRequestWait;
 // jsApiDeleteConsumerT is used to delete consumers.
 #define jsApiConsumerDeleteT "%.*s.CONSUMER.DELETE.%s.%s"
 
+// jsApiConsumerResetT is used to reset a consumer.
+#define jsApiConsumerResetT "%.*s.CONSUMER.RESET.%s.%s"
+
 // jsApiConsumerUnpinT is used to unpin a consumer.
 #define jsApiConsumerUnpinT "%.*s.CONSUMER.UNPIN.%s.%s"
 

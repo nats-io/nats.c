@@ -34115,6 +34115,188 @@ void test_JetStreamConvertDirectMsg(void)
     natsMsg_Destroy(msg);
 }
 
+void test_JetStreamConsumerReset(void)
+{
+    natsStatus              s    = NATS_OK;
+    jsErrCode               jerr = 0;
+    jsConsumerResetResponse *crr = NULL;
+    jsStreamConfig          sc;
+    jsConsumerConfig        cc;
+    int                     i;
+    natsSubscription        *sub  = NULL;
+    natsMsgList             list  = { 0 };
+    jsMsgMetaData           *meta = NULL;
+
+    JS_SETUP(2, 14, 0);
+
+    test("Reset consumer (bad args): ");
+    s = js_ResetConsumer(&crr, NULL, "MY_STREAM", "dur", 0, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (crr == NULL));
+    nats_clearLastError();
+
+    test("Reset consumer, stream name missing: ");
+    s = js_ResetConsumer(&crr, js, NULL, "dur", 0, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_ResetConsumer(&crr, js, "", "dur", 0, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (crr == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrStreamNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Reset consumer, stream name invalid: ");
+    s = js_ResetConsumer(&crr, js, "bad.stream.name", "dur", 0, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (crr == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidStreamName) != NULL));
+    nats_clearLastError();
+
+    test("Reset consumer, consumer name missing: ");
+    s = js_ResetConsumer(&crr, js, "MY_STREAM", NULL, 0, NULL, &jerr);
+    if (s == NATS_INVALID_ARG)
+        s = js_ResetConsumer(&crr, js, "MY_STREAM", "", 0, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (crr == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrConsumerNameRequired) != NULL));
+    nats_clearLastError();
+
+    test("Reset consumer, consumer name invalid: ");
+    s = js_ResetConsumer(&crr, js, "MY_STREAM", "bad.consumer.name", 0, NULL, &jerr);
+    testCond((s == NATS_INVALID_ARG) && (crr == NULL)
+                && (strstr(nats_GetLastError(NULL), jsErrInvalidConsumerName) != NULL));
+    nats_clearLastError();
+
+    // consumer reset - basic (no seq)
+    test("Create stream s1: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "s1";
+    sc.Subjects = (const char*[1]){"s1.*"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Add consumer c1 (DeliverAll): ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "c1";
+    cc.AckPolicy = js_AckExplicit;
+    cc.DeliverPolicy = js_DeliverAll;
+    s = js_AddConsumer(NULL, js, "s1", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Publish 5 messages to s1: ");
+    for (i = 0; (s == NATS_OK) && (i < 5); i++)
+        s = js_Publish(NULL, js, "s1.x", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Fetch 3 and ack: ");
+    s = js_PullSubscribe(&sub, js, "s1.x", "c1", NULL, NULL, &jerr);
+    IFOK(s, natsSubscription_Fetch(&list, sub, 3, 1000, &jerr));
+    if ((s == NATS_OK) && (list.Count != 3))
+        s = NATS_ERR;
+    for (i = 0; (s == NATS_OK) && (i < list.Count); i++)
+        s = natsMsg_AckSync(list.Msgs[i], NULL, &jerr);
+    natsMsgList_Destroy(&list);
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Reset consumer (no seq): ");
+    s = js_ResetConsumer(&crr, js, "s1", "c1", 0, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0)
+                && (crr != NULL)
+                && (crr->Consumer != NULL)
+                && (crr->Consumer->Name != NULL)
+                && (strcmp(crr->Consumer->Name, "c1") == 0)
+                && (crr->Consumer->Stream != NULL)
+                && (strcmp(crr->Consumer->Stream, "s1") == 0)
+                && (crr->Consumer->Delivered.Consumer == 0)
+                && (crr->Consumer->NumRedelivered == 0));
+    jsConsumerResetResponse_Destroy(crr);
+    crr = NULL;
+
+    // consumer reset - with seq
+    test("Create stream s2: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "s2";
+    sc.Subjects = (const char*[1]){"s2.*"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Add consumer c2 (DeliverAll): ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "c2";
+    cc.AckPolicy = js_AckExplicit;
+    cc.DeliverPolicy = js_DeliverAll;
+    s = js_AddConsumer(NULL, js, "s2", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Publish 5 messages to s2: ");
+    for (i = 0; (s == NATS_OK) && (i < 5); i++)
+        s = js_Publish(NULL, js, "s2.x", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Reset consumer with seq 3: ");
+    s = js_ResetConsumer(&crr, js, "s2", "c2", 3, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0)
+                && (crr != NULL) && (crr->ResetSeq == 3));
+    jsConsumerResetResponse_Destroy(crr);
+    crr = NULL;
+
+    test("Next delivered message has stream seq >= 3: ");
+    s = js_PullSubscribe(&sub, js, "s2.x", "c2", NULL, NULL, &jerr);
+    IFOK(s, natsSubscription_Fetch(&list, sub, 1, 1000, &jerr));
+    if ((s == NATS_OK) && (list.Count != 1))
+        s = NATS_ERR;
+    IFOK(s, natsMsg_GetMetaData(&meta, list.Msgs[0]));
+    if ((s == NATS_OK) && (meta->Sequence.Stream < 3))
+        s = NATS_ERR;
+    if (s == NATS_OK)
+        s = natsMsg_AckSync(list.Msgs[0], NULL, &jerr);
+    jsMsgMetaData_Destroy(meta);
+    natsMsgList_Destroy(&list);
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    // consumer reset - by_start_sequence allowed at/above
+    test("Create the test stream: ");
+    jsStreamConfig_Init(&sc);
+    sc.Name = "s";
+    sc.Subjects = (const char*[1]){"s.*"};
+    sc.SubjectsLen = 1;
+    s = js_AddStream(NULL, js, &sc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Add consumer starting at seq 3: ");
+    jsConsumerConfig_Init(&cc);
+    cc.Durable = "c";
+    cc.AckPolicy = js_AckExplicit;
+    cc.DeliverPolicy = js_DeliverByStartSequence;
+    cc.OptStartSeq = 3;
+    s = js_AddConsumer(NULL, js, "s", &cc, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    test("Publish 5 messages: ");
+    for (i = 0; (s == NATS_OK) && (i < 5); i++)
+        s = js_Publish(NULL, js, "s.x", "hello", 5, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0));
+
+    // At the boundary: equals opt_start_seq is allowed.
+    test("Reset consumer to seq 3 (at boundary): ");
+    s = js_ResetConsumer(&crr, js, "s", "c", 3, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0)
+                && (crr != NULL) && (crr->ResetSeq == 3));
+    jsConsumerResetResponse_Destroy(crr);
+    crr = NULL;
+
+    // Above the boundary is allowed.
+    test("Reset consumer to seq 4 (above boundary): ");
+    s = js_ResetConsumer(&crr, js, "s", "c", 4, NULL, &jerr);
+    testCond((s == NATS_OK) && (jerr == 0)
+                && (crr != NULL) && (crr->ResetSeq == 4));
+    jsConsumerResetResponse_Destroy(crr);
+    crr = NULL;
+
+    JS_TEARDOWN;
+}
+
 static natsStatus
 _checkDirectGet(jsCtx *js, uint64_t seq, const char *nextBySubj, const char *lastBySubj,
                 const char *expectedSubj, uint64_t expectedSeq)

@@ -3553,6 +3553,125 @@ js_DeleteConsumer(jsCtx *js, const char *stream, const char *consumer,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+static natsStatus
+_unmarshalConsumerResetResp(jsConsumerResetResponse **new_crr, natsMsg *resp, jsErrCode *errCode)
+{
+    nats_JSON                   *json = NULL;
+    jsApiResponse               ar;
+    jsConsumerResetResponse     *crr  = NULL;
+    natsStatus                  s;
+
+    s = js_unmarshalResponse(&ar, &json, resp);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    if (js_apiResponseIsErr(&ar))
+    {
+        if (errCode != NULL)
+            *errCode = (int) ar.Error.ErrCode;
+
+        if (ar.Error.ErrCode == JSConsumerNotFoundErr)
+            s = NATS_NOT_FOUND;
+        else
+            s = nats_setError(NATS_ERR, "%s", ar.Error.Description);
+    }
+    else if (new_crr != NULL)
+    {
+        crr = (jsConsumerResetResponse *) NATS_CALLOC(1, sizeof(jsConsumerResetResponse));
+        if (crr == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+        {
+            s = nats_JSONGetULong(json, "reset_seq", &(crr->ResetSeq));
+            IFOK(s, js_unmarshalConsumerInfo(json, &(crr->Consumer)));
+            if (s == NATS_OK)
+                *new_crr = crr;
+            else
+                jsConsumerResetResponse_Destroy(crr);
+        }
+    }
+
+    js_freeApiRespContent(&ar);
+    nats_JSONDestroy(json);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+void
+jsConsumerResetResponse_Destroy(jsConsumerResetResponse *crr)
+{
+    if (crr == NULL)
+        return;
+
+    jsConsumerInfo_Destroy(crr->Consumer);
+    NATS_FREE(crr);
+}
+
+natsStatus
+js_ResetConsumer(jsConsumerResetResponse **new_crr, jsCtx *js,
+                 const char *stream, const char *consumer,
+                 uint64_t seq, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus          s       = NATS_OK;
+    char                *subj   = NULL;
+    bool                freePfx = false;
+    natsConnection      *nc     = NULL;
+    natsMsg             *resp   = NULL;
+    jsErrCode           jsErr   = 0;
+    jsErrCode           *pErr   = (errCode == NULL ? &jsErr : errCode);
+    jsOptions           o;
+    char                jsonBuf[32];
+    const char          *body   = NULL;
+    int                 bodyLen = 0;
+
+    if (errCode != NULL)
+        *errCode = 0;
+
+    if (js == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    s = _checkStreamName(stream);
+    IFOK(s, js_checkConsName(consumer, false))
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    s = js_setOpts(&nc, &freePfx, js, opts, &o);
+    if (s == NATS_OK)
+    {
+        if (nats_asprintf(&subj, jsApiConsumerResetT,
+                          js_lenWithoutTrailingDot(o.Prefix), o.Prefix,
+                          stream, consumer) < 0 )
+        {
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        }
+        if (freePfx)
+            NATS_FREE((char*) o.Prefix);
+    }
+
+    if ((s == NATS_OK) && (seq > 0))
+    {
+        bodyLen = snprintf(jsonBuf, sizeof(jsonBuf),
+                           "{\"seq\":%" PRIu64 "}", seq);
+        body = jsonBuf;
+    }
+
+    // Send the request
+    IFOK_JSR(s, natsConnection_Request(&resp, nc, subj, body, bodyLen, o.Wait));
+
+    // If we got a response, check for error or return the reset response.
+    IFOK(s, _unmarshalConsumerResetResp(new_crr, resp, pErr));
+
+    NATS_FREE(subj);
+    natsMsg_Destroy(resp);
+
+    if ((s == NATS_NOT_FOUND) && ((*pErr) == JSConsumerNotFoundErr))
+    {
+        nats_clearLastError();
+        return s;
+    }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 natsStatus
 js_unmarshalConsumerPauseResp(nats_JSON *json, jsConsumerPauseResponse **new_cpr)
 {

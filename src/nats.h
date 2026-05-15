@@ -1191,8 +1191,8 @@ typedef struct jsConsumerPauseResponse
  */
 typedef struct jsConsumerResetResponse
 {
-        jsConsumerInfo  *Consumer;      ///< Consumer info after the reset.
         uint64_t        ResetSeq;       ///< Stream sequence the consumer was reset to.
+
 } jsConsumerResetResponse;
 
 /**

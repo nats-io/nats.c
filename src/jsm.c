@@ -3583,7 +3583,6 @@ _unmarshalConsumerResetResp(jsConsumerResetResponse **new_crr, natsMsg *resp, js
         else
         {
             s = nats_JSONGetULong(json, "reset_seq", &(crr->ResetSeq));
-            IFOK(s, js_unmarshalConsumerInfo(json, &(crr->Consumer)));
             if (s == NATS_OK)
                 *new_crr = crr;
             else
@@ -3603,7 +3602,6 @@ jsConsumerResetResponse_Destroy(jsConsumerResetResponse *crr)
     if (crr == NULL)
         return;
 
-    jsConsumerInfo_Destroy(crr->Consumer);
     NATS_FREE(crr);
 }
 

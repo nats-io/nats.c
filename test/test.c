@@ -34206,7 +34206,8 @@ void test_JetStreamConsumerReset(void)
                 && (crr->Consumer->Stream != NULL)
                 && (strcmp(crr->Consumer->Stream, "s1") == 0)
                 && (crr->Consumer->Delivered.Consumer == 0)
-                && (crr->Consumer->NumRedelivered == 0));
+                && (crr->Consumer->NumRedelivered == 0)
+                && (crr->ResetSeq == 4));
     jsConsumerResetResponse_Destroy(crr);
     crr = NULL;
 

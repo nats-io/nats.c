@@ -3650,6 +3650,7 @@ js_ResetConsumer(jsConsumerResetResponse **new_crr, jsCtx *js,
 
     if ((s == NATS_OK) && (seq > 0))
     {
+        // The serialization is guaranteed to fit in the buffer so no need to check the return value here.
         bodyLen = snprintf(jsonBuf, sizeof(jsonBuf),
                            "{\"seq\":%" PRIu64 "}", seq);
         body = jsonBuf;

@@ -1187,6 +1187,8 @@ typedef struct jsConsumerPauseResponse
 /**
  * Response returned by js_ResetConsumer.
  *
+ * \note: Consumer will be destroyed by jsConsumerResetResponse_Destroy. It should not be freed by the user.
+ *
  * @see js_ResetConsumer
  */
 typedef struct jsConsumerResetResponse

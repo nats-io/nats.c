@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -257,7 +257,7 @@ Variables</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>This error type is returned by most microservice functions. You can create your own custom errors by using <a class="el" href="group__micro_error_functions.html#ga7732a5a63c3b452f8d78f4e41e726fe1" title="creates a new microError, with a printf-like formatted message.">micro_Errorf</a> and wrap existing errors using <a class="el" href="group__micro_error_functions.html#gad43118a9e9e48aefbde3b21c4bd9d36f" title="Wraps an exising microError with a higher printf-like formatted message.">microError_Wrapf</a>. Errors are heap-allocated and must be freed with either <a class="el" href="group__micro_error_functions.html#ga1bf0dc7e647ffd431bdca222d9246f07" title="destroys a microError.">microError_Destroy</a> or by passing it into <a class="el" href="group__micro_request_functions.html#ga9c50e895154b151d3c9dadd3502b80f9" title="Respond to a request, on the same NATS connection.">microRequest_Respond</a>.</p>
+<p>This error type is returned by most microservice functions. You can create your own custom errors by using <a class="el" href="group__micro_error_functions.html#ga7732a5a63c3b452f8d78f4e41e726fe1" title="creates a new microError, with a printf-like formatted message.">micro_Errorf</a> and wrap existing errors using <a class="el" href="group__micro_error_functions.html#gad43118a9e9e48aefbde3b21c4bd9d36f" title="Wraps an existing microError with a higher printf-like formatted message.">microError_Wrapf</a>. Errors are heap-allocated and must be freed with either <a class="el" href="group__micro_error_functions.html#ga1bf0dc7e647ffd431bdca222d9246f07" title="destroys a microError.">microError_Destroy</a> or by passing it into <a class="el" href="group__micro_request_functions.html#ga9c50e895154b151d3c9dadd3502b80f9" title="Respond to a request, on the same NATS connection.">microRequest_Respond</a>.</p>
 <p>There are no public fields in this struct, use <a class="el" href="group__micro_error_functions.html#ga69edae8121c8a5a093c76ee2662bae54" title="returns the int code of the error.">microError_Code</a>, <a class="el" href="group__micro_error_functions.html#ga2648fe981670c5394bd058128ef6478c" title="Returns the NATS status associated with the error.">microError_Status</a>, and <a class="el" href="group__micro_error_functions.html#ga9694838e69616612ef98afe7a45cb58d" title="Returns a printable string with the error message.">microError_String</a> to get more information about the error. </p>
 
 </div>

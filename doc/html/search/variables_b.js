@@ -38,5 +38,6 @@ var searchData=
   ['msgid_35',['MsgId',['../structjs_pub_options.html#ac8708487360b784f7dd5d7a21e5617c0',1,'jsPubOptions']]],
   ['msgs_36',['msgs',['../structnats_msg_list.html#aa123668879f1c9c11c9be7bd81a205c5',1,'natsMsgList::Msgs'],['../structjs_lost_stream_data.html#a5d2e87697526033c842a7f955776dfda',1,'jsLostStreamData::Msgs'],['../structjs_stream_state_subject.html#a8b9b2edc5afe82b7b3bc7dbdd67a4384',1,'jsStreamStateSubject::Msgs'],['../structjs_stream_state.html#a495269fe83c6bbf2023cca94add0a888',1,'jsStreamState::Msgs']]],
   ['msgslen_37',['MsgsLen',['../structjs_lost_stream_data.html#abdc373ed7fc9b7cf161c13da1913fc9a',1,'jsLostStreamData']]],
-  ['msgttl_38',['MsgTTL',['../structjs_pub_options.html#a07c8ec214966ef7ce0bd48a8e8008f9d',1,'jsPubOptions']]]
+  ['msgttl_38',['MsgTTL',['../structjs_pub_options.html#a07c8ec214966ef7ce0bd48a8e8008f9d',1,'jsPubOptions']]],
+  ['muxreplies_39',['MuxReplies',['../structjs_options_publish_async.html#a818eb8be6c9d38bb709bdf083604f8fe',1,'jsOptionsPublishAsync']]]
 ];

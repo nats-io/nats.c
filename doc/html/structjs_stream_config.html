@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -190,6 +190,18 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:aa45bb2b4fb0e7ce71b77d9af91c0a6bd" id="r_aa45bb2b4fb0e7ce71b77d9af91c0a6bd"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#aa45bb2b4fb0e7ce71b77d9af91c0a6bd">SubjectDeleteMarkerTTL</a></td></tr>
 <tr class="memdesc:aa45bb2b4fb0e7ce71b77d9af91c0a6bd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enables and sets a duration for adding server markers for delete, purge and max age limits. In nanoseconds. Requires nats-server v2.11.0 or later.  <br /></td></tr>
 <tr class="separator:aa45bb2b4fb0e7ce71b77d9af91c0a6bd"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a532a35a82101aba31033b5da088f90eb" id="r_a532a35a82101aba31033b5da088f90eb"><td class="memItemLeft" align="right" valign="top"><a class="el" href="group__types_group.html#ga0816678d2eb067e44ebf180e9b7397ee">jsPersistModeType</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a532a35a82101aba31033b5da088f90eb">PersistMode</a></td></tr>
+<tr class="memdesc:a532a35a82101aba31033b5da088f90eb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the persistence mode for the stream. Requires nats-server v2.12.0 or later.  <br /></td></tr>
+<tr class="separator:a532a35a82101aba31033b5da088f90eb"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab0f62e9eff46d8c5150e191af91e31e5" id="r_ab0f62e9eff46d8c5150e191af91e31e5"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#ab0f62e9eff46d8c5150e191af91e31e5">AllowAtomic</a></td></tr>
+<tr class="memdesc:ab0f62e9eff46d8c5150e191af91e31e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enables sending atomic batch publishing into the stream.  <br /></td></tr>
+<tr class="separator:ab0f62e9eff46d8c5150e191af91e31e5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a88fdbc7240e020e36f30e298695c9102" id="r_a88fdbc7240e020e36f30e298695c9102"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#a88fdbc7240e020e36f30e298695c9102">AllowMsgCounter</a></td></tr>
+<tr class="memdesc:a88fdbc7240e020e36f30e298695c9102"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allow the message counter to be used for the stream. Requires nats-server v2.12.0 or later.  <br /></td></tr>
+<tr class="separator:a88fdbc7240e020e36f30e298695c9102"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:afb0488f4d14c9febc9ca8ca677dbace8" id="r_afb0488f4d14c9febc9ca8ca677dbace8"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_stream_config.html#afb0488f4d14c9febc9ca8ca677dbace8">AllowMsgSchedules</a></td></tr>
+<tr class="memdesc:afb0488f4d14c9febc9ca8ca677dbace8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allow messages to be scheduled in the stream. Requires nats-server v2.14.0 or later.  <br /></td></tr>
+<tr class="separator:afb0488f4d14c9febc9ca8ca677dbace8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Configuration of a JetStream stream.</p>
@@ -756,6 +768,62 @@ NATS server 2.10 added user-provided Metadata, storage Compression type, FirstSe
       <table class="memname">
         <tr>
           <td class="memname">int64_t jsStreamConfig::SubjectDeleteMarkerTTL</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a532a35a82101aba31033b5da088f90eb" name="a532a35a82101aba31033b5da088f90eb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a532a35a82101aba31033b5da088f90eb">&#9670;&#160;</a></span>PersistMode</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="group__types_group.html#ga0816678d2eb067e44ebf180e9b7397ee">jsPersistModeType</a> jsStreamConfig::PersistMode</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ab0f62e9eff46d8c5150e191af91e31e5" name="ab0f62e9eff46d8c5150e191af91e31e5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab0f62e9eff46d8c5150e191af91e31e5">&#9670;&#160;</a></span>AllowAtomic</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool jsStreamConfig::AllowAtomic</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a88fdbc7240e020e36f30e298695c9102" name="a88fdbc7240e020e36f30e298695c9102"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a88fdbc7240e020e36f30e298695c9102">&#9670;&#160;</a></span>AllowMsgCounter</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool jsStreamConfig::AllowMsgCounter</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="afb0488f4d14c9febc9ca8ca677dbace8" name="afb0488f4d14c9febc9ca8ca677dbace8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afb0488f4d14c9febc9ca8ca677dbace8">&#9670;&#160;</a></span>AllowMsgSchedules</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool jsStreamConfig::AllowMsgSchedules</td>
         </tr>
       </table>
 </div><div class="memdoc">

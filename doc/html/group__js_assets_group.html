@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -145,7 +145,7 @@ Functions</h2></td></tr>
 <tr class="memdesc:ga7158f73e183462e9a15e9802e1746ff0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Erases a message from the stream.  <br /></td></tr>
 <tr class="separator:ga7158f73e183462e9a15e9802e1746ff0"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga94cb23a35516b7779de28fcbb263180a" id="r_ga94cb23a35516b7779de28fcbb263180a"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__js_assets_group.html#ga94cb23a35516b7779de28fcbb263180a">js_GetStreamInfo</a> (<a class="el" href="structjs_stream_info.html">jsStreamInfo</a> **si, <a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> *js, const char *stream, <a class="el" href="structjs_options.html">jsOptions</a> *opts, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70">jsErrCode</a> *errCode)</td></tr>
-<tr class="memdesc:ga94cb23a35516b7779de28fcbb263180a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retreives information from a stream.  <br /></td></tr>
+<tr class="memdesc:ga94cb23a35516b7779de28fcbb263180a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retrieves information from a stream.  <br /></td></tr>
 <tr class="separator:ga94cb23a35516b7779de28fcbb263180a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga8ee87ef86e94be42685941abe9638bbd" id="r_ga8ee87ef86e94be42685941abe9638bbd"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__js_assets_group.html#ga8ee87ef86e94be42685941abe9638bbd">jsStreamInfo_Destroy</a> (<a class="el" href="structjs_stream_info.html">jsStreamInfo</a> *si)</td></tr>
 <tr class="memdesc:ga8ee87ef86e94be42685941abe9638bbd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys the stream information object.  <br /></td></tr>
@@ -177,6 +177,12 @@ Functions</h2></td></tr>
 <tr class="memitem:ga52fbc61759b11494db91f348a733c490" id="r_ga52fbc61759b11494db91f348a733c490"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__js_assets_group.html#ga52fbc61759b11494db91f348a733c490">js_DeleteConsumer</a> (<a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> *js, const char *stream, const char *consumer, <a class="el" href="structjs_options.html">jsOptions</a> *opts, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70">jsErrCode</a> *errCode)</td></tr>
 <tr class="memdesc:ga52fbc61759b11494db91f348a733c490"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deletes a consumer.  <br /></td></tr>
 <tr class="separator:ga52fbc61759b11494db91f348a733c490"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga6c21fa1cb6f3709fa3cca1a02e35f7b8" id="r_ga6c21fa1cb6f3709fa3cca1a02e35f7b8"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__js_assets_group.html#ga6c21fa1cb6f3709fa3cca1a02e35f7b8">js_ResetConsumer</a> (<a class="el" href="structjs_consumer_reset_response.html">jsConsumerResetResponse</a> **new_crr, <a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> *js, const char *stream, const char *consumer, uint64_t seq, <a class="el" href="structjs_options.html">jsOptions</a> *opts, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70">jsErrCode</a> *errCode)</td></tr>
+<tr class="memdesc:ga6c21fa1cb6f3709fa3cca1a02e35f7b8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resets the consumer's delivery state.  <br /></td></tr>
+<tr class="separator:ga6c21fa1cb6f3709fa3cca1a02e35f7b8"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaf43b2959059f3390873c47454ee712ea" id="r_gaf43b2959059f3390873c47454ee712ea"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__js_assets_group.html#gaf43b2959059f3390873c47454ee712ea">jsConsumerResetResponse_Destroy</a> (<a class="el" href="structjs_consumer_reset_response.html">jsConsumerResetResponse</a> *crr)</td></tr>
+<tr class="memdesc:gaf43b2959059f3390873c47454ee712ea"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys the ResetConsumer response object.  <br /></td></tr>
+<tr class="separator:gaf43b2959059f3390873c47454ee712ea"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gabb1579300f501ba4611efce29d952b82" id="r_gabb1579300f501ba4611efce29d952b82"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__js_assets_group.html#gabb1579300f501ba4611efce29d952b82">js_PauseConsumer</a> (<a class="el" href="structjs_consumer_pause_response.html">jsConsumerPauseResponse</a> **new_cpr, <a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> *js, const char *stream, const char *consumer, uint64_t pauseUntil, <a class="el" href="structjs_options.html">jsOptions</a> *opts, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70">jsErrCode</a> *errCode)</td></tr>
 <tr class="memdesc:gabb1579300f501ba4611efce29d952b82"><td class="mdescLeft">&#160;</td><td class="mdescRight">Pauses a consumer.  <br /></td></tr>
 <tr class="separator:gabb1579300f501ba4611efce29d952b82"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1423,6 +1429,102 @@ This API can only be used against servers that support the direct get feature, w
     <tr><td class="paramname">consumer</td><td>the name of the consumer. </td></tr>
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="structjs_options.html">jsOptions</a> object, possibly <code>NULL</code>. </td></tr>
     <tr><td class="paramname">errCode</td><td>the location where to store the JetStream specific error code, or <code>NULL</code> if not needed. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ga6c21fa1cb6f3709fa3cca1a02e35f7b8" name="ga6c21fa1cb6f3709fa3cca1a02e35f7b8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga6c21fa1cb6f3709fa3cca1a02e35f7b8">&#9670;&#160;</a></span>js_ResetConsumer()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> js_ResetConsumer </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="structjs_consumer_reset_response.html">jsConsumerResetResponse</a> **&#160;</td>
+          <td class="paramname"><em>new_crr</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> *&#160;</td>
+          <td class="paramname"><em>js</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>stream</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>consumer</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">uint64_t&#160;</td>
+          <td class="paramname"><em>seq</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="structjs_options.html">jsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70">jsErrCode</a> *&#160;</td>
+          <td class="paramname"><em>errCode</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Resets the consumer's delivery state without deleting and recreating it. Requires nats-server v2.14.0 or later.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">new_crr</td><td>if not NULL, will receive the response of the operation. </td></tr>
+    <tr><td class="paramname">js</td><td>the pointer to the <a class="el" href="group__types_group.html#gaaf12cdd24c6cc23a57c20466c92ff8c1">jsCtx</a> context. </td></tr>
+    <tr><td class="paramname">stream</td><td>the name of the stream. </td></tr>
+    <tr><td class="paramname">consumer</td><td>the name of the consumer. </td></tr>
+    <tr><td class="paramname">seq</td><td>stream sequence to reset to. Zero (the default) resets the consumer to its current ack floor. </td></tr>
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="structjs_options.html">jsOptions</a> object, possibly <code>NULL</code>. </td></tr>
+    <tr><td class="paramname">errCode</td><td>the location where to store the JetStream specific error code, or <code>NULL</code> if not needed. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="gaf43b2959059f3390873c47454ee712ea" name="gaf43b2959059f3390873c47454ee712ea"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaf43b2959059f3390873c47454ee712ea">&#9670;&#160;</a></span>jsConsumerResetResponse_Destroy()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> void jsConsumerResetResponse_Destroy </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="structjs_consumer_reset_response.html">jsConsumerResetResponse</a> *&#160;</td>
+          <td class="paramname"><em>crr</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Releases memory allocated for this object.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">crr</td><td>the pointer to the <a class="el" href="structjs_consumer_reset_response.html">jsConsumerResetResponse</a> object. </td></tr>
   </table>
   </dd>
 </dl>

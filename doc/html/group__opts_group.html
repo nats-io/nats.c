@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -180,6 +180,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gaaff89c3f41627f4b2929dbc9b82d265b" id="r_gaaff89c3f41627f4b2929dbc9b82d265b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gaaff89c3f41627f4b2929dbc9b82d265b">natsOptions_SetMaxPingsOut</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int maxPingsOut)</td></tr>
 <tr class="memdesc:gaaff89c3f41627f4b2929dbc9b82d265b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the limit of outstanding <code>PING</code>s without corresponding <code>PONG</code>s.  <br /></td></tr>
 <tr class="separator:gaaff89c3f41627f4b2929dbc9b82d265b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga64016b8481ff8b423c567ae64ef7680e" id="r_ga64016b8481ff8b423c567ae64ef7680e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga64016b8481ff8b423c567ae64ef7680e">natsOptions_SetIgnoreAuthErrorAbort</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool ignore)</td></tr>
+<tr class="memdesc:ga64016b8481ff8b423c567ae64ef7680e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Indicates if the connection should abort on authentication error or not.  <br /></td></tr>
+<tr class="separator:ga64016b8481ff8b423c567ae64ef7680e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga1a3e3abfd7ddd8aff247df8f332bbda3" id="r_ga1a3e3abfd7ddd8aff247df8f332bbda3"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga1a3e3abfd7ddd8aff247df8f332bbda3">natsOptions_SetIOBufSize</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int ioBufSize)</td></tr>
 <tr class="memdesc:ga1a3e3abfd7ddd8aff247df8f332bbda3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the size of the internal read/write buffers.  <br /></td></tr>
 <tr class="separator:ga1a3e3abfd7ddd8aff247df8f332bbda3"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1168,7 +1171,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>By default, the server certificate is verified. You can disable the verification by passing <code>true</code> to this function.</p>
-<dl class="section note"><dt>Note</dt><dd>Setting this to true will clear SSL verfication callback set via <a class="el" href="group__opts_group.html#ga241477d90abb58ada7001cd676d293cb" title="EXPERIMENTAL Sets the certificate validation callback.">natsOptions_SetSSLVerificationCallback()</a>.</dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Setting this to true will clear SSL verification callback set via <a class="el" href="group__opts_group.html#ga241477d90abb58ada7001cd676d293cb" title="EXPERIMENTAL Sets the certificate validation callback.">natsOptions_SetSSLVerificationCallback()</a>.</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>This is fine for tests but use with caution since this is not secure.</dd>
 <dd>
 See warning in <a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba" title="Sets the secure mode.">natsOptions_SetSecure</a>.</dd></dl>
@@ -1360,6 +1363,42 @@ See warning in <a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
     <tr><td class="paramname">maxPingsOut</td><td>the maximum number of <code>PING</code>s without <code>PONG</code>s (positive number). </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ga64016b8481ff8b423c567ae64ef7680e" name="ga64016b8481ff8b423c567ae64ef7680e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga64016b8481ff8b423c567ae64ef7680e">&#9670;&#160;</a></span>natsOptions_SetIgnoreAuthErrorAbort()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetIgnoreAuthErrorAbort </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool&#160;</td>
+          <td class="paramname"><em>ignore</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>If set to true, client opts out of the default connect behavior of aborting subsequent reconnect attempts if server returns the same auth error twice (regardless of reconnect policy).</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">ignore</td><td><code>true</code> if the connection should stay opened when receiving authentication errors, <code>false</code> if it should close after two errors (default behavior). </td></tr>
   </table>
   </dd>
 </dl>
@@ -2043,7 +2082,7 @@ See warning in <a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Specifies the callback to invoke when the server notifies the connection that it entered lame duck mode, that is, going to gradually disconnect all its connections before shuting down. This is often used in deployments when upgrading NATS Servers.</p>
+<p>Specifies the callback to invoke when the server notifies the connection that it entered lame duck mode, that is, going to gradually disconnect all its connections before shutting down. This is often used in deployments when upgrading NATS Servers.</p>
 <dl class="section warning"><dt>Warning</dt><dd>Invocation of this callback is asynchronous, which means that the state may have changed when this callback is invoked.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">

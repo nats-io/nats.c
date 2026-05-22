@@ -917,6 +917,8 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         IFOK(s, natsBuf_Append(buf, ",\"discard_new_per_subject\":true", -1));
     if ((s == NATS_OK) && cfg->AllowAtomic)
         IFOK(s, natsBuf_Append(buf, ",\"allow_atomic\":true", -1));
+    if ((s == NATS_OK) && cfg->AllowBatched)
+        IFOK(s, natsBuf_Append(buf, ",\"allow_batched\":true", -1));
 
     IFOK(s, nats_marshalMetadata(buf, true, "metadata", &(cfg->Metadata)));
     IFOK(s, _marshalStorageCompression(cfg->Compression, buf));

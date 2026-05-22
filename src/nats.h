@@ -683,6 +683,10 @@ typedef struct jsStreamConfig {
         /// Requires nats-server v2.14.0 or later.
         bool                    AllowMsgSchedules;
 
+        /// @brief Allow batch publishing of messages into the stream.
+        /// Requires nats-server v2.14.0 or later.
+        bool                   AllowBatched;
+
 } jsStreamConfig;
 
 /**

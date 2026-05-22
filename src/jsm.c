@@ -794,6 +794,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_JSONGetBool(jcfg, "allow_atomic", &(cfg->AllowAtomic)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_msg_counter", &(cfg->AllowMsgCounter)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_msg_schedules", &(cfg->AllowMsgSchedules)));
+    IFOK(s, nats_JSONGetBool(jcfg, "allow_batched", &(cfg->AllowBatched)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;

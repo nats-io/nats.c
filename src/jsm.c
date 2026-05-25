@@ -794,6 +794,7 @@ js_unmarshalStreamConfig(nats_JSON *json, const char *fieldName, jsStreamConfig 
     IFOK(s, nats_JSONGetBool(jcfg, "allow_atomic", &(cfg->AllowAtomic)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_msg_counter", &(cfg->AllowMsgCounter)));
     IFOK(s, nats_JSONGetBool(jcfg, "allow_msg_schedules", &(cfg->AllowMsgSchedules)));
+    IFOK(s, nats_JSONGetBool(jcfg, "allow_batched", &(cfg->AllowBatched)));
 
     if (s == NATS_OK)
         *new_cfg = cfg;
@@ -917,6 +918,8 @@ js_marshalStreamConfig(natsBuffer **new_buf, jsStreamConfig *cfg)
         IFOK(s, natsBuf_Append(buf, ",\"discard_new_per_subject\":true", -1));
     if ((s == NATS_OK) && cfg->AllowAtomic)
         IFOK(s, natsBuf_Append(buf, ",\"allow_atomic\":true", -1));
+    if ((s == NATS_OK) && cfg->AllowBatched)
+        IFOK(s, natsBuf_Append(buf, ",\"allow_batched\":true", -1));
 
     IFOK(s, nats_marshalMetadata(buf, true, "metadata", &(cfg->Metadata)));
     IFOK(s, _marshalStorageCompression(cfg->Compression, buf));

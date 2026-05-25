@@ -24458,6 +24458,7 @@ void test_JetStreamMarshalStreamConfig(void)
     sc.AllowAtomic = true;
     sc.AllowMsgCounter = true;
     sc.AllowMsgSchedules = true;
+    sc.AllowBatched = true;
 
     test("Marshal stream config: ");
     s = js_marshalStreamConfig(&buf, &sc);
@@ -24544,6 +24545,7 @@ void test_JetStreamMarshalStreamConfig(void)
                 && (rsc->AllowAtomic == true)
                 && (rsc->AllowMsgCounter == true)
                 && (rsc->AllowMsgSchedules == true)
+                && (rsc->AllowBatched == true)
                 );
     js_destroyStreamConfig(rsc);
     rsc = NULL;

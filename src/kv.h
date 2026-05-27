@@ -17,6 +17,11 @@
 #define kvOpDeleteStr               "DEL"
 #define kvOpPurgeStr                "PURGE"
 
+#define kvMarkerReasonHeader        "Nats-Marker-Reason"
+#define kvAgeReasonStr              "MaxAge"
+#define kvPurgeReasonStr            "Purge"
+#define kvRemoveReasonStr           "Remove"
+
 #define kvErrInvalidBucketName      "invalid bucket name"
 #define kvErrHistoryTooLarge        "history limited to a max of "
 #define kvErrBadBucket              "bucket not valid key-value store"

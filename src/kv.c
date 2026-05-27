@@ -508,6 +508,15 @@ _getKVOp(natsMsg *msg)
         else if (strcmp(val, kvOpPurgeStr) == 0)
             op = kvOp_Purge;
     }
+    else if(natsMsgHeader_Get(msg, kvMarkerReasonHeader, &val) == NATS_OK)
+    {
+        if (strcmp(val, kvAgeReasonStr) == 0)
+            op = kvOp_Purge;
+        else if (strcmp(val, kvPurgeReasonStr) == 0)
+            op = kvOp_Purge;
+        else if (strcmp(val, kvRemoveReasonStr) == 0)
+            op = kvOp_Delete;
+    }
     return op;
 }
 

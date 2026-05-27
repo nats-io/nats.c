@@ -45,6 +45,7 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsNatsBatchIdHdr               "Nats-Batch-Id"
 #define jsNatsBatchSequenceHdr         "Nats-Batch-Sequence"
 #define jsNatsBatchCommit              "Nats-Batch-Commit"
+#define jsNatsMarkerReasonHeader       "Nats-Marker-Reason"
 #define jsNatsScheduleHdr              "Nats-Schedule"
 #define jsNatsScheduleTargetHdr        "Nats-Schedule-Target"
 #define jsNatsScheduleSourceHdr        "Nats-Schedule-Source"
@@ -119,6 +120,10 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsPriorityPolicyPinnedClientStr "pinned_client"
 #define jsPriorityPolicyPrioritizedStr  "prioritized"
 #define jsPriorityPolicyOverflowStr     "overflow"
+
+#define jsAgeReasonStr                  "MaxAge"
+#define jsPurgeReasonStr                "Purge"
+#define jsRemoveReasonStr               "Remove"
 
 #define jsAckPrefix         "$JS.ACK."
 #define jsAckPrefixLen      (8)

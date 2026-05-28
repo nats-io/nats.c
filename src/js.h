@@ -45,7 +45,7 @@ extern const int64_t    jsDefaultRequestWait;
 #define jsNatsBatchIdHdr               "Nats-Batch-Id"
 #define jsNatsBatchSequenceHdr         "Nats-Batch-Sequence"
 #define jsNatsBatchCommit              "Nats-Batch-Commit"
-#define jsNatsMarkerReasonHeader       "Nats-Marker-Reason"
+#define jsNatsMarkerReasonHdr          "Nats-Marker-Reason"
 #define jsNatsScheduleHdr              "Nats-Schedule"
 #define jsNatsScheduleTargetHdr        "Nats-Schedule-Target"
 #define jsNatsScheduleSourceHdr        "Nats-Schedule-Source"

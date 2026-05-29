@@ -37173,6 +37173,140 @@ void test_KeyValueMirrorCrossDomains(void)
     remove(lconfFile);
 }
 
+// Publishes an empty message carrying only a "Nats-Marker-Reason" header, the
+// way the server stores a limit marker when a message expires or is removed.
+static natsStatus
+_storeKVMarker(jsCtx *js, const char *subject, const char *reason)
+{
+    natsStatus  s;
+    natsMsg     *msg = NULL;
+
+    s = natsMsg_Create(&msg, subject, NULL, NULL, 0);
+    IFOK(s, natsMsgHeader_Set(msg, "Nats-Marker-Reason", reason));
+    IFOK(s, js_PublishMsg(NULL, js, msg, NULL, NULL));
+    natsMsg_Destroy(msg);
+    return s;
+}
+
+void test_KeyValueLimitMarkerTTL(void)
+{
+    natsStatus          s;
+    kvStore             *kv = NULL;
+    kvEntry             *e  = NULL;
+    kvWatcher           *w  = NULL;
+    kvConfig            kvc;
+    jsStreamInfo        *si = NULL;
+    jsStreamConfig      *sCfg = NULL;
+
+    int                 i;
+
+    kvOperation         nameOp = kvOp_Unknown;
+    kvOperation         ageOp  = kvOp_Unknown;
+    kvOperation         goneOp = kvOp_Unknown;
+    kvOperation         delOp  = kvOp_Unknown;
+
+    JS_SETUP(2, 11, 0);
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "KVS";
+    kvc.TTL = 1000000000;
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Get KV Info as JS: ");
+    s = js_GetStreamInfo(&si, js, "KV_KVS", NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Set delete marker TTL: ");
+    sCfg = si->Config;
+    sCfg->SubjectDeleteMarkerTTL = 1000000000;
+    s = js_UpdateStream(NULL, js, sCfg, NULL, NULL);
+    testCond(s == NATS_OK);
+
+    test("Put regular key: ");
+    s = kvStore_PutString(NULL, kv, "name", "value");
+    testCond(s == NATS_OK);
+
+    // "MaxAge" and "Purge" both map to kvOp_Purge but are distinct branches in
+    // _getKVOp, while "Remove" maps to kvOp_Delete; cover all three.
+    test("Store MaxAge marker: ");
+    s = _storeKVMarker(js, "$KV.KVS.age", "MaxAge");
+    testCond(s == NATS_OK);
+
+    test("Store Purge marker: ");
+    s = _storeKVMarker(js, "$KV.KVS.gone", "Purge");
+    testCond(s == NATS_OK);
+
+    test("Store Remove marker: ");
+    s = _storeKVMarker(js, "$KV.KVS.del", "Remove");
+    testCond(s == NATS_OK);
+
+    test("Get regular key: ");
+    s = kvStore_Get(&e, kv, "name");
+    testCond((s == NATS_OK) && (e != NULL)
+    && (strcmp(kvEntry_ValueString(e), "value") == 0)
+    && (kvEntry_Operation(e) == kvOp_Put));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Get MaxAge marker key: ");
+    s = kvStore_Get(&e, kv, "age");
+    testCond((s == NATS_NOT_FOUND) && (e == NULL));
+
+    test("Get Purge marker key: ");
+    s = kvStore_Get(&e, kv, "gone");
+    testCond((s == NATS_NOT_FOUND) && (e == NULL));
+
+    test("Get Remove marker key: ");
+    s = kvStore_Get(&e, kv, "del");
+    testCond((s == NATS_NOT_FOUND) && (e == NULL));
+
+    test("Create watcher: ");
+    s = kvStore_WatchAll(&w, kv, NULL);
+    testCond((s == NATS_OK) && (w != NULL));
+
+    test("Read ops: ");
+    for (i = 0; (s == NATS_OK) && (i < 4); i++)
+    {
+        s = kvWatcher_Next(&e, w, 1000);
+        if ((s != NATS_OK) || (e == NULL))
+            break;
+        if (strcmp(kvEntry_Key(e), "name") == 0)
+            nameOp = kvEntry_Operation(e);
+        else if (strcmp(kvEntry_Key(e), "age") == 0)
+            ageOp = kvEntry_Operation(e);
+        else if (strcmp(kvEntry_Key(e), "gone") == 0)
+            goneOp = kvEntry_Operation(e);
+        else if (strcmp(kvEntry_Key(e), "del") == 0)
+            delOp = kvEntry_Operation(e);
+        kvEntry_Destroy(e);
+        e = NULL;
+    }
+    testCond((s == NATS_OK)
+    && (nameOp == kvOp_Put)
+    && (ageOp == kvOp_Purge)
+    && (goneOp == kvOp_Purge)
+    && (delOp == kvOp_Delete));
+
+    test("Finish reading updates: ");
+    s = kvWatcher_Next(&e, w, 1000);
+    testCond((s == NATS_OK) && (e == NULL));
+
+    test("Check entry op becomes \"Purge\": ");
+    s = kvWatcher_Next(&e, w, 10000);
+    testCond((s == NATS_OK) && (e != NULL)
+    && strcmp(kvEntry_Key(e), "name") == 0
+    && kvEntry_Operation(e)== kvOp_Purge);
+
+    kvEntry_Destroy(e);
+    kvWatcher_Destroy(w);
+    kvStore_Destroy(kv);
+    jsStreamInfo_Destroy(si);
+
+    JS_TEARDOWN;
+}
+
 void test_natsHeader(void)
 {
     natsStatus  s           = NATS_OK;

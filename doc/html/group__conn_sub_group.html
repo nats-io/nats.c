@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -106,7 +106,7 @@ Functions</h2></td></tr>
 <tr class="memdesc:gacb2c83b58b7909715424cbc327fdd404"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates an asynchronous subscription with a timeout.  <br /></td></tr>
 <tr class="separator:gacb2c83b58b7909715424cbc327fdd404"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga17574d5165f7e285462e3d3b2709edf4" id="r_ga17574d5165f7e285462e3d3b2709edf4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_sub_group.html#ga17574d5165f7e285462e3d3b2709edf4">natsConnection_SubscribeSync</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> **sub, <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char *subject)</td></tr>
-<tr class="memdesc:ga17574d5165f7e285462e3d3b2709edf4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates a synchronous subcription.  <br /></td></tr>
+<tr class="memdesc:ga17574d5165f7e285462e3d3b2709edf4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates a synchronous subscription.  <br /></td></tr>
 <tr class="separator:ga17574d5165f7e285462e3d3b2709edf4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga3c9fee2775130786ef62f1cbeb191a48" id="r_ga3c9fee2775130786ef62f1cbeb191a48"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_sub_group.html#ga3c9fee2775130786ef62f1cbeb191a48">natsConnection_QueueSubscribe</a> (<a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8">natsSubscription</a> **sub, <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, const char *subject, const char *queueGroup, <a class="el" href="group__callbacks_group.html#gad1a5ac566893e13dc8c81ac0e9c87afe">natsMsgHandler</a> cb, void *cbClosure)</td></tr>
 <tr class="memdesc:ga3c9fee2775130786ef62f1cbeb191a48"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates an asynchronous queue subscriber.  <br /></td></tr>
@@ -231,7 +231,7 @@ Functions</h2></td></tr>
 <p>If no message is received by the given timeout (in milliseconds), the message handler is invoked with a <code>NULL</code> message.<br  />
  You can then destroy the subscription in the callback, or simply return, in which case, the message handler will fire again when a message is received or the subscription times-out again.</p>
 <dl class="section note"><dt>Note</dt><dd>Receiving a message reset the timeout. Until all pending messages are processed, no timeout will occur. The timeout starts when the message handler for the last pending message returns.</dd></dl>
-<dl class="section warning"><dt>Warning</dt><dd>If you re-use message handler code between subscriptions with and without timeouts, keep in mind that the message passed in the message handler may be <code>NULL</code>.</dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd>If you reuse message handler code between subscriptions with and without timeouts, keep in mind that the message passed in the message handler may be <code>NULL</code>.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the location where to store the pointer to the newly created <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject.">natsSubscription</a> object. </td></tr>
@@ -412,7 +412,7 @@ Functions</h2></td></tr>
 <p>If no message is received by the given timeout (in milliseconds), the message handler is invoked with a <code>NULL</code> message.<br  />
  You can then destroy the subscription in the callback, or simply return, in which case, the message handler will fire again when a message is received or the subscription times-out again.</p>
 <dl class="section note"><dt>Note</dt><dd>Receiving a message reset the timeout. Until all pending messages are processed, no timeout will occur. The timeout starts when the message handler for the last pending message returns.</dd></dl>
-<dl class="section warning"><dt>Warning</dt><dd>If you re-use message handler code between subscriptions with and without timeouts, keep in mind that the message passed in the message handler may be <code>NULL</code>.</dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd>If you reuse message handler code between subscriptions with and without timeouts, keep in mind that the message passed in the message handler may be <code>NULL</code>.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sub</td><td>the location where to store the pointer to the newly created <a class="el" href="group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8" title="Interest on a given subject.">natsSubscription</a> object. </td></tr>

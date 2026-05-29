@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -588,7 +588,7 @@ If a durable name is specified, it cannot contain the character ".".</dd></dl>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Fetches up to <code>batch</code> messages from the server, waiting up to <code>timeout</code> milliseconds. No more thant <code>batch</code> messages will be returned, however, it can be less.</p>
+<p>Fetches up to <code>batch</code> messages from the server, waiting up to <code>timeout</code> milliseconds. No more than <code>batch</code> messages will be returned, however, it can be less.</p>
 <p>For <code>batch</code> greater than <code>1</code>, this call will not necessarily wait up <code>timeout</code> milliseconds if some messages were collected and the library receives a notification that no more messages are available at this time.<br  />
  It means that calling <code>natsSubscription_Fetch(&amp;list, sub, 10, 5000)</code> may return after less than 5 seconds with only 3 messages.</p>
 <dl class="params"><dt>Parameters</dt><dd>

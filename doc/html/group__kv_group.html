@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -979,7 +979,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Returns all keys in the bucket.</p>
-<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait (in milliseconds) for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all keys for this bucket. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no keys.</dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all keys for this bucket. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no keys.</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>The user should call <a class="el" href="group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45" title="Destroys this list of KeyValue store key strings.">kvKeysList_Destroy</a> to release memory allocated for the entries list.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__kv_group.html#ga762fd5de8cde683e46a6736a51e575f5" title="Initializes a KeyValue watcher options structure.">kvWatchOptions_Init</a> </dd>
 <dd>
@@ -1039,7 +1039,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Get a list of the keys in a bucket filtered by a subject-like string, for instance "key" or "key.foo.*" or "key.&gt;" Any deleted or purged keys will not be returned.</p>
-<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait (in milliseconds) for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all keys for this bucket. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no keys.</dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all keys for this bucket. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no keys.</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>The user should call <a class="el" href="group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45" title="Destroys this list of KeyValue store key strings.">kvKeysList_Destroy</a> to release memory allocated for the entries list.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__kv_group.html#ga762fd5de8cde683e46a6736a51e575f5" title="Initializes a KeyValue watcher options structure.">kvWatchOptions_Init</a> </dd>
 <dd>
@@ -1123,8 +1123,8 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Returns all historical entries for the key</p>
-<p>Use the options to alter the behavior. For instance, if delete markers are not desired, option <a class="el" href="structkv_watch_options.html#a0535edd21b26affc0057575bafc21a07">kvWatchOptions.IgnoreDeletes</a> should be specified.</p>
-<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait (in milliseconds) for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all entries for this key. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no entries.</dd></dl>
+<p>Use the options to alter the behavior. For instance, if delete markers are not desired, option <a class="el" href="structkv_watch_options.html#a0535edd21b26affc0057575bafc21a07" title="Do not receive delete markers.">kvWatchOptions.IgnoreDeletes</a> should be specified.</p>
+<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all entries for this key. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no entries.</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>The user should call <a class="el" href="group__kv_group.html#gae783352ab81e22aa3173057d117518e6" title="Destroys this list of KeyValue store entries.">kvEntryList_Destroy</a> to release memory allocated for the entries list.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__kv_group.html#ga762fd5de8cde683e46a6736a51e575f5" title="Initializes a KeyValue watcher options structure.">kvWatchOptions_Init</a> </dd>
 <dd>

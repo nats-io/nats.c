@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -125,6 +125,8 @@ Public Attributes</h2></td></tr>
 <tr class="separator:a14214f0e033e75b3ee0f8de634f5a553"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a298e98d26850e1105833689c280e4f5e" id="r_a298e98d26850e1105833689c280e4f5e"><td class="memItemLeft" align="right" valign="top">const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_fetch_request.html#a298e98d26850e1105833689c280e4f5e">Group</a></td></tr>
 <tr class="separator:a298e98d26850e1105833689c280e4f5e"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a67f65b0f03b649bc71ccbb43e7240867" id="r_a67f65b0f03b649bc71ccbb43e7240867"><td class="memItemLeft" align="right" valign="top">uint8_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_fetch_request.html#a67f65b0f03b649bc71ccbb43e7240867">Priority</a></td></tr>
+<tr class="separator:a67f65b0f03b649bc71ccbb43e7240867"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Options for the <a class="el" href="group__js_sub_group.html#ga676292505e7fde8688cfd886b79a10ed" title="Fetches messages for a pull subscription with a complete request configuration.">natsSubscription_FetchRequest()</a> call, which is similar to <a class="el" href="group__js_sub_group.html#gafc5e0d2269bd23b4d5fb7f3b05278e50" title="Fetches messages for a pull subscription.">natsSubscription_Fetch()</a> but gives more control in the configuration of the fetch. </p>
@@ -253,6 +255,21 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+
+</div>
+</div>
+<a id="a67f65b0f03b649bc71ccbb43e7240867" name="a67f65b0f03b649bc71ccbb43e7240867"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a67f65b0f03b649bc71ccbb43e7240867">&#9670;&#160;</a></span>Priority</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">uint8_t jsFetchRequest::Priority</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Sets the priority used when sending fetch requests for consumer with "prioritized". Lower values indicate higher priority (0 is the highest priority) and are served first. Maximum priority value is 9. </p>
 
 </div>
 </div>

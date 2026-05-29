@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -180,6 +180,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gadafcfeeeac2733c7119981ab97b7103d" id="r_gadafcfeeeac2733c7119981ab97b7103d"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#gadafcfeeeac2733c7119981ab97b7103d">natsConnection_GetClientIP</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, char **ip)</td></tr>
 <tr class="memdesc:gadafcfeeeac2733c7119981ab97b7103d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the client's IP address as reported by the server.  <br /></td></tr>
 <tr class="separator:gadafcfeeeac2733c7119981ab97b7103d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga731ffd265f0a91d873aaa5627a3277d3" id="r_ga731ffd265f0a91d873aaa5627a3277d3"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#ga731ffd265f0a91d873aaa5627a3277d3">natsConnection_GetName</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc)</td></tr>
+<tr class="memdesc:ga731ffd265f0a91d873aaa5627a3277d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the name of this connection.  <br /></td></tr>
+<tr class="separator:ga731ffd265f0a91d873aaa5627a3277d3"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaa3fd27e6e7d8131e679d4f10e201c435" id="r_gaa3fd27e6e7d8131e679d4f10e201c435"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__conn_mgt_group.html#gaa3fd27e6e7d8131e679d4f10e201c435">natsConnection_GetRTT</a> (<a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *nc, int64_t *rtt)</td></tr>
 <tr class="memdesc:gaa3fd27e6e7d8131e679d4f10e201c435"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the round trip time between this client and the server.  <br /></td></tr>
 <tr class="separator:gaa3fd27e6e7d8131e679d4f10e201c435"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -920,7 +923,7 @@ Functions</h2></td></tr>
 <dd>
 If n is greater than 0, the buffer will be null-terminated. If the message does not fit in the buffer, the last 3 characters will be replaced with "..."".</dd>
 <dd>
-We recommend a buffer size of at least 256 bytes. There is currently no way for the user to obtain the length of the full error string, without suppling a buffer large enough to fit it. </dd></dl>
+We recommend a buffer size of at least 256 bytes. There is currently no way for the user to obtain the length of the full error string, without supplying a buffer large enough to fit it. </dd></dl>
 
 </div>
 </div>
@@ -1110,7 +1113,7 @@ We recommend a buffer size of at least 256 bytes. There is currently no way for 
       </table>
 </div><div class="memdoc">
 <p>When a connection is created to the server, the server identifies the connection's remote IP address and return it back to the client.</p>
-<dl class="section note"><dt>Note</dt><dd>The user is responsible to free memory allocated to store the client IP address.</dd>
+<dl class="section note"><dt>Note</dt><dd>The user is responsible for freeing the memory allocated for the returned client IP address string.</dd>
 <dd>
 This is supported on servers &gt;= version 2.1.6. Calling <a class="el" href="group__conn_mgt_group.html#gadafcfeeeac2733c7119981ab97b7103d" title="Returns the client&#39;s IP address as reported by the server.">natsConnection_GetClientIP()</a> with server below this version will return the <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a8a4e298931ba0698a72e397b1b57c885" title="The server does not support this action.">NATS_NO_SERVER_SUPPORT</a> error.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__conn_mgt_group.html#gaa079d4712912ed8e484fa8a60fe71bcb" title="Returns the connection local IP and port.">natsConnection_GetLocalIPAndPort</a> to get the local IP and port instead.</dd></dl>
@@ -1118,6 +1121,33 @@ This is supported on servers &gt;= version 2.1.6. Calling <a class="el" href="gr
   <table class="params">
     <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
     <tr><td class="paramname">ip</td><td>the memory location where to store the client's IP string. The user is responsible from freeing this memory. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ga731ffd265f0a91d873aaa5627a3277d3" name="ga731ffd265f0a91d873aaa5627a3277d3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga731ffd265f0a91d873aaa5627a3277d3">&#9670;&#160;</a></span>natsConnection_GetName()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> const char * natsConnection_GetName </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec">natsConnection</a> *&#160;</td>
+          <td class="paramname"><em>nc</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Returns the name of the connection set with the option <a class="el" href="group__opts_group.html#ga1c529d347be0fe2eec17c7f4698e283e" title="Sets the name.">natsOptions_SetName</a>, or <code>NULL</code> if none were set.</p>
+<dl class="section warning"><dt>Warning</dt><dd>The returned string is owned by the connection and MUST NOT be freed. The returned string should be copied if it is needed past the connection's lifetime.</dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga1c529d347be0fe2eec17c7f4698e283e" title="Sets the name.">natsOptions_SetName</a></dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">nc</td><td>the pointer to the <a class="el" href="group__types_group.html#gaf88dca0a18efb5c5e994d265a9f04aec" title="A connection to a NATS Server.">natsConnection</a> object. </td></tr>
   </table>
   </dd>
 </dl>

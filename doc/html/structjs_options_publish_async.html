@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -120,6 +120,8 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:ad43a5ebb3ea73813e13ffb24412f27ae" id="r_ad43a5ebb3ea73813e13ffb24412f27ae"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_options_publish_async.html#ad43a5ebb3ea73813e13ffb24412f27ae">StallWait</a></td></tr>
 <tr class="memdesc:ad43a5ebb3ea73813e13ffb24412f27ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">Amount of time (in milliseconds) to wait in a PublishAsync call when there is MaxPending inflight messages, default is 200 ms.  <br /></td></tr>
 <tr class="separator:ad43a5ebb3ea73813e13ffb24412f27ae"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a818eb8be6c9d38bb709bdf083604f8fe" id="r_a818eb8be6c9d38bb709bdf083604f8fe"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_options_publish_async.html#a818eb8be6c9d38bb709bdf083604f8fe">MuxReplies</a></td></tr>
+<tr class="separator:a818eb8be6c9d38bb709bdf083604f8fe"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Async pull options.</p>
@@ -206,6 +208,21 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+
+</div>
+</div>
+<a id="a818eb8be6c9d38bb709bdf083604f8fe" name="a818eb8be6c9d38bb709bdf083604f8fe"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a818eb8be6c9d38bb709bdf083604f8fe">&#9670;&#160;</a></span>MuxReplies</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool jsOptionsPublishAsync::MuxReplies</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>If <code>true</code> the replies to asynchronous publishes will be received by the connection's responses multiplexer (avoids creating an internal subscription per context). Works only if the connection has not been created with <a class="el" href="group__opts_group.html#ga70aa85319933d78c0076cc862fa3e5a6" title="Switches the use of old style requests.">natsOptions_UseOldRequestStyle</a>. </p>
 
 </div>
 </div>

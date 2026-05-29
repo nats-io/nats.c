@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -103,17 +103,26 @@ $(document).ready(function(){initNavTree('structkv_watch_options.html',''); init
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:a0535edd21b26affc0057575bafc21a07" id="r_a0535edd21b26affc0057575bafc21a07"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structkv_watch_options.html#a0535edd21b26affc0057575bafc21a07">IgnoreDeletes</a></td></tr>
+<tr class="memdesc:a0535edd21b26affc0057575bafc21a07"><td class="mdescLeft">&#160;</td><td class="mdescRight">Do not receive delete markers.  <br /></td></tr>
 <tr class="separator:a0535edd21b26affc0057575bafc21a07"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a08274f08ae96e14d9ded326e4e665649" id="r_a08274f08ae96e14d9ded326e4e665649"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structkv_watch_options.html#a08274f08ae96e14d9ded326e4e665649">IncludeHistory</a></td></tr>
+<tr class="memdesc:a08274f08ae96e14d9ded326e4e665649"><td class="mdescLeft">&#160;</td><td class="mdescRight">Receive all history per subject, not just the last one.  <br /></td></tr>
 <tr class="separator:a08274f08ae96e14d9ded326e4e665649"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac9094bce4f3c6513431ba32fb49e5605" id="r_ac9094bce4f3c6513431ba32fb49e5605"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structkv_watch_options.html#ac9094bce4f3c6513431ba32fb49e5605">MetaOnly</a></td></tr>
+<tr class="memdesc:ac9094bce4f3c6513431ba32fb49e5605"><td class="mdescLeft">&#160;</td><td class="mdescRight">Only receive the meta data of the entry.  <br /></td></tr>
 <tr class="separator:ac9094bce4f3c6513431ba32fb49e5605"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a56183d56585697d058c7eeb20bdddb66" id="r_a56183d56585697d058c7eeb20bdddb66"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66">Timeout</a></td></tr>
-<tr class="memdesc:a56183d56585697d058c7eeb20bdddb66"><td class="mdescLeft">&#160;</td><td class="mdescRight">How long to wait (in milliseconds) for some operations to complete.  <br /></td></tr>
+<tr class="memdesc:a56183d56585697d058c7eeb20bdddb66"><td class="mdescLeft">&#160;</td><td class="mdescRight">How long to wait for some operations to complete.  <br /></td></tr>
 <tr class="separator:a56183d56585697d058c7eeb20bdddb66"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a82cd6bcb7167e7f798b6f912c1fa29c9" id="r_a82cd6bcb7167e7f798b6f912c1fa29c9"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structkv_watch_options.html#a82cd6bcb7167e7f798b6f912c1fa29c9">UpdatesOnly</a></td></tr>
 <tr class="memdesc:a82cd6bcb7167e7f798b6f912c1fa29c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Only receive updates, no initial snapshot.  <br /></td></tr>
 <tr class="separator:a82cd6bcb7167e7f798b6f912c1fa29c9"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ac2a99e8be8ded778400505c6e96f6a9b" id="r_ac2a99e8be8ded778400505c6e96f6a9b"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structkv_watch_options.html#ac2a99e8be8ded778400505c6e96f6a9b">Heartbeat</a></td></tr>
+<tr class="memdesc:ac2a99e8be8ded778400505c6e96f6a9b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Heartbeat used by the internal ordered consumer.  <br /></td></tr>
+<tr class="separator:ac2a99e8be8ded778400505c6e96f6a9b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a0ae73e54b438a43961cdb0f10f3e504d" id="r_a0ae73e54b438a43961cdb0f10f3e504d"><td class="memItemLeft" align="right" valign="top">uint64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structkv_watch_options.html#a0ae73e54b438a43961cdb0f10f3e504d">ResumeFromRevision</a></td></tr>
+<tr class="memdesc:a0ae73e54b438a43961cdb0f10f3e504d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resume from this specific revision.  <br /></td></tr>
+<tr class="separator:a0ae73e54b438a43961cdb0f10f3e504d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>KeyValue watcher options object.</p>
@@ -130,6 +139,7 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+<p>If this is set to <code>true</code>, the watcher will not receive delete markers. </p>
 
 </div>
 </div>
@@ -144,6 +154,8 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+<p>If not set, only the latest value per key is delivered as the initial snapshot.</p>
+<dl class="section warning"><dt>Warning</dt><dd>This option is ignored if <a class="el" href="structkv_watch_options.html#a0ae73e54b438a43961cdb0f10f3e504d" title="Resume from this specific revision.">ResumeFromRevision</a> is set. </dd></dl>
 
 </div>
 </div>
@@ -158,6 +170,7 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+<p>The entry will not contain the actual content of entry. </p>
 
 </div>
 </div>
@@ -172,6 +185,7 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+<p>Expressed in milliseconds. </p>
 
 </div>
 </div>
@@ -186,6 +200,42 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+<p>If set to <code>true</code>, the initial snapshot will not be received. Only new updates after the watcher is created will be received.</p>
+<dl class="section note"><dt>Note</dt><dd>If this is set, <a class="el" href="structkv_watch_options.html#a08274f08ae96e14d9ded326e4e665649" title="Receive all history per subject, not just the last one.">IncludeHistory</a> option is ignored.</dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd>This option is ignored if <a class="el" href="structkv_watch_options.html#a0ae73e54b438a43961cdb0f10f3e504d" title="Resume from this specific revision.">ResumeFromRevision</a> is set. </dd></dl>
+
+</div>
+</div>
+<a id="ac2a99e8be8ded778400505c6e96f6a9b" name="ac2a99e8be8ded778400505c6e96f6a9b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac2a99e8be8ded778400505c6e96f6a9b">&#9670;&#160;</a></span>Heartbeat</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int64_t kvWatchOptions::Heartbeat</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Expressed in nanoseconds, similar to <a class="el" href="structjs_consumer_config.html#ac439828c3bedb8826a1e92de13280d53" title="Heartbeat interval expressed in number of nanoseconds.">jsConsumerConfig.Heartbeat</a>.</p>
+<dl class="section note"><dt>Note</dt><dd>If not specified, a default value of 5 seconds is used. </dd></dl>
+
+</div>
+</div>
+<a id="a0ae73e54b438a43961cdb0f10f3e504d" name="a0ae73e54b438a43961cdb0f10f3e504d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0ae73e54b438a43961cdb0f10f3e504d">&#9670;&#160;</a></span>ResumeFromRevision</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">uint64_t kvWatchOptions::ResumeFromRevision</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>If this is set to a positive value, the watcher will resume from this specific revision.</p>
+<dl class="section note"><dt>Note</dt><dd>This is intended for watchers that have restarted watching and have maintained some state of where they were in the watch.</dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd><a class="el" href="structkv_watch_options.html#a08274f08ae96e14d9ded326e4e665649" title="Receive all history per subject, not just the last one.">IncludeHistory</a> and <a class="el" href="structkv_watch_options.html#a82cd6bcb7167e7f798b6f912c1fa29c9" title="Only receive updates, no initial snapshot.">UpdatesOnly</a> options will be ignored. </dd></dl>
 
 </div>
 </div>

@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -163,7 +163,9 @@ Enumerations</h2></td></tr>
 &#160;&#160;<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a37d80c8232775339a32805fe93e0ea7f">NATS_MISSED_HEARTBEAT</a>
 , <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ac1eb33007d16930e74c2fa3b22761635">NATS_LIMIT_REACHED</a>
 , <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80aec45b93e3dd0ca1b1bc878730ea81c31">NATS_PIN_ID_MISMATCH</a>
-, <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a57e2c2023e6a7730b9e960ddebd73f09">NATS_MAX_STATUS_VALUE</a>
+, <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80aa8515acb3a93eb71cd051931011dbc9a">NATS_INVALID_CONFIG</a>
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80a57e2c2023e6a7730b9e960ddebd73f09">NATS_MAX_STATUS_VALUE</a>
 <br />
  }</td></tr>
 <tr class="memdesc:a36c934157b663b7b5fb5d6609c897c80"><td class="mdescLeft">&#160;</td><td class="mdescRight">Status returned by most of the APIs.  <a href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">More...</a><br /></td></tr>
@@ -373,6 +375,15 @@ Enumerations</h2></td></tr>
 , <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a85d46a574d4a3a1a7d63bf0c891724ba">JSMessageTTLInvalidErr</a> = 10165
 , <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a0ff642cd118d8fdde5da78bb06fee48d">JSMessageTTLDisabledErr</a> = 10166
 , <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a1c6f821ff093a7d00615a3625cbd898c">JSStreamTooManyRequestsErr</a> = 10167
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ad542535967cb74985ffa6c9055a3ef84">JSBatchPublishNotEnabledErr</a> = 10174
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70af1df65d177c1df8bcf7818096f27c1d5">JSBatchPublishIncompleteErr</a> = 10176
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a1c03161c0f3bbdc760d2ca69a9300b5e">JSBatchPublishInvalidIDErr</a> = 10179
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aa0832767c084547cecc414cb6d5051e5">JSBatchPublishSequenceMissingErr</a> = 10175
+, <br />
+&#160;&#160;<a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a8b79671c1b41cb32094d39de453d5e75">JSBatchPublishSequenceExceedsLimitErr</a> = 10199
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a3b9417d8039b90e9ba7f380c60f200b8">JSBatchPublishUnsupportedHeaderErr</a> = 10177
+, <a class="el" href="status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ac4a03c6c1d9461ef1010fd41da718022">JSBatchPublishDuplicateMessageIDErr</a> = 10201
 <br />
  }</td></tr>
 <tr class="separator:a10731415ffcd3e2330df10c4d5fd3d70"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -497,6 +508,8 @@ Enumerations</h2></td></tr>
 <tr><td class="fieldname"><a id="a36c934157b663b7b5fb5d6609c897c80ac1eb33007d16930e74c2fa3b22761635" name="a36c934157b663b7b5fb5d6609c897c80ac1eb33007d16930e74c2fa3b22761635"></a>NATS_LIMIT_REACHED&#160;</td><td class="fielddoc"><p>Attempt to receive messages than allowed by the byte limit, for instance in <a class="el" href="group__js_sub_group.html#ga938d410675ab09fa8c21896ab61bed0a" title="Starts a Pull based JetStream subscription, and delivers messages to a user callback asynchronously.">js_PullSubscribeAsync()</a>. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="a36c934157b663b7b5fb5d6609c897c80aec45b93e3dd0ca1b1bc878730ea81c31" name="a36c934157b663b7b5fb5d6609c897c80aec45b93e3dd0ca1b1bc878730ea81c31"></a>NATS_PIN_ID_MISMATCH&#160;</td><td class="fielddoc"><p>Pin ID sent in the request does not match the currently pinned consumer subscriber ID on the server. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a36c934157b663b7b5fb5d6609c897c80aa8515acb3a93eb71cd051931011dbc9a" name="a36c934157b663b7b5fb5d6609c897c80aa8515acb3a93eb71cd051931011dbc9a"></a>NATS_INVALID_CONFIG&#160;</td><td class="fielddoc"><p>The config is not valid for the operation. For example, requesting counters when AllowMsgCounter has not been set on the stream configuration. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="a36c934157b663b7b5fb5d6609c897c80a57e2c2023e6a7730b9e960ddebd73f09" name="a36c934157b663b7b5fb5d6609c897c80a57e2c2023e6a7730b9e960ddebd73f09"></a>NATS_MAX_STATUS_VALUE&#160;</td><td class="fielddoc"><p>Maximum status value, this element MUST be the last one. </p>
 </td></tr>
@@ -843,6 +856,20 @@ Enumerations</h2></td></tr>
 <tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a0ff642cd118d8fdde5da78bb06fee48d" name="a10731415ffcd3e2330df10c4d5fd3d70a0ff642cd118d8fdde5da78bb06fee48d"></a>JSMessageTTLDisabledErr&#160;</td><td class="fielddoc"><p>Per-message TTL is disabled. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a1c6f821ff093a7d00615a3625cbd898c" name="a10731415ffcd3e2330df10c4d5fd3d70a1c6f821ff093a7d00615a3625cbd898c"></a>JSStreamTooManyRequestsErr&#160;</td><td class="fielddoc"><p>Too many requests. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70ad542535967cb74985ffa6c9055a3ef84" name="a10731415ffcd3e2330df10c4d5fd3d70ad542535967cb74985ffa6c9055a3ef84"></a>JSBatchPublishNotEnabledErr&#160;</td><td class="fielddoc"><p>Batch publish not enabled on stream. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70af1df65d177c1df8bcf7818096f27c1d5" name="a10731415ffcd3e2330df10c4d5fd3d70af1df65d177c1df8bcf7818096f27c1d5"></a>JSBatchPublishIncompleteErr&#160;</td><td class="fielddoc"><p>Batch publish is incomplete and was abandoned. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a1c03161c0f3bbdc760d2ca69a9300b5e" name="a10731415ffcd3e2330df10c4d5fd3d70a1c03161c0f3bbdc760d2ca69a9300b5e"></a>JSBatchPublishInvalidIDErr&#160;</td><td class="fielddoc"><p>Batch publish ID is invalid (exceeds 64 characters) </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70aa0832767c084547cecc414cb6d5051e5" name="a10731415ffcd3e2330df10c4d5fd3d70aa0832767c084547cecc414cb6d5051e5"></a>JSBatchPublishSequenceMissingErr&#160;</td><td class="fielddoc"><p>Batch publish sequence is missing. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a8b79671c1b41cb32094d39de453d5e75" name="a10731415ffcd3e2330df10c4d5fd3d70a8b79671c1b41cb32094d39de453d5e75"></a>JSBatchPublishSequenceExceedsLimitErr&#160;</td><td class="fielddoc"><p>Batch publish sequence exceeds server limit (default 1000) </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70a3b9417d8039b90e9ba7f380c60f200b8" name="a10731415ffcd3e2330df10c4d5fd3d70a3b9417d8039b90e9ba7f380c60f200b8"></a>JSBatchPublishUnsupportedHeaderErr&#160;</td><td class="fielddoc"><p>Batch publish unsupported header used (Nats-Expected-Last-Msg-Id) </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a10731415ffcd3e2330df10c4d5fd3d70ac4a03c6c1d9461ef1010fd41da718022" name="a10731415ffcd3e2330df10c4d5fd3d70ac4a03c6c1d9461ef1010fd41da718022"></a>JSBatchPublishDuplicateMessageIDErr&#160;</td><td class="fielddoc"><p>Batch publish contains duplicate message id (Nats-Msg-Id) </p>
 </td></tr>
 </table>
 

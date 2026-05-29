@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.13.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -120,12 +120,17 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:aeefec1d2c7644562d23b87e55bf2e253" id="r_aeefec1d2c7644562d23b87e55bf2e253"><td class="memItemLeft" align="right" valign="top">uint64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_pub_options.html#aeefec1d2c7644562d23b87e55bf2e253">ExpectLastSubjectSeq</a></td></tr>
 <tr class="memdesc:aeefec1d2c7644562d23b87e55bf2e253"><td class="mdescLeft">&#160;</td><td class="mdescRight">Expected last message sequence for the subject in the stream.  <br /></td></tr>
 <tr class="separator:aeefec1d2c7644562d23b87e55bf2e253"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a932874ab9567150ee4e73fabd6e12de5" id="r_a932874ab9567150ee4e73fabd6e12de5"><td class="memItemLeft" align="right" valign="top">const char *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_pub_options.html#a932874ab9567150ee4e73fabd6e12de5">ExpectLastSubjectSeqSubject</a></td></tr>
+<tr class="memdesc:a932874ab9567150ee4e73fabd6e12de5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Expected subject for the sequence set with 'ExpectLastSubjectSeq'.  <br /></td></tr>
+<tr class="separator:a932874ab9567150ee4e73fabd6e12de5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a740a7edee8c832a75b75fded6046ba90" id="r_a740a7edee8c832a75b75fded6046ba90"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_pub_options.html#a740a7edee8c832a75b75fded6046ba90">ExpectNoMessage</a></td></tr>
 <tr class="memdesc:a740a7edee8c832a75b75fded6046ba90"><td class="mdescLeft">&#160;</td><td class="mdescRight">Expected no message (that is, sequence == 0) for the subject in the stream.  <br /></td></tr>
 <tr class="separator:a740a7edee8c832a75b75fded6046ba90"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a07c8ec214966ef7ce0bd48a8e8008f9d" id="r_a07c8ec214966ef7ce0bd48a8e8008f9d"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_pub_options.html#a07c8ec214966ef7ce0bd48a8e8008f9d">MsgTTL</a></td></tr>
 <tr class="memdesc:a07c8ec214966ef7ce0bd48a8e8008f9d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Message time to live (TTL) in milliseconds, used by the server to expire the message. Requires nats-server v2.11.0 or later.  <br /></td></tr>
 <tr class="separator:a07c8ec214966ef7ce0bd48a8e8008f9d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:acc467475394ac1b1d33d70d6034cf2ff" id="r_acc467475394ac1b1d33d70d6034cf2ff"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structjs_schedule_options.html">jsScheduleOptions</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structjs_pub_options.html#acc467475394ac1b1d33d70d6034cf2ff">Schedule</a></td></tr>
+<tr class="separator:acc467475394ac1b1d33d70d6034cf2ff"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>JetStream publish options.</p>
@@ -218,6 +223,20 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="a932874ab9567150ee4e73fabd6e12de5" name="a932874ab9567150ee4e73fabd6e12de5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a932874ab9567150ee4e73fabd6e12de5">&#9670;&#160;</a></span>ExpectLastSubjectSeqSubject</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">const char* jsPubOptions::ExpectLastSubjectSeqSubject</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a740a7edee8c832a75b75fded6046ba90" name="a740a7edee8c832a75b75fded6046ba90"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a740a7edee8c832a75b75fded6046ba90">&#9670;&#160;</a></span>ExpectNoMessage</h2>
 
@@ -243,6 +262,21 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+
+</div>
+</div>
+<a id="acc467475394ac1b1d33d70d6034cf2ff" name="acc467475394ac1b1d33d70d6034cf2ff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acc467475394ac1b1d33d70d6034cf2ff">&#9670;&#160;</a></span>Schedule</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="structjs_schedule_options.html">jsScheduleOptions</a> jsPubOptions::Schedule</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Schedule options for the message, see <a class="el" href="structjs_schedule_options.html">jsScheduleOptions</a>. Requires nats-server v2.14.0 or later. </p>
 
 </div>
 </div>

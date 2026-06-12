@@ -1029,6 +1029,18 @@ natsOptions_SetAllowReconnect(natsOptions *opts, bool allow)
 }
 
 natsStatus
+natsOptions_SetReconnectOnProtocolError(natsOptions *opts, bool reconnect)
+{
+    LOCK_AND_CHECK_OPTIONS(opts, 0);
+
+    opts->reconnectOnProtocolError = reconnect;
+
+    UNLOCK_OPTS(opts);
+
+    return NATS_OK;
+}
+
+natsStatus
 natsOptions_SetMaxReconnect(natsOptions *opts, int maxReconnect)
 {
     LOCK_AND_CHECK_OPTIONS(opts, 0);

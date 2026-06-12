@@ -3569,6 +3569,41 @@ natsOptions_SetIOBufSize(natsOptions *opts, int ioBufSize);
 NATS_EXTERN natsStatus
 natsOptions_SetAllowReconnect(natsOptions *opts, bool allow);
 
+/** \brief Controls whether a generic server protocol error triggers a reconnect
+ *  instead of permanently closing the connection.
+ *
+ * When a `NATS Server` sends a generic `-ERR` on an established connection —
+ * for example `'Maximum Connections Exceeded'` when the server's connection
+ * limit is briefly hit — the default behaviour is to call the closed callback
+ * and stop all reconnect attempts, regardless of
+ * #natsOptions_SetAllowReconnect() or #natsOptions_SetMaxReconnect() settings.
+ *
+ * Setting this option to `true` changes that behaviour: the library treats
+ * such errors the same as a dropped connection and routes them through the
+ * normal reconnect path. The disconnected callback fires and the library
+ * attempts to reconnect according to the configured reconnect settings (see
+ * #natsOptions_SetMaxReconnect() and #natsOptions_SetReconnectWait()). With
+ * `maxReconnect` set to `-1` (unlimited retries) this means the client will
+ * keep retrying indefinitely until the server becomes reachable again.
+ *
+ * \note This option only affects generic `-ERR` messages that are not
+ * otherwise handled. `'Stale Connection'` already triggers a reconnect
+ * unconditionally; authorization errors and permissions violations cause
+ * an immediate close regardless of this setting.
+ *
+ * \note The default is `false`, preserving the original behaviour so that
+ * existing users are unaffected.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param reconnect `true` to reconnect on generic protocol errors,
+ * `false` (default) to permanently close the connection.
+ *
+ * @see natsOptions_SetAllowReconnect()
+ * @see natsOptions_SetMaxReconnect()
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetReconnectOnProtocolError(natsOptions *opts, bool reconnect);
+
 /** \brief Sets the maximum number of reconnect attempts.
  *
  * Specifies the maximum number of reconnect attempts.

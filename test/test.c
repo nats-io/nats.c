@@ -18225,6 +18225,99 @@ void test_ServerErrorClosesConnection(void)
     _destroyDefaultThreadArgs(&arg);
 }
 
+void test_GenericServerErrReconnectsWithReconnectOnProtocolError(void)
+{
+    natsStatus          s = NATS_OK;
+    natsSock            sock = NATS_SOCK_INVALID;
+    natsThread          *t = NULL;
+    struct threadArg    arg;
+    natsSockCtx         ctx;
+    bool                closedBeforeCleanup = false;
+    const char          *err = "-ERR 'Maximum Connections Exceeded'\r\n";
+
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, natsOptions_Create(&(arg.opts)));
+    IFOK(s, natsOptions_SetMaxReconnect(arg.opts, -1));
+    IFOK(s, natsOptions_SetReconnectWait(arg.opts, 20));
+    IFOK(s, natsOptions_SetReconnectJitter(arg.opts, 0, 0));
+    IFOK(s, natsOptions_SetReconnectOnProtocolError(arg.opts, true));
+    IFOK(s, natsOptions_SetDisconnectedCB(arg.opts, _disconnectedCb, &arg));
+    IFOK(s, natsOptions_SetClosedCB(arg.opts, _closedCb, &arg));
+    if (s != NATS_OK)
+        FAIL("@@ Unable to setup test!");
+
+    // control==7: client thread connects, then blocks until arg.done is set,
+    // then calls natsConnection_Destroy (which fires the closed callback).
+    arg.control = 7;
+
+    test("Generic -ERR with reconnectOnProtocolError triggers reconnect, not close: ")
+
+    s = _startMockupServer(&sock, "localhost", "4222");
+    IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
+
+    if ((s == NATS_OK)
+        && (((ctx.fd = accept(sock, NULL, NULL)) == NATS_SOCK_INVALID)
+            || (natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK)))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    if (s == NATS_OK)
+    {
+        char info[1024];
+        char buffer[1024];
+
+        strncpy(info,
+                "INFO {\"server_id\":\"foobar\",\"version\":\"latest\","
+                "\"go\":\"latest\",\"host\":\"localhost\",\"port\":4222,"
+                "\"auth_required\":false,\"tls_required\":false,"
+                "\"max_payload\":1048576}\r\n",
+                sizeof(info));
+
+        s = natsSock_WriteFully(&ctx, info, (int) strlen(info));
+        if (s == NATS_OK)
+        {
+            memset(buffer, 0, sizeof(buffer));
+            s = natsSock_ReadLine(&ctx, buffer, sizeof(buffer));
+            IFOK(s, natsSock_ReadLine(&ctx, buffer, sizeof(buffer)));
+        }
+        IFOK(s, natsSock_WriteFully(&ctx, _PONG_PROTO_, _PONG_PROTO_LEN_));
+
+        if (s == NATS_OK)
+        {
+            nats_Sleep(50);
+            s = natsSock_WriteFully(&ctx, err, (int) strlen(err));
+        }
+
+        // Wait for the disconnect callback: reconnect path must have fired.
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.disconnected)
+            s = natsCondition_TimedWait(arg.c, arg.m, 5000);
+        // Capture closed state before cleanup: must still be false since
+        // the reconnect path does not call _close.
+        closedBeforeCleanup = arg.closed;
+        // Unblock the client thread so it can Destroy the connection.
+        arg.done = true;
+        natsCondition_Signal(arg.c);
+        natsMutex_Unlock(arg.m);
+
+        natsSock_Close(ctx.fd);
+    }
+    natsSock_Close(sock);
+
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+
+    testCond((s == NATS_OK) && arg.disconnected && !closedBeforeCleanup);
+
+    _waitForConnClosed(&arg);
+    _destroyDefaultThreadArgs(&arg);
+}
+
 void test_NoEcho(void)
 {
     natsStatus          s;

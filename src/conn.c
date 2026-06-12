@@ -3183,18 +3183,12 @@ natsConn_processErr(natsConnection *nc, char *buf, int bufLen)
     }
     else
     {
-        bool reconnectOnErr = false;
-
         natsConn_Lock(nc);
         nc->err = NATS_ERR;
         snprintf(nc->errStr, sizeof(nc->errStr), "%s", error);
         natsConn_Unlock(nc);
 
-        natsOptions_lock(nc->opts);
-        reconnectOnErr = nc->opts->reconnectOnProtocolError;
-        natsOptions_unlock(nc->opts);
-
-        if (reconnectOnErr)
+        if (nc->opts->reconnectOnProtocolError)
             _processOpError(nc, NATS_ERR, false);
         else
             close = true;

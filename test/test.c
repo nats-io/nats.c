@@ -18314,6 +18314,7 @@ void test_GenericServerErrReconnectsWithReconnectOnProtocolError(void)
 
     testCond((s == NATS_OK) && arg.disconnected && !closedBeforeCleanup);
 
+    _waitForConnClosed(&arg);
     _destroyDefaultThreadArgs(&arg);
 }
 

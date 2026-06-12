@@ -254,6 +254,7 @@ struct __natsOptions
     bool                    verbose;
     bool                    pedantic;
     bool                    allowReconnect;
+    bool                    reconnectOnProtocolError;
     bool                    secure;
     bool                    secureExplicitlySet;
     bool                    tlsHandshakeFirst;

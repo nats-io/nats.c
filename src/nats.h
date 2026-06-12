@@ -3569,6 +3569,20 @@ natsOptions_SetIOBufSize(natsOptions *opts, int ioBufSize);
 NATS_EXTERN natsStatus
 natsOptions_SetAllowReconnect(natsOptions *opts, bool allow);
 
+/** \brief Indicates if a generic protocol error from the server should
+ *  trigger a reconnect attempt rather than permanently closing the connection.
+ *
+ *  By default (`false`) a generic server -ERR closes the connection and fires
+ *  the closed callback, preserving the original behaviour. Set to `true` to
+ *  treat such errors like a disconnect and attempt to reconnect according to
+ *  the configured reconnect settings.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param reconnect `true` to reconnect on protocol errors, `false` (default) to close.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetReconnectOnProtocolError(natsOptions *opts, bool reconnect);
+
 /** \brief Sets the maximum number of reconnect attempts.
  *
  * Specifies the maximum number of reconnect attempts.

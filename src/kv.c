@@ -267,6 +267,15 @@ js_CreateKeyValue(kvStore **new_kv, jsCtx *js, kvConfig *cfg)
         sc.AllowDirect = true;
         sc.RePublish = cfg->RePublish;
 
+        // LimitMarkerTTL enables per-message TTL on the bucket (so
+        // kvStore_CreateWithTTL works) and auto-expires the
+        // delete/purge tombstone markers after the given duration (nanoseconds).
+        if (cfg->LimitMarkerTTL > 0)
+        {
+            sc.AllowMsgTTL = true;
+            sc.SubjectDeleteMarkerTTL = cfg->LimitMarkerTTL;
+        }
+
         if (cfg->Mirror != NULL)
         {
             jsStreamSource *m = cfg->Mirror;
@@ -684,8 +693,33 @@ kvStore_PutString(uint64_t *rev, kvStore *kv, const char *key, const char *data)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// CAS update carrying an optional per-key TTL (milliseconds). ttl <= 0 means
+// "no TTL" (identical to the pre-existing update). The TTL rides
+// jsPubOptions.MsgTTL; combining it with the CAS predicate in the same publish
+// is what callers would otherwise have to hand-roll.
 natsStatus
-kvStore_Create(uint64_t *rev, kvStore *kv, const char *key, const void *data, int len)
+kvStore_UpdateWithTTL(uint64_t *rev, kvStore *kv, const char *key, const void *data, int len,
+                      uint64_t last, int64_t ttl)
+{
+    natsStatus      s;
+    jsPubOptions    po;
+
+    jsPubOptions_Init(&po);
+    if (last == 0)
+        po.ExpectNoMessage = true;
+    else
+        po.ExpectLastSubjectSeq = last;
+    if (ttl > 0)
+        po.MsgTTL = ttl;
+    s = _putEntry(rev, kv, &po, key, data, len);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+// create-if-absent carrying an optional per-key TTL. Reuses the marker-aware
+// retry so a re-create over a DEL/PURGE/MaxAge tombstone succeeds AND keeps the
+// TTL on both the initial attempt and the re-create-over-marker attempt.
+natsStatus
+kvStore_CreateWithTTL(uint64_t *rev, kvStore *kv, const char *key, const void *data, int len, int64_t ttl)
 {
     natsStatus s;
     natsStatus ls;
@@ -695,7 +729,7 @@ kvStore_Create(uint64_t *rev, kvStore *kv, const char *key, const void *data, in
     if (kv == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    s = kvStore_Update(rev, kv, key, data, len, 0);
+    s = kvStore_UpdateWithTTL(rev, kv, key, data, len, 0, ttl);
     if (s == NATS_OK)
         return s;
 
@@ -705,10 +739,17 @@ kvStore_Create(uint64_t *rev, kvStore *kv, const char *key, const void *data, in
     if (ls == NATS_OK)
     {
         if (deleted)
-            s = kvStore_Update(rev, kv, key, data, len, kvEntry_Revision(e));
+            s = kvStore_UpdateWithTTL(rev, kv, key, data, len, kvEntry_Revision(e), ttl);
 
         kvEntry_Destroy(e);
     }
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+kvStore_Create(uint64_t *rev, kvStore *kv, const char *key, const void *data, int len)
+{
+    natsStatus s = kvStore_CreateWithTTL(rev, kv, key, data, len, 0);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -720,17 +761,16 @@ kvStore_CreateString(uint64_t *rev, kvStore *kv, const char *key, const char *da
 }
 
 natsStatus
+kvStore_CreateStringWithTTL(uint64_t *rev, kvStore *kv, const char *key, const char *data, int64_t ttl)
+{
+    natsStatus s = kvStore_CreateWithTTL(rev, kv, key, (const void*) data, (int) strlen(data), ttl);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
 kvStore_Update(uint64_t *rev, kvStore *kv, const char *key, const void *data, int len, uint64_t last)
 {
-    natsStatus      s;
-    jsPubOptions    po;
-
-    jsPubOptions_Init(&po);
-    if (last == 0)
-        po.ExpectNoMessage = true;
-    else
-        po.ExpectLastSubjectSeq = last;
-    s = _putEntry(rev, kv, &po, key, data, len);
+    natsStatus s = kvStore_UpdateWithTTL(rev, kv, key, data, len, last, 0);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -738,6 +778,13 @@ natsStatus
 kvStore_UpdateString(uint64_t *rev, kvStore *kv, const char *key, const char *data, uint64_t last)
 {
     natsStatus s = kvStore_Update(rev, kv, key, (const void*) data, (int) strlen(data), last);
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+kvStore_UpdateStringWithTTL(uint64_t *rev, kvStore *kv, const char *key, const char *data, uint64_t last, int64_t ttl)
+{
+    natsStatus s = kvStore_UpdateWithTTL(rev, kv, key, (const void*) data, (int) strlen(data), last, ttl);
     return NATS_UPDATE_ERR_STACK(s);
 }
 
@@ -770,10 +817,13 @@ _delete(kvStore *kv, const char *key, bool purge, const kvPurgeOptions *opts)
             s = natsMsgHeader_Set(msg, kvOpHeader, kvOpDeleteStr);
         }
     }
-    if (purge && (opts != NULL) && (opts->Timeout > 0))
+    if (purge && (opts != NULL) && ((opts->Timeout > 0) || (opts->TTL > 0)))
     {
         jsPubOptions_Init(&o);
-        o.MaxWait = opts->Timeout;
+        if (opts->Timeout > 0)
+            o.MaxWait = opts->Timeout;
+        if (opts->TTL > 0)              // PurgeTTL: the purge marker auto-expires
+            o.MsgTTL = opts->TTL;
         po = &o;
     }
     IFOK(s, js_PublishMsg(NULL, kv->js, msg, po, NULL));

@@ -1601,6 +1601,12 @@ typedef struct kvConfig
         jsStreamSource  **Sources;
         int             SourcesLen;
 
+        // When > 0 (nanoseconds), enables per-message TTL on the bucket's
+        // backing stream and auto-expires the
+        // delete/purge tombstone markers after this duration. Required for
+        // kvStore_CreateWithTTL() to take effect. Requires nats-server v2.11+.
+        int64_t         LimitMarkerTTL;
+
 } kvConfig;
 
 /**
@@ -1688,6 +1694,14 @@ typedef struct kvPurgeOptions
         // markers regardless of their age.
         // The value is expressed as a time in nanoseconds.
         int64_t         DeleteMarkersOlderThan;
+
+        // When > 0, the purge marker
+        // written by kvStore_Purge() is published with this per-message TTL (in
+        // milliseconds), so the server auto-expires the purge tombstone after the
+        // duration. Requires the bucket created with kvConfig.LimitMarkerTTL > 0 and
+        // nats-server v2.11+. Ignored by kvStore_Delete() (delete markers use the
+        // bucket-level LimitMarkerTTL).
+        int64_t         TTL;
 
 } kvPurgeOptions;
 
@@ -8489,6 +8503,33 @@ kvStore_Create(uint64_t *rev, kvStore *kv, const char *key, const void *data, in
 NATS_EXTERN natsStatus
 kvStore_CreateString(uint64_t *rev, kvStore *kv, const char *key, const char *data);
 
+/** \brief Create-if-absent with a per-key TTL.
+ *
+ * Like #kvStore_Create, but the new value is published with a per-message TTL so the
+ * server expires this key after `ttl` milliseconds. Re-creating over an existing
+ * delete/purge/MaxAge marker succeeds and keeps the TTL (the marker-aware create path
+ * is reused). Requires the bucket to have been created with `kvConfig.LimitMarkerTTL > 0`
+ * and nats-server v2.11+; otherwise the server rejects the TTL (JSMessageTTLDisabledErr).
+ * The server requires the TTL to be at least 1 second (1000 ms); a smaller value is
+ * rejected with JSMessageTTLInvalidErr.
+ *
+ * @param rev the location where to store the revision of this value, or `NULL`.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ * @param data the pointer to the data in memory.
+ * @param len the number of bytes to copy from the data's memory location.
+ * @param ttl per-key time-to-live in milliseconds (`<= 0` means no TTL — same as #kvStore_Create).
+ */
+NATS_EXTERN natsStatus
+kvStore_CreateWithTTL(uint64_t *rev, kvStore *kv, const char *key, const void *data, int len, int64_t ttl);
+
+/** \brief String variant of #kvStore_CreateWithTTL.
+ *
+ * \note Equivalent of calling #kvStore_CreateWithTTL with `(int) strlen(data)`.
+ */
+NATS_EXTERN natsStatus
+kvStore_CreateStringWithTTL(uint64_t *rev, kvStore *kv, const char *key, const char *data, int64_t ttl);
+
 /** \brief Updates the value for the key into the store if and only if the latest revision matches.
  *
  * Updates the value for the key into the store if and only if the latest revision matches.
@@ -8519,6 +8560,33 @@ kvStore_Update(uint64_t *rev, kvStore *kv, const char *key, const void *data, in
  */
 NATS_EXTERN natsStatus
 kvStore_UpdateString(uint64_t *rev, kvStore *kv, const char *key, const char *data, uint64_t last);
+
+/** \brief Updates a key with a per-key TTL if and only if the latest revision matches.
+ *
+ * Like #kvStore_Update, but the new value is published with a per-message TTL so the
+ * server expires this key after `ttl` milliseconds. The TTL is set on the same CAS
+ * publish, so a plain update can adopt a TTL atomically. Requires the bucket to have
+ * been created with `kvConfig.LimitMarkerTTL > 0` and nats-server v2.11+; otherwise the
+ * server rejects the TTL (JSMessageTTLDisabledErr). The server requires the TTL to be at
+ * least 1 second (1000 ms); a smaller value is rejected with JSMessageTTLInvalidErr.
+ *
+ * @param rev the location where to store the revision of this value, or `NULL`.
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ * @param data the pointer to the data in memory.
+ * @param len the number of bytes to copy from the data's memory location.
+ * @param last the expected latest revision prior to the update.
+ * @param ttl per-key time-to-live in milliseconds (`<= 0` means no TTL — same as #kvStore_Update).
+ */
+NATS_EXTERN natsStatus
+kvStore_UpdateWithTTL(uint64_t *rev, kvStore *kv, const char *key, const void *data, int len, uint64_t last, int64_t ttl);
+
+/** \brief String variant of #kvStore_UpdateWithTTL.
+ *
+ * \note Equivalent of calling #kvStore_UpdateWithTTL with `(int) strlen(data)`.
+ */
+NATS_EXTERN natsStatus
+kvStore_UpdateStringWithTTL(uint64_t *rev, kvStore *kv, const char *key, const char *data, uint64_t last, int64_t ttl);
 
 /** \brief Deletes a key by placing a delete marker and leaving all revisions.
  *

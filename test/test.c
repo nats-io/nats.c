@@ -37400,6 +37400,158 @@ void test_KeyValueLimitMarkerTTL(void)
     JS_TEARDOWN;
 }
 
+// Exercises the per-key TTL write helpers (kvStore_CreateWithTTL /
+// kvStore_CreateStringWithTTL / kvStore_UpdateWithTTL / kvStore_UpdateStringWithTTL),
+// the kvConfig.LimitMarkerTTL bucket option, and kvPurgeOptions.TTL. Requires
+// nats-server v2.11+ (per-message TTL); JS_SETUP(2,11,0) skips it on older servers.
+void test_KeyValueCreateWithTTL(void)
+{
+    natsStatus      s;
+    kvStore         *kv  = NULL;
+    kvEntry         *e   = NULL;
+    kvConfig        kvc;
+    kvPurgeOptions  po;
+    uint64_t        rev  = 0;
+
+    JS_SETUP(2, 11, 0);
+
+    test("Create KV with LimitMarkerTTL: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "KVCTTL";
+    kvc.LimitMarkerTTL = (int64_t)1000000000; // 1s (ns): enables per-message TTL + marker auto-expire
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("CreateWithTTL rejects NULL kv: ");
+    s = kvStore_CreateWithTTL(NULL, NULL, "k", (const void*)"v", 1, 1000);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("UpdateWithTTL rejects NULL kv: ");
+    s = kvStore_UpdateWithTTL(NULL, NULL, "k", (const void*)"v", 1, 0, 1000);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("CreateStringWithTTL k=v ttl=1s: ");
+    s = kvStore_CreateStringWithTTL(&rev, kv, "k", "v", 1000);
+    testCond((s == NATS_OK) && (rev == 1));
+
+    test("Get before expiry returns the value: ");
+    s = kvStore_Get(&e, kv, "k");
+    testCond((s == NATS_OK) && (e != NULL)
+        && (strcmp(kvEntry_ValueString(e), "v") == 0)
+        && (kvEntry_Operation(e) == kvOp_Put));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("CreateWithTTL over a live key fails (create-if-absent preserved): ");
+    s = kvStore_CreateStringWithTTL(&rev, kv, "k", "v-dup", 1000);
+    testCond(s != NATS_OK);
+    nats_clearLastError();
+
+    test("Key expires server-side after its per-key TTL: ");
+    nats_Sleep(2500);
+    s = kvStore_Get(&e, kv, "k");
+    testCond((s == NATS_NOT_FOUND) && (e == NULL));
+    nats_clearLastError();
+
+    // Re-create over the (expired) tombstone must succeed on the first attempt — the
+    // marker-aware create retry the helper inherits from kvStore_Create — and keep the TTL.
+    test("Re-create over the expired marker (first attempt): ");
+    s = kvStore_CreateStringWithTTL(&rev, kv, "k", "v2", 1000);
+    testCond(s == NATS_OK);
+
+    test("Get the re-created value: ");
+    s = kvStore_Get(&e, kv, "k");
+    testCond((s == NATS_OK) && (e != NULL)
+        && (strcmp(kvEntry_ValueString(e), "v2") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    // kvStore_UpdateWithTTL: set a per-key TTL on an existing (no-TTL) key via a CAS
+    // update — the update-side counterpart of kvStore_CreateWithTTL (a plain
+    // kvStore_Update cannot add a TTL).
+    test("Seed a no-TTL key for UpdateWithTTL: ");
+    s = kvStore_CreateString(&rev, kv, "u", "u0");
+    testCond((s == NATS_OK) && (rev >= 1));
+
+    test("UpdateWithTTL sets a per-key TTL under a CAS predicate: ");
+    s = kvStore_UpdateWithTTL(&rev, kv, "u", (const void*)"u1", 2, rev, 1000);
+    testCond(s == NATS_OK);
+
+    test("Updated value is present before expiry: ");
+    s = kvStore_Get(&e, kv, "u");
+    testCond((s == NATS_OK) && (e != NULL)
+        && (strcmp(kvEntry_ValueString(e), "u1") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("UpdateStringWithTTL writes the value under a CAS predicate: ");
+    s = kvStore_UpdateStringWithTTL(&rev, kv, "u", "u2", rev, 1000);
+    testCond(s == NATS_OK);
+
+    test("String-updated value is present before expiry: ");
+    s = kvStore_Get(&e, kv, "u");
+    testCond((s == NATS_OK) && (e != NULL)
+        && (strcmp(kvEntry_ValueString(e), "u2") == 0));
+    kvEntry_Destroy(e);
+    e = NULL;
+
+    test("Key expires server-side after the update's per-key TTL: ");
+    nats_Sleep(2500);
+    s = kvStore_Get(&e, kv, "u");
+    testCond((s == NATS_NOT_FOUND) && (e == NULL));
+    nats_clearLastError();
+
+    // E: a stale CAS predicate (wrong `last`) must fail rather than overwrite.
+    test("Seed a key for the stale-CAS check: ");
+    s = kvStore_CreateString(&rev, kv, "c", "c0");
+    testCond(s == NATS_OK);
+
+    test("UpdateWithTTL fails on a stale CAS revision: ");
+    s = kvStore_UpdateWithTTL(&rev, kv, "c", (const void*)"c1", 2, rev + 100, 1000);
+    testCond(s != NATS_OK);
+    nats_clearLastError();
+
+    // D: the server requires a per-key TTL of at least 1 second; a sub-second ttl is
+    // rejected. (The constraint is a 1s minimum, not whole-seconds — see the 1500ms case
+    // below.) The marker-aware create path runs a _getEntry on retry which clears the
+    // server's error text, so assert the server message on the single-publish update path.
+    test("Sub-second per-key TTL is rejected on create: ");
+    s = kvStore_CreateStringWithTTL(&rev, kv, "sub", "x", 500);
+    testCond(s != NATS_OK);
+    nats_clearLastError();
+
+    test("Sub-second per-key TTL on update surfaces 'invalid per-message TTL': ");
+    s = kvStore_CreateString(&rev, kv, "sub2", "s0");
+    if (s == NATS_OK)
+        s = kvStore_UpdateWithTTL(&rev, kv, "sub2", (const void*)"s1", 2, rev, 500);
+    testCond((s != NATS_OK)
+        && (strstr(nats_GetLastError(NULL), "invalid per-message TTL") != NULL));
+    nats_clearLastError();
+
+    // A non-whole-second ttl >= 1s is accepted (confirms the 1s-minimum rule).
+    test("Non-whole-second TTL (1500ms) is accepted: ");
+    s = kvStore_CreateStringWithTTL(&rev, kv, "ws", "x", 1500);
+    testCond(s == NATS_OK);
+    nats_clearLastError();
+
+    test("Purge with PurgeTTL: ");
+    kvPurgeOptions_Init(&po);
+    po.TTL = 1000; // ms: purge marker auto-expires
+    s = kvStore_Purge(kv, "k", &po);
+    testCond(s == NATS_OK);
+
+    test("Get after purge returns NOT_FOUND: ");
+    s = kvStore_Get(&e, kv, "k");
+    testCond((s == NATS_NOT_FOUND) && (e == NULL));
+    nats_clearLastError();
+
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+}
+
 void test_natsHeader(void)
 {
     natsStatus  s           = NATS_OK;

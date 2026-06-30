@@ -37408,6 +37408,7 @@ void test_KeyValueCreateWithTTL(void)
 {
     natsStatus      s;
     kvStore         *kv  = NULL;
+    kvStore         *kv2 = NULL;
     kvEntry         *e   = NULL;
     kvConfig        kvc;
     kvPurgeOptions  po;
@@ -37444,9 +37445,11 @@ void test_KeyValueCreateWithTTL(void)
     kvEntry_Destroy(e);
     e = NULL;
 
-    test("CreateWithTTL over a live key fails (create-if-absent preserved): ");
+    test("CreateWithTTL over a live key fails, error preserved (create-if-absent): ");
     s = kvStore_CreateStringWithTTL(&rev, kv, "k", "v-dup", 1000);
-    testCond(s != NATS_OK);
+    testCond((s != NATS_OK)
+        && (nats_GetLastError(NULL) != NULL)
+        && (nats_GetLastError(NULL)[0] != '\0'));
     nats_clearLastError();
 
     test("Key expires server-side after its per-key TTL: ");
@@ -37503,7 +37506,7 @@ void test_KeyValueCreateWithTTL(void)
     testCond((s == NATS_NOT_FOUND) && (e == NULL));
     nats_clearLastError();
 
-    // E: a stale CAS predicate (wrong `last`) must fail rather than overwrite.
+    // A stale CAS predicate (wrong `last`) must fail rather than overwrite.
     test("Seed a key for the stale-CAS check: ");
     s = kvStore_CreateString(&rev, kv, "c", "c0");
     testCond(s == NATS_OK);
@@ -37513,16 +37516,19 @@ void test_KeyValueCreateWithTTL(void)
     testCond(s != NATS_OK);
     nats_clearLastError();
 
-    // D: the server requires a per-key TTL of at least 1 second; a sub-second ttl is
-    // rejected. (The constraint is a 1s minimum, not whole-seconds — see the 1500ms case
-    // below.) The marker-aware create path runs a _getEntry on retry which clears the
-    // server's error text, so assert the server message on the single-publish update path.
-    test("Sub-second per-key TTL is rejected on create: ");
+    // The server enforces the per-message TTL minimum (currently >= 1 second); the
+    // client does not duplicate that check. A sub-second value is rejected SERVER-side
+    // (JSMessageTTLInvalidErr). On the create path the marker-aware retry's _getEntry
+    // used to clear that error (the create then returned an empty message); the fix
+    // suppresses error-stack updates across the probe so the server error survives.
+    test("Sub-second per-key TTL on create surfaces the server error: ");
     s = kvStore_CreateStringWithTTL(&rev, kv, "sub", "x", 500);
-    testCond(s != NATS_OK);
+    testCond((s != NATS_OK)
+        && (nats_GetLastError(NULL) != NULL)
+        && (strstr(nats_GetLastError(NULL), "invalid per-message TTL") != NULL));
     nats_clearLastError();
 
-    test("Sub-second per-key TTL on update surfaces 'invalid per-message TTL': ");
+    test("Sub-second per-key TTL on update surfaces the server error: ");
     s = kvStore_CreateString(&rev, kv, "sub2", "s0");
     if (s == NATS_OK)
         s = kvStore_UpdateWithTTL(&rev, kv, "sub2", (const void*)"s1", 2, rev, 500);
@@ -37530,8 +37536,8 @@ void test_KeyValueCreateWithTTL(void)
         && (strstr(nats_GetLastError(NULL), "invalid per-message TTL") != NULL));
     nats_clearLastError();
 
-    // A non-whole-second ttl >= 1s is accepted (confirms the 1s-minimum rule).
-    test("Non-whole-second TTL (1500ms) is accepted: ");
+    // A ttl >= the 1s minimum is accepted (left to the server).
+    test("TTL >= 1s is accepted (1500ms): ");
     s = kvStore_CreateStringWithTTL(&rev, kv, "ws", "x", 1500);
     testCond(s == NATS_OK);
     nats_clearLastError();
@@ -37547,6 +37553,26 @@ void test_KeyValueCreateWithTTL(void)
     testCond((s == NATS_NOT_FOUND) && (e == NULL));
     nats_clearLastError();
 
+    // Error propagation through the marker-aware create retry. On a bucket created
+    // WITHOUT LimitMarkerTTL the stream has AllowMsgTTL=false, so a per-key TTL is
+    // rejected SERVER-side (JSMessageTTLDisabledErr) and the key is never created.
+    // The retry's _getEntry then returns NOT_FOUND and would clear the thread-local
+    // error, so the create suppresses error-stack updates across the probe and the
+    // original server message survives (rather than an empty / NOT_FOUND error).
+    test("Create KV without LimitMarkerTTL (per-message TTL disabled): ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "KVNOTTL";
+    s = js_CreateKeyValue(&kv2, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("CreateWithTTL on a TTL-disabled bucket preserves the server error: ");
+    s = kvStore_CreateStringWithTTL(&rev, kv2, "k", "v", 1000);
+    testCond((s != NATS_OK)
+        && (nats_GetLastError(NULL) != NULL)
+        && (strstr(nats_GetLastError(NULL), "per-message TTL is disabled") != NULL));
+    nats_clearLastError();
+
+    kvStore_Destroy(kv2);
     kvStore_Destroy(kv);
 
     JS_TEARDOWN;

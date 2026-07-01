@@ -696,7 +696,9 @@ kvStore_PutString(uint64_t *rev, kvStore *kv, const char *key, const char *data)
 // CAS update carrying an optional per-key TTL (milliseconds). ttl <= 0 means
 // "no TTL" (identical to the pre-existing update). The TTL rides
 // jsPubOptions.MsgTTL; combining it with the CAS predicate in the same publish
-// is what callers would otherwise have to hand-roll.
+// is what callers would otherwise have to hand-roll. The server enforces the
+// per-message TTL minimum (currently 1 second); the client does not duplicate
+// that check, so a future server-side change needs no client update.
 natsStatus
 kvStore_UpdateWithTTL(uint64_t *rev, kvStore *kv, const char *key, const void *data, int len,
                       uint64_t last, int64_t ttl)
@@ -734,13 +736,20 @@ kvStore_CreateWithTTL(uint64_t *rev, kvStore *kv, const char *key, const void *d
         return s;
 
     // Since we have tombstones for DEL ops for watchers, this could be from that
-    // so we need to double check.
+    // so we need to double check. Suppress error-stack updates across the probe
+    // so a NATS_NOT_FOUND (or any other _getEntry result) cannot overwrite/clear
+    // the original create error we still want to surface below.
+    nats_doNotUpdateErrStack(true);
     ls = _getEntry(&e, &deleted, kv, key, 0);
+    nats_doNotUpdateErrStack(false);
     if (ls == NATS_OK)
     {
         if (deleted)
+        {
+            // clear original stack error before calling update.
+            nats_clearLastError();
             s = kvStore_UpdateWithTTL(rev, kv, key, data, len, kvEntry_Revision(e), ttl);
-
+        }
         kvEntry_Destroy(e);
     }
     return NATS_UPDATE_ERR_STACK(s);

@@ -736,30 +736,22 @@ kvStore_CreateWithTTL(uint64_t *rev, kvStore *kv, const char *key, const void *d
         return s;
 
     // Since we have tombstones for DEL ops for watchers, this could be from that
-    // so we need to double check. The _getEntry probe below would otherwise
-    // overwrite (and, on NATS_NOT_FOUND, clear) the original create error, so
-    // suppress error-stack updates around it and restore the original error on
-    // return. We re-enable updates only when we actually re-create over a
-    // tombstone, so that attempt reports its own error.
+    // so we need to double check. Suppress error-stack updates across the probe
+    // so a NATS_NOT_FOUND (or any other _getEntry result) cannot overwrite/clear
+    // the original create error we still want to surface below.
     nats_doNotUpdateErrStack(true);
-
     ls = _getEntry(&e, &deleted, kv, key, 0);
+    nats_doNotUpdateErrStack(false);
     if (ls == NATS_OK)
     {
         if (deleted)
         {
-            nats_doNotUpdateErrStack(false);
+            // clear original stack error before calling update.
             nats_clearLastError();
             s = kvStore_UpdateWithTTL(rev, kv, key, data, len, kvEntry_Revision(e), ttl);
-            kvEntry_Destroy(e);
-            return NATS_UPDATE_ERR_STACK(s);
         }
         kvEntry_Destroy(e);
     }
-
-    // Not a tombstone re-create: surface the original create failure (status and
-    // stack as they were before the _getEntry probe).
-    nats_doNotUpdateErrStack(false);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

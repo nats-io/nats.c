@@ -2040,10 +2040,14 @@ natsConn_flushOrKickFlusher(natsConnection *nc)
     {
         s = natsConn_bufferFlush(nc);
     }
-    else if (!(nc->flusherSignaled) && (nc->bw != NULL))
+    else if (nc->bw != NULL)
     {
-        nc->flusherSignaled = true;
-        natsCondition_Signal(nc->flusherCond);
+        nc->flusherKicks++;
+        if (!(nc->flusherSignaled))
+        {
+            nc->flusherSignaled = true;
+            natsCondition_Signal(nc->flusherCond);
+        }
     }
     return s;
 }
@@ -2586,12 +2590,16 @@ _flusher(void *arg)
             break;
         }
 
-        // Give a chance to accumulate more requests, but only when writes
-        // are frequent (a flush occurred within the last accumulation
-        // window): flushing right away then would result in a system call
-        // per small message. After an idle period, flush immediately so
-        // that sparse traffic does not pay the accumulation delay.
+        // Give a chance to accumulate more requests, but only when it is
+        // likely that more data is coming: several writes were already
+        // buffered by the time we woke up, and writes are frequent (a
+        // flush occurred within the last accumulation window). Flushing
+        // right away then would result in a system call per small message.
+        // For a lone pending write - sparse traffic or a synchronous
+        // request/reply or KV loop, where nothing more can be sent until
+        // the response comes back - flush immediately instead.
         if ((nc->opts->flusherWaitUs > 0)
+            && (nc->flusherKicks > 1)
             && (((nats_NowMonotonicInNanoSeconds() - nc->flusherLastFlush) / 1000)
                     < nc->opts->flusherWaitUs))
         {
@@ -2600,6 +2608,7 @@ _flusher(void *arg)
         }
 
         nc->flusherSignaled = false;
+        nc->flusherKicks    = 0;
 
         if (!_isConnected(nc) || natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
         {
@@ -2704,6 +2713,7 @@ _spinUpSocketWatchers(natsConnection *nc)
     nc->pout             = 0;
     nc->flusherStop      = false;
     nc->flusherLastFlush = 0;
+    nc->flusherKicks     = 0;
 
     if (nc->opts->evLoop == NULL)
     {

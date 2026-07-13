@@ -4003,19 +4003,20 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap);
  * in **microseconds** (unlike other time-based options, which are
  * expressed in milliseconds). The default is 1000 (1 millisecond).
  *
- * The wait only applies when the connection is busy, that is, when the
- * flusher performed a flush within the last `flusherWaitUs` microseconds.
- * The first write after an idle period is always flushed right away, so
- * sparse traffic does not pay the accumulation delay.
+ * The wait only applies when the connection is busy: more than one write
+ * was already buffered by the time the flusher was ready to flush, and a
+ * flush occurred within the last `flusherWaitUs` microseconds. A lone
+ * pending write is always flushed right away, so sparse traffic and
+ * synchronous request/reply (or KeyValue put) loops do not pay the
+ * accumulation delay.
  *
  * Setting this option to `0` makes the flusher flush as soon as it is
  * signaled, regardless of activity, which minimizes latency in all
  * cases, but can significantly reduce the maximum throughput of small
  * messages published from a tight loop (more system calls, each writing
  * less data). The default adaptive behavior provides the same latency
- * benefit for sparse traffic without that throughput cost, so `0` is
- * only useful when the lowest possible latency is required even while
- * the connection is busy.
+ * benefit for sparse and request/reply style traffic without that
+ * throughput cost, so `0` is rarely needed.
  *
  * \note On Windows, waits have millisecond granularity: positive values
  * are rounded up to the nearest millisecond. A value of `0` fully

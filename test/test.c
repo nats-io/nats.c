@@ -3360,6 +3360,19 @@ void test_natsOptions(void)
     s = natsOptions_SetSendAsap(opts, false);
     testCond((s == NATS_OK) && (opts->sendAsap == false));
 
+    test("Set FlusherWaitMicros (invalid args): ");
+    s = natsOptions_SetFlusherWaitMicros(opts, -1);
+    testCond(s != NATS_OK);
+    nats_clearLastError();
+
+    test("Set FlusherWaitMicros to zero: ");
+    s = natsOptions_SetFlusherWaitMicros(opts, 0);
+    testCond((s == NATS_OK) && (opts->flusherWaitUs == 0));
+
+    test("Set FlusherWaitMicros: ");
+    s = natsOptions_SetFlusherWaitMicros(opts, 500);
+    testCond((s == NATS_OK) && (opts->flusherWaitUs == 500));
+
     test("Set UserCreds: ");
     s = natsOptions_SetUserCredentialsCallbacks(opts, _dummyUserJWTCb, (void*) 1, _dummySigCb, (void*) 2);
     testCond((s == NATS_OK)
@@ -8418,6 +8431,109 @@ void test_NoFlusherIfSendAsap(void)
     natsConnection_Close(nc);
     _waitForConnClosed(&arg);
     natsConnection_Destroy(nc);
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+
+    _stopServer(pid);
+}
+
+void test_FlusherWait(void)
+{
+    natsStatus          s;
+    natsPid             pid = NATS_INVALID_PID;
+    natsOptions         *opts = NULL;
+    struct threadArg    arg;
+    int64_t             waits[3] = {-1, 0, 5000};
+    int                 i;
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        s = natsOptions_Create(&opts);
+    if ((s != NATS_OK)
+            || (natsOptions_SetURL(opts, "nats://127.0.0.1:4222") != NATS_OK))
+    {
+        FAIL("Failed to setup test");
+    }
+    arg.string = "test";
+
+    pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222", true);
+    CHECK_SERVER_STARTED(pid);
+
+    // Run with the default wait (adaptive 1ms), 0 (always flush right away)
+    // and a 5ms accumulation window.
+    for (i=0; i<3; i++)
+    {
+        natsConnection      *nc   = NULL;
+        natsSubscription    *sub  = NULL;
+        int64_t             start = 0;
+        int64_t             rtt   = 0;
+        int                 j;
+
+        if (waits[i] >= 0)
+        {
+            test("Set flusher wait: ");
+            s = natsOptions_SetFlusherWaitMicros(opts, waits[i]);
+            testCond(s == NATS_OK);
+        }
+
+        test("Connect/subscribe ok: ");
+        s = natsConnection_Connect(&nc, opts);
+        IFOK(s, natsConnection_Subscribe(&sub, nc, "foo", _recvTestString, (void*) &arg));
+        IFOK(s, natsConnection_Flush(nc));
+        testCond(s == NATS_OK);
+
+        natsMutex_Lock(arg.m);
+        arg.control     = 1;
+        arg.msgReceived = false;
+        arg.status      = NATS_OK;
+        natsMutex_Unlock(arg.m);
+
+        // Let the connection go idle so that this publish exercises the
+        // immediate-flush path.
+        nats_Sleep(50);
+
+        test("Sparse publish received: ");
+        start = nats_Now();
+        s = natsConnection_PublishString(nc, "foo", "test");
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+            s = natsCondition_TimedWait(arg.c, arg.m, 1500);
+        if (s == NATS_OK)
+            s = arg.status;
+        arg.msgReceived = false;
+        natsMutex_Unlock(arg.m);
+        rtt = nats_Now() - start;
+        testCond(s == NATS_OK);
+
+        // Coarse bound: catches only gross regressions, such as the
+        // flusher waiting for a signal that never comes.
+        test("Sparse publish RTT sane: ");
+        testCond(rtt <= 300);
+
+        natsMutex_Lock(arg.m);
+        arg.control     = 12;
+        arg.msgReceived = false;
+        arg.status      = NATS_OK;
+        arg.sum         = 0;
+        arg.N           = 100;
+        natsMutex_Unlock(arg.m);
+
+        test("Burst received: ");
+        s = NATS_OK;
+        for (j=0; (s == NATS_OK) && (j<100); j++)
+            s = natsConnection_PublishString(nc, "foo", "test");
+        natsMutex_Lock(arg.m);
+        while ((s != NATS_TIMEOUT) && !arg.msgReceived)
+            s = natsCondition_TimedWait(arg.c, arg.m, 1500);
+        if (s == NATS_OK)
+            s = arg.status;
+        natsMutex_Unlock(arg.m);
+        testCond(s == NATS_OK);
+
+        natsSubscription_Destroy(sub);
+        natsConnection_Destroy(nc);
+    }
 
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&arg);

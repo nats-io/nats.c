@@ -2586,14 +2586,18 @@ _flusher(void *arg)
             break;
         }
 
-        //TODO: If we process the request right away, performance
-        //      will suffer when sending quickly very small messages.
-        //      The buffer is going to be always flushed, which
-        //      defeats the purpose of a write buffer.
-        //      We need to revisit this.
-
-        // Give a chance to accumulate more requests...
-        natsCondition_TimedWait(nc->flusherCond, nc->mu, 1);
+        // Give a chance to accumulate more requests, but only when writes
+        // are frequent (a flush occurred within the last accumulation
+        // window): flushing right away then would result in a system call
+        // per small message. After an idle period, flush immediately so
+        // that sparse traffic does not pay the accumulation delay.
+        if ((nc->opts->flusherWaitUs > 0)
+            && (((nats_NowMonotonicInNanoSeconds() - nc->flusherLastFlush) / 1000)
+                    < nc->opts->flusherWaitUs))
+        {
+            natsCondition_TimedWaitMicros(nc->flusherCond, nc->mu,
+                                          nc->opts->flusherWaitUs);
+        }
 
         nc->flusherSignaled = false;
 
@@ -2609,6 +2613,7 @@ _flusher(void *arg)
             s = natsConn_bufferFlush(nc);
             if ((s != NATS_OK) && (nc->err == NATS_OK))
                 nc->err = s;
+            nc->flusherLastFlush = nats_NowMonotonicInNanoSeconds();
         }
 
         natsConn_Unlock(nc);
@@ -2696,8 +2701,9 @@ _spinUpSocketWatchers(natsConnection *nc)
 {
     natsStatus  s = NATS_OK;
 
-    nc->pout        = 0;
-    nc->flusherStop = false;
+    nc->pout             = 0;
+    nc->flusherStop      = false;
+    nc->flusherLastFlush = 0;
 
     if (nc->opts->evLoop == NULL)
     {

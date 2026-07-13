@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -87,6 +87,36 @@ natsStatus
 natsCondition_AbsoluteTimedWait(natsCondition *cond, natsMutex *mutex, int64_t absoluteTime)
 {
     return _timedWait(cond, mutex, true, absoluteTime);
+}
+
+natsStatus
+natsCondition_TimedWaitMicros(natsCondition *cond, natsMutex *mutex, int64_t timeoutUs)
+{
+    int     r;
+    struct  timespec ts;
+    int64_t target;
+
+    if (timeoutUs <= 0)
+        return NATS_TIMEOUT;
+
+    target = nats_NowInNanoSeconds();
+    if (timeoutUs > (0x7FFFFFFFFFFFFFFF - target) / 1000)
+        target = 0x7FFFFFFFFFFFFFFF;
+    else
+        target += timeoutUs * 1000;
+
+    ts.tv_sec  = target / 1000000000L;
+    ts.tv_nsec = target % 1000000000L;
+
+    r = pthread_cond_timedwait(cond, mutex, &ts);
+
+    if (r == 0)
+        return NATS_OK;
+
+    if (r == ETIMEDOUT)
+        return NATS_TIMEOUT;
+
+    return nats_setError(NATS_SYS_ERROR, "pthread_cond_timedwait error: %d", errno);
 }
 
 void

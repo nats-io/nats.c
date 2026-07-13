@@ -116,7 +116,7 @@ natsCondition_TimedWaitMicros(natsCondition *cond, natsMutex *mutex, int64_t tim
     if (r == ETIMEDOUT)
         return NATS_TIMEOUT;
 
-    return nats_setError(NATS_SYS_ERROR, "pthread_cond_timedwait error: %d", errno);
+    return nats_setError(NATS_SYS_ERROR, "pthread_cond_timedwait error: %d", r);
 }
 
 void

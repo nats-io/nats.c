@@ -8460,8 +8460,8 @@ void test_FlusherWait(void)
     pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222", true);
     CHECK_SERVER_STARTED(pid);
 
-    // Run with the default wait (adaptive 1ms), 0 (always flush right away)
-    // and a 5ms accumulation window.
+    // Run with the default wait (adaptive 250us), 0 (always flush right
+    // away) and a 5ms accumulation window.
     for (i=0; i<3; i++)
     {
         natsConnection      *nc   = NULL;

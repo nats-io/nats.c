@@ -881,9 +881,9 @@ struct __natsConnection
     // flusher thread, 0 if none. Used to skip the accumulation wait when
     // the connection has been idle.
     int64_t             flusherLastFlush;
-    // Number of writes buffered since the last flush performed by the
-    // flusher thread. Used to skip the accumulation wait when only a
-    // single write is pending (sparse traffic or a synchronous
+    // Number of writes buffered since the flusher thread last woke up
+    // and examined the buffer. Used to skip the accumulation wait when
+    // only a single write is pending (sparse traffic or a synchronous
     // request/reply or KV loop).
     int64_t             flusherKicks;
 

@@ -4001,14 +4001,18 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap);
  *
  * This option controls the maximum duration of that wait, expressed
  * in **microseconds** (unlike other time-based options, which are
- * expressed in milliseconds). The default is 1000 (1 millisecond).
+ * expressed in milliseconds). The default is 250 (a quarter of a
+ * millisecond).
  *
  * The wait only applies when the connection is busy: more than one write
  * was already buffered by the time the flusher was ready to flush, and a
  * flush occurred within the last `flusherWaitUs` microseconds. A lone
- * pending write is always flushed right away, so sparse traffic and
- * synchronous request/reply (or KeyValue put) loops do not pay the
- * accumulation delay.
+ * pending write is always flushed right away, so sparse traffic and a
+ * single synchronous request/reply (or KeyValue put) loop do not pay the
+ * accumulation delay. Note that this is based on the number of pending
+ * writes, not writers: several concurrent synchronous request/reply
+ * loops sharing a connection buffer their writes together, count as
+ * busy traffic, and can each pay up to the full wait per operation.
  *
  * Setting this option to `0` makes the flusher flush as soon as it is
  * signaled, regardless of activity, which minimizes latency in all

@@ -957,10 +957,50 @@ _cmpInt64(const void *p1, const void *p2)
     return 0;
 }
 
+struct _benchPPCtx
+{
+    natsConnection      *nc;
+    natsSubscription    *sub;
+    const char          *subj;
+    struct _benchArg    arg;
+    int64_t             *rtts;
+    int                 total;
+    natsStatus          s;
+};
+
+static void
+_benchPingPongLoop(void *closure)
+{
+    struct _benchPPCtx  *ctx = (struct _benchPPCtx*) closure;
+    natsStatus          s    = NATS_OK;
+    int                 j;
+
+    for (j=0; (s == NATS_OK) && (j < ctx->total); j++)
+    {
+        int64_t start = nats_NowMonotonicInNanoSeconds();
+
+        s = natsConnection_Publish(ctx->nc, ctx->subj, (const void*) "x", 1);
+        if (s == NATS_OK)
+        {
+            natsMutex_Lock(ctx->arg.mu);
+            while ((s != NATS_TIMEOUT) && (ctx->arg.done != (j+1)))
+                s = natsCondition_TimedWait(ctx->arg.cond, ctx->arg.mu, 2000);
+            natsMutex_Unlock(ctx->arg.mu);
+        }
+        if (s == NATS_OK)
+            ctx->rtts[j] = nats_NowMonotonicInNanoSeconds() - start;
+    }
+    ctx->s = s;
+}
+
 // Measures the round-trip latency of single publishes for various flusher
-// accumulation waits, in two modes: "sparse" leaves the connection idle
+// accumulation waits, in three modes: "sparse" leaves the connection idle
 // between publishes, "pingpong" publishes again as soon as the previous
-// message is received (like a synchronous request or KV put loop).
+// message is received (like a synchronous request or KV put loop), and
+// "pingpong2" runs two such loops concurrently on the same connection
+// (their coincident writes count as busy traffic, so with a non-zero wait
+// each operation is expected to pay the accumulation window on top of the
+// RTT).
 void test_BenchCorePublishLatency(void)
 {
     natsStatus          s        = NATS_OK;
@@ -1031,15 +1071,63 @@ void test_BenchCorePublishLatency(void)
 
             if (s == NATS_OK)
             {
-                const char *comma = ((i < numTests-1) || (m < numModes-1) ? "," : "");
-
                 qsort(rtts, total, sizeof(int64_t), _cmpInt64);
-                printf("\t{\"name\":\"%s/%s\", \"p50us\":%d, \"p99us\":%d}%s\n",
+                printf("\t{\"name\":\"%s/%s\", \"p50us\":%d, \"p99us\":%d},\n",
                        tn, modes[m],
+                       (int) (rtts[total/2] / 1000),
+                       (int) (rtts[(total*99)/100] / 1000));
+                fflush(stdout);
+            }
+        }
+
+        // pingpong2: two concurrent synchronous writers on this connection.
+        if (s == NATS_OK)
+        {
+            struct _benchPPCtx  ctxs[2];
+            int64_t             wrtts[2][250];
+            natsThread          *t = NULL;
+            int                 w;
+
+            memset(ctxs, 0, sizeof(ctxs));
+            for (w=0; (s == NATS_OK) && (w<2); w++)
+            {
+                ctxs[w].nc    = nc;
+                ctxs[w].subj  = (w == 0 ? "lat1" : "lat2");
+                ctxs[w].rtts  = wrtts[w];
+                ctxs[w].total = (int) (sizeof(wrtts[w])/sizeof(*wrtts[w]));
+                s = natsMutex_Create(&ctxs[w].arg.mu);
+                IFOK(s, natsCondition_Create(&ctxs[w].arg.cond));
+                IFOK(s, natsConnection_Subscribe(&ctxs[w].sub, nc, ctxs[w].subj,
+                                                 _benchLatencyHandler, (void*) &ctxs[w].arg));
+            }
+            IFOK(s, natsConnection_Flush(nc));
+            IFOK(s, natsThread_Create(&t, _benchPingPongLoop, (void*) &ctxs[1]));
+            if (s == NATS_OK)
+            {
+                _benchPingPongLoop((void*) &ctxs[0]);
+                natsThread_Join(t);
+                natsThread_Destroy(t);
+                s = (ctxs[0].s != NATS_OK ? ctxs[0].s : ctxs[1].s);
+            }
+            if (s == NATS_OK)
+            {
+                const char *comma = (i < numTests-1 ? "," : "");
+
+                memcpy(rtts, wrtts[0], sizeof(wrtts[0]));
+                memcpy(rtts + ctxs[0].total, wrtts[1], sizeof(wrtts[1]));
+                qsort(rtts, total, sizeof(int64_t), _cmpInt64);
+                printf("\t{\"name\":\"%s/pingpong2\", \"p50us\":%d, \"p99us\":%d}%s\n",
+                       tn,
                        (int) (rtts[total/2] / 1000),
                        (int) (rtts[(total*99)/100] / 1000),
                        comma);
                 fflush(stdout);
+            }
+            for (w=0; w<2; w++)
+            {
+                natsSubscription_Destroy(ctxs[w].sub);
+                natsCondition_Destroy(ctxs[w].arg.cond);
+                natsMutex_Destroy(ctxs[w].arg.mu);
             }
         }
 

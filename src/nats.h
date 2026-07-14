@@ -4005,7 +4005,7 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap);
  *
  * The wait only applies when the connection is busy: writes continue to
  * come in after the flusher is signaled, and a
- * flush occurred within the last `flusherWait` microseconds. A lone
+ * flush occurred within the last `flusherWaitUs` microseconds. A lone
  * pending write is always flushed right away, so sparse traffic and a
  * single synchronous request/reply loop do not pay the
  * accumulation delay.
@@ -4026,11 +4026,11 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap);
  * `true`, since in that case the flusher thread is not used.
  *
  * @param opts the pointer to the #natsOptions object.
- * @param flusherWait the maximum accumulation wait, in microseconds.
+ * @param flusherWaitUs the maximum accumulation wait, in microseconds.
  * Must be `>= 0`.
  */
 NATS_EXTERN natsStatus
-natsOptions_SetFlusherWait(natsOptions *opts, int64_t flusherWaitUs);
+natsOptions_SetFlusherWaitMicros(natsOptions *opts, int64_t flusherWaitUs);
 
 /** \brief Switches the use of old style requests.
  *

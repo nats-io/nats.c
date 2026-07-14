@@ -890,7 +890,7 @@ void test_BenchCorePublishSmall(void)
 
         s = natsOptions_Create(&opts);
         if ((s == NATS_OK) && (_flusherWaits[i] >= 0))
-            s = natsOptions_SetFlusherWait(opts, _flusherWaits[i]);
+            s = natsOptions_SetFlusherWaitMicros(opts, _flusherWaits[i]);
         IFOK(s, natsConnection_Connect(&nc, opts));
 
         for (run=0; (s == NATS_OK) && (run < REPEAT); run++)
@@ -1036,7 +1036,7 @@ void test_BenchCorePublishLatency(void)
 
         s = natsOptions_Create(&opts);
         if ((s == NATS_OK) && (_flusherWaits[i] >= 0))
-            s = natsOptions_SetFlusherWait(opts, _flusherWaits[i]);
+            s = natsOptions_SetFlusherWaitMicros(opts, _flusherWaits[i]);
         IFOK(s, natsConnection_Connect(&nc, opts));
         IFOK(s, natsConnection_Subscribe(&sub, nc, "lat", _benchLatencyHandler, (void*) &arg));
         IFOK(s, natsConnection_Flush(nc));

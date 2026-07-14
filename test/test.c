@@ -3361,16 +3361,16 @@ void test_natsOptions(void)
     testCond((s == NATS_OK) && (opts->sendAsap == false));
 
     test("Set FlusherWaitMicros (invalid args): ");
-    s = natsOptions_SetFlusherWait(opts, -1);
+    s = natsOptions_SetFlusherWaitMicros(opts, -1);
     testCond(s != NATS_OK);
     nats_clearLastError();
 
     test("Set FlusherWaitMicros to zero: ");
-    s = natsOptions_SetFlusherWait(opts, 0);
+    s = natsOptions_SetFlusherWaitMicros(opts, 0);
     testCond((s == NATS_OK) && (opts->flusherWait == 0));
 
     test("Set FlusherWaitMicros: ");
-    s = natsOptions_SetFlusherWait(opts, 500);
+    s = natsOptions_SetFlusherWaitMicros(opts, 500);
     testCond((s == NATS_OK) && (opts->flusherWait == 500));
 
     test("Set UserCreds: ");
@@ -8473,7 +8473,7 @@ void test_FlusherWait(void)
         if (waits[i] >= 0)
         {
             test("Set flusher wait: ");
-            s = natsOptions_SetFlusherWait(opts, waits[i]);
+            s = natsOptions_SetFlusherWaitMicros(opts, waits[i]);
             testCond(s == NATS_OK);
         }
 

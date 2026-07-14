@@ -1324,7 +1324,7 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap)
 }
 
 natsStatus
-natsOptions_SetFlusherWait(natsOptions *opts, int64_t flusherWaitUs)
+natsOptions_SetFlusherWaitMicros(natsOptions *opts, int64_t flusherWaitUs)
 {
     LOCK_AND_CHECK_OPTIONS(opts, (flusherWaitUs < 0));
     opts->flusherWait = flusherWaitUs;

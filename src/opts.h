@@ -45,7 +45,7 @@ static inline void natsOptions_unlock(natsOptions *opts)
 #define NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE    (8 * 1024 * 1024)   // 8 MB
 #define NATS_OPTS_DEFAULT_RECONNECT_JITTER      (100)               // 100 ms
 #define NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS  (1000)              // 1 second
-#define NATS_OPTS_DEFAULT_FLUSHER_WAIT          (250)               // 250 microseconds
+#define NATS_OPTS_DEFAULT_FLUSHER_WAIT          (1000)              // 1000 microseconds
 
 natsOptions*
 natsOptions_clone(natsOptions *opts);

@@ -4001,18 +4001,14 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap);
  *
  * This option controls the maximum duration of that wait, expressed
  * in **microseconds** (unlike other time-based options, which are
- * expressed in milliseconds). The default is 250 (a quarter of a
- * millisecond).
+ * expressed in milliseconds). The default is 1000 (1 millisecond).
  *
- * The wait only applies when the connection is busy: more than one write
- * was already buffered by the time the flusher was ready to flush, and a
- * flush occurred within the last `flusherWaitUs` microseconds. A lone
+ * The wait only applies when the connection is busy: writes continue to
+ * come in after the flusher is signaled, and a
+ * flush occurred within the last `flusherWait` microseconds. A lone
  * pending write is always flushed right away, so sparse traffic and a
- * single synchronous request/reply (or KeyValue put) loop do not pay the
- * accumulation delay. Note that this is based on the number of pending
- * writes, not writers: several concurrent synchronous request/reply
- * loops sharing a connection buffer their writes together, count as
- * busy traffic, and can each pay up to the full wait per operation.
+ * single synchronous request/reply loop do not pay the
+ * accumulation delay.
  *
  * Setting this option to `0` makes the flusher flush as soon as it is
  * signaled, regardless of activity, which minimizes latency in all
@@ -4030,11 +4026,11 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap);
  * `true`, since in that case the flusher thread is not used.
  *
  * @param opts the pointer to the #natsOptions object.
- * @param flusherWaitUs the maximum accumulation wait, in microseconds.
+ * @param flusherWait the maximum accumulation wait, in microseconds.
  * Must be `>= 0`.
  */
 NATS_EXTERN natsStatus
-natsOptions_SetFlusherWaitMicros(natsOptions *opts, int64_t flusherWaitUs);
+natsOptions_SetFlusherWait(natsOptions *opts, int64_t flusherWaitUs);
 
 /** \brief Switches the use of old style requests.
  *

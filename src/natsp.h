@@ -334,7 +334,7 @@ struct __natsOptions
     // Maximum time (in microseconds) the flusher thread waits to
     // accumulate more data before flushing when writes are frequent.
     // 0 means flush as soon as signaled.
-    int64_t                 flusherWaitUs;
+    int64_t                 flusherWait;
 
     // If set to true, pending requests will fail with NATS_CONNECTION_DISCONNECTED
     // when the library detects a disconnection.
@@ -978,6 +978,11 @@ natsThread_Detach(natsThread *t);
 
 void
 natsThread_Yield(void);
+
+// Yields to another runnable thread without deliberately sleeping. Unlike
+// natsThread_Yield(), this must not use a millisecond sleep on Windows.
+void
+natsThread_FastYield(void);
 
 void
 natsThread_Destroy(natsThread *t);

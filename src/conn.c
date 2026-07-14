@@ -2576,6 +2576,7 @@ _flusher(void *arg)
 {
     natsConnection  *nc  = (natsConnection*) arg;
     natsStatus      s;
+    int64_t         kicks = 0;
 
     while (true)
     {
@@ -2591,24 +2592,30 @@ _flusher(void *arg)
         }
 
         // Give a chance to accumulate more requests, but only when it is
-        // likely that more data is coming: several writes were already
-        // buffered by the time we woke up, and writes are frequent (a
-        // flush occurred within the last accumulation window). Flushing
-        // right away then would result in a system call per small message.
+        // likely that more data is coming: writes are still coming after
+        // we woke up, and writes are frequent (a flush occurred within the
+        // last accumulation window).
         // For a lone pending write - sparse traffic or a synchronous
-        // request/reply or KV loop, where nothing more can be sent until
-        // the response comes back - flush immediately instead.
-        if ((nc->opts->flusherWaitUs > 0)
-            && (nc->flusherKicks > 1)
-            && (((nats_NowMonotonicInNanoSeconds() - nc->flusherLastFlush) / 1000)
-                    < nc->opts->flusherWaitUs))
+        // request/reply - flush immediately instead.
+        if ((nc->opts->flusherWait > 0))
         {
-            natsCondition_TimedWaitMicros(nc->flusherCond, nc->mu,
-                                          nc->opts->flusherWaitUs);
+            kicks = nc->flusherKicks;
+            natsConn_Unlock(nc);
+            natsThread_FastYield();
+            natsConn_Lock(nc);
+
+            if (nc->flusherKicks > kicks &&
+                (((nats_NowMonotonicInNanoSeconds() - nc->flusherLastFlush) / 1000)
+                    < nc->opts->flusherWait))
+            {
+                natsCondition_TimedWaitMicros(nc->flusherCond, nc->mu,
+                                            nc->opts->flusherWait);
+            }
         }
 
         nc->flusherSignaled = false;
         nc->flusherKicks    = 0;
+        kicks = 0;
 
         if (!_isConnected(nc) || natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
         {

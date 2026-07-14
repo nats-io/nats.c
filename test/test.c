@@ -3361,17 +3361,17 @@ void test_natsOptions(void)
     testCond((s == NATS_OK) && (opts->sendAsap == false));
 
     test("Set FlusherWaitMicros (invalid args): ");
-    s = natsOptions_SetFlusherWaitMicros(opts, -1);
+    s = natsOptions_SetFlusherWait(opts, -1);
     testCond(s != NATS_OK);
     nats_clearLastError();
 
     test("Set FlusherWaitMicros to zero: ");
-    s = natsOptions_SetFlusherWaitMicros(opts, 0);
-    testCond((s == NATS_OK) && (opts->flusherWaitUs == 0));
+    s = natsOptions_SetFlusherWait(opts, 0);
+    testCond((s == NATS_OK) && (opts->flusherWait == 0));
 
     test("Set FlusherWaitMicros: ");
-    s = natsOptions_SetFlusherWaitMicros(opts, 500);
-    testCond((s == NATS_OK) && (opts->flusherWaitUs == 500));
+    s = natsOptions_SetFlusherWait(opts, 500);
+    testCond((s == NATS_OK) && (opts->flusherWait == 500));
 
     test("Set UserCreds: ");
     s = natsOptions_SetUserCredentialsCallbacks(opts, _dummyUserJWTCb, (void*) 1, _dummySigCb, (void*) 2);
@@ -8460,7 +8460,7 @@ void test_FlusherWait(void)
     pid = _startServer("nats://127.0.0.1:4222", "-a 127.0.0.1 -p 4222", true);
     CHECK_SERVER_STARTED(pid);
 
-    // Run with the default wait (adaptive 250us), 0 (always flush right
+    // Run with the default wait (adaptive 1ms), 0 (always flush right
     // away) and a 5ms accumulation window.
     for (i=0; i<3; i++)
     {
@@ -8473,7 +8473,7 @@ void test_FlusherWait(void)
         if (waits[i] >= 0)
         {
             test("Set flusher wait: ");
-            s = natsOptions_SetFlusherWaitMicros(opts, waits[i]);
+            s = natsOptions_SetFlusherWait(opts, waits[i]);
             testCond(s == NATS_OK);
         }
 

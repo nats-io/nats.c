@@ -1324,10 +1324,10 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap)
 }
 
 natsStatus
-natsOptions_SetFlusherWaitMicros(natsOptions *opts, int64_t flusherWaitUs)
+natsOptions_SetFlusherWait(natsOptions *opts, int64_t flusherWaitUs)
 {
     LOCK_AND_CHECK_OPTIONS(opts, (flusherWaitUs < 0));
-    opts->flusherWaitUs = flusherWaitUs;
+    opts->flusherWait = flusherWaitUs;
     UNLOCK_OPTS(opts);
 
     return NATS_OK;
@@ -1792,7 +1792,7 @@ natsOptions_Create(natsOptions **newOpts)
     opts->reconnectBufSize      = NATS_OPTS_DEFAULT_RECONNECT_BUF_SIZE;
     opts->reconnectJitter       = NATS_OPTS_DEFAULT_RECONNECT_JITTER;
     opts->reconnectJitterTLS    = NATS_OPTS_DEFAULT_RECONNECT_JITTER_TLS;
-    opts->flusherWaitUs         = NATS_OPTS_DEFAULT_FLUSHER_WAIT;
+    opts->flusherWait           = NATS_OPTS_DEFAULT_FLUSHER_WAIT;
     opts->asyncErrCb            = natsConn_defaultErrHandler;
 
     // Override with values from the config (or from environment variables)

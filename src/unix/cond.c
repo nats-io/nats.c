@@ -100,13 +100,13 @@ natsCondition_TimedWaitMicros(natsCondition *cond, natsMutex *mutex, int64_t tim
         return NATS_TIMEOUT;
 
     target = nats_NowInNanoSeconds();
-    if (timeoutUs > (0x7FFFFFFFFFFFFFFF - target) / 1000)
-        target = 0x7FFFFFFFFFFFFFFF;
+    if (timeoutUs > (INT64_MAX - target) / 1000)
+        target = INT64_MAX;
     else
         target += timeoutUs * 1000;
 
-    ts.tv_sec  = target / 1000000000L;
-    ts.tv_nsec = target % 1000000000L;
+    ts.tv_sec  = target / NATS_SECONDS_TO_NANOS(1);
+    ts.tv_nsec = target % NATS_SECONDS_TO_NANOS(1);
 
     r = pthread_cond_timedwait(cond, mutex, &ts);
 

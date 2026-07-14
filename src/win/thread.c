@@ -147,6 +147,13 @@ natsThread_Yield()
 }
 
 void
+natsThread_FastYield(void)
+{
+    if (SwitchToThread() == 0)
+        Sleep(0);
+}
+
+void
 natsThread_Destroy(natsThread *t)
 {
     if (t == NULL)

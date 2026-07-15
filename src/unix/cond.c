@@ -74,7 +74,7 @@ _timedWait(natsCondition *cond, natsMutex *mutex, bool isAbsolute, int64_t timeo
     if (r == ETIMEDOUT)
         return NATS_TIMEOUT;
 
-    return nats_setError(NATS_SYS_ERROR, "pthread_cond_timedwait error: %d", errno);
+    return nats_setError(NATS_SYS_ERROR, "pthread_cond_timedwait error: %d", r);
 }
 
 natsStatus

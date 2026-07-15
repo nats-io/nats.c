@@ -131,12 +131,6 @@ natsThread_Yield(void)
 }
 
 void
-natsThread_FastYield(void)
-{
-    sched_yield();
-}
-
-void
 natsThread_Destroy(natsThread *t)
 {
     if (t == NULL)

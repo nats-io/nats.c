@@ -9660,6 +9660,7 @@ void test_ConnCloseBreaksReconnectLoop(void)
     natsOptions         *opts     = NULL;
     natsThread          *t        = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
+    const char          *srvs[]   = {"nats://127.0.0.1:22222", "nats://127.0.0.1:22223", "nats://127.0.0.1:22224", "nats://127.0.0.1:22225"};
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
@@ -9669,6 +9670,7 @@ void test_ConnCloseBreaksReconnectLoop(void)
         if (opts == NULL)
             s = NATS_NO_MEMORY;
     }
+    IFOK(s, natsOptions_SetServers(opts, srvs, 4));
     IFOK(s, natsOptions_SetMaxReconnect(opts, 1000));
     IFOK(s, natsOptions_SetClosedCB(opts, _closedCb, &arg));
     IFOK(s, natsOptions_SetDisconnectedCB(opts, _disconnectedCb, &arg));

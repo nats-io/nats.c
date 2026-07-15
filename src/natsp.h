@@ -979,11 +979,6 @@ natsThread_Detach(natsThread *t);
 void
 natsThread_Yield(void);
 
-// Yields to another runnable thread without deliberately sleeping. Unlike
-// natsThread_Yield(), this must not use a millisecond sleep on Windows.
-void
-natsThread_FastYield(void);
-
 void
 natsThread_Destroy(natsThread *t);
 

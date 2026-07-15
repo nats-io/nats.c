@@ -1832,7 +1832,9 @@ _doReconnect(void *arg)
 
     // Note that the pool's size may decrement after the call to
     // natsSrvPool_GetNextServer.
-    for (i=0; (s == NATS_OK) && (natsSrvPool_GetSize(pool) > 0); )
+    // The connection could have been closed entering the thread, so bail out
+    // once we detect that the connection is closed.
+    for (i=0; (s == NATS_OK) && !natsConn_isClosed(nc) && (natsSrvPool_GetSize(pool) > 0); )
     {
         nc->cur = natsSrvPool_GetNextServer(pool, nc->opts, nc->cur);
         if (nc->cur == NULL)
@@ -1843,6 +1845,7 @@ _doReconnect(void *arg)
 
         doSleep = (i+1 >= natsSrvPool_GetSize(pool));
 
+        sleepTime = 0;
         if (doSleep)
         {
             i = 0;
@@ -1852,6 +1855,9 @@ _doReconnect(void *arg)
                 natsConn_Unlock(nc);
                 sleepTime = crd(nc, wlf, crdClosure);
                 natsConn_Lock(nc);
+                // Connection could have been closed.
+                if (natsConn_isClosed(nc))
+                    break;
             }
             else
             {
@@ -1859,17 +1865,13 @@ _doReconnect(void *arg)
                 if (jitter > 0)
                     sleepTime += nats_Rand64() % jitter;
             }
-            if (natsConn_isClosed(nc))
-                break;
-            natsCondition_TimedWait(nc->reconnectCond, nc->mu, sleepTime);
         }
         else
         {
             i++;
-            natsConn_Unlock(nc);
-            natsThread_Yield();
-            natsConn_Lock(nc);
+            sleepTime = 1;
         }
+        natsCondition_TimedWait(nc->reconnectCond, nc->mu, sleepTime);
 
         // Check if we have been closed first.
         if (natsConn_isClosed(nc))
@@ -2601,7 +2603,7 @@ _flusher(void *arg)
         {
             kicks = nc->flusherKicks;
             natsConn_Unlock(nc);
-            natsThread_FastYield();
+            natsThread_Yield();
             natsConn_Lock(nc);
 
             if (nc->flusherKicks > kicks &&

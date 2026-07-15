@@ -3991,6 +3991,47 @@ natsOptions_IPResolutionOrder(natsOptions *opts, int order);
 NATS_EXTERN natsStatus
 natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap);
 
+/** \brief Sets the maximum time the flusher thread waits to accumulate data.
+ *
+ * When data is published, the library buffers it and signals a flusher
+ * thread that writes it to the socket. When writes are frequent, the
+ * flusher waits a little before flushing so that more data can be
+ * accumulated and sent in fewer system calls, improving throughput of
+ * small messages at the expense of latency.
+ *
+ * This option controls the maximum duration of that wait, expressed
+ * in **microseconds** (unlike other time-based options, which are
+ * expressed in milliseconds). The default is 1000 (1 millisecond).
+ *
+ * The wait only applies when the connection is busy: writes continue to
+ * come in after the flusher is signaled, and a
+ * flush occurred within the last `flusherWaitUs` microseconds. A lone
+ * pending write is always flushed right away, so sparse traffic and a
+ * single synchronous request/reply loop do not pay the
+ * accumulation delay.
+ *
+ * Setting this option to `0` makes the flusher flush as soon as it is
+ * signaled, regardless of activity, which minimizes latency in all
+ * cases, but can significantly reduce the maximum throughput of small
+ * messages published from a tight loop (more system calls, each writing
+ * less data). The default adaptive behavior provides the same latency
+ * benefit for sparse and request/reply style traffic without that
+ * throughput cost, so `0` is rarely needed.
+ *
+ * \note On Windows, waits have millisecond granularity: positive values
+ * are rounded up to the nearest millisecond. A value of `0` fully
+ * applies on all platforms.
+ *
+ * \note This option has no effect if #natsOptions_SetSendAsap is set to
+ * `true`, since in that case the flusher thread is not used.
+ *
+ * @param opts the pointer to the #natsOptions object.
+ * @param flusherWaitUs the maximum accumulation wait, in microseconds.
+ * Must be `>= 0`.
+ */
+NATS_EXTERN natsStatus
+natsOptions_SetFlusherWaitMicros(natsOptions *opts, int64_t flusherWaitUs);
+
 /** \brief Switches the use of old style requests.
  *
  * Setting `useOldStyle` to `true` forces the request calls to use the original

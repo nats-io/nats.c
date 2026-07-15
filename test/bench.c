@@ -848,3 +848,306 @@ void test_BenchJetStreamPubAsync(void)
 
     testCond(s == NATS_OK);
 }
+
+// The flusher wait values benchmarked below: -1 means "library default".
+static const int64_t _flusherWaits[] = {-1, 0, 250, 1000};
+
+static void
+_flusherWaitName(int64_t waitUs, char *buf, size_t bufLen)
+{
+    if (waitUs < 0)
+        snprintf(buf, bufLen, "wait=default");
+    else
+        snprintf(buf, bufLen, "wait=%dus", (int) waitUs);
+}
+
+// Measures raw core publish throughput of small messages, for various
+// flusher accumulation waits.
+void test_BenchCorePublishSmall(void)
+{
+    natsStatus  s        = NATS_OK;
+    natsPid     pid      = NATS_INVALID_PID;
+    const int   total    = 1000000;
+    const char  payload[]= "0123456789abcdef";
+    int         numTests = (int) (sizeof(_flusherWaits)/sizeof(*_flusherWaits));
+    int         i;
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    if (pid == NATS_INVALID_PID)
+        s = NATS_ERR;
+
+    printf("[\n");
+    fflush(stdout);
+    for (i=0; (s == NATS_OK) && (i < numTests); i++)
+    {
+        natsOptions     *opts = NULL;
+        natsConnection  *nc   = NULL;
+        char            tn[64];
+        int64_t         dur   = 0;
+        int             run;
+
+        _flusherWaitName(_flusherWaits[i], tn, sizeof(tn));
+
+        s = natsOptions_Create(&opts);
+        if ((s == NATS_OK) && (_flusherWaits[i] >= 0))
+            s = natsOptions_SetFlusherWaitMicros(opts, _flusherWaits[i]);
+        IFOK(s, natsConnection_Connect(&nc, opts));
+
+        for (run=0; (s == NATS_OK) && (run < REPEAT); run++)
+        {
+            int64_t start = nats_NowMonotonicInNanoSeconds();
+            int     j;
+
+            for (j=0; (s == NATS_OK) && (j < total); j++)
+                s = natsConnection_Publish(nc, "perf", (const void*) payload, (int) (sizeof(payload)-1));
+            IFOK(s, natsConnection_Flush(nc));
+            if (s == NATS_OK)
+                dur += nats_NowMonotonicInNanoSeconds() - start;
+        }
+
+        if (s == NATS_OK)
+        {
+            const char *comma = (i < numTests-1 ? "," : "");
+
+            dur /= REPEAT;
+            printf("\t{\"name\":\"%s\",\"perf\":%d}%s\n", tn, (int)(((int64_t)total * 1E9L) / dur), comma);
+            fflush(stdout);
+        }
+
+        natsConnection_Destroy(nc);
+        natsOptions_Destroy(opts);
+    }
+    printf("]\n");
+    fflush(stdout);
+
+    _stopServer(pid);
+
+    if (s != NATS_OK)
+    {
+        printf("Error: %d (%s)\n", s, natsStatus_GetText(s));
+        nats_PrintLastErrorStack(stdout);
+        fflush(stdout);
+    }
+
+    testCond(s == NATS_OK);
+}
+
+static void
+_benchLatencyHandler(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    struct _benchArg *arg = (struct _benchArg*) closure;
+
+    natsMsg_Destroy(msg);
+    natsMutex_Lock(arg->mu);
+    arg->done++;
+    natsCondition_Broadcast(arg->cond);
+    natsMutex_Unlock(arg->mu);
+}
+
+static int
+_cmpInt64(const void *p1, const void *p2)
+{
+    int64_t v1 = *(const int64_t*) p1;
+    int64_t v2 = *(const int64_t*) p2;
+
+    if (v1 < v2)
+        return -1;
+    if (v1 > v2)
+        return 1;
+    return 0;
+}
+
+struct _benchPPCtx
+{
+    natsConnection      *nc;
+    natsSubscription    *sub;
+    const char          *subj;
+    struct _benchArg    arg;
+    int64_t             *rtts;
+    int                 total;
+    natsStatus          s;
+};
+
+static void
+_benchPingPongLoop(void *closure)
+{
+    struct _benchPPCtx  *ctx = (struct _benchPPCtx*) closure;
+    natsStatus          s    = NATS_OK;
+    int                 j;
+
+    for (j=0; (s == NATS_OK) && (j < ctx->total); j++)
+    {
+        int64_t start = nats_NowMonotonicInNanoSeconds();
+
+        s = natsConnection_Publish(ctx->nc, ctx->subj, (const void*) "x", 1);
+        if (s == NATS_OK)
+        {
+            natsMutex_Lock(ctx->arg.mu);
+            while ((s != NATS_TIMEOUT) && (ctx->arg.done != (j+1)))
+                s = natsCondition_TimedWait(ctx->arg.cond, ctx->arg.mu, 2000);
+            natsMutex_Unlock(ctx->arg.mu);
+        }
+        if (s == NATS_OK)
+            ctx->rtts[j] = nats_NowMonotonicInNanoSeconds() - start;
+    }
+    ctx->s = s;
+}
+
+// Measures the round-trip latency of single publishes for various flusher
+// accumulation waits, in three modes: "sparse" leaves the connection idle
+// between publishes, "pingpong" publishes again as soon as the previous
+// message is received (like a synchronous request or KV put loop), and
+// "pingpong2" runs two such loops concurrently on the same connection
+// (their coincident writes count as busy traffic, so with a non-zero wait
+// each operation is expected to pay the accumulation window on top of the
+// RTT).
+void test_BenchCorePublishLatency(void)
+{
+    natsStatus          s        = NATS_OK;
+    natsPid             pid      = NATS_INVALID_PID;
+    int                 numTests = (int) (sizeof(_flusherWaits)/sizeof(*_flusherWaits));
+    struct _benchArg    arg;
+    int64_t             rtts[500];
+    const int           total    = (int) (sizeof(rtts)/sizeof(*rtts));
+    const int           gaps[]   = {2, 0}; // ms of idle between publishes
+    const char          *modes[] = {"sparse", "pingpong"};
+    int                 numModes = (int) (sizeof(gaps)/sizeof(*gaps));
+    int                 i;
+
+    memset(&arg, 0, sizeof(struct _benchArg));
+
+    pid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    if (pid == NATS_INVALID_PID)
+        s = NATS_ERR;
+    IFOK(s, natsMutex_Create(&arg.mu));
+    IFOK(s, natsCondition_Create(&arg.cond));
+
+    printf("[\n");
+    fflush(stdout);
+    for (i=0; (s == NATS_OK) && (i < numTests); i++)
+    {
+        natsOptions      *opts = NULL;
+        natsConnection   *nc   = NULL;
+        natsSubscription *sub  = NULL;
+        char             tn[64];
+        int              m;
+
+        _flusherWaitName(_flusherWaits[i], tn, sizeof(tn));
+
+        s = natsOptions_Create(&opts);
+        if ((s == NATS_OK) && (_flusherWaits[i] >= 0))
+            s = natsOptions_SetFlusherWaitMicros(opts, _flusherWaits[i]);
+        IFOK(s, natsConnection_Connect(&nc, opts));
+        IFOK(s, natsConnection_Subscribe(&sub, nc, "lat", _benchLatencyHandler, (void*) &arg));
+        IFOK(s, natsConnection_Flush(nc));
+
+        for (m=0; (s == NATS_OK) && (m < numModes); m++)
+        {
+            int j;
+
+            natsMutex_Lock(arg.mu);
+            arg.done = 0;
+            natsMutex_Unlock(arg.mu);
+
+            for (j=0; (s == NATS_OK) && (j < total); j++)
+            {
+                int64_t start;
+
+                if (gaps[m] > 0)
+                    nats_Sleep(gaps[m]);
+
+                start = nats_NowMonotonicInNanoSeconds();
+                s = natsConnection_Publish(nc, "lat", (const void*) "x", 1);
+                if (s == NATS_OK)
+                {
+                    natsMutex_Lock(arg.mu);
+                    while ((s != NATS_TIMEOUT) && (arg.done != (j+1)))
+                        s = natsCondition_TimedWait(arg.cond, arg.mu, 2000);
+                    natsMutex_Unlock(arg.mu);
+                }
+                if (s == NATS_OK)
+                    rtts[j] = nats_NowMonotonicInNanoSeconds() - start;
+            }
+
+            if (s == NATS_OK)
+            {
+                qsort(rtts, total, sizeof(int64_t), _cmpInt64);
+                printf("\t{\"name\":\"%s/%s\", \"p50us\":%d, \"p99us\":%d},\n",
+                       tn, modes[m],
+                       (int) (rtts[total/2] / 1000),
+                       (int) (rtts[(total*99)/100] / 1000));
+                fflush(stdout);
+            }
+        }
+
+        // pingpong2: two concurrent synchronous writers on this connection.
+        if (s == NATS_OK)
+        {
+            struct _benchPPCtx  ctxs[2];
+            int64_t             wrtts[2][250];
+            natsThread          *t = NULL;
+            int                 w;
+
+            memset(ctxs, 0, sizeof(ctxs));
+            for (w=0; (s == NATS_OK) && (w<2); w++)
+            {
+                ctxs[w].nc    = nc;
+                ctxs[w].subj  = (w == 0 ? "lat1" : "lat2");
+                ctxs[w].rtts  = wrtts[w];
+                ctxs[w].total = (int) (sizeof(wrtts[w])/sizeof(*wrtts[w]));
+                s = natsMutex_Create(&ctxs[w].arg.mu);
+                IFOK(s, natsCondition_Create(&ctxs[w].arg.cond));
+                IFOK(s, natsConnection_Subscribe(&ctxs[w].sub, nc, ctxs[w].subj,
+                                                 _benchLatencyHandler, (void*) &ctxs[w].arg));
+            }
+            IFOK(s, natsConnection_Flush(nc));
+            IFOK(s, natsThread_Create(&t, _benchPingPongLoop, (void*) &ctxs[1]));
+            if (s == NATS_OK)
+            {
+                _benchPingPongLoop((void*) &ctxs[0]);
+                natsThread_Join(t);
+                natsThread_Destroy(t);
+                s = (ctxs[0].s != NATS_OK ? ctxs[0].s : ctxs[1].s);
+            }
+            if (s == NATS_OK)
+            {
+                const char *comma = (i < numTests-1 ? "," : "");
+
+                memcpy(rtts, wrtts[0], sizeof(wrtts[0]));
+                memcpy(rtts + ctxs[0].total, wrtts[1], sizeof(wrtts[1]));
+                qsort(rtts, total, sizeof(int64_t), _cmpInt64);
+                printf("\t{\"name\":\"%s/pingpong2\", \"p50us\":%d, \"p99us\":%d}%s\n",
+                       tn,
+                       (int) (rtts[total/2] / 1000),
+                       (int) (rtts[(total*99)/100] / 1000),
+                       comma);
+                fflush(stdout);
+            }
+            for (w=0; w<2; w++)
+            {
+                natsSubscription_Destroy(ctxs[w].sub);
+                natsCondition_Destroy(ctxs[w].arg.cond);
+                natsMutex_Destroy(ctxs[w].arg.mu);
+            }
+        }
+
+        natsSubscription_Destroy(sub);
+        natsConnection_Destroy(nc);
+        natsOptions_Destroy(opts);
+    }
+    printf("]\n");
+    fflush(stdout);
+
+    natsMutex_Destroy(arg.mu);
+    natsCondition_Destroy(arg.cond);
+    _stopServer(pid);
+
+    if (s != NATS_OK)
+    {
+        printf("Error: %d (%s)\n", s, natsStatus_GetText(s));
+        nats_PrintLastErrorStack(stdout);
+        fflush(stdout);
+    }
+
+    testCond(s == NATS_OK);
+}

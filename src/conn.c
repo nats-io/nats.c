@@ -1832,7 +1832,9 @@ _doReconnect(void *arg)
 
     // Note that the pool's size may decrement after the call to
     // natsSrvPool_GetNextServer.
-    for (i=0; (s == NATS_OK) && (natsSrvPool_GetSize(pool) > 0); )
+    // The connection could have been closed entering the thread, so bail out
+    // once we detect that the connection is closed.
+    for (i=0; (s == NATS_OK) && !natsConn_isClosed(nc) && (natsSrvPool_GetSize(pool) > 0); )
     {
         nc->cur = natsSrvPool_GetNextServer(pool, nc->opts, nc->cur);
         if (nc->cur == NULL)
@@ -1843,6 +1845,7 @@ _doReconnect(void *arg)
 
         doSleep = (i+1 >= natsSrvPool_GetSize(pool));
 
+        sleepTime = 0;
         if (doSleep)
         {
             i = 0;
@@ -1852,6 +1855,9 @@ _doReconnect(void *arg)
                 natsConn_Unlock(nc);
                 sleepTime = crd(nc, wlf, crdClosure);
                 natsConn_Lock(nc);
+                // Connection could have been closed.
+                if (natsConn_isClosed(nc))
+                    break;
             }
             else
             {
@@ -1859,17 +1865,13 @@ _doReconnect(void *arg)
                 if (jitter > 0)
                     sleepTime += nats_Rand64() % jitter;
             }
-            if (natsConn_isClosed(nc))
-                break;
-            natsCondition_TimedWait(nc->reconnectCond, nc->mu, sleepTime);
         }
         else
         {
             i++;
-            natsConn_Unlock(nc);
-            natsThread_Yield();
-            natsConn_Lock(nc);
+            sleepTime = 1;
         }
+        natsCondition_TimedWait(nc->reconnectCond, nc->mu, sleepTime);
 
         // Check if we have been closed first.
         if (natsConn_isClosed(nc))
@@ -2040,10 +2042,14 @@ natsConn_flushOrKickFlusher(natsConnection *nc)
     {
         s = natsConn_bufferFlush(nc);
     }
-    else if (!(nc->flusherSignaled) && (nc->bw != NULL))
+    else if (nc->bw != NULL)
     {
-        nc->flusherSignaled = true;
-        natsCondition_Signal(nc->flusherCond);
+        nc->flusherKicks++;
+        if (!(nc->flusherSignaled))
+        {
+            nc->flusherSignaled = true;
+            natsCondition_Signal(nc->flusherCond);
+        }
     }
     return s;
 }
@@ -2572,6 +2578,7 @@ _flusher(void *arg)
 {
     natsConnection  *nc  = (natsConnection*) arg;
     natsStatus      s;
+    int64_t         kicks = 0;
 
     while (true)
     {
@@ -2586,16 +2593,31 @@ _flusher(void *arg)
             break;
         }
 
-        //TODO: If we process the request right away, performance
-        //      will suffer when sending quickly very small messages.
-        //      The buffer is going to be always flushed, which
-        //      defeats the purpose of a write buffer.
-        //      We need to revisit this.
+        // Give a chance to accumulate more requests, but only when it is
+        // likely that more data is coming: writes are still coming after
+        // we woke up, and writes are frequent (a flush occurred within the
+        // last accumulation window).
+        // For a lone pending write - sparse traffic or a synchronous
+        // request/reply - flush immediately instead.
+        if ((nc->opts->flusherWait > 0))
+        {
+            kicks = nc->flusherKicks;
+            natsConn_Unlock(nc);
+            natsThread_Yield();
+            natsConn_Lock(nc);
 
-        // Give a chance to accumulate more requests...
-        natsCondition_TimedWait(nc->flusherCond, nc->mu, 1);
+            if (nc->flusherKicks > kicks &&
+                (((nats_NowMonotonicInNanoSeconds() - nc->flusherLastFlush) / 1000)
+                    < nc->opts->flusherWait))
+            {
+                natsCondition_TimedWaitMicros(nc->flusherCond, nc->mu,
+                                            nc->opts->flusherWait);
+            }
+        }
 
         nc->flusherSignaled = false;
+        nc->flusherKicks    = 0;
+        kicks = 0;
 
         if (!_isConnected(nc) || natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
         {
@@ -2609,6 +2631,7 @@ _flusher(void *arg)
             s = natsConn_bufferFlush(nc);
             if ((s != NATS_OK) && (nc->err == NATS_OK))
                 nc->err = s;
+            nc->flusherLastFlush = nats_NowMonotonicInNanoSeconds();
         }
 
         natsConn_Unlock(nc);
@@ -2696,8 +2719,10 @@ _spinUpSocketWatchers(natsConnection *nc)
 {
     natsStatus  s = NATS_OK;
 
-    nc->pout        = 0;
-    nc->flusherStop = false;
+    nc->pout             = 0;
+    nc->flusherStop      = false;
+    nc->flusherLastFlush = 0;
+    nc->flusherKicks     = 0;
 
     if (nc->opts->evLoop == NULL)
     {

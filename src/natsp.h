@@ -331,6 +331,11 @@ struct __natsOptions
     // not rely on the flusher.
     bool                    sendAsap;
 
+    // Maximum time (in microseconds) the flusher thread waits to
+    // accumulate more data before flushing when writes are frequent.
+    // 0 means flush as soon as signaled.
+    int64_t                 flusherWait;
+
     // If set to true, pending requests will fail with NATS_CONNECTION_DISCONNECTED
     // when the library detects a disconnection.
     bool                    failRequestsOnDisconnect;
@@ -872,6 +877,15 @@ struct __natsConnection
     natsCondition       *flusherCond;
     bool                flusherSignaled;
     bool                flusherStop;
+    // Monotonic time (in nanoseconds) of the last flush performed by the
+    // flusher thread, 0 if none. Used to skip the accumulation wait when
+    // the connection has been idle.
+    int64_t             flusherLastFlush;
+    // Number of writes buffered since the flusher thread last woke up
+    // and examined the buffer. Used to skip the accumulation wait when
+    // only a single write is pending (sparse traffic or a synchronous
+    // request/reply or KV loop).
+    int64_t             flusherKicks;
 
     natsThread          *reconnectThread;
     int                 inReconnect;
@@ -1001,6 +1015,13 @@ natsCondition_TimedWait(natsCondition *cond, natsMutex *mutex, int64_t timeout);
 natsStatus
 natsCondition_AbsoluteTimedWait(natsCondition *cond, natsMutex *mutex,
                                 int64_t absoluteTime);
+
+// Same as natsCondition_TimedWait, but with the timeout expressed in
+// microseconds. On platforms where the underlying primitive has millisecond
+// granularity (Windows), the timeout is rounded up to the nearest millisecond.
+natsStatus
+natsCondition_TimedWaitMicros(natsCondition *cond, natsMutex *mutex,
+                              int64_t timeoutUs);
 
 void
 natsCondition_Signal(natsCondition *cond);

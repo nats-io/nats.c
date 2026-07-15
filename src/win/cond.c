@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -75,6 +75,17 @@ natsCondition_AbsoluteTimedWait(natsCondition *cond, natsMutex *mutex, int64_t a
     }
 
     return NATS_OK;
+}
+
+natsStatus
+natsCondition_TimedWaitMicros(natsCondition *cond, natsMutex *mutex, int64_t timeoutUs)
+{
+    if (timeoutUs <= 0)
+        return NATS_TIMEOUT;
+
+    // SleepConditionVariableCS has millisecond granularity: round up.
+    return natsCondition_TimedWait(cond, mutex,
+                                   (timeoutUs / 1000) + ((timeoutUs % 1000) != 0 ? 1 : 0));
 }
 
 void

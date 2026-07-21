@@ -13,6 +13,18 @@
 
 #include <stdio.h>
 #include <string.h>
+
+// This example reads the server's INFO line over a raw TCP connection using
+// the POSIX sockets API, so it builds on Unix-like systems (Linux, macOS)
+// only. On Windows the equivalent would use the Winsock API (winsock2.h).
+#if defined(_WIN32)
+int main(void)
+{
+    fprintf(stderr,
+            "This example uses POSIX sockets and is not supported on Windows.\n");
+    return 0;
+}
+#else
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -21,6 +33,7 @@
 int main(int argc, char **argv)
 {
     // NATS-DOC-START
+    // Raw POSIX/BSD sockets -- Unix-like systems (Linux, macOS) only.
     // The server sends first. Open a raw TCP connection to port 4222 --
     // no NATS library involved -- and the server immediately sends its
     // INFO line: plain text, ending in CRLF, describing itself and the
@@ -56,3 +69,4 @@ int main(int argc, char **argv)
 
     return 0;
 }
+#endif

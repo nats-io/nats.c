@@ -1,0 +1,66 @@
+// Copyright 2026 The NATS Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include <nats.h>
+
+int main(int argc, char **argv)
+{
+    natsConnection      *conn = NULL;
+    natsOptions         *opts = NULL;
+    natsStatus          s;
+
+    s = natsOptions_Create(&opts);
+
+    // NATS-DOC-START
+    // A pool whose first pick may be unreachable: the client tries the
+    // next URL. Connect fails only when every dial failed.
+    const char *servers[] = {"nats://n1:4222", "nats://n2:4222",
+                             "nats://n3:4222"};
+
+    if (s == NATS_OK)
+        s = natsOptions_SetServers(opts, servers, 3);
+    if (s == NATS_OK)
+        s = natsOptions_SetName(opts, "order-svc");
+
+    // Handle the failure at the boundary. NATS_NO_SERVER means no
+    // server in the pool answered; anything else is a rejected connect,
+    // an -ERR from a server the client did reach.
+    if (s == NATS_OK)
+        s = natsConnection_Connect(&conn, opts);
+    if (s == NATS_NO_SERVER)
+    {
+        fprintf(stderr, "could not connect to any server in the pool\n");
+        natsOptions_Destroy(opts);
+        exit(1);
+    }
+
+    if (s == NATS_OK)
+        s = natsConnection_PublishString(conn, "orders.created",
+                "{\"order_id\":\"ord_8w2k\",\"customer\":\"acme-co\","
+                "\"total_cents\":4200,\"ts\":\"2026-05-22T10:14:22Z\"}");
+
+    if (s == NATS_OK)
+        printf("connected and published\n");
+    // NATS-DOC-END
+
+    natsConnection_Destroy(conn);
+    natsOptions_Destroy(opts);
+
+    if (s != NATS_OK)
+    {
+        nats_PrintLastErrorStack(stderr);
+        exit(2);
+    }
+
+    return 0;
+}

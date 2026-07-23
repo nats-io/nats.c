@@ -3979,7 +3979,11 @@ natsOptions_IPResolutionOrder(natsOptions *opts, int order);
  *
  * The alternative would be to call #natsConnection_Flush(),
  * but this call requires a round-trip with the server, which is less
- * efficient than using this option.
+ * efficient than using this option. Setting the flusher wait to `0`
+ * (see #natsOptions_SetFlusherWaitMicros()) avoids the round-trip too,
+ * but the data is still handed to the flusher thread, so each publish
+ * costs a thread wake-up before it reaches the socket. With this option
+ * the publishing thread writes the data itself.
  *
  * Note that the Request() call already automatically sends the request
  * as fast as possible, there is no need to set an option for that.
@@ -4018,12 +4022,20 @@ natsOptions_SetSendAsap(natsOptions *opts, bool sendAsap);
  * benefit for sparse and request/reply style traffic without that
  * throughput cost, so `0` is rarely needed.
  *
- * \note On Windows, waits have millisecond granularity: positive values
- * are rounded up to the nearest millisecond. A value of `0` fully
- * applies on all platforms.
- *
  * \note This option has no effect if #natsOptions_SetSendAsap is set to
  * `true`, since in that case the flusher thread is not used.
+ *
+ * \note The value that yields the highest throughput depends on the
+ * machine, the message size and the publishing pattern - in our
+ * benchmarks the best value moved between 250 and 1000 microseconds
+ * across different hosts. Applications that need both maximum throughput
+ * and minimal latency should benchmark their own workload rather
+ * than assume the default is optimal.
+ *
+ * \warning On Windows, waits have millisecond granularity: positive values
+ * are rounded up to the nearest millisecond, so any value between `1` and
+ * `1000` behaves like `1000` - tuning below 1 millisecond has no effect on
+ * Windows. A value of `0` fully applies on all platforms.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param flusherWaitUs the maximum accumulation wait, in microseconds.

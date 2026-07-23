@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['management_0',['management',['../group__js_assets_group.html',1,'JetStream Assets Management'],['../group__kv_group_mgt.html',1,'KeyValue store management'],['../group__conn_mgt_group.html',1,'Management'],['../group__stan_conn_mgt_group.html',1,'Management'],['../group__obs_mgt.html',1,'Object Store management'],['../group__obs_group_mgt.html',1,'Object Stores management']]],
+  ['management_0',['management',['../group__js_assets_group.html',1,'JetStream Assets Management'],['../group__kv_group_mgt.html',1,'KeyValue store management'],['../group__stan_conn_mgt_group.html',1,'Management'],['../group__conn_mgt_group.html',1,'Management'],['../group__obs_mgt.html',1,'Object Store management'],['../group__obs_group_mgt.html',1,'Object Stores management']]],
   ['manualack_1',['ManualAck',['../structjs_sub_options.html#a21a905c49dfab61729d8674702d196b2',1,'jsSubOptions']]],
   ['maxackpending_2',['maxackpending',['../structjs_stream_consumer_limits.html#a04a6c89366cf75dbf76e43c786b133a4',1,'jsStreamConsumerLimits::MaxAckPending'],['../structjs_consumer_config.html#aeb2336d480e3885385d1b08410e89892',1,'jsConsumerConfig::MaxAckPending'],['../structjs_account_limits.html#a4abf1972690c20d73bd314f2059e8013',1,'jsAccountLimits::MaxAckPending']]],
   ['maxage_3',['MaxAge',['../structjs_stream_config.html#aa538765ad97d343d60212ebd9894661e',1,'jsStreamConfig']]],
@@ -22,13 +22,13 @@ var searchData=
   ['maxvaluesize_19',['MaxValueSize',['../structkv_config.html#a281156a9df0130abad7f3b2728ac35a5',1,'kvConfig']]],
   ['maxwait_20',['MaxWait',['../structjs_pub_options.html#a1b242c9311b904a2e5337417b5c6d143',1,'jsPubOptions']]],
   ['maxwaiting_21',['MaxWaiting',['../structjs_consumer_config.html#a8472d49fae908ab0291b4d62c8411b76',1,'jsConsumerConfig']]],
-  ['memory_22',['memory',['../structjs_account_info.html#a448578d621e878267ad5f1792002a665',1,'jsAccountInfo::Memory'],['../structjs_tier.html#aeff4a4cb86e10d8d7749d6ff69f97ed1',1,'jsTier::Memory']]],
+  ['memory_22',['memory',['../structjs_tier.html#aeff4a4cb86e10d8d7749d6ff69f97ed1',1,'jsTier::Memory'],['../structjs_account_info.html#a448578d621e878267ad5f1792002a665',1,'jsAccountInfo::Memory']]],
   ['memorymaxstreambytes_23',['MemoryMaxStreamBytes',['../structjs_account_limits.html#a38875d969274b0f0fcefc6b04ce56eb8',1,'jsAccountLimits']]],
   ['memorystorage_24',['MemoryStorage',['../structjs_consumer_config.html#a046177256938d6a601c629f9fd82f888',1,'jsConsumerConfig']]],
   ['message_25',['message',['../group__msg_group.html',1,'Message'],['../group__stan_msg_group.html',1,'Streaming Message']]],
   ['messages_26',['Messages',['../group__js_msg.html',1,'']]],
   ['meta_27',['Meta',['../structobj_store_info.html#a06fd53bb3fe3fe401907d75a6cb4de6e',1,'objStoreInfo']]],
-  ['metadata_28',['metadata',['../structjs_stream_config.html#a7aa4849b0f555c9de6b6da953929a565',1,'jsStreamConfig::Metadata'],['../structmicro__service__info__s.html#a292990d3fd1d94e48fd91e5556a2c091',1,'micro_service_info_s::Metadata'],['../structmicro__service__config__s.html#a4a5a97a4181a4870353f9e139cca72fc',1,'micro_service_config_s::Metadata'],['../structmicro__endpoint__info__s.html#aef2820ecb742b9ce9a643d39343df740',1,'micro_endpoint_info_s::Metadata'],['../structmicro__endpoint__config__s.html#a7aee4ab9e29512c0b6ee12ba233c0fb7',1,'micro_endpoint_config_s::Metadata'],['../structobj_store_meta.html#ad4c964a192c4abe830744747d920605e',1,'objStoreMeta::Metadata'],['../structobj_store_status.html#afa1c16d011acad8057968f10bafca2af',1,'objStoreStatus::Metadata'],['../structobj_store_config.html#a1aadd26b6fdda95b72b8eb1a06778d08',1,'objStoreConfig::Metadata'],['../structjs_consumer_config.html#a8bfc0284c57028bf9cf809205d989959',1,'jsConsumerConfig::Metadata']]],
+  ['metadata_28',['metadata',['../structjs_stream_config.html#a7aa4849b0f555c9de6b6da953929a565',1,'jsStreamConfig::Metadata'],['../structjs_consumer_config.html#a8bfc0284c57028bf9cf809205d989959',1,'jsConsumerConfig::Metadata'],['../structobj_store_config.html#a1aadd26b6fdda95b72b8eb1a06778d08',1,'objStoreConfig::Metadata'],['../structobj_store_status.html#afa1c16d011acad8057968f10bafca2af',1,'objStoreStatus::Metadata'],['../structobj_store_meta.html#ad4c964a192c4abe830744747d920605e',1,'objStoreMeta::Metadata'],['../structmicro__endpoint__config__s.html#a7aee4ab9e29512c0b6ee12ba233c0fb7',1,'micro_endpoint_config_s::Metadata'],['../structmicro__endpoint__info__s.html#aef2820ecb742b9ce9a643d39343df740',1,'micro_endpoint_info_s::Metadata'],['../structmicro__service__config__s.html#a4a5a97a4181a4870353f9e139cca72fc',1,'micro_service_config_s::Metadata'],['../structmicro__service__info__s.html#a292990d3fd1d94e48fd91e5556a2c091',1,'micro_service_info_s::Metadata']]],
   ['metaonly_29',['MetaOnly',['../structkv_watch_options.html#ac9094bce4f3c6513431ba32fb49e5605',1,'kvWatchOptions']]],
   ['micro_5faddservice_30',['micro_AddService',['../group__micro_service_functions.html#ga2986a9751147b6f77064b5739635c2c1',1,'nats.h']]],
   ['micro_5fapi_5fprefix_31',['MICRO_API_PREFIX',['../group__micro_constants.html#ga2ad15244b5f6541d0d30207bb71e2667',1,'nats.h']]],
@@ -63,7 +63,7 @@ var searchData=
   ['microendpointconfig_60',['microEndpointConfig',['../group__micro_types.html#ga7718d2f2c911e4cf677788f4ffe048cd',1,'nats.h']]],
   ['microendpointinfo_61',['microEndpointInfo',['../group__micro_types.html#gadd4fcc67087b4d5f42015a7269cb6496',1,'nats.h']]],
   ['microendpointstats_62',['microEndpointStats',['../group__micro_types.html#ga0a429a5ecfff69b212a3ba9abebcba53',1,'nats.h']]],
-  ['microerror_63',['microerror',['../group__micro_error_functions.html',1,'microError'],['../group__micro_types.html#ga41ae4121cf2f8e326369bbc2e44e20d7',1,'microError:&#160;nats.h']]],
+  ['microerror_63',['microerror',['../group__micro_types.html#ga41ae4121cf2f8e326369bbc2e44e20d7',1,'microError:&#160;nats.h'],['../group__micro_error_functions.html',1,'microError']]],
   ['microerror_5fcode_64',['microError_Code',['../group__micro_error_functions.html#ga69edae8121c8a5a093c76ee2662bae54',1,'nats.h']]],
   ['microerror_5fdestroy_65',['microError_Destroy',['../group__micro_error_functions.html#ga1bf0dc7e647ffd431bdca222d9246f07',1,'nats.h']]],
   ['microerror_5fignore_66',['microError_Ignore',['../group__micro_error_functions.html#ga7d7cf243a0d24ff38fbaf6afdfb461cd',1,'nats.h']]],
@@ -71,7 +71,7 @@ var searchData=
   ['microerror_5fstring_68',['microError_String',['../group__micro_error_functions.html#ga9694838e69616612ef98afe7a45cb58d',1,'nats.h']]],
   ['microerror_5fwrapf_69',['microError_Wrapf',['../group__micro_error_functions.html#gad43118a9e9e48aefbde3b21c4bd9d36f',1,'nats.h']]],
   ['microerrorhandler_70',['microErrorHandler',['../group__micro_callbacks.html#ga7a40fbbb9b1102f0a7679f9dfcf6c0d6',1,'nats.h']]],
-  ['microgroup_71',['microgroup',['../group__micro_group_functions.html',1,'microGroup'],['../group__micro_types.html#ga2681ea21e9f5f6681b972bbb67e32133',1,'microGroup:&#160;nats.h']]],
+  ['microgroup_71',['microgroup',['../group__micro_types.html#ga2681ea21e9f5f6681b972bbb67e32133',1,'microGroup:&#160;nats.h'],['../group__micro_group_functions.html',1,'microGroup']]],
   ['microgroup_5faddendpoint_72',['microGroup_AddEndpoint',['../group__micro_group_functions.html#gabc9641ad7ee7775c388c864f2ffa6883',1,'nats.h']]],
   ['microgroup_5faddgroup_73',['microGroup_AddGroup',['../group__micro_group_functions.html#gade7fd0f2080a2e647b79c20a5019394d',1,'nats.h']]],
   ['microgroupconfig_74',['microGroupConfig',['../group__micro_types.html#ga8ea3d2aa37d1e89fb9c6d87c10dfe603',1,'nats.h']]],
@@ -122,5 +122,6 @@ var searchData=
   ['msgid_119',['MsgId',['../structjs_pub_options.html#ac8708487360b784f7dd5d7a21e5617c0',1,'jsPubOptions']]],
   ['msgs_120',['msgs',['../structnats_msg_list.html#aa123668879f1c9c11c9be7bd81a205c5',1,'natsMsgList::Msgs'],['../structjs_lost_stream_data.html#a5d2e87697526033c842a7f955776dfda',1,'jsLostStreamData::Msgs'],['../structjs_stream_state_subject.html#a8b9b2edc5afe82b7b3bc7dbdd67a4384',1,'jsStreamStateSubject::Msgs'],['../structjs_stream_state.html#a495269fe83c6bbf2023cca94add0a888',1,'jsStreamState::Msgs']]],
   ['msgslen_121',['MsgsLen',['../structjs_lost_stream_data.html#abdc373ed7fc9b7cf161c13da1913fc9a',1,'jsLostStreamData']]],
-  ['msgttl_122',['MsgTTL',['../structjs_pub_options.html#a07c8ec214966ef7ce0bd48a8e8008f9d',1,'jsPubOptions']]]
+  ['msgttl_122',['MsgTTL',['../structjs_pub_options.html#a07c8ec214966ef7ce0bd48a8e8008f9d',1,'jsPubOptions']]],
+  ['muxreplies_123',['MuxReplies',['../structjs_options_publish_async.html#a818eb8be6c9d38bb709bdf083604f8fe',1,'jsOptionsPublishAsync']]]
 ];

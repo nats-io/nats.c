@@ -2439,6 +2439,10 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
         }
     }
 
+    // Expose disconnect cause to asyncErrCb before reconnect clears it.
+    if ((s != NATS_OK) && (nc->opts->asyncErrCb != NULL))
+        natsAsyncCb_PostErrHandler(nc, NULL, s, NULL);
+
     // Do reconnect only if allowed and we were actually connected
     // or if we are retrying on initial failed connect.
     if (initialConnect || (nc->opts->allowReconnect && (nc->status == NATS_CONN_STATUS_CONNECTED)))

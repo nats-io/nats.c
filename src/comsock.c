@@ -187,6 +187,24 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
         // Invoke the proxy connect callback.
         s = ctx->proxyConnectCb(&ctx->fd, host, port, ctx->proxyConnectClosure);
 
+        // The callback hands back a socket it created itself, so it has not been
+        // through the setup that the regular connect path below performs. Apply
+        // the same settings here. Leaving the socket in blocking mode is not an
+        // option: with TLS, natsSock_Read() holds ctx->sslMu across SSL_read(),
+        // so a blocking read would stall every concurrent write - and with it
+        // the flusher thread, which holds nc->mu while flushing.
+        if (s == NATS_OK)
+            s = natsSock_SetBlocking(ctx->fd, false);
+
+        if (s == NATS_OK)
+            s = natsSock_SetCommonTcpOptions(ctx->fd);
+
+        if (s != NATS_OK)
+        {
+            _closeFd(ctx->fd);
+            ctx->fd = NATS_SOCK_INVALID;
+        }
+
         // If there was a deadline, reset the deadline with whatever is left.
         if (totalTimeout > 0)
             _resetDeadline(ctx, start, totalTimeout);

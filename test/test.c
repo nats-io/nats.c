@@ -6421,6 +6421,60 @@ _proxyConnectCb(natsSock *fd, char *host, int port, void *closure)
     return s;
 }
 
+// Returns a plain blocking socket, without going through any of the natsSock_*
+// helpers. This is what a callback that performs its own connect (say an HTTP
+// CONNECT tunnel to a proxy) hands back, and the library is responsible for
+// applying the socket setup to it.
+static natsStatus
+_plainSocketProxyConnectCb(natsSock *fd, char *host, int port, void *closure)
+{
+    struct threadArg    *arg      = (struct threadArg*) closure;
+    struct addrinfo     *servinfo = NULL;
+    struct addrinfo     hints;
+    natsStatus          s         = NATS_OK;
+    natsSock            sock      = NATS_SOCK_INVALID;
+    char                sport[6];
+    int                 res;
+
+    natsMutex_Lock(arg->m);
+    arg->sum++;
+    natsMutex_Unlock(arg->m);
+
+    snprintf(sport, sizeof(sport), "%d", port);
+
+    memset(&hints, 0, sizeof(hints));
+
+    hints.ai_family   = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    if ((res = getaddrinfo(host, sport, &hints, &servinfo)) != 0)
+        s = NATS_SYS_ERROR;
+
+    if (s == NATS_OK)
+    {
+        sock = socket(servinfo->ai_family, servinfo->ai_socktype,
+                      servinfo->ai_protocol);
+        if (sock == NATS_SOCK_INVALID)
+            s = NATS_SYS_ERROR;
+    }
+    if ((s == NATS_OK)
+        && (connect(sock, servinfo->ai_addr, (natsSockLen) servinfo->ai_addrlen) != 0))
+    {
+        s = NATS_SYS_ERROR;
+    }
+
+    if (servinfo != NULL)
+        freeaddrinfo(servinfo);
+
+    if (s == NATS_OK)
+        *fd = sock;
+    else if (sock != NATS_SOCK_INVALID)
+        natsSock_Close(sock);
+
+    return s;
+}
+
 void test_ProxyConnectCb(void)
 {
     natsStatus          s;
@@ -6472,6 +6526,37 @@ void test_ProxyConnectCb(void)
     s = (args.sum == 1 ? NATS_OK : NATS_ERR);
     args.sum = 0;
     natsMutex_Unlock(args.m);
+    testCond(s == NATS_OK);
+
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
+    test("Set connectCb that returns a plain socket: ");
+    s = natsOptions_SetProxyConnHandler(opts, _plainSocketProxyConnectCb, (void*) &args);
+    testCond(s == NATS_OK);
+
+    test("Connect with connectCb returning a plain socket: ");
+    s = natsConnection_Connect(&nc, opts);
+    testCond(s == NATS_OK);
+
+    // The socket the callback returned had no options set. Check that the
+    // library applied its own setup to it, as it does on the regular path.
+    test("Socket setup applied by the library: ");
+    {
+        int         nodelay = 0;
+        natsSockLen len     = (natsSockLen) sizeof(nodelay);
+
+        s = NATS_OK;
+        if (getsockopt(nc->sockCtx.fd, IPPROTO_TCP, TCP_NODELAY,
+                       (char*) &nodelay, &len) != 0)
+        {
+            s = NATS_SYS_ERROR;
+        }
+        else if (nodelay == 0)
+        {
+            s = NATS_ERR;
+        }
+    }
     testCond(s == NATS_OK);
 
     natsConnection_Destroy(nc);

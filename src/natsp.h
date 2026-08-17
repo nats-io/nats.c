@@ -578,6 +578,8 @@ struct __kvWatcher
     natsSubscription    *sub;
     uint64_t            initPending;
     uint64_t            received;
+    kvWatchCb           cb;
+    void                *cbClosure;
     bool                ignoreDel;
     bool                initDone;
     bool                retMarker;

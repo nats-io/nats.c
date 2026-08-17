@@ -1,4 +1,4 @@
-// Copyright 2021-2022 The NATS Authors
+// Copyright 2021-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -1010,6 +1010,10 @@ GET_NEXT:
     {
         s = nats_setDefaultError(NATS_ILLEGAL_STATE);
     }
+    else if (w->cb != NULL)
+    {
+        s = nats_setError(NATS_ILLEGAL_STATE, "%s", kvErrNoNextIfCbSet);
+    }
     else if (w->retMarker)
     {
         // Will return a NULL entry (*new_entry is initialized to NULL).
@@ -1113,6 +1117,111 @@ kvStore_Watch(kvWatcher **new_watcher, kvStore *kv, const char *key, const kvWat
     return kvStore_WatchMulti(new_watcher, kv, &subjects, 1, opts);
 }
 
+static void
+_watchCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    kvWatcher   *w          = (kvWatcher*) closure;
+    natsStatus  s           = NATS_OK;
+    kvEntry     *e          = NULL;
+    kvWatchCb   cb          = NULL;
+    void        *cbClosure  = NULL;
+    bool        ignore      = false;
+    bool        schedule    = false;
+
+    natsMutex_Lock(w->mu);
+    if (w->stopped)
+    {
+        ignore = true;
+    }
+    if (w->retMarker)
+    {
+        // Will invoke the callback with a NULL entry.
+        // Mark that we should no longer check/return the "init done" marker.
+        w->retMarker = false;
+    }
+    else
+    {
+        uint64_t delta = 0;
+
+        // Use kv->pre here, always.
+        if ((strlen(msg->subject) <= strlen(w->kv->pre)))
+            s = nats_setError(NATS_ERR, "invalid update's subject '%s'", msg->subject);
+
+        if ((s == NATS_OK) && ((nats_IsStringEmpty(msg->reply) ||
+                                ((int) strlen(msg->reply) <= jsAckPrefixLen))))
+        {
+            s = nats_setError(NATS_ERR, "unable to get metadata from '%s'", msg->reply);
+        }
+        IFOK(s, js_getMetaData(msg->reply+jsAckPrefixLen,
+                               NULL, NULL, NULL, NULL, &(msg->seq),
+                               NULL, &(msg->time), &delta, 3));
+        if (s == NATS_OK)
+        {
+            kvOperation op = _getKVOp(msg);
+
+            if (!w->ignoreDel || (op != kvOp_Delete && op != kvOp_Purge))
+            {
+                s = _createEntry(&e, w->kv, &msg);
+                if (s == NATS_OK)
+                {
+                    e->op    = op;
+                    e->delta = delta;
+                }
+            }
+            else
+            {
+                ignore = true;
+            }
+            // Here, regardless of status, need to update this
+            if (!w->initDone)
+            {
+                w->received++;
+                // We set this on the first trip through..
+                if (w->initPending == 0)
+                    w->initPending = delta;
+                if ((w->received > w->initPending) || (delta == 0))
+                {
+                    w->initDone  = true;
+                    w->retMarker = true;
+                    schedule     = true;
+                }
+            }
+        }
+    }
+    if (!ignore)
+    {
+        cb          = w->cb;
+        cbClosure   = w->cbClosure;
+    }
+    natsMutex_Unlock(w->mu);
+
+    if (!ignore)
+        (cb)(w, e, s, cbClosure);
+
+    if (schedule)
+    {
+        natsMsg *idm = NULL;
+
+        if (natsMsg_create(&idm, "signal", 6, NULL, 0, NULL, 0, -1) == NATS_OK)
+        {
+            nats_lockSubAndDispatcher(sub);
+            natsSub_enqueueUserMessage(sub, idm);
+            nats_unlockSubAndDispatcher(sub);
+        }
+    }
+
+    // The `msg` variable may be NULL if an entry was created
+    // and took ownership. It is ok since then destroy will be a no-op.
+    natsMsg_Destroy(msg);
+}
+
+static void
+_watchDone(void *closure)
+{
+    kvWatcher   *w = (kvWatcher*) closure;
+    _releaseWatcher(w);
+}
+
 natsStatus
 kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int numKeys, const kvWatchOptions *opts)
 {
@@ -1139,6 +1248,13 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
     if (w == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
+    s = natsMutex_Create(&(w->mu));
+    if (s != NATS_OK)
+    {
+        NATS_FREE(w);
+        return NATS_UPDATE_ERR_STACK(s);
+    }
+
     _retainKV(kv);
     w->kv = kv;
     w->refs = 1;
@@ -1147,7 +1263,6 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
     {
         // special case for single key to avoid a calloc.
         subscribeSubjects[0] = (char *)keys[0];
-
     }
     else
     {
@@ -1173,7 +1288,6 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
             return nats_setDefaultError(NATS_NO_MEMORY);
         }
     }
-    IFOK(s, natsMutex_Create(&(w->mu)));
     if (s == NATS_OK)
     {
         bool updatesOnly = false;
@@ -1210,26 +1324,60 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
         // Need to explicitly bind to the stream here because the subject
         // we construct may not help find the stream when using mirrors.
         so.Stream = kv->stream;
-        s = js_SubscribeSyncMulti(&(w->sub), kv->js, (const char **)subscribeSubjects, numKeys, NULL, &so, NULL);
+        if ((opts != NULL) && (opts->Callback != NULL))
+        {
+            w->cb        = opts->Callback;
+            w->cbClosure = opts->Closure;
+            w->refs++;
+            s = js_SubscribeMulti(&(w->sub), kv->js, (const char **)subscribeSubjects, numKeys,
+                                  _watchCb, (void*) w, NULL, &so, NULL);
+            if (s == NATS_OK)
+            {
+                s = natsSubscription_SetOnCompleteCB(w->sub, _watchDone, (void*) w);
+                // If we could not set the completion callback, then we need
+                // to manually release here.
+                if (s != NATS_OK)
+                    w->refs--;
+            }
+        }
+        else
+        {
+            s = js_SubscribeSyncMulti(&(w->sub), kv->js, (const char **)subscribeSubjects, numKeys, NULL, &so, NULL);
+        }
         IFOK(s, natsSubscription_SetPendingLimits(w->sub, -1, -1));
         if (s == NATS_OK)
         {
             natsSubscription *sub = w->sub;
 
-            natsSub_Lock(sub);
+            nats_lockSubAndDispatcher(sub);
             if ((opts == NULL) || !updatesOnly)
             {
                 if ((sub->jsi != NULL) && (sub->jsi->pending == 0))
                 {
                     w->initDone = true;
                     w->retMarker = true;
+                    if ((opts != NULL) && (opts->Callback != NULL))
+                    {
+                        natsMsg *idm = NULL;
+                        s = natsMsg_create(&idm, "signal", 6, NULL, 0, NULL, 0, -1);
+                        IFOK(s, natsSub_enqueueUserMessage(sub, idm));
+                    }
                 }
             }
             else
             {
                 w->initDone = true;
             }
-            natsSub_Unlock(sub);
+            nats_unlockSubAndDispatcher(sub);
+        }
+
+        // If there was an error and the subscription was created, we need to
+        // destroy it so that it can invoke the completion callback and release
+        // the watcher.
+        if ((s != NATS_OK) && (w->sub != NULL))
+        {
+            natsSubscription_Destroy(w->sub);
+            w->sub = NULL;
         }
     }
 
@@ -1240,7 +1388,7 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
     if (s == NATS_OK)
         *new_watcher = w;
     else
-        _freeWatcher(w);
+        _releaseWatcher(w);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

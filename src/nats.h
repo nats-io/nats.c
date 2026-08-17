@@ -1609,6 +1609,11 @@ typedef struct kvConfig
 
 } kvConfig;
 
+#ifndef BUILD_IN_DOXYGEN
+// Forward declaration
+typedef void (*kvWatchCb)(kvWatcher *w, kvEntry *e, natsStatus s, void *closure);
+#endif
+
 /**
  * KeyValue watcher options object.
  *
@@ -1672,6 +1677,21 @@ typedef struct kvWatchOptions
          * \warning #IncludeHistory and #UpdatesOnly options will be ignored.
          */
         uint64_t        ResumeFromRevision;
+
+        /** \brief This callback is invoked when an entry is available.
+         *
+         * If this is set, the watcher becomes asynchronous, that is, the user
+         * cannot call #kvWatcher_Next, instead the callback will automatically
+         * be invoked when an entry is available.
+         */
+        kvWatchCb       Callback;
+
+        /** \brief An optional pointer to user provided data to be passed to the #Callback.
+         *
+         * If this is non `NULL`, it will be passed to the `Callback` on each
+         * callback invocation.
+         */
+        void*           Closure;
 
 } kvWatchOptions;
 
@@ -2574,6 +2594,30 @@ typedef void (*jsPubAckHandler)(jsCtx *js, natsMsg *msg, jsPubAck *pa, jsPubAckE
  * @param closure user-defined object, possibly `NULL`.
  */
 typedef void (*natsThreadStartedHandler)(void *closure);
+
+/** \brief Callback invoked for each entry of a watcher.
+ *
+ * If the watcher is created with #kvWatchOptions.Callback, then the provided
+ * callback (and #kvWatchOptions.Closure, which can be `NULL`) will be invoked
+ * when an entry is available.
+ *
+ * \note An entry can be NULL the same way that when returned from
+ * #kvWatcher_Next to indicate the end if the initialization of the watcher.
+ * Also, the provided status may be other than #NATS_OK to indicate an issue
+ * deserializing the entry.
+ *
+ * \note If the watcher is stopped in the callback no other entry will be
+ * presented. If the watcher is called in a different thread, no error
+ * status is posted to the callback, entries are simply not dispatched.
+ *
+ * @param w the #kvWatcher
+ * @param e the #kvEntry, possibly `NULL` to indicate that the watcher
+ * initialization is done.
+ * @param s a #natsStatus that indicates if there was an error creating the entry.
+ * @param closure the pointer to some user provided data (#kvWatchOptions.Closure),
+ * possibly `NULL`.
+ */
+typedef void (*kvWatchCb)(kvWatcher *w, kvEntry *e, natsStatus s, void *closure);
 #endif
 
 #if defined(NATS_HAS_STREAMING)

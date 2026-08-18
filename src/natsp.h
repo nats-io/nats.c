@@ -580,6 +580,7 @@ struct __kvWatcher
     uint64_t            received;
     kvWatchCb           cb;
     void                *cbClosure;
+    natsMsg             *signal;
     bool                ignoreDel;
     bool                initDone;
     bool                retMarker;

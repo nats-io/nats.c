@@ -958,6 +958,11 @@ _freeWatcher(kvWatcher *w)
     kvStore *kv = NULL;
 
     natsSubscription_Destroy(w->sub);
+    if (w->signal != NULL)
+    {
+        natsMsg_clearNoDestroy(w->signal);
+        natsMsg_Destroy(w->signal);
+    }
     natsMutex_Destroy(w->mu);
     kv = w->kv;
     NATS_FREE(w);
@@ -1133,7 +1138,7 @@ _watchCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
     {
         ignore = true;
     }
-    if (w->retMarker)
+    else if (w->retMarker)
     {
         // Will invoke the callback with a NULL entry.
         // Mark that we should no longer check/return the "init done" marker.
@@ -1188,27 +1193,27 @@ _watchCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
             }
         }
     }
-    if (!ignore)
-    {
-        cb          = w->cb;
-        cbClosure   = w->cbClosure;
-    }
+    cb          = w->cb;
+    cbClosure   = w->cbClosure;
     natsMutex_Unlock(w->mu);
-
-    if (!ignore)
-        (cb)(w, e, s, cbClosure);
 
     if (schedule)
     {
-        natsMsg *idm = NULL;
+        natsStatus ls;
 
-        if (natsMsg_create(&idm, "signal", 6, NULL, 0, NULL, 0, -1) == NATS_OK)
+        nats_lockSubAndDispatcher(sub);
+        ls = natsSub_enqueueUserMessage(sub, w->signal);
+        nats_unlockSubAndDispatcher(sub);
+
+        if ((ls != NATS_OK) && (s == NATS_OK))
         {
-            nats_lockSubAndDispatcher(sub);
-            natsSub_enqueueUserMessage(sub, idm);
-            nats_unlockSubAndDispatcher(sub);
+            s = ls;
+            ignore = false;
         }
     }
+
+    if (!ignore)
+        (cb)(w, e, s, cbClosure);
 
     // The `msg` variable may be NULL if an entry was created
     // and took ownership. It is ok since then destroy will be a no-op.
@@ -1326,16 +1331,21 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
         so.Stream = kv->stream;
         if ((opts != NULL) && (opts->Callback != NULL))
         {
-            w->cb        = opts->Callback;
-            w->cbClosure = opts->Closure;
-            w->refs++;
-            s = js_SubscribeMulti(&(w->sub), kv->js, (const char **)subscribeSubjects, numKeys,
-                                  _watchCb, (void*) w, NULL, &so, NULL);
+            s = natsMsg_create(&(w->signal), "signal", 6, NULL, 0, NULL, 0, -1);
             if (s == NATS_OK)
             {
-                s = natsSubscription_SetOnCompleteCB(w->sub, _watchDone, (void*) w);
-                // If we could not set the completion callback, then we need
-                // to manually release here.
+                // Prevent this message to be destroyed by the dispatcher.
+                natsMsg_setNoDestroy(w->signal);
+                // Set the callback/closure.
+                w->cb        = opts->Callback;
+                w->cbClosure = opts->Closure;
+                // Retain the watcher.
+                w->refs++;
+                s = js_SubscribeMulti(&(w->sub), kv->js, (const char **)subscribeSubjects, numKeys,
+                                        _watchCb, (void*) w, NULL, &so, NULL);
+                IFOK(s, natsSubscription_SetOnCompleteCB(w->sub, _watchDone, (void*) w));
+                // If we could not create the sub or not set the completion callback,
+                // then we need to manually release here.
                 if (s != NATS_OK)
                     w->refs--;
             }
@@ -1357,11 +1367,7 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
                     w->initDone = true;
                     w->retMarker = true;
                     if ((opts != NULL) && (opts->Callback != NULL))
-                    {
-                        natsMsg *idm = NULL;
-                        s = natsMsg_create(&idm, "signal", 6, NULL, 0, NULL, 0, -1);
-                        IFOK(s, natsSub_enqueueUserMessage(sub, idm));
-                    }
+                        s = natsSub_enqueueUserMessage(sub, w->signal);
                 }
             }
             else
@@ -1373,7 +1379,7 @@ kvStore_WatchMulti(kvWatcher **new_watcher, kvStore *kv, const char **keys, int 
 
         // If there was an error and the subscription was created, we need to
         // destroy it so that it can invoke the completion callback and release
-        // the watcher.
+        // the watcher (required for async watcher, but can be done in all cases).
         if ((s != NATS_OK) && (w->sub != NULL))
         {
             natsSubscription_Destroy(w->sub);

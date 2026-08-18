@@ -1197,23 +1197,19 @@ _watchCb(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
     cbClosure   = w->cbClosure;
     natsMutex_Unlock(w->mu);
 
-    if (schedule)
-    {
-        natsStatus ls;
-
-        nats_lockSubAndDispatcher(sub);
-        ls = natsSub_enqueueUserMessage(sub, w->signal);
-        nats_unlockSubAndDispatcher(sub);
-
-        if ((ls != NATS_OK) && (s == NATS_OK))
-        {
-            s = ls;
-            ignore = false;
-        }
-    }
-
     if (!ignore)
         (cb)(w, e, s, cbClosure);
+
+    if (schedule)
+    {
+        nats_lockSubAndDispatcher(sub);
+        s = natsSub_enqueueUserMessage(sub, w->signal);
+        nats_unlockSubAndDispatcher(sub);
+
+        if (s != NATS_OK)
+            (cb)(w, NULL, s, cbClosure);
+    }
+
 
     // The `msg` variable may be NULL if an entry was created
     // and took ownership. It is ok since then destroy will be a no-op.

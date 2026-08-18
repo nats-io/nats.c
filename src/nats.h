@@ -2610,8 +2610,7 @@ typedef void (*natsThreadStartedHandler)(void *closure);
  * presented. If the watcher is called in a different thread, no error
  * status is posted to the callback, entries are simply not dispatched.
  *
- * \warning The user is responsible for calling #kvEntry_Destroy before the
- * callback returns.
+ * \warning The user is responsible for calling #kvEntry_Destroy when no longer needed.
  *
  * @param w the #kvWatcher
  * @param e the #kvEntry, possibly `NULL` to indicate that the watcher

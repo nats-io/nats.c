@@ -133,6 +133,7 @@ struct threadArg
     natsConnection   *nc;
     jsCtx            *js;
     natsBuffer       *buf;
+    kvEntry          *kve;
 
 #if defined(NATS_HAS_STREAMING)
     stanConnection   *sc;
@@ -36005,6 +36006,214 @@ void test_KeyValueWatch(void)
     _destroyDefaultThreadArgs(&arg);
 
     JS_TEARDOWN;
+}
+
+static natsStatus
+_getNextKVEntryAsync(kvEntry **e, struct threadArg *arg, int64_t timeout)
+{
+    natsStatus  s = NATS_OK;
+
+    natsMutex_Lock(arg->m);
+    while ((s != NATS_TIMEOUT) && !arg->msgReceived)
+        s = natsCondition_TimedWait(arg->c, arg->m, timeout);
+    *e = arg->kve;
+    arg->kve = NULL;
+    arg->msgReceived = false;
+    natsMutex_Unlock(arg->m);
+
+    return s;
+}
+
+static bool
+_expectInitDoneAsync(struct threadArg *arg)
+{
+    natsStatus  s   = NATS_OK;
+    kvEntry     *e  = NULL;
+
+    test("Check init done: ");
+    s = _getNextKVEntryAsync(&e, arg, 1000);
+    return ((s == NATS_OK) && (e == NULL));
+}
+
+static bool
+_expectUpdateAsync(struct threadArg *arg, const char *key, const char *val, uint64_t rev)
+{
+    natsStatus  s;
+    kvEntry     *e = NULL;
+
+    test("Check update: ");
+    s = _getNextKVEntryAsync(&e, arg, 1000);
+    if ((s != NATS_OK) || (e == NULL))
+        return false;
+
+    if ((strcmp(kvEntry_Bucket(e), "WATCH") != 0)
+        || (strcmp(kvEntry_Key(e), key) != 0)
+        || (strcmp(kvEntry_ValueString(e), val) != 0)
+        || (kvEntry_Revision(e) != rev)
+        || (kvEntry_Created(e) == 0))
+    {
+        return false;
+    }
+    kvEntry_Destroy(e);
+    return true;
+}
+
+static bool
+_expectDeleteAsync(struct threadArg *arg, const char *key, uint64_t rev)
+{
+    natsStatus  s;
+    kvEntry     *e = NULL;
+
+    test("Check delete: ");
+    s = _getNextKVEntryAsync(&e, arg, 1000);
+    if ((s != NATS_OK) || (e == NULL))
+        return false;
+
+    if ((kvEntry_Operation(e) != kvOp_Delete)
+        || (kvEntry_Revision(e) != rev))
+    {
+        return false;
+    }
+    kvEntry_Destroy(e);
+    return true;
+}
+
+static void
+_watchCb(kvWatcher *w, kvEntry *e, natsStatus s, void *closure)
+{
+    struct threadArg *arg = (struct threadArg*) closure;
+
+    natsMutex_Lock(arg->m);
+    if ((e != NULL)
+        && (kvEntry_Operation(e) == kvOp_Put)
+        && (strcmp(kvEntry_ValueString(e), "stop") == 0))
+    {
+        kvWatcher_Stop(w);
+    }
+    arg->kve = e;
+    arg->msgReceived = true;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+}
+
+void test_KeyValueWatchAsync(void)
+{
+    natsStatus          s   = NATS_OK;
+    kvStore             *kv = NULL;
+    kvWatcher           *w  = NULL;
+    kvEntry             *e  = NULL;
+    kvConfig            kvc;
+    kvWatchOptions      o;
+    struct threadArg    arg;
+
+    JS_SETUP(2, 10, 14);
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s != NATS_OK)
+        FAIL("Unable to setup test");
+
+    test("Create KV: ");
+    kvConfig_Init(&kvc);
+    kvc.Bucket = "WATCH";
+    s = js_CreateKeyValue(&kv, js, &kvc);
+    testCond(s == NATS_OK);
+
+    test("Create watcher: ");
+    kvWatchOptions_Init(&o);
+    o.Callback = _watchCb;
+    o.Closure  = (void*) &arg;
+    s = kvStore_WatchAll(&w, kv, &o);
+    testCond((s == NATS_OK) && (w != NULL));
+
+    testCond(_expectInitDoneAsync(&arg));
+
+    test("Create: ");
+    s = kvStore_CreateString(NULL, kv, "name", "derek");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdateAsync(&arg, "name", "derek", 1));
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv, "name", "rip");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdateAsync(&arg, "name", "rip", 2));
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv, "name", "ik");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdateAsync(&arg, "name", "ik", 3));
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv, "age", "22");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdateAsync(&arg, "age", "22", 4));
+
+    test("Put: ");
+    s = kvStore_PutString(NULL, kv, "age", "33");
+    testCond(s == NATS_OK);
+    testCond(_expectUpdateAsync(&arg, "age", "33", 5));
+
+    test("Delete: ");
+    s = kvStore_Delete(kv, "age");
+    testCond(s == NATS_OK);
+    testCond(_expectDeleteAsync(&arg, "age", 6));
+
+    kvWatcher_Destroy(w);
+    w = NULL;
+    test("Create watcher with UpdatesOnly: ");
+    o.UpdatesOnly = true;
+    s = kvStore_Watch(&w, kv, "name", &o);
+    IFOK(s, kvStore_PutString(NULL, kv, "name", "last"));
+    testCond(s == NATS_OK);
+
+    testCond(_expectUpdateAsync(&arg, "name", "last", 7));
+
+    kvWatcher_Destroy(w);
+    w = NULL;
+    test("Create watcher with IgnoreDeletes: ");
+    o.UpdatesOnly = false;
+    o.IgnoreDeletes = true;
+    s = kvStore_Watch(&w, kv, "del", &o);
+    testCond(s == NATS_OK);
+
+    testCond(_expectInitDoneAsync(&arg));
+
+    test("Add: ");
+    s = kvStore_CreateString(NULL, kv, "del", "del");
+    testCond(s == NATS_OK);
+
+    testCond(_expectUpdateAsync(&arg, "del", "del", 8));
+
+    test("Delete: ")
+    s = kvStore_Delete(kv, "del");
+    testCond(s == NATS_OK);
+
+    test("Expect nothing: ");
+    s = _getNextKVEntryAsync(&e, &arg, 350);
+    testCond(s == NATS_TIMEOUT);
+    s = NATS_OK;
+
+    test("Next is not allowed: ");
+    s = kvWatcher_Next(&e, w, 1000);
+    testCond((s == NATS_ILLEGAL_STATE) && (e == NULL)
+                && (strstr(nats_GetLastError(NULL), kvErrNoNextIfCbSet) != NULL));
+    nats_clearLastError();
+
+    test("Stop from callback: ");
+    s = kvStore_PutString(NULL, kv, "del", "stop");
+    IFOK(s, kvStore_PutString(NULL, kv, "del", "not_received"));
+    testCond(s == NATS_OK);
+
+    testCond(_expectUpdateAsync(&arg, "del", "stop", 10));
+    test("Expect nothing: ");
+    s = _getNextKVEntryAsync(&e, &arg, 350);
+    testCond(s == NATS_TIMEOUT);
+    s = NATS_OK;
+
+    kvWatcher_Destroy(w);
+    kvStore_Destroy(kv);
+
+    JS_TEARDOWN;
+    _destroyDefaultThreadArgs(&arg);
 }
 
 void test_KeyValueWatchMulti(void)

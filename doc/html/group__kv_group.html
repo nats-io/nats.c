@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.14.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -129,12 +129,24 @@ Functions</h2></td></tr>
 <tr class="memitem:ga5726ad2e6205d2f6749be013138218ca" id="r_ga5726ad2e6205d2f6749be013138218ca"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_group.html#ga5726ad2e6205d2f6749be013138218ca">kvStore_CreateString</a> (uint64_t *rev, <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *kv, const char *key, const char *data)</td></tr>
 <tr class="memdesc:ga5726ad2e6205d2f6749be013138218ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">Places the value (as a string) for the key into the store if and only if the key does not exist.  <br /></td></tr>
 <tr class="separator:ga5726ad2e6205d2f6749be013138218ca"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaaf575c3325d60ca4152d073c23e97f20" id="r_gaaf575c3325d60ca4152d073c23e97f20"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_group.html#gaaf575c3325d60ca4152d073c23e97f20">kvStore_CreateWithTTL</a> (uint64_t *rev, <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *kv, const char *key, const void *data, int len, int64_t ttl)</td></tr>
+<tr class="memdesc:gaaf575c3325d60ca4152d073c23e97f20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Create-if-absent with a per-key TTL.  <br /></td></tr>
+<tr class="separator:gaaf575c3325d60ca4152d073c23e97f20"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gaa063e9a97ee21863ebc1a9d51c3ac472" id="r_gaa063e9a97ee21863ebc1a9d51c3ac472"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_group.html#gaa063e9a97ee21863ebc1a9d51c3ac472">kvStore_CreateStringWithTTL</a> (uint64_t *rev, <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *kv, const char *key, const char *data, int64_t ttl)</td></tr>
+<tr class="memdesc:gaa063e9a97ee21863ebc1a9d51c3ac472"><td class="mdescLeft">&#160;</td><td class="mdescRight">String variant of <a class="el" href="group__kv_group.html#gaaf575c3325d60ca4152d073c23e97f20" title="Create-if-absent with a per-key TTL.">kvStore_CreateWithTTL</a>.  <br /></td></tr>
+<tr class="separator:gaa063e9a97ee21863ebc1a9d51c3ac472"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gae0c593bb2ef94ae60e775617c9423038" id="r_gae0c593bb2ef94ae60e775617c9423038"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_group.html#gae0c593bb2ef94ae60e775617c9423038">kvStore_Update</a> (uint64_t *rev, <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *kv, const char *key, const void *data, int len, uint64_t last)</td></tr>
 <tr class="memdesc:gae0c593bb2ef94ae60e775617c9423038"><td class="mdescLeft">&#160;</td><td class="mdescRight">Updates the value for the key into the store if and only if the latest revision matches.  <br /></td></tr>
 <tr class="separator:gae0c593bb2ef94ae60e775617c9423038"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga13ed70f15cd1485cd15f96bcc4b7ad1c" id="r_ga13ed70f15cd1485cd15f96bcc4b7ad1c"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_group.html#ga13ed70f15cd1485cd15f96bcc4b7ad1c">kvStore_UpdateString</a> (uint64_t *rev, <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *kv, const char *key, const char *data, uint64_t last)</td></tr>
 <tr class="memdesc:ga13ed70f15cd1485cd15f96bcc4b7ad1c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Updates the value (as a string) for the key into the store if and only if the latest revision matches.  <br /></td></tr>
 <tr class="separator:ga13ed70f15cd1485cd15f96bcc4b7ad1c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga9f15a00140c447a592e6ef1af686f723" id="r_ga9f15a00140c447a592e6ef1af686f723"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_group.html#ga9f15a00140c447a592e6ef1af686f723">kvStore_UpdateWithTTL</a> (uint64_t *rev, <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *kv, const char *key, const void *data, int len, uint64_t last, int64_t ttl)</td></tr>
+<tr class="memdesc:ga9f15a00140c447a592e6ef1af686f723"><td class="mdescLeft">&#160;</td><td class="mdescRight">Updates a key with a per-key TTL if and only if the latest revision matches.  <br /></td></tr>
+<tr class="separator:ga9f15a00140c447a592e6ef1af686f723"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga59ce9582c3abbaaffd3630f795223bb1" id="r_ga59ce9582c3abbaaffd3630f795223bb1"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_group.html#ga59ce9582c3abbaaffd3630f795223bb1">kvStore_UpdateStringWithTTL</a> (uint64_t *rev, <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *kv, const char *key, const char *data, uint64_t last, int64_t ttl)</td></tr>
+<tr class="memdesc:ga59ce9582c3abbaaffd3630f795223bb1"><td class="mdescLeft">&#160;</td><td class="mdescRight">String variant of <a class="el" href="group__kv_group.html#ga9f15a00140c447a592e6ef1af686f723" title="Updates a key with a per-key TTL if and only if the latest revision matches.">kvStore_UpdateWithTTL</a>.  <br /></td></tr>
+<tr class="separator:ga59ce9582c3abbaaffd3630f795223bb1"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga68101d46739ca894fd7c56c8661c08d8" id="r_ga68101d46739ca894fd7c56c8661c08d8"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__kv_group.html#ga68101d46739ca894fd7c56c8661c08d8">kvStore_Delete</a> (<a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *kv, const char *key)</td></tr>
 <tr class="memdesc:ga68101d46739ca894fd7c56c8661c08d8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deletes a key by placing a delete marker and leaving all revisions.  <br /></td></tr>
 <tr class="separator:ga68101d46739ca894fd7c56c8661c08d8"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -497,6 +509,117 @@ Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="gaaf575c3325d60ca4152d073c23e97f20" name="gaaf575c3325d60ca4152d073c23e97f20"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaaf575c3325d60ca4152d073c23e97f20">&#9670;&#160;</a></span>kvStore_CreateWithTTL()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> kvStore_CreateWithTTL </td>
+          <td>(</td>
+          <td class="paramtype">uint64_t *&#160;</td>
+          <td class="paramname"><em>rev</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *&#160;</td>
+          <td class="paramname"><em>kv</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>key</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const void *&#160;</td>
+          <td class="paramname"><em>data</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname"><em>len</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>ttl</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Like <a class="el" href="group__kv_group.html#ga5289f7cd3999cfb46fb1fcb83178aec6" title="Places the value for the key into the store if and only if the key does not exist.">kvStore_Create</a>, but the new value is published with a per-message TTL so the server expires this key after <code>ttl</code> milliseconds. Re-creating over an existing delete/purge/MaxAge marker succeeds and keeps the TTL (the marker-aware create path is reused). Requires the bucket to have been created with <code><a class="el" href="structkv_config.html#ac2281d71438b8e9a35a820a9d1ae2ba6">kvConfig.LimitMarkerTTL</a> &gt; 0</code> and nats-server v2.11+; otherwise the server rejects the TTL (JSMessageTTLDisabledErr). The server requires the TTL to be at least 1 second (1000 ms); a smaller value is rejected with JSMessageTTLInvalidErr.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">rev</td><td>the location where to store the revision of this value, or <code>NULL</code>. </td></tr>
+    <tr><td class="paramname">kv</td><td>the pointer to the <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> object. </td></tr>
+    <tr><td class="paramname">key</td><td>the name of the key. </td></tr>
+    <tr><td class="paramname">data</td><td>the pointer to the data in memory. </td></tr>
+    <tr><td class="paramname">len</td><td>the number of bytes to copy from the data's memory location. </td></tr>
+    <tr><td class="paramname">ttl</td><td>per-key time-to-live in milliseconds (<code>&lt;= 0</code> means no TTL — same as <a class="el" href="group__kv_group.html#ga5289f7cd3999cfb46fb1fcb83178aec6" title="Places the value for the key into the store if and only if the key does not exist.">kvStore_Create</a>). </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="gaa063e9a97ee21863ebc1a9d51c3ac472" name="gaa063e9a97ee21863ebc1a9d51c3ac472"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaa063e9a97ee21863ebc1a9d51c3ac472">&#9670;&#160;</a></span>kvStore_CreateStringWithTTL()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> kvStore_CreateStringWithTTL </td>
+          <td>(</td>
+          <td class="paramtype">uint64_t *&#160;</td>
+          <td class="paramname"><em>rev</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *&#160;</td>
+          <td class="paramname"><em>kv</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>key</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>data</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>ttl</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<dl class="section note"><dt>Note</dt><dd>Equivalent of calling <a class="el" href="group__kv_group.html#gaaf575c3325d60ca4152d073c23e97f20" title="Create-if-absent with a per-key TTL.">kvStore_CreateWithTTL</a> with <code>(int) strlen(data)</code>. </dd></dl>
+
+</div>
+</div>
 <a id="gae0c593bb2ef94ae60e775617c9423038" name="gae0c593bb2ef94ae60e775617c9423038"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#gae0c593bb2ef94ae60e775617c9423038">&#9670;&#160;</a></span>kvStore_Update()</h2>
 
@@ -617,6 +740,130 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a id="ga9f15a00140c447a592e6ef1af686f723" name="ga9f15a00140c447a592e6ef1af686f723"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga9f15a00140c447a592e6ef1af686f723">&#9670;&#160;</a></span>kvStore_UpdateWithTTL()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> kvStore_UpdateWithTTL </td>
+          <td>(</td>
+          <td class="paramtype">uint64_t *&#160;</td>
+          <td class="paramname"><em>rev</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *&#160;</td>
+          <td class="paramname"><em>kv</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>key</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const void *&#160;</td>
+          <td class="paramname"><em>data</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname"><em>len</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">uint64_t&#160;</td>
+          <td class="paramname"><em>last</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>ttl</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Like <a class="el" href="group__kv_group.html#gae0c593bb2ef94ae60e775617c9423038" title="Updates the value for the key into the store if and only if the latest revision matches.">kvStore_Update</a>, but the new value is published with a per-message TTL so the server expires this key after <code>ttl</code> milliseconds. The TTL is set on the same CAS publish, so a plain update can adopt a TTL atomically. Requires the bucket to have been created with <code><a class="el" href="structkv_config.html#ac2281d71438b8e9a35a820a9d1ae2ba6">kvConfig.LimitMarkerTTL</a> &gt; 0</code> and nats-server v2.11+; otherwise the server rejects the TTL (JSMessageTTLDisabledErr). The server requires the TTL to be at least 1 second (1000 ms); a smaller value is rejected with JSMessageTTLInvalidErr.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">rev</td><td>the location where to store the revision of this value, or <code>NULL</code>. </td></tr>
+    <tr><td class="paramname">kv</td><td>the pointer to the <a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> object. </td></tr>
+    <tr><td class="paramname">key</td><td>the name of the key. </td></tr>
+    <tr><td class="paramname">data</td><td>the pointer to the data in memory. </td></tr>
+    <tr><td class="paramname">len</td><td>the number of bytes to copy from the data's memory location. </td></tr>
+    <tr><td class="paramname">last</td><td>the expected latest revision prior to the update. </td></tr>
+    <tr><td class="paramname">ttl</td><td>per-key time-to-live in milliseconds (<code>&lt;= 0</code> means no TTL — same as <a class="el" href="group__kv_group.html#gae0c593bb2ef94ae60e775617c9423038" title="Updates the value for the key into the store if and only if the latest revision matches.">kvStore_Update</a>). </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ga59ce9582c3abbaaffd3630f795223bb1" name="ga59ce9582c3abbaaffd3630f795223bb1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga59ce9582c3abbaaffd3630f795223bb1">&#9670;&#160;</a></span>kvStore_UpdateStringWithTTL()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> kvStore_UpdateStringWithTTL </td>
+          <td>(</td>
+          <td class="paramtype">uint64_t *&#160;</td>
+          <td class="paramname"><em>rev</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a">kvStore</a> *&#160;</td>
+          <td class="paramname"><em>kv</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>key</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const char *&#160;</td>
+          <td class="paramname"><em>data</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">uint64_t&#160;</td>
+          <td class="paramname"><em>last</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>ttl</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<dl class="section note"><dt>Note</dt><dd>Equivalent of calling <a class="el" href="group__kv_group.html#ga9f15a00140c447a592e6ef1af686f723" title="Updates a key with a per-key TTL if and only if the latest revision matches.">kvStore_UpdateWithTTL</a> with <code>(int) strlen(data)</code>. </dd></dl>
 
 </div>
 </div>
@@ -979,7 +1226,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Returns all keys in the bucket.</p>
-<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait (in milliseconds) for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all keys for this bucket. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no keys.</dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all keys for this bucket. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no keys.</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>The user should call <a class="el" href="group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45" title="Destroys this list of KeyValue store key strings.">kvKeysList_Destroy</a> to release memory allocated for the entries list.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__kv_group.html#ga762fd5de8cde683e46a6736a51e575f5" title="Initializes a KeyValue watcher options structure.">kvWatchOptions_Init</a> </dd>
 <dd>
@@ -1039,7 +1286,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Get a list of the keys in a bucket filtered by a subject-like string, for instance "key" or "key.foo.*" or "key.&gt;" Any deleted or purged keys will not be returned.</p>
-<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait (in milliseconds) for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all keys for this bucket. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no keys.</dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all keys for this bucket. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no keys.</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>The user should call <a class="el" href="group__kv_group.html#ga02ccd58bc5062f6ce6f94bf05e3dfe45" title="Destroys this list of KeyValue store key strings.">kvKeysList_Destroy</a> to release memory allocated for the entries list.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__kv_group.html#ga762fd5de8cde683e46a6736a51e575f5" title="Initializes a KeyValue watcher options structure.">kvWatchOptions_Init</a> </dd>
 <dd>
@@ -1123,8 +1370,8 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Returns all historical entries for the key</p>
-<p>Use the options to alter the behavior. For instance, if delete markers are not desired, option <a class="el" href="structkv_watch_options.html#a0535edd21b26affc0057575bafc21a07">kvWatchOptions.IgnoreDeletes</a> should be specified.</p>
-<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait (in milliseconds) for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all entries for this key. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no entries.</dd></dl>
+<p>Use the options to alter the behavior. For instance, if delete markers are not desired, option <a class="el" href="structkv_watch_options.html#a0535edd21b26affc0057575bafc21a07" title="Do not receive delete markers.">kvWatchOptions.IgnoreDeletes</a> should be specified.</p>
+<dl class="section note"><dt>Note</dt><dd>Use <a class="el" href="structkv_watch_options.html#a56183d56585697d058c7eeb20bdddb66" title="How long to wait for some operations to complete.">kvWatchOptions.Timeout</a> to specify how long to wait (in milliseconds) to gather all entries for this key. If the deadline is reached, this function will return <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80ab88994c9ea9889ac4d9d656d62f550ed">NATS_TIMEOUT</a> and no entries.</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>The user should call <a class="el" href="group__kv_group.html#gae783352ab81e22aa3173057d117518e6" title="Destroys this list of KeyValue store entries.">kvEntryList_Destroy</a> to release memory allocated for the entries list.</dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__kv_group.html#ga762fd5de8cde683e46a6736a51e575f5" title="Initializes a KeyValue watcher options structure.">kvWatchOptions_Init</a> </dd>
 <dd>

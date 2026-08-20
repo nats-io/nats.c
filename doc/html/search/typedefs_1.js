@@ -7,6 +7,7 @@ var searchData=
   ['kvpurgeoptions_4',['kvPurgeOptions',['../group__types_group.html#ga90e8de23c4468005488bde690a2ffe9d',1,'nats.h']]],
   ['kvstatus_5',['kvStatus',['../group__types_group.html#gad3a0dd2dac950d5709ee5772b104fc80',1,'nats.h']]],
   ['kvstore_6',['kvStore',['../group__types_group.html#ga054c05493dd3cfc5c3e7a665a424e54a',1,'nats.h']]],
-  ['kvwatcher_7',['kvWatcher',['../group__types_group.html#ga526fa6d37e818784b94cdc1713f3a043',1,'nats.h']]],
-  ['kvwatchoptions_8',['kvWatchOptions',['../group__types_group.html#gac32f992fe797a1f7befc7dc3452640b6',1,'nats.h']]]
+  ['kvwatchcb_7',['kvWatchCb',['../group__callbacks_group.html#gaa6477e5c11a432c53d659257d590ab10',1,'nats.h']]],
+  ['kvwatcher_8',['kvWatcher',['../group__types_group.html#ga526fa6d37e818784b94cdc1713f3a043',1,'nats.h']]],
+  ['kvwatchoptions_9',['kvWatchOptions',['../group__types_group.html#gac32f992fe797a1f7befc7dc3452640b6',1,'nats.h']]]
 ];

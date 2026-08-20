@@ -2469,6 +2469,9 @@ _processOpError(natsConnection *nc, natsStatus s, bool initialConnect)
             // but the actual socket close will be done from the event loop
             // adapter by calling natsConnection_ProcessCloseEvent().
             ls = _evStopPolling(nc);
+
+            // Libuv equivalent of _readLoop's per-cycle parser destroy.
+            nc->psReset = true;
         }
 
         // Fail pending flush requests.
@@ -4579,6 +4582,15 @@ natsConnection_ProcessReadEvent(natsConnection *nc)
     {
         natsConn_Unlock(nc);
         return;
+    }
+
+    // Same event-loop thread runs both this destroy and natsParser_Parse below,
+    // so the in-flight Parse on the previous socket has already returned.
+    if (nc->psReset)
+    {
+        natsParser_Destroy(nc->ps);
+        nc->ps = NULL;
+        nc->psReset = false;
     }
 
     if (nc->ps == NULL)

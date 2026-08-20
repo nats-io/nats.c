@@ -869,6 +869,7 @@ struct __natsConnection
     char                errStr[256];
 
     natsParser          *ps;
+    bool                psReset; // libuv adapter: destroy nc->ps on next ProcessReadEvent
     natsTimer           *ptmr;
     int                 pout;
 

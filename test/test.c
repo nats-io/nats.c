@@ -4937,18 +4937,22 @@ void test_natsMsg(void)
 {
     natsMsg     *msg = NULL;
     natsStatus  s    = NATS_OK;
+    const char  *pay = "hello";
 
     test("Check invalid subj (NULL): ");
     s = natsMsg_Create(&msg, NULL, "reply", "data", 4);
     testCond((msg == NULL) && (s == NATS_INVALID_ARG));
+    nats_clearLastError();
 
     test("Check invalid subj (empty): ");
     s = natsMsg_Create(&msg, "", "reply", "data", 4);
     testCond((msg == NULL) && (s == NATS_INVALID_ARG));
+    nats_clearLastError();
 
     test("Check invalid reply (empty): ");
     s = natsMsg_Create(&msg, "foo", "", "data", 4);
     testCond((msg == NULL) && (s == NATS_INVALID_ARG));
+    nats_clearLastError();
 
     test("GetSubject with NULL msg: ");
     testCond(natsMsg_GetSubject(NULL) == NULL);
@@ -4965,6 +4969,33 @@ void test_natsMsg(void)
     test("Create ok: ");
     s = natsMsg_Create(&msg, "foo", "reply", "data", 4);
     testCond((s == NATS_OK) && (msg != NULL));
+
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Create with no data: ");
+    s = natsMsg_Create(&msg, "foo", NULL, NULL, 0);
+    // msg->data actually points to somewhere inside the message structure,
+    // however, natsMsg_GetData should return NULL.
+    testCond((s == NATS_OK) && (msg != NULL) && (msg->data != NULL) && (msg->dataLen == 0)
+                && (natsMsg_GetData(msg) == NULL) && (natsMsg_GetDataLength(msg) == 0));
+
+    test("Set data: ");
+    s = natsMsg_SetData(NULL, (const void*) "hello", 5);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Set NULL/0 is ok: ");
+    s = natsMsg_SetData(msg, NULL, 0);
+    testCond((s == NATS_OK) && (msg->data == NULL) && (msg->dataLen == 0));
+
+    test("Set data: ");
+    s = natsMsg_SetData(msg, (const void*) pay, 5);
+    testCond((s == NATS_OK) && (msg->data == pay) && (msg->dataLen == 5));
+
+    test("Set NULL/0 is ok: ");
+    s = natsMsg_SetData(msg, NULL, 0);
+    testCond((s == NATS_OK) && (msg->data == NULL) && (msg->dataLen == 0));
 
     natsMsg_Destroy(msg);
 }
@@ -5948,6 +5979,55 @@ void test_natsMsgHeaderAPIs(void)
     test("Should be gone: ");
     s = natsMsgHeader_Get(msg, "my-other-key", &val);
     testCond((s == NATS_NOT_FOUND) && (val == NULL));
+
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
+    test("Encoded length with NULL msg: ");
+    testCond(natsMsgHeader_EncodedLength(msg) == 0);
+
+    test("Create empty msg: ");
+    s = natsMsg_Create(&msg, "headers", NULL, NULL, 0);
+    testCond(s == NATS_OK);
+
+    test("Encoded length with empty msg: ");
+    testCond(natsMsgHeader_EncodedLength(msg) == 0);
+
+    test("Set a header: ");
+    s = natsMsgHeader_Set(msg, "my-key", "my-value");
+    testCond(s == NATS_OK);
+
+    test("Encoded length: ");
+    // Should be: "NATS/1.0\r\nmy-key: my-value\r\n\r\n", which means
+    // 10+6+2+8+2+2=30
+    testCond(natsMsgHeader_EncodedLength(msg) == 30);
+
+    test("Add key: ");
+    s = natsMsgHeader_Set(msg, "my-key2", "my-value2");
+    testCond(s == NATS_OK);
+
+    test("Encoded length: ");
+    // Should be: "NATS/1.0\r\nmy-key: my-value\r\nmy-key2: my-value2\r\n\r\n", which means
+    // 10+6+2+8+2+7+2+9+2+2=50
+    testCond(natsMsgHeader_EncodedLength(msg) == 50);
+
+    test("Delete first: ");
+    s = natsMsgHeader_Delete(msg, "my-key");
+    testCond(s == NATS_OK);
+
+    test("Encoded length: ");
+    // Should be: "NATS/1.0\r\nmy-key2: my-value2\r\n\r\n", which means
+    // 10+7+2+9+2+2=32
+    testCond(natsMsgHeader_EncodedLength(msg) == 32);
+
+    test("Add to existing: ");
+    s = natsMsgHeader_Add(msg, "my-key2", "my-value22");
+    testCond(s == NATS_OK);
+
+    test("Encoded length: ");
+    // Should be: "NATS/1.0\r\nmy-key2: my-value2\r\nmy-key2: my-value22\r\n\r\n", which means
+    // 10+7+2+9+2+7+2+10+2+2=53
+    testCond(natsMsgHeader_EncodedLength(msg) == 53);
 
     natsMsg_Destroy(msg);
 }
@@ -11749,6 +11829,11 @@ void test_PublishMsg(void)
     natsConnection      *nc       = NULL;
     natsSubscription    *sub      = NULL;
     natsPid             serverPid = NATS_INVALID_PID;
+    natsMsg             *msg      = NULL;
+    natsMsg             *rmsg     = NULL;
+    int                 hdr       = 0;
+    char conf[256];
+    char cmdLine[1024];
     struct threadArg    arg;
 
     s = _createDefaultThreadArgsForCbTests(&arg);
@@ -11770,12 +11855,12 @@ void test_PublishMsg(void)
     if (s == NATS_OK)
     {
         const char  data[] = {104, 101, 108, 108, 111, 33};
-        natsMsg     *msg   = NULL;
 
         s = natsMsg_Create(&msg, "foo", NULL, data, sizeof(data));
         IFOK(s, natsConnection_PublishMsg(nc, msg));
 
         natsMsg_Destroy(msg);
+        msg = NULL;
     }
     IFOK(s, natsConnection_Flush(nc));
 
@@ -11789,11 +11874,105 @@ void test_PublishMsg(void)
     testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    test("Create sync sub: ");
+    s = natsConnection_SubscribeSync(&sub, nc, "setdata");
+    testCond(s == NATS_OK);
+
+    test("Create msg: ");
+    s = natsMsg_Create(&msg, "setdata", NULL, "willbereplaced", 14);
+    testCond((s == NATS_OK) && (msg != NULL));
+
+    test("Set data: ");
+    s = natsMsg_SetData(msg, (const void*) "hello", 5);
+    testCond(s == NATS_OK);
+
+    test("Publish: ");
+    s = natsConnection_PublishMsg(nc, msg);
+    testCond(s == NATS_OK);
+
+    test("Destroy published msg: ");
+    natsMsg_Destroy(msg);
+    msg = NULL;
+    testCond(true);
+
+    test("Receive: ");
+    s = natsSubscription_NextMsg(&msg, sub, 1000);
+    testCond((s == NATS_OK) && (msg != NULL));
+
+    test("Check content: ");
+    testCond((natsMsg_GetDataLength(msg) == 5) &&
+                (strncmp(natsMsg_GetData(msg), "hello", 5) == 0));
+
+    natsMsg_Destroy(msg);
+    natsSubscription_Destroy(sub);
+    sub = NULL;
     natsConnection_Destroy(nc);
+    nc = NULL;
 
     _stopServer(serverPid);
+    serverPid = NATS_INVALID_PID;
 
     _destroyDefaultThreadArgs(&arg);
+
+    test("Start server with max_payload: ");
+    _createConfFile(conf, sizeof(conf), "max_payload: 40\n");
+    snprintf(cmdLine, sizeof(cmdLine), "-c %s", conf);
+    serverPid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(serverPid);
+    testCond(true);
+
+    test("Connect and subscribe: ");
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_SubscribeSync(&sub, nc, "setdata"));
+    testCond((s == NATS_OK) && (nc != NULL) && (sub != NULL));
+
+    test("Create msg: ");
+    s = natsMsg_Create(&msg, "setdata", NULL, NULL, 0);
+    testCond((s == NATS_OK) && (msg != NULL));
+
+    test("Set header: ");
+    s = natsMsgHeader_Set(msg, "my-key", "my-value");
+    testCond(s == NATS_OK);
+
+    test("Headers Encoded length: ");
+    // Should be: "NATS/1.0\r\nmy-key: my-value\r\n\r\n", which means
+    // 10+6+2+8+2+2=30
+    hdr = natsMsgHeader_EncodedLength(msg);
+    testCond(hdr == 30);
+
+    test("Set data at 40-30=10: ");
+    s = natsMsg_SetData(msg, (const void*) "hellohello", 10);
+    testCond(s == NATS_OK);
+
+    test("Publish ok: ");
+    s = natsConnection_PublishMsg(nc, msg);
+    testCond(s == NATS_OK);
+
+    test("Check received: ");
+    s = natsSubscription_NextMsg(&rmsg, sub, 1000);
+    testCond((s == NATS_OK) && (rmsg != NULL));
+
+    test("Check content: ");
+    testCond((natsMsg_GetDataLength(rmsg) == 10) &&
+                (strncmp(natsMsg_GetData(rmsg), "hellohello", 10) == 0));
+    natsMsg_Destroy(rmsg);
+    rmsg = NULL;
+
+    test("Set data too long: ");
+    s = natsMsg_SetData(msg, (const void*) "hellohello!", 11);
+    testCond(s == NATS_OK);
+
+    test("Publish fails: ");
+    s = natsConnection_PublishMsg(nc, msg);
+    testCond(s == NATS_MAX_PAYLOAD);
+    nats_clearLastError();
+
+    natsMsg_Destroy(msg);
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
+    _stopServer(serverPid);
 }
 
 void test_InvalidSubsArgs(void)

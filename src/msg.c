@@ -22,7 +22,7 @@
 #include "msg.h"
 
 int
-natsMsgHeader_encodedLen(natsMsg *msg)
+natsMsgHeader_encodedLen(const natsMsg *msg)
 {
     natsStrHashIter iter;
     char            *key = NULL;
@@ -60,6 +60,15 @@ natsMsgHeader_encodedLen(natsMsg *msg)
     hl += _CRLF_LEN_;
 
     return hl;
+}
+
+int
+natsMsgHeader_EncodedLength(const natsMsg *msg)
+{
+    if (msg == NULL)
+        return 0;
+
+    return natsMsgHeader_encodedLen(msg);
 }
 
 natsStatus
@@ -733,10 +742,26 @@ natsMsg_GetReply(const natsMsg *msg)
     return (const char*) msg->reply;
 }
 
+natsStatus
+natsMsg_SetData(natsMsg *msg, const void *data, int len)
+{
+    if (msg == NULL)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+    if ((len < 0) || (data == NULL && len != 0))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    msg->data = (const char*) data;
+    msg->dataLen = len;
+    return NATS_OK;
+}
+
 const char*
 natsMsg_GetData(const natsMsg *msg)
 {
     if (msg == NULL)
+        return NULL;
+
+    if (msg->dataLen == 0)
         return NULL;
 
     return (const char*) msg->data;

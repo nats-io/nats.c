@@ -93,7 +93,7 @@ typedef struct __natsHeaderValue
 } natsHeaderValue;
 
 int
-natsMsgHeader_encodedLen(natsMsg *msg);
+natsMsgHeader_encodedLen(const natsMsg *msg);
 
 natsStatus
 natsMsgHeader_encode(natsBuffer *buf, natsMsg *msg);

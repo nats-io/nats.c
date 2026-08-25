@@ -5068,6 +5068,22 @@ natsMsg_GetSubject(const natsMsg *msg);
 NATS_EXTERN const char*
 natsMsg_GetReply(const natsMsg *msg);
 
+/** \brief Sets the message payload.
+ *
+ * Users can use this function to set the data of a message after it has
+ * been created with #natsMsg_Create.
+ *
+ * \warning The data is not copied and must remain valid and not mutated
+ * while the message has a reference to it. The user owns the data and it
+ * will not be freed when #natsMsg_Destroy is called.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ * @param data the pointer to the data.
+ * @param len the length of the data that this message references.
+ */
+NATS_EXTERN natsStatus
+natsMsg_SetData(natsMsg *msg, const void *data, int len);
+
 /** \brief Returns the message payload.
  *
  * Returns the message payload, possibly `NULL`.
@@ -5078,8 +5094,13 @@ natsMsg_GetReply(const natsMsg *msg);
  * allows you to call #natsMsg_GetData() without having to copy the returned
  * data to a buffer to add the `NULL` byte at the end.
  *
- * \warning The string belongs to the message and must not be freed.
- * Copy it if needed.
+ * \warning Unless the payload was set using #natsMsg_SetData, the string belongs
+ * to the message and must not be freed. Copy it if needed.
+ *
+ * \note Returns `NULL` if the message is `NULL` or has no payload (created with
+ * `dataLen == 0`).
+ *
+ * @see natsMsg_SetData
  *
  * @param msg the pointer to the #natsMsg object.
  */
@@ -5235,6 +5256,17 @@ natsMsgHeader_Keys(natsMsg *msg, const char* **keys, int *count);
  */
 NATS_EXTERN natsStatus
 natsMsgHeader_Delete(natsMsg *msg, const char *key);
+
+/** \brief Returns the encoded length of the message headers.
+ *
+ * Returns the encoded length of the message headers.
+ *
+ * \note Returns 0 if the message is `NULL` or no headers are set.
+ *
+ * @param msg the pointer to the #natsMsg object.
+ */
+NATS_EXTERN int
+natsMsgHeader_EncodedLength(const natsMsg *msg);
 
 /** \brief Indicates if this message is a "no responders" message from the server.
  *

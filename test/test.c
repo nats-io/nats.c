@@ -4980,6 +4980,16 @@ void test_natsMsg(void)
     testCond((s == NATS_OK) && (msg != NULL) && (msg->data != NULL) && (msg->dataLen == 0)
                 && (natsMsg_GetData(msg) == NULL) && (natsMsg_GetDataLength(msg) == 0));
 
+    test("Set NULL data with non-zero len: ");
+    s = natsMsg_SetData(msg, NULL, 5);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Set negative len: ");
+    s = natsMsg_SetData(msg, (const void*) "hi", -1);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
     test("Set data: ");
     s = natsMsg_SetData(NULL, (const void*) "hello", 5);
     testCond(s == NATS_INVALID_ARG);

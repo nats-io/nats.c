@@ -5094,8 +5094,13 @@ natsMsg_SetData(natsMsg *msg, const void *data, int len);
  * allows you to call #natsMsg_GetData() without having to copy the returned
  * data to a buffer to add the `NULL` byte at the end.
  *
- * \warning The string belongs to the message and must not be freed.
- * Copy it if needed.
+ * \warning Unless the payload was set using #natsMsg_SetData, the string belongs
+ * to the message and must not be freed. Copy it if needed.
+ *
+ * \note Returns `NULL` if the message is `NULL` or has no payload (created with
+ * `dataLen == 0`).
+ *
+ * @see natsMsg_SetData
  *
  * @param msg the pointer to the #natsMsg object.
  */

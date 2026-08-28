@@ -1,4 +1,4 @@
-// Copyright 2021-2025 The NATS Authors
+// Copyright 2021-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -1932,7 +1932,11 @@ _unmarshalGetMsgResp(natsMsg **msg, natsMsg *resp, jsErrCode *errCode)
         if ((s == NATS_OK) && (mjson == NULL))
             s = nats_setError(NATS_NOT_FOUND, "%s", "message content not found");
         else
-            s = _unmarshalStoredMsg(mjson, msg);
+        {
+            IFOK(s, _unmarshalStoredMsg(mjson, msg));
+            if ((s == NATS_OK) && (*msg == NULL))
+                s = nats_setError(NATS_ERR, "%s", "invalid stored message response");
+        }
     }
 
     js_freeApiRespContent(&ar);
@@ -1941,22 +1945,14 @@ _unmarshalGetMsgResp(natsMsg **msg, natsMsg *resp, jsErrCode *errCode)
 }
 
 static natsStatus
-_getMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, const char *subject, jsOptions *opts, jsErrCode *errCode)
+_buildGetMsgReq(char **newSubj, natsBuffer *buf, int64_t *wait, jsCtx *js,
+                const char *stream, uint64_t seq, const char *subject, jsOptions *opts)
 {
     natsStatus          s = NATS_OK;
     char                *subj   = NULL;
-    natsMsg             *resp   = NULL;
     natsConnection      *nc     = NULL;
     bool                freePfx = false;
     jsOptions           o;
-    char                buffer[64];
-    natsBuffer          buf     = NATS_EMPTY_BUFFER;
-
-    if ((msg == NULL) || (js == NULL))
-        return nats_setDefaultError(NATS_INVALID_ARG);
-
-    if (nats_IsStringEmpty(stream))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
 
     s = js_setOpts(&nc, &freePfx, js, opts, &o);
     if (s == NATS_OK)
@@ -1967,22 +1963,51 @@ _getMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, const char *
         if (freePfx)
             NATS_FREE((char*) o.Prefix);
     }
-    IFOK(s, natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer)));
-    IFOK(s, natsBuf_AppendByte(&buf, '{'));
+    IFOK(s, natsBuf_AppendByte(buf, '{'));
     if ((s == NATS_OK) && (seq > 0))
     {
-       s = nats_marshalULong(&buf, false, "seq", seq);
+       s = nats_marshalULong(buf, false, "seq", seq);
     }
     else
     {
-        IFOK(s, natsBuf_Append(&buf, "\"last_by_subj\":\"", -1));
-        IFOK(s, natsBuf_Append(&buf, subject, -1));
-        IFOK(s, natsBuf_AppendByte(&buf, '"'));
+        IFOK(s, natsBuf_Append(buf, "\"last_by_subj\":\"", -1));
+        IFOK(s, natsBuf_Append(buf, subject, -1));
+        IFOK(s, natsBuf_AppendByte(buf, '"'));
     }
-    IFOK(s, natsBuf_AppendByte(&buf, '}'));
+    IFOK(s, natsBuf_AppendByte(buf, '}'));
+
+    if (s == NATS_OK)
+    {
+        *newSubj = subj;
+        *wait    = o.Wait;
+    }
+    else
+        NATS_FREE(subj);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+static natsStatus
+_getMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, const char *subject, jsOptions *opts, jsErrCode *errCode)
+{
+    natsStatus          s = NATS_OK;
+    char                *subj   = NULL;
+    natsMsg             *resp   = NULL;
+    int64_t             wait    = 0;
+    char                buffer[64];
+    natsBuffer          buf     = NATS_EMPTY_BUFFER;
+
+    if ((msg == NULL) || (js == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (nats_IsStringEmpty(stream))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
+
+    s = natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
+    IFOK(s, _buildGetMsgReq(&subj, &buf, &wait, js, stream, seq, subject, opts));
 
     // Send the request
-    IFOK_JSR(s, natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), o.Wait));
+    IFOK_JSR(s, natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), wait));
     // Unmarshal response
     IFOK(s, _unmarshalGetMsgResp(msg, resp, errCode));
 
@@ -2023,6 +2048,96 @@ js_GetLastMsg(natsMsg **msg, jsCtx *js, const char *stream, const char *subject,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// State kept until the response to an asynchronous "get message" request has
+// been dispatched to the user callback.
+typedef struct __jsGetMsgReq
+{
+    js_getMsgCb cb;
+    void        *closure;
+
+} jsGetMsgReq;
+
+static natsStatus
+_newGetMsgReq(jsGetMsgReq **newReq, js_getMsgCb cb, void *closure)
+{
+    jsGetMsgReq *req = (jsGetMsgReq*) NATS_CALLOC(1, sizeof(jsGetMsgReq));
+
+    if (req == NULL)
+        return nats_setDefaultError(NATS_NO_MEMORY);
+
+    req->cb      = cb;
+    req->closure = closure;
+    *newReq = req;
+
+    return NATS_OK;
+}
+
+// Invoked when the response to the request sent by _getMsgAsync() is available.
+static void
+_getMsgAsyncDone(natsMsg *resp, natsStatus s, void *closure)
+{
+    jsGetMsgReq *req  = (jsGetMsgReq*) closure;
+    natsMsg     *msg  = NULL;
+    jsErrCode   jerr  = 0;
+
+    if (s == NATS_OK)
+        s = _unmarshalGetMsgResp(&msg, resp, &jerr);
+    else if (s == NATS_NO_RESPONDERS)
+        jerr = JSNotEnabledErr;
+
+    (req->cb)(msg, s, jerr, req->closure);
+
+    natsMsg_Destroy(resp);
+    NATS_FREE(req);
+}
+
+static natsStatus
+_getMsgAsync(jsCtx *js, const char *stream, uint64_t seq, const char *subject,
+            jsOptions *opts, js_getMsgCb cb, void *closure)
+{
+    natsStatus  s       = NATS_OK;
+    char        *subj   = NULL;
+    jsGetMsgReq *req    = NULL;
+    int64_t     wait    = 0;
+    char        buffer[64];
+    natsBuffer  buf     = NATS_EMPTY_BUFFER;
+
+    s = natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
+    IFOK(s, _buildGetMsgReq(&subj, &buf, &wait, js, stream, seq, subject, opts));
+    IFOK(s, _newGetMsgReq(&req, cb, closure));
+
+    // Send the request without waiting for the response.
+    IFOK(s, js_requestAsync(js, subj, natsBuf_Data(&buf), natsBuf_Len(&buf),
+                            wait, _getMsgAsyncDone, (void*) req));
+
+    if (s != NATS_OK)
+        NATS_FREE(req);
+
+    natsBuf_Cleanup(&buf);
+    NATS_FREE(subj);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_getMsgAsync(jsCtx *js, const char *stream, uint64_t seq, const char *subject,
+               jsOptions *opts, js_getMsgCb cb, void *closure)
+{
+    natsStatus s = NATS_OK;
+
+    if ((js == NULL) || (cb == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if ((seq == 0) && nats_IsStringEmpty(subject))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+    if (nats_IsStringEmpty(stream))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
+
+    s = _getMsgAsync(js, stream, seq, subject, opts, cb, closure);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 natsStatus
 jsDirectGetMsgOptions_Init(jsDirectGetMsgOptions *opts)
 {
@@ -2034,7 +2149,7 @@ jsDirectGetMsgOptions_Init(jsDirectGetMsgOptions *opts)
 }
 
 natsStatus
-js_directGetMsgToJSMsg(const char *stream, natsMsg *msg)
+js_directGetMsgToJSMsg(natsMsg *msg)
 {
     natsStatus          s;
     const char          *val = NULL;
@@ -2088,27 +2203,22 @@ js_directGetMsgToJSMsg(const char *stream, natsMsg *msg)
     return NATS_OK;
 }
 
-natsStatus
-js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, jsDirectGetMsgOptions *dgOpts)
+// Builds the subject and the payload of a "direct get message" request, and
+// returns the request timeout in `wait`. When getting the last message for a
+// subject, the request has no payload and `buf` is left untouched. On success,
+// the caller is responsible for freeing `*newSubj`, and for the cleanup of
+// `buf`, which must have been initialized prior to this call.
+static natsStatus
+_buildDirectGetMsgReq(char **newSubj, natsBuffer *buf, int64_t *wait, jsCtx *js,
+                      const char *stream, jsOptions *opts, jsDirectGetMsgOptions *dgOpts)
 {
-    natsStatus          s = NATS_OK;
+    natsStatus          s       = NATS_OK;
     char                *subj   = NULL;
-    natsMsg             *resp   = NULL;
     natsConnection      *nc     = NULL;
     bool                freePfx = false;
     bool                comma   = false;
-    bool                doLBS   = false;
+    bool                doLBS   = !nats_IsStringEmpty(dgOpts->LastBySubject);
     jsOptions           o;
-    char                buffer[64];
-    natsBuffer          buf = NATS_EMPTY_BUFFER;
-
-    if ((msg == NULL) || (js == NULL) || (dgOpts == NULL))
-        return nats_setDefaultError(NATS_INVALID_ARG);
-
-    if (nats_IsStringEmpty(stream))
-        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
-
-    doLBS = !nats_IsStringEmpty(dgOpts->LastBySubject);
 
     s = js_setOpts(&nc, &freePfx, js, opts, &o);
     if (s == NATS_OK)
@@ -2126,38 +2236,65 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
         if (freePfx)
             NATS_FREE((char*) o.Prefix);
     }
-    if ((s == NATS_OK) && doLBS)
+    // Getting the last message for a subject is expressed in the subject
+    // itself, so such request has no payload.
+    if ((s == NATS_OK) && !doLBS)
     {
-        IFOK(s, natsConnection_Request(&resp, js->nc, subj, NULL, 0, o.Wait));
-    }
-    else if (s == NATS_OK)
-    {
-        IFOK(s, natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer)));
-        IFOK(s, natsBuf_AppendByte(&buf, '{'));
+        IFOK(s, natsBuf_AppendByte(buf, '{'));
         if ((s == NATS_OK) && (dgOpts->Sequence > 0))
         {
             comma = true;
-            s = nats_marshalULong(&buf, false, "seq", dgOpts->Sequence);
+            s = nats_marshalULong(buf, false, "seq", dgOpts->Sequence);
         }
         if ((s == NATS_OK) && !nats_IsStringEmpty(dgOpts->NextBySubject))
         {
             if (comma)
-                s = natsBuf_AppendByte(&buf, ',');
+                s = natsBuf_AppendByte(buf, ',');
 
-            comma = true;
-            IFOK(s, natsBuf_Append(&buf, "\"next_by_subj\":\"", -1));
-            IFOK(s, natsBuf_Append(&buf, dgOpts->NextBySubject, -1));
-            IFOK(s, natsBuf_AppendByte(&buf, '"'));
+            IFOK(s, natsBuf_Append(buf, "\"next_by_subj\":\"", -1));
+            IFOK(s, natsBuf_Append(buf, dgOpts->NextBySubject, -1));
+            IFOK(s, natsBuf_AppendByte(buf, '"'));
         }
-        IFOK(s, natsBuf_AppendByte(&buf, '}'));
-        // Send the request
-        IFOK(s, natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), o.Wait));
-
-        natsBuf_Cleanup(&buf);
+        IFOK(s, natsBuf_AppendByte(buf, '}'));
     }
-    // Convert the response to a JS message returned to the user.
-    IFOK(s, js_directGetMsgToJSMsg(stream, resp));
 
+    if (s == NATS_OK)
+    {
+        *newSubj = subj;
+        *wait    = o.Wait;
+    }
+    else
+        NATS_FREE(subj);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, jsDirectGetMsgOptions *dgOpts)
+{
+    natsStatus          s = NATS_OK;
+    char                *subj   = NULL;
+    natsMsg             *resp   = NULL;
+    int64_t             wait    = 0;
+    char                buffer[64];
+    natsBuffer          buf = NATS_EMPTY_BUFFER;
+
+    if ((msg == NULL) || (js == NULL) || (dgOpts == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (nats_IsStringEmpty(stream))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
+
+    s = natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
+    IFOK(s, _buildDirectGetMsgReq(&subj, &buf, &wait, js, stream, opts, dgOpts));
+
+    // Send the request. When the request has no payload, the buffer was left
+    // empty (natsBuf_Len() is 0).
+    IFOK(s, natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), wait));
+    // Convert the response to a JS message returned to the user.
+    IFOK(s, js_directGetMsgToJSMsg(resp));
+
+    natsBuf_Cleanup(&buf);
     NATS_FREE(subj);
 
     if (s == NATS_OK)
@@ -2165,6 +2302,76 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
     else
         natsMsg_Destroy(resp);
 
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+// Invoked when the response to the request sent by _directGetMsgAsync() is
+// available.
+static void
+_directGetMsgAsyncDone(natsMsg *resp, natsStatus s, void *closure)
+{
+    jsGetMsgReq *req = (jsGetMsgReq*) closure;
+    natsMsg     *msg = NULL;
+
+    // Convert the response to a JS message returned to the user. Note that
+    // the conversion is done in place, so on success the response message
+    // is the message given to the callback.
+    if (s == NATS_OK)
+        s = js_directGetMsgToJSMsg(resp);
+    if (s == NATS_OK)
+    {
+        msg  = resp;
+        resp = NULL;
+    }
+
+    (req->cb)(msg, s, 0, req->closure);
+
+    natsMsg_Destroy(resp);
+    NATS_FREE(req);
+}
+
+static natsStatus
+_directGetMsgAsync(jsCtx *js, const char *stream, jsOptions *opts,
+                   jsDirectGetMsgOptions *dgOpts, js_getMsgCb cb, void *closure)
+{
+    natsStatus      s       = NATS_OK;
+    char            *subj   = NULL;
+    jsGetMsgReq     *req    = NULL;
+    int64_t         wait    = 0;
+    char            buffer[64];
+    natsBuffer      buf = NATS_EMPTY_BUFFER;
+
+    s = natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
+    IFOK(s, _buildDirectGetMsgReq(&subj, &buf, &wait, js, stream, opts, dgOpts));
+    IFOK(s, _newGetMsgReq(&req, cb, closure));
+
+    // Send the request without waiting for the response. When the request
+    // has no payload, the buffer was left empty (natsBuf_Len() is 0).
+    IFOK(s, js_requestAsync(js, subj, natsBuf_Data(&buf), natsBuf_Len(&buf),
+                            wait, _directGetMsgAsyncDone, (void*) req));
+
+    if (s != NATS_OK)
+        NATS_FREE(req);
+
+    natsBuf_Cleanup(&buf);
+    NATS_FREE(subj);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_directGetMsgAsync(jsCtx *js, const char *stream, jsOptions *opts,
+                     jsDirectGetMsgOptions *dgOpts, js_getMsgCb cb, void *closure)
+{
+    natsStatus s;
+
+    if ((js == NULL) || (dgOpts == NULL) || (cb == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (nats_IsStringEmpty(stream))
+        return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
+
+    s = _directGetMsgAsync(js, stream, opts, dgOpts, cb, closure);
     return NATS_UPDATE_ERR_STACK(s);
 }
 

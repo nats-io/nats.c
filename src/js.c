@@ -106,6 +106,7 @@ _freeContext(jsCtx *js)
     js_onReleaseCb  cb      = NULL;
 
     natsStrHash_Destroy(js->pm);
+    natsStrHash_Destroy(js->pr);
     _destroyAsyncReplies(&js->asyncReplies);
     _destroyOptions(&(js->opts));
     natsCondition_Destroy(js->cond);
@@ -159,6 +160,9 @@ js_unlockAndRelease(jsCtx *js)
 }
 
 static void
+_completeAsyncReq(jsAsyncReq *req, natsMsg *msg, natsStatus s);
+
+static void
 _destroyPMInfo(pmInfo *pmi)
 {
     if (pmi == NULL)
@@ -173,6 +177,8 @@ jsCtx_Destroy(jsCtx *js)
 {
     pmInfo *pm;
     jsAsyncReplies *ar;
+    jsAsyncReq *reqs = NULL;
+    jsAsyncReq *req  = NULL;
 
     if (js == NULL)
         return;
@@ -214,6 +220,23 @@ jsCtx_Destroy(jsCtx *js)
             natsMsg_Destroy(msg);
         }
     }
+
+    if ((js->pr != NULL) && (natsStrHash_Count(js->pr) > 0))
+    {
+        natsStrHashIter iter;
+        void            *v = NULL;
+
+        natsStrHashIter_Init(&iter, js->pr);
+        while (natsStrHashIter_Next(&iter, NULL, &v))
+        {
+            req = (jsAsyncReq*) v;
+
+            natsStrHashIter_RemoveCurrent(&iter);
+            req->next = reqs;
+            reqs = req;
+        }
+        natsStrHashIter_Done(&iter);
+    }
     while ((pm = js->pmHead) != NULL)
     {
         js->pmHead = pm->next;
@@ -222,6 +245,12 @@ jsCtx_Destroy(jsCtx *js)
     if (js->pmtmr != NULL)
         natsTimer_Stop(js->pmtmr);
     js_unlockAndRelease(js);
+
+    while ((req = reqs) != NULL)
+    {
+        reqs = req->next;
+        _completeAsyncReq(req, NULL, NATS_ILLEGAL_STATE);
+    }
 }
 
 natsStatus
@@ -744,6 +773,28 @@ _parsePubAck(natsMsg *msg, jsPubAck *pa, jsPubAckErr *pae, char *errTxt, size_t 
     return s;
 }
 
+// Invokes the callback of an asynchronous request and destroys the request.
+// Takes ownership of `msg`. `msg` may be NULL on error.
+static void
+_completeAsyncReq(jsAsyncReq *req, natsMsg *msg, natsStatus s)
+{
+    if (s == NATS_OK)
+    {
+        if (natsMsg_isTimeout(msg))
+            s = NATS_TIMEOUT;
+        else if (natsMsg_IsNoResponders(msg))
+            s = NATS_NO_RESPONDERS;
+    }
+    if (s != NATS_OK)
+    {
+        natsMsg_Destroy(msg);
+        msg = NULL;
+    }
+    (req->cb)(msg, s, req->closure);
+
+    NATS_FREE(req);
+}
+
 static void
 _handleAsyncReply(natsConnection *nc, natsSubscription *ignored, natsMsg *msg, void *closure)
 {
@@ -764,8 +815,19 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *ignored, natsMsg *msg, v
     pmsg = natsStrHash_Remove(js->pm, id);
     if (pmsg == NULL)
     {
+        jsAsyncReq *req = NULL;
+
+        // This may be the response to an asynchronous request instead of
+        // a publish acknowledgment.
+        if (js->pr != NULL)
+            req = (jsAsyncReq*) natsStrHash_Remove(js->pr, id);
+
         js_unlock(js);
-        natsMsg_Destroy(msg);
+
+        if (req != NULL)
+            _completeAsyncReq(req, msg, NATS_OK);
+        else
+            natsMsg_Destroy(msg);
         return;
     }
 
@@ -1065,6 +1127,8 @@ _timeoutPubAsync(natsTimer *t, void *closure)
     int64_t now = nats_Now();
     int64_t next= 0;
     jsAsyncReplies *ar;
+    jsAsyncReq *reqs = NULL;
+    jsAsyncReq *req  = NULL;
 
     js_lock(js);
     if (js->closed)
@@ -1076,11 +1140,13 @@ _timeoutPubAsync(natsTimer *t, void *closure)
     ar = &js->asyncReplies;
     while (((pm = js->pmHead) != NULL) && (pm->deadline <= now))
     {
-        // Check if the corresponding message is still in the hashtable.
-        if (natsStrHash_Get(js->pm, pm->id) != NULL)
+        // Check if the corresponding publish message, or asynchronous request,
+        // is still pending.
+        if (natsStrHash_Get(pm->map, pm->id) != NULL)
         {
-            natsMsg *m      = NULL;
-            char    *subj   = NULL;
+            natsMsg *m        = NULL;
+            char    *subj     = NULL;
+            bool    enqueued  = false;
 
             if ((nats_asprintf(&subj, "%s%s", ar->repliesPfx, pm->id) > 0)
                 && (natsMsg_Create(&m, subj, NULL, NULL, 0) == NATS_OK))
@@ -1089,15 +1155,35 @@ _timeoutPubAsync(natsTimer *t, void *closure)
 
                 if (ar->sub != NULL)
                 {
-                    // Best attempt, ignore NATS_SLOW_CONSUMER errors which may be returned here.
                     nats_lockSubAndDispatcher(ar->sub);
-                    natsSub_enqueueUserMessage(ar->sub, m);
+                    // A closed subscription (say the connection was closed)
+                    // would discard the message without invoking the handler.
+                    if (!ar->sub->closed)
+                        enqueued = (natsSub_enqueueUserMessage(ar->sub, m) == NATS_OK);
                     nats_unlockSubAndDispatcher(ar->sub);
+                    if (!enqueued)
+                        natsMsg_Destroy(m);
                 }
                 else
-                   js_submitRespMsg(js, m);
+                {
+                    js_submitRespMsg(js, m);
+                    enqueued = true;
+                }
             }
             NATS_FREE(subj);
+
+            // If the timeout message could not be dispatched, an asynchronous
+            // request would never be completed, so do it directly (once the
+            // lock is released). Publish acknowledgments need no completion.
+            if (!enqueued && (pm->map == js->pr))
+            {
+                req = (jsAsyncReq*) natsStrHash_Remove(js->pr, pm->id);
+                if (req != NULL)
+                {
+                    req->next = reqs;
+                    reqs = req;
+                }
+            }
         }
         // Remove from the list.
         js->pmHead = pm->next;
@@ -1120,6 +1206,13 @@ _timeoutPubAsync(natsTimer *t, void *closure)
     natsTimer_Reset(js->pmtmr, next);
 
     js_unlock(js);
+
+    // Complete the requests that could not be dispatched.
+    while ((req = reqs) != NULL)
+    {
+        reqs = req->next;
+        _completeAsyncReq(req, NULL, NATS_TIMEOUT);
+    }
 }
 
 static void
@@ -1129,8 +1222,12 @@ _timeoutPubAsyncComplete(natsTimer *t, void *closure)
     js_release(js);
 }
 
+// Adds the given ID to the list of asynchronous replies (publish
+// acknowledgment or request response) that need to be timed-out after `mw`
+// milliseconds. `map` is the map of pending operations that the ID belongs
+// to, so that the timer can tell if the operation is still pending.
 static natsStatus
-_trackPublishAsyncTimeout(jsCtx *js, char *id, int64_t mw)
+_trackPublishAsyncTimeout(jsCtx *js, natsStrHash *map, char *id, int64_t mw)
 {
     natsStatus  s       = NATS_OK;
     pmInfo      *pm     = NULL;
@@ -1145,6 +1242,7 @@ _trackPublishAsyncTimeout(jsCtx *js, char *id, int64_t mw)
         NATS_FREE(pmi);
         return nats_setDefaultError(NATS_NO_MEMORY);
     }
+    pmi->map      = map;
     pmi->deadline = nats_setTargetTime(mw);
 
     // Check if we can add at the end of the list
@@ -1225,7 +1323,7 @@ _registerPubMsg(natsConnection **nc, char *reply, jsCtx *js, natsMsg *msg, int64
         release = true;
     }
     if ((s == NATS_OK) && (mw > 0))
-        s = _trackPublishAsyncTimeout(js, id, mw);
+        s = _trackPublishAsyncTimeout(js, js->pm, id, mw);
     if (s == NATS_OK)
         s = natsStrHash_Set(js->pm, id, true, msg, NULL);
     if (s == NATS_OK)
@@ -1313,6 +1411,104 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
     // they would call with natsMsg_Destroy(NULL), which is a no-op.
     if (s == NATS_OK)
         *msg = NULL;
+
+    if (reply != replyBuf)
+        NATS_FREE(reply);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+// Registers the asynchronous request so that the response (or the failure)
+// can be dispatched to its callback. On success, the reply subject to use for
+// the request is set in `reply` and the connection to publish it with is
+// returned in `nc`.
+static natsStatus
+_registerAsyncReq(natsConnection **nc, char *reply, jsCtx *js, jsAsyncReq *req, int64_t timeout)
+{
+    natsStatus  s   = NATS_OK;
+    char        *id = NULL;
+
+    js_lock(js);
+
+    if (js->closed)
+    {
+        js_unlock(js);
+        return nats_setError(NATS_ILLEGAL_STATE, "%s", "JetStream context has been destroyed");
+    }
+    if (js->pr == NULL)
+        s = natsStrHash_Create(&(js->pr), 64);
+    // creates the objects used to receive the asynchronous replies
+    // if this is the first asynchronous operation for this ctx
+    IFOK(s, _newAsyncReply(reply, js));
+    if (s == NATS_OK)
+    {
+        id = reply+js->asyncReplies.idOffset;
+        s = _trackPublishAsyncTimeout(js, js->pr, id, timeout);
+    }
+    IFOK(s, natsStrHash_Set(js->pr, id, true, (void*) req, NULL));
+    if (s == NATS_OK)
+        *nc = js->nc;
+
+    js_unlock(js);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+js_requestAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
+                int64_t timeout, js_asyncReqCb cb, void *closure)
+{
+    natsStatus      s       = NATS_OK;
+    natsConnection  *nc     = NULL;
+    jsAsyncReq      *req    = NULL;
+    // This is big enough regardless if we use the connection response muxer or
+    // our own subscription for the replies.
+    char            replyBuf[32 + NATS_MAX_JS_RESP_SUFFIX_LEN];
+    char            *reply  = replyBuf;
+
+    if ((js == NULL) || (cb == NULL) || nats_IsStringEmpty(subj))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (timeout <= 0)
+        timeout = jsDefaultRequestWait;
+
+    if (js->nc->inboxPfxLen > 32)
+    {
+        reply = NATS_MALLOC(js->nc->inboxPfxLen + NATS_MAX_JS_RESP_SUFFIX_LEN);
+        if (reply == NULL)
+            return nats_setDefaultError(NATS_NO_MEMORY);
+    }
+
+    req = (jsAsyncReq*) NATS_CALLOC(1, sizeof(jsAsyncReq));
+    if (req == NULL)
+        s = nats_setDefaultError(NATS_NO_MEMORY);
+    else
+    {
+        req->cb      = cb;
+        req->closure = closure;
+    }
+
+    IFOK(s, _registerAsyncReq(&nc, reply, js, req, timeout));
+    if (s == NATS_OK)
+    {
+        s = natsConnection_PublishRequest(nc, subj, reply, data, dataLen);
+        if (s != NATS_OK)
+        {
+            char *id = reply+js->asyncReplies.idOffset;
+
+            // we don't know if the request has been sent.
+            // If it can be removed, then the callback will not be invoked,
+            // so report the failure to the caller. If it can't, then the
+            // response is being processed and we should return sucess
+            js_lock(js);
+            if (natsStrHash_Remove(js->pr, id) == NULL)
+                s = NATS_OK;
+            js_unlock(js);
+        }
+    }
+
+    if (s != NATS_OK)
+        NATS_FREE(req);
 
     if (reply != replyBuf)
         NATS_FREE(reply);

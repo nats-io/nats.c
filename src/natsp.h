@@ -393,12 +393,30 @@ struct __natsOptions
 typedef struct __pmInfo
 {
     char                *id;
+    natsStrHash         *map;
     int64_t             deadline;
     struct __pmInfo     *next;
 
 } pmInfo;
 
 typedef void (*js_onReleaseCb)(void *arg);
+
+// Callback invoked when the response to an asynchronous JetStream request is
+// available, or when the request has failed (timeout, no responders, etc..).
+// If `s` is NATS_OK, the callback takes ownership of `resp`, otherwise `resp`
+// is NULL.
+typedef void (*js_asyncReqCb)(natsMsg *resp, natsStatus s, void *closure);
+
+// Tracks an asynchronous JetStream request until its response (or a failure)
+// has been dispatched to the callback. The `next` field is used only when
+// completing all pending requests at once like when the context is destroyed.
+typedef struct __jsAsyncReq
+{
+    js_asyncReqCb       cb;
+    void                *closure;
+    struct __jsAsyncReq *next;
+
+} jsAsyncReq;
 
 typedef struct __jsAsyncReplies
 {
@@ -427,6 +445,7 @@ struct __jsCtx
     int				    refs;
     natsCondition       *cond;
     natsStrHash         *pm;
+    natsStrHash         *pr;
     natsTimer           *pmtmr;
     pmInfo              *pmHead;
     pmInfo              *pmTail;

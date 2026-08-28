@@ -528,6 +528,24 @@ _getKVOp(natsMsg *msg)
 }
 
 static natsStatus
+_createEntryFromMsg(kvEntry **new_entry, bool *deleted, kvStore *kv, natsMsg **msg)
+{
+    natsStatus  s;
+    kvEntry     *e = NULL;
+
+    s = _createEntry(&e, kv, msg);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
+    e->op = _getKVOp(e->msg);
+
+    *deleted   = ((e->op == kvOp_Delete) || (e->op == kvOp_Purge));
+    *new_entry = e;
+
+    return NATS_OK;
+}
+
+static natsStatus
 _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key, uint64_t revision)
 {
     natsStatus  s       = NATS_OK;
@@ -566,19 +584,13 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key, uint
     // message subject matches the request.
     if (revision != 0)
         IFOK(s, (strcmp(natsMsg_GetSubject(msg), natsBuf_Data(&buf)) == 0 ? NATS_OK : NATS_NOT_FOUND));
-    IFOK(s, _createEntry(&e, kv, &msg));
-    if (s == NATS_OK)
-        e->op = _getKVOp(e->msg);
+    IFOK(s, _createEntryFromMsg(&e, deleted, kv, &msg));
 
     natsBuf_Cleanup(&buf);
     natsMsg_Destroy(msg);
 
     if (s == NATS_OK)
-    {
-        if ((e->op == kvOp_Delete) || (e->op == kvOp_Purge))
-            *deleted = true;
         *new_entry = e;
-    }
     else
     {
         kvEntry_Destroy(e);
@@ -624,6 +636,102 @@ kvStore_Get(kvEntry **new_entry, kvStore *kv, const char *key)
     // We don't want stack trace for this error
     if (s == NATS_NOT_FOUND)
         return s;
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+typedef struct __kvGetRequest
+{
+    kvStore     *kv;
+    kvGetCb     cb;
+    void        *cbClosure;
+
+} kvGetRequest;
+
+static void
+_destroyGetRequest(kvGetRequest *req)
+{
+    if (req == NULL)
+        return;
+
+    _releaseKV(req->kv);
+    NATS_FREE(req);
+}
+
+static void
+_getAsyncCb(natsMsg *msg, natsStatus s, jsErrCode jerr, void *closure)
+{
+    kvGetRequest    *req     = (kvGetRequest*) closure;
+    kvEntry         *e       = NULL;
+    bool            deleted  = false;
+
+    IFOK(s, _createEntryFromMsg(&e, &deleted, req->kv, &msg));
+    if ((s == NATS_OK) && deleted)
+    {
+        // A deleted or purged key is reported as not found, the same way
+        // that kvStore_Get() does.
+        kvEntry_Destroy(e);
+        e = NULL;
+        s = NATS_NOT_FOUND;
+    }
+    // We don't want stack trace for this error.
+    if (s == NATS_NOT_FOUND)
+        nats_clearLastError();
+
+    (req->cb)(req->kv, e, s, req->cbClosure);
+
+    natsMsg_Destroy(msg);
+    _destroyGetRequest(req);
+}
+
+natsStatus
+kvStore_GetAsync(kvStore *kv, const char *key, kvGetCb cb, void *closure)
+{
+    natsStatus      s    = NATS_OK;
+    kvGetRequest    *req = NULL;
+    DEFINE_BUF_FOR_SUBJECT;
+    jsDirectGetMsgOptions dgo;
+
+    if ((kv == NULL) || (cb == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    if (!validKey(key))
+        return nats_setError(NATS_INVALID_ARG, "%s", kvErrInvalidKey);
+
+    BUILD_SUBJECT(KEY_NAME_ONLY, NOT_FOR_A_PUT);
+
+    if (s == NATS_OK)
+    {
+        req = (kvGetRequest*) NATS_CALLOC(1, sizeof(kvGetRequest));
+        if (req == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+        {
+            _retainKV(kv);
+            req->kv         = kv;
+            req->cb         = cb;
+            req->cbClosure  = closure;
+        }
+    }
+    if (s == NATS_OK)
+    {
+        if (kv->useDirect)
+        {
+            jsDirectGetMsgOptions_Init(&dgo);
+            dgo.LastBySubject = natsBuf_Data(&buf);
+
+            s = js_directGetMsgAsync(kv->js, kv->stream, NULL, &dgo, _getAsyncCb, (void*) req);
+        }
+        else
+        {
+            s = js_getMsgAsync(kv->js, kv->stream, 0, natsBuf_Data(&buf), NULL, _getAsyncCb, (void*) req);
+        }
+    }
+
+    natsBuf_Cleanup(&buf);
+
+    if (s != NATS_OK)
+        _destroyGetRequest(req);
+
     return NATS_UPDATE_ERR_STACK(s);
 }
 

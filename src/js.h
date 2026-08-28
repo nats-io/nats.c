@@ -303,7 +303,7 @@ void
 js_release(jsCtx *js);
 
 natsStatus
-js_directGetMsgToJSMsg(const char *stream, natsMsg *msg);
+js_directGetMsgToJSMsg(natsMsg *msg);
 
 natsStatus
 js_cloneConsumerConfig(jsConsumerConfig *org, jsConsumerConfig **clone);
@@ -328,3 +328,50 @@ js_submitRespDrainMsg(jsCtx *js);
 
 void
 js_initRespDrain(jsCtx *js);
+
+// Sends a request on `subj` and returns without waiting for the response.
+// When the response is received, or the request has failed (`timeout` has
+// elapsed, no responder, etc..), `cb` is invoked from the thread dispatching
+// the context's asynchronous replies (or the thread calling jsCtx_Destroy
+// for requests still pending at that time).
+//
+// If `timeout` is 0 or less, jsDefaultRequestWait is used.
+//
+// If this function returns anything but NATS_OK, `cb` will not be invoked.
+// Otherwise, it is guaranteed to be invoked exactly once. Note that if the
+// context is destroyed while requests are still pending, their callback is
+// invoked with the NATS_ILLEGAL_STATE status.
+natsStatus
+js_requestAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
+                int64_t timeout, js_asyncReqCb cb, void *closure);
+
+// Callback invoked when the response to an asynchronous "get message" request
+// is available, or when the request has failed (no responder, timeout, etc..).
+//
+// On success, `msg` is a JetStream message ready to be presented to the user
+// and the callback takes ownership of it. Otherwise, `msg` is NULL and `s`
+// (possibly with `jerr`) indicates the reason of the failure.
+//
+// The callback is invoked from a library thread (see js_requestAsync), so it
+// must not block.
+typedef void (*js_getMsgCb)(natsMsg *msg, natsStatus s, jsErrCode jerr, void *closure);
+
+// Asynchronous version of js_DirectGetMsg(). The request is sent and the
+// function returns without waiting for the response, `cb` being invoked
+// when the response (or an error) is available.
+//
+// The `opts` and `dgOpts` objects (and the strings they point to) need to
+// remain valid only for the duration of the call.
+//
+// If the function returns anything but NATS_OK, the callback will not be
+// invoked. Otherwise, it is guaranteed to be invoked exactly once.
+natsStatus
+js_directGetMsgAsync(jsCtx *js, const char *stream, jsOptions *opts,
+                     jsDirectGetMsgOptions *dgOpts, js_getMsgCb cb, void *closure);
+
+// Asynchronous version of js_GetMsg() (if `seq` is not 0) or js_GetLastMsg()
+// (if `subject` is not NULL). Same contract as js_directGetMsgAsync() with
+// regards to the options lifetime and the invocation of the callback.
+natsStatus
+js_getMsgAsync(jsCtx *js, const char *stream, uint64_t seq, const char *subject,
+               jsOptions *opts, js_getMsgCb cb, void *closure);

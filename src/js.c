@@ -1499,7 +1499,7 @@ js_requestAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
             // we don't know if the request has been sent.
             // If it can be removed, then the callback will not be invoked,
             // so report the failure to the caller. If it can't, then the
-            // response is being processed and we should return sucess
+            // response is being processed and we should return success
             js_lock(js);
             if (natsStrHash_Remove(js->pr, id) == NULL)
                 s = NATS_OK;

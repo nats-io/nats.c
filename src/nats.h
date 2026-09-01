@@ -2253,6 +2253,38 @@ typedef struct __stanSubOptions     stanSubOptions;
 typedef void (*natsMsgHandler)(
         natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure);
 
+/** \brief Callback invoked with the entry of an asynchronous get.
+ *
+ * This is the callback that one provides to #kvStore_GetAsync(). It is invoked
+ * exactly once, either with the entry that was retrieved, or with the reason
+ * why the get did not succeed.
+ *
+ * \note If the key does not exist, or if it has been deleted or purged, the
+ * callback is invoked with a `NULL` entry and the #NATS_NOT_FOUND status,
+ * the same way that #kvStore_Get() reports it.
+ *
+ * \note If the JetStream context that the #kvStore was created from is
+ * destroyed while the get is still pending, the callback is invoked with a
+ * `NULL` entry and the #NATS_ILLEGAL_STATE status, from the thread calling
+ * #jsCtx_Destroy.
+ *
+ * \warning The user is responsible for calling #kvEntry_Destroy when no longer needed.
+ *
+ * \warning This callback is invoked from a library thread (or from the thread
+ *          destroying the JetStream context, see above), not from the thread
+ *          that called #kvStore_GetAsync(). It should not block, and use of the
+ *          `closure` object (if non `NULL`) must be thread-safe.
+ *
+ * @see kvStore_GetAsync()
+ *
+ * @param kv the #kvStore that the entry was retrieved from.
+ * @param e the #kvEntry, `NULL` if the get did not succeed.
+ * @param s a #natsStatus that indicates if the get was successful.
+ * @param closure the pointer to some user provided data, possibly `NULL`.
+ */
+typedef void (*kvGetCb)(
+        kvStore *kv, kvEntry *e, natsStatus s, void *closure);
+
 /** \brief Callback used to notify the user of asynchronous connection events.
  *
  * This callback is used for asynchronous events such as disconnected
@@ -8560,6 +8592,32 @@ kvEntry_Destroy(kvEntry *e);
  */
 NATS_EXTERN natsStatus
 kvStore_Get(kvEntry **new_entry, kvStore *kv, const char *key);
+
+/** \brief Asynchronously returns the latest entry for the key.
+ *
+ * Starts the retrieval of the latest entry for the given key and returns
+ * immediately, without waiting for the server's response. The provided
+ * callback is invoked when the entry (or the reason why it could not be
+ * retrieved) is available.
+ *
+ * \note The callback is invoked exactly once, and only if this call returns
+ * #NATS_OK. If the key does not exist, or if it has been deleted or purged,
+ * the callback receives a `NULL` entry and the #NATS_NOT_FOUND status. If the
+ * JetStream context that the #kvStore was created from is destroyed while the
+ * get is still pending, the callback receives a `NULL` entry and the
+ * #NATS_ILLEGAL_STATE status.
+ *
+ * \warning The callback is not invoked from the calling thread, see #kvGetCb.
+ *
+ * @see kvGetCb
+ *
+ * @param kv the pointer to the #kvStore object.
+ * @param key the name of the key.
+ * @param cb the callback function to invoke when the entry is retrieved.
+ * @param cbClosure a pointer to an user defined object (can be `NULL`).
+ */
+NATS_EXTERN natsStatus
+kvStore_GetAsync(kvStore *kv, const char *key, kvGetCb cb, void *cbClosure);
 
 /** \brief Returns the entry at the specific revision for the key.
  *

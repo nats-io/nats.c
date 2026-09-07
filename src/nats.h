@@ -5666,6 +5666,22 @@ natsConnection_GetConnectedUrl(natsConnection *nc, char *buffer, size_t bufferSi
 NATS_EXTERN natsStatus
 natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t bufferSize);
 
+/** \brief Gets the server name.
+ *
+ * Copies in the given buffer, the connected server's name, as reported by
+ * the server in the `INFO` protocol (the `server_name` field). If the buffer
+ * is too small, an error is returned.
+ *
+ * \note Servers prior to v2.0.0 do not report a name. In this case, the
+ * buffer is set to the empty string and #NATS_OK is returned.
+ *
+ * @param nc the pointer to the #natsConnection object.
+ * @param buffer the buffer in which the server name is copied.
+ * @param bufferSize the size of the buffer.
+ */
+NATS_EXTERN natsStatus
+natsConnection_GetConnectedServerName(natsConnection *nc, char *buffer, size_t bufferSize);
+
 /** \brief Returns the list of server URLs known to this connection.
  *
  * Returns the list of known servers, including additional servers

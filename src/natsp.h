@@ -188,6 +188,7 @@ typedef struct __natsControl
 typedef struct __natsServerInfo
 {
     char        *id;
+    char        *name;
     char        *host;
     int         port;
     char        *version;

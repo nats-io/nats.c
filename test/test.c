@@ -11748,6 +11748,13 @@ void test_ConnectedServer(void)
 
     buffer[0] = '\0';
 
+    // The server reports its name only since v2.0.0.
+    test("Verify ConnectedServerName is not null: ")
+    s = natsConnection_GetConnectedServerName(nc, buffer, sizeof(buffer));
+    testCond((s == NATS_OK)  && (!serverVersionAtLeast(2,0,0) || (buffer[0] != '\0')));
+
+    buffer[0] = '\0';
+
     test("Verify ConnectedUrl is empty after disconnect: ")
     natsConnection_Close(nc);
     s = natsConnection_GetConnectedUrl(nc, buffer, sizeof(buffer));
@@ -11758,6 +11765,60 @@ void test_ConnectedServer(void)
     test("Verify ConnectedServerId is empty after disconnect: ")
     s = natsConnection_GetConnectedServerId(nc, buffer, sizeof(buffer));
     testCond((s == NATS_OK)  && (buffer[0] == '\0'));
+
+    buffer[0] = '\0';
+
+    test("Verify ConnectedServerName is empty after disconnect: ")
+    s = natsConnection_GetConnectedServerName(nc, buffer, sizeof(buffer));
+    testCond((s == NATS_OK)  && (buffer[0] == '\0'));
+
+    natsConnection_Destroy(nc);
+
+    _stopServer(serverPid);
+}
+
+void test_ConnectedServerName(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    char                buffer[128];
+
+    if (!serverVersionAtLeast(2,0,0))
+    {
+        char txt[200];
+
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.0.0, got %s: ", serverVersion);
+        test(txt);
+        testCond(true);
+        return;
+    }
+
+    buffer[0] = '\0';
+
+    serverPid = _startServer("nats://127.0.0.1:4222", "--name my_server_name", true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Verify ConnectedServerName reports the server's name: ")
+    s = natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_GetConnectedServerName(nc, buffer, sizeof(buffer)));
+    testCond((s == NATS_OK) && (strcmp(buffer, "my_server_name") == 0));
+
+    buffer[0] = '\0';
+
+    test("Verify ConnectedServerName with too small buffer: ")
+    s = natsConnection_GetConnectedServerName(nc, buffer, 4);
+    testCond(s == NATS_INSUFFICIENT_BUFFER);
+    nats_clearLastError();
+
+    buffer[0] = '\0';
+
+    test("Verify ConnectedServerName with invalid args: ")
+    s = natsConnection_GetConnectedServerName(NULL, buffer, sizeof(buffer));
+    if (s == NATS_INVALID_ARG)
+        s = natsConnection_GetConnectedServerName(nc, NULL, sizeof(buffer));
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
 
     natsConnection_Destroy(nc);
 

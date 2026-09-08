@@ -164,6 +164,7 @@ _clearServerInfo(natsServerInfo *si)
     int i;
 
     NATS_FREE(si->id);
+    NATS_FREE(si->name);
     NATS_FREE(si->host);
     NATS_FREE(si->version);
 
@@ -596,6 +597,7 @@ _processInfo(natsConnection *nc, char *info, int len)
         return NATS_UPDATE_ERR_STACK(s);
 
     IFOK(s, nats_JSONGetStr(json, "server_id", &(nc->info.id)));
+    IFOK(s, nats_JSONGetStr(json, "server_name", &(nc->info.name)));
     IFOK(s, nats_JSONGetStr(json, "version", &(nc->info.version)));
     IFOK(s, nats_JSONGetStr(json, "host", &(nc->info.host)));
     IFOK(s, nats_JSONGetInt(json, "port", &(nc->info.port)));
@@ -4403,6 +4405,33 @@ natsConnection_GetConnectedServerId(natsConnection *nc, char *buffer, size_t buf
 
         if (s == NATS_OK)
             snprintf(buffer, bufferSize, "%s", nc->info.id);
+    }
+
+    natsConn_Unlock(nc);
+
+    return s;
+}
+
+natsStatus
+natsConnection_GetConnectedServerName(natsConnection *nc, char *buffer, size_t bufferSize)
+{
+    natsStatus  s = NATS_OK;
+
+    if ((nc == NULL) || (buffer == NULL))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    natsConn_Lock(nc);
+
+    buffer[0] = '\0';
+
+    if (((nc->status == NATS_CONN_STATUS_CONNECTED) || (nc->status == NATS_CONN_STATUS_CONNECTING))
+        && (nc->info.name != NULL))
+    {
+        if (strlen(nc->info.name) >= bufferSize)
+            s = nats_setDefaultError(NATS_INSUFFICIENT_BUFFER);
+
+        if (s == NATS_OK)
+            snprintf(buffer, bufferSize, "%s", nc->info.name);
     }
 
     natsConn_Unlock(nc);

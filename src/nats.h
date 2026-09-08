@@ -7163,9 +7163,9 @@ natsConnection_JetStream(jsCtx **js, natsConnection *nc, jsOptions *opts);
  *
  * \note Callbacks of asynchronous operations still pending (such as
  * #kvStore_GetAsync() gets) are invoked with the #NATS_ILLEGAL_STATE status
- * before this call returns. This call may be made from within such a
- * callback, but since it waits for any callback in progress, not while
- * holding a lock that a callback needs.
+ * before this call returns. It may be called from within such a callback.
+ * It must not be called while holding a lock that a pending callback needs,
+ * since it waits for callbacks in progress to return.
  *
  * @param js the pointer to the #jsCtx object to destroy.
  */

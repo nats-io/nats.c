@@ -34826,6 +34826,19 @@ void test_JetStreamGetMsgAsync(void)
         memset(&greq, 0, sizeof(greq));
         s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     }
+    if (s == NATS_INVALID_ARG)
+    {
+        greq.seq           = 1;
+        greq.lastBySubject = "foo.bar";
+        s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
+    }
+    if (s == NATS_INVALID_ARG)
+    {
+        memset(&greq, 0, sizeof(greq));
+        greq.seq           = 1;
+        greq.nextBySubject = "foo.bar";
+        s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
+    }
     testCond(s == NATS_INVALID_ARG);
     nats_clearLastError();
 

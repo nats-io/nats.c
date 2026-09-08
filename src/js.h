@@ -333,8 +333,12 @@ js_initRespDrain(jsCtx *js);
 // When the response is received, or the request has failed (`timeout` has
 // elapsed, no responder, etc..), `cb` is invoked from the thread dispatching
 // the context's asynchronous replies (possibly before this call returns), so
-// it must not block. jsCtx_Destroy and the timeout run on that same thread;
-// jsCtx_Destroy will not return until the callbacks have.
+// it must not block. A timeout or a jsCtx_Destroy() normally completes the
+// request from that same thread too, but once the connection is closed or
+// drained that thread may be gone, in which case the timeout completes it
+// from the timer thread and jsCtx_Destroy() from the calling thread (see the
+// kvGetCb documentation in nats.h). Either way, jsCtx_Destroy() does not
+// return until the callbacks of the pending requests have.
 //
 // If `timeout` is 0 or less, jsDefaultRequestWait is used.
 //
@@ -360,6 +364,11 @@ typedef void (*js_getMsgCb)(natsMsg *msg, natsStatus s, jsErrCode jerr, void *cl
 // Parameters of a stream "get message" request, covering both the JS API
 // get ($JS.API.STREAM.MSG.GET.<stream>) and the direct get
 // ($JS.API.DIRECT.GET.<stream>).
+//
+// A JS API get takes exactly one of `seq` and `lastBySubject`, and no
+// `nextBySubject` (anything else is rejected with NATS_INVALID_ARG).
+// Combinations of the direct get selectors are, as documented for
+// js_DirectGetMsg(), left to the server to validate.
 typedef struct __jsStreamMsgGetReq
 {
     bool        direct;         // use the direct get API instead of the JS API get

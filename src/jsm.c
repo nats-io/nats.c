@@ -2065,9 +2065,17 @@ _buildStreamMsgGetReq(char **newSubj, natsBuffer *buf, int64_t *wait, jsCtx *js,
     if (nats_IsStringEmpty(stream))
         return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
 
-    // The JS API get requires a sequence or a subject.
-    if (!req->direct && (req->seq == 0) && nats_IsStringEmpty(req->lastBySubject))
-        return nats_setDefaultError(NATS_INVALID_ARG);
+    // The JS API get takes exactly one of a sequence or a subject, and does
+    // not support "next by subject". Combinations of the direct get selectors
+    // are left to the server (see js_DirectGetMsg()).
+    if (!req->direct)
+    {
+        bool bySeq  = (req->seq > 0);
+        bool bySubj = !nats_IsStringEmpty(req->lastBySubject);
+
+        if ((bySeq == bySubj) || !nats_IsStringEmpty(req->nextBySubject))
+            return nats_setDefaultError(NATS_INVALID_ARG);
+    }
 
     if (req->direct)
         s = _buildDirectGetMsgReq(newSubj, buf, wait, js, stream, opts, req);

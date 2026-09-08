@@ -49,6 +49,12 @@
 #define natsMsg_isTimeout(m)        (((m)->flags &   (1 << 3)) != 0)
 #define natsMsg_clearTimeout(m)     ((m)->flags  &= ~(1 << 3))
 
+// Synthetic message completing an asynchronous JetStream request whose
+// context was destroyed while it was pending (see js_requestAsync()).
+#define natsMsg_setIllegalState(m)  ((m)->flags  |=  (1 << 4))
+#define natsMsg_isIllegalState(m)   (((m)->flags &   (1 << 4)) != 0)
+#define natsMsg_clearIllegalState(m)((m)->flags  &= ~(1 << 4))
+
 #define natsMsg_dataAndHdrLen(m)    ((m)->dataLen + (m)->hdrLen)
 
 struct __natsMsg

@@ -435,6 +435,8 @@ typedef struct __jsAsyncReplies
     bool                init;
     bool                draining;
     bool                closed;
+    // Set when the dispatch thread exits (nothing queued is consumed after).
+    bool                dispatcherDone;
 
 } jsAsyncReplies;
 
@@ -447,6 +449,8 @@ struct __jsCtx
     natsCondition       *cond;
     natsStrHash         *pm;
     natsStrHash         *pr;
+    // Request callbacks currently running on the dispatch thread.
+    int                 prInFlight;
     natsTimer           *pmtmr;
     pmInfo              *pmHead;
     pmInfo              *pmTail;

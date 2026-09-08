@@ -2265,15 +2265,22 @@ typedef void (*natsMsgHandler)(
  *
  * \note If the JetStream context that the #kvStore was created from is
  * destroyed while the get is still pending, the callback is invoked with a
- * `NULL` entry and the #NATS_ILLEGAL_STATE status, from the thread calling
- * #jsCtx_Destroy.
+ * `NULL` entry and the #NATS_ILLEGAL_STATE status, before #jsCtx_Destroy
+ * returns.
  *
  * \warning The user is responsible for calling #kvEntry_Destroy when no longer needed.
  *
- * \warning This callback is invoked from a library thread (or from the thread
- *          destroying the JetStream context, see above), not from the thread
- *          that called #kvStore_GetAsync(). It should not block, and use of the
- *          `closure` object (if non `NULL`) must be thread-safe.
+ * \warning The callback is invoked from a library thread, never from the
+ * thread calling #kvStore_GetAsync(), but possibly before that call returns.
+ * Normally this is the single thread dispatching the context's replies, and
+ * callbacks are serialized, but this is not guaranteed once the connection
+ * has been closed or drained. The `closure` must therefore be thread-safe,
+ * and no ordering between gets can be assumed.
+ *
+ * \warning The callback should not block, since it delays the other callbacks
+ * of the context, nor wait for the thread calling #jsCtx_Destroy, which waits
+ * for the callback to return. See #kvStore_GetAsync() for how to hand the
+ * entry off to an application thread.
  *
  * @see kvStore_GetAsync()
  *
@@ -7154,6 +7161,12 @@ natsConnection_JetStream(jsCtx **js, natsConnection *nc, jsOptions *opts);
  *
  * Releases memory used by the context object.
  *
+ * \note Callbacks of asynchronous operations still pending (such as
+ * #kvStore_GetAsync() gets) are invoked with the #NATS_ILLEGAL_STATE status
+ * before this call returns. This call may be made from within such a
+ * callback, but since it waits for any callback in progress, not while
+ * holding a lock that a callback needs.
+ *
  * @param js the pointer to the #jsCtx object to destroy.
  */
 NATS_EXTERN void
@@ -8623,7 +8636,30 @@ kvStore_Get(kvEntry **new_entry, kvStore *kv, const char *key);
  * get is still pending, the callback receives a `NULL` entry and the
  * #NATS_ILLEGAL_STATE status.
  *
- * \warning The callback is not invoked from the calling thread, see #kvGetCb.
+ * \warning The callback runs on a library thread, possibly before this call
+ * returns. See #kvGetCb for the threading contract.
+ *
+ * To process the entry from an application thread instead, the callback can
+ * simply hand it over, for instance:
+ *
+ * \code{.unparsed}
+ * static void
+ * getCompleted(kvStore *kv, kvEntry *e, natsStatus s, void *closure)
+ * {
+ *     myWorkQueue *q = (myWorkQueue*) closure;
+ *
+ *     // The entry (NULL if s != NATS_OK) is now owned by the application,
+ *     // which must eventually call kvEntry_Destroy.
+ *     myWorkQueue_Lock(q);
+ *     myWorkQueue_Push(q, e, s);
+ *     myWorkQueue_SignalAndUnlock(q);
+ * }
+ *
+ * // ...
+ * s = kvStore_GetAsync(kv, "key", getCompleted, (void*) q);
+ * \endcode
+ *
+ * A complete program along these lines is in `examples/kv-get-async.c`.
  *
  * @see kvGetCb
  *

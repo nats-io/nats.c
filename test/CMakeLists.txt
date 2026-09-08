@@ -34,6 +34,10 @@ add_executable(testsuite test.c bench.c)
 # Link statically with the library
 target_link_libraries(testsuite nats_static ${NATS_EXTRA_LIB})
 
+if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+  target_link_libraries(testsuite execinfo)
+endif()
+
 set(BENCH_LIST ${PROJECT_SOURCE_DIR}/test/list_bench.txt)
 set(STAN_LIST ${PROJECT_SOURCE_DIR}/test/list_stan.txt)
 

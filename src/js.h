@@ -332,8 +332,12 @@ js_initRespDrain(jsCtx *js);
 // Sends a request on `subj` and returns without waiting for the response.
 // When the response is received, or the request has failed (`timeout` has
 // elapsed, no responder, etc..), `cb` is invoked from the thread dispatching
-// the context's asynchronous replies (or the thread calling jsCtx_Destroy
-// for requests still pending at that time).
+// the context's asynchronous replies (possibly before this call returns), so
+// it must not block. Once the connection is closed or drained, that thread
+// may be gone: a timeout then completes the request from the timer thread,
+// and jsCtx_Destroy() from the calling thread (see kvGetCb in nats.h).
+// Either way, jsCtx_Destroy() does not return before the callbacks of the
+// pending requests have.
 //
 // If `timeout` is 0 or less, jsDefaultRequestWait is used.
 //
@@ -356,22 +360,38 @@ js_requestAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
 // must not block.
 typedef void (*js_getMsgCb)(natsMsg *msg, natsStatus s, jsErrCode jerr, void *closure);
 
-// Asynchronous version of js_DirectGetMsg(). The request is sent and the
+// Parameters of a stream "get message" request, for both the JS API get
+// ($JS.API.STREAM.MSG.GET.<stream>) and the direct get
+// ($JS.API.DIRECT.GET.<stream>).
+//
+// A JS API get takes exactly one of `seq` and `lastBySubject`, and no
+// `nextBySubject` (NATS_INVALID_ARG otherwise). Combinations of the direct
+// get selectors are left to the server to validate (see js_DirectGetMsg()).
+typedef struct __jsStreamMsgGetReq
+{
+    bool        direct;         // use the direct get API instead of the JS API get
+    uint64_t    seq;            // get the message with this sequence...
+    const char  *lastBySubject; // ...or the last message on this subject...
+    const char  *nextBySubject; // ...or (direct get only) the first message
+                                // with a sequence >= `seq` on this subject.
+
+} jsStreamMsgGetReq;
+
+// Retrieves a message from `stream` per `req`: the common implementation of
+// js_GetMsg(), js_GetLastMsg() and js_DirectGetMsg().
+natsStatus
+js_getStreamMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts,
+                const jsStreamMsgGetReq *req, jsErrCode *errCode);
+
+// Asynchronous version of js_getStreamMsg(). The request is sent and the
 // function returns without waiting for the response, `cb` being invoked
 // when the response (or an error) is available.
 //
-// The `opts` and `dgOpts` objects (and the strings they point to) need to
+// The `opts` and `req` objects (and the strings they point to) need to
 // remain valid only for the duration of the call.
 //
 // If the function returns anything but NATS_OK, the callback will not be
 // invoked. Otherwise, it is guaranteed to be invoked exactly once.
 natsStatus
-js_directGetMsgAsync(jsCtx *js, const char *stream, jsOptions *opts,
-                     jsDirectGetMsgOptions *dgOpts, js_getMsgCb cb, void *closure);
-
-// Asynchronous version of js_GetMsg() (if `seq` is not 0) or js_GetLastMsg()
-// (if `subject` is not NULL). Same contract as js_directGetMsgAsync() with
-// regards to the options lifetime and the invocation of the callback.
-natsStatus
-js_getMsgAsync(jsCtx *js, const char *stream, uint64_t seq, const char *subject,
-               jsOptions *opts, js_getMsgCb cb, void *closure);
+js_getStreamMsgAsync(jsCtx *js, const char *stream, jsOptions *opts,
+                     const jsStreamMsgGetReq *req, js_getMsgCb cb, void *closure);

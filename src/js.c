@@ -163,12 +163,21 @@ static void
 _completeAsyncReq(jsAsyncReq *req, natsMsg *msg, natsStatus s);
 
 static void
+_completeAsyncReqs(jsAsyncReq *reqs, natsStatus s);
+
+static jsAsyncReq*
+_takePendingReqs(jsCtx *js);
+
+static bool
+_enqueueCtxClosedMsg(jsCtx *js);
+
+static void
+_dispatcherDone(void *closure);
+
+static void
 _destroyPMInfo(pmInfo *pmi)
 {
-    if (pmi == NULL)
-        return;
-
-    NATS_FREE(pmi->id);
+    // The id is in the same allocation.
     NATS_FREE(pmi);
 }
 
@@ -178,7 +187,9 @@ jsCtx_Destroy(jsCtx *js)
     pmInfo *pm;
     jsAsyncReplies *ar;
     jsAsyncReq *reqs = NULL;
-    jsAsyncReq *req  = NULL;
+    natsThread *dt = NULL;
+    bool onDispatcher = false;
+    bool enqueued = false;
 
     if (js == NULL)
         return;
@@ -191,6 +202,57 @@ jsCtx_Destroy(jsCtx *js)
     }
     js->closed = true;
     ar = &js->asyncReplies;
+
+    // Are we on the reply dispatch thread (i.e. in a callback)?
+    dt = (ar->sub != NULL ? ar->sub->ownDispatcher.thread : ar->dispatcher);
+    onDispatcher = ((dt != NULL) && natsThread_IsCurrent(dt));
+
+    if ((js->pm != NULL) && natsStrHash_Count(js->pm) > 0)
+    {
+        natsStrHashIter iter;
+        void            *v = NULL;
+
+        natsStrHashIter_Init(&iter, js->pm);
+        while (natsStrHashIter_Next(&iter, NULL, &v))
+        {
+            natsMsg *msg = (natsMsg*) v;
+            natsStrHashIter_RemoveCurrent(&iter);
+            natsMsg_Destroy(msg);
+        }
+    }
+    while ((pm = js->pmHead) != NULL)
+    {
+        js->pmHead = pm->next;
+        _destroyPMInfo(pm);
+    }
+    if (js->pmtmr != NULL)
+        natsTimer_Stop(js->pmtmr);
+
+    // If requests are pending, have the reply dispatcher complete them, so
+    // that their callbacks run on that thread. Not if we are that thread (we
+    // would wait for ourselves): they are then completed directly below.
+    if (!onDispatcher && (js->pr != NULL) && (natsStrHash_Count(js->pr) > 0))
+        enqueued = _enqueueCtxClosedMsg(js);
+
+    // Wait for the message to be processed: by then, every callback queued
+    // ahead of it has returned. If it could not be queued, just wait for the
+    // request callback in progress, if any. Do not shut the dispatcher down
+    // before that, since a closed subscription discards its queue. Whatever
+    // the dispatcher does not get to (connection closed or drained) is
+    // completed below.
+    if (!onDispatcher)
+    {
+        while (!ar->dispatcherDone && !ar->closeHandled
+               && (enqueued || (js->prInFlight > 0)))
+        {
+            natsCondition_Wait(js->cond, js->mu);
+        }
+    }
+
+    // What is left is completed once the lock is released.
+    reqs = _takePendingReqs(js);
+
+    // Shut the dispatcher down.
     if (ar->init)
     {
         if (ar->sub != NULL)
@@ -207,50 +269,10 @@ jsCtx_Destroy(jsCtx *js)
             natsMutex_Unlock(ar->mu);
         }
     }
-    if ((js->pm != NULL) && natsStrHash_Count(js->pm) > 0)
-    {
-        natsStrHashIter iter;
-        void            *v = NULL;
 
-        natsStrHashIter_Init(&iter, js->pm);
-        while (natsStrHashIter_Next(&iter, NULL, &v))
-        {
-            natsMsg *msg = (natsMsg*) v;
-            natsStrHashIter_RemoveCurrent(&iter);
-            natsMsg_Destroy(msg);
-        }
-    }
-
-    if ((js->pr != NULL) && (natsStrHash_Count(js->pr) > 0))
-    {
-        natsStrHashIter iter;
-        void            *v = NULL;
-
-        natsStrHashIter_Init(&iter, js->pr);
-        while (natsStrHashIter_Next(&iter, NULL, &v))
-        {
-            req = (jsAsyncReq*) v;
-
-            natsStrHashIter_RemoveCurrent(&iter);
-            req->next = reqs;
-            reqs = req;
-        }
-        natsStrHashIter_Done(&iter);
-    }
-    while ((pm = js->pmHead) != NULL)
-    {
-        js->pmHead = pm->next;
-        _destroyPMInfo(pm);
-    }
-    if (js->pmtmr != NULL)
-        natsTimer_Stop(js->pmtmr);
     js_unlockAndRelease(js);
 
-    while ((req = reqs) != NULL)
-    {
-        reqs = req->next;
-        _completeAsyncReq(req, NULL, NATS_ILLEGAL_STATE);
-    }
+    _completeAsyncReqs(reqs, NATS_ILLEGAL_STATE);
 }
 
 natsStatus
@@ -795,6 +817,115 @@ _completeAsyncReq(jsAsyncReq *req, natsMsg *msg, natsStatus s)
     NATS_FREE(req);
 }
 
+// Completes all requests in the list with the given status.
+static void
+_completeAsyncReqs(jsAsyncReq *reqs, natsStatus s)
+{
+    jsAsyncReq *req = NULL;
+
+    while ((req = reqs) != NULL)
+    {
+        reqs = req->next;
+        _completeAsyncReq(req, NULL, s);
+    }
+}
+
+// Removes and returns (as a list) all pending requests. Lock must be held.
+static jsAsyncReq*
+_takePendingReqs(jsCtx *js)
+{
+    jsAsyncReq      *reqs = NULL;
+    jsAsyncReq      *req  = NULL;
+    natsStrHashIter iter;
+    void            *v    = NULL;
+
+    if ((js->pr == NULL) || (natsStrHash_Count(js->pr) == 0))
+        return NULL;
+
+    natsStrHashIter_Init(&iter, js->pr);
+    while (natsStrHashIter_Next(&iter, NULL, &v))
+    {
+        req = (jsAsyncReq*) v;
+        natsStrHashIter_RemoveCurrent(&iter);
+        req->next = reqs;
+        reqs = req;
+    }
+    natsStrHashIter_Done(&iter);
+
+    return reqs;
+}
+
+// Appends `msg` to the dispatcher's queue. ar->mu must be held.
+static void
+_submitRespMsgLocked(jsAsyncReplies *ar, natsMsg *msg)
+{
+    if (ar->tail != NULL)
+        ar->tail->next = msg;
+    ar->tail = msg;
+    if (ar->head == NULL)
+    {
+        ar->head = msg;
+        natsCondition_Signal(ar->cond);
+    }
+}
+
+// Hands `msg` to the reply dispatcher (dedicated thread or reply
+// subscription), which invokes _handleAsyncReply() with it. Returns false if
+// the dispatcher is shutting down: `msg` is then left to the caller.
+// Lock must be held.
+static bool
+_enqueueAsyncReply(jsCtx *js, natsMsg *msg)
+{
+    jsAsyncReplies  *ar         = &js->asyncReplies;
+    bool            enqueued    = false;
+
+    // Once the dispatch thread has exited, nothing queued is ever consumed.
+    if (ar->dispatcherDone)
+        return false;
+
+    if (ar->sub != NULL)
+    {
+        nats_lockSubAndDispatcher(ar->sub);
+        // A closed sub discards its queue, a draining one exits once it is empty.
+        if (!ar->sub->closed && !ar->sub->draining)
+            enqueued = (natsSub_enqueueUserMessage(ar->sub, msg) == NATS_OK);
+        nats_unlockSubAndDispatcher(ar->sub);
+    }
+    else
+    {
+        // Check and append under the same lock, to keep `msg` ahead of the
+        // drain message (on which the dispatcher exits).
+        natsMutex_Lock(ar->mu);
+        if (!ar->draining)
+        {
+            _submitRespMsgLocked(ar, msg);
+            enqueued = true;
+        }
+        natsMutex_Unlock(ar->mu);
+    }
+    return enqueued;
+}
+
+// Queues the "context closed" message for the reply dispatcher (see
+// jsCtx_Destroy()). Returns false if it is shutting down. Lock must be held.
+static bool
+_enqueueCtxClosedMsg(jsCtx *js)
+{
+    natsMsg *m = NULL;
+
+    // Recognized by its flag in _handleAsyncReply(): the subject just needs
+    // to be non-empty.
+    if (natsMsg_Create(&m, js->asyncReplies.repliesPfx, NULL, NULL, 0) != NATS_OK)
+        return false;
+
+    natsMsg_setCtxClosed(m);
+    if (_enqueueAsyncReply(js, m))
+        return true;
+
+    natsMsg_Destroy(m);
+    return false;
+}
+
 static void
 _handleAsyncReply(natsConnection *nc, natsSubscription *ignored, natsMsg *msg, void *closure)
 {
@@ -812,6 +943,25 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *ignored, natsMsg *msg, v
 
     js_lock(js);
 
+    // Context closed: complete the pending requests from this thread, then
+    // let jsCtx_Destroy() proceed.
+    if (natsMsg_isCtxClosed(msg))
+    {
+        jsAsyncReq *reqs = _takePendingReqs(js);
+
+        js_unlock(js);
+
+        _completeAsyncReqs(reqs, NATS_ILLEGAL_STATE);
+
+        js_lock(js);
+        ar->closeHandled = true;
+        natsCondition_Broadcast(js->cond);
+        js_unlock(js);
+
+        natsMsg_Destroy(msg);
+        return;
+    }
+
     pmsg = natsStrHash_Remove(js->pm, id);
     if (pmsg == NULL)
     {
@@ -821,11 +971,22 @@ _handleAsyncReply(natsConnection *nc, natsSubscription *ignored, natsMsg *msg, v
         // a publish acknowledgment.
         if (js->pr != NULL)
             req = (jsAsyncReq*) natsStrHash_Remove(js->pr, id);
+        // Tracked so that jsCtx_Destroy() can wait for the callback to return.
+        if (req != NULL)
+            js->prInFlight++;
 
         js_unlock(js);
 
         if (req != NULL)
+        {
             _completeAsyncReq(req, msg, NATS_OK);
+
+            js_lock(js);
+            js->prInFlight--;
+            if (js->closed)
+                natsCondition_Broadcast(js->cond);
+            js_unlock(js);
+        }
         else
             natsMsg_Destroy(msg);
         return;
@@ -955,7 +1116,9 @@ _dispatchAsyncReplies(void *closure)
     natsThread_Destroy(ar->dispatcher);
     // In case tests want to make sure that the dispatcher thread has been destroyed.
     ar->dispatcher = NULL;
-    js_unlockAndRelease(js);
+    js_unlock(js);
+
+    _dispatcherDone((void*) js);
 }
 
 void
@@ -964,14 +1127,7 @@ js_submitRespMsg(jsCtx *js, natsMsg *msg)
     jsAsyncReplies *ar = &js->asyncReplies;
 
     natsMutex_Lock(ar->mu);
-    if (ar->tail != NULL)
-        ar->tail->next = msg;
-    ar->tail = msg;
-    if (ar->head == NULL)
-    {
-        ar->head = msg;
-        natsCondition_Signal(ar->cond);
-    }
+    _submitRespMsgLocked(ar, msg);
     natsMutex_Unlock(ar->mu);
 }
 
@@ -991,10 +1147,17 @@ js_initRespDrain(jsCtx *js)
     natsMutex_Unlock(ar->mu);
 }
 
+// Invoked from the reply dispatcher's thread when it exits: wakes up
+// jsCtx_Destroy() if waiting on it, and releases the dispatcher's reference.
 static void
-_subComplete(void *closure)
+_dispatcherDone(void *closure)
 {
-    js_release((jsCtx*) closure);
+    jsCtx *js = (jsCtx*) closure;
+
+    js_lock(js);
+    js->asyncReplies.dispatcherDone = true;
+    natsCondition_Broadcast(js->cond);
+    js_unlockAndRelease(js);
 }
 
 static natsStatus
@@ -1034,7 +1197,7 @@ _initAsyncReplies(jsCtx *js, jsAsyncReplies *ar)
             if (s == NATS_OK)
             {
                 natsSubscription_SetPendingLimits(sub, -1, -1);
-                natsSubscription_SetOnCompleteCB(sub, _subComplete, (void*) js);
+                natsSubscription_SetOnCompleteCB(sub, _dispatcherDone, (void*) js);
             }
             else
             {
@@ -1119,6 +1282,27 @@ _newAsyncReply(char *reply, jsCtx *js)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// Reply subject buffer size, big enough regardless if we use the connection
+// response muxer or our own subscription (inbox prefix up to 32 bytes).
+#define ASYNC_REPLY_BUF_SIZE (32 + NATS_MAX_JS_RESP_SUFFIX_LEN)
+
+// Sets `*reply` to `stackBuf` (of ASYNC_REPLY_BUF_SIZE bytes) or, if the
+// inbox prefix is too long for it, to a heap buffer freed by the caller.
+static natsStatus
+_getAsyncReplyBuf(char **reply, char *stackBuf, jsCtx *js)
+{
+    int needed = js->nc->inboxPfxLen + NATS_MAX_JS_RESP_SUFFIX_LEN;
+
+    *reply = stackBuf;
+    if (needed > ASYNC_REPLY_BUF_SIZE)
+    {
+        *reply = NATS_MALLOC(needed);
+        if (*reply == NULL)
+            return nats_setDefaultError(NATS_NO_MEMORY);
+    }
+    return NATS_OK;
+}
+
 static void
 _timeoutPubAsync(natsTimer *t, void *closure)
 {
@@ -1152,23 +1336,9 @@ _timeoutPubAsync(natsTimer *t, void *closure)
                 && (natsMsg_Create(&m, subj, NULL, NULL, 0) == NATS_OK))
             {
                 natsMsg_setTimeout(m);
-
-                if (ar->sub != NULL)
-                {
-                    nats_lockSubAndDispatcher(ar->sub);
-                    // A closed subscription (say the connection was closed)
-                    // would discard the message without invoking the handler.
-                    if (!ar->sub->closed)
-                        enqueued = (natsSub_enqueueUserMessage(ar->sub, m) == NATS_OK);
-                    nats_unlockSubAndDispatcher(ar->sub);
-                    if (!enqueued)
-                        natsMsg_Destroy(m);
-                }
-                else
-                {
-                    js_submitRespMsg(js, m);
-                    enqueued = true;
-                }
+                enqueued = _enqueueAsyncReply(js, m);
+                if (!enqueued)
+                    natsMsg_Destroy(m);
             }
             NATS_FREE(subj);
 
@@ -1208,11 +1378,7 @@ _timeoutPubAsync(natsTimer *t, void *closure)
     js_unlock(js);
 
     // Complete the requests that could not be dispatched.
-    while ((req = reqs) != NULL)
-    {
-        reqs = req->next;
-        _completeAsyncReq(req, NULL, NATS_TIMEOUT);
-    }
+    _completeAsyncReqs(reqs, NATS_TIMEOUT);
 }
 
 static void
@@ -1231,17 +1397,15 @@ _trackPublishAsyncTimeout(jsCtx *js, natsStrHash *map, char *id, int64_t mw)
 {
     natsStatus  s       = NATS_OK;
     pmInfo      *pm     = NULL;
-    pmInfo      *pmi    = NATS_CALLOC(1, sizeof(pmInfo));
+    int         idLen   = (int) strlen(id);
+    pmInfo      *pmi    = NATS_CALLOC(1, sizeof(pmInfo) + idLen + 1);
 
     if (pmi == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
-    pmi->id = NATS_STRDUP(id);
-    if (pmi->id == NULL)
-    {
-        NATS_FREE(pmi);
-        return nats_setDefaultError(NATS_NO_MEMORY);
-    }
+    // The id is stored right after the structure, in the same allocation.
+    pmi->id = (char*) (pmi + 1);
+    memcpy(pmi->id, id, idLen + 1);
     pmi->map      = map;
     pmi->deadline = nats_setTargetTime(mw);
 
@@ -1261,8 +1425,6 @@ _trackPublishAsyncTimeout(jsCtx *js, natsStrHash *map, char *id, int64_t mw)
     // If the list was empty
     else if (js->pmHead == NULL)
     {
-        js->pmHead = pmi;
-        js->pmTail = pmi;
         if (js->pmtmr == NULL)
         {
             s = natsTimer_Create(&js->pmtmr, _timeoutPubAsync, _timeoutPubAsyncComplete, mw, (void*) js);
@@ -1271,6 +1433,11 @@ _trackPublishAsyncTimeout(jsCtx *js, natsStrHash *map, char *id, int64_t mw)
         }
         else
             natsTimer_Reset(js->pmtmr, mw);
+        if (s == NATS_OK)
+        {
+            js->pmHead = pmi;
+            js->pmTail = pmi;
+        }
     }
     else
     {
@@ -1359,21 +1526,16 @@ js_PublishMsgAsync(jsCtx *js, natsMsg **msg, jsPubOptions *opts)
 {
     natsStatus      s   = NATS_OK;
     natsConnection  *nc = NULL;
-    // This is big enough regardless if we use the connection response muxer or
-    // our own subscription for the replies.
-    char            replyBuf[32 + NATS_MAX_JS_RESP_SUFFIX_LEN];
-    char            *reply = replyBuf;
+    char            replyBuf[ASYNC_REPLY_BUF_SIZE];
+    char            *reply = NULL;
     int64_t         mw = 0;
 
     if ((js == NULL) || (msg == NULL) || (*msg == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    if (js->nc->inboxPfxLen > 32)
-    {
-        reply = NATS_MALLOC(js->nc->inboxPfxLen + NATS_MAX_JS_RESP_SUFFIX_LEN);
-        if (reply == NULL)
-            return nats_setDefaultError(NATS_NO_MEMORY);
-    }
+    s = _getAsyncReplyBuf(&reply, replyBuf, js);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
 
     if (opts != NULL)
     {
@@ -1461,10 +1623,8 @@ js_requestAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
     natsStatus      s       = NATS_OK;
     natsConnection  *nc     = NULL;
     jsAsyncReq      *req    = NULL;
-    // This is big enough regardless if we use the connection response muxer or
-    // our own subscription for the replies.
-    char            replyBuf[32 + NATS_MAX_JS_RESP_SUFFIX_LEN];
-    char            *reply  = replyBuf;
+    char            replyBuf[ASYNC_REPLY_BUF_SIZE];
+    char            *reply  = NULL;
 
     if ((js == NULL) || (cb == NULL) || nats_IsStringEmpty(subj))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -1472,12 +1632,9 @@ js_requestAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
     if (timeout <= 0)
         timeout = jsDefaultRequestWait;
 
-    if (js->nc->inboxPfxLen > 32)
-    {
-        reply = NATS_MALLOC(js->nc->inboxPfxLen + NATS_MAX_JS_RESP_SUFFIX_LEN);
-        if (reply == NULL)
-            return nats_setDefaultError(NATS_NO_MEMORY);
-    }
+    s = _getAsyncReplyBuf(&reply, replyBuf, js);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
 
     req = (jsAsyncReq*) NATS_CALLOC(1, sizeof(jsAsyncReq));
     if (req == NULL)

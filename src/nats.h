@@ -2270,17 +2270,16 @@ typedef void (*natsMsgHandler)(
  *
  * \warning The user is responsible for calling #kvEntry_Destroy when no longer needed.
  *
- * \warning The callback is invoked from a library thread, never from the
- * thread calling #kvStore_GetAsync(), but possibly before that call returns.
- * Normally this is the single thread dispatching the context's replies, and
- * callbacks are serialized, but this is not guaranteed once the connection
- * has been closed or drained. The `closure` must therefore be thread-safe,
- * and no ordering between gets can be assumed.
+ * \warning The callback is invoked from a library thread, possibly before
+ * #kvStore_GetAsync() returns. Normally that is the single thread dispatching
+ * the context's replies, so callbacks are serialized, but this is not
+ * guaranteed once the connection is closed or drained: the `closure` must be
+ * thread-safe, and no ordering between gets should be assumed.
  *
- * \warning The callback should not block, since it delays the other callbacks
- * of the context, nor wait for the thread calling #jsCtx_Destroy, which waits
- * for the callback to return. See #kvStore_GetAsync() for how to hand the
- * entry off to an application thread.
+ * \warning The callback should not block, as it delays the context's other
+ * callbacks, nor wait for the thread calling #jsCtx_Destroy, which waits for
+ * it to return. See #kvStore_GetAsync() for handing the entry off to an
+ * application thread.
  *
  * @see kvStore_GetAsync()
  *
@@ -7161,11 +7160,11 @@ natsConnection_JetStream(jsCtx **js, natsConnection *nc, jsOptions *opts);
  *
  * Releases memory used by the context object.
  *
- * \note Callbacks of asynchronous operations still pending (such as
- * #kvStore_GetAsync() gets) are invoked with the #NATS_ILLEGAL_STATE status
- * before this call returns. It may be called from within such a callback.
- * It must not be called while holding a lock that a pending callback needs,
- * since it waits for callbacks in progress to return.
+ * \note Pending asynchronous operations (such as #kvStore_GetAsync() gets)
+ * have their callback invoked with #NATS_ILLEGAL_STATE before this call
+ * returns, which may be made from such a callback. Do not make it while
+ * holding a lock that a pending callback needs: it waits for callbacks in
+ * progress to return.
  *
  * @param js the pointer to the #jsCtx object to destroy.
  */

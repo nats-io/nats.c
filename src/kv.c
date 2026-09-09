@@ -545,8 +545,8 @@ _createEntryFromMsg(kvEntry **new_entry, bool *deleted, kvStore *kv, natsMsg **m
     return NATS_OK;
 }
 
-// Fills the "get message" request for `subj` (at `revision`, or latest if 0),
-// using direct get or not per the bucket's configuration.
+// Fills the "get message" request for `subj` at `revision` (latest if 0),
+// direct or not per the bucket's configuration.
 static void
 _initStreamMsgGetReq(jsStreamMsgGetReq *req, kvStore *kv, const char *subj, uint64_t revision)
 {

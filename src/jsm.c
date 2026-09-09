@@ -2051,8 +2051,7 @@ _buildDirectGetMsgReq(char **newSubj, natsBuffer *buf, int64_t *wait, jsCtx *js,
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-// Validates the request parameters and builds the subject and the payload of
-// the corresponding request, per the wire format that `req` selects.
+// Validates `req`, then builds the subject and the payload of the request.
 static natsStatus
 _buildStreamMsgGetReq(char **newSubj, natsBuffer *buf, int64_t *wait, jsCtx *js,
                       const char *stream, jsOptions *opts, const jsStreamMsgGetReq *req)
@@ -2065,56 +2064,55 @@ _buildStreamMsgGetReq(char **newSubj, natsBuffer *buf, int64_t *wait, jsCtx *js,
     if (nats_IsStringEmpty(stream))
         return nats_setError(NATS_INVALID_ARG, "%s", jsErrStreamNameRequired);
 
-    // The JS API get takes exactly one of a sequence or a subject, and does
-    // not support "next by subject". Combinations of the direct get selectors
-    // are left to the server (see js_DirectGetMsg()).
-    if (!req->direct)
+    if (req->direct)
+    {
+        // Selector combinations are left to the server (see js_DirectGetMsg()).
+        s = _buildDirectGetMsgReq(newSubj, buf, wait, js, stream, opts, req);
+    }
+    else
     {
         bool bySeq  = (req->seq > 0);
         bool bySubj = !nats_IsStringEmpty(req->lastBySubject);
 
+        // Exactly one of a sequence or a subject, and no "next by subject".
         if ((bySeq == bySubj) || !nats_IsStringEmpty(req->nextBySubject))
             return nats_setDefaultError(NATS_INVALID_ARG);
-    }
 
-    if (req->direct)
-        s = _buildDirectGetMsgReq(newSubj, buf, wait, js, stream, opts, req);
-    else
         s = _buildGetMsgReq(newSubj, buf, wait, js, stream, opts, req);
+    }
 
     return NATS_UPDATE_ERR_STACK(s);
 }
 
-// Turns the outcome of a "get message" request (`reqStatus`, and `*resp` when
-// NATS_OK) into the message given to the user. Always consumes `*resp`.
+// Turns the outcome of a "get message" request into the user's message.
+// Always consumes `resp`.
 static natsStatus
-_processStreamMsgGetResp(natsMsg **msg, natsMsg **resp, natsStatus reqStatus,
+_processStreamMsgGetResp(natsMsg **msg, natsMsg *resp, natsStatus reqStatus,
                          bool direct, jsErrCode *errCode)
 {
     natsStatus s = reqStatus;
 
     if (s != NATS_OK)
     {
-        // No responders means "JetStream not enabled" only for the JS API
-        // get: for a direct get, the stream may simply not allow it.
+        // No responders means "JetStream not enabled", except for a direct
+        // get, which the stream may simply not allow.
         if (!direct && (s == NATS_NO_RESPONDERS) && (errCode != NULL))
             *errCode = JSNotEnabledErr;
     }
     else if (direct)
     {
         // Converted in place: the response becomes the user's message.
-        s = js_directGetMsgToJSMsg(*resp);
+        s = js_directGetMsgToJSMsg(resp);
         if (s == NATS_OK)
         {
-            *msg  = *resp;
-            *resp = NULL;
+            *msg = resp;
+            resp = NULL;
         }
     }
     else
-        s = _unmarshalGetMsgResp(msg, *resp, errCode);
+        s = _unmarshalGetMsgResp(msg, resp, errCode);
 
-    natsMsg_Destroy(*resp);
-    *resp = NULL;
+    natsMsg_Destroy(resp);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -2140,7 +2138,7 @@ js_getStreamMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts,
         // Send the request. When the request has no payload, the buffer was
         // left empty (natsBuf_Len() is 0).
         s = natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), wait);
-        s = _processStreamMsgGetResp(msg, &resp, s, req->direct, errCode);
+        s = _processStreamMsgGetResp(msg, resp, s, req->direct, errCode);
     }
 
     natsBuf_Cleanup(&buf);
@@ -2206,7 +2204,7 @@ _getStreamMsgAsyncDone(natsMsg *resp, natsStatus s, void *closure)
     natsMsg     *msg  = NULL;
     jsErrCode   jerr  = 0;
 
-    s = _processStreamMsgGetResp(&msg, &resp, s, req->direct, &jerr);
+    s = _processStreamMsgGetResp(&msg, resp, s, req->direct, &jerr);
 
     (req->cb)(msg, s, jerr, req->closure);
 
@@ -2327,7 +2325,7 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
     natsStatus          s;
     jsStreamMsgGetReq   req;
 
-    if ((msg == NULL) || (js == NULL) || (dgOpts == NULL))
+    if ((msg == NULL) || (dgOpts == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
     memset(&req, 0, sizeof(req));

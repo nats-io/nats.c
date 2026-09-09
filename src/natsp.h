@@ -437,6 +437,8 @@ typedef struct __jsAsyncReplies
     bool                closed;
     // Set when the dispatch thread exits (nothing queued is consumed after).
     bool                dispatcherDone;
+    // Set once the "context closed" message is processed (see jsCtx_Destroy()).
+    bool                closeHandled;
 
 } jsAsyncReplies;
 

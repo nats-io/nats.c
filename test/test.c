@@ -39997,6 +39997,93 @@ void test_ObjectStore_PutAndGet(void)
     JS_TEARDOWN;
 }
 
+void test_ObjectStore_PutFlowControl(void)
+{
+    natsStatus      s;
+    natsConnection  *nc     = NULL;
+    jsCtx           *js     = NULL;
+    natsPid         pid     = NATS_INVALID_PID;
+    objStore        *obs    = NULL;
+    objStorePut     *put    = NULL;
+    objStoreInfo    *info   = NULL;
+    void            *data   = NULL;
+    int             len     = 0;
+    char            payload[16*1024];
+    int             i;
+    jsOptions       o;
+    objStoreConfig  cfg;
+    objStoreMeta    meta;
+    char confFile[256] = {'\0'};
+    char datastore[256] = {'\0'};
+    char cmdLine[1024] = {'\0'};
+
+    ENSURE_JS_VERSION(2, 11, 0);
+
+    test("Start server: ");
+    _makeUniqueDir(datastore, sizeof(datastore), "datastore_");
+    _createConfFile(confFile, sizeof(confFile),
+        "jetstream: {\n"
+        "   enabled: true\n"
+        "   max_buffered_size: 10Kb\n"
+        "   max_buffered_msgs: 100\n"
+        "}\n");
+    snprintf(cmdLine, sizeof(cmdLine), "-js -sd %s -c %s", datastore, confFile);
+    pid = _startServer("nats://127.0.0.1:4222", cmdLine, true);
+    CHECK_SERVER_STARTED(pid);
+    testCond(true);
+
+    test("Connect: ");
+    s = natsConnection_Connect(&nc, NULL);
+    testCond(s == NATS_OK);
+
+#ifndef NATS_HAS_TLS
+    nats_hashNoErrorOnNoSSL(true);
+#endif
+
+    test("Create JS context with flow control: ");
+    jsOptions_Init(&o);
+    o.PublishAsync.MaxPending = 1;
+    o.PublishAsync.StallWait  = 5000;
+    s = natsConnection_JetStream(&js, nc, &o);
+    testCond((s == NATS_OK) && (js != NULL));
+
+    test("Create ObjectStore: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "FLOW";
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    test("Put inherits the store's flow control: ");
+    objStoreMeta_Init(&meta);
+    meta.Name = "paced";
+    meta.Opts.ChunkSize = 1024;
+    s = objStore_Put(&put, obs, &meta);
+    testCond((s == NATS_OK) && (put != NULL)
+                && (put->pubJS->opts.PublishAsync.MaxPending == 1)
+                && (put->pubJS->opts.PublishAsync.StallWait == 5000));
+
+    test("Put multi-chunk object with one message in flight: ");
+    for (i = 0; i < (int) sizeof(payload); i++)
+        payload[i] = (char) (i % 251);
+    s = objStorePut_Add(put, payload, (int) sizeof(payload));
+    IFOK(s, objStorePut_Complete(&info, put, 0));
+    testCond((s == NATS_OK) && (info != NULL)
+                && (info->Size == sizeof(payload))
+                && (info->Chunks == sizeof(payload) / 1024));
+
+    test("Get it back: ");
+    s = objStore_GetBytes(&data, &len, obs, "paced", NULL);
+    testCond((s == NATS_OK) && (len == (int) sizeof(payload))
+                && (memcmp(data, payload, sizeof(payload)) == 0));
+    free(data);
+
+    objStoreInfo_Destroy(info);
+    objStorePut_Destroy(put);
+    objStore_Destroy(obs);
+
+    JS_TEARDOWN;
+}
+
 void test_ObjectStore_StoreMgt(void)
 {
     natsStatus          s;

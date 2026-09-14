@@ -1916,6 +1916,12 @@ objStore_Put(objStorePut **new_put, objStore *obs, objStoreMeta *pMeta)
         jsOptions_Init(&pubJSOpts);
         pubJSOpts.PublishAsync.ErrHandler           = _putErrHandler;
         pubJSOpts.PublishAsync.ErrHandlerClosure    = (void*) put;
+        // Inherit the store context's flow control so that a large object
+        // cannot outrun the server's ingest buffer.
+        js_lock(obs->js);
+        pubJSOpts.PublishAsync.MaxPending           = obs->js->opts.PublishAsync.MaxPending;
+        pubJSOpts.PublishAsync.StallWait            = obs->js->opts.PublishAsync.StallWait;
+        js_unlock(obs->js);
 
         s = natsConnection_JetStream(&(put->pubJS), obs->js->nc, &pubJSOpts);
         if (s == NATS_OK)

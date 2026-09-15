@@ -334,10 +334,15 @@ js_initRespDrain(jsCtx *js);
 // elapsed, no responder, etc..), `cb` is invoked from a library thread
 // (possibly before this call returns), so it must not block. That is
 // normally the thread dispatching the context's asynchronous replies, but
-// once the connection is closed or drained a timed-out request is completed
-// from the timer thread instead, and jsCtx_Destroy() completes the requests
-// still pending from the calling thread: callbacks are not guaranteed to be
+// a timed-out request may be completed from the timer thread instead (when
+// the context uses its own reply subscription and the connection has been
+// closed or drained), and jsCtx_Destroy() completes the requests still
+// pending from the calling thread: callbacks are not guaranteed to be
 // serialized, so `closure` must be thread-safe.
+//
+// Note that when the context uses the connection's reply muxer
+// (jsOptions.PublishAsync.MuxReplies), a request timing out after the
+// connection has been drained is only completed by jsCtx_Destroy().
 //
 // If `timeout` is 0 or less, jsDefaultRequestWait is used.
 //
@@ -365,8 +370,11 @@ typedef void (*js_getMsgCb)(natsMsg *msg, natsStatus s, jsErrCode jerr, void *cl
 // ($JS.API.DIRECT.GET.<stream>).
 //
 // A JS API get takes exactly one of `seq` and `lastBySubject`, and no
-// `nextBySubject` (NATS_INVALID_ARG otherwise). Combinations of the direct
-// get selectors are left to the server to validate (see js_DirectGetMsg()).
+// `nextBySubject` (NATS_INVALID_ARG otherwise). For a direct get, the
+// selectors are not validated: if `lastBySubject` is set, it is the only
+// one sent (`seq` and `nextBySubject` are ignored), otherwise both `seq`
+// and `nextBySubject` are sent as given and left to the server to validate
+// (see js_DirectGetMsg()).
 typedef struct __jsStreamMsgGetReq
 {
     bool        direct;         // use the direct get API instead of the JS API get

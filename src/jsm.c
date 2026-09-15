@@ -2151,10 +2151,16 @@ natsStatus
 js_GetMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, jsOptions *opts, jsErrCode *errCode)
 {
     natsStatus          s;
-    jsStreamMsgGetReq   req = { .seq = seq };
+    jsStreamMsgGetReq   req;
 
     if (errCode != NULL)
         *errCode = 0;
+
+    if (seq < 1)
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    memset(&req, 0, sizeof(req));
+    req.seq = seq;
 
     s = js_getStreamMsg(msg, js, stream, opts, &req, errCode);
     return NATS_UPDATE_ERR_STACK(s);
@@ -2164,10 +2170,16 @@ natsStatus
 js_GetLastMsg(natsMsg **msg, jsCtx *js, const char *stream, const char *subject, jsOptions *opts, jsErrCode *errCode)
 {
     natsStatus          s;
-    jsStreamMsgGetReq   req = { .lastBySubject = subject };
+    jsStreamMsgGetReq   req;
 
     if (errCode != NULL)
         *errCode = 0;
+
+    if (nats_IsStringEmpty(subject))
+        return nats_setDefaultError(NATS_INVALID_ARG);
+
+    memset(&req, 0, sizeof(req));
+    req.lastBySubject = subject;
 
     s = js_getStreamMsg(msg, js, stream, opts, &req, errCode);
     return NATS_UPDATE_ERR_STACK(s);
@@ -2314,10 +2326,11 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
     if ((msg == NULL) || (dgOpts == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    req = (jsStreamMsgGetReq) { .direct        = true,
-                                .seq           = dgOpts->Sequence,
-                                .lastBySubject = dgOpts->LastBySubject,
-                                .nextBySubject = dgOpts->NextBySubject };
+    memset(&req, 0, sizeof(req));
+    req.direct        = true;
+    req.seq           = dgOpts->Sequence;
+    req.lastBySubject = dgOpts->LastBySubject;
+    req.nextBySubject = dgOpts->NextBySubject;
 
     s = js_getStreamMsg(msg, js, stream, opts, &req, NULL);
     return NATS_UPDATE_ERR_STACK(s);

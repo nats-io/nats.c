@@ -329,33 +329,22 @@ js_submitRespDrainMsg(jsCtx *js);
 void
 js_initRespDrain(jsCtx *js);
 
-// Returns the thread dispatching the context's asynchronous replies (its
-// reply subscription's, or its own with muxed replies), NULL if there is
-// none (yet, or anymore). Lock must be held.
-natsThread*
-js_replyDispatchThread(jsCtx *js);
-
 // Sends a request on `subj` and returns without waiting for the response.
 // When the response is received, or the request has failed (`timeout` has
-// elapsed, no responder, etc..), `cb` is invoked from the thread dispatching
-// the context's asynchronous replies (possibly before this call returns), so
-// it must not block. The status tells which thread `cb` is invoked from
-// (see kvGetCb in nats.h for the user-facing contract):
-// - NATS_OK, or the error the response carries, NATS_TIMEOUT and
-//   NATS_NO_RESPONDERS: always that dispatch thread, so these are serialized.
-// - NATS_CONNECTION_CLOSED, NATS_DRAINING: the dispatch thread is gone; the
-//   request is completed at its deadline from the timer thread, possibly
-//   while a callback runs on the dispatch thread. (With muxed replies, a
-//   plain close does not terminate the dispatcher: NATS_TIMEOUT then.) Once
-//   the dispatch thread is gone, this function fails with that status.
-// - NATS_ILLEGAL_STATE: the context was destroyed with the request pending;
-//   invoked from within jsCtx_Destroy(), which also waits for a request
-//   callback in progress on either of the threads above to return.
+// elapsed, no responder, etc..), `cb` is invoked from a library thread
+// (possibly before this call returns), so it must not block. That is
+// normally the thread dispatching the context's asynchronous replies, but
+// once the connection is closed or drained a timed-out request is completed
+// from the timer thread instead, and jsCtx_Destroy() completes the requests
+// still pending from the calling thread: callbacks are not guaranteed to be
+// serialized, so `closure` must be thread-safe.
 //
 // If `timeout` is 0 or less, jsDefaultRequestWait is used.
 //
 // If this function returns anything but NATS_OK, `cb` will not be invoked.
-// Otherwise, it is guaranteed to be invoked exactly once.
+// Otherwise, it is guaranteed to be invoked exactly once. Note that if the
+// context is destroyed while requests are still pending, their callback is
+// invoked with the NATS_ILLEGAL_STATE status.
 natsStatus
 js_requestAsync(jsCtx *js, const char *subj, const void *data, int dataLen,
                 int64_t timeout, js_asyncReqCb cb, void *closure);

@@ -410,8 +410,7 @@ typedef void (*js_asyncReqCb)(natsMsg *resp, natsStatus s, void *closure);
 
 // Tracks an asynchronous JetStream request until its response (or a failure)
 // has been dispatched to the callback. The `next` field is used only when
-// completing several pending requests at once, with the same status (when
-// the context is destroyed, or once the reply dispatcher is gone).
+// completing all pending requests at once like when the context is destroyed.
 typedef struct __jsAsyncReq
 {
     js_asyncReqCb       cb;
@@ -448,10 +447,6 @@ struct __jsCtx
     natsCondition       *cond;
     natsStrHash         *pm;
     natsStrHash         *pr;
-    // Request callbacks currently running on the reply dispatch thread and
-    // on the timer thread, respectively: jsCtx_Destroy() waits for them.
-    int                 prInFlight;
-    int                 prInFlightTimer;
     natsTimer           *pmtmr;
     pmInfo              *pmHead;
     pmInfo              *pmTail;

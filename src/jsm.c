@@ -2052,6 +2052,7 @@ _buildDirectGetMsgReq(char **newSubj, natsBuffer *buf, int64_t *wait, jsCtx *js,
 }
 
 // Validates `req`, then builds the subject and the payload of the request.
+// When the request has no payload, `buf` is left empty (natsBuf_Len() is 0).
 static natsStatus
 _buildStreamMsgGetReq(char **newSubj, natsBuffer *buf, int64_t *wait, jsCtx *js,
                       const char *stream, jsOptions *opts, const jsStreamMsgGetReq *req)
@@ -2135,8 +2136,7 @@ js_getStreamMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts,
     IFOK(s, _buildStreamMsgGetReq(&subj, &buf, &wait, js, stream, opts, req));
     if (s == NATS_OK)
     {
-        // Send the request. When the request has no payload, the buffer was
-        // left empty (natsBuf_Len() is 0).
+        // Send the request.
         s = natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), wait);
         s = _processStreamMsgGetResp(msg, resp, s, req->direct, errCode);
     }
@@ -2156,9 +2156,6 @@ js_GetMsg(natsMsg **msg, jsCtx *js, const char *stream, uint64_t seq, jsOptions 
     if (errCode != NULL)
         *errCode = 0;
 
-    if (seq < 1)
-        return nats_setDefaultError(NATS_INVALID_ARG);
-
     s = js_getStreamMsg(msg, js, stream, opts, &req, errCode);
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -2171,9 +2168,6 @@ js_GetLastMsg(natsMsg **msg, jsCtx *js, const char *stream, const char *subject,
 
     if (errCode != NULL)
         *errCode = 0;
-
-    if (nats_IsStringEmpty(subject))
-        return nats_setDefaultError(NATS_INVALID_ARG);
 
     s = js_getStreamMsg(msg, js, stream, opts, &req, errCode);
     return NATS_UPDATE_ERR_STACK(s);
@@ -2216,21 +2210,24 @@ js_getStreamMsgAsync(jsCtx *js, const char *stream, jsOptions *opts,
     char        buffer[64];
     natsBuffer  buf     = NATS_EMPTY_BUFFER;
 
-    if ((cb == NULL) || (req == NULL))
+    if (cb == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
-
-    r = (jsGetMsgReq*) NATS_CALLOC(1, sizeof(jsGetMsgReq));
-    if (r == NULL)
-        return nats_setDefaultError(NATS_NO_MEMORY);
-
-    r->cb      = cb;
-    r->closure = closure;
-    r->direct  = req->direct;
 
     s = natsBuf_InitWithBackend(&buf, buffer, 0, sizeof(buffer));
     IFOK(s, _buildStreamMsgGetReq(&subj, &buf, &wait, js, stream, opts, req));
-    // Send the request without waiting for the response. When the request
-    // has no payload, the buffer was left empty (natsBuf_Len() is 0).
+    if (s == NATS_OK)
+    {
+        r = (jsGetMsgReq*) NATS_CALLOC(1, sizeof(jsGetMsgReq));
+        if (r == NULL)
+            s = nats_setDefaultError(NATS_NO_MEMORY);
+        else
+        {
+            r->cb      = cb;
+            r->closure = closure;
+            r->direct  = req->direct;
+        }
+    }
+    // Send the request without waiting for the response.
     IFOK(s, js_requestAsync(js, subj, natsBuf_Data(&buf), natsBuf_Len(&buf),
                             wait, _getStreamMsgAsyncDone, (void*) r));
 
@@ -2317,10 +2314,10 @@ js_DirectGetMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts, j
     if ((msg == NULL) || (dgOpts == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
 
-    req.direct        = true;
-    req.seq           = dgOpts->Sequence;
-    req.lastBySubject = dgOpts->LastBySubject;
-    req.nextBySubject = dgOpts->NextBySubject;
+    req = (jsStreamMsgGetReq) { .direct        = true,
+                                .seq           = dgOpts->Sequence,
+                                .lastBySubject = dgOpts->LastBySubject,
+                                .nextBySubject = dgOpts->NextBySubject };
 
     s = js_getStreamMsg(msg, js, stream, opts, &req, NULL);
     return NATS_UPDATE_ERR_STACK(s);

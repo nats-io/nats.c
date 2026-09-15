@@ -53,8 +53,4 @@ int nats_getTimersCountInList(void);
 // Invoked when a library thread is started.
 void nats_threadStartedHandler(void);
 
-// Returns true if called from the library's timer thread (that is, from a
-// timer's callback).
-bool nats_isTimerThread(void);
-
 #endif // GLIB_H_

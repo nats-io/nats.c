@@ -419,11 +419,3 @@ void nats_overrideDefaultOptionsWithConfig(natsOptions *opts)
     opts->useSharedDispatcher = gLib.config.DefaultToThreadPool;
     opts->useSharedReplyDispatcher = gLib.config.DefaultRepliesToThreadPool;
 }
-
-bool
-nats_isTimerThread(void)
-{
-    natsThread *t = gLib.timers.thread;
-
-    return ((t != NULL) && natsThread_IsCurrent(t));
-}

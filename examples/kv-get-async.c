@@ -245,9 +245,7 @@ int main(int argc, char **argv)
                 errors++;
                 break;
         }
-        // The entry (if any) is ours to destroy.
         kvEntry_Destroy(r->entry);
-        r->entry = NULL;
     }
     if (found + notFound + errors > 0)
     {

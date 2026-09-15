@@ -132,6 +132,7 @@ struct threadArg
     natsOptions      *opts;
     natsConnection   *nc;
     jsCtx            *js;
+    natsThread       *jsDispatcher;
     natsBuffer       *buf;
     kvEntry          *kve;
     natsMsg          *msg;
@@ -34683,12 +34684,42 @@ _waitForAsyncGet(struct threadArg *arg, int64_t timeout)
     return s;
 }
 
+// Invoked from the request callbacks, with the status `s` they received:
+// counts in arg->results[1] those that, per the contract (see kvGetCb in
+// nats.h), must be invoked from the reply dispatch thread of arg->js but are
+// not. That thread is remembered in arg->jsDispatcher, since jsCtx_Destroy()
+// detaches it from the context. Lock must be held.
+static void
+_checkOnJsDispatcher(struct threadArg *arg, natsStatus s)
+{
+    natsThread *t = NULL;
+
+    if (arg->js == NULL)
+        return;
+
+    // These may come from another thread.
+    if ((s == NATS_CONNECTION_CLOSED) || (s == NATS_DRAINING) || (s == NATS_ILLEGAL_STATE))
+        return;
+
+    js_lock(arg->js);
+    t = js_replyDispatchThread(arg->js);
+    js_unlock(arg->js);
+    if (t != NULL)
+        arg->jsDispatcher = t;
+    else
+        t = arg->jsDispatcher;
+
+    if ((t == NULL) || !natsThread_IsCurrent(t))
+        arg->results[1]++;
+}
+
 static void
 _getMsgAsyncCb(natsMsg *msg, natsStatus s, jsErrCode jerr, void *closure)
 {
     struct threadArg *arg = (struct threadArg*) closure;
 
     natsMutex_Lock(arg->m);
+    _checkOnJsDispatcher(arg, s);
     arg->msg         = msg;
     arg->status      = s;
     arg->jerr        = jerr;
@@ -34705,6 +34736,7 @@ _getMsgAsyncPendingCb(natsMsg *msg, natsStatus s, jsErrCode jerr, void *closure)
     struct threadArg *arg = (struct threadArg*) closure;
 
     natsMutex_Lock(arg->m);
+    _checkOnJsDispatcher(arg, s);
     if ((s == NATS_ILLEGAL_STATE) && (msg == NULL))
         arg->results[0]++;
     arg->sum++;
@@ -34738,15 +34770,26 @@ _getMsgAsyncDestroyCb(natsMsg *msg, natsStatus s, jsErrCode jerr, void *closure)
 {
     struct threadArg *arg = (struct threadArg*) closure;
 
+    jsCtx            *js  = NULL;
+
     natsMsg_Destroy(msg);
 
     natsMutex_Lock(arg->m);
+    _checkOnJsDispatcher(arg, s);
     arg->status = s;
     arg->sum++;
+    js = arg->js;
     natsMutex_Unlock(arg->m);
 
-    // The pending requests are completed from here.
-    _destroyJsCtxThread(closure);
+    // The pending requests are completed from within this call.
+    jsCtx_Destroy(js);
+
+    natsMutex_Lock(arg->m);
+    // Record how many were, before signaling.
+    arg->results[2] = arg->results[0];
+    arg->done = true;
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
 }
 
 // Signals arg->msgReceived, then parks the dispatcher until arg->control != 0.
@@ -34758,6 +34801,7 @@ _getMsgAsyncParkCb(natsMsg *msg, natsStatus s, jsErrCode jerr, void *closure)
     natsMsg_Destroy(msg);
 
     natsMutex_Lock(arg->m);
+    _checkOnJsDispatcher(arg, s);
     arg->msgReceived = true;
     natsCondition_Broadcast(arg->c);
     while (arg->control == 0)
@@ -34767,16 +34811,42 @@ _getMsgAsyncParkCb(natsMsg *msg, natsStatus s, jsErrCode jerr, void *closure)
 }
 
 // Connects, subscribes to "$JS.NOREPLY.API.>" without ever replying (so that
-// requests sent there stay pending), and creates a JetStream context.
+// requests sent there stay pending), and creates a JetStream context, which
+// becomes the one whose callbacks `arg` checks (see _checkOnJsDispatcher()),
+// with the counters reset.
 static natsStatus
-_connectWithNoReplyResponder(natsConnection **nc, natsSubscription **sub, jsCtx **js, jsOptions *o)
+_connectWithNoReplyResponder(struct threadArg *arg, natsConnection **nc, natsSubscription **sub, jsCtx **js, jsOptions *o)
 {
     natsStatus s = natsConnection_ConnectTo(nc, NATS_DEFAULT_URL);
 
     IFOK(s, natsConnection_SubscribeSync(sub, *nc, "$JS.NOREPLY.API.>"));
     IFOK(s, natsConnection_Flush(*nc));
     IFOK(s, natsConnection_JetStream(js, *nc, o));
+
+    natsMutex_Lock(arg->m);
+    arg->js           = *js;
+    arg->jsDispatcher = NULL;
+    arg->sum          = 0;
+    arg->results[0]   = 0;
+    arg->results[1]   = 0;
+    arg->results[2]   = 0;
+    arg->control      = 0;
+    arg->done         = false;
+    natsMutex_Unlock(arg->m);
+
     return s;
+}
+
+// Counterpart of _connectWithNoReplyResponder().
+static void
+_disconnectNoReplyResponder(natsConnection **nc, natsSubscription **sub, jsCtx **js)
+{
+    jsCtx_Destroy(*js);
+    natsSubscription_Destroy(*sub);
+    natsConnection_Destroy(*nc);
+    *js  = NULL;
+    *sub = NULL;
+    *nc  = NULL;
 }
 
 void test_JetStreamGetMsgAsync(void)
@@ -34800,6 +34870,10 @@ void test_JetStreamGetMsgAsync(void)
     s = _createDefaultThreadArgsForCbTests(&arg);
     if (s != NATS_OK)
         FAIL("Unable to setup test");
+
+    // The callbacks check that they are invoked from the reply dispatch
+    // thread of this context (see _checkOnJsDispatcher()).
+    arg.js = js;
 
     test("Create stream: ");
     jsStreamConfig_Init(&cfg);
@@ -34914,7 +34988,14 @@ void test_JetStreamGetMsgAsync(void)
     jsOptions_Init(&o);
     o.PublishAsync.MuxReplies = true;
     s = natsConnection_JetStream(&js2, nc, &o);
-    IFOK(s, js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg));
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        arg.js           = js2;
+        arg.jsDispatcher = NULL;
+        natsMutex_Unlock(arg.m);
+        s = js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
+    }
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_OK) && (arg.msg != NULL)
                 && (natsMsg_GetSequence(arg.msg) == 1)
@@ -34922,11 +35003,15 @@ void test_JetStreamGetMsgAsync(void)
     natsMsg_Destroy(arg.msg);
     arg.msg = NULL;
     jsCtx_Destroy(js2);
+    natsMutex_Lock(arg.m);
+    arg.js           = js;
+    arg.jsDispatcher = NULL;
+    natsMutex_Unlock(arg.m);
 
-    test("Callbacks invoked once each: ");
+    test("Callbacks invoked once each, from the dispatch thread: ");
     nats_Sleep(300);
     natsMutex_Lock(arg.m);
-    s = (arg.sum == 6 ? NATS_OK : NATS_ERR);
+    s = (((arg.sum == 6) && (arg.results[1] == 0)) ? NATS_OK : NATS_ERR);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
@@ -34941,31 +35026,51 @@ void test_JetStreamGetMsgAsync(void)
         js = NULL;
         s = _waitForAsyncGet(&arg, 2000);
     }
-    testCond((s == NATS_OK) && (arg.status == NATS_ILLEGAL_STATE) && (arg.msg == NULL));
+    testCond((s == NATS_OK) && (arg.status == NATS_ILLEGAL_STATE) && (arg.msg == NULL)
+                && (arg.results[1] == 0));
 
-    // The reply subscription is closed with the connection, so the timed-out
-    // request has to be completed directly by the timeout timer.
-    test("Pending request timed-out after connection is closed: ");
+    // The reply subscription is closed with the connection, so the request
+    // is completed at its deadline by the timeout timer, with the status
+    // saying why.
+    test("Pending request failed after connection is closed: ");
+    natsMutex_Lock(arg.m);
+    arg.results[1]   = 0;
+    arg.jsDispatcher = NULL;
+    natsMutex_Unlock(arg.m);
     jsOptions_Init(&o);
     o.Prefix = "$JS.NOREPLY.API";
     o.Wait   = 250;
     s = natsConnection_JetStream(&js2, nc, NULL);
-    IFOK(s, js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncCb, (void*) &arg));
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(arg.m);
+        arg.js = js2;
+        natsMutex_Unlock(arg.m);
+        s = js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncCb, (void*) &arg);
+    }
     if (s == NATS_OK)
     {
         natsConnection_Close(nc);
         s = _waitForAsyncGet(&arg, 2000);
     }
-    testCond((s == NATS_OK) && (arg.status == NATS_TIMEOUT) && (arg.msg == NULL));
+    testCond((s == NATS_OK) && (arg.status == NATS_CONNECTION_CLOSED) && (arg.msg == NULL)
+                && (arg.results[1] == 0));
+
+    test("Request refused once the dispatch thread has exited: ");
+    s = js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncCb, (void*) &arg);
+    if (s == NATS_CONNECTION_CLOSED)
+        s = _waitForAsyncGet(&arg, 250);
+    testCond(s == NATS_TIMEOUT);
+    nats_clearLastError();
     jsCtx_Destroy(js2);
     js2 = NULL;
 
     // With muxed replies, the drain terminates the reply dispatcher, so the
-    // timeout timer has to complete the request directly.
-    test("Pending request timed-out after connection is drained: ");
+    // request is completed at its deadline by the timeout timer.
+    test("Pending request failed after connection is drained: ");
     jsOptions_Init(&o);
     o.PublishAsync.MuxReplies = true;
-    s = _connectWithNoReplyResponder(&nc2, &sub2, &js2, &o);
+    s = _connectWithNoReplyResponder(&arg, &nc2, &sub2, &js2, &o);
     if (s == NATS_OK)
     {
         jsOptions_Init(&o);
@@ -34974,35 +35079,73 @@ void test_JetStreamGetMsgAsync(void)
         s = js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncCb, (void*) &arg);
     }
     // Consume the request without replying, then unsubscribe so that the
-    // drain is not delayed past the request's deadline.
+    // drain completes before the request's deadline.
     IFOK(s, natsSubscription_NextMsg(&rmsg, sub2, 1000));
     IFOK(s, natsSubscription_Unsubscribe(sub2));
     IFOK(s, natsConnection_Drain(nc2));
     IFOK(s, _waitForAsyncGet(&arg, 2000));
-    testCond((s == NATS_OK) && (arg.status == NATS_TIMEOUT) && (arg.msg == NULL));
+    testCond((s == NATS_OK) && (arg.status == NATS_DRAINING) && (arg.msg == NULL)
+                && (arg.results[1] == 0));
     natsMsg_Destroy(rmsg);
-    jsCtx_Destroy(js2);
-    natsSubscription_Destroy(sub2);
-    natsConnection_Destroy(nc2);
-    js2  = NULL;
-    sub2 = NULL;
-    nc2  = NULL;
+    rmsg = NULL;
+    _disconnectNoReplyResponder(&nc2, &sub2, &js2);
+
+    // A plain close does not terminate the muxed replies dispatcher, which
+    // still gets to dispatch the request's timeout.
+    test("Pending request timed-out after connection is closed (muxed replies): ");
+    jsOptions_Init(&o);
+    o.PublishAsync.MuxReplies = true;
+    s = _connectWithNoReplyResponder(&arg, &nc2, &sub2, &js2, &o);
+    if (s == NATS_OK)
+    {
+        jsOptions_Init(&o);
+        o.Prefix = "$JS.NOREPLY.API";
+        o.Wait   = 250;
+        s = js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncCb, (void*) &arg);
+    }
+    if (s == NATS_OK)
+    {
+        natsConnection_Close(nc2);
+        s = _waitForAsyncGet(&arg, 2000);
+    }
+    testCond((s == NATS_OK) && (arg.status == NATS_TIMEOUT) && (arg.msg == NULL)
+                && (arg.results[1] == 0));
+    _disconnectNoReplyResponder(&nc2, &sub2, &js2);
+
+    // With no callback in progress, destroying the context completes the
+    // pending requests from within the call, without waiting for anything.
+    test("Context destroyed with requests pending, no callback in progress: ");
+    s = _connectWithNoReplyResponder(&arg, &nc2, &sub2, &js2, NULL);
+    if (s == NATS_OK)
+    {
+        jsOptions_Init(&o);
+        o.Prefix = "$JS.NOREPLY.API";
+        o.Wait   = 10000;
+        s = js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncPendingCb, (void*) &arg);
+        IFOK(s, js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncPendingCb, (void*) &arg));
+    }
+    if (s == NATS_OK)
+    {
+        int64_t start = nats_Now();
+
+        jsCtx_Destroy(js2);
+        js2 = NULL;
+
+        natsMutex_Lock(arg.m);
+        // Both completed by the time the call returned, and promptly.
+        if ((arg.results[0] != 2) || (arg.sum != 2) || ((nats_Now() - start) > 1000))
+            s = NATS_ERR;
+        natsMutex_Unlock(arg.m);
+    }
+    testCond(s == NATS_OK);
+    _disconnectNoReplyResponder(&nc2, &sub2, &js2);
 
     // Destroying the context from a callback must complete the other pending
     // requests from that thread, without waiting for itself.
     test("Context destroyed from a callback with other requests pending: ");
-    natsMutex_Lock(arg.m);
-    arg.sum        = 0;
-    arg.results[0] = 0;
-    arg.done       = false;
-    natsMutex_Unlock(arg.m);
-    s = _connectWithNoReplyResponder(&nc2, &sub2, &js2, NULL);
+    s = _connectWithNoReplyResponder(&arg, &nc2, &sub2, &js2, NULL);
     if (s == NATS_OK)
     {
-        natsMutex_Lock(arg.m);
-        arg.js = js2;
-        natsMutex_Unlock(arg.m);
-
         jsOptions_Init(&o);
         o.Prefix = "$JS.NOREPLY.API";
         o.Wait   = 10000;
@@ -35019,31 +35162,19 @@ void test_JetStreamGetMsgAsync(void)
         natsMutex_Unlock(arg.m);
     }
     testCond((s == NATS_OK) && (arg.status == NATS_OK)
-                && (arg.results[0] == 2) && (arg.sum == 3));
+                && (arg.results[0] == 2) && (arg.results[1] == 0)
+                && (arg.results[2] == 2) && (arg.sum == 3));
     // The context was destroyed from the callback.
     js2 = NULL;
-    natsSubscription_Destroy(sub2);
-    sub2 = NULL;
-    natsConnection_Destroy(nc2);
-    nc2 = NULL;
+    _disconnectNoReplyResponder(&nc2, &sub2, &js2);
 
-    // If the connection is closed while jsCtx_Destroy() waits for a busy
-    // dispatcher, the reply subscription discards its queue: jsCtx_Destroy()
-    // must then complete the requests itself.
+    // jsCtx_Destroy() completes the pending requests itself, but does not
+    // return before the request callback in progress has, even if the
+    // connection is closed in the meantime.
     test("Context destroyed while connection is closed: ");
-    natsMutex_Lock(arg.m);
-    arg.sum        = 0;
-    arg.results[0] = 0;
-    arg.control    = 0;
-    arg.done       = false;
-    natsMutex_Unlock(arg.m);
-    s = _connectWithNoReplyResponder(&nc2, &sub2, &js2, NULL);
+    s = _connectWithNoReplyResponder(&arg, &nc2, &sub2, &js2, NULL);
     if (s == NATS_OK)
     {
-        natsMutex_Lock(arg.m);
-        arg.js = js2;
-        natsMutex_Unlock(arg.m);
-
         // Park the dispatcher thread in the callback of a get that succeeds.
         s = js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncParkCb, (void*) &arg);
         IFOK(s, _waitForAsyncGet(&arg, 2000));
@@ -35056,15 +35187,16 @@ void test_JetStreamGetMsgAsync(void)
         s = js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncPendingCb, (void*) &arg);
         IFOK(s, js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncPendingCb, (void*) &arg));
     }
-    // Destroy from another thread: it waits on the busy dispatcher.
+    // Destroy from another thread: it waits for the parked callback.
     IFOK(s, natsThread_Create(&t, _destroyJsCtxThread, (void*) &arg));
     if (s == NATS_OK)
     {
         nats_Sleep(250);
-        // Close the connection, then let the dispatcher go: it exits without
-        // dispatching its queue.
+        // Close the connection, then let the parked callback return:
+        // jsCtx_Destroy() must not have returned before (results[2]).
         natsConnection_Close(nc2);
         natsMutex_Lock(arg.m);
+        arg.results[2] = (arg.done ? 1 : 0);
         arg.control = 1;
         natsCondition_Broadcast(arg.c);
         while ((s != NATS_TIMEOUT) && !arg.done)
@@ -35072,7 +35204,8 @@ void test_JetStreamGetMsgAsync(void)
         done = arg.done;
         natsMutex_Unlock(arg.m);
     }
-    testCond((s == NATS_OK) && (arg.results[0] == 2) && (arg.sum == 3));
+    testCond((s == NATS_OK) && (arg.results[0] == 2) && (arg.results[1] == 0)
+                && (arg.results[2] == 0) && (arg.sum == 3));
     // Do not join a thread that may be stuck in jsCtx_Destroy().
     if ((t != NULL) && done)
     {
@@ -35081,10 +35214,7 @@ void test_JetStreamGetMsgAsync(void)
         t = NULL;
     }
     js2 = NULL;
-    natsSubscription_Destroy(sub2);
-    sub2 = NULL;
-    natsConnection_Destroy(nc2);
-    nc2 = NULL;
+    _disconnectNoReplyResponder(&nc2, &sub2, &js2);
 
     natsSubscription_Destroy(sub);
 

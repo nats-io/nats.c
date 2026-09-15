@@ -1900,6 +1900,8 @@ _unmarshalStoredMsg(nats_JSON *json, natsMsg **new_msg)
     }
     if (s == NATS_OK)
         *new_msg = msg;
+    else
+        natsMsg_Destroy(msg);
 
     return NATS_UPDATE_ERR_STACK(s);
 }
@@ -1942,6 +1944,9 @@ _unmarshalGetMsgResp(natsMsg **msg, natsMsg *resp, jsErrCode *errCode)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// Builds the subject and JSON payload of a JS API get, by `req->seq` if it
+// is not 0, else by `req->lastBySubject`. The caller (_buildStreamMsgGetReq)
+// has already checked that exactly one of them is set.
 static natsStatus
 _buildGetMsgReq(char **newSubj, natsBuffer *buf, int64_t *wait, jsCtx *js,
                 const char *stream, jsOptions *opts, const jsStreamMsgGetReq *req)
@@ -1964,7 +1969,7 @@ _buildGetMsgReq(char **newSubj, natsBuffer *buf, int64_t *wait, jsCtx *js,
     IFOK(s, natsBuf_AppendByte(buf, '{'));
     if ((s == NATS_OK) && (req->seq > 0))
     {
-       s = nats_marshalULong(buf, false, "seq", req->seq);
+        s = nats_marshalULong(buf, false, "seq", req->seq);
     }
     else
     {
@@ -2123,11 +2128,15 @@ js_getStreamMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts,
                 const jsStreamMsgGetReq *req, jsErrCode *errCode)
 {
     natsStatus          s = NATS_OK;
+    natsStatus          reqStatus = NATS_OK;
     char                *subj   = NULL;
     natsMsg             *resp   = NULL;
     int64_t             wait    = 0;
     char                buffer[64];
     natsBuffer          buf     = NATS_EMPTY_BUFFER;
+
+    if (errCode != NULL)
+        *errCode = 0;
 
     if (msg == NULL)
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -2136,9 +2145,9 @@ js_getStreamMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts,
     IFOK(s, _buildStreamMsgGetReq(&subj, &buf, &wait, js, stream, opts, req));
     if (s == NATS_OK)
     {
-        // Send the request.
-        s = natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), wait);
-        s = _processStreamMsgGetResp(msg, resp, s, req->direct, errCode);
+        // Send the request, then process the response (or the failure).
+        reqStatus = natsConnection_Request(&resp, js->nc, subj, natsBuf_Data(&buf), natsBuf_Len(&buf), wait);
+        s = _processStreamMsgGetResp(msg, resp, reqStatus, req->direct, errCode);
     }
 
     natsBuf_Cleanup(&buf);

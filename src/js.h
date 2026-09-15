@@ -331,18 +331,23 @@ js_initRespDrain(jsCtx *js);
 
 // Sends a request on `subj` and returns without waiting for the response.
 // When the response is received, or the request has failed (`timeout` has
-// elapsed, no responder, etc..), `cb` is invoked from a library thread
+// elapsed, no responder, etc.), `cb` is invoked from a library thread
 // (possibly before this call returns), so it must not block. That is
 // normally the thread dispatching the context's asynchronous replies, but
 // a timed-out request may be completed from the timer thread instead (when
-// the context uses its own reply subscription and the connection has been
-// closed or drained), and jsCtx_Destroy() completes the requests still
-// pending from the calling thread: callbacks are not guaranteed to be
-// serialized, so `closure` must be thread-safe.
+// the context uses its own reply subscription and that subscription has
+// been closed, say because the connection was closed or drained), and
+// jsCtx_Destroy() completes the requests still pending from the calling
+// thread: callbacks are not guaranteed to be serialized, so `closure` must
+// be thread-safe.
 //
-// Note that when the context uses the connection's reply muxer
-// (jsOptions.PublishAsync.MuxReplies), a request timing out after the
-// connection has been drained is only completed by jsCtx_Destroy().
+// Note that a request timing out after the connection has been closed or
+// drained may only be completed by jsCtx_Destroy(): always when the context
+// uses the connection's reply muxer (jsOptions.PublishAsync.MuxReplies),
+// since its replies are no longer dispatched, and with the context's own
+// reply subscription if the timeout is detected just before that
+// subscription is closed (the timeout message is then discarded along with
+// the subscription's queue).
 //
 // If `timeout` is 0 or less, jsDefaultRequestWait is used.
 //
@@ -386,7 +391,8 @@ typedef struct __jsStreamMsgGetReq
 } jsStreamMsgGetReq;
 
 // Retrieves a message from `stream` per `req`: the common implementation of
-// js_GetMsg(), js_GetLastMsg() and js_DirectGetMsg().
+// js_GetMsg(), js_GetLastMsg() and js_DirectGetMsg(). If `errCode` is not
+// NULL, it is set to 0 before anything else.
 natsStatus
 js_getStreamMsg(natsMsg **msg, jsCtx *js, const char *stream, jsOptions *opts,
                 const jsStreamMsgGetReq *req, jsErrCode *errCode);

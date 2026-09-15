@@ -161,6 +161,13 @@ int main(int argc, char **argv)
     total = 10;
     opts = parseArgs(argc, argv, usage);
     numKeys = total;
+    if (numKeys < 0)
+    {
+        printf("Invalid count: %" PRId64 "\n", numKeys);
+        natsOptions_Destroy(opts);
+        nats_Close();
+        return 1;
+    }
 
     if (workQueue_Init(&queue) != NATS_OK)
     {
@@ -266,9 +273,10 @@ int main(int argc, char **argv)
         printf("\n");
     }
 
-    // Destroy all our objects to avoid report of memory leak. Destroying the
-    // context completes any pending get (with NATS_ILLEGAL_STATE), which
-    // pushes to the queue, so the queue and the results must outlive it.
+    // Destroy all our objects to avoid report of memory leak. All the gets
+    // have completed at this point; if they had not, destroying the context
+    // would complete them (with NATS_ILLEGAL_STATE) and push to the queue,
+    // so the queue and the results are kept alive until after it anyway.
     kvStore_Destroy(kv);
     jsCtx_Destroy(js);
     natsConnection_Destroy(conn);

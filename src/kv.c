@@ -545,6 +545,19 @@ _createEntryFromMsg(kvEntry **new_entry, bool *deleted, kvStore *kv, natsMsg **m
     return NATS_OK;
 }
 
+// Fills the "get message" request for `subj` at `revision` (latest if 0),
+// direct or not per the bucket's configuration.
+static void
+_initStreamMsgGetReq(jsStreamMsgGetReq *req, kvStore *kv, const char *subj, uint64_t revision)
+{
+    memset(req, 0, sizeof(*req));
+    req->direct = kv->useDirect;
+    if (revision != 0)
+        req->seq = revision;
+    else
+        req->lastBySubject = subj;
+}
+
 static natsStatus
 _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key, uint64_t revision)
 {
@@ -552,7 +565,7 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key, uint
     natsMsg     *msg    = NULL;
     kvEntry     *e      = NULL;
     DEFINE_BUF_FOR_SUBJECT;
-    jsDirectGetMsgOptions dgo;
+    jsStreamMsgGetReq greq;
 
     *new_entry = NULL;
     *deleted   = false;
@@ -562,23 +575,10 @@ _getEntry(kvEntry **new_entry, bool *deleted, kvStore *kv, const char *key, uint
 
     BUILD_SUBJECT(KEY_NAME_ONLY, NOT_FOR_A_PUT);
 
-    if (kv->useDirect)
+    if (s == NATS_OK)
     {
-        jsDirectGetMsgOptions_Init(&dgo);
-        if (revision == 0)
-            dgo.LastBySubject = natsBuf_Data(&buf);
-        else
-            dgo.Sequence = revision;
-
-        IFOK(s, js_DirectGetMsg(&msg, kv->js, kv->stream, NULL, &dgo));
-    }
-    else if (revision == 0)
-    {
-        IFOK(s, js_GetLastMsg(&msg, kv->js, kv->stream, natsBuf_Data(&buf), NULL, NULL));
-    }
-    else
-    {
-        IFOK(s, js_GetMsg(&msg, kv->js, kv->stream, revision, NULL, NULL));
+        _initStreamMsgGetReq(&greq, kv, natsBuf_Data(&buf), revision);
+        s = js_getStreamMsg(&msg, kv->js, kv->stream, NULL, &greq, NULL);
     }
     // If a sequence was provided, just make sure that the retrieved
     // message subject matches the request.
@@ -689,7 +689,7 @@ kvStore_GetAsync(kvStore *kv, const char *key, kvGetCb cb, void *closure)
     natsStatus      s    = NATS_OK;
     kvGetRequest    *req = NULL;
     DEFINE_BUF_FOR_SUBJECT;
-    jsDirectGetMsgOptions dgo;
+    jsStreamMsgGetReq greq;
 
     if ((kv == NULL) || (cb == NULL))
         return nats_setDefaultError(NATS_INVALID_ARG);
@@ -714,17 +714,8 @@ kvStore_GetAsync(kvStore *kv, const char *key, kvGetCb cb, void *closure)
     }
     if (s == NATS_OK)
     {
-        if (kv->useDirect)
-        {
-            jsDirectGetMsgOptions_Init(&dgo);
-            dgo.LastBySubject = natsBuf_Data(&buf);
-
-            s = js_directGetMsgAsync(kv->js, kv->stream, NULL, &dgo, _getAsyncCb, (void*) req);
-        }
-        else
-        {
-            s = js_getMsgAsync(kv->js, kv->stream, 0, natsBuf_Data(&buf), NULL, _getAsyncCb, (void*) req);
-        }
+        _initStreamMsgGetReq(&greq, kv, natsBuf_Data(&buf), 0);
+        s = js_getStreamMsgAsync(kv->js, kv->stream, NULL, &greq, _getAsyncCb, (void*) req);
     }
 
     natsBuf_Cleanup(&buf);

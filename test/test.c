@@ -34706,6 +34706,7 @@ void test_JetStreamGetMsgAsync(void)
     jsStreamConfig      cfg;
     jsOptions           o;
     jsErrCode           jerr = 0;
+    jsStreamMsgGetReq   greq;
     struct threadArg    arg;
 
     JS_SETUP(2, 3, 1);
@@ -34730,18 +34731,36 @@ void test_JetStreamGetMsgAsync(void)
     testCond(s == NATS_OK);
 
     test("Bad args: ");
-    s = js_getMsgAsync(NULL, "GET_MSG_ASYNC", 1, NULL, NULL, _getMsgAsyncCb, (void*) &arg);
+    greq = (jsStreamMsgGetReq) { .seq = 1 };
+    s = js_getStreamMsgAsync(NULL, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     if (s == NATS_INVALID_ARG)
-        s = js_getMsgAsync(js, "GET_MSG_ASYNC", 1, NULL, NULL, NULL, (void*) &arg);
+        s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", NULL, NULL, _getMsgAsyncCb, (void*) &arg);
     if (s == NATS_INVALID_ARG)
-        s = js_getMsgAsync(js, NULL, 1, NULL, NULL, _getMsgAsyncCb, (void*) &arg);
+        s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", NULL, &greq, NULL, (void*) &arg);
     if (s == NATS_INVALID_ARG)
-        s = js_getMsgAsync(js, "GET_MSG_ASYNC", 0, NULL, NULL, _getMsgAsyncCb, (void*) &arg);
+        s = js_getStreamMsgAsync(js, NULL, NULL, &greq, _getMsgAsyncCb, (void*) &arg);
+    if (s == NATS_INVALID_ARG)
+    {
+        // The JS API get requires a sequence or a subject.
+        greq = (jsStreamMsgGetReq) { 0 };
+        s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
+    }
+    if (s == NATS_INVALID_ARG)
+    {
+        greq = (jsStreamMsgGetReq) { .seq = 1, .lastBySubject = "foo.bar" };
+        s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
+    }
+    if (s == NATS_INVALID_ARG)
+    {
+        greq = (jsStreamMsgGetReq) { .seq = 1, .nextBySubject = "foo.bar" };
+        s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
+    }
     testCond(s == NATS_INVALID_ARG);
     nats_clearLastError();
 
     test("Get by sequence: ");
-    s = js_getMsgAsync(js, "GET_MSG_ASYNC", 2, NULL, NULL, _getMsgAsyncCb, (void*) &arg);
+    greq = (jsStreamMsgGetReq) { .seq = 2 };
+    s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_OK) && (arg.msg != NULL)
                 && (strcmp(natsMsg_GetSubject(arg.msg), "foo.baz") == 0)
@@ -34752,7 +34771,8 @@ void test_JetStreamGetMsgAsync(void)
     arg.msg = NULL;
 
     test("Get last by subject: ");
-    s = js_getMsgAsync(js, "GET_MSG_ASYNC", 0, "foo.bar", NULL, _getMsgAsyncCb, (void*) &arg);
+    greq = (jsStreamMsgGetReq) { .lastBySubject = "foo.bar" };
+    s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_OK) && (arg.msg != NULL)
                 && (natsMsg_GetSequence(arg.msg) == 3)
@@ -34761,7 +34781,8 @@ void test_JetStreamGetMsgAsync(void)
     arg.msg = NULL;
 
     test("Message not found: ");
-    s = js_getMsgAsync(js, "GET_MSG_ASYNC", 100, NULL, NULL, _getMsgAsyncCb, (void*) &arg);
+    greq = (jsStreamMsgGetReq) { .seq = 100 };
+    s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_NOT_FOUND) && (arg.msg == NULL)
                 && (arg.jerr == JSNoMessageFoundErr));
@@ -34770,7 +34791,9 @@ void test_JetStreamGetMsgAsync(void)
     test("No responders: ");
     jsOptions_Init(&o);
     o.Prefix = "$JS.DOESNOTEXIST.API";
-    s = js_getMsgAsync(js, "GET_MSG_ASYNC", 1, NULL, &o, _getMsgAsyncCb, (void*) &arg);
+    // The remaining requests all get the message with sequence 1.
+    greq = (jsStreamMsgGetReq) { .seq = 1 };
+    s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncCb, (void*) &arg);
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_NO_RESPONDERS) && (arg.msg == NULL)
                 && (arg.jerr == JSNotEnabledErr));
@@ -34786,7 +34809,7 @@ void test_JetStreamGetMsgAsync(void)
     jsOptions_Init(&o);
     o.Prefix = "$JS.NOREPLY.API";
     o.Wait   = 250;
-    s = js_getMsgAsync(js, "GET_MSG_ASYNC", 1, NULL, &o, _getMsgAsyncCb, (void*) &arg);
+    s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncCb, (void*) &arg);
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_TIMEOUT) && (arg.msg == NULL));
 
@@ -34797,7 +34820,7 @@ void test_JetStreamGetMsgAsync(void)
     jsOptions_Init(&o);
     o.PublishAsync.MuxReplies = true;
     s = natsConnection_JetStream(&js2, nc, &o);
-    IFOK(s, js_getMsgAsync(js2, "GET_MSG_ASYNC", 1, NULL, NULL, _getMsgAsyncCb, (void*) &arg));
+    IFOK(s, js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg));
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_OK) && (arg.msg != NULL)
                 && (natsMsg_GetSequence(arg.msg) == 1)
@@ -34817,7 +34840,7 @@ void test_JetStreamGetMsgAsync(void)
     jsOptions_Init(&o);
     o.Prefix = "$JS.NOREPLY.API";
     o.Wait   = 10000;
-    s = js_getMsgAsync(js, "GET_MSG_ASYNC", 1, NULL, &o, _getMsgAsyncCb, (void*) &arg);
+    s = js_getStreamMsgAsync(js, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncCb, (void*) &arg);
     if (s == NATS_OK)
     {
         jsCtx_Destroy(js);
@@ -34833,7 +34856,7 @@ void test_JetStreamGetMsgAsync(void)
     o.Prefix = "$JS.NOREPLY.API";
     o.Wait   = 250;
     s = natsConnection_JetStream(&js2, nc, NULL);
-    IFOK(s, js_getMsgAsync(js2, "GET_MSG_ASYNC", 1, NULL, &o, _getMsgAsyncCb, (void*) &arg));
+    IFOK(s, js_getStreamMsgAsync(js2, "GET_MSG_ASYNC", &o, &greq, _getMsgAsyncCb, (void*) &arg));
     if (s == NATS_OK)
     {
         natsConnection_Close(nc);
@@ -34852,7 +34875,7 @@ void test_JetStreamDirectGetMsgAsync(void)
 {
     natsStatus              s;
     jsStreamConfig          cfg;
-    jsDirectGetMsgOptions   dgo;
+    jsStreamMsgGetReq       greq;
     jsErrCode               jerr = 0;
     struct threadArg        arg;
 
@@ -34879,22 +34902,20 @@ void test_JetStreamDirectGetMsgAsync(void)
     testCond(s == NATS_OK);
 
     test("Bad args: ");
-    jsDirectGetMsgOptions_Init(&dgo);
-    dgo.Sequence = 1;
-    s = js_directGetMsgAsync(NULL, "DGM_ASYNC", NULL, &dgo, _getMsgAsyncCb, (void*) &arg);
+    greq = (jsStreamMsgGetReq) { .direct = true, .seq = 1 };
+    s = js_getStreamMsgAsync(NULL, "DGM_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     if (s == NATS_INVALID_ARG)
-        s = js_directGetMsgAsync(js, "DGM_ASYNC", NULL, NULL, _getMsgAsyncCb, (void*) &arg);
+        s = js_getStreamMsgAsync(js, "DGM_ASYNC", NULL, NULL, _getMsgAsyncCb, (void*) &arg);
     if (s == NATS_INVALID_ARG)
-        s = js_directGetMsgAsync(js, "DGM_ASYNC", NULL, &dgo, NULL, (void*) &arg);
+        s = js_getStreamMsgAsync(js, "DGM_ASYNC", NULL, &greq, NULL, (void*) &arg);
     if (s == NATS_INVALID_ARG)
-        s = js_directGetMsgAsync(js, NULL, NULL, &dgo, _getMsgAsyncCb, (void*) &arg);
+        s = js_getStreamMsgAsync(js, NULL, NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     testCond(s == NATS_INVALID_ARG);
     nats_clearLastError();
 
     test("Get by sequence: ");
-    jsDirectGetMsgOptions_Init(&dgo);
-    dgo.Sequence = 2;
-    s = js_directGetMsgAsync(js, "DGM_ASYNC", NULL, &dgo, _getMsgAsyncCb, (void*) &arg);
+    greq = (jsStreamMsgGetReq) { .direct = true, .seq = 2 };
+    s = js_getStreamMsgAsync(js, "DGM_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_OK) && (arg.msg != NULL)
                 && (strcmp(natsMsg_GetSubject(arg.msg), "bar") == 0)
@@ -34906,9 +34927,8 @@ void test_JetStreamDirectGetMsgAsync(void)
     arg.msg = NULL;
 
     test("Get last by subject: ");
-    jsDirectGetMsgOptions_Init(&dgo);
-    dgo.LastBySubject = "foo";
-    s = js_directGetMsgAsync(js, "DGM_ASYNC", NULL, &dgo, _getMsgAsyncCb, (void*) &arg);
+    greq = (jsStreamMsgGetReq) { .direct = true, .lastBySubject = "foo" };
+    s = js_getStreamMsgAsync(js, "DGM_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_OK) && (arg.msg != NULL)
                 && (strcmp(natsMsg_GetSubject(arg.msg), "foo") == 0)
@@ -34918,10 +34938,8 @@ void test_JetStreamDirectGetMsgAsync(void)
     arg.msg = NULL;
 
     test("Get next by subject: ");
-    jsDirectGetMsgOptions_Init(&dgo);
-    dgo.Sequence = 2;
-    dgo.NextBySubject = "foo";
-    s = js_directGetMsgAsync(js, "DGM_ASYNC", NULL, &dgo, _getMsgAsyncCb, (void*) &arg);
+    greq = (jsStreamMsgGetReq) { .direct = true, .seq = 2, .nextBySubject = "foo" };
+    s = js_getStreamMsgAsync(js, "DGM_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_OK) && (arg.msg != NULL)
                 && (strcmp(natsMsg_GetSubject(arg.msg), "foo") == 0)
@@ -34930,17 +34948,15 @@ void test_JetStreamDirectGetMsgAsync(void)
     arg.msg = NULL;
 
     test("Message not found: ");
-    jsDirectGetMsgOptions_Init(&dgo);
-    dgo.Sequence = 100;
-    s = js_directGetMsgAsync(js, "DGM_ASYNC", NULL, &dgo, _getMsgAsyncCb, (void*) &arg);
+    greq = (jsStreamMsgGetReq) { .direct = true, .seq = 100 };
+    s = js_getStreamMsgAsync(js, "DGM_ASYNC", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_NOT_FOUND) && (arg.msg == NULL));
     nats_clearLastError();
 
     test("Stream not found: ");
-    jsDirectGetMsgOptions_Init(&dgo);
-    dgo.LastBySubject = "foo";
-    s = js_directGetMsgAsync(js, "DOESNOTEXIST", NULL, &dgo, _getMsgAsyncCb, (void*) &arg);
+    greq = (jsStreamMsgGetReq) { .direct = true, .lastBySubject = "foo" };
+    s = js_getStreamMsgAsync(js, "DOESNOTEXIST", NULL, &greq, _getMsgAsyncCb, (void*) &arg);
     IFOK(s, _waitForAsyncGet(&arg, 2000));
     testCond((s == NATS_OK) && (arg.status == NATS_NO_RESPONDERS) && (arg.msg == NULL));
     nats_clearLastError();
@@ -36889,6 +36905,13 @@ void test_KeyValueGetAsync(void)
         kvEntry_Destroy(arg.kve);
         arg.kve = NULL;
     }
+
+    test("Callbacks invoked once each: ");
+    nats_Sleep(300);
+    natsMutex_Lock(arg.m);
+    s = (arg.sum == 12 ? NATS_OK : NATS_ERR);
+    natsMutex_Unlock(arg.m);
+    testCond(s == NATS_OK);
 
     JS_TEARDOWN;
     _destroyDefaultThreadArgs(&arg);

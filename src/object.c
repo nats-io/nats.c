@@ -2134,8 +2134,8 @@ _get(objStoreGet **new_get, objStore *obs, int64_t start, int64_t timeout, const
 
         return NATS_UPDATE_ERR_STACK(s);
 	}
-	// Now that we know we are not a link, we need to have a digest.
-	if ((s == NATS_OK) && nats_IsStringEmpty(info->Digest))
+    // Now that we know we are not a link, we need to have a digest.
+    if ((s == NATS_OK) && nats_IsStringEmpty(info->Digest))
         s = nats_setError(NATS_ILLEGAL_STATE, "%s", obsErrBadObjectMeta);
     if (s == NATS_OK)
     {

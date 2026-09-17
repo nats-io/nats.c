@@ -13,6 +13,7 @@
 
 #include "test.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -39348,6 +39349,12 @@ void test_ObjectStore_PutAndGet(void)
 #endif
     objStoreConfig      cfg;
     objStoreMeta        meta;
+    uint64_t            badSizes[5] = {2147483647, 2147483648, 4294967296, 4294967297, 4294967312};
+    char                metaInfo[1024];
+    char                chunk[64];
+    int                 iter, i;
+
+    memset(chunk, 'x', sizeof(chunk));
 
     JS_SETUP(2, 10, 0);
 
@@ -40015,7 +40022,146 @@ void test_ObjectStore_PutAndGet(void)
 
     objStorePut_Destroy(put);
     objStore_Destroy(obs);
+    obs = NULL;
     free(chunkSubj);
+
+    for (i=0; i<(int)(sizeof(badSizes)/sizeof(uint64_t)); i++)
+    {
+        char title[128];
+
+        snprintf(title, sizeof(title), "Create object store (%" PRIu64 "): ", badSizes[i]);
+        test(title);
+        objStoreConfig_Init(&cfg);
+        cfg.Bucket = "B";
+        cfg.Description = "Test Get Failures";
+        cfg.Storage = js_MemoryStorage;
+        s = js_CreateObjectStore(&obs, js, &cfg);
+        testCond((s == NATS_OK) && (obs != NULL));
+
+        snprintf(metaInfo, sizeof(metaInfo), "{\"name\":\"x\",\"bucket\":\"B\",\"nuid\":\"bad\","
+                "\"size\":%" PRIu64 ",\"mtime\":\"2026-09-09T00:00:00Z\","
+                "\"chunks\":1,\"digest\":\"SHA-256=unused\",\"deleted\":false}", badSizes[i]);
+
+        test("Publish bad data: ");
+        s = natsConnection_Publish(nc, "$O.B.M.eA==", metaInfo, (int) strlen(metaInfo));
+        IFOK(s, natsConnection_Publish(nc, "$O.B.C.bad", chunk, (int) sizeof(chunk)));
+        IFOK(s, natsConnection_Flush(nc));
+        testCond(s == NATS_OK);
+
+        test("Wait for data: ");
+        for (iter = 0; iter < 5; iter++)
+        {
+            s = objStore_GetInfo(&info, obs, "x", NULL);
+            if (s == NATS_OK)
+            {
+                objStoreInfo_Destroy(info);
+                info = NULL;
+                break;
+            }
+            nats_Sleep(100);
+            nats_clearLastError();
+        }
+        testCond(s == NATS_OK);
+
+        test("Check GetString fails: ");
+        str = NULL;
+        s = objStore_GetString(&str, obs, "x", NULL);
+        testCond((s == NATS_INSUFFICIENT_BUFFER) && (str == NULL));
+        nats_clearLastError();
+
+        if (badSizes[i] > INT_MAX)
+        {
+            test("Check GetBytes fails: ");
+            data = NULL;
+            len = 0;
+            s = objStore_GetBytes(&data, &len, obs, "x", NULL);
+            testCond((s == NATS_INSUFFICIENT_BUFFER) && (data == NULL) && (len == 0));
+            nats_clearLastError();
+
+            test("Create get: ");
+            s = objStore_Get(&get, obs, "x", NULL);
+            testCond((s == NATS_OK) && (get != NULL));
+
+            test("Check ReadAll fails: ");
+            s = objStoreGet_ReadAll(&data, &len, get, 1000);
+            testCond((s == NATS_INSUFFICIENT_BUFFER) && (data == NULL) && (len == 0));
+            nats_clearLastError();
+
+            test("Check Read is ok: ");
+            done = false;
+            s = objStoreGet_Read(&done, &data, &len, get, 1000);
+            testCond((s == NATS_OK) && !done && (data != NULL) && (len == 64));
+            free(data);
+            data = NULL;
+
+            objStoreGet_Destroy(get);
+            get = NULL;
+        }
+
+        test("Delete store: ");
+        s = js_DeleteObjectStore(js, "B");
+        testCond(s == NATS_OK);
+
+        objStore_Destroy(obs);
+        obs = NULL;
+    }
+
+    test("Create object store to check missing digest: ");
+    objStoreConfig_Init(&cfg);
+    cfg.Bucket = "C";
+    cfg.Description = "Test Missing Digest";
+    cfg.Storage = js_MemoryStorage;
+    s = js_CreateObjectStore(&obs, js, &cfg);
+    testCond((s == NATS_OK) && (obs != NULL));
+
+    snprintf(metaInfo, sizeof(metaInfo), "%s", "{\"name\":\"x\",\"bucket\":\"C\",\"nuid\":\"bad\","
+            "\"size\":64,\"mtime\":\"2026-09-09T00:00:00Z\","
+            "\"chunks\":1,\"deleted\":false}");
+
+    test("Publish bad data: ");
+    s = natsConnection_Publish(nc, "$O.C.M.eA==", metaInfo, (int) strlen(metaInfo));
+    IFOK(s, natsConnection_Publish(nc, "$O.C.C.bad", chunk, (int) sizeof(chunk)));
+    IFOK(s, natsConnection_Flush(nc));
+    testCond(s == NATS_OK);
+
+    test("Wait for data: ");
+    for (iter = 0; iter < 5; iter++)
+    {
+        s = objStore_GetInfo(&info, obs, "x", NULL);
+        if (s == NATS_OK)
+        {
+            objStoreInfo_Destroy(info);
+            info = NULL;
+            break;
+        }
+        nats_Sleep(100);
+        nats_clearLastError();
+    }
+    testCond(s == NATS_OK);
+
+    test("Check GetString: ");
+    str = NULL;
+    s = objStore_GetString(&str, obs, "x", NULL);
+    testCond((s == NATS_ILLEGAL_STATE) && (str == NULL)
+                && (strstr(nats_GetLastError(NULL), obsErrBadObjectMeta) != NULL));
+    nats_clearLastError();
+
+    test("Check GetBytes: ");
+    data = NULL;
+    len = 0;
+    s = objStore_GetBytes(&data, &len, obs, "x", NULL);
+    testCond((s == NATS_ILLEGAL_STATE) && (data == NULL) && (len == 0)
+                && (strstr(nats_GetLastError(NULL), obsErrBadObjectMeta) != NULL));
+    nats_clearLastError();
+
+    test("Create get: ");
+    s = objStore_Get(&get, obs, "x", NULL);
+    testCond((s == NATS_ILLEGAL_STATE) && (get == NULL)
+                && (strstr(nats_GetLastError(NULL), obsErrBadObjectMeta) != NULL));
+    nats_clearLastError();
+
+    objStore_Destroy(obs);
+    obs = NULL;
 
     JS_TEARDOWN;
 }

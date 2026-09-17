@@ -31,7 +31,7 @@ extern "C" {
                              (NATS_VERSION_MINOR <<  8) | \
                              NATS_VERSION_PATCH)
 
-#define NATS_VERSION_REQUIRED_NUMBER 0x030F00
+#define NATS_VERSION_REQUIRED_NUMBER 0x030E00
 
 #ifdef __cplusplus
 }

@@ -26,7 +26,7 @@
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;" >
    <div id="projectname">NATS C Client with JetStream and Streaming support
-   &#160;<span id="projectnumber">3.12.0-beta</span>
+   &#160;<span id="projectnumber">3.14.0-beta</span>
    </div>
    <div id="projectbrief">The nats.io C Client, Supported by Synadia Communications Inc.</div>
   </td>
@@ -180,12 +180,18 @@ Functions</h2></td></tr>
 <tr class="memitem:gaaff89c3f41627f4b2929dbc9b82d265b" id="r_gaaff89c3f41627f4b2929dbc9b82d265b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gaaff89c3f41627f4b2929dbc9b82d265b">natsOptions_SetMaxPingsOut</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int maxPingsOut)</td></tr>
 <tr class="memdesc:gaaff89c3f41627f4b2929dbc9b82d265b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the limit of outstanding <code>PING</code>s without corresponding <code>PONG</code>s.  <br /></td></tr>
 <tr class="separator:gaaff89c3f41627f4b2929dbc9b82d265b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga64016b8481ff8b423c567ae64ef7680e" id="r_ga64016b8481ff8b423c567ae64ef7680e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga64016b8481ff8b423c567ae64ef7680e">natsOptions_SetIgnoreAuthErrorAbort</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool ignore)</td></tr>
+<tr class="memdesc:ga64016b8481ff8b423c567ae64ef7680e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Indicates if the connection should abort on authentication error or not.  <br /></td></tr>
+<tr class="separator:ga64016b8481ff8b423c567ae64ef7680e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga1a3e3abfd7ddd8aff247df8f332bbda3" id="r_ga1a3e3abfd7ddd8aff247df8f332bbda3"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga1a3e3abfd7ddd8aff247df8f332bbda3">natsOptions_SetIOBufSize</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int ioBufSize)</td></tr>
 <tr class="memdesc:ga1a3e3abfd7ddd8aff247df8f332bbda3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the size of the internal read/write buffers.  <br /></td></tr>
 <tr class="separator:ga1a3e3abfd7ddd8aff247df8f332bbda3"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga3d1d3cb2f2a0e23d27dd60e96d1cc91b" id="r_ga3d1d3cb2f2a0e23d27dd60e96d1cc91b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga3d1d3cb2f2a0e23d27dd60e96d1cc91b">natsOptions_SetAllowReconnect</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool allow)</td></tr>
 <tr class="memdesc:ga3d1d3cb2f2a0e23d27dd60e96d1cc91b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Indicates if the connection will be allowed to reconnect.  <br /></td></tr>
 <tr class="separator:ga3d1d3cb2f2a0e23d27dd60e96d1cc91b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga1da0cb202ee0d151e9a44ef25cd61821" id="r_ga1da0cb202ee0d151e9a44ef25cd61821"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga1da0cb202ee0d151e9a44ef25cd61821">natsOptions_SetReconnectOnProtocolError</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool reconnect)</td></tr>
+<tr class="memdesc:ga1da0cb202ee0d151e9a44ef25cd61821"><td class="mdescLeft">&#160;</td><td class="mdescRight">Controls whether a generic server protocol error triggers a reconnect instead of permanently closing the connection.  <br /></td></tr>
+<tr class="separator:ga1da0cb202ee0d151e9a44ef25cd61821"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gab54cd2719c0b64eebd6c7b83dd2908a0" id="r_gab54cd2719c0b64eebd6c7b83dd2908a0"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#gab54cd2719c0b64eebd6c7b83dd2908a0">natsOptions_SetMaxReconnect</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int maxReconnect)</td></tr>
 <tr class="memdesc:gab54cd2719c0b64eebd6c7b83dd2908a0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the maximum number of reconnect attempts.  <br /></td></tr>
 <tr class="separator:gab54cd2719c0b64eebd6c7b83dd2908a0"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -243,6 +249,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga8f06568cc3319a5a0eef9f80282034ca" id="r_ga8f06568cc3319a5a0eef9f80282034ca"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga8f06568cc3319a5a0eef9f80282034ca">natsOptions_SetSendAsap</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool sendAsap)</td></tr>
 <tr class="memdesc:ga8f06568cc3319a5a0eef9f80282034ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets if Publish calls should send data right away.  <br /></td></tr>
 <tr class="separator:ga8f06568cc3319a5a0eef9f80282034ca"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga5ee7f6e9bff22b4fa9d9331f6b709dec" id="r_ga5ee7f6e9bff22b4fa9d9331f6b709dec"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga5ee7f6e9bff22b4fa9d9331f6b709dec">natsOptions_SetFlusherWaitMicros</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, int64_t flusherWaitUs)</td></tr>
+<tr class="memdesc:ga5ee7f6e9bff22b4fa9d9331f6b709dec"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the maximum time the flusher thread waits to accumulate data.  <br /></td></tr>
+<tr class="separator:ga5ee7f6e9bff22b4fa9d9331f6b709dec"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga70aa85319933d78c0076cc862fa3e5a6" id="r_ga70aa85319933d78c0076cc862fa3e5a6"><td class="memItemLeft" align="right" valign="top"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group__opts_group.html#ga70aa85319933d78c0076cc862fa3e5a6">natsOptions_UseOldRequestStyle</a> (<a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *opts, bool useOldStyle)</td></tr>
 <tr class="memdesc:ga70aa85319933d78c0076cc862fa3e5a6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Switches the use of old style requests.  <br /></td></tr>
 <tr class="separator:ga70aa85319933d78c0076cc862fa3e5a6"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -1168,7 +1177,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>By default, the server certificate is verified. You can disable the verification by passing <code>true</code> to this function.</p>
-<dl class="section note"><dt>Note</dt><dd>Setting this to true will clear SSL verfication callback set via <a class="el" href="group__opts_group.html#ga241477d90abb58ada7001cd676d293cb" title="EXPERIMENTAL Sets the certificate validation callback.">natsOptions_SetSSLVerificationCallback()</a>.</dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Setting this to true will clear SSL verification callback set via <a class="el" href="group__opts_group.html#ga241477d90abb58ada7001cd676d293cb" title="EXPERIMENTAL Sets the certificate validation callback.">natsOptions_SetSSLVerificationCallback()</a>.</dd></dl>
 <dl class="section warning"><dt>Warning</dt><dd>This is fine for tests but use with caution since this is not secure.</dd>
 <dd>
 See warning in <a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6b695da563eba" title="Sets the secure mode.">natsOptions_SetSecure</a>.</dd></dl>
@@ -1366,6 +1375,42 @@ See warning in <a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6
 
 </div>
 </div>
+<a id="ga64016b8481ff8b423c567ae64ef7680e" name="ga64016b8481ff8b423c567ae64ef7680e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga64016b8481ff8b423c567ae64ef7680e">&#9670;&#160;</a></span>natsOptions_SetIgnoreAuthErrorAbort()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetIgnoreAuthErrorAbort </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool&#160;</td>
+          <td class="paramname"><em>ignore</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>If set to true, client opts out of the default connect behavior of aborting subsequent reconnect attempts if server returns the same auth error twice (regardless of reconnect policy).</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">ignore</td><td><code>true</code> if the connection should stay opened when receiving authentication errors, <code>false</code> if it should close after two errors (default behavior). </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
 <a id="ga1a3e3abfd7ddd8aff247df8f332bbda3" name="ga1a3e3abfd7ddd8aff247df8f332bbda3"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga1a3e3abfd7ddd8aff247df8f332bbda3">&#9670;&#160;</a></span>natsOptions_SetIOBufSize()</h2>
 
@@ -1436,6 +1481,49 @@ See warning in <a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a id="ga1da0cb202ee0d151e9a44ef25cd61821" name="ga1da0cb202ee0d151e9a44ef25cd61821"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga1da0cb202ee0d151e9a44ef25cd61821">&#9670;&#160;</a></span>natsOptions_SetReconnectOnProtocolError()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetReconnectOnProtocolError </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool&#160;</td>
+          <td class="paramname"><em>reconnect</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>When a <code>NATS Server</code> sends a generic <code>-ERR</code> on an established connection — for example &lsquo;'Maximum Connections Exceeded&rsquo;` when the server's connection limit is briefly hit — the default behaviour is to call the closed callback and stop all reconnect attempts, regardless of <a class="el" href="group__opts_group.html#ga3d1d3cb2f2a0e23d27dd60e96d1cc91b" title="Indicates if the connection will be allowed to reconnect.">natsOptions_SetAllowReconnect()</a> or <a class="el" href="group__opts_group.html#gab54cd2719c0b64eebd6c7b83dd2908a0" title="Sets the maximum number of reconnect attempts.">natsOptions_SetMaxReconnect()</a> settings.</p>
+<p>Setting this option to <code>true</code> changes that behaviour: the library treats such errors the same as a dropped connection and routes them through the normal reconnect path. The disconnected callback fires and the library attempts to reconnect according to the configured reconnect settings (see <a class="el" href="group__opts_group.html#gab54cd2719c0b64eebd6c7b83dd2908a0" title="Sets the maximum number of reconnect attempts.">natsOptions_SetMaxReconnect()</a> and <a class="el" href="group__opts_group.html#ga2730f4e16e318a2ef8de98dbf6ede807" title="Sets the time between reconnect attempts.">natsOptions_SetReconnectWait()</a>). With <code>maxReconnect</code> set to <code>-1</code> (unlimited retries) this means the client will keep retrying indefinitely until the server becomes reachable again.</p>
+<dl class="section note"><dt>Note</dt><dd>This option only affects generic <code>-ERR</code> messages that are not otherwise handled. &lsquo;'Stale Connection&rsquo;` already triggers a reconnect unconditionally; authorization errors and permissions violations cause an immediate close regardless of this setting.</dd>
+<dd>
+The default is <code>false</code>, preserving the original behaviour so that existing users are unaffected.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">reconnect</td><td><code>true</code> to reconnect on generic protocol errors, <code>false</code> (default) to permanently close the connection.</td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__opts_group.html#ga3d1d3cb2f2a0e23d27dd60e96d1cc91b" title="Indicates if the connection will be allowed to reconnect.">natsOptions_SetAllowReconnect()</a> </dd>
+<dd>
+<a class="el" href="group__opts_group.html#gab54cd2719c0b64eebd6c7b83dd2908a0" title="Sets the maximum number of reconnect attempts.">natsOptions_SetMaxReconnect()</a> </dd></dl>
 
 </div>
 </div>
@@ -2043,7 +2131,7 @@ See warning in <a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Specifies the callback to invoke when the server notifies the connection that it entered lame duck mode, that is, going to gradually disconnect all its connections before shuting down. This is often used in deployments when upgrading NATS Servers.</p>
+<p>Specifies the callback to invoke when the server notifies the connection that it entered lame duck mode, that is, going to gradually disconnect all its connections before shutting down. This is often used in deployments when upgrading NATS Servers.</p>
 <dl class="section warning"><dt>Warning</dt><dd>Invocation of this callback is asynchronous, which means that the state may have changed when this callback is invoked.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
@@ -2244,12 +2332,55 @@ See warning in <a class="el" href="group__opts_group.html#gaa1f09416d443fa7a6af6
 <p>A good use-case would be a connection used to solely send replies. Imagine, a requestor sending a request, waiting for the reply before sending the next request.<br  />
  The replier application will send only one reply at a time (since it will not receive the next request until the requestor receives the reply).<br  />
  In such case, it makes sense for the reply to be sent right away.</p>
-<p>The alternative would be to call <a class="el" href="group__conn_mgt_group.html#ga1c98f8d89bb8e20ea8621e860a90267f" title="Flushes the connection.">natsConnection_Flush()</a>, but this call requires a round-trip with the server, which is less efficient than using this option.</p>
+<p>The alternative would be to call <a class="el" href="group__conn_mgt_group.html#ga1c98f8d89bb8e20ea8621e860a90267f" title="Flushes the connection.">natsConnection_Flush()</a>, but this call requires a round-trip with the server, which is less efficient than using this option. Setting the flusher wait to <code>0</code> (see <a class="el" href="group__opts_group.html#ga5ee7f6e9bff22b4fa9d9331f6b709dec" title="Sets the maximum time the flusher thread waits to accumulate data.">natsOptions_SetFlusherWaitMicros()</a>) avoids the round-trip too, but the data is still handed to the flusher thread, so each publish costs a thread wake-up before it reaches the socket. With this option the publishing thread writes the data itself.</p>
 <p>Note that the Request() call already automatically sends the request as fast as possible, there is no need to set an option for that.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
     <tr><td class="paramname">sendAsap</td><td>a boolean indicating if published data should be sent right away or be buffered. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ga5ee7f6e9bff22b4fa9d9331f6b709dec" name="ga5ee7f6e9bff22b4fa9d9331f6b709dec"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga5ee7f6e9bff22b4fa9d9331f6b709dec">&#9670;&#160;</a></span>natsOptions_SetFlusherWaitMicros()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="nats_8h.html#a3bc1b3fe7f64083e60c7c3b93f205bad">NATS_EXTERN</a> <a class="el" href="status_8h.html#a36c934157b663b7b5fb5d6609c897c80">natsStatus</a> natsOptions_SetFlusherWaitMicros </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e">natsOptions</a> *&#160;</td>
+          <td class="paramname"><em>opts</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int64_t&#160;</td>
+          <td class="paramname"><em>flusherWaitUs</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>When data is published, the library buffers it and signals a flusher thread that writes it to the socket. When writes are frequent, the flusher waits a little before flushing so that more data can be accumulated and sent in fewer system calls, improving throughput of small messages at the expense of latency.</p>
+<p>This option controls the maximum duration of that wait, expressed in <b>microseconds</b> (unlike other time-based options, which are expressed in milliseconds). The default is 1000 (1 millisecond).</p>
+<p>The wait only applies when the connection is busy: writes continue to come in after the flusher is signaled, and a flush occurred within the last <code>flusherWaitUs</code> microseconds. A lone pending write is always flushed right away, so sparse traffic and a single synchronous request/reply loop do not pay the accumulation delay.</p>
+<p>Setting this option to <code>0</code> makes the flusher flush as soon as it is signaled, regardless of activity, which minimizes latency in all cases, but can significantly reduce the maximum throughput of small messages published from a tight loop (more system calls, each writing less data). The default adaptive behavior provides the same latency benefit for sparse and request/reply style traffic without that throughput cost, so <code>0</code> is rarely needed.</p>
+<dl class="section note"><dt>Note</dt><dd>This option has no effect if <a class="el" href="group__opts_group.html#ga8f06568cc3319a5a0eef9f80282034ca" title="Sets if Publish calls should send data right away.">natsOptions_SetSendAsap</a> is set to <code>true</code>, since in that case the flusher thread is not used.</dd>
+<dd>
+The value that yields the highest throughput depends on the machine, the message size and the publishing pattern - in our benchmarks the best value moved between 250 and 1000 microseconds across different hosts. Applications that need both maximum throughput and minimal latency should benchmark their own workload rather than assume the default is optimal.</dd></dl>
+<dl class="section warning"><dt>Warning</dt><dd>On Windows, waits have millisecond granularity: positive values are rounded up to the nearest millisecond, so any value between <code>1</code> and <code>1000</code> behaves like <code>1000</code> - tuning below 1 millisecond has no effect on Windows. A value of <code>0</code> fully applies on all platforms.</dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">opts</td><td>the pointer to the <a class="el" href="group__types_group.html#gabcc48b40a81fe302188f4ee06ea9c54e" title="Way to configure a natsConnection.">natsOptions</a> object. </td></tr>
+    <tr><td class="paramname">flusherWaitUs</td><td>the maximum accumulation wait, in microseconds. Must be <code>&gt;= 0</code>. </td></tr>
   </table>
   </dd>
 </dl>

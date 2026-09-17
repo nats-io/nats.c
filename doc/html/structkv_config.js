@@ -11,5 +11,6 @@ var structkv_config =
     [ "RePublish", "structkv_config.html#ae172d3e442eef1a57cd7cf266d9e8951", null ],
     [ "Mirror", "structkv_config.html#ac86ca661d283627bccecf70cd286c8f8", null ],
     [ "Sources", "structkv_config.html#afbfd6725c0b0c9fb661a96c06d788ac9", null ],
-    [ "SourcesLen", "structkv_config.html#af1d95d5434b10e929d6ce6fa6129a789", null ]
+    [ "SourcesLen", "structkv_config.html#af1d95d5434b10e929d6ce6fa6129a789", null ],
+    [ "LimitMarkerTTL", "structkv_config.html#ac2281d71438b8e9a35a820a9d1ae2ba6", null ]
 ];

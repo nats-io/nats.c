@@ -1,4 +1,4 @@
-// Copyright 2015-2020 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -18,6 +18,18 @@
 #include "conn.h"
 #include "util.h"
 #include "mem.h"
+
+// Max MSG/HMSG size (or header size) so that it fits in a natsBuffer.
+#define NATS_MAX_MSG_ARG_SIZE       (0x7FFFFFFE)
+
+// Returns -1 if invalid or too large.
+static int
+_parseMsgSize(const char *d, int dLen)
+{
+    int64_t n = nats_ParseInt64(d, dLen);
+
+    return ((n > NATS_MAX_MSG_ARG_SIZE) ? -1 : (int) n);
+}
 
 // cloneMsgArg is used when the split buffer scenario has the pubArg in the existing read buffer, but
 // we need to hold onto it into the next read.
@@ -179,11 +191,11 @@ _processMsgArgs(natsConnection *nc, char *buf, int bufLen)
         {
             if (hasHeaders)
             {
-                nc->ps->ma.hdr = (int) nats_ParseInt64(slices[hdrSizeIndex].start,
-                                                       slices[hdrSizeIndex].len);
+                nc->ps->ma.hdr = _parseMsgSize(slices[hdrSizeIndex].start,
+                                               slices[hdrSizeIndex].len);
             }
-            nc->ps->ma.size = (int) nats_ParseInt64(slices[maSizeIndex].start,
-                                                    slices[maSizeIndex].len);
+            nc->ps->ma.size = _parseMsgSize(slices[maSizeIndex].start,
+                                            slices[maSizeIndex].len);
         }
     }
     else
@@ -368,8 +380,11 @@ natsParser_Parse(natsConnection *nc, char* buf, int bufLen)
 
                             // jump ahead with the index. If this overruns
                             // what is left we fall out and process split
-                            // buffer.
-                            i = nc->ps->afterSpace + nc->ps->ma.size - 1;
+                            // buffer (check first to avoid int overflow).
+                            if (nc->ps->ma.size > bufLen - nc->ps->afterSpace)
+                                i = bufLen - 1;
+                            else
+                                i = nc->ps->afterSpace + nc->ps->ma.size - 1;
                         }
                         break;
                     }

@@ -8157,6 +8157,62 @@ void test_ProcessMsgArgs(void)
                 && (le != NULL)
                 && (strstr(le, "Bad or Missing Header Size") != NULL));
 
+    RECREATE_PARSER;
+
+    // Would truncate to 10 if cast to an int.
+    snprintf(buf, sizeof(buf), "%s", "MSG foo 1 4294967306\r\n");
+    test("Parsing MSG with size larger than an int: ");
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (strstr(le, "Bad or Missing Size") != NULL));
+
+    RECREATE_PARSER;
+
+    snprintf(buf, sizeof(buf), "%s", "MSG foo 1 bar 99999999999\r\n");
+    test("Parsing MSG with size larger than an int (with reply): ");
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (strstr(le, "Bad or Missing Size") != NULL));
+
+    RECREATE_PARSER;
+
+    snprintf(buf, sizeof(buf), "%s", "HMSG foo 1 4294967306 4294967306\r\n");
+    test("Parsing HMSG with header size larger than an int: ");
+    natsParser_Parse(nc, buf, (int) strlen(buf));
+    s = natsConnection_ReadLastError(nc, le, sizeof(le));
+    testCond((s == NATS_PROTOCOL_ERROR)
+                && (nc->ps->argBuf == NULL)
+                && (nc->ps->msgBuf == NULL)
+                && (nc->ps->ma.subject == NULL)
+                && (nc->ps->ma.reply == NULL)
+                && (strstr(le, "Bad or Missing Header Size") != NULL));
+
+    RECREATE_PARSER;
+
+    // Allocation may fail depending on the platform, which is fine.
+    snprintf(buf, sizeof(buf), "%s", "MSG foo 1 2147483646\r\nab");
+    test("Parsing MSG with size close to INT_MAX: ");
+    s = natsParser_Parse(nc, buf, (int) strlen(buf));
+    testCond(((s == NATS_OK)
+                && (nc->ps->state == MSG_PAYLOAD)
+                && (nc->ps->ma.size == 2147483646)
+                && (nc->ps->msgBuf != NULL)
+                && (natsBuf_Len(nc->ps->msgBuf) == 2))
+             || (s == NATS_NO_MEMORY));
+    nats_clearLastError();
+    natsBuf_Destroy(nc->ps->msgBuf);
+    nc->ps->msgBuf = NULL;
+
     natsConnection_Destroy(nc);
 }
 

@@ -1351,6 +1351,7 @@ GET_NEXT:
     else
     {
         natsMsg     *msg    = NULL;
+        const char  *meta   = NULL;
         int64_t     tm      = 0;
         uint64_t    pending = 0;
         bool        next    = false;
@@ -1370,7 +1371,13 @@ GET_NEXT:
         }
         w->refs--;
         IFOK(s, _unmarshalObjStoreInfo(&info, natsMsg_GetData(msg), natsMsg_GetDataLength(msg)));
-        IFOK(s, js_getMetaData(natsMsg_GetReply(msg), NULL, NULL, NULL, NULL, NULL, NULL, &tm, &pending, 2));
+        if (s == NATS_OK)
+        {
+            meta = js_ackMetaData(msg->reply);
+            if (meta == NULL)
+                s = nats_setError(NATS_ERR, "unable to get metadata from '%s'", msg->reply);
+        }
+        IFOK(s, js_getMetaData(meta, NULL, NULL, NULL, NULL, NULL, NULL, &tm, &pending, 2));
         if (s == NATS_OK)
         {
             if (!w->ignoreDel || !info->Deleted)
@@ -1401,6 +1408,8 @@ GET_NEXT:
 
     if (s == NATS_OK)
         *new_info = info;
+    else
+        objStoreInfo_Destroy(info);
 
     return NATS_UPDATE_ERR_STACK(s);
 }

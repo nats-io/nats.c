@@ -1800,6 +1800,18 @@ _copyString(char **new_str, const char *str, int l)
     return NATS_OK;
 }
 
+// Returns the metadata part of an ack reply subject (what follows the
+// "$JS.ACK." prefix), suitable for js_getMetaData(), or NULL if `reply`
+// is not an ack subject or has nothing after the prefix.
+const char*
+js_ackMetaData(const char *reply)
+{
+    if (!nats_HasPrefix(reply, jsAckPrefix) || (reply[jsAckPrefixLen] == '\0'))
+        return NULL;
+
+    return reply+jsAckPrefixLen;
+}
+
 natsStatus
 js_getMetaData(const char *reply,
     char **domain,
@@ -4064,15 +4076,16 @@ jsSub_checkOrderedMsg(natsSubscription *sub, natsMsg *msg, bool *reset)
     jsSub       *jsi = NULL;
     uint64_t    sseq = 0;
     uint64_t    dseq = 0;
+    const char  *meta = js_ackMetaData(natsMsg_GetReply(msg));
 
     *reset = false;
 
-    // Ignore msgs with no reply like HBs and flowcontrol, they are handled elsewhere.
-    if (natsMsg_GetReply(msg) == NULL)
+    // Ignore msgs with no ack reply like HBs and flowcontrol, they are handled elsewhere.
+    if (meta == NULL)
         return NATS_OK;
 
     // Normal message here.
-    s = js_getMetaData(natsMsg_GetReply(msg), NULL, NULL, NULL, NULL, &sseq, &dseq, NULL, NULL, 2);
+    s = js_getMetaData(meta, NULL, NULL, NULL, NULL, &sseq, &dseq, NULL, NULL, 2);
     if (s == NATS_OK)
     {
         jsi = sub->jsi;

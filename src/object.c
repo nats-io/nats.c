@@ -1375,7 +1375,8 @@ GET_NEXT:
         {
             meta = js_ackMetaData(msg->reply);
             if (meta == NULL)
-                s = nats_setError(NATS_ERR, "unable to get metadata from '%s'", msg->reply);
+                s = nats_setError(NATS_ERR, "unable to get metadata from '%s'",
+                    msg->reply ? msg->reply : "<none>");
         }
         IFOK(s, js_getMetaData(meta, NULL, NULL, NULL, NULL, NULL, NULL, &tm, &pending, 2));
         if (s == NATS_OK)

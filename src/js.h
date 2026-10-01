@@ -284,6 +284,9 @@ js_cleanStreamState(jsStreamState *state);
 natsStatus
 js_checkConsName(const char *cons, bool isDurable);
 
+const char*
+js_ackMetaData(const char *reply);
+
 natsStatus
 js_getMetaData(const char *reply,
     char **domain,

@@ -29498,7 +29498,7 @@ void test_JetStreamSubscribe(void)
     testCond(s == NATS_OK);
 
     test("Create sub to check lib sends ACKs: ");
-    s = natsConnection_SubscribeSync(&ackSub, nc, "$JS.ACK.TEST.>");
+    s = natsConnection_SubscribeSync(&ackSub, nc, "$JS.ACK.>");
     testCond(s == NATS_OK);
 
     test("Subscribe, no options: ");
@@ -29729,12 +29729,7 @@ void test_JetStreamSubscribe(void)
     test("Create sub to check lib sends ACKs: ");
     natsSubscription_Destroy(ackSub);
     ackSub = NULL;
-    {
-        char tmp[512];
-
-        snprintf(tmp, sizeof(tmp), "$JS.ACK.%s.>", longsn);
-        s = natsConnection_SubscribeSync(&ackSub, nc, tmp);
-    }
+    s = natsConnection_SubscribeSync(&ackSub, nc, "$JS.ACK.>");
     testCond(s == NATS_OK);
 
     test("Create sub with auto-ack: ");
@@ -29759,9 +29754,9 @@ void test_JetStreamSubscribe(void)
 
     test("Check ack sent: ");
     s = natsSubscription_NextMsg(&ack, ackSub, 1000);
+    testCond((s == NATS_OK) && (strstr(natsMsg_GetSubject(ack), longsn) != NULL));
     natsMsg_Destroy(ack);
     ack = NULL;
-    testCond(s == NATS_OK);
 
     natsSubscription_Destroy(sub);
 #endif
@@ -30136,7 +30131,7 @@ void test_JetStreamSubscribeSync(void)
     testCond(s == NATS_OK);
 
     test("Create sub to check ACKs: ");
-    s = natsConnection_SubscribeSync(&ackSub, nc, "$JS.ACK.TEST.>");
+    s = natsConnection_SubscribeSync(&ackSub, nc, "$JS.ACK.>");
     testCond(s == NATS_OK);
 
     test("Subscribe, no options: ");
@@ -31405,7 +31400,7 @@ void test_JetStreamSubscribeFlowControl(void)
     testCond(s == NATS_OK);
 
     test("Create sub to check for FC: ");
-    s = natsConnection_SubscribeSync(&nsub, nc, "$JS.FC.TEST.>");
+    s = natsConnection_SubscribeSync(&nsub, nc, "$JS.FC.>");
     testCond((s == NATS_OK) && (nsub != NULL));
 
     test("FC requires HB: ");
@@ -31441,7 +31436,7 @@ void test_JetStreamSubscribeFlowControl(void)
     nsub = NULL;
 
     test("Create sub to check for FC: ");
-    s = natsConnection_SubscribeSync(&nsub, nc, "$JS.FC.TEST.>");
+    s = natsConnection_SubscribeSync(&nsub, nc, "$JS.FC.>");
     testCond((s == NATS_OK) && (nsub != NULL));
 
     test("Subscribe sync: ");
@@ -31474,7 +31469,7 @@ void test_JetStreamSubscribeFlowControl(void)
     nsub = NULL;
 
     test("Create sub to check for FC: ");
-    s = natsConnection_SubscribeSync(&nsub, nc, "$JS.FC.TEST.>");
+    s = natsConnection_SubscribeSync(&nsub, nc, "$JS.FC.>");
     testCond((s == NATS_OK) && (nsub != NULL));
 
     test("Subscribe: ");
@@ -31501,7 +31496,8 @@ void test_JetStreamSubscribeFlowControl(void)
 
     test("Check FC reply due to HB header: ");
     IFOK(s, natsSubscription_NextMsg(&msg, nsub, 1000));
-    testCond(s == NATS_OK);
+    testCond((s == NATS_OK)
+                && (strcmp(natsMsg_GetSubject(msg), "$JS.FC.TEST.fc.reply") == 0));
 
     natsBuf_Destroy(buf);
     natsMsg_Destroy(msg);
@@ -31567,10 +31563,10 @@ _fetchRequest(void *closure)
     natsMutex_Unlock(args->m);
 
     jsFetchRequest_Init(&fr);
-    // With current messages, for a MaxBytes of 150, we should get 2 messages,
-    // for a total size of 142.
+    // With current messages, a MaxBytes of 200 fits exactly 2 messages with
+    // either v1 or the longer v2 ack subjects
     fr.Batch = 10;
-    fr.MaxBytes = 150;
+    fr.MaxBytes = 200;
     fr.Expires = NATS_SECONDS_TO_NANOS(2);
     start = nats_Now();
     s = natsSubscription_FetchRequest(&list, sub, &fr);
@@ -31585,7 +31581,7 @@ _fetchRequest(void *closure)
             natsMsg_AckSync(list.Msgs[i], NULL, NULL);
         }
 
-        if ((total > 150) || (list.Count != 2) || ((nats_Now() - start) >= 1900))
+        if ((total > fr.MaxBytes) || (list.Count != 2) || ((nats_Now() - start) >= 1900))
             s = NATS_ERR;
 
         natsMsgList_Destroy(&list);

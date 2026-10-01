@@ -3934,8 +3934,14 @@ _recreateOrderedCons(void *closure)
         {
             // Create consumer request for starting policy.
             cc->DeliverSubject = oci->ndlv;
-            cc->DeliverPolicy  = js_DeliverByStartSequence;
-            cc->OptStartSeq    = oci->sseq;
+            // If we have not received anything yet, we keep the
+            // original deliver policy.
+            if (oci->sseq > 0)
+            {
+                cc->DeliverPolicy  = js_DeliverByStartSequence;
+                cc->OptStartSeq    = oci->sseq;
+                cc->OptStartTime   = 0;
+            }
 
             s = js_AddConsumer(&ci, jsi->js, jsi->stream, cc, NULL, NULL);
             if (s == NATS_OK)
@@ -4046,7 +4052,8 @@ jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq)
 
         oci->osid = osid;
         oci->nsid = sub->sid;
-        oci->sseq = sseq;
+        // Leave at 0 if nothing has been received yet.
+        oci->sseq = (jsi->sseq == 0 ? 0 : sseq);
         oci->nc   = nc;
         oci->sub  = sub;
         oci->max  = max;

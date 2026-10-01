@@ -34148,9 +34148,11 @@ void test_JetStreamOrderedConsSrvRestart(void)
 {
     natsStatus          s;
     natsSubscription    *sub    = NULL;
+    natsSubscription    *subNew = NULL;
     natsMsg             *msg    = NULL;
     natsOptions         *opts   = NULL;
     jsConsumerInfo      *ci     = NULL;
+    jsMsgMetaData       *meta   = NULL;
     jsErrCode           jerr= 0;
     jsStreamConfig      sc;
     jsSubOptions        so;
@@ -34203,6 +34205,13 @@ void test_JetStreamOrderedConsSrvRestart(void)
     natsMsg_Destroy(msg);
     msg = NULL;
 
+    // Nothing is received on this one before the restart, so it
+    // should still only get new messages after that.
+    test("Subscribe with DeliverNew: ");
+    so.Config.DeliverPolicy = js_DeliverNew;
+    s = js_SubscribeSync(&subNew, js, "foo", NULL, &so, &jerr);
+    testCond((s == NATS_OK) && (subNew != NULL) && (jerr == 0));
+
     test("Stopping server: ");
     _stopServer(pid);
     testCond(true);
@@ -34235,6 +34244,14 @@ void test_JetStreamOrderedConsSrvRestart(void)
     natsMsg_Destroy(msg);
     msg = NULL;
 
+    test("DeliverNew sub gets only new message: ");
+    s = natsSubscription_NextMsg(&msg, subNew, 5000);
+    IFOK(s, natsMsg_GetMetaData(&meta, msg));
+    testCond((s == NATS_OK) && (meta->Sequence.Stream == 2));
+    jsMsgMetaData_Destroy(meta);
+    natsMsg_Destroy(msg);
+    msg = NULL;
+
     test("Check configuration is similar: ");
     for (i=0; (s==NATS_OK) && (i<10); i++)
     {
@@ -34255,6 +34272,7 @@ void test_JetStreamOrderedConsSrvRestart(void)
     jsConsumerInfo_Destroy(ci);
 
     natsSubscription_Destroy(sub);
+    natsSubscription_Destroy(subNew);
     natsOptions_Destroy(opts);
     _destroyDefaultThreadArgs(&args);
     JS_TEARDOWN;

@@ -518,6 +518,8 @@ typedef struct __jsSub
     natsTimer           *hbTimer;
 
     char                *cmeta;
+    // For ordered consumers, the stream sequence to resume from. If 0,
+    // the original deliver policy is used.
     uint64_t            sseq;
     uint64_t            dseq;
     // Skip sequence mismatch notification. This is used for
@@ -1101,7 +1103,7 @@ natsStatus
 jsSub_checkOrderedMsg(natsSubscription *sub, natsMsg *msg, bool *reset);
 
 natsStatus
-jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq);
+jsSub_resetOrderedConsumer(natsSubscription *sub);
 
 bool
 natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType);

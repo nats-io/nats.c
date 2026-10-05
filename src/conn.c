@@ -1237,7 +1237,7 @@ _resendSubscriptions(natsConnection *nc)
         // at the next HB interval.
         if ((sub->jsi != NULL) && (sub->jsi->ordered))
         {
-            jsSub_resetOrderedConsumer(sub, sub->jsi->sseq+1);
+            jsSub_resetOrderedConsumer(sub);
             nats_unlockSubAndDispatcher(sub);
             continue;
         }

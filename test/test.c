@@ -34168,10 +34168,12 @@ _checkOrderedConsStreamSeqs(natsSubscription *sub, const uint64_t *seqs, int cou
         natsMsg_Destroy(msg);
         msg = NULL;
     }
-    // Nothing else should be received.
+    // Nothing else should be received. Wait for more than what it takes to
+    // detect missed heartbeats (set to 250ms in these tests) so that a late
+    // reset of the consumer is noticed too.
     if (s == NATS_OK)
     {
-        s = natsSubscription_NextMsg(&msg, sub, 300);
+        s = natsSubscription_NextMsg(&msg, sub, 750);
         if (s == NATS_TIMEOUT)
         {
             nats_clearLastError();
@@ -34198,17 +34200,35 @@ _publishN(jsCtx *js, const char *subj, int n)
 }
 
 static natsStatus
-_deleteOrderedConsumer(jsCtx *js, natsSubscription *sub, const char *stream)
+_getOrderedConsName(natsSubscription *sub, char **name)
 {
-    natsStatus  s     = NATS_OK;
-    char        *name = NULL;
+    natsStatus  s = NATS_OK;
 
     natsSub_Lock(sub);
-    DUP_STRING(s, name, sub->jsi->consumer);
+    DUP_STRING(s, *name, sub->jsi->consumer);
     natsSub_Unlock(sub);
-    IFOK(s, js_DeleteConsumer(js, stream, name, NULL, NULL));
-    NATS_FREE(name);
     return s;
+}
+
+// Waits for the ordered consumer `prev` to be replaced, and for the new one
+// to be known as active so that it is not about to be replaced again.
+static natsStatus
+_waitOrderedConsRecreated(natsSubscription *sub, const char *prev)
+{
+    bool    done = false;
+    int     i;
+
+    for (i=0; !done && (i<500); i++)
+    {
+        natsSub_Lock(sub);
+        done = (sub->jsi->active
+                && (sub->jsi->consumer != NULL)
+                && (strcmp(sub->jsi->consumer, prev) != 0));
+        natsSub_Unlock(sub);
+        if (!done)
+            nats_Sleep(10);
+    }
+    return (done ? NATS_OK : nats_setError(NATS_TIMEOUT, "%s", "ordered consumer not recreated"));
 }
 
 void test_JetStreamOrderedConsSrvRestart(void)
@@ -34219,6 +34239,7 @@ void test_JetStreamOrderedConsSrvRestart(void)
     natsMsg             *msg    = NULL;
     natsOptions         *opts   = NULL;
     jsConsumerInfo      *ci     = NULL;
+    char                *name   = NULL;
     jsErrCode           jerr= 0;
     jsStreamConfig      sc;
     jsSubOptions        so;
@@ -34276,6 +34297,7 @@ void test_JetStreamOrderedConsSrvRestart(void)
     test("Subscribe with DeliverNew: ");
     so.Config.DeliverPolicy = js_DeliverNew;
     s = js_SubscribeSync(&subNew, js, "foo", NULL, &so, &jerr);
+    IFOK(s, _getOrderedConsName(subNew, &name));
     testCond((s == NATS_OK) && (subNew != NULL) && (jerr == 0));
 
     test("Stopping server: ");
@@ -34299,6 +34321,13 @@ void test_JetStreamOrderedConsSrvRestart(void)
         s = natsCondition_TimedWait(args.c, args.m, 2000);
     natsMutex_Unlock(args.m);
     testCond(s == NATS_OK);
+
+    // It is recreated with DeliverNew, so the message has to be sent after.
+    test("Wait for DeliverNew sub to be recreated: ");
+    s = _waitOrderedConsRecreated(subNew, name);
+    testCond(s == NATS_OK);
+    NATS_FREE(name);
+    name = NULL;
 
     test("Send 1 message: ");
     s = js_Publish(NULL, js, "foo", "hello", 5, NULL, NULL);
@@ -34344,9 +34373,17 @@ void test_JetStreamOrderedConsResume(void)
 {
     natsStatus          s;
     natsSubscription    *sub    = NULL;
+    natsSubscription    *sub2   = NULL;
+    natsConnection      *nc2    = NULL;
+    jsCtx               *js2    = NULL;
+    jsConsumerInfo      *ci     = NULL;
+    char                *name   = NULL;
     jsErrCode           jerr    = 0;
+    int64_t             start   = 0;
+    bool                bound   = true;
     jsStreamConfig      sc;
     jsSubOptions        so;
+    int                 i;
 
     JS_SETUP(2, 9, 2);
 
@@ -34367,65 +34404,119 @@ void test_JetStreamOrderedConsResume(void)
     so.Ordered = true;
     so.Config.Heartbeat = NATS_MILLIS_TO_NANOS(250);
 
+    // Until a message is received, the consumer is recreated with its
+    // original deliver policy. Here, seq 6 is lost and seq 7 causes the
+    // reset, so only what is stored after that is received.
     test("DeliverNew, first message lost: ");
     natsConn_setFilter(nc, _firstOnlyLoss);
     so.Config.DeliverPolicy = js_DeliverNew;
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
-    IFOK(s, _publishN(js, "foo", 3));
-    IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){6, 7, 8}, 3));
+    IFOK(s, _getOrderedConsName(sub, &name));
+    IFOK(s, _publishN(js, "foo", 2));
+    IFOK(s, _waitOrderedConsRecreated(sub, name));
+    IFOK(s, _publishN(js, "foo", 1));
+    IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){8}, 1));
     testCond((s == NATS_OK) && (jerr == 0));
     natsConn_setFilter(nc, NULL);
     natsSubscription_Destroy(sub);
     sub = NULL;
+    NATS_FREE(name);
+    name = NULL;
 
+    // Seq 8 is lost and seq 9, which causes the reset, is the new last.
     test("DeliverLast, first message lost: ");
     natsConn_setFilter(nc, _firstOnlyLoss);
     so.Config.DeliverPolicy = js_DeliverLast;
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
     IFOK(s, _publishN(js, "foo", 1));
-    IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){8, 9}, 2));
+    IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){9}, 1));
     testCond((s == NATS_OK) && (jerr == 0));
     natsConn_setFilter(nc, NULL);
     natsSubscription_Destroy(sub);
     sub = NULL;
 
-    // Messages stored before the consumer is recreated must be received.
     test("DeliverNew, consumer lost before any message: ");
     so.Config.DeliverPolicy = js_DeliverNew;
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
-    IFOK(s, _deleteOrderedConsumer(js, sub, "OCRESUME"));
+    IFOK(s, _getOrderedConsName(sub, &name));
+    IFOK(s, js_DeleteConsumer(js, "OCRESUME", name, NULL, &jerr));
+    IFOK(s, _waitOrderedConsRecreated(sub, name));
     IFOK(s, _publishN(js, "foo", 2));
     IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){10, 11}, 2));
     testCond((s == NATS_OK) && (jerr == 0));
     natsSubscription_Destroy(sub);
     sub = NULL;
+    NATS_FREE(name);
+    name = NULL;
 
-    test("DeliverByStartTime, consumer lost: ");
+    // Use a whole second as the start time, since nats_EncodeTimeUTC() may
+    // alter fractional seconds, and wait for it to pass so that the messages
+    // stored so far are older.
+    start = ((nats_NowInNanoSeconds() / 1000000000) + 1) * 1000000000;
+    nats_Sleep(NATS_NANOS_TO_MILLIS(start - nats_NowInNanoSeconds()) + 50);
+
+    // The start time is kept, so messages stored while the consumer was
+    // gone are received.
+    test("DeliverByStartTime, consumer lost before any message: ");
     so.Config.DeliverPolicy = js_DeliverByStartTime;
-    so.Config.OptStartTime = nats_NowInNanoSeconds();
+    so.Config.OptStartTime = start;
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
-    IFOK(s, _deleteOrderedConsumer(js, sub, "OCRESUME"));
+    IFOK(s, _getOrderedConsName(sub, &name));
+    IFOK(s, js_DeleteConsumer(js, "OCRESUME", name, NULL, &jerr));
     IFOK(s, _publishN(js, "foo", 2));
     IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){12, 13}, 2));
     testCond((s == NATS_OK) && (jerr == 0));
+    NATS_FREE(name);
+    name = NULL;
+
+    // Now a start sequence is used, which replaces the start time.
+    test("DeliverByStartTime, consumer lost after messages: ");
+    s = _getOrderedConsName(sub, &name);
+    IFOK(s, js_DeleteConsumer(js, "OCRESUME", name, NULL, &jerr));
+    IFOK(s, _publishN(js, "foo", 1));
+    IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){14}, 1));
+    testCond((s == NATS_OK) && (jerr == 0));
     natsSubscription_Destroy(sub);
     sub = NULL;
+    NATS_FREE(name);
+    name = NULL;
     so.Config.OptStartTime = 0;
 
+    // The name can't be reused for the new consumer, so one is derived from
+    // it. Seq 15 is lost and seq 16 causes the reset.
     test("User provided name, first message lost: ");
     natsConn_setFilter(nc, _firstOnlyLoss);
     so.Config.DeliverPolicy = js_DeliverNew;
     so.Config.Name = "oc";
     s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
-    IFOK(s, _publishN(js, "foo", 3));
-    IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){14, 15, 16}, 3));
-    testCond((s == NATS_OK) && (jerr == 0));
+    IFOK(s, _publishN(js, "foo", 2));
+    IFOK(s, _waitOrderedConsRecreated(sub, "oc"));
+    IFOK(s, _getOrderedConsName(sub, &name));
+    IFOK(s, _publishN(js, "foo", 1));
+    IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){17}, 1));
+    testCond((s == NATS_OK) && (jerr == 0) && (strcmp(name, "oc_1") == 0));
     natsConn_setFilter(nc, NULL);
     natsSubscription_Destroy(sub);
     sub = NULL;
+    NATS_FREE(name);
+    name = NULL;
     so.Config.Name = NULL;
 
-    // Seq 2 is superseded and should not be received.
+    // The consumer must not be recreated from a sequence of the old stream.
+    test("DeliverNew, stream recreated before any message: ");
+    s = js_SubscribeSync(&sub, js, "foo", NULL, &so, &jerr);
+    IFOK(s, _getOrderedConsName(sub, &name));
+    IFOK(s, js_DeleteStream(js, "OCRESUME", NULL, &jerr));
+    IFOK(s, js_AddStream(NULL, js, &sc, NULL, &jerr));
+    IFOK(s, _waitOrderedConsRecreated(sub, name));
+    IFOK(s, _publishN(js, "foo", 2));
+    IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){1, 2}, 2));
+    testCond((s == NATS_OK) && (jerr == 0));
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+    NATS_FREE(name);
+    name = NULL;
+
     test("Create stream: ");
     jsStreamConfig_Init(&sc);
     sc.Name = "OCRESUMELPS";
@@ -34438,6 +34529,7 @@ void test_JetStreamOrderedConsResume(void)
     IFOK(s, _publishN(js, "bar.b", 2));
     testCond((s == NATS_OK) && (jerr == 0));
 
+    // Seq 2 is superseded and should not be received.
     test("DeliverLastPerSubject, first message lost: ");
     natsConn_setFilter(nc, _firstOnlyLoss);
     so.Config.DeliverPolicy = js_DeliverLastPerSubject;
@@ -34445,6 +34537,44 @@ void test_JetStreamOrderedConsResume(void)
     IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){1, 3}, 2));
     testCond((s == NATS_OK) && (jerr == 0));
     natsConn_setFilter(nc, NULL);
+    natsSubscription_Destroy(sub);
+    sub = NULL;
+
+    // Closing the connection leaves the consumer behind.
+    test("Leave a named consumer behind: ");
+    so.Config.DeliverPolicy = js_DeliverAll;
+    so.Config.Name = "oc";
+    s = natsConnection_ConnectTo(&nc2, NATS_DEFAULT_URL);
+    IFOK(s, natsConnection_JetStream(&js2, nc2, NULL));
+    IFOK(s, js_SubscribeSync(&sub2, js2, "bar.*", NULL, &so, &jerr));
+    IFOK(s, _checkOrderedConsStreamSeqs(sub2, (uint64_t[]){1, 2, 3}, 3));
+    if (s == NATS_OK)
+        natsConnection_Close(nc2);
+    for (i=0; (s == NATS_OK) && bound && (i<500); i++)
+    {
+        s = js_GetConsumerInfo(&ci, js, "OCRESUMELPS", "oc", NULL, &jerr);
+        if (s == NATS_OK)
+        {
+            bound = ci->PushBound;
+            jsConsumerInfo_Destroy(ci);
+            ci = NULL;
+            if (bound)
+                nats_Sleep(10);
+        }
+    }
+    testCond((s == NATS_OK) && (jerr == 0) && !bound);
+    natsSubscription_Destroy(sub2);
+    jsCtx_Destroy(js2);
+    natsConnection_Destroy(nc2);
+
+    // Using the same name updates that consumer, which does not make it
+    // start over. This is detected with the next message and the consumer
+    // is then recreated with its original deliver policy.
+    test("User provided name, existing consumer: ");
+    s = js_SubscribeSync(&sub, js, "bar.*", NULL, &so, &jerr);
+    IFOK(s, _publishN(js, "bar.c", 1));
+    IFOK(s, _checkOrderedConsStreamSeqs(sub, (uint64_t[]){1, 2, 3, 4}, 4));
+    testCond((s == NATS_OK) && (jerr == 0));
     natsSubscription_Destroy(sub);
     sub = NULL;
 

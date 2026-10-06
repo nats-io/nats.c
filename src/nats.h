@@ -1086,6 +1086,20 @@ typedef struct jsSubOptions
          * messages. There are no redeliveries and no acks.
          * Flow control and heartbeats are required and set by default, but
          * the heartbeats value can be overridden in the consumer configuration.
+         *
+         * The library recreates the consumer when it detects that messages
+         * were missed, that heartbeats are missed, or after a reconnect.
+         * The new consumer resumes after the last message received by the
+         * subscription. If no message was received yet, it is created with
+         * the deliver policy, start sequence or start time of the consumer
+         * configuration, which for instance means that with #js_DeliverNew
+         * messages stored before the consumer is recreated are not received.
+         *
+         * If jsConsumerConfig.Name is set, it is the name of the first consumer.
+         * When recreated, the consumer is named `<Name>_<n>`, where `n` is
+         * incremented each time. If permissions restrict which consumers can
+         * be created, they need to allow these names too. The name of the
+         * current consumer can be found with #natsSubscription_GetConsumerInfo.
          */
         bool                    Ordered;        ///< If true, this will be an ordered consumer.
 

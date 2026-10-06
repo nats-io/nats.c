@@ -2910,25 +2910,6 @@ js_checkConsName(const char *cons, bool isDurable)
     return NATS_OK;
 }
 
-// Records where an ordered consumer should resume from, based on the
-// consumer info returned when it was created, unless already known.
-// Lock should be held.
-static void
-_setOrderedConsResumeSeq(jsSub *jsi, jsConsumerInfo *ci)
-{
-    if (jsi->sseq > 0)
-        return;
-
-    // Keep the original policy for DeliverLastPerSubject with a snapshot
-    // to deliver, otherwise superseded values would be replayed.
-    if ((jsi->ocCfg->DeliverPolicy == js_DeliverLastPerSubject)
-        && ((ci->NumPending + ci->Delivered.Consumer) > 0))
-    {
-        return;
-    }
-    jsi->sseq = ci->Delivered.Stream+1;
-}
-
 static natsStatus
 _subscribeMulti(natsSubscription **new_sub, jsCtx *js, const char **subjects, int numSubjects, const char *pullDurable,
            natsMsgHandler usrCB, void *usrCBClosure, bool isPullMode,
@@ -3139,13 +3120,6 @@ PROCESS_INFO:
             cfg->DeliverSubject = NULL;
             s = js_cloneConsumerConfig(cfg, &ocCfg);
             cfg->DeliverSubject = tmp;
-            // Let the server pick a new name when recreating, otherwise this
-            // could be treated as an update of the existing consumer.
-            if (s == NATS_OK)
-            {
-                NATS_FREE((char*) ocCfg->Name);
-                ocCfg->Name = NULL;
-            }
         }
         else
         {
@@ -3273,8 +3247,6 @@ PROCESS_INFO:
             // set only if jsi->consumer is NULL!
             if (jsi->consumer == NULL)
             {
-                if (jsi->ordered)
-                    _setOrderedConsResumeSeq(jsi, info);
                 DUP_STRING(s, jsi->consumer, info->Name);
                 if (s == NATS_OK)
                 {
@@ -3956,6 +3928,24 @@ _recreateOrderedCons(void *closure)
         t = oci->thread;
         jsi = sub->jsi;
         s = js_cloneConsumerConfig(jsi->ocCfg, &cc);
+        // A user provided name can't be reused, otherwise this could be treated
+        // as an update of the existing consumer, so derive a new one from it.
+        if ((s == NATS_OK) && !nats_IsStringEmpty(cc->Name))
+        {
+            char *name = NULL;
+
+            if (nats_asprintf(&name, "%s_%d", cc->Name, ++(jsi->ocSerial)) < 0)
+            {
+                s = nats_setDefaultError(NATS_NO_MEMORY);
+                js_destroyConsumerConfig(cc);
+                cc = NULL;
+            }
+            else
+            {
+                NATS_FREE((char*) cc->Name);
+                cc->Name = name;
+            }
+        }
         natsSub_Unlock(sub);
 
         if (s == NATS_OK)
@@ -3981,7 +3971,6 @@ _recreateOrderedCons(void *closure)
                     NATS_FREE(jsi->consumer);
                     jsi->consumer = NULL;
                     DUP_STRING(s, jsi->consumer, ci->Name);
-                    _setOrderedConsResumeSeq(jsi, ci);
                 }
                 natsSub_Unlock(sub);
 

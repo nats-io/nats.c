@@ -518,9 +518,9 @@ typedef struct __jsSub
     natsTimer           *hbTimer;
 
     char                *cmeta;
-    // For ordered consumers, the stream sequence to resume from. It stays 0
-    // until a message is received, and the original deliver policy is used
-    // when recreating the consumer while that is the case.
+    // For ordered consumers, the stream sequence to resume from. If 0,
+    // the original deliver policy is used. Not reset if the stream is
+    // recreated.
     uint64_t            sseq;
     uint64_t            dseq;
     // Skip sequence mismatch notification. This is used for

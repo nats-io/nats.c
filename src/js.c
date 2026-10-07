@@ -2910,6 +2910,24 @@ js_checkConsName(const char *cons, bool isDurable)
     return NATS_OK;
 }
 
+// Sets the ordered consumer resume sequence from the consumer's start
+// position, unless already known.
+// Lock should be held.
+static void
+_setOrderedConsResumeSeq(jsSub *jsi, jsConsumerInfo *ci)
+{
+    // Delivered.Stream is the start position only if nothing was delivered.
+    if ((jsi->sseq > 0) || (ci->Delivered.Consumer > 0))
+        return;
+
+    // Keep the original policy for DeliverLastPerSubject with a snapshot
+    // to deliver, otherwise superseded values would be replayed.
+    if ((ci->Config->DeliverPolicy == js_DeliverLastPerSubject) && (ci->NumPending > 0))
+        return;
+
+    jsi->sseq = ci->Delivered.Stream+1;
+}
+
 static natsStatus
 _subscribeMulti(natsSubscription **new_sub, jsCtx *js, const char **subjects, int numSubjects, const char *pullDurable,
            natsMsgHandler usrCB, void *usrCBClosure, bool isPullMode,
@@ -3247,6 +3265,8 @@ PROCESS_INFO:
             // set only if jsi->consumer is NULL!
             if (jsi->consumer == NULL)
             {
+                if (jsi->ordered)
+                    _setOrderedConsResumeSeq(jsi, info);
                 DUP_STRING(s, jsi->consumer, info->Name);
                 if (s == NATS_OK)
                 {
@@ -3971,6 +3991,7 @@ _recreateOrderedCons(void *closure)
                     NATS_FREE(jsi->consumer);
                     jsi->consumer = NULL;
                     DUP_STRING(s, jsi->consumer, ci->Name);
+                    _setOrderedConsResumeSeq(jsi, ci);
                 }
                 natsSub_Unlock(sub);
 

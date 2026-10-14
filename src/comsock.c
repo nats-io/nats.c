@@ -667,20 +667,28 @@ natsSock_InitDeadline(natsSockCtx *ctx, int64_t timeout)
     natsDeadline_Init(&ctx->writeDeadline, timeout);
 }
 
-natsStatus
-natsSock_GetLocalIPAndPort(natsSockCtx *ctx, char **ip, int *port)
+static natsStatus
+_getIPAndPort(natsSockCtx *ctx, bool local, char **ip, int *port)
 {
     struct sockaddr_storage addr;
     natsSockLen             addrLen = (natsSockLen) sizeof(addr);
-    char                    localIP[64];
-    void                    *laddr = NULL;
+    char                    addrIP[64];
+    void                    *iaddr = NULL;
     int                     fam;
+    int                     res;
 
     *ip = NULL;
     *port = 0;
 
-    if (getsockname(ctx->fd, (struct sockaddr*) &addr, &addrLen) != 0)
-        return nats_setError(NATS_SYS_ERROR, "getsockname error: %d", NATS_SOCK_GET_ERROR);
+    if (local)
+        res = getsockname(ctx->fd, (struct sockaddr*) &addr, &addrLen);
+    else
+        res = getpeername(ctx->fd, (struct sockaddr*) &addr, &addrLen);
+
+    if (res != 0)
+        return nats_setError(NATS_SYS_ERROR, "%s error: %d",
+                             (local ? "getsockname" : "getpeername"),
+                             NATS_SOCK_GET_ERROR);
 
     fam = ((struct sockaddr*) &addr)->sa_family;
 
@@ -688,14 +696,14 @@ natsSock_GetLocalIPAndPort(natsSockCtx *ctx, char **ip, int *port)
     {
         struct sockaddr_in *addr4 = (struct sockaddr_in*) &addr;
 
-        laddr = &(addr4->sin_addr);
+        iaddr = &(addr4->sin_addr);
         *port = (int) ntohs(addr4->sin_port);
     }
     else if (fam == AF_INET6)
     {
         struct sockaddr_in6 *addr6 = (struct sockaddr_in6*) &addr;
 
-        laddr = &(addr6->sin6_addr);
+        iaddr = &(addr6->sin6_addr);
         *port = (int) ntohs(addr6->sin6_port);
     }
     else
@@ -703,11 +711,23 @@ natsSock_GetLocalIPAndPort(natsSockCtx *ctx, char **ip, int *port)
         return nats_setError(NATS_SYS_ERROR, "unknown INET family: %d", fam);
     }
 
-    if (inet_ntop(fam, laddr, localIP, sizeof(localIP)) == NULL)
+    if (inet_ntop(fam, iaddr, addrIP, sizeof(addrIP)) == NULL)
         return nats_setError(NATS_SYS_ERROR, "inet_ntop error: %d", NATS_SOCK_GET_ERROR);
 
-    if ((*ip = NATS_STRDUP(localIP)) == NULL)
+    if ((*ip = NATS_STRDUP(addrIP)) == NULL)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
     return NATS_OK;
+}
+
+natsStatus
+natsSock_GetLocalIPAndPort(natsSockCtx *ctx, char **ip, int *port)
+{
+    return _getIPAndPort(ctx, true, ip, port);
+}
+
+natsStatus
+natsSock_GetRemoteIPAndPort(natsSockCtx *ctx, char **ip, int *port)
+{
+    return _getIPAndPort(ctx, false, ip, port);
 }

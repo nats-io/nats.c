@@ -4953,8 +4953,8 @@ natsConnection_HasHeaderSupport(natsConnection *nc)
     return NATS_NO_SERVER_SUPPORT;
 }
 
-natsStatus
-natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port)
+static natsStatus
+_getIPAndPort(natsConnection *nc, bool local, char **ip, int *port)
 {
     natsStatus s = NATS_OK;
 
@@ -4969,11 +4969,25 @@ natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port)
         s = nats_setDefaultError(NATS_CONNECTION_CLOSED);
     else if (!nc->sockCtx.fdActive)
         s = nats_setDefaultError(NATS_CONNECTION_DISCONNECTED);
-    else
+    else if (local)
         s = natsSock_GetLocalIPAndPort(&(nc->sockCtx), ip, port);
+    else
+        s = natsSock_GetRemoteIPAndPort(&(nc->sockCtx), ip, port);
     natsConn_Unlock(nc);
 
     return NATS_UPDATE_ERR_STACK(s);
+}
+
+natsStatus
+natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port)
+{
+    return _getIPAndPort(nc, true, ip, port);
+}
+
+natsStatus
+natsConnection_GetRemoteIPAndPort(natsConnection *nc, char **ip, int *port)
+{
+    return _getIPAndPort(nc, false, ip, port);
 }
 
 void

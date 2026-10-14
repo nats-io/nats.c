@@ -5919,6 +5919,8 @@ natsConnection_HasHeaderSupport(natsConnection *nc);
  * \note The user is responsible for freeing the memory allocated
  * for the returned IP string.
  *
+ * @see natsConnection_GetRemoteIPAndPort to get the remote IP and port instead.
+ *
  * @param nc the pointer of the #natsConnection object.
  * @param ip the memory location where to store the local IP string.
  * The user is responsible from freeing this memory.
@@ -5932,6 +5934,33 @@ natsConnection_HasHeaderSupport(natsConnection *nc);
  */
 NATS_EXTERN natsStatus
 natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port);
+
+/** \brief Returns the connection remote IP and port.
+ *
+ * Returns the IP and port of the server this connection is currently
+ * connected to, as seen from the connection's socket.
+ *
+ * \note If the connection goes through a proxy (see #natsOptions_SetProxyConnHandler),
+ * the returned IP and port are the proxy's, not the NATS server's.
+ *
+ * \note The user is responsible for freeing the memory allocated
+ * for the returned IP string.
+ *
+ * @see natsConnection_GetLocalIPAndPort to get the local IP and port instead.
+ *
+ * @param nc the pointer of the #natsConnection object.
+ * @param ip the memory location where to store the remote IP string.
+ * The user is responsible from freeing this memory.
+ * @param port the memory location where to store the remote port.
+ *
+ * @return #NATS_OK on success.
+ * @return #NATS_CONNECTION_DISCONNECTED if disconnected.
+ * @return #NATS_CONNECTION_CLOSED is connection is closed.
+ * @return #NATS_SYS_ERROR if a system error getting the IP and port occurred.
+ * @return #NATS_NO_MEMORY if the library was unable to allocate memory for the returned IP string.
+ */
+NATS_EXTERN natsStatus
+natsConnection_GetRemoteIPAndPort(natsConnection *nc, char **ip, int *port);
 
 /** \brief Closes the connection.
  *

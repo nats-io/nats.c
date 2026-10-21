@@ -14,7 +14,9 @@ bazel build //:cnats //:cnats_shared
 bazel test --test_output=errors //...
 ```
 
-The root test run includes three existing CMake regression programs:
+The root test run includes the server-free tests from the main CMake test suite,
+a check that the generated Bazel test list is up to date, and three existing CMake
+regression programs:
 
 - `//test:check_cpp` checks C++ compatibility of internal structs with static cnats.
 - `//test:nonats` checks shared-library cleanup when the library was never opened.
@@ -24,6 +26,58 @@ The root test run includes three existing CMake regression programs:
 These tests require no NATS server. Private headers and flat includes are supplied
 through a test-only target visible only to this test package. The existing CMake
 test sources and the public Bazel header interface are unchanged.
+
+Run the server-dependent tests explicitly:
+
+```sh
+bazel test --test_output=errors //test:unit
+bazel test --test_output=errors //test:integration
+bazel test --test_output=errors //test:natsJSON
+bazel test --test_output=errors //test:JetStreamPublish
+```
+
+Each C test has its own `cc_test` target. The `//test:unit` test suite groups 14
+server-free tests; `//test:integration` groups the remaining 319 tests, excluding
+benchmarks and legacy Streaming tests. Integration targets and their suite are
+tagged `manual` so wildcard test runs do not select them. Each integration test
+is also `exclusive` because the suite uses fixed server ports.
+
+Bazel handles scheduling, caching, 60-second per-test timeouts, process cleanup,
+and individual logs and XML reports. A shared C++ setup function copies fixtures
+into each test's writable `TEST_TMPDIR`, configures the managed server, and calls
+the existing C test entry point. Existing native skips still apply. To select a
+subset, name the individual targets or use a Bazel query, for example in a shell:
+
+```sh
+bazel test --test_output=errors $(bazel query 'filter("JetStream", tests(//test:integration))')
+```
+
+`test/list_test.bzl` is generated from `test/list_test.txt` and checked in so Bazel
+can load it before running build actions. After adding or removing a C test,
+regenerate it with:
+
+```sh
+bazel run //test:update_test_list
+```
+
+The `write_source_file` rule supplies `//test:update_test_list_test`, which fails
+when the checked-in list is stale and prints the update command. The server-free
+classification stays handwritten in `test/BUILD.bazel`; all other tests use the
+integration server. The C test sources are shared by all targets and compiled once.
+
+The integration target downloads NATS Server **v2.15.1** automatically using
+the development-only `rules_multitool` dependency. No server installation is
+needed. `test/multitool.lock.json` pins release archives and SHA-256 checksums
+for Linux x86-64, macOS Intel/ARM64, and Windows x86-64. To update the server,
+update all four URLs, archive executable paths, and checksums together using
+the release's published `SHA256SUMS`, then rerun the integration tests. The test
+generator uses Python 3.12 from a development-only Bazel toolchain, and the source
+update and drift check use the development-only `bazel_lib` dependency.
+
+CI runs server-free tests on Bazel 7, 8, and 9. Separate integration jobs use
+the default `.bazelversion` on all four supported CI platforms and retain
+logs and XML reports when a job fails. These test-tool dependencies are excluded
+from downstream cnats consumers.
 
 The separate `test/bcr` module also verifies the external dependency interface:
 

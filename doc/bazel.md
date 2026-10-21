@@ -40,6 +40,16 @@ Bazel version when using Bazelisk.
 Run `python3 tools/test_bazel_release.py` to check archive reproducibility,
 release-note preservation, and rejection of invalid release inputs locally.
 
+Formatting uses the development dependency `buildifier_prebuilt` 10.1.0. Run
+the same check as CI from the repository root using the default `.bazelversion`:
+
+```sh
+bazel run @buildifier_prebuilt//:buildifier -- -mode=check -lint=warn -r .
+```
+
+This recursively checks all Bazel files, including the nested consumer module.
+The formatting tool is not a dependency of downstream cnats consumers.
+
 ## Consume the library
 
 Add this to your application's `MODULE.bazel`, replacing `VERSION` with a

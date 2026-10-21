@@ -1,4 +1,131 @@
+load("@bazel_lib//lib:run_binary.bzl", "run_binary")
+load("@bazel_lib//lib:write_source_files.bzl", "write_source_file")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_python//python:py_binary.bzl", "py_binary")
+load(":list_test.bzl", "ALL_TESTS")
+load(":test_suite.bzl", "cnats_test_suite")
+
+exports_files(["multitool.lock.json"])
+
+# Keep the server-free allowlist handwritten; put remaining tests in integration.
+_UNIT_TESTS = [
+    "natsBase32Decode",
+    "natsBase64Encode",
+    "natsBuffer",
+    "natsCRC16",
+    "natsHash",
+    "natsHashing",
+    "natsJSON",
+    "natsMsg",
+    "natsMsgHeaderAPIs",
+    "natsOptions",
+    "natsParseControl",
+    "natsParseInt64",
+    "natsUrl",
+    "Version",
+]
+
+cc_library(
+    name = "test_lists",
+    testonly = True,
+    textual_hdrs = [
+        "list_bench.txt",
+        "list_test.txt",
+    ],
+)
+
+cc_library(
+    name = "testsuite",
+    testonly = True,
+    srcs = [
+        "bench.c",
+        "list.h",
+        "test.c",
+        "test.h",
+    ],
+    copts = select({
+        "@platforms//os:windows": [
+            "/std:c11",
+            "/w",
+        ],
+        "//conditions:default": [
+            "-std=c99",
+            "-pthread",
+        ],
+    }),
+    linkstatic = True,
+    local_defines = ["main=cnats_test_main"],
+    deps = [
+        ":test_lists",
+        "//:cnats",
+        "//:cnats_test_headers",
+        "@openssl//:crypto",
+        "@openssl//:ssl",
+    ],
+)
+
+cc_library(
+    name = "test_setup",
+    testonly = True,
+    srcs = ["bazel_test_main.cc"],
+    copts = select({
+        "@platforms//os:windows": ["/std:c++17"],
+        "//conditions:default": ["-std=c++17"],
+    }),
+    deps = [
+        ":testsuite",
+        "@rules_cc//cc/runfiles",
+    ],
+)
+
+_FIXTURES = glob([
+    "*.conf",
+    "certs/*.pem",
+]) + [
+    "list_bench.txt",
+    "list_stan.txt",
+    "list_test.txt",
+]
+
+cnats_test_suite(
+    name = "unit",
+    fixtures = _FIXTURES,
+    test_names = _UNIT_TESTS,
+)
+
+cnats_test_suite(
+    name = "integration",
+    fixtures = _FIXTURES,
+    server = "@multitool//tools/nats-server",
+    test_names = [test for test in ALL_TESTS if test not in _UNIT_TESTS],
+)
+
+py_binary(
+    name = "generate_test_list",
+    testonly = True,
+    srcs = ["generate_test_list.py"],
+    legacy_create_init = False,
+)
+
+run_binary(
+    name = "generated_test_list",
+    testonly = True,
+    srcs = ["list_test.txt"],
+    outs = ["list_test.generated.bzl"],
+    args = [
+        "$(execpath list_test.txt)",
+        "$(execpath list_test.generated.bzl)",
+    ],
+    tool = ":generate_test_list",
+)
+
+write_source_file(
+    name = "update_test_list",
+    testonly = True,
+    in_file = ":generated_test_list",
+    out_file = "list_test.bzl",
+)
 
 cc_test(
     name = "check_cpp",

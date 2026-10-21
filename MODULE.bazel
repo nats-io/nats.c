@@ -8,4 +8,15 @@ bazel_dep(name = "openssl", version = "3.5.4.bcr.1")
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_cc", version = "0.2.17")
 
+bazel_dep(name = "bazel_lib", version = "3.7.2", dev_dependency = True)
 bazel_dep(name = "buildifier_prebuilt", version = "10.1.0", dev_dependency = True)
+bazel_dep(name = "rules_multitool", version = "1.11.1", dev_dependency = True)
+bazel_dep(name = "rules_python", version = "2.4.2", dev_dependency = True)
+
+multitool = use_extension("@rules_multitool//multitool:extension.bzl", "multitool", dev_dependency = True)
+multitool.hub(lockfile = "//test:multitool.lock.json")
+use_repo(multitool, "multitool")
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python", dev_dependency = True)
+python.defaults(python_version = "3.12")
+python.toolchain(python_version = "3.12")

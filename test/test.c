@@ -20399,7 +20399,7 @@ void test_GetRTT(void)
     natsOptions_Destroy(opts);
 }
 
-void test_GetLocalIPAndPort(void)
+void test_GetLocalAndRemoteIPAndPort(void)
 {
     natsStatus          s;
     natsConnection      *nc     = NULL;
@@ -20432,12 +20432,33 @@ void test_GetLocalIPAndPort(void)
     s = natsConnection_GetLocalIPAndPort(nc, &ip, NULL);
     testCond(s == NATS_INVALID_ARG);
 
+    test("Get Remote IP and Port - no conn: ");
+    s = natsConnection_GetRemoteIPAndPort(NULL, &ip, &port);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Get Remote IP and Port - no ip loc: ");
+    s = natsConnection_GetRemoteIPAndPort(nc, NULL, &port);
+    testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
+
+    test("Get Remote IP and Port - no port loc: ");
+    s = natsConnection_GetRemoteIPAndPort(nc, &ip, NULL);
+    testCond(s == NATS_INVALID_ARG);
+
     nats_clearLastError();
     test("Get Local IP and Port: ");
     s = natsConnection_GetLocalIPAndPort(nc, &ip, &port);
     testCond((s == NATS_OK)
                 && ((ip != NULL) && (strcmp(ip, "127.0.0.1") == 0))
                 && (port != 0));
+    free(ip);
+
+    test("Get Remote IP and Port: ");
+    s = natsConnection_GetRemoteIPAndPort(nc, &ip, &port);
+    testCond((s == NATS_OK)
+                && ((ip != NULL) && (strcmp(ip, "127.0.0.1") == 0))
+                && (port == 4222));
     free(ip);
 
     test("Wait for disconnect: ");
@@ -20454,10 +20475,20 @@ void test_GetLocalIPAndPort(void)
     testCond(s == NATS_CONNECTION_DISCONNECTED);
     nats_clearLastError();
 
+    test("Get Remote IP and Port while disconnected: ");
+    s = natsConnection_GetRemoteIPAndPort(nc, &ip, &port);
+    testCond(s == NATS_CONNECTION_DISCONNECTED);
+    nats_clearLastError();
+
     // Close connection
     natsConnection_Close(nc);
     test("Get Local IP and Port with closed connection: ");
     s = natsConnection_GetLocalIPAndPort(nc, &ip, &port);
+    testCond(s == NATS_CONNECTION_CLOSED);
+    nats_clearLastError();
+
+    test("Get Remote IP and Port with closed connection: ");
+    s = natsConnection_GetRemoteIPAndPort(nc, &ip, &port);
     testCond(s == NATS_CONNECTION_CLOSED);
 
     natsConnection_Destroy(nc);

@@ -18,7 +18,7 @@ jobs:
           curl --fail --location --output /tmp/buildifier https://github.com/bazelbuild/buildtools/releases/download/v10.0.1/buildifier-linux-amd64
           echo 'e0ea28e2d639347724435ebafe0531fd764fbf20eec6a23000c81edd0d58e51d  /tmp/buildifier' | sha256sum --check
           chmod +x /tmp/buildifier
-          /tmp/buildifier -mode=check -lint=warn BUILD.bazel MODULE.bazel test/bcr/BUILD.bazel test/bcr/MODULE.bazel
+          /tmp/buildifier -mode=check -lint=warn BUILD.bazel MODULE.bazel test/BUILD.bazel test/bcr/BUILD.bazel test/bcr/MODULE.bazel
       - name: Check release packaging
         run: python3 tools/test_bazel_release.py
 
@@ -39,8 +39,8 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.bazel }}
           repository-cache: true
-      - name: Build libraries
-        run: bazel build //:cnats //:cnats_shared
+      - name: Test libraries and regressions
+        run: bazel test --test_output=errors //...
       - name: Test external consumers
         working-directory: test/bcr
         run: bazel test --test_output=errors //...

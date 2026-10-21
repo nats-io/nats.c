@@ -1,0 +1,42 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_test(
+    name = "check_cpp",
+    size = "small",
+    srcs = ["check_cpp/check_cpp.cpp"],
+    linkstatic = True,
+    deps = [
+        "//:cnats",
+        "//:cnats_test_headers",
+        "@openssl//:crypto",
+        "@openssl//:ssl",
+    ],
+)
+
+cc_test(
+    name = "nonats",
+    size = "small",
+    srcs = ["dylib/nonats.c"],
+    dynamic_deps = ["//:cnats_shared"],
+    linkstatic = True,
+    deps = [
+        "//:cnats_shared_headers",
+        "//:cnats_test_headers",
+    ],
+)
+
+cc_test(
+    name = "nocrashonexit",
+    size = "small",
+    srcs = ["no_crash_on_exit/nocrashonexit.c"],
+    copts = ["-pthread"],
+    linkstatic = True,
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//:cnats",
+        "//:cnats_test_headers",
+    ],
+)

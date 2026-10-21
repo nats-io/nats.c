@@ -14,6 +14,17 @@ bazel build //:cnats //:cnats_shared
 bazel test --test_output=errors //...
 ```
 
+The root test run includes three existing CMake regression programs:
+
+- `//test:check_cpp` checks C++ compatibility of internal structs with static cnats.
+- `//test:nonats` checks shared-library cleanup when the library was never opened.
+- `//test:nocrashonexit` checks shutdown while the main thread exits. It uses
+  pthreads and runs on Linux and macOS; Windows wildcard test runs skip it.
+
+These tests require no NATS server. Private headers and flat includes are supplied
+through a test-only target visible only to this test package. The existing CMake
+test sources and the public Bazel header interface are unchanged.
+
 The separate `test/bcr` module also verifies the external dependency interface:
 
 ```sh

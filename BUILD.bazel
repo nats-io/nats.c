@@ -78,6 +78,20 @@ _COMMON_ATTRS = dict(
     ],
 )
 
+# Flat includes and private structs are available only to the upstream tests.
+cc_library(
+    name = "cnats_test_headers",
+    testonly = True,
+    hdrs = glob([
+        "src/*.h",
+        "src/glib/*.h",
+        "src/include/*.h",
+    ]),
+    defines = _COMMON_DEFINES,
+    includes = ["src"],
+    visibility = ["//test:__pkg__"],
+)
+
 cc_library(
     name = "cnats",
     srcs = _COMMON_ATTRS["srcs"],

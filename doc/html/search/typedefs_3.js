@@ -23,6 +23,7 @@ var searchData=
   ['natssslverifycb_20',['natsSSLVerifyCb',['../group__callbacks_group.html#gac45beaf6d26ef2c335ba499e4be5a896',1,'nats.h']]],
   ['natsstatistics_21',['natsStatistics',['../group__types_group.html#ga57a4b8c7109e2773878655722ce028aa',1,'nats.h']]],
   ['natssubscription_22',['natsSubscription',['../group__types_group.html#ga87158ec63b4f90f69e20451624ea01d8',1,'nats.h']]],
-  ['natstokenhandler_23',['natsTokenHandler',['../group__callbacks_group.html#ga4b02de70fe9380d184fd01d87527f499',1,'nats.h']]],
-  ['natsuserjwthandler_24',['natsUserJWTHandler',['../group__callbacks_group.html#ga258b30458134be90f17315c037f34b7b',1,'nats.h']]]
+  ['natsthreadstartedhandler_23',['natsThreadStartedHandler',['../group__callbacks_group.html#gad845be86eb43304975beac908b0296dd',1,'nats.h']]],
+  ['natstokenhandler_24',['natsTokenHandler',['../group__callbacks_group.html#ga4b02de70fe9380d184fd01d87527f499',1,'nats.h']]],
+  ['natsuserjwthandler_25',['natsUserJWTHandler',['../group__callbacks_group.html#ga258b30458134be90f17315c037f34b7b',1,'nats.h']]]
 ];

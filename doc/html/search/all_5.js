@@ -14,8 +14,9 @@ var searchData=
   ['expectlastmsgid_11',['ExpectLastMsgId',['../structjs_pub_options.html#a095391b33a261586fc02eaf013b65e61',1,'jsPubOptions']]],
   ['expectlastseq_12',['ExpectLastSeq',['../structjs_pub_options.html#a3b02b60b05caa6d242079a4c26b181bf',1,'jsPubOptions']]],
   ['expectlastsubjectseq_13',['ExpectLastSubjectSeq',['../structjs_pub_options.html#aeefec1d2c7644562d23b87e55bf2e253',1,'jsPubOptions']]],
-  ['expectnomessage_14',['ExpectNoMessage',['../structjs_pub_options.html#a740a7edee8c832a75b75fded6046ba90',1,'jsPubOptions']]],
-  ['expectstream_15',['ExpectStream',['../structjs_pub_options.html#ac7ac74d2557d772c3092288dacf3711f',1,'jsPubOptions']]],
-  ['expires_16',['Expires',['../structjs_fetch_request.html#ac3351138ce8ac3b321ac1eb78887116e',1,'jsFetchRequest']]],
-  ['external_17',['external',['../structjs_stream_source.html#a295458d156af5373bb3f5ab06612a888',1,'jsStreamSource::External'],['../structjs_stream_source_info.html#a7eb19dd2637079fd1e970a2b38d33e05',1,'jsStreamSourceInfo::External']]]
+  ['expectlastsubjectseqsubject_14',['ExpectLastSubjectSeqSubject',['../structjs_pub_options.html#a932874ab9567150ee4e73fabd6e12de5',1,'jsPubOptions']]],
+  ['expectnomessage_15',['ExpectNoMessage',['../structjs_pub_options.html#a740a7edee8c832a75b75fded6046ba90',1,'jsPubOptions']]],
+  ['expectstream_16',['ExpectStream',['../structjs_pub_options.html#ac7ac74d2557d772c3092288dacf3711f',1,'jsPubOptions']]],
+  ['expires_17',['Expires',['../structjs_fetch_request.html#ac3351138ce8ac3b321ac1eb78887116e',1,'jsFetchRequest']]],
+  ['external_18',['external',['../structjs_stream_source.html#a295458d156af5373bb3f5ab06612a888',1,'jsStreamSource::External'],['../structjs_stream_source_info.html#a7eb19dd2637079fd1e970a2b38d33e05',1,'jsStreamSourceInfo::External']]]
 ];

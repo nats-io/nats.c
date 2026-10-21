@@ -8,5 +8,6 @@ var structjs_fetch_request =
     [ "MinPending", "structjs_fetch_request.html#a5a83f41e8e44bc592a4e6e1a34127e68", null ],
     [ "MinAckPending", "structjs_fetch_request.html#ab9ef4230eca62471d84bd907e6aec8c9", null ],
     [ "ID", "structjs_fetch_request.html#a14214f0e033e75b3ee0f8de634f5a553", null ],
-    [ "Group", "structjs_fetch_request.html#a298e98d26850e1105833689c280e4f5e", null ]
+    [ "Group", "structjs_fetch_request.html#a298e98d26850e1105833689c280e4f5e", null ],
+    [ "Priority", "structjs_fetch_request.html#a67f65b0f03b649bc71ccbb43e7240867", null ]
 ];

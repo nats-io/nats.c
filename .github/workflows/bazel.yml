@@ -1,0 +1,60 @@
+name: Bazel
+
+on:
+  pull_request:
+  push:
+    branches: [main, "release_*"]
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Check Bazel formatting
+        run: |
+          curl --fail --location --output /tmp/buildifier https://github.com/bazelbuild/buildtools/releases/download/v10.0.1/buildifier-linux-amd64
+          echo 'e0ea28e2d639347724435ebafe0531fd764fbf20eec6a23000c81edd0d58e51d  /tmp/buildifier' | sha256sum --check
+          chmod +x /tmp/buildifier
+          /tmp/buildifier -mode=check -lint=warn BUILD.bazel MODULE.bazel test/bcr/BUILD.bazel test/bcr/MODULE.bazel
+      - name: Check release packaging
+        run: python3 tools/test_bazel_release.py
+
+  consumer:
+    name: ${{ matrix.os }} / Bazel ${{ matrix.bazel }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15-intel, macos-15, windows-latest]
+        bazel: [7.x, 8.x, 9.x]
+    env:
+      USE_BAZEL_VERSION: ${{ matrix.bazel }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.bazel }}
+          repository-cache: true
+      - name: Build libraries
+        run: bazel build //:cnats //:cnats_shared
+      - name: Test external consumers
+        working-directory: test/bcr
+        run: bazel test --test_output=errors //...
+      - name: Check shared exports and OpenSSL linkage
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          python3 tools/bazel_exports.py bazel-bin/libcnats.a bazel-bin/libcnats.${{ runner.os == 'macOS' && 'dylib' || 'so' }}
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            dependencies=$(readelf -d bazel-bin/libcnats.so)
+          else
+            dependencies=$(otool -L bazel-bin/libcnats.dylib)
+          fi
+          if grep -Eq 'lib(ssl|crypto)[.0-9]*\.(so|dylib)' <<< "$dependencies"; then
+            echo 'Unexpected OpenSSL shared-library dependency'
+            exit 1
+          fi

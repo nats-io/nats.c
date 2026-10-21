@@ -5864,10 +5864,11 @@ natsConnection_Sign(natsConnection *nc,
  * return the #NATS_NO_SERVER_SUPPORT error.
  *
  * @see natsConnection_GetLocalIPAndPort to get the local IP and port instead.
+ * @see natsConnection_GetRemoteIPAndPort to get the remote (server) IP and port instead.
  *
  * @param nc the pointer to the #natsConnection object.
  * @param ip the memory location where to store the client's IP string.
- * The user is responsible from freeing this memory.
+ * The user is responsible for freeing this memory.
  */
 NATS_EXTERN natsStatus
 natsConnection_GetClientIP(natsConnection *nc, char **ip);
@@ -5923,12 +5924,12 @@ natsConnection_HasHeaderSupport(natsConnection *nc);
  *
  * @param nc the pointer of the #natsConnection object.
  * @param ip the memory location where to store the local IP string.
- * The user is responsible from freeing this memory.
+ * The user is responsible for freeing this memory.
  * @param port the memory location where to store the local port.
  *
  * @return #NATS_OK on success.
  * @return #NATS_CONNECTION_DISCONNECTED if disconnected.
- * @return #NATS_CONNECTION_CLOSED is connection is closed.
+ * @return #NATS_CONNECTION_CLOSED if connection is closed.
  * @return #NATS_SYS_ERROR if a system error getting the IP and port occurred.
  * @return #NATS_NO_MEMORY if the library was unable to allocate memory for the returned IP string.
  */
@@ -5950,12 +5951,12 @@ natsConnection_GetLocalIPAndPort(natsConnection *nc, char **ip, int *port);
  *
  * @param nc the pointer of the #natsConnection object.
  * @param ip the memory location where to store the remote IP string.
- * The user is responsible from freeing this memory.
+ * The user is responsible for freeing this memory.
  * @param port the memory location where to store the remote port.
  *
  * @return #NATS_OK on success.
  * @return #NATS_CONNECTION_DISCONNECTED if disconnected.
- * @return #NATS_CONNECTION_CLOSED is connection is closed.
+ * @return #NATS_CONNECTION_CLOSED if connection is closed.
  * @return #NATS_SYS_ERROR if a system error getting the IP and port occurred.
  * @return #NATS_NO_MEMORY if the library was unable to allocate memory for the returned IP string.
  */

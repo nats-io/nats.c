@@ -20435,10 +20435,12 @@ void test_GetLocalAndRemoteIPAndPort(void)
     test("Get Remote IP and Port - no conn: ");
     s = natsConnection_GetRemoteIPAndPort(NULL, &ip, &port);
     testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
 
     test("Get Remote IP and Port - no ip loc: ");
     s = natsConnection_GetRemoteIPAndPort(nc, NULL, &port);
     testCond(s == NATS_INVALID_ARG);
+    nats_clearLastError();
 
     test("Get Remote IP and Port - no port loc: ");
     s = natsConnection_GetRemoteIPAndPort(nc, &ip, NULL);
@@ -20471,6 +20473,7 @@ void test_GetLocalAndRemoteIPAndPort(void)
     test("Get Local IP and Port while disconnected: ");
     s = natsConnection_GetLocalIPAndPort(nc, &ip, &port);
     testCond(s == NATS_CONNECTION_DISCONNECTED);
+    nats_clearLastError();
 
     test("Get Remote IP and Port while disconnected: ");
     s = natsConnection_GetRemoteIPAndPort(nc, &ip, &port);
@@ -20482,6 +20485,7 @@ void test_GetLocalAndRemoteIPAndPort(void)
     test("Get Local IP and Port with closed connection: ");
     s = natsConnection_GetLocalIPAndPort(nc, &ip, &port);
     testCond(s == NATS_CONNECTION_CLOSED);
+    nats_clearLastError();
 
     test("Get Remote IP and Port with closed connection: ");
     s = natsConnection_GetRemoteIPAndPort(nc, &ip, &port);

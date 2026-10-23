@@ -1,6 +1,16 @@
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
 
+# Development tooling reads these files without adding its dependencies here.
+exports_files(
+    [
+        "cnats.lds",
+        "cnats.macos.exports",
+        "src/nats.h",
+    ],
+    visibility = ["//tools:__pkg__"],
+)
+
 _PUBLIC_HDRS = [
     "src/nats.h",
     "src/status.h",
@@ -137,7 +147,7 @@ cc_library(
 )
 
 # Export only public API declarations implemented by the default-feature build.
-# Refresh these files with tools/bazel_exports.py --update after API changes.
+# Refresh these files with bazel run //tools:update_exports after API changes.
 # Keeping them checked in avoids host-tool dependencies during normal builds.
 
 cc_shared_library(

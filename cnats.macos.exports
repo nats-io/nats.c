@@ -181,6 +181,7 @@ _natsConnection_GetLocalIPAndPort
 _natsConnection_GetMaxPayload
 _natsConnection_GetName
 _natsConnection_GetRTT
+_natsConnection_GetRemoteIPAndPort
 _natsConnection_GetServers
 _natsConnection_GetStats
 _natsConnection_HasHeaderSupport

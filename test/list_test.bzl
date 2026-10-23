@@ -70,7 +70,7 @@ ALL_TESTS = [
     "GetClientIP",
     "GetDiscoveredServers",
     "GetLastError",
-    "GetLocalIPAndPort",
+    "GetLocalAndRemoteIPAndPort",
     "GetName",
     "GetRTT",
     "GetServers",

@@ -23,11 +23,11 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def symbols(path, shared=False):
+def symbols(path, shared=False, nm="nm"):
     if sys.platform == "darwin":
-        command = ["nm", "-gU", str(path)]
+        command = [nm, "-gU", str(path)]
     else:
-        command = ["nm", "--defined-only", "-g"]
+        command = [nm, "--defined-only", "-g"]
         if shared:
             command.append("-D")
         command.append(str(path))
@@ -44,29 +44,39 @@ def symbols(path, shared=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--update", action="store_true", help="rewrite both checked-in export lists")
+    parser.add_argument("--header", type=Path, default=ROOT / "src/nats.h", help="public API header")
+    parser.add_argument("--nm", default="nm", help="symbol tool from the C/C++ toolchain")
+    parser.add_argument("--linux-output", type=Path, help="write the Linux list to this build output")
+    parser.add_argument("--macos-output", type=Path, help="write the macOS list to this build output")
     parser.add_argument("archive", type=Path, help="Bazel-built libcnats.a")
     parser.add_argument("shared", type=Path, nargs="?", help="libcnats.so or libcnats.dylib to verify")
     args = parser.parse_args()
-    if not args.update and args.shared is None:
-        parser.error("provide a shared library to verify, or use --update")
+    generate = args.linux_output is not None or args.macos_output is not None
+    if generate and (args.linux_output is None or args.macos_output is None):
+        parser.error("provide both --linux-output and --macos-output")
+    if generate and args.update:
+        parser.error("--update cannot be combined with build output paths")
+    if not generate and not args.update and args.shared is None:
+        parser.error("provide a shared library to verify, use --update, or provide build output paths")
 
-    header = (ROOT / "src/nats.h").read_text()
+    header = args.header.read_text(encoding="utf-8")
     header = re.sub(r"/\*.*?\*/|//[^\n]*", "", header, flags=re.S)
     declared = set(re.findall(r"^NATS_EXTERN\s+[^;]+?\b(\w+)\s*\(", header, re.M))
-    expected = declared & symbols(args.archive)
+    expected = declared & symbols(args.archive, nm=args.nm)
     if not expected:
         raise SystemExit("No public API symbols found in the archive")
     names = sorted(expected)
     linux = "{\n    global:\n" + "".join(f"        {name};\n" for name in names) + "    local: *;\n};\n"
     macos = "".join(f"_{name}\n" for name in names)
-    for name, contents in [("cnats.lds", linux), ("cnats.macos.exports", macos)]:
-        path = ROOT / name
-        if args.update:
-            path.write_text(contents)
-        elif path.read_text() != contents:
-            raise SystemExit(f"{name} is stale; run tools/bazel_exports.py --update {args.archive}")
+    paths = (args.linux_output, args.macos_output) if generate else (ROOT / "cnats.lds", ROOT / "cnats.macos.exports")
+    for path, contents in zip(paths, (linux, macos)):
+        if args.update or generate:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(contents, encoding="utf-8", newline="\n")
+        elif path.read_text(encoding="utf-8") != contents:
+            raise SystemExit(f"{path.name} is stale; run bazel run //tools:update_exports")
     if args.shared is not None:
-        actual = symbols(args.shared, shared=True)
+        actual = symbols(args.shared, shared=True, nm=args.nm)
         if actual != expected:
             raise SystemExit(f"Shared API mismatch: missing={sorted(expected - actual)}, unexpected={sorted(actual - expected)}")
     print(f"Verified {len(expected)} public API symbols")

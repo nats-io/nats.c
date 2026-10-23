@@ -159,19 +159,25 @@ versions. Shared cnats embeds OpenSSL; only the public cnats API is exported.
 ## Maintain shared-library exports
 
 Linux and macOS use checked-in export lists, so ordinary builds do not need
-tools that scan symbols. After adding or removing public APIs, build the static
-library and refresh both lists on Linux or macOS:
+tools that scan symbols. After adding or removing public APIs, refresh both lists
+on Linux or macOS:
 
 ```sh
-bazel build //:cnats
-python3 tools/bazel_exports.py --update bazel-bin/libcnats.a
+bazel run //tools:update_exports
+bazel test //tools:update_exports_tests
 bazel build //:cnats_shared
 python3 tools/bazel_exports.py bazel-bin/libcnats.a bazel-bin/libcnats.so
 ```
 
-Use `libcnats.dylib` for the last command on macOS. The tool intersects
-`NATS_EXTERN` declarations with implemented symbols from the default static
-build, then verifies the shared library exports exactly that API. CI also
+The update target builds the static library, intersects `NATS_EXTERN`
+declarations with its implemented symbols using the configured C/C++ toolchain's
+`nm`, and writes both files through `write_source_files`. The generated drift
+tests run as part of `bazel test //...` and report the update command if either
+file is stale. These development targets are incompatible with Windows, which
+uses `__declspec(dllexport)` instead.
+
+Use `libcnats.dylib` for the last command on macOS. The existing verification
+command checks that the shared library exports exactly the public API. CI also
 checks that the shared library has no OpenSSL shared-library dependency.
 
 ## Releases and BCR attestations

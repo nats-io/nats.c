@@ -1,0 +1,53 @@
+load("@bazel_lib//lib:run_binary.bzl", "run_binary")
+load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
+load("@rules_python//python:py_binary.bzl", "py_binary")
+
+_UNIX_COMPATIBILITY = select({
+    "@platforms//os:windows": ["@platforms//:incompatible"],
+    "//conditions:default": [],
+})
+
+py_binary(
+    name = "bazel_exports",
+    testonly = True,
+    srcs = ["bazel_exports.py"],
+    legacy_create_init = False,
+    target_compatible_with = _UNIX_COMPATIBILITY,
+)
+
+run_binary(
+    name = "generated_exports",
+    testonly = True,
+    srcs = [
+        "//:cnats",
+        "//:src/nats.h",
+        "@rules_cc//cc:current_cc_toolchain",
+    ],
+    outs = [
+        "generated/cnats.lds",
+        "generated/cnats.macos.exports",
+    ],
+    args = [
+        "--header=$(execpath //:src/nats.h)",
+        "--nm='$(NM)'",
+        "--linux-output=$(execpath generated/cnats.lds)",
+        "--macos-output=$(execpath generated/cnats.macos.exports)",
+        "$(execpath //:cnats)",
+    ],
+    target_compatible_with = _UNIX_COMPATIBILITY,
+    tool = ":bazel_exports",
+    toolchains = ["@rules_cc//cc:current_cc_toolchain"],
+    use_default_shell_env = True,
+)
+
+write_source_files(
+    name = "update_exports",
+    testonly = True,
+    # The destination files are in the parent package; keep the diff tests enabled.
+    check_that_out_file_exists = False,
+    files = {
+        "//:cnats.lds": ":generated/cnats.lds",
+        "//:cnats.macos.exports": ":generated/cnats.macos.exports",
+    },
+    target_compatible_with = _UNIX_COMPATIBILITY,
+)

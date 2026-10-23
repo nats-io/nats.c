@@ -183,6 +183,7 @@
         natsConnection_GetMaxPayload;
         natsConnection_GetName;
         natsConnection_GetRTT;
+        natsConnection_GetRemoteIPAndPort;
         natsConnection_GetServers;
         natsConnection_GetStats;
         natsConnection_HasHeaderSupport;

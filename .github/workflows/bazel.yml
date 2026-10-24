@@ -40,10 +40,10 @@ jobs:
           disk-cache: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.bazel }}
           repository-cache: true
       - name: Test libraries and regressions
-        run: bazel test --test_output=errors //...
+        run: bazel test --test_output=errors ${{ matrix.os == 'macos-15-intel' && '--copt=-isystem/usr/local/include' || '' }} //...
       - name: Test external consumers
         working-directory: test/bcr
-        run: bazel test --test_output=errors //...
+        run: bazel test --test_output=errors ${{ matrix.os == 'macos-15-intel' && '--copt=-isystem/usr/local/include' || '' }} //...
       - name: Check shared exports and OpenSSL linkage
         if: runner.os != 'Windows'
         shell: bash
@@ -75,7 +75,7 @@ jobs:
           disk-cache: ${{ runner.os }}-${{ runner.arch }}-integration
           repository-cache: true
       - name: Run server integration tests
-        run: bazel test --test_output=errors //test:integration
+        run: bazel test --test_output=errors ${{ matrix.os == 'macos-15-intel' && '--copt=-isystem/usr/local/include' || '' }} //test:integration
       - name: Collect test results
         if: failure()
         shell: bash

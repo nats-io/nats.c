@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/bazel-contrib/rules_multitool/v1.11.1/lockfile.schema.json",
+  "nats-server": {
+    "binaries": [
+      {
+        "kind": "archive",
+        "url": "https://github.com/nats-io/nats-server/releases/download/v2.15.1/nats-server-v2.15.1-linux-amd64.tar.gz",
+        "sha256": "bf5edc7b1ce98e885c368cb43a886eb148dc5d0551d99f3cf6141fb5e1954c70",
+        "file": "nats-server-v2.15.1-linux-amd64/nats-server",
+        "os": "linux",
+        "cpu": "x86_64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/nats-io/nats-server/releases/download/v2.15.1/nats-server-v2.15.1-darwin-amd64.tar.gz",
+        "sha256": "3cba5976a4fbd022669d3401cab4147faeb2b4c079712c882edb9ae4e52feb06",
+        "file": "nats-server-v2.15.1-darwin-amd64/nats-server",
+        "os": "macos",
+        "cpu": "x86_64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/nats-io/nats-server/releases/download/v2.15.1/nats-server-v2.15.1-darwin-arm64.tar.gz",
+        "sha256": "ed0fe39222ec2e317c4d0e1a9cdc16c63ec523d94f9355d24a902a4db2655ffd",
+        "file": "nats-server-v2.15.1-darwin-arm64/nats-server",
+        "os": "macos",
+        "cpu": "arm64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/nats-io/nats-server/releases/download/v2.15.1/nats-server-v2.15.1-windows-amd64.zip",
+        "sha256": "4f7edfa376750b2720463bd22766ed469a5f13f378a643097866fcd953cbf7e3",
+        "file": "nats-server-v2.15.1-windows-amd64/nats-server.exe",
+        "os": "windows",
+        "cpu": "x86_64"
+      }
+    ]
+  }
+}

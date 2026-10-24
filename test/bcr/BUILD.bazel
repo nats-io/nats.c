@@ -1,0 +1,18 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_test(
+    name = "c_smoke_test",
+    size = "small",
+    srcs = ["c_smoke_test.c"],
+    linkstatic = True,
+    deps = ["@cnats"],
+)
+
+cc_test(
+    name = "c_shared_smoke_test",
+    size = "small",
+    srcs = ["c_smoke_test.c"],
+    dynamic_deps = ["@cnats//:cnats_shared"],
+    linkstatic = True,
+    deps = ["@cnats//:cnats_shared_headers"],
+)

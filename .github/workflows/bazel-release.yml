@@ -1,0 +1,90 @@
+name: Bazel release and BCR attestations
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing published release tag to retry (must contain Bazel release support)
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: bazel-release-${{ github.event.release.tag_name || inputs.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+    steps:
+      - name: Check publishing configuration
+        env:
+          REGISTRY_FORK: ${{ vars.BCR_REGISTRY_FORK }}
+          PUBLISH_TOKEN: ${{ secrets.BCR_PUBLISH_TOKEN }}
+        run: |
+          if [[ -z "$REGISTRY_FORK" || -z "$PUBLISH_TOKEN" ]]; then
+            echo '::error::Set BCR_REGISTRY_FORK and BCR_PUBLISH_TOKEN as described in doc/bazel.md.'
+            exit 1
+          fi
+      - name: Read existing release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag_name }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9][A-Za-z0-9.-]*)?$ ]]; then
+            echo '::error::Expected a version tag such as v3.15.0 or v3.15.0-beta.'
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" != "refs/tags/$RELEASE_TAG" ]]; then
+            echo '::error::Dispatch this workflow at the release tag so attestations identify that source ref.'
+            exit 1
+          fi
+          gh release view "$RELEASE_TAG" --json body,isDraft,isPrerelease,tagName > release.json
+          jq --exit-status '.isDraft == false' release.json
+          mkdir cnats-release-metadata
+          jq --raw-output '.body // ""' release.json > cnats-release-metadata/release-notes.md
+          printf 'tag=%s\n' "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          printf 'prerelease=%s\n' "$(jq --raw-output '.isPrerelease' release.json)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cnats-release-metadata
+          path: cnats-release-metadata/release-notes.md
+
+  archive:
+    needs: prepare
+    uses: bazel-contrib/.github/.github/workflows/release_ruleset.yaml@v7.7.0 # 1d798ff015ed0696433e01e2c3ccbb2abefadad7
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    with:
+      tag_name: ${{ needs.prepare.outputs.tag }}
+      prerelease: ${{ needs.prepare.outputs.prerelease == 'true' }}
+      generate_release_notes: false
+      release_files: build-bazel-release/cnats-*.tar.gz
+
+  publish:
+    needs: [prepare, archive]
+    uses: bazel-contrib/publish-to-bcr/.github/workflows/publish.yaml@v1.5.1 # fa5bb3803983c621c90721669ee7857afe139836
+    permissions:
+      contents: write
+      actions: read
+      id-token: write
+      attestations: write
+    with:
+      tag_name: ${{ needs.prepare.outputs.tag }}
+      registry_fork: ${{ vars.BCR_REGISTRY_FORK }}
+      attest: true
+      draft: true
+    secrets:
+      publish_token: ${{ secrets.BCR_PUBLISH_TOKEN }}

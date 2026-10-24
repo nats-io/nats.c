@@ -30,5 +30,10 @@ test/conf_*
 out/
 .cache/
 
+# Bazel output symlinks and consumer-module lockfile
+/bazel-*
+/test/bcr/bazel-*
+/test/bcr/MODULE.bazel.lock
+
 # Mac
 .DS_Store

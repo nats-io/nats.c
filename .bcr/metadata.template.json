@@ -1,0 +1,14 @@
+{
+    "homepage": "https://github.com/nats-io/nats.c",
+    "maintainers": [
+        {
+            "email": "dragoscarp@gmail.com",
+            "github": "dcarp",
+            "github_user_id": 1738497,
+            "name": "Dragos Carp"
+        }
+    ],
+    "repository": [
+        "github:nats-io/nats.c"
+    ]
+}

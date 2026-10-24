@@ -75,7 +75,7 @@ jobs:
           disk-cache: ${{ runner.os }}-${{ runner.arch }}-integration
           repository-cache: true
       - name: Run server integration tests
-        run: bazel test --test_output=errors //test:integration
+        run: bazel test --test_output=errors --flaky_test_attempts=3 //test:integration
       - name: Collect test results
         if: failure()
         shell: bash

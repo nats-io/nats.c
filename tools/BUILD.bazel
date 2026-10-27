@@ -29,7 +29,7 @@ run_binary(
     ],
     args = [
         "--header=$(execpath //:src/nats.h)",
-        "--nm='$(NM)'",
+        "--nm=$(NM)",
         "--linux-output=$(execpath generated/cnats.lds)",
         "--macos-output=$(execpath generated/cnats.macos.exports)",
         "$(execpath //:cnats)",

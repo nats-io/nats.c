@@ -49,6 +49,7 @@ var status_8h =
       [ "NATS_MISSED_HEARTBEAT", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a37d80c8232775339a32805fe93e0ea7f", null ],
       [ "NATS_LIMIT_REACHED", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80ac1eb33007d16930e74c2fa3b22761635", null ],
       [ "NATS_PIN_ID_MISMATCH", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80aec45b93e3dd0ca1b1bc878730ea81c31", null ],
+      [ "NATS_INVALID_CONFIG", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80aa8515acb3a93eb71cd051931011dbc9a", null ],
       [ "NATS_MAX_STATUS_VALUE", "status_8h.html#a36c934157b663b7b5fb5d6609c897c80a57e2c2023e6a7730b9e960ddebd73f09", null ]
     ] ],
     [ "jsErrCode", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70", [
@@ -215,6 +216,13 @@ var status_8h =
       [ "JSStreamWrongLastSequenceConstantErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ab9865b2405db4747f002f545667ad7ec", null ],
       [ "JSMessageTTLInvalidErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a85d46a574d4a3a1a7d63bf0c891724ba", null ],
       [ "JSMessageTTLDisabledErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a0ff642cd118d8fdde5da78bb06fee48d", null ],
-      [ "JSStreamTooManyRequestsErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a1c6f821ff093a7d00615a3625cbd898c", null ]
+      [ "JSStreamTooManyRequestsErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a1c6f821ff093a7d00615a3625cbd898c", null ],
+      [ "JSBatchPublishNotEnabledErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ad542535967cb74985ffa6c9055a3ef84", null ],
+      [ "JSBatchPublishIncompleteErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70af1df65d177c1df8bcf7818096f27c1d5", null ],
+      [ "JSBatchPublishInvalidIDErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a1c03161c0f3bbdc760d2ca69a9300b5e", null ],
+      [ "JSBatchPublishSequenceMissingErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70aa0832767c084547cecc414cb6d5051e5", null ],
+      [ "JSBatchPublishSequenceExceedsLimitErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a8b79671c1b41cb32094d39de453d5e75", null ],
+      [ "JSBatchPublishUnsupportedHeaderErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70a3b9417d8039b90e9ba7f380c60f200b8", null ],
+      [ "JSBatchPublishDuplicateMessageIDErr", "status_8h.html#a10731415ffcd3e2330df10c4d5fd3d70ac4a03c6c1d9461ef1010fd41da718022", null ]
     ] ]
 ];

@@ -518,6 +518,9 @@ typedef struct __jsSub
     natsTimer           *hbTimer;
 
     char                *cmeta;
+    // For ordered consumers, the stream sequence to resume from. If 0,
+    // the original deliver policy is used. Not reset if the stream is
+    // recreated.
     uint64_t            sseq;
     uint64_t            dseq;
     // Skip sequence mismatch notification. This is used for
@@ -554,6 +557,9 @@ typedef struct __jsSub
 
     // When resetting an OrderedConsumer, need the original configuration.
     jsConsumerConfig    *ocCfg;
+    // Number of times the OrderedConsumer was recreated, used to derive the
+    // name of the new consumer if the original configuration has one.
+    int                 ocSerial;
 
 } jsSub;
 
@@ -1101,7 +1107,7 @@ natsStatus
 jsSub_checkOrderedMsg(natsSubscription *sub, natsMsg *msg, bool *reset);
 
 natsStatus
-jsSub_resetOrderedConsumer(natsSubscription *sub, uint64_t sseq);
+jsSub_resetOrderedConsumer(natsSubscription *sub);
 
 bool
 natsMsg_isJSCtrl(natsMsg *msg, int *ctrlType);

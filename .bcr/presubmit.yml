@@ -1,0 +1,25 @@
+matrix:
+  platform: [ubuntu2204, macos, macos_arm64, windows]
+  bazel: [7.x, 8.x, 9.x]
+tasks:
+  verify_targets:
+    name: Build cnats as a dependency
+    platform: ${{ platform }}
+    bazel: ${{ bazel }}
+    build_targets:
+      - "@cnats//:cnats"
+      - "@cnats//:cnats_shared"
+
+bcr_test_module:
+  module_path: test/bcr
+  matrix:
+    platform: [ubuntu2204, macos, macos_arm64, windows]
+    bazel: [7.x, 8.x, 9.x]
+  tasks:
+    smoke_tests:
+      name: Test static and shared cnats consumers
+      platform: ${{ platform }}
+      bazel: ${{ bazel }}
+      test_targets:
+        - "//:c_smoke_test"
+        - "//:c_shared_smoke_test"

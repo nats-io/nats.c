@@ -1694,7 +1694,7 @@ nats_EncodeTimeUTC(char *buf, size_t bufLen, int64_t timeUTC)
         char nsBuf[15];
         int i, nd;
 
-        nd = snprintf(nsBuf, sizeof(nsBuf), ".%" PRId64, ns);
+        nd = snprintf(nsBuf, sizeof(nsBuf), ".%09" PRId64, ns);
         for (; (nd > 0) && (nsBuf[nd-1] == '0'); )
             nd--;
 

@@ -240,7 +240,14 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, in
 
     for (i=0; (s == NATS_OK) && (i<urlCount); i++)
     {
-        s = natsStrHash_Set(tmp, urls[i], false, (void*)1, NULL);
+        char *entry = urls[i];
+        char *at    = strrchr(entry, '@');
+
+        // Never use user info from a server-supplied entry: the
+        // credentials the user configured apply to discovered servers.
+        if (at != NULL)
+            entry = at + 1;
+        s = natsStrHash_Set(tmp, entry, false, (void*)1, NULL);
     }
 
     // Walk the pool and removed the implicit servers that are no longer in the

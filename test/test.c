@@ -8458,6 +8458,34 @@ void test_AsyncINFO(void)
     nc = NULL;
     nats_clearLastError();
 
+    test("User info in an entry is dropped: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
+    if (s == NATS_OK)
+    {
+        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"mallory:stolen@localhost:5222\",\"tok@localhost:6222\",\"mallory:stolen@localhost:4222\"]}\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    }
+    if (s == NATS_OK)
+    {
+        natsMutex_Lock(nc->mu);
+        // localhost:4222 (the default URL) is not added a second time.
+        if (nc->srvPool->size != 3)
+            s = NATS_ERR;
+        for (i=0; (s == NATS_OK) && (i<nc->srvPool->size); i++)
+        {
+            natsUrl *u = nc->srvPool->srvrs[i]->url;
+
+            if ((u->username != NULL) || (u->password != NULL))
+                s = NATS_ERR;
+        }
+        natsMutex_Unlock(nc->mu);
+    }
+    testCond(s == NATS_OK);
+    natsConnection_Destroy(nc);
+    nc = NULL;
+
     // Check that new URLs are added at random places in the pool
     if (s == NATS_OK)
     {

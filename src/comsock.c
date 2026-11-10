@@ -246,7 +246,7 @@ natsSock_ConnectTcp(natsSockCtx *ctx, const char *phost, int port)
             count++;
             numIPs++;
         }
-        natsSock_ShuffleIPs(ctx, tmpStorage, sizeof(tmpStorage), &(servInfos[numServInfo]), count);
+        natsSock_ShuffleIPs(ctx, tmpStorage, (int) (sizeof(tmpStorage) / sizeof(tmpStorage[0])), &(servInfos[numServInfo]), count);
         numServInfo++;
     }
     // If we got a getaddrinfo() and there is no servInfos to try to connect to

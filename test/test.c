@@ -6321,6 +6321,7 @@ listOrder(struct addrinfo *head, bool ordered)
 void test_natsSock_ShuffleIPs(void)
 {
     struct addrinfo *tmp[10];
+    int             tmpSize = (int) (sizeof(tmp) / sizeof(tmp[0]));
     struct addrinfo *head = NULL;
     struct addrinfo *tail = NULL;
     struct addrinfo *list = NULL;
@@ -6345,31 +6346,31 @@ void test_natsSock_ShuffleIPs(void)
     natsSock_Init(&ctx);
     ctx.noRandomize = true;
     list = head;
-    natsSock_ShuffleIPs(&ctx, tmp, sizeof(tmp), &list, 10);
+    natsSock_ShuffleIPs(&ctx, tmp, tmpSize, &list, 10);
     testCond((list == head) && listOrder(list, true));
 
     test("Shuffling bad args 2: ");
     natsSock_Init(&ctx);
     list = head;
-    natsSock_ShuffleIPs(&ctx, tmp, sizeof(tmp), NULL, 10);
+    natsSock_ShuffleIPs(&ctx, tmp, tmpSize, NULL, 10);
     testCond((list == head) && listOrder(list, true));
 
     test("Shuffling bad args 1: ");
     natsSock_Init(&ctx);
     list = head;
-    natsSock_ShuffleIPs(&ctx, tmp, sizeof(tmp), &list, 0);
+    natsSock_ShuffleIPs(&ctx, tmp, tmpSize, &list, 0);
     testCond((list == head) && listOrder(list, true));
 
     test("No shuffling count==1: ");
     natsSock_Init(&ctx);
     list = head;
-    natsSock_ShuffleIPs(&ctx, tmp, sizeof(tmp), &list, 1);
+    natsSock_ShuffleIPs(&ctx, tmp, tmpSize, &list, 1);
     testCond((list == head) && listOrder(list, true));
 
     test("Shuffling: ");
     natsSock_Init(&ctx);
     list = head;
-    natsSock_ShuffleIPs(&ctx, tmp, sizeof(tmp), &list, 10);
+    natsSock_ShuffleIPs(&ctx, tmp, tmpSize, &list, 10);
     testCond(listOrder(list, false));
 
     // Reorder the list, and we will try with a tmp buffer too small,
@@ -8442,6 +8443,20 @@ void test_AsyncINFO(void)
 
     natsConnection_Destroy(nc);
     nc = NULL;
+
+    test("Entries without a port do not crash: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsConn_create(&nc, opts));
+    IFOK(s, natsParser_Create(&(nc->ps)));
+    if (s == NATS_OK)
+    {
+        snprintf(buf, sizeof(buf), "%s", "INFO {\"connect_urls\":[\"127.0.0.1\",\"[::1]\",\"localhost\"]}\r\n");
+        s = natsParser_Parse(nc, buf, (int)strlen(buf));
+    }
+    testCond((s == NATS_OK) && (nc->ps->state == OP_START));
+    natsConnection_Destroy(nc);
+    nc = NULL;
+    nats_clearLastError();
 
     // Check that new URLs are added at random places in the pool
     if (s == NATS_OK)

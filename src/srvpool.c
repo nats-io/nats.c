@@ -295,11 +295,13 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, in
 
             // Consider localhost:<port>, 127.0.0.1:<port> and [::1]:<port>
             // all the same.
+            // An entry without a port has no ':' and is handled as is.
             sport = strrchr(curl, ':');
-            portPos = (int) (sport - curl);
-            if (((nats_strcasestr(curl, "localhost") == curl) && (portPos == 9))
+            portPos = (sport != NULL ? (int) (sport - curl) : 0);
+            if ((sport != NULL)
+                && (((nats_strcasestr(curl, "localhost") == curl) && (portPos == 9))
                     || (strncmp(curl, "127.0.0.1", portPos) == 0)
-                    || (strncmp(curl, "[::1]", portPos) == 0))
+                    || (strncmp(curl, "[::1]", portPos) == 0)))
             {
                 isLH = ((curl[0] == 'l') || (curl[0] == 'L'));
 

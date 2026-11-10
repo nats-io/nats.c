@@ -1,0 +1,6 @@
+{
+    "url": "https://github.com/{OWNER}/{REPO}/releases/download/{TAG}/cnats-{VERSION}.tar.gz",
+    "integrity": "",
+    "strip_prefix": "cnats-{VERSION}",
+    "docs_url": "https://github.com/{OWNER}/{REPO}/blob/{TAG}/doc/bazel.md"
+}

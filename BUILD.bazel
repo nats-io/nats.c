@@ -1,0 +1,174 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
+
+# Development tooling reads these files without adding its dependencies here.
+exports_files(
+    [
+        "cnats.lds",
+        "cnats.macos.exports",
+        "src/nats.h",
+    ],
+    visibility = ["//tools:__pkg__"],
+)
+
+_PUBLIC_HDRS = [
+    "src/nats.h",
+    "src/status.h",
+    "src/version.h",
+]
+
+_COMMON_DEFINES = [
+    "NATS_HAS_TLS",
+    "NATS_FORCE_HOST_VERIFICATION",
+    "_REENTRANT",
+] + select({
+    "@platforms//os:linux": [
+        "LINUX",
+        "_GNU_SOURCE",
+    ],
+    "@platforms//os:macos": ["DARWIN"],
+    "@platforms//os:windows": ["_WIN32"],
+})
+
+# Mirrors src/CMakeLists.txt: common sources, glib, and one platform backend.
+# Streaming (src/stan) and optional libsodium/adapters are not enabled.
+_COMMON_ATTRS = dict(
+    srcs = glob(
+        [
+            "src/*.c",
+            "src/*.h",
+            "src/glib/*.c",
+            "src/glib/*.h",
+            "src/include/*.h",
+        ],
+        exclude = [
+            "src/nats.h",
+            "src/status.h",
+            "src/version.h",
+        ],
+    ) + select({
+        "@platforms//os:windows": glob(["src/win/*.c"]),
+        "//conditions:default": glob(["src/unix/*.c"]),
+    }),
+    hdrs = _PUBLIC_HDRS,
+    copts = select({
+        "@platforms//os:windows": [
+            "/std:c11",
+            "/W4",
+            "/wd4100",
+            "/wd4127",
+            "/wd4130",
+            "/wd4200",
+        ],
+        "//conditions:default": [
+            "-std=c99",
+            "-pthread",
+            "-Wno-unused-parameter",
+            "-Wno-unused-function",
+        ],
+    }),
+    include_prefix = "nats",
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-pthread",
+            "-lrt",
+        ],
+        "@platforms//os:macos": ["-pthread"],
+        "@platforms//os:windows": [
+            "-DEFAULTLIB:advapi32.lib",
+            "-DEFAULTLIB:crypt32.lib",
+            "-DEFAULTLIB:user32.lib",
+            "-DEFAULTLIB:ws2_32.lib",
+        ],
+    }),
+    strip_include_prefix = "src",
+    deps = [
+        "@openssl//:crypto",
+        "@openssl//:ssl",
+    ],
+)
+
+# Flat includes and private structs are available only to the upstream tests.
+cc_library(
+    name = "cnats_test_headers",
+    testonly = True,
+    hdrs = glob([
+        "src/*.h",
+        "src/glib/*.h",
+        "src/include/*.h",
+    ]),
+    defines = _COMMON_DEFINES,
+    includes = ["src"],
+    visibility = ["//test:__pkg__"],
+)
+
+cc_library(
+    name = "cnats",
+    srcs = _COMMON_ATTRS["srcs"],
+    hdrs = _COMMON_ATTRS["hdrs"],
+    copts = _COMMON_ATTRS["copts"],
+    include_prefix = _COMMON_ATTRS["include_prefix"],
+    linkopts = _COMMON_ATTRS["linkopts"],
+    linkstatic = True,
+    # Disables the Windows DLL lifecycle hooks for static consumers.
+    local_defines = _COMMON_DEFINES + ["NATS_STATIC"],
+    strip_include_prefix = _COMMON_ATTRS["strip_include_prefix"],
+    visibility = ["//visibility:public"],
+    deps = _COMMON_ATTRS["deps"],
+)
+
+cc_library(
+    name = "cnats_shared_objects",
+    srcs = _COMMON_ATTRS["srcs"],
+    hdrs = _COMMON_ATTRS["hdrs"],
+    copts = _COMMON_ATTRS["copts"],
+    include_prefix = _COMMON_ATTRS["include_prefix"],
+    linkopts = _COMMON_ATTRS["linkopts"],
+    linkstatic = True,
+    # Export declarations only while building the DLL, never in consumers.
+    local_defines = _COMMON_DEFINES + select({
+        "@platforms//os:windows": ["nats_EXPORTS"],
+        "//conditions:default": [],
+    }),
+    strip_include_prefix = _COMMON_ATTRS["strip_include_prefix"],
+    deps = _COMMON_ATTRS["deps"],
+)
+
+cc_library(
+    name = "cnats_shared_headers",
+    hdrs = _PUBLIC_HDRS,
+    defines = select({
+        "@platforms//os:windows": ["nats_IMPORTS"],
+        "//conditions:default": [],
+    }),
+    include_prefix = "nats",
+    strip_include_prefix = "src",
+    visibility = ["//visibility:public"],
+)
+
+# Export only public API declarations implemented by the default-feature build.
+# Refresh these files with bazel run //tools:update_exports after API changes.
+# Keeping them checked in avoids host-tool dependencies during normal builds.
+
+cc_shared_library(
+    name = "cnats_shared",
+    additional_linker_inputs = select({
+        "@platforms//os:linux": ["cnats.lds"],
+        "@platforms//os:macos": ["cnats.macos.exports"],
+        "@platforms//os:windows": [],
+    }),
+    shared_lib_name = select({
+        "@platforms//os:linux": "libcnats.so",
+        "@platforms//os:macos": "libcnats.dylib",
+        "@platforms//os:windows": "cnats.dll",
+    }),
+    # OpenSSL is embedded; only the cnats public API is exported. Windows uses
+    # nats_EXPORTS above rather than automatic export of all symbols.
+    user_link_flags = select({
+        "@platforms//os:linux": ["-Wl,--version-script=$(execpath cnats.lds)"],
+        "@platforms//os:macos": ["-Wl,-exported_symbols_list,$(execpath cnats.macos.exports)"],
+        "@platforms//os:windows": [],
+    }),
+    visibility = ["//visibility:public"],
+    deps = [":cnats_shared_objects"],
+)

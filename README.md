@@ -16,6 +16,7 @@ This NATS Client implementation is heavily based on the [NATS GO Client](https:/
 
 - [Installing](#installing)
 - [Building](#building)
+	* [Building with Bazel](#building-with-bazel)
 	* [TLS Support](#tls-support)
         * [Link statically](#link-statically)
     * [Building with EXPERIMENTAL API support](#building-with-experimental-API-support)
@@ -73,8 +74,25 @@ There are several package managers with NATS C client library available. If you 
 - [conan](https://conan.io/center) The "cnats" recipe is [here](https://github.com/conan-io/conan-center-index/tree/master/recipes/cnats)
 - [Homebrew](https://github.com/Homebrew/homebrew-core) The "cnats" formula is [here](https://github.com/Homebrew/homebrew-core/blob/master/Formula/c/cnats.rb)
 - [vcpkg](https://vcpkg.io) The "cnats" port is [here](https://github.com/microsoft/vcpkg/tree/master/ports/cnats)
+- [Bazel Central Registry](https://registry.bazel.build/modules/cnats) The module is named `cnats`.
 
 ## Building
+
+### Building with Bazel
+
+The native Bazel build supports static and shared libraries on Linux, macOS, and
+Windows (MSVC), using Bazel 7.2.1 or newer with Bzlmod. It preserves the `cnats`
+targets and public header paths provided by the Bazel Central Registry.
+
+```sh
+bazel build //:cnats //:cnats_shared
+bazel test //...
+```
+
+TLS and hostname verification are enabled. See [Bazel support](doc/bazel.md) for
+consumer examples, supported features, and the release attestation process.
+
+### Building with CMake
 
 First, download the source code:
 ```

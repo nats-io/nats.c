@@ -571,24 +571,67 @@ natsConn_srvVersionAtLeast(natsConnection *nc, int major, int minor, int update)
     return ok;
 }
 
-// _processInfo is used to parse the info messages sent
-// from the server.
-// This function may update the server pool.
+// Applies the current INFO: adds its `connect_urls` to the pool if `useURLs`
+// is true, and posts the discovered servers and lame duck mode callbacks.
 static natsStatus
-_processInfo(natsConnection *nc, char *info, int len)
+_applyInfo(natsConnection *nc, bool useURLs)
 {
-    natsStatus  s     = NATS_OK;
-    nats_JSON   *json = NULL;
+    natsStatus  s                       = NATS_OK;
     bool        postDiscoveredServersCb = false;
-    bool        postLameDuckCb = false;
-
-    if (info == NULL)
-        return NATS_OK;
+    bool        postLameDuckCb          = false;
 
     natsOptions_lock(nc->opts);
     postDiscoveredServersCb = (nc->opts->discoveredServersCb != NULL);
     postLameDuckCb = (nc->opts->lameDuckCb != NULL);
     natsOptions_unlock(nc->opts);
+
+    // The array could be empty/not present on initial connect,
+    // if advertise is disabled on that server, or servers that
+    // did not include themselves in the async INFO protocol.
+    // If empty, do not remove the implicit servers from the pool.
+    if (useURLs && !nc->opts->ignoreDiscoveredServers && (nc->info.connectURLsCount > 0))
+    {
+        bool        added    = false;
+        const char  *tlsName = NULL;
+
+        // Discovered servers inherit the name the current server is verified
+        // against: its own inherited name, or else its host if not an IP.
+        if (nc->cur != NULL)
+        {
+            if (nc->cur->tlsName != NULL)
+                tlsName = (const char*) nc->cur->tlsName;
+            else if ((nc->cur->url != NULL) && !nats_HostIsIP(nc->cur->url->host))
+                tlsName = (const char*) nc->cur->url->host;
+        }
+
+        s = natsSrvPool_addNewURLs(nc->srvPool,
+                                   nc->cur ? nc->cur->url : NULL,
+                                   nc->info.connectURLs,
+                                   nc->info.connectURLsCount,
+                                   tlsName,
+                                   &added);
+        if ((s == NATS_OK) && added && !nc->initc && postDiscoveredServersCb)
+            natsAsyncCb_PostConnHandler(nc, ASYNC_DISCOVERED_SERVERS);
+    }
+    // Process the LDM callback after the above. It will cover cases where
+    // we have connect URLs and invoke discovered server callback, and case
+    // where we don't.
+    if ((s == NATS_OK) && nc->info.lameDuckMode && postLameDuckCb)
+        natsAsyncCb_PostConnHandler(nc, ASYNC_LAME_DUCK_MODE);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+// _processInfo is used to parse the info messages sent
+// from the server. See _applyInfo() to act on it.
+static natsStatus
+_processInfo(natsConnection *nc, char *info, int len)
+{
+    natsStatus  s     = NATS_OK;
+    nats_JSON   *json = NULL;
+
+    if (info == NULL)
+        return NATS_OK;
 
     _clearServerInfo(&(nc->info));
 
@@ -618,33 +661,6 @@ _processInfo(natsConnection *nc, char *info, int len)
     if (s == NATS_OK)
         _unpackSrvVersion(nc);
 
-    // The array could be empty/not present on initial connect,
-    // if advertise is disabled on that server, or servers that
-    // did not include themselves in the async INFO protocol.
-    // If empty, do not remove the implicit servers from the pool.
-    if ((s == NATS_OK) && !nc->opts->ignoreDiscoveredServers && (nc->info.connectURLsCount > 0))
-    {
-        bool        added    = false;
-        const char  *tlsName = NULL;
-
-        if ((nc->cur != NULL) && (nc->cur->url != NULL) && !nats_HostIsIP(nc->cur->url->host))
-            tlsName = (const char*) nc->cur->url->host;
-
-        s = natsSrvPool_addNewURLs(nc->srvPool,
-                                   nc->cur ? nc->cur->url : NULL,
-                                   nc->info.connectURLs,
-                                   nc->info.connectURLsCount,
-                                   tlsName,
-                                   &added);
-        if ((s == NATS_OK) && added && !nc->initc && postDiscoveredServersCb)
-            natsAsyncCb_PostConnHandler(nc, ASYNC_DISCOVERED_SERVERS);
-    }
-    // Process the LDM callback after the above. It will cover cases where
-    // we have connect URLs and invoke discovered server callback, and case
-    // where we don't.
-    if ((s == NATS_OK) && nc->info.lameDuckMode && postLameDuckCb)
-        natsAsyncCb_PostConnHandler(nc, ASYNC_LAME_DUCK_MODE);
-
     if (s != NATS_OK)
         s = nats_setError(NATS_PROTOCOL_ERROR,
                           "Invalid protocol: %s", nats_GetLastError(NULL));
@@ -662,7 +678,8 @@ natsConn_processAsyncINFO(natsConnection *nc, char *buf, int len)
 {
     natsConn_Lock(nc);
     // Ignore errors, we will simply not update the server pool...
-    (void) _processInfo(nc, buf, len);
+    if (_processInfo(nc, buf, len) == NATS_OK)
+        (void) _applyInfo(nc, true);
     natsConn_Unlock(nc);
 }
 
@@ -906,9 +923,16 @@ _processExpectedInfo(natsConnection *nc)
                           _INFO_OP_);
     }
     if (s == NATS_OK)
+    {
+        bool wasTLS = (nc->sockCtx.ssl != NULL);
+
         s = _processInfo(nc, control.args, -1);
-    if (s == NATS_OK)
-        s = _checkForSecure(nc);
+        IFOK(s, _checkForSecure(nc));
+        // The servers of a plaintext INFO followed by a TLS upgrade are not
+        // used, since that INFO is not protected. They are learned from the
+        // INFOs received once the connection is established.
+        IFOK(s, _applyInfo(nc, wasTLS || (nc->sockCtx.ssl == NULL)));
+    }
 
     _clearControlContent(&control);
 

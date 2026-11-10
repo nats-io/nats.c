@@ -24273,6 +24273,92 @@ void test_SSLPerfConcurrentConnect(void)
 #endif
 }
 
+#if defined(NATS_HAS_TLS)
+// Starts a client in a thread, has the mock server on 127.0.0.1:4222 send
+// `info` and close, and reports whether the client then dialed the mock
+// server on 127.0.0.1:4223.
+static natsStatus
+_dialsServerAdvertisedInInfo(bool secure, const char *info, bool *dialed)
+{
+    natsStatus          s;
+    natsSock            sockA = NATS_SOCK_INVALID;
+    natsSock            sockB = NATS_SOCK_INVALID;
+    natsSock            fd    = NATS_SOCK_INVALID;
+    natsThread          *t    = NULL;
+    natsSockCtx         ctx;
+    struct threadArg    arg;
+
+    *dialed = false;
+    memset(&ctx, 0, sizeof(natsSockCtx));
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    IFOK(s, _startMockupServer(&sockA, "127.0.0.1", "4222"));
+    IFOK(s, _startMockupServer(&sockB, "127.0.0.1", "4223"));
+    IFOK(s, natsOptions_Create(&(arg.opts)));
+    IFOK(s, natsOptions_SetURL(arg.opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_SetNoRandomize(arg.opts, true));
+    IFOK(s, natsOptions_SetTimeout(arg.opts, 500));
+    if ((s == NATS_OK) && secure)
+        s = natsOptions_SetSecure(arg.opts, true);
+    IFOK(s, natsThread_Create(&t, _connectToMockupServer, (void*) &arg));
+    if ((s == NATS_OK)
+        && (((ctx.fd = accept(sockA, NULL, NULL)) == NATS_SOCK_INVALID)
+            || (natsSock_SetCommonTcpOptions(ctx.fd) != NATS_OK)))
+    {
+        s = NATS_SYS_ERROR;
+    }
+    IFOK(s, natsSock_WriteFully(&ctx, info, (int) strlen(info)));
+    natsSock_Close(ctx.fd);
+
+    if (t != NULL)
+    {
+        natsThread_Join(t);
+        natsThread_Destroy(t);
+    }
+    // The client is done: any connection to B is in the accept queue.
+    if (s == NATS_OK)
+        s = natsSock_SetBlocking(sockB, false);
+    if ((s == NATS_OK) && ((fd = accept(sockB, NULL, NULL)) != NATS_SOCK_INVALID))
+    {
+        *dialed = true;
+        natsSock_Close(fd);
+    }
+
+    _destroyDefaultThreadArgs(&arg);
+    natsSock_Close(sockA);
+    natsSock_Close(sockB);
+    nats_clearLastError();
+
+    return s;
+}
+#endif
+
+void test_SSLNoServersFromPlaintextInfo(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus  s;
+    bool        dialed = false;
+
+    test("Plaintext connection uses the servers of the first INFO: ");
+    s = _dialsServerAdvertisedInInfo(false,
+            "INFO {\"connect_urls\":[\"127.0.0.1:4223\"]}\r\n", &dialed);
+    testCond((s == NATS_OK) && dialed);
+
+    test("Servers of a plaintext INFO before a failed TLS handshake are not used: ");
+    s = _dialsServerAdvertisedInInfo(true,
+            "INFO {\"tls_required\":true,\"connect_urls\":[\"127.0.0.1:4223\"]}\r\n", &dialed);
+    testCond((s == NATS_OK) && !dialed);
+
+    test("Servers of a plaintext INFO without TLS for a secure client are not used: ");
+    s = _dialsServerAdvertisedInInfo(true,
+            "INFO {\"connect_urls\":[\"127.0.0.1:4223\"]}\r\n", &dialed);
+    testCond((s == NATS_OK) && !dialed);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
 void test_SSLURLSchemeAutoEnable(void)
 {
 #if defined(NATS_HAS_TLS)

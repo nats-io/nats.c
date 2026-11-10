@@ -51,6 +51,9 @@ natsOptions*
 natsOptions_clone(natsOptions *opts);
 
 natsStatus
+natsOptions_ensureSSLCtx(natsOptions *opts);
+
+natsStatus
 natsOptions_setMicroCallbacks(natsOptions *opts, natsConnectionHandler closedCb, natsErrHandler errCb);
 
 #endif /* OPTS_H_ */

@@ -741,6 +741,12 @@ _makeTLSConn(natsConnection *nc)
     // Reset nc->errStr before initiating the handshake...
     nc->errStr[0] = '\0';
 
+    // A `tls://` URL with the secure mode explicitly off may have no SSL
+    // context (natsOptions_SetSecure(opts, false) releases it).
+    s = natsOptions_ensureSSLCtx(nc->opts);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
+
     // We will lock by default, unless the option `tlsConcurrentHandshakes` allows
     // us to perform the handshake concurrently. Regardless, we will perform the
     // handshake under lock for the very first one for this context. This is because
@@ -873,6 +879,15 @@ DO_HANDSHAKE:
 #endif
 }
 
+// Returns true if TLS is required for the current server: the secure mode
+// is on, or the server's URL has a `tls://` scheme (even if the secure mode
+// was explicitly turned off).
+static bool
+_tlsWanted(natsConnection *nc)
+{
+    return (nc->opts->secure || ((nc->cur != NULL) && nc->cur->url->tlsScheme));
+}
+
 // This will check to see if the connection should be
 // secure. This can be dictated from either end and should
 // only be called after the INIT protocol has been received.
@@ -882,7 +897,7 @@ _checkForSecure(natsConnection *nc)
     natsStatus  s = NATS_OK;
 
     // Check for mismatch in setups
-    if (nc->opts->secure && !nc->info.tlsRequired && !nc->info.tlsAvailable)
+    if (_tlsWanted(nc) && !nc->info.tlsRequired && !nc->info.tlsAvailable)
         s = nats_setDefaultError(NATS_SECURE_CONNECTION_WANTED);
     else if (nc->info.tlsRequired && !nc->opts->secure)
     {
@@ -890,7 +905,8 @@ _checkForSecure(natsConnection *nc)
         s = natsOptions_SetSecure(nc->opts, true);
     }
 
-    if ((s == NATS_OK) && nc->opts->secure)
+    // Checked again: the block above may have enabled the secure mode.
+    if ((s == NATS_OK) && _tlsWanted(nc))
     {
         // If TLS handshake first is true, we have already done
         // the handshake, so do it only if false.
@@ -1150,7 +1166,7 @@ _connectProto(natsConnection *nc, char **proto)
                             (token != NULL ? "\"auth_token\":\"" :""),
                             (token != NULL ? token : ""),
                             (token != NULL ? "\"," : ""),
-                            nats_GetBoolStr(opts->secure),
+                            nats_GetBoolStr(_tlsWanted(nc)),
                             (name != NULL ? name : ""),
                             CString, NATS_VERSION_STRING,
                             CLIENT_PROTO_INFO,
@@ -2237,7 +2253,7 @@ _processConnInit(natsConnection *nc)
 
     // If we need to have a TLS connection and want the TLS handshake to occur
     // first, do it now.
-    if (nc->opts->secure && nc->opts->tlsHandshakeFirst)
+    if (_tlsWanted(nc) && nc->opts->tlsHandshakeFirst)
         s = _makeTLSConn(nc);
 
     // Process the INFO protocol that we should be receiving

@@ -1627,6 +1627,22 @@ void test_natsUrl(void)
     natsStatus  s;
     natsUrl     *u = NULL;
 
+    test("'ws://localhost:4222' is refused:");
+    s = natsUrl_Create(&u, "ws://localhost:4222");
+    testCond((s == NATS_INVALID_ARG) && (u == NULL));
+    nats_clearLastError();
+
+    test("'WSS://localhost:4222' is refused:");
+    s = natsUrl_Create(&u, "WSS://localhost:4222");
+    testCond((s == NATS_INVALID_ARG) && (u == NULL));
+    nats_clearLastError();
+
+    test("'TLS://localhost:4222' has the tls scheme:");
+    s = natsUrl_Create(&u, "TLS://localhost:4222");
+    testCond((s == NATS_OK) && (u != NULL) && u->tlsScheme);
+    natsUrl_Destroy(u);
+    u = NULL;
+
     test("NULL: ");
     s = natsUrl_Create(&u, NULL);
     testCond((s != NATS_OK) && (u == NULL));
@@ -24116,6 +24132,19 @@ void test_SSLAvailable(void)
     s = natsConnection_ConnectTo(&nc, "nats://localhost:4222");
     testCond(s == NATS_OK);
     natsConnection_Destroy(nc);
+    nc = NULL;
+
+    test("tls:// URL with SetSecure(false) still uses TLS: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetSecure(opts, false));
+    IFOK(s, natsOptions_SetURL(opts, "tls://localhost:4222"));
+    IFOK(s, natsOptions_SetTimeout(opts, 2000));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    // No CA is configured: the handshake fails verifying the server.
+    testCond((s == NATS_SSL_ERROR) && (nc == NULL));
+    natsOptions_Destroy(opts);
+    opts = NULL;
+    nats_clearLastError();
 
     _stopServer(serverPid);
     remove(conf);
@@ -24273,6 +24302,87 @@ void test_SSLPerfConcurrentConnect(void)
 #endif
 }
 
+void test_SSLTLSSettingsImplySecure(void)
+{
+#if defined(NATS_HAS_TLS)
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    int                 i;
+    const char          *name     = NULL;
+    char                buf[256];
+
+    for (i=0; i<8; i++)
+    {
+        s = natsOptions_Create(&opts);
+        if (s == NATS_OK)
+        {
+            switch (i)
+            {
+                case 0: name = "LoadCATrustedCertificates"; s = natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"); break;
+                case 1: name = "LoadCATrustedCertificatesPath"; s = natsOptions_LoadCATrustedCertificatesPath(opts, "certs"); break;
+                case 2: name = "LoadCertificatesChain"; s = natsOptions_LoadCertificatesChain(opts, "certs/client-cert.pem", "certs/client-key.pem"); break;
+                case 3: name = "SetCiphers"; s = natsOptions_SetCiphers(opts, "-ALL:HIGH"); break;
+                case 4: name = "SetCipherSuites"; s = natsOptions_SetCipherSuites(opts, "TLS_AES_128_GCM_SHA256"); break;
+                case 5: name = "SetExpectedHostname"; s = natsOptions_SetExpectedHostname(opts, "localhost"); break;
+                case 6: name = "SkipServerVerification"; s = natsOptions_SkipServerVerification(opts, true); break;
+                case 7: name = "SetSSLVerificationCallback"; s = natsOptions_SetSSLVerificationCallback(opts, _sslVerifyCallback); break;
+            }
+        }
+        snprintf(buf, sizeof(buf), "%s enables secure: ", (name != NULL ? name : "?"));
+        test(buf);
+        testCond((s == NATS_OK) && opts->secure);
+        natsOptions_Destroy(opts);
+        opts = NULL;
+    }
+
+    test("Resetting settings does not enable secure: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetExpectedHostname(opts, NULL));
+    IFOK(s, natsOptions_SkipServerVerification(opts, false));
+    IFOK(s, natsOptions_SetSSLVerificationCallback(opts, NULL));
+    testCond((s == NATS_OK) && !opts->secure);
+    natsOptions_Destroy(opts);
+    opts = NULL;
+
+    test("Failed CA load does not enable secure: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/doesnotexist.pem"));
+    testCond((s != NATS_OK) && !opts->secure);
+    natsOptions_Destroy(opts);
+    opts = NULL;
+    nats_clearLastError();
+
+    test("Explicit SetSecure(false) before CA keeps secure off: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetSecure(opts, false));
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    testCond((s == NATS_OK) && !opts->secure);
+    natsOptions_Destroy(opts);
+    opts = NULL;
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("CA alone fails against non-TLS server: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetURL(opts, "nats://127.0.0.1:4222"));
+    IFOK(s, natsOptions_LoadCATrustedCertificates(opts, "certs/ca.pem"));
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond((s == NATS_SECURE_CONNECTION_WANTED) && (nc == NULL));
+    natsOptions_Destroy(opts);
+    opts = NULL;
+    nats_clearLastError();
+
+    _stopServer(serverPid);
+#else
+    test("Skipped when built with no SSL support: ");
+    testCond(true);
+#endif
+}
+
 #if defined(NATS_HAS_TLS)
 // Starts a client in a thread, has the mock server on 127.0.0.1:4222 send
 // `info` and close, and reports whether the client then dialed the mock
@@ -24394,6 +24504,33 @@ void test_SSLURLSchemeAutoEnable(void)
     opts = NULL;
     nats_clearLastError();
 
+    test("SetSecure(false) before tls:// URL fails with non-TLS server: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetSecure(opts, false));
+    IFOK(s, natsOptions_SetURL(opts, "tls://127.0.0.1:4443"));
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond((s == NATS_SECURE_CONNECTION_WANTED) && (nc == NULL));
+    natsOptions_Destroy(opts);
+    opts = NULL;
+    nats_clearLastError();
+
+    test("SetSecure(false) with mixed URLs skips tls:// and connects to nats://: ");
+    s = natsOptions_Create(&opts);
+    IFOK(s, natsOptions_SetServers(opts, (const char*[]){"tls://127.0.0.1:4443", "nats://127.0.0.1:4443"}, 2));
+    IFOK(s, natsOptions_SetSecure(opts, false));
+    IFOK(s, natsOptions_SetNoRandomize(opts, true));
+    IFOK(s, natsOptions_SetTimeout(opts, 500));
+    IFOK(s, natsConnection_Connect(&nc, opts));
+    testCond((s == NATS_OK)
+             && (nc != NULL)
+             && (strcmp(nc->cur->url->fullUrl, "nats://127.0.0.1:4443") == 0));
+    natsConnection_Destroy(nc);
+    nc = NULL;
+    natsOptions_Destroy(opts);
+    opts = NULL;
+    nats_clearLastError();
+
     _stopServer(serverPid);
 
     // Now start TLS server for remaining tests
@@ -24412,7 +24549,7 @@ void test_SSLURLSchemeAutoEnable(void)
     natsOptions_Destroy(opts);
     opts = NULL;
 
-    test("SetSecure(false) before tls:// URL is respected: ");
+    test("SetSecure(false) before tls:// URL still uses TLS (verification fails): ");
     s = natsOptions_Create(&opts);
     IFOK(s, natsOptions_SetSecure(opts, false));
     IFOK(s, natsOptions_SetURL(opts, "tls://127.0.0.1:4443"));
@@ -24423,7 +24560,7 @@ void test_SSLURLSchemeAutoEnable(void)
     opts = NULL;
     nats_clearLastError();
 
-    test("SetSecure(false) after tls:// URL is respected: ");
+    test("SetSecure(false) after tls:// URL still uses TLS (verification fails): ");
     s = natsOptions_Create(&opts);
     IFOK(s, natsOptions_SetURL(opts, "tls://127.0.0.1:4443"));
     IFOK(s, natsOptions_SetSecure(opts, false));

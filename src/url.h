@@ -14,6 +14,8 @@
 #ifndef URL_H_
 #define URL_H_
 
+#include <stdbool.h>
+
 #include "status.h"
 
 typedef struct __natsUrl
@@ -21,10 +23,17 @@ typedef struct __natsUrl
     char    *fullUrl;
     char    *host;
     int     port;
+    // True if the URL has a `tls://` scheme (case-insensitive).
+    bool    tlsScheme;
     char    *username;
     char    *password;
 
 } natsUrl;
+
+// Returns true if `url` starts with the `tls://` scheme, regardless of case.
+// Expects trimmed input.
+bool
+natsUrl_HasTLSScheme(const char *url);
 
 natsStatus
 natsUrl_Create(natsUrl **newUrl, const char *urlStr);

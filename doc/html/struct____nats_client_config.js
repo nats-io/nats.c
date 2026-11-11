@@ -6,5 +6,7 @@ var struct____nats_client_config =
     [ "ThreadPoolMax", "struct____nats_client_config.html#a7c9592d371e589faf41d5f493934b5c1", null ],
     [ "DefaultRepliesToThreadPool", "struct____nats_client_config.html#a053db33a66e585ee3d5c4f9689db63bf", null ],
     [ "UseSeparatePoolForReplies", "struct____nats_client_config.html#a11769afbb1dd577e63571e05fd579ddf", null ],
-    [ "ReplyThreadPoolMax", "struct____nats_client_config.html#a70f9a7d726a564fb1c3ef14c1bc6cd47", null ]
+    [ "ReplyThreadPoolMax", "struct____nats_client_config.html#a70f9a7d726a564fb1c3ef14c1bc6cd47", null ],
+    [ "ThreadStartedHandler", "struct____nats_client_config.html#a846d531c14368a4fbfb9f2ba472e81af", null ],
+    [ "ThreadStartedHandlerClosure", "struct____nats_client_config.html#aaea9884a869402dbe226cd9ecae5dd27", null ]
 ];

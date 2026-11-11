@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['nats_20c_20client_0',['NATS C client.',['../index.html',1,'']]]
+  ['frequently_20asked_20questions_0',['Frequently Asked Questions',['../index.html#faq_sec',1,'']]]
 ];

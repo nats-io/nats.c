@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['list_0',['Deprecated List',['../deprecated.html',1,'']]]
+  ['deprecated_20list_0',['Deprecated List',['../deprecated.html',1,'']]],
+  ['documentation_1',['Other Documentation',['../index.html#other_doc_section',1,'']]]
 ];

@@ -1637,6 +1637,28 @@ void test_natsUrl(void)
     testCond((s == NATS_INVALID_ARG) && (u == NULL));
     nats_clearLastError();
 
+    test("'ws:1234' is host 'ws' with the nats scheme:");
+    s = natsUrl_Create(&u, "ws:1234");
+    testCond((s == NATS_OK)
+            && (u != NULL)
+            && (strcmp(u->host, "ws") == 0)
+            && (u->port == 1234)
+            && !u->tlsScheme
+            && (strcmp(u->fullUrl, "nats://ws:1234") == 0));
+    natsUrl_Destroy(u);
+    u = NULL;
+
+    test("'wss:1234' is host 'wss' with the nats scheme:");
+    s = natsUrl_Create(&u, "wss:1234");
+    testCond((s == NATS_OK)
+            && (u != NULL)
+            && (strcmp(u->host, "wss") == 0)
+            && (u->port == 1234)
+            && !u->tlsScheme
+            && (strcmp(u->fullUrl, "nats://wss:1234") == 0));
+    natsUrl_Destroy(u);
+    u = NULL;
+
     test("'TLS://localhost:4222' has the tls scheme:");
     s = natsUrl_Create(&u, "TLS://localhost:4222");
     testCond((s == NATS_OK) && (u != NULL) && u->tlsScheme);
@@ -24134,18 +24156,6 @@ void test_SSLAvailable(void)
     natsConnection_Destroy(nc);
     nc = NULL;
 
-    test("tls:// URL with SetSecure(false) still uses TLS: ");
-    s = natsOptions_Create(&opts);
-    IFOK(s, natsOptions_SetSecure(opts, false));
-    IFOK(s, natsOptions_SetURL(opts, "tls://localhost:4222"));
-    IFOK(s, natsOptions_SetTimeout(opts, 2000));
-    IFOK(s, natsConnection_Connect(&nc, opts));
-    // No CA is configured: the handshake fails verifying the server.
-    testCond((s == NATS_SSL_ERROR) && (nc == NULL));
-    natsOptions_Destroy(opts);
-    opts = NULL;
-    nats_clearLastError();
-
     _stopServer(serverPid);
     remove(conf);
 #else
@@ -24555,7 +24565,7 @@ void test_SSLURLSchemeAutoEnable(void)
     IFOK(s, natsOptions_SetURL(opts, "tls://127.0.0.1:4443"));
     IFOK(s, natsOptions_SetTimeout(opts, 500));
     IFOK(s, natsConnection_Connect(&nc, opts));
-    testCond((s != NATS_OK) && (nc == NULL));
+    testCond((s == NATS_SSL_ERROR) && (nc == NULL));
     natsOptions_Destroy(opts);
     opts = NULL;
     nats_clearLastError();
@@ -24566,7 +24576,7 @@ void test_SSLURLSchemeAutoEnable(void)
     IFOK(s, natsOptions_SetSecure(opts, false));
     IFOK(s, natsOptions_SetTimeout(opts, 500));
     IFOK(s, natsConnection_Connect(&nc, opts));
-    testCond((s != NATS_OK) && (nc == NULL));
+    testCond((s == NATS_SSL_ERROR) && (nc == NULL));
     natsOptions_Destroy(opts);
     opts = NULL;
     nats_clearLastError();

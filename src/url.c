@@ -128,10 +128,11 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
             *ptr = '\0';
             scheme = (const char*) copy;
             ptr += 3;
+
+            // There is no WebSocket transport: refuse rather than dial as plain TCP.
+            if ((strcasecmp(scheme, "ws") == 0) || (strcasecmp(scheme, "wss") == 0))
+                s = nats_setError(NATS_INVALID_ARG, "URL scheme '%s' is not supported", scheme);
         }
-        // There is no WebSocket transport: refuse rather than dial as plain TCP.
-        if ((strcasecmp(scheme, "ws") == 0) || (strcasecmp(scheme, "wss") == 0))
-            s = nats_setError(NATS_INVALID_ARG, "URL scheme '%s' is not supported", scheme);
     }
     // User info
     if (s == NATS_OK)

@@ -23,13 +23,13 @@ int main(void)
 
     // NATS-DOC-START
     // Ask your running app how many orders it has seen. The app subscribes
-    // to orders.count and replies with the current total, so the request
+    // to app.orders.count and replies with the current total, so the request
     // returns a single reply message.
     if (s == NATS_OK)
     {
         natsMsg *reply = NULL;
 
-        s = natsConnection_RequestString(&reply, conn, "orders.count", "", 2000);
+        s = natsConnection_RequestString(&reply, conn, "app.orders.count", "", 2000);
         if (s == NATS_OK)
         {
             printf("%.*s\n",

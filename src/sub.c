@@ -695,7 +695,7 @@ natsSub_nextMsg(natsMsg **nextMsg, natsSubscription *sub, int64_t timeout, bool 
     if ((s == NATS_OK) && natsMsg_IsNoResponders(msg))
     {
         natsMsg_Destroy(msg);
-        s = NATS_NO_RESPONDERS;
+        s = nats_setDefaultError(NATS_NO_RESPONDERS);
     }
     else if (s == NATS_OK)
         *nextMsg = msg;

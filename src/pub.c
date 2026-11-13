@@ -414,7 +414,7 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
                 if (natsMsg_IsNoResponders(resp->msg))
                 {
                     natsMsg_Destroy(resp->msg);
-                    s = NATS_NO_RESPONDERS;
+                    s = nats_setDefaultError(NATS_NO_RESPONDERS);
                 }
                 else
                     *replyMsg = resp->msg;
@@ -428,9 +428,14 @@ natsConnection_RequestMsg(natsMsg **replyMsg, natsConnection *nc,
                 // No need to remove since it was done in `_respHandler`.
                 removeResp = false;
                 // Set the correct error status that we return to the user
-                s = resp->closedSts;
+                s = nats_setDefaultError(resp->closedSts);
             }
-            // else s == NATS_TIMEOUT (from the "while" loop)
+            else
+            {
+                // s == NATS_TIMEOUT (from the "while" loop). Set the error
+                // so that nats_GetLastError() does not report an older one.
+                s = nats_setDefaultError(s);
+            }
             natsMutex_Unlock(resp->mu);
         }
         // Common to success, failure to send the request or timeout.

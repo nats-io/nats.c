@@ -12610,6 +12610,74 @@ void test_NoResponders(void)
     _stopServer(serverPid);
 }
 
+static bool
+_lastErrorIs(natsStatus expected)
+{
+    natsStatus  sts = NATS_OK;
+    const char  *txt = nats_GetLastError(&sts);
+
+    return ((sts == expected) && (txt != NULL)
+            && (strstr(txt, natsStatus_GetText(expected)) != NULL));
+}
+
+void test_RequestSetsLastError(void)
+{
+    natsStatus          s;
+    natsConnection      *nc       = NULL;
+    natsSubscription    *sub      = NULL;
+    natsMsg             *msg      = NULL;
+    natsOptions         *opts     = NULL;
+    natsPid             serverPid = NATS_INVALID_PID;
+    int                 i;
+
+    if (!serverVersionAtLeast(2,2,0))
+    {
+        char txt[200];
+
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.2.0, got %s: ", serverVersion);
+        test(txt);
+        testCond(true);
+        return;
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    for (i=0; i<2; i++)
+    {
+        bool oldStyle = (i == 1);
+
+        s = natsOptions_Create(&opts);
+        IFOK(s, natsOptions_UseOldRequestStyle(opts, oldStyle));
+        IFOK(s, natsConnection_Connect(&nc, opts));
+        IFOK(s, natsConnection_SubscribeSync(&sub, nc, "sink"));
+        IFOK(s, natsConnection_Flush(nc));
+        if (s != NATS_OK)
+            FAIL("Unable to setup test!");
+
+        // An earlier, unrelated error must not be reported for a later failure.
+        test(oldStyle ? "Old request style, no responders sets last error: " : "No responders sets last error: ");
+        nats_setError(NATS_ERR, "%s", "previous error");
+        s = natsConnection_RequestString(&msg, nc, "foo", "hello", 1000);
+        testCond((s == NATS_NO_RESPONDERS) && (msg == NULL) && _lastErrorIs(NATS_NO_RESPONDERS));
+
+        test(oldStyle ? "Old request style, timeout sets last error: " : "Timeout sets last error: ");
+        nats_setError(NATS_ERR, "%s", "previous error");
+        s = natsConnection_RequestString(&msg, nc, "sink", "hello", 100);
+        testCond((s == NATS_TIMEOUT) && (msg == NULL) && _lastErrorIs(NATS_TIMEOUT));
+
+        natsSubscription_Destroy(sub);
+        sub = NULL;
+        natsConnection_Destroy(nc);
+        nc = NULL;
+        natsOptions_Destroy(opts);
+        opts = NULL;
+    }
+    nats_clearLastError();
+
+    _stopServer(serverPid);
+}
+
 struct flushArg
 {
     natsConnection      *nc;

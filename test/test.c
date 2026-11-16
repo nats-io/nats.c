@@ -24407,6 +24407,7 @@ _dialsServerAdvertisedInInfo(bool secure, const char *info, bool *dialed)
     natsThread          *t    = NULL;
     natsSockCtx         ctx;
     struct threadArg    arg;
+    char                buf[1];
 
     *dialed = false;
     memset(&ctx, 0, sizeof(natsSockCtx));
@@ -24428,6 +24429,10 @@ _dialsServerAdvertisedInInfo(bool secure, const char *info, bool *dialed)
         s = NATS_SYS_ERROR;
     }
     IFOK(s, natsSock_WriteFully(&ctx, info, (int) strlen(info)));
+    // Wait until the client reacts to the INFO (CONNECT, ClientHello or close):
+    // closing first resets the socket, which on Windows drops unread data.
+    if (s == NATS_OK)
+        (void) natsSock_Read(&ctx, buf, 1, NULL);
     natsSock_Close(ctx.fd);
 
     if (t != NULL)

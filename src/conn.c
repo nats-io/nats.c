@@ -571,24 +571,67 @@ natsConn_srvVersionAtLeast(natsConnection *nc, int major, int minor, int update)
     return ok;
 }
 
-// _processInfo is used to parse the info messages sent
-// from the server.
-// This function may update the server pool.
+// Applies the current INFO: adds its `connect_urls` to the pool if `useURLs`
+// is true, and posts the discovered servers and lame duck mode callbacks.
 static natsStatus
-_processInfo(natsConnection *nc, char *info, int len)
+_applyInfo(natsConnection *nc, bool useURLs)
 {
-    natsStatus  s     = NATS_OK;
-    nats_JSON   *json = NULL;
+    natsStatus  s                       = NATS_OK;
     bool        postDiscoveredServersCb = false;
-    bool        postLameDuckCb = false;
-
-    if (info == NULL)
-        return NATS_OK;
+    bool        postLameDuckCb          = false;
 
     natsOptions_lock(nc->opts);
     postDiscoveredServersCb = (nc->opts->discoveredServersCb != NULL);
     postLameDuckCb = (nc->opts->lameDuckCb != NULL);
     natsOptions_unlock(nc->opts);
+
+    // The array could be empty/not present on initial connect,
+    // if advertise is disabled on that server, or servers that
+    // did not include themselves in the async INFO protocol.
+    // If empty, do not remove the implicit servers from the pool.
+    if (useURLs && !nc->opts->ignoreDiscoveredServers && (nc->info.connectURLsCount > 0))
+    {
+        bool        added    = false;
+        const char  *tlsName = NULL;
+
+        // Discovered servers inherit the name the current server is verified
+        // against: its own inherited name, or else its host if not an IP.
+        if (nc->cur != NULL)
+        {
+            if (nc->cur->tlsName != NULL)
+                tlsName = (const char*) nc->cur->tlsName;
+            else if ((nc->cur->url != NULL) && !nats_HostIsIP(nc->cur->url->host))
+                tlsName = (const char*) nc->cur->url->host;
+        }
+
+        s = natsSrvPool_addNewURLs(nc->srvPool,
+                                   nc->cur ? nc->cur->url : NULL,
+                                   nc->info.connectURLs,
+                                   nc->info.connectURLsCount,
+                                   tlsName,
+                                   &added);
+        if ((s == NATS_OK) && added && !nc->initc && postDiscoveredServersCb)
+            natsAsyncCb_PostConnHandler(nc, ASYNC_DISCOVERED_SERVERS);
+    }
+    // Process the LDM callback after the above. It will cover cases where
+    // we have connect URLs and invoke discovered server callback, and case
+    // where we don't.
+    if ((s == NATS_OK) && nc->info.lameDuckMode && postLameDuckCb)
+        natsAsyncCb_PostConnHandler(nc, ASYNC_LAME_DUCK_MODE);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
+// _processInfo is used to parse the info messages sent
+// from the server. See _applyInfo() to act on it.
+static natsStatus
+_processInfo(natsConnection *nc, char *info, int len)
+{
+    natsStatus  s     = NATS_OK;
+    nats_JSON   *json = NULL;
+
+    if (info == NULL)
+        return NATS_OK;
 
     _clearServerInfo(&(nc->info));
 
@@ -618,33 +661,6 @@ _processInfo(natsConnection *nc, char *info, int len)
     if (s == NATS_OK)
         _unpackSrvVersion(nc);
 
-    // The array could be empty/not present on initial connect,
-    // if advertise is disabled on that server, or servers that
-    // did not include themselves in the async INFO protocol.
-    // If empty, do not remove the implicit servers from the pool.
-    if ((s == NATS_OK) && !nc->opts->ignoreDiscoveredServers && (nc->info.connectURLsCount > 0))
-    {
-        bool        added    = false;
-        const char  *tlsName = NULL;
-
-        if ((nc->cur != NULL) && (nc->cur->url != NULL) && !nats_HostIsIP(nc->cur->url->host))
-            tlsName = (const char*) nc->cur->url->host;
-
-        s = natsSrvPool_addNewURLs(nc->srvPool,
-                                   nc->cur ? nc->cur->url : NULL,
-                                   nc->info.connectURLs,
-                                   nc->info.connectURLsCount,
-                                   tlsName,
-                                   &added);
-        if ((s == NATS_OK) && added && !nc->initc && postDiscoveredServersCb)
-            natsAsyncCb_PostConnHandler(nc, ASYNC_DISCOVERED_SERVERS);
-    }
-    // Process the LDM callback after the above. It will cover cases where
-    // we have connect URLs and invoke discovered server callback, and case
-    // where we don't.
-    if ((s == NATS_OK) && nc->info.lameDuckMode && postLameDuckCb)
-        natsAsyncCb_PostConnHandler(nc, ASYNC_LAME_DUCK_MODE);
-
     if (s != NATS_OK)
         s = nats_setError(NATS_PROTOCOL_ERROR,
                           "Invalid protocol: %s", nats_GetLastError(NULL));
@@ -662,7 +678,8 @@ natsConn_processAsyncINFO(natsConnection *nc, char *buf, int len)
 {
     natsConn_Lock(nc);
     // Ignore errors, we will simply not update the server pool...
-    (void) _processInfo(nc, buf, len);
+    if (_processInfo(nc, buf, len) == NATS_OK)
+        (void) _applyInfo(nc, true);
     natsConn_Unlock(nc);
 }
 
@@ -723,6 +740,12 @@ _makeTLSConn(natsConnection *nc)
 
     // Reset nc->errStr before initiating the handshake...
     nc->errStr[0] = '\0';
+
+    // A `tls://` URL with the secure mode explicitly off may have no SSL
+    // context (natsOptions_SetSecure(opts, false) releases it).
+    s = natsOptions_ensureSSLCtx(nc->opts);
+    if (s != NATS_OK)
+        return NATS_UPDATE_ERR_STACK(s);
 
     // We will lock by default, unless the option `tlsConcurrentHandshakes` allows
     // us to perform the handshake concurrently. Regardless, we will perform the
@@ -856,6 +879,15 @@ DO_HANDSHAKE:
 #endif
 }
 
+// Returns true if TLS is required for the current server: the secure mode
+// is on, or the server's URL has a `tls://` scheme (even if the secure mode
+// was explicitly turned off).
+static bool
+_tlsWanted(natsConnection *nc)
+{
+    return (nc->opts->secure || ((nc->cur != NULL) && nc->cur->url->tlsScheme));
+}
+
 // This will check to see if the connection should be
 // secure. This can be dictated from either end and should
 // only be called after the INIT protocol has been received.
@@ -865,7 +897,7 @@ _checkForSecure(natsConnection *nc)
     natsStatus  s = NATS_OK;
 
     // Check for mismatch in setups
-    if (nc->opts->secure && !nc->info.tlsRequired && !nc->info.tlsAvailable)
+    if (_tlsWanted(nc) && !nc->info.tlsRequired && !nc->info.tlsAvailable)
         s = nats_setDefaultError(NATS_SECURE_CONNECTION_WANTED);
     else if (nc->info.tlsRequired && !nc->opts->secure)
     {
@@ -873,7 +905,8 @@ _checkForSecure(natsConnection *nc)
         s = natsOptions_SetSecure(nc->opts, true);
     }
 
-    if ((s == NATS_OK) && nc->opts->secure)
+    // Checked again: the block above may have enabled the secure mode.
+    if ((s == NATS_OK) && _tlsWanted(nc))
     {
         // If TLS handshake first is true, we have already done
         // the handshake, so do it only if false.
@@ -906,9 +939,16 @@ _processExpectedInfo(natsConnection *nc)
                           _INFO_OP_);
     }
     if (s == NATS_OK)
+    {
+        bool wasTLS = (nc->sockCtx.ssl != NULL);
+
         s = _processInfo(nc, control.args, -1);
-    if (s == NATS_OK)
-        s = _checkForSecure(nc);
+        IFOK(s, _checkForSecure(nc));
+        // The servers of a plaintext INFO followed by a TLS upgrade are not
+        // used, since that INFO is not protected. They are learned from the
+        // INFOs received once the connection is established.
+        IFOK(s, _applyInfo(nc, wasTLS || (nc->sockCtx.ssl == NULL)));
+    }
 
     _clearControlContent(&control);
 
@@ -1126,7 +1166,7 @@ _connectProto(natsConnection *nc, char **proto)
                             (token != NULL ? "\"auth_token\":\"" :""),
                             (token != NULL ? token : ""),
                             (token != NULL ? "\"," : ""),
-                            nats_GetBoolStr(opts->secure),
+                            nats_GetBoolStr(_tlsWanted(nc)),
                             (name != NULL ? name : ""),
                             CString, NATS_VERSION_STRING,
                             CLIENT_PROTO_INFO,
@@ -2213,7 +2253,7 @@ _processConnInit(natsConnection *nc)
 
     // If we need to have a TLS connection and want the TLS handshake to occur
     // first, do it now.
-    if (nc->opts->secure && nc->opts->tlsHandshakeFirst)
+    if (_tlsWanted(nc) && nc->opts->tlsHandshakeFirst)
         s = _makeTLSConn(nc);
 
     // Process the INFO protocol that we should be receiving

@@ -3300,7 +3300,21 @@ natsOptions_SetName(natsOptions *opts, const char *name);
  *
  * Indicates to the server if the client wants a secure (SSL/TLS) connection.
  *
- * The default is `false`.
+ * The default is `false`. However, the secure mode is enabled, and TLS is
+ * then required for every server, when any of these is configured, unless
+ * this function was called explicitly:
+ * - a `tls://` URL (#natsOptions_SetURL, #natsOptions_SetServers),
+ * - trusted CA certificates, a client certificate chain, ciphers or cipher
+ *   suites, an expected hostname, skipping server verification, or a
+ *   verification callback.
+ *
+ * Calling this function with `false` is the explicit opt-out: those settings
+ * then no longer require TLS by themselves. A server whose URL has the
+ * `tls://` scheme, or that requires TLS, is still connected to with TLS.
+ *
+ * \note Calling this function with `false` releases the SSL context, which
+ * discards the TLS settings configured so far (for instance trusted CA
+ * certificates). Configure them after this call.
  *
  * \warning Once this option is set and if this #natsOptions object is passed
  * to any #natsConnection_Connect call, and connections are still active,
@@ -3389,6 +3403,9 @@ natsOptions_AllowConcurrentTLSHandshakes(natsOptions *opts);
  *
  * \warning See warning in #natsOptions_SetSecure.
  *
+ * \note Setting this option makes TLS required (it enables the secure mode),
+ * unless #natsOptions_SetSecure was called explicitly. See #natsOptions_SetSecure.
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param fileName the file containing the CA certificates.
  *
@@ -3406,6 +3423,9 @@ natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName);
  * You can get extra information by calling #nats_GetLastError.
  *
  * \warning See warning in #natsOptions_SetSecure.
+ *
+ * \note Setting this option makes TLS required (it enables the secure mode),
+ * unless #natsOptions_SetSecure was called explicitly. See #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param path the path containing the CA certificates.
@@ -3438,6 +3458,9 @@ natsOptions_LoadCATrustedCertificatesPath(natsOptions *opts, const char *path);
  *
  * \warning See warning in #natsOptions_SetSecure.
  *
+ * \note Setting this option makes TLS required (it enables the secure mode),
+ * unless #natsOptions_SetSecure was called explicitly. See #natsOptions_SetSecure.
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param certificates the string containing the concatenated CA certificates.
  */
@@ -3455,6 +3478,9 @@ natsOptions_SetCATrustedCertificates(natsOptions *opts, const char *certificates
  * See #natsOptions_LoadCATrustedCertificates regarding error reports.
  *
  * \warning See warning in #natsOptions_SetSecure.
+ *
+ * \note Setting this option makes TLS required (it enables the secure mode),
+ * unless #natsOptions_SetSecure was called explicitly. See #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param certsFileName the file containing the client certificates.
@@ -3476,6 +3502,9 @@ natsOptions_LoadCertificatesChain(natsOptions *opts,
  *
  * \warning See warning in #natsOptions_SetSecure.
  *
+ * \note Setting this option makes TLS required (it enables the secure mode),
+ * unless #natsOptions_SetSecure was called explicitly. See #natsOptions_SetSecure.
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param certsFileName the file containing the client certificates.
  * @param keyFileName the file containing the client private key.
@@ -3493,6 +3522,9 @@ natsOptions_LoadCertificatesChainDynamic(natsOptions *opts,
  * @see natsOptions_LoadCertificatesChain
  *
  * \warning See warning in #natsOptions_SetSecure.
+ *
+ * \note Setting this option makes TLS required (it enables the secure mode),
+ * unless #natsOptions_SetSecure was called explicitly. See #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param cert the memory location containing the client certificates.
@@ -3517,6 +3549,9 @@ natsOptions_SetCertificatesChain(natsOptions *opts,
  *
  * \warning See warning in #natsOptions_SetSecure.
  *
+ * \note Setting this option makes TLS required (it enables the secure mode),
+ * unless #natsOptions_SetSecure was called explicitly. See #natsOptions_SetSecure.
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param ciphers the ciphers suite.
  */
@@ -3535,6 +3570,9 @@ natsOptions_SetCiphers(natsOptions *opts, const char *ciphers);
  *
  * \warning See warning in #natsOptions_SetSecure.
  *
+ * \note Setting this option makes TLS required (it enables the secure mode),
+ * unless #natsOptions_SetSecure was called explicitly. See #natsOptions_SetSecure.
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param ciphers the ciphers suite.
  */
@@ -3548,6 +3586,9 @@ natsOptions_SetCipherSuites(natsOptions *opts, const char *ciphers);
  * is created, not at the time of this call.
  *
  * \warning See warning in #natsOptions_SetSecure.
+ *
+ * \note Setting a hostname makes TLS required (it enables the secure mode),
+ * unless #natsOptions_SetSecure was called explicitly. See #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param hostname the expected server certificate hostname.
@@ -3566,6 +3607,9 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname);
  *
  * \warning See warning in #natsOptions_SetSecure.
  *
+ * \note Passing `true` makes TLS required (it enables the secure mode),
+ * unless #natsOptions_SetSecure was called explicitly. See #natsOptions_SetSecure.
+ *
  * @param opts the pointer to the #natsOptions object.
  * @param skip set it to <c>true</c> to disable - or skip - server certificate verification.
  */
@@ -3580,6 +3624,9 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip);
  * #natsOptions_SkipServerVerification.
  *
  * \warning See warning in #natsOptions_SetSecure.
+ *
+ * \note Setting a callback makes TLS required (it enables the secure mode),
+ * unless #natsOptions_SetSecure was called explicitly. See #natsOptions_SetSecure.
  *
  * @param opts the pointer to the #natsOptions object.
  * @param callback the custom SSL verification handler to invoke.

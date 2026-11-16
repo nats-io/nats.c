@@ -1,4 +1,4 @@
-// Copyright 2015-2018 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -18,6 +18,12 @@
 #include <ctype.h>
 
 #include "mem.h"
+
+bool
+natsUrl_HasTLSScheme(const char *url)
+{
+    return (!nats_IsStringEmpty(url) && (strncasecmp(url, "tls://", 6) == 0));
+}
 
 void
 natsUrl_Destroy(natsUrl *url)
@@ -105,6 +111,8 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
         return nats_setDefaultError(NATS_NO_MEMORY);
 
     s = nats_Trim(&copy, urlStr);
+    if (s == NATS_OK)
+        url->tlsScheme = natsUrl_HasTLSScheme(copy);
 
     // Scheme
     if (s == NATS_OK)
@@ -120,6 +128,10 @@ natsUrl_Create(natsUrl **newUrl, const char *urlStr)
             *ptr = '\0';
             scheme = (const char*) copy;
             ptr += 3;
+
+            // There is no WebSocket transport: refuse rather than dial as plain TCP.
+            if ((strcasecmp(scheme, "ws") == 0) || (strcasecmp(scheme, "wss") == 0))
+                s = nats_setError(NATS_INVALID_ARG, "URL scheme '%s' is not supported", scheme);
         }
     }
     // User info

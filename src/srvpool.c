@@ -1,4 +1,4 @@
-// Copyright 2015-2020 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -240,7 +240,14 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, in
 
     for (i=0; (s == NATS_OK) && (i<urlCount); i++)
     {
-        s = natsStrHash_Set(tmp, urls[i], false, (void*)1, NULL);
+        char *entry = urls[i];
+        char *at    = strrchr(entry, '@');
+
+        // Never use user info from a server-supplied entry: the
+        // credentials the user configured apply to discovered servers.
+        if (at != NULL)
+            entry = at + 1;
+        s = natsStrHash_Set(tmp, entry, false, (void*)1, NULL);
     }
 
     // Walk the pool and removed the implicit servers that are no longer in the
@@ -295,11 +302,13 @@ natsSrvPool_addNewURLs(natsSrvPool *pool, const natsUrl *curUrl, char **urls, in
 
             // Consider localhost:<port>, 127.0.0.1:<port> and [::1]:<port>
             // all the same.
+            // An entry without a port has no ':' and is handled as is.
             sport = strrchr(curl, ':');
-            portPos = (int) (sport - curl);
-            if (((nats_strcasestr(curl, "localhost") == curl) && (portPos == 9))
+            portPos = (sport != NULL ? (int) (sport - curl) : 0);
+            if ((sport != NULL)
+                && (((nats_strcasestr(curl, "localhost") == curl) && (portPos == 9))
                     || (strncmp(curl, "127.0.0.1", portPos) == 0)
-                    || (strncmp(curl, "[::1]", portPos) == 0))
+                    || (strncmp(curl, "[::1]", portPos) == 0)))
             {
                 isLH = ((curl[0] == 'l') || (curl[0] == 'L'));
 

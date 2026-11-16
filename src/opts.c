@@ -1,4 +1,4 @@
-// Copyright 2015-2025 The NATS Authors
+// Copyright 2015-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -18,22 +18,25 @@
 #include "mem.h"
 #include "opts.h"
 #include "util.h"
+#include "url.h"
 #include "conn.h"
 #include "glib/glib.h"
 
-// Check if the URL has a tls:// scheme (case-insensitive).
-// Expects trimmed input (callers use nats_Trim before storing URLs).
-static bool
-_hasTLSScheme(const char *url)
-{
-    if (nats_IsStringEmpty(url))
-        return false;
-
-    return (strncasecmp(url, "tls://", 6) == 0);
-}
-
 // Forward declaration - defined in TLS/non-TLS conditional blocks below.
 static natsStatus _setSecureLocked(natsOptions *opts, bool secure);
+
+// Enables the secure mode, unless the user explicitly called
+// natsOptions_SetSecure. Called when the configuration asks for TLS: a tls://
+// URL, or any TLS setting (CA, client certificate, ciphers, expected hostname,
+// skip verification, verification callback). Assumes the lock is already held.
+static natsStatus
+_autoEnableSecureLocked(natsOptions *opts)
+{
+    if (opts->secureExplicitlySet)
+        return NATS_OK;
+
+    return _setSecureLocked(opts, true);
+}
 
 natsStatus
 natsOptions_SetURL(natsOptions *opts, const char* url)
@@ -51,9 +54,8 @@ natsOptions_SetURL(natsOptions *opts, const char* url)
     if (url != NULL)
         s = nats_Trim(&(opts->url), url);
 
-    // Auto-enable TLS for tls:// URLs if user hasn't explicitly set secure.
-    if ((s == NATS_OK) && !opts->secureExplicitlySet && _hasTLSScheme(opts->url))
-        s = _setSecureLocked(opts, true);
+    if ((s == NATS_OK) && natsUrl_HasTLSScheme(opts->url))
+        s = _autoEnableSecureLocked(opts);
 
     UNLOCK_OPTS(opts);
 
@@ -102,15 +104,14 @@ natsOptions_SetServers(natsOptions *opts, const char** servers, int serversCount
             if (s == NATS_OK)
             {
                 opts->serversCount++;
-                if (!needsSecure && _hasTLSScheme(opts->servers[i]))
+                if (!needsSecure && natsUrl_HasTLSScheme(opts->servers[i]))
                     needsSecure = true;
             }
         }
     }
 
-    // Auto-enable TLS for tls:// URLs if user hasn't explicitly set secure.
-    if ((s == NATS_OK) && !opts->secureExplicitlySet && needsSecure)
-        s = _setSecureLocked(opts, true);
+    if ((s == NATS_OK) && needsSecure)
+        s = _autoEnableSecureLocked(opts);
 
     if (s != NATS_OK)
         _freeServers(opts);
@@ -362,6 +363,22 @@ _getSSLCtx(natsOptions *opts)
     return NATS_UPDATE_ERR_STACK(s);
 }
 
+// Creates the SSL context if there is none, leaving the secure mode unchanged.
+// Used when a `tls://` URL is dialed while the secure mode was explicitly
+// turned off (which releases the SSL context).
+natsStatus
+natsOptions_ensureSSLCtx(natsOptions *opts)
+{
+    natsStatus s = NATS_OK;
+
+    natsOptions_lock(opts);
+    if (opts->sslCtx == NULL)
+        s = _createSSLCtx(&(opts->sslCtx));
+    natsOptions_unlock(opts);
+
+    return NATS_UPDATE_ERR_STACK(s);
+}
+
 // Internal version of SetSecure that assumes the lock is already held.
 // Does NOT set secureExplicitlySet - that's only for explicit user calls.
 static natsStatus
@@ -455,6 +472,8 @@ natsOptions_LoadCATrustedCertificates(natsOptions *opts, const char *fileName)
         }
     }
 
+    IFOK(s, _autoEnableSecureLocked(opts));
+
     UNLOCK_OPTS(opts);
 
     return s;
@@ -478,6 +497,8 @@ natsOptions_LoadCATrustedCertificatesPath(natsOptions *opts, const char *path)
                               NATS_SSL_ERR_REASON_STRING);
         }
     }
+
+    IFOK(s, _autoEnableSecureLocked(opts));
 
     UNLOCK_OPTS(opts);
 
@@ -561,6 +582,8 @@ natsOptions_SetCATrustedCertificates(natsOptions *opts, const char *certs)
             BIO_free(bio);
     }
 
+    IFOK(s, _autoEnableSecureLocked(opts));
+
     UNLOCK_OPTS(opts);
 
     return s;
@@ -603,6 +626,8 @@ natsOptions_LoadCertificatesChain(natsOptions *opts,
                               NATS_SSL_ERR_REASON_STRING);
         }
     }
+
+    IFOK(s, _autoEnableSecureLocked(opts));
 
     UNLOCK_OPTS(opts);
 
@@ -675,6 +700,8 @@ natsOptions_LoadCertificatesChainDynamic(natsOptions *opts,
         SSL_CTX_set_cert_cb(opts->sslCtx->ctx, _sslCertCallback, opts->sslCtx);
     }
 
+    IFOK(s, _autoEnableSecureLocked(opts));
+
     UNLOCK_OPTS(opts);
 
     return s;
@@ -742,6 +769,8 @@ natsOptions_SetCertificatesChain(natsOptions *opts, const char *certStr, const c
             BIO_free(bio);
     }
 
+    IFOK(s, _autoEnableSecureLocked(opts));
+
     UNLOCK_OPTS(opts);
 
     return s;
@@ -766,6 +795,8 @@ natsOptions_SetCiphers(natsOptions *opts, const char *ciphers)
         }
     }
 
+    IFOK(s, _autoEnableSecureLocked(opts));
+
     UNLOCK_OPTS(opts);
 
     return s;
@@ -789,6 +820,8 @@ natsOptions_SetCipherSuites(natsOptions *opts, const char *ciphers)
                               NATS_SSL_ERR_REASON_STRING);
         }
     }
+
+    IFOK(s, _autoEnableSecureLocked(opts));
 
     UNLOCK_OPTS(opts);
 
@@ -819,6 +852,9 @@ natsOptions_SetExpectedHostname(natsOptions *opts, const char *hostname)
         }
     }
 
+    if ((s == NATS_OK) && (hostname != NULL))
+        s = _autoEnableSecureLocked(opts);
+
     UNLOCK_OPTS(opts);
 
     return s;
@@ -838,6 +874,9 @@ natsOptions_SkipServerVerification(natsOptions *opts, bool skip)
         if (skip)
             opts->sslCtx->callback = NULL;
     }
+
+    if ((s == NATS_OK) && skip)
+        s = _autoEnableSecureLocked(opts);
 
     UNLOCK_OPTS(opts);
 
@@ -860,6 +899,9 @@ natsOptions_SetSSLVerificationCallback(natsOptions *opts, natsSSLVerifyCb callba
             opts->sslCtx->skipVerify = false;
         }
     }
+
+    if ((s == NATS_OK) && (callback != NULL))
+        s = _autoEnableSecureLocked(opts);
 
     UNLOCK_OPTS(opts);
 

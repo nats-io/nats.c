@@ -23970,21 +23970,33 @@ void test_SSLServerNameIndication(void)
     testCond((s == NATS_OK) && (ctx.fd > 0));
 
     test("Read ClientHello from client: ");
-    char buffer[1024];
-    memset(buffer, 0, sizeof(buffer));
-
-    int size = recv(ctx.fd, buffer, sizeof(buffer), 0);
+    // ClientHello can exceed 1KB (OpenSSL 4.x puts SNI near the end) and
+    // span several reads, so read the whole TLS record.
+    char buffer[8192];
+    int size = 0;
+    while (size < (int) sizeof(buffer))
+    {
+        int n = recv(ctx.fd, buffer + size, (int) sizeof(buffer) - size, 0);
+        if (n <= 0)
+            break;
+        size += n;
+        // TLS record header: type(1) version(2) length(2)
+        if ((size >= 5)
+            && (size >= 5 + ((((unsigned char) buffer[3]) << 8) | ((unsigned char) buffer[4]))))
+        {
+            break;
+        }
+    }
     testCond(size > 0);
 
-    // remove all null chars to allow the use of strstr on the result
-    for (int i = 0; i < size; ++i) {
-        if (buffer[i] == 0)
-            buffer[i] = '0';
-    }
-
     test("Check hostname is found in ClientHello: ");
-    bool found = strstr(buffer, "localhost");
-    testCond(found == true);
+    // ClientHello is binary, so search the received bytes without strstr.
+    const char *host = "localhost";
+    int hlen = (int) strlen(host);
+    bool found = false;
+    for (int i = 0; !found && (i + hlen <= size); i++)
+        found = (memcmp(buffer + i, host, hlen) == 0);
+    testCond(found);
 
     // Need to close those for the client side to unblock.
     natsSock_Close(ctx.fd);

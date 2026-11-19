@@ -42326,6 +42326,149 @@ void test_MicroGroups(void)
     _stopServer(serverPid);
 }
 
+static microError *
+_microEndpointStatsFor(char **data, microService *m, const microEndpointStats *ep)
+{
+    return (nats_asprintf(data, "{\"for\":\"%s\"}", ep->Name) < 0) ? micro_ErrorOutOfMemory : NULL;
+}
+
+static microError *
+_microEndpointStatsFail(char **data, microService *m, const microEndpointStats *ep)
+{
+    return micro_Errorf("no stats for %s", ep->Name);
+}
+
+void test_MicroEndpointStatsHandler(void)
+{
+    natsStatus s = NATS_OK;
+    microError *err = NULL;
+    struct threadArg arg;
+    natsOptions *opts = NULL;
+    natsConnection *nc = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    microService *m = NULL;
+    microService *plain = NULL;
+    microServiceStats *stats = NULL;
+    natsMsg *reply = NULL;
+    nats_JSON *js = NULL;
+    nats_JSON **array = NULL;
+    int array_len = 0;
+    char *subject = NULL;
+    int i;
+    char buf[1024];
+
+    microEndpointConfig add_cfg = { .Name = "add", .Handler = _microHandleRequest42 };
+    microEndpointConfig remove_cfg = { .Name = "remove", .Handler = _microHandleRequest42 };
+    microEndpointConfig *eps[] = { &add_cfg, &remove_cfg };
+    microServiceConfig cfg = {
+        .Version = "1.0.0",
+        .Name = "with-stats-handler",
+        .EndpointStatsHandler = _microEndpointStatsFor,
+    };
+    microServiceConfig plain_cfg = {
+        .Version = "1.0.0",
+        .Name = "without-stats-handler",
+    };
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if ((opts == NULL)
+        || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK)
+        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
+    {
+        FAIL("Unable to setup test for MicroEndpointStatsHandler!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to server: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    _startMicroserviceOK(&m, nc, &cfg, eps, 2, &arg);
+    _startMicroserviceOK(&plain, nc, &plain_cfg, eps, 2, &arg);
+
+    test("GetStats sets each endpoint's data from the handler: ");
+    err = microService_GetStats(&stats, m);
+    s = ((err == NULL) && (stats->EndpointsLen == 2)) ? NATS_OK : NATS_ERR;
+    for (i = 0; (s == NATS_OK) && (i < stats->EndpointsLen); i++)
+    {
+        snprintf(buf, sizeof(buf), "{\"for\":\"%s\"}", stats->Endpoints[i].Name);
+        if ((stats->Endpoints[i].Data == NULL) || (strcmp(stats->Endpoints[i].Data, buf) != 0))
+            s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+    microServiceStats_Destroy(stats);
+    stats = NULL;
+
+    test("GetStats without a handler leaves data NULL: ");
+    err = microService_GetStats(&stats, plain);
+    testCond((err == NULL) && (stats->EndpointsLen == 2) &&
+             (stats->Endpoints[0].Data == NULL) && (stats->Endpoints[1].Data == NULL));
+    microServiceStats_Destroy(stats);
+    stats = NULL;
+
+    test("Request and parse STATS: ");
+    micro_new_control_subject(&subject, MICRO_STATS_VERB, "with-stats-handler", NULL);
+    s = natsConnection_RequestString(&reply, nc, subject, "", 1000);
+    IFOK(s, nats_JSONParse(&js, reply->data, reply->dataLen));
+    IFOK(s, nats_JSONGetArrayObject(js, "endpoints", &array, &array_len));
+    testCond((s == NATS_OK) && (array_len == 2));
+    NATS_FREE(subject);
+
+    for (i = 0; i < array_len; i++)
+    {
+        const char *name = NULL;
+        const char *str = NULL;
+        nats_JSON *data = NULL;
+
+        snprintf(buf, sizeof(buf), "STATS endpoint #%d has data {\"for\": <its name>}: ", i);
+        test(buf);
+        testCond((NATS_OK == nats_JSONGetStrPtr(array[i], "name", &name)) && (name != NULL) &&
+                 (NATS_OK == nats_JSONGetObject(array[i], "data", &data)) && (data != NULL) &&
+                 (NATS_OK == nats_JSONGetStrPtr(data, "for", &str)) && (str != NULL) &&
+                 (strcmp(str, name) == 0));
+    }
+    NATS_FREE(array);
+    nats_JSONDestroy(js);
+    natsMsg_Destroy(reply);
+    reply = NULL;
+
+    test("STATS without a handler has no data: ");
+    micro_new_control_subject(&subject, MICRO_STATS_VERB, "without-stats-handler", NULL);
+    s = natsConnection_RequestString(&reply, nc, subject, "", 1000);
+    testCond((s == NATS_OK) && (strstr(natsMsg_GetData(reply), "\"data\"") == NULL));
+    NATS_FREE(subject);
+    natsMsg_Destroy(reply);
+
+    { _destroyMicroservice(m); }
+    { _destroyMicroservice(plain); }
+    _waitForMicroservicesAllDone(&arg);
+
+    m = NULL;
+    cfg.Name = "failing-stats-handler";
+    cfg.EndpointStatsHandler = _microEndpointStatsFail;
+    _startMicroserviceOK(&m, nc, &cfg, eps, 2, &arg);
+
+    test("GetStats fails when the handler fails: ");
+    err = microService_GetStats(&stats, m);
+    testCond((err != NULL) && (stats == NULL) &&
+             (strstr(microError_String(err, buf, sizeof(buf)), "no stats for ") != NULL));
+    microError_Destroy(err);
+
+    { _destroyMicroservice(m); }
+    _waitForMicroservicesAllDone(&arg);
+
+    test("Destroy the test connection: ");
+    natsConnection_Destroy(nc);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
 void test_MicroQueueGroupForEndpoint(void)
 {
     microError *err = NULL;

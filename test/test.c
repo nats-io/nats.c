@@ -42749,6 +42749,49 @@ void test_MicroBasics(void)
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
 
+    test("Reset stats keeps config and start time, zeroes counters: ");
+    for (i = 0; (s == NATS_OK) && (i < NUM_MICRO_SERVICES); i++)
+    {
+        microServiceStats *before = NULL;
+        microServiceStats *after = NULL;
+        int j;
+
+        err = microService_GetStats(&before, svcs[i]);
+        MICRO_CALL(err, microService_Reset(svcs[i]));
+        MICRO_CALL(err, microService_GetStats(&after, svcs[i]));
+        if (err != NULL)
+        {
+            s = NATS_ERR;
+            microError_Destroy(err);
+        }
+        else if ((after->Started != before->Started) || (after->EndpointsLen != 2))
+        {
+            s = NATS_ERR;
+        }
+        for (j = 0; (s == NATS_OK) && (j < after->EndpointsLen); j++)
+        {
+            microEndpointStats *ep = &after->Endpoints[j];
+
+            if ((ep->NumRequests != 0) || (ep->NumErrors != 0) ||
+                (ep->ProcessingTimeSeconds != 0) || (ep->ProcessingTimeNanoseconds != 0) ||
+                (ep->LastErrorString[0] != '\0') ||
+                (strcmp(ep->Name, before->Endpoints[j].Name) != 0) ||
+                (strcmp(ep->Subject, before->Endpoints[j].Subject) != 0) ||
+                (strcmp(ep->QueueGroup, before->Endpoints[j].QueueGroup) != 0))
+            {
+                s = NATS_ERR;
+            }
+        }
+        microServiceStats_Destroy(before);
+        microServiceStats_Destroy(after);
+    }
+    testCond(s == NATS_OK);
+
+    test("Reset with NULL service fails: ");
+    err = microService_Reset(NULL);
+    testCond(err != NULL);
+    microError_Destroy(err);
+
     natsSubscription_Destroy(sub);
     natsInbox_Destroy(inbox);
     NATS_FREE(subject);

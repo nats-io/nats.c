@@ -10997,6 +10997,22 @@ microService_IsStopped(microService *m);
 NATS_EXTERN microError *
 microService_Run(microService *m);
 
+/** @brief Resets the run-time statistics of a microservice.
+ *
+ * Zeroes the request and error counts, the processing times and the last
+ * error of every endpoint of the service. The endpoints' configuration
+ * (name, subject, queue group, metadata) and the service's start time are
+ * kept.
+ *
+ * @param m the #microService.
+ *
+ * @return a #microError for invalid arguments, otherwise always succeeds.
+ *
+ * @see #microService_GetStats
+ */
+NATS_EXTERN microError *
+microService_Reset(microService *m);
+
 /** @brief Stops a running microservice.
  *
  * Drains and closes the all subscriptions (endpoints and monitoring), resets

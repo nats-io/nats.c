@@ -55,8 +55,7 @@ micro_start_endpoint(microEndpoint *ep)
         // nothing to do
         return NULL;
 
-    // reset the stats.
-    memset(&ep->stats, 0, sizeof(ep->stats));
+    micro_reset_endpoint_stats(ep);
 
     const char *queueGroup = micro_queue_group_for_endpoint(ep);
     if (ep->is_monitoring_endpoint || (queueGroup == NULL))

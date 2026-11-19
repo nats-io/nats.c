@@ -191,7 +191,7 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, micro
             micro_free_cloned_endpoint_config(ep->config);
             err = micro_clone_endpoint_config(&ep->config, cfg);
             if (err == NULL)
-                memset(&ep->stats, 0, sizeof(ep->stats));
+                micro_reset_endpoint_stats(ep);
             micro_unlock_endpoint(ep);
         }
         else
@@ -883,6 +883,29 @@ void microServiceInfo_Destroy(microServiceInfo *info)
     NATS_FREE((char *)info->Id);
     nats_freeMetadata(&info->Metadata);
     NATS_FREE(info);
+}
+
+microError *
+microService_Reset(microService *m)
+{
+    microEndpoint *ep = NULL;
+
+    if ((m == NULL) || (m->service_mu == NULL))
+        return micro_ErrorInvalidArg;
+
+    _lock_service(m);
+    for (ep = m->first_ep; ep != NULL; ep = ep->next)
+    {
+        if (ep->is_monitoring_endpoint || (ep->endpoint_mu == NULL))
+            continue;
+
+        micro_lock_endpoint(ep);
+        micro_reset_endpoint_stats(ep);
+        micro_unlock_endpoint(ep);
+    }
+    _unlock_service(m);
+
+    return NULL;
 }
 
 microError *

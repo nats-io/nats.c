@@ -219,6 +219,20 @@ add_verb_handlers(microService *m, const char *verb, microRequestHandler handler
     IFOK(s, natsBuf_Append(buf, (_value) != NULL ? (_value) : "", -1)); \
     IFOK(s, natsBuf_Append(buf, "\"" _sep, -1));
 
+// Appends the fields common to all discovery responses, without a trailing comma.
+static natsStatus
+marshal_identity(natsBuffer *buf, const char *type, const char *name, const char *version, const char *id, natsMetadata *md)
+{
+    natsStatus s = NATS_OK;
+
+    IFOK_attr("type", type, ",");
+    IFOK_attr("name", name, ",");
+    IFOK_attr("version", version, ",");
+    IFOK_attr("id", id, "");
+    IFOK(s, nats_marshalMetadata(buf, true, "metadata", md));
+    return s;
+}
+
 static microError *
 marshal_ping(natsBuffer **new_buf, microService *m)
 {
@@ -226,15 +240,9 @@ marshal_ping(natsBuffer **new_buf, microService *m)
     natsStatus s;
 
     s = natsBuf_Create(&buf, 1024);
-    if (s == NATS_OK)
-    {
-        s = natsBuf_AppendByte(buf, '{');
-        IFOK_attr("name", m->cfg->Name, ",");
-        IFOK_attr("version", m->cfg->Version, ",");
-        IFOK_attr("id", m->id, ",");
-        IFOK_attr("type", MICRO_PING_RESPONSE_TYPE, "");
-        IFOK(s, natsBuf_AppendByte(buf, '}'));
-    }
+    IFOK(s, natsBuf_AppendByte(buf, '{'));
+    IFOK(s, marshal_identity(buf, MICRO_PING_RESPONSE_TYPE, m->cfg->Name, m->cfg->Version, m->id, &(m->cfg->Metadata)));
+    IFOK(s, natsBuf_AppendByte(buf, '}'));
 
     if (s != NATS_OK)
     {
@@ -278,12 +286,7 @@ marshal_info(natsBuffer **new_buf, microServiceInfo *info)
         IFOK(s, natsBuf_Append(buf, "],", 2));
     }
 
-    IFOK_attr("id", info->Id, "");
-    IFOK(s, nats_marshalMetadata(buf, true, "metadata", &(info->Metadata)));
-    IFOK(s, natsBuf_AppendByte(buf, ','));
-    IFOK_attr("name", info->Name, ",");
-    IFOK_attr("type", info->Type, ",");
-    IFOK_attr("version", info->Version, "");
+    IFOK(s, marshal_identity(buf, info->Type, info->Name, info->Version, info->Id, &(info->Metadata)));
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
     if (s != NATS_OK)
@@ -306,9 +309,6 @@ marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
 
     s = natsBuf_Create(&buf, 8 * 1024);
     IFOK(s, natsBuf_AppendByte(buf, '{'));
-    IFOK_attr("id", stats->Id, ",");
-    IFOK_attr("name", stats->Name, ",");
-    IFOK_attr("type", stats->Type, ",");
     IFOK(s, nats_EncodeTimeUTC(timebuf, sizeof(timebuf), stats->Started));
     IFOK_attr("started", timebuf, ",");
 
@@ -341,7 +341,7 @@ marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
         IFOK(s, natsBuf_Append(buf, "],", 2));
     }
 
-    IFOK_attr("version", stats->Version, "");
+    IFOK(s, marshal_identity(buf, stats->Type, stats->Name, stats->Version, stats->Id, &(stats->Metadata)));
     IFOK(s, natsBuf_AppendByte(buf, '}'));
 
     if (s == NATS_OK)

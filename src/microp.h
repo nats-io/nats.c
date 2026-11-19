@@ -165,6 +165,10 @@ bool micro_match_endpoint_subject(const char *ep_subject, const char *actual_sub
 static inline void micro_lock_endpoint(microEndpoint *ep) { natsMutex_Lock(ep->endpoint_mu); }
 static inline void micro_unlock_endpoint(microEndpoint *ep) { natsMutex_Unlock(ep->endpoint_mu); }
 
+// Zeroes the endpoint's stats. The caller must hold the endpoint lock if the
+// endpoint may be handling requests.
+static inline void micro_reset_endpoint_stats(microEndpoint *ep) { memset(&ep->stats, 0, sizeof(ep->stats)); }
+
 static inline microError *
 micro_strdup(char **ptr, const char *str)
 {

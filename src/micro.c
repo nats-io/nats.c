@@ -914,7 +914,7 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
     microError *err = NULL;
     microServiceStats *stats = NULL;
     microEndpoint *ep = NULL;
-    int len;
+    int len, i;
     long double avg = 0.0;
 
     if ((new_stats == NULL) || (m == NULL) || (m->service_mu == NULL))
@@ -980,6 +980,14 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
         _unlock_service(m);
     }
 
+    // Called without the locks held, since the handler is user code.
+    if ((err == NULL) && (m->cfg->EndpointStatsHandler != NULL))
+    {
+        for (i = 0; (err == NULL) && (i < stats->EndpointsLen); i++)
+            err = m->cfg->EndpointStatsHandler(
+                (char **)&stats->Endpoints[i].Data, m, &stats->Endpoints[i]);
+    }
+
     if (err != NULL)
     {
         microServiceStats_Destroy(stats);
@@ -1001,6 +1009,7 @@ void microServiceStats_Destroy(microServiceStats *stats)
         NATS_FREE((char *)stats->Endpoints[i].Name);
         NATS_FREE((char *)stats->Endpoints[i].Subject);
         NATS_FREE((char *)stats->Endpoints[i].QueueGroup);
+        NATS_FREE((char *)stats->Endpoints[i].Data);
     }
     NATS_FREE(stats->Endpoints);
     NATS_FREE((char *)stats->Name);

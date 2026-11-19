@@ -10445,6 +10445,23 @@ typedef void (*microErrorHandler)(microService *m, microEndpoint *ep, natsStatus
  */
 typedef void (*microDoneHandler)(microService *m);
 
+/**
+ * @brief Callback type for adding custom data to an endpoint's stats.
+ *
+ * If specified in microServiceConfig, this callback is invoked by
+ * #microService_GetStats once for each endpoint. The JSON it returns in `data`
+ * becomes the endpoint's `data` field in the STATS response. Returning an error
+ * fails the stats request.
+ *
+ * @param data Set to a JSON value allocated with `malloc`, which the library
+ * frees, or left NULL to omit the field.
+ * @param m The microservice object.
+ * @param ep The endpoint's stats, valid only during the call.
+ *
+ * @see microServiceConfig, micro_service_config_s.
+ */
+typedef microError *(*microEndpointStatsHandler)(char **data, microService *m, const microEndpointStats *ep);
+
 /** @} */ // end of microCallbacks
 
 /** \defgroup microStructs Public structs
@@ -10579,6 +10596,11 @@ struct micro_endpoint_stats_s
      * @brief a copy of the last error message.
      */
     char LastErrorString[2048];
+
+    /**
+     * @brief custom JSON data from the EndpointStatsHandler, or NULL.
+     */
+    const char *Data;
 };
 
 /**
@@ -10684,6 +10706,14 @@ struct micro_service_config_s
      * consider thread-safe mechanisms of accessing the data.
      */
     void *State;
+
+    /**
+     * @brief A custom endpoint stats handler.
+     *
+     * It will be called for each endpoint to add custom `data` to its stats.
+     * Unlike StatsHandler, it does not replace the STATS response.
+     */
+    microEndpointStatsHandler EndpointStatsHandler;
 };
 
 /**

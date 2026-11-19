@@ -328,6 +328,11 @@ marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
             IFOK(s, nats_marshalLong(buf, true, "average_processing_time", ep->AverageProcessingTimeNanoseconds));
             IFOK(s, natsBuf_AppendByte(buf, ','));
             IFOK_attr("last_error", ep->LastErrorString, "");
+            if (!nats_IsStringEmpty(ep->Data))
+            {
+                IFOK(s, natsBuf_Append(buf, ",\"data\":", -1));
+                IFOK(s, natsBuf_Append(buf, ep->Data, -1));
+            }
             IFOK(s, natsBuf_AppendByte(buf, '}'));
 
             if (i < (stats->EndpointsLen - 1))

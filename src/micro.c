@@ -927,6 +927,8 @@ microService_GetStats(microServiceStats **new_stats, microService *m)
     MICRO_CALL(err, micro_strdup((char **)&stats->Name, m->cfg->Name));
     MICRO_CALL(err, micro_strdup((char **)&stats->Version, m->cfg->Version));
     MICRO_CALL(err, micro_strdup((char **)&stats->Id, m->id));
+    MICRO_CALL(err, micro_ErrorFromStatus(
+        nats_cloneMetadata(&stats->Metadata, &(m->cfg->Metadata))));
 
     if (err == NULL)
     {
@@ -1015,5 +1017,6 @@ void microServiceStats_Destroy(microServiceStats *stats)
     NATS_FREE((char *)stats->Name);
     NATS_FREE((char *)stats->Version);
     NATS_FREE((char *)stats->Id);
+    nats_freeMetadata(&stats->Metadata);
     NATS_FREE(stats);
 }

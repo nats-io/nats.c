@@ -42583,6 +42583,18 @@ void test_MicroQueueGroupForEndpoint(void)
 
 #define NUM_MICRO_SERVICES 5
 
+// Checks the service metadata set by test_MicroBasics in a discovery response.
+static bool
+_microBasicsMetadataOK(nats_JSON *js)
+{
+    nats_JSON *md = NULL;
+    const char *str = NULL;
+
+    return (NATS_OK == nats_JSONGetObject(js, "metadata", &md))
+        && (NATS_OK == nats_JSONGetStrPtr(md, "skey1", &str)) && (strcmp(str, "svalue1") == 0)
+        && (NATS_OK == nats_JSONGetStrPtr(md, "skey2", &str)) && (strcmp(str, "svalue2") == 0);
+}
+
 void test_MicroBasics(void)
 {
     natsStatus s = NATS_OK;
@@ -42670,6 +42682,8 @@ void test_MicroBasics(void)
 
             for (j=0; (s == NATS_OK) && (j<stats->EndpointsLen); j++)
                 s = (stats->Endpoints[j].AverageProcessingTimeNanoseconds == 0 ? NATS_OK : NATS_ERR);
+            if ((s == NATS_OK) && (stats->Metadata.Count != 2))
+                s = NATS_ERR;
 
             microServiceStats_Destroy(stats);
         }
@@ -42745,12 +42759,7 @@ void test_MicroBasics(void)
 
         snprintf(buf, sizeof(buf), "Validate INFO service metadata#%d: ", i);
         test(buf);
-        md = NULL;
-        testCond(
-            (NATS_OK == nats_JSONGetObject(js, "metadata", &md))
-            && (NATS_OK == nats_JSONGetStrPtr(md, "skey1", &str)) && (strcmp(str, "svalue1") == 0)
-            && (NATS_OK == nats_JSONGetStrPtr(md, "skey2", &str)) && (strcmp(str, "svalue2") == 0)
-        );
+        testCond(_microBasicsMetadataOK(js));
         test("Validate INFO has 2 endpoints: ");
         array = NULL;
         array_len = 0;
@@ -42812,7 +42821,8 @@ void test_MicroBasics(void)
         js = NULL;
         testCond((NATS_OK == nats_JSONParse(&js, reply->data, reply->dataLen)) &&
                  (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) &&
-                 (strcmp(str, "ManyServicesSameName") == 0));
+                 (strcmp(str, "ManyServicesSameName") == 0) &&
+                 _microBasicsMetadataOK(js));
         nats_JSONDestroy(js);
         natsMsg_Destroy(reply);
     }
@@ -42847,6 +42857,9 @@ void test_MicroBasics(void)
         js = NULL;
         s = nats_JSONParse(&js, reply->data, reply->dataLen);
         testCond((NATS_OK == s) && (js != NULL));
+
+        test("Validate STATS service metadata: ");
+        testCond(_microBasicsMetadataOK(js));
 
         test("Ensure STATS has 2 endpoints: ");
         array = NULL;

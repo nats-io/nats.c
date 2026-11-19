@@ -10803,6 +10803,11 @@ struct micro_service_stats_s
      * @brief The number of endpoints in the `endpoints` array.
      */
     int EndpointsLen;
+
+    /**
+     * @brief Metadata for the service.
+     */
+    natsMetadata Metadata;
 };
 
 /** @} */ // end of microStructs

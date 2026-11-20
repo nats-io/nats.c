@@ -10498,7 +10498,8 @@ struct micro_endpoint_config_s
     const char *Subject;
 
     /**
-     * @brief Overrides the default queue group for the service.
+     * @brief Overrides the default queue group for the service. Must not
+     * contain whitespace, `.`, `*` or `>`.
      *
      */
     const char *QueueGroup;
@@ -10615,7 +10616,8 @@ struct micro_group_config_s
     /// which case endpoints use the parent prefix (if any) unchanged.
     const char *Prefix;
 
-    /// @brief Overrides the default queue group for the service.
+    /// @brief Overrides the default queue group for the service. Must not
+    /// contain whitespace, `.`, `*` or `>`.
     const char *QueueGroup;
 
     /// @brief Disables the use of a queue group for the service.
@@ -10648,7 +10650,8 @@ struct micro_service_config_s
     const char *Description;
 
     /**
-     * @brief Overrides the default queue group for the service ("q").
+     * @brief Overrides the default queue group for the service ("q"). Must
+     * not contain whitespace, `.`, `*` or `>`.
      *
      */
     const char *QueueGroup;

@@ -42635,6 +42635,50 @@ void test_MicroQueueGroupForEndpoint(void)
         _destroyDefaultThreadArgs(&arg);
     }
 
+    {
+        // Queue groups must be ADR-6 terms: no whitespace, '.', '*' or '>'.
+        const char *invalid[] = {"work ers", "work.ers", "work*", "work>"};
+        microServiceConfig cfg = { .Name = "testService", .Version = "1.0.0" };
+        microGroupConfig gcfg = { .Prefix = "grp" };
+        microEndpointConfig ecfg = { .Name = "ep", .Handler = _microHandleRequest42 };
+        microService *service = NULL;
+        microService *badService = NULL;
+        microGroup *group = NULL;
+        char buf[256];
+
+#define _isInvalidQueueGroupErr(_err) \
+        (((_err) != NULL) && (strstr(microError_String((_err), buf, sizeof(buf)), "invalid queue group") != NULL))
+
+        test("Start a service with a valid queue group: ");
+        cfg.QueueGroup = "work-ers_1";
+        err = micro_AddService(&service, nc, &cfg);
+        testCond(err == NULL);
+
+        for (int i = 0; i < (int)(sizeof(invalid) / sizeof(invalid[0])); i++)
+        {
+            testf("Service queue group '%s' is refused: ", invalid[i]);
+            cfg.QueueGroup = invalid[i];
+            err = micro_AddService(&badService, nc, &cfg);
+            testCond(_isInvalidQueueGroupErr(err) && (badService == NULL));
+            microError_Destroy(err);
+
+            testf("Group queue group '%s' is refused: ", invalid[i]);
+            gcfg.QueueGroup = invalid[i];
+            err = microService_AddGroup(&group, service, &gcfg);
+            testCond(_isInvalidQueueGroupErr(err) && (group == NULL));
+            microError_Destroy(err);
+
+            testf("Endpoint queue group '%s' is refused: ", invalid[i]);
+            ecfg.QueueGroup = invalid[i];
+            err = microService_AddEndpoint(service, &ecfg);
+            testCond(_isInvalidQueueGroupErr(err));
+            microError_Destroy(err);
+        }
+#undef _isInvalidQueueGroupErr
+
+        microService_Destroy(service);
+    }
+
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
     _stopServer(serverPid);

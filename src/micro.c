@@ -1,4 +1,4 @@
-// Copyright 2023 The NATS Authors
+// Copyright 2023-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -121,6 +121,16 @@ _new_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, microEndpo
 }
 
 
+// Returns true if the subject is in the $SRV space reserved for the service's
+// own discovery endpoints.
+static bool
+_is_reserved_subject(const char *subject)
+{
+    const size_t n = sizeof(MICRO_API_PREFIX) - 1;
+
+    return nats_HasPrefix(subject, MICRO_API_PREFIX) && ((subject[n] == '\0') || (subject[n] == '.'));
+}
+
 microError *
 micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, microEndpointConfig *cfg, bool is_internal)
 {
@@ -138,8 +148,13 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, micro
                             nats_IsStringEmpty(cfg->Subject) ? cfg->Name : cfg->Subject), err != NULL)
         return microError_Wrapf(err, "failed to create full subject for endpoint '%s'", cfg->Name);
     if (!micro_is_valid_subject(fullSubject))
-    {
         err = microError_Wrapf(micro_ErrorInvalidArg, "invalid subject '%s' for endpoint '%s'", fullSubject, cfg->Name);
+    else if (!is_internal && _is_reserved_subject(fullSubject))
+        err = microError_Wrapf(micro_ErrorInvalidArg,
+                               "subject '%s' for endpoint '%s' is reserved",
+                               fullSubject, cfg->Name);
+    if (err != NULL)
+    {
         NATS_FREE(fullSubject);
         return err;
     }

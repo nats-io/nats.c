@@ -10491,6 +10491,9 @@ struct micro_endpoint_config_s
      *
      * For endpoints added to a group, the subject is automatically prefixed
      * with the group's prefix.
+     *
+     * The resulting subject may not be `$SRV` or start with `$SRV.`; that
+     * subject space is reserved for the service's discovery endpoints.
      */
     const char *Subject;
 

@@ -42892,6 +42892,11 @@ void test_MicroBasics(void)
         s = nats_JSONGetLong(array[1], "average_processing_time", &avg);
         testCond((s == NATS_OK) && (avg > 0));
 
+        test("Ensure second endpoint has processing_time of at least the average: ");
+        int64_t total = 0;
+        s = nats_JSONGetLong(array[1], "processing_time", &total);
+        testCond((s == NATS_OK) && (total >= avg));
+
         NATS_FREE(array);
         nats_JSONDestroy(js);
         natsMsg_Destroy(reply);

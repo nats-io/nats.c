@@ -73,27 +73,17 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
     return NULL;
 }
 
-static microError *_subjectWithGroupPrefix(char **dst, microGroup *g, const char *src)
+// Joins two subject parts with a '.', omitting empty or NULL parts.
+static microError *
+_join_subject(char **dst, const char *a, const char *b)
 {
-    size_t len = strlen(src) + 1;
-    char *p;
+    if (a == NULL)
+        a = "";
+    if (b == NULL)
+        b = "";
 
-    if (g != NULL)
-        len += strlen(g->config->Prefix) + 1;
-
-    *dst = NATS_CALLOC(1, len);
-    if (*dst == NULL)
+    if (nats_asprintf(dst, "%s%s%s", a, ((*a != '\0') && (*b != '\0')) ? "." : "", b) < 0)
         return micro_ErrorOutOfMemory;
-
-    p = *dst;
-    if (g != NULL)
-    {
-        len = strlen(g->config->Prefix);
-        memcpy(p, g->config->Prefix, len);
-        p[len] = '.';
-        p += len + 1;
-    }
-    memcpy(p, src, strlen(src) + 1);
     return NULL;
 }
 
@@ -144,7 +134,8 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, micro
         return NULL;
 
     char *fullSubject = NULL;
-    if (err = _subjectWithGroupPrefix(&fullSubject, g, nats_IsStringEmpty(cfg->Subject) ? cfg->Name : cfg->Subject), err != NULL)
+    if (err = _join_subject(&fullSubject, (g == NULL) ? NULL : g->config->Prefix,
+                            nats_IsStringEmpty(cfg->Subject) ? cfg->Name : cfg->Subject), err != NULL)
         return microError_Wrapf(err, "failed to create full subject for endpoint '%s'", cfg->Name);
     if (!micro_is_valid_subject(fullSubject))
     {
@@ -714,21 +705,9 @@ _clone_group_config(microGroupConfig **out, microGroupConfig *in, microGroup *pa
 
     // prefix = parent_prefix.prefix
     if (err == NULL)
-    {
-        size_t prefixSize = strlen(in->Prefix) + 1;
-        if (parent != NULL)
-            prefixSize += strlen(parent->config->Prefix) + 1;
-        new_cfg->Prefix = NATS_CALLOC(1, prefixSize);
-        if (new_cfg->Prefix != NULL)
-        {
-            if (parent != NULL)
-                snprintf((char *)new_cfg->Prefix, prefixSize, "%s.%s", parent->config->Prefix, in->Prefix);
-            else
-                memcpy((char *)new_cfg->Prefix, in->Prefix, prefixSize);
-        }
-        else
-            err = micro_ErrorOutOfMemory;
-    }
+        err = _join_subject((char **)&new_cfg->Prefix,
+                            (parent == NULL) ? NULL : parent->config->Prefix,
+                            in->Prefix);
 
     if (err != NULL)
     {
@@ -766,7 +745,7 @@ _add_group(microGroup **new_group, microService *m, microGroup *parent, microGro
 microError *
 microService_AddGroup(microGroup **new_group, microService *m, microGroupConfig *config)
 {
-    if ((m == NULL) || (new_group == NULL) || (config == NULL) || nats_IsStringEmpty(config->Prefix))
+    if ((m == NULL) || (new_group == NULL) || (config == NULL))
         return micro_ErrorInvalidArg;
 
     return _add_group(new_group, m, NULL, config);
@@ -775,7 +754,7 @@ microService_AddGroup(microGroup **new_group, microService *m, microGroupConfig 
 microError *
 microGroup_AddGroup(microGroup **new_group, microGroup *parent, microGroupConfig *config)
 {
-    if ((parent == NULL) || (new_group == NULL) || (config == NULL) || nats_IsStringEmpty(config->Prefix))
+    if ((parent == NULL) || (new_group == NULL) || (config == NULL))
         return micro_ErrorInvalidArg;
 
     return _add_group(new_group, parent->m, parent, config);

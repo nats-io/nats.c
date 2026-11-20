@@ -42223,6 +42223,9 @@ void test_MicroGroups(void)
     microService *m = NULL;
     microGroup *g1 = NULL;
     microGroup *g2 = NULL;
+    microGroup *g3 = NULL;
+    microGroup *g4 = NULL;
+    microGroup *g5 = NULL;
     microServiceInfo *info = NULL;
     int i;
     char buf[1024];
@@ -42237,6 +42240,9 @@ void test_MicroGroups(void)
     };
 
     const char* expected_subjects[] = {
+        "g5.ep3",
+        "g1.ep3",
+        "ep3",
         "g1.ep2",
         "g1.g2.ep2",
         "g1.g2.ep1",
@@ -42293,6 +42299,29 @@ void test_MicroGroups(void)
 
     test("AddEndpoint 2 to g1: ");
     testCond(NULL == microGroup_AddEndpoint(g1, &ep2_cfg));
+
+    microEndpointConfig ep3_cfg = { .Name = "ep3", .Handler = _microHandleRequest42 };
+
+    test("AddGroup with empty prefix: ");
+    microGroupConfig empty_cfg = { .Prefix = "" };
+    testCond(NULL == microService_AddGroup(&g3, m, &empty_cfg));
+
+    test("AddEndpoint 3 to empty group: ");
+    testCond(NULL == microGroup_AddEndpoint(g3, &ep3_cfg));
+
+    test("Add sub-group with NULL prefix to g1: ");
+    microGroupConfig null_cfg = { .Prefix = NULL };
+    testCond(NULL == microGroup_AddGroup(&g4, g1, &null_cfg));
+
+    test("AddEndpoint 3 to NULL-prefix sub-group: ");
+    testCond(NULL == microGroup_AddEndpoint(g4, &ep3_cfg));
+
+    test("Add sub-group g5 to empty group: ");
+    microGroupConfig g5_cfg = { .Prefix = "g5" };
+    testCond(NULL == microGroup_AddGroup(&g5, g3, &g5_cfg));
+
+    test("AddEndpoint 3 to g5: ");
+    testCond(NULL == microGroup_AddEndpoint(g5, &ep3_cfg));
 
     err = microService_GetInfo(&info, m);
     if (err != NULL)

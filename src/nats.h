@@ -10608,7 +10608,8 @@ struct micro_endpoint_stats_s
  */
 struct micro_group_config_s
 {
-    /// @brief The subject prefix for the group.
+    /// @brief The subject prefix for the group. May be empty or NULL, in
+    /// which case endpoints use the parent prefix (if any) unchanged.
     const char *Prefix;
 
     /// @brief Overrides the default queue group for the service.

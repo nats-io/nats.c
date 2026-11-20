@@ -32,6 +32,23 @@ static void _free_service(microService *m);
 static microError *
 _attach_service_to_connection(natsConnection *nc, microService *service);
 
+// A queue group must be an ADR-6 term: no whitespace and none of the subject
+// separator or wildcard characters. An empty one is not checked here: groups
+// and endpoints inherit their parent's, and the service refuses it itself.
+static microError *
+_validate_queue_group(const char *queueGroup, const char *kind, const char *name)
+{
+    const char *c;
+
+    for (c = queueGroup; (c != NULL) && (*c != '\0'); c++)
+    {
+        if (isspace((unsigned char)*c) || (*c == '.') || (*c == '*') || (*c == '>'))
+            return microError_Wrapf(micro_ErrorInvalidArg, "invalid queue group '%s' for %s '%s'",
+                                    queueGroup, kind, (name != NULL) ? name : "");
+    }
+    return NULL;
+}
+
 microError *
 micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *cfg)
 {
@@ -43,6 +60,8 @@ micro_AddService(microService **new_m, natsConnection *nc, microServiceConfig *c
         return micro_ErrorInvalidArg;
     if ((cfg->QueueGroup != NULL) && nats_IsStringEmpty(cfg->QueueGroup))
         return micro_ErrorInvalidArg;
+    if ((err = _validate_queue_group(cfg->QueueGroup, "service", cfg->Name)) != NULL)
+        return err;
 
     // Make a microservice object, with a reference to a natsConnection.
     err = _new_service(&m, nc);
@@ -142,6 +161,8 @@ micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, micro
         return micro_ErrorInvalidArg;
     if (cfg == NULL)
         return NULL;
+    if ((err = _validate_queue_group(cfg->QueueGroup, "endpoint", cfg->Name)) != NULL)
+        return err;
 
     char *fullSubject = NULL;
     if (err = _join_subject(&fullSubject, (g == NULL) ? NULL : g->config->Prefix,
@@ -737,13 +758,15 @@ _clone_group_config(microGroupConfig **out, microGroupConfig *in, microGroup *pa
 static inline microError *
 _add_group(microGroup **new_group, microService *m, microGroup *parent, microGroupConfig *config)
 {
+    microError *err = _validate_queue_group(config->QueueGroup, "group", config->Prefix);
+    if (err != NULL)
+        return err;
 
     *new_group = NATS_CALLOC(1, sizeof(microGroup));
     if (*new_group == NULL)
         return micro_ErrorOutOfMemory;
 
-    microError *err = NULL;
-    err =  _clone_group_config(&(*new_group)->config, config, parent);
+    err = _clone_group_config(&(*new_group)->config, config, parent);
     if (err != NULL)
     {
         NATS_FREE(*new_group);

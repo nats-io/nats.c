@@ -42248,6 +42248,7 @@ void test_MicroGroups(void)
         "g1.g2.ep1",
         "g1.ep1",
         "ep1",
+        "$SRVX.custom",
     };
     int expected_num_endpoints = sizeof(expected_subjects) / sizeof(expected_subjects[0]);
 
@@ -42275,6 +42276,35 @@ void test_MicroGroups(void)
     testCond((err != NULL) && (strstr(microError_String(err, buf, sizeof(buf)), "invalid subject 'foo bar'") != NULL));
     microError_Destroy(err);
     err = NULL;
+
+    {
+        const char *reserved[] = {"$SRV", "$SRV.custom", "$SRV.PING.with-groups"};
+        for (i = 0; i < (int)(sizeof(reserved) / sizeof(reserved[0])); i++)
+        {
+            testf("AddEndpoint with reserved subject '%s': ", reserved[i]);
+            microEndpointConfig reserved_ep_cfg = { .Name = "reserved", .Handler = _microHandleRequest42, .Subject = reserved[i] };
+            err = microService_AddEndpoint(m, &reserved_ep_cfg);
+            testCond((err != NULL) && (strstr(microError_String(err, buf, sizeof(buf)), "is reserved") != NULL));
+            microError_Destroy(err);
+            err = NULL;
+        }
+
+        test("AddEndpoint in a group named $SRV: ");
+        microGroup *srv_group = NULL;
+        microGroupConfig srv_group_cfg = { .Prefix = "$SRV" };
+        microEndpointConfig grouped_ep_cfg = { .Name = "grouped", .Handler = _microHandleRequest42 };
+        err = microService_AddGroup(&srv_group, m, &srv_group_cfg);
+        if (err == NULL)
+            err = microGroup_AddEndpoint(srv_group, &grouped_ep_cfg);
+        testCond((err != NULL) && (strstr(microError_String(err, buf, sizeof(buf)), "is reserved") != NULL));
+        microError_Destroy(err);
+        err = NULL;
+
+        test("AddEndpoint with a $SRV-like but unreserved subject: ");
+        microEndpointConfig srvx_ep_cfg = { .Name = "srvx", .Handler = _microHandleRequest42, .Subject = "$SRVX.custom" };
+        err = microService_AddEndpoint(m, &srvx_ep_cfg);
+        testCond(err == NULL);
+    }
 
     test("AddEndpoint 1 to service: ");
     microEndpointConfig ep1_cfg = { .Name = "ep1", .Handler = _microHandleRequest42 };

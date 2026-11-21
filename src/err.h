@@ -24,7 +24,15 @@
 #include "status.h"
 #include "nats.h"
 
-#define NATS_SSL_ERR_REASON_STRING ERR_reason_error_string(ERR_get_error())
+// ERR_reason_error_string() returns NULL when the error queue is empty and,
+// with OpenSSL 3, for system (errno) errors. That NULL ends up as the
+// argument of a "%s" conversion, which is undefined behavior: glibc prints
+// "(null)" but QNX's libc crashes. nats_sslErrReasonString() never
+// returns NULL (see natsp.h).
+#define NATS_SSL_ERR_REASON_STRING nats_sslErrReasonString()
+
+// Never pass a possibly-NULL string to a "%s" conversion (see above).
+#define NATS_SAFE_STR(s) (((s) != NULL) ? (s) : "")
 
 #define nats_setDefaultError(e) nats_setError((e), "%s", natsStatus_GetText(e))
 

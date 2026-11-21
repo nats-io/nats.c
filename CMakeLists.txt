@@ -201,7 +201,11 @@ if(UNIX)
     set(NATS_OS "DARWIN")
   else(APPLE)
     set(NATS_OS "LINUX")
-    if(NOT ANDROID)
+    if(CMAKE_SYSTEM_NAME STREQUAL "QNX")
+      # QNX: clock_gettime & friends live in libc (no librt);
+      # BSD socket API lives in libsocket.
+      set(NATS_EXTRA_LIB "socket")
+    elseif(NOT ANDROID)
       set(NATS_EXTRA_LIB "rt")
     endif()
   endif(APPLE)

@@ -11878,7 +11878,7 @@ void test_ConnectedServerName(void)
     {
         char txt[200];
 
-        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.0.0, got %s: ", serverVersion);
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.0.0, got %s: ", _nn(serverVersion));
         test(txt);
         testCond(true);
         return;
@@ -12631,7 +12631,7 @@ void test_NoResponders(void)
     {
         char txt[200];
 
-        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.2.0, got %s: ", serverVersion);
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.2.0, got %s: ", _nn(serverVersion));
         test(txt);
         testCond(true);
         return;
@@ -14207,7 +14207,7 @@ void test_SubBadSubjectAndQueueName(void)
 
     for (i=0; i<(int) (sizeof(badSubjs)/sizeof(char*)); i++)
     {
-        snprintf(buf, sizeof(buf), "test subject '%s': ", badSubjs[i]);
+        snprintf(buf, sizeof(buf), "test subject '%s': ", _nn(badSubjs[i]));
         test(buf)
         s = (nats_IsSubjectValid(badSubjs[i], true) ? NATS_ERR : NATS_OK);
         testCond(s == NATS_OK);
@@ -17584,7 +17584,7 @@ void test_ServerPoolUpdatedOnClusterUpdate(void)
     {
         char txt[200];
 
-        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 1.0.7, got %s: ", serverVersion);
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 1.0.7, got %s: ", _nn(serverVersion));
         test(txt);
         testCond(true);
         return;
@@ -20191,7 +20191,7 @@ void test_GetClientID(void)
     {
         char txt[200];
 
-        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 1.2.0, got %s: ", serverVersion);
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 1.2.0, got %s: ", _nn(serverVersion));
         test(txt);
         testCond(true);
         return;
@@ -20314,7 +20314,7 @@ void test_GetClientIP(void)
     {
         char txt[200];
 
-        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.1.6, got %s: ", serverVersion);
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.1.6, got %s: ", _nn(serverVersion));
         test(txt);
         testCond(true);
         return;
@@ -21967,7 +21967,7 @@ void test_HeadersBasic(void)
     {
         char txt[200];
 
-        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.2.0, got %s: ", serverVersion);
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.2.0, got %s: ", _nn(serverVersion));
         test(txt);
         testCond(true);
         return;
@@ -23637,7 +23637,7 @@ void test_SSLHandshakeFirst(void)
     {
         char txt[200];
 
-        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.10.0, got %s: ", serverVersion);
+        snprintf(txt, sizeof(txt), "Skipping since requires server version of at least 2.10.0, got %s: ", _nn(serverVersion));
         test(txt);
         testCond(true);
         return;
@@ -24460,6 +24460,16 @@ _dialsServerAdvertisedInInfo(bool secure, const char *info, bool *dialed)
         *dialed = true;
         natsSock_Close(fd);
     }
+#if !defined(_WIN32)
+    // The client closes with SO_LINGER{1,0}, i.e. it resets the connection.
+    // Linux still hands a reset connection out of the accept queue, but
+    // BSD-derived stacks (QNX io-sock, FreeBSD) report ECONNABORTED instead.
+    // Either way the client did dial B.
+    else if ((s == NATS_OK) && (errno == ECONNABORTED))
+    {
+        *dialed = true;
+    }
+#endif
 
     _destroyDefaultThreadArgs(&arg);
     natsSock_Close(sockA);
@@ -25686,7 +25696,7 @@ if (!serverVersionAtLeast((major), (minor), (update))) \
 { \
     char txt[200]; \
     snprintf(txt, sizeof(txt), "Skipping since requires server version of at least %d.%d.%d, got %s: ", \
-             (major), (minor), (update), serverVersion); \
+             (major), (minor), (update), _nn(serverVersion)); \
     test(txt); \
     testCond(true); \
     return; \
@@ -45896,9 +45906,10 @@ void test_StanSubTimeout(void)
 static void _sigsegv_handler(int sig) {
 
 // Android doesn't support backtrace before API Level 33.
+// QNX has no <execinfo.h> (it uses its own libbacktrace bt_* API).
 // Because this is for tests it's good enough to check
 // for Android only, until there is need for a better solution.
-#ifndef ANDROID
+#if !defined(ANDROID) && !defined(__QNX__)
   void *array[20];
   int size = backtrace(array, 20);
 #endif // ANDROID
@@ -45906,7 +45917,7 @@ static void _sigsegv_handler(int sig) {
   // print out all the frames to stderr
   fprintf(stderr, "Error: signal %d:\n", sig);
 
-#ifndef ANDROID
+#if !defined(ANDROID) && !defined(__QNX__)
   backtrace_symbols_fd(array, size, STDERR_FILENO);
 #endif // ANDROID
 
@@ -45967,7 +45978,7 @@ int main(int argc, char **argv)
     if ((envStr != NULL) && (envStr[0] != '\0'))
     {
         serverVersion = envStr;
-        printf("Test server version: %s\n", serverVersion);
+        printf("Test server version: %s\n", _nn(serverVersion));
     }
 
     if (nats_Open(-1) != NATS_OK)

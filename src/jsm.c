@@ -2292,30 +2292,30 @@ js_directGetMsgToJSMsg(natsMsg *msg)
         else
         {
             natsMsgHeader_Get(msg, DESCRIPTION_HDR, &val);
-            return nats_setError(NATS_ERR, "error getting message: %s", val);
+            return nats_setError(NATS_ERR, "error getting message: %s", NATS_SAFE_STR(val));
         }
     }
 
     s = natsMsgHeader_Get(msg, JSStream, &val);
     if ((s != NATS_OK) || nats_IsStringEmpty(val))
-        return nats_setError(NATS_ERR, "missing stream name '%s'", val);
+        return nats_setError(NATS_ERR, "missing stream name '%s'", NATS_SAFE_STR(val));
 
     val = NULL;
     s = natsMsgHeader_Get(msg, JSSequence, &val);
     if ((s != NATS_OK) || ((seq = nats_ParseInt64(val, (int) strlen(val))) == -1))
-        return nats_setError(NATS_ERR, "missing or invalid sequence '%s'", val);
+        return nats_setError(NATS_ERR, "missing or invalid sequence '%s'", NATS_SAFE_STR(val));
 
     val = NULL;
     s = natsMsgHeader_Get(msg, JSTimeStamp, &val);
     if ((s == NATS_OK) && !nats_IsStringEmpty(val))
         s = nats_parseTime((char*) val, &tm);
     if ((s != NATS_OK) || (tm == 0))
-        return nats_setError(NATS_ERR, "missing or invalid timestamp '%s'", val);
+        return nats_setError(NATS_ERR, "missing or invalid timestamp '%s'", NATS_SAFE_STR(val));
 
     val = NULL;
     s = natsMsgHeader_Get(msg, JSSubject, &val);
     if ((s != NATS_OK) || nats_IsStringEmpty(val))
-        return nats_setError(NATS_ERR, "missing or invalid subject '%s'", val);
+        return nats_setError(NATS_ERR, "missing or invalid subject '%s'", NATS_SAFE_STR(val));
 
     // Will point the message subject to the JSSubject header value.
     // This will remain in the message memory allocated block, even

@@ -2,6 +2,8 @@ var group__micro_request_functions =
 [
     [ "microRequest_AddHeader", "group__micro_request_functions.html#ga6a6fa30291301abf54e25a24fde7e293", null ],
     [ "microRequest_DeleteHeader", "group__micro_request_functions.html#gad50a68e2193da36d7b477a34f488840c", null ],
+    [ "microRequest_Detach", "group__micro_request_functions.html#ga91849be291d6205d2188761cc5937fa5", null ],
+    [ "microRequest_Destroy", "group__micro_request_functions.html#ga4902b6ad16f9293d516d0011a87c17ae", null ],
     [ "microRequest_GetConnection", "group__micro_request_functions.html#ga6cf9c55a05fe1234ef264c25ca8294b3", null ],
     [ "microRequest_GetData", "group__micro_request_functions.html#ga695cf95ff0f596affecbd3954fd498cf", null ],
     [ "microRequest_GetDataLength", "group__micro_request_functions.html#ga3fd1eef10afd445f517d73f32c9d4fd0", null ],

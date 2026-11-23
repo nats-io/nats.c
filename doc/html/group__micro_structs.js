@@ -24,7 +24,8 @@ var group__micro_structs =
       [ "ProcessingTimeSeconds", "structmicro__endpoint__stats__s.html#a3e971e78657d71f28477476a560162dd", null ],
       [ "ProcessingTimeNanoseconds", "structmicro__endpoint__stats__s.html#a532060ae39ed420c3f84244163b4590b", null ],
       [ "AverageProcessingTimeNanoseconds", "structmicro__endpoint__stats__s.html#acc74c3df96d5f8595521a57dd0eb0cde", null ],
-      [ "LastErrorString", "structmicro__endpoint__stats__s.html#a2adef3bbd175d542387fe47b9a156e6c", null ]
+      [ "LastErrorString", "structmicro__endpoint__stats__s.html#a2adef3bbd175d542387fe47b9a156e6c", null ],
+      [ "Data", "structmicro__endpoint__stats__s.html#ac5a29b32463d5ede7b31d4d8019958a0", null ]
     ] ],
     [ "micro_group_config_s", "structmicro__group__config__s.html", [
       [ "Prefix", "structmicro__group__config__s.html#ac27de1821ea44f444b6061c5bde97bcf", null ],
@@ -42,7 +43,8 @@ var group__micro_structs =
       [ "StatsHandler", "structmicro__service__config__s.html#a8385ccdaef440f9406a876868663ec56", null ],
       [ "ErrHandler", "structmicro__service__config__s.html#a4069a6987c910fb4f045b233b6befc27", null ],
       [ "DoneHandler", "structmicro__service__config__s.html#ab349d30e0f637d449c0af865234a0985", null ],
-      [ "State", "structmicro__service__config__s.html#a0a0ae007824f6f53fbb0cb4b940c5ad2", null ]
+      [ "State", "structmicro__service__config__s.html#a0a0ae007824f6f53fbb0cb4b940c5ad2", null ],
+      [ "EndpointStatsHandler", "structmicro__service__config__s.html#a3f811f9444310bf8d18d497b94663bb6", null ]
     ] ],
     [ "micro_service_info_s", "structmicro__service__info__s.html", [
       [ "Type", "structmicro__service__info__s.html#a47188c4f3a9cc6fdd1151dd59db4b1fe", null ],
@@ -61,6 +63,7 @@ var group__micro_structs =
       [ "Id", "structmicro__service__stats__s.html#afbc7f9586df0c4d8969736e76284bb20", null ],
       [ "Started", "structmicro__service__stats__s.html#a53e7ea532c4bc4f9a9c4322b28060a4e", null ],
       [ "Endpoints", "structmicro__service__stats__s.html#aa1ac7f9fd93c943ab8619e625976e567", null ],
-      [ "EndpointsLen", "structmicro__service__stats__s.html#a88ca92be3498c27f5519c8ddbd2dc9df", null ]
+      [ "EndpointsLen", "structmicro__service__stats__s.html#a88ca92be3498c27f5519c8ddbd2dc9df", null ],
+      [ "Metadata", "structmicro__service__stats__s.html#a888445601d7e2d4a41c431d61ef3e8ba", null ]
     ] ]
 ];

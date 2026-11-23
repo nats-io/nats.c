@@ -1,4 +1,4 @@
-// Copyright 2023 The NATS Authors
+// Copyright 2023-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -31,8 +31,11 @@ microRequest_RespondCustom(microRequest *req, microError *service_error, const c
     natsMsg *msg = NULL;
     natsStatus s = NATS_OK;
     char buf[64];
+    // Use the service's connection, not the message's subscription: a detached
+    // request may outlive the subscription it was received on.
+    natsConnection *nc = microRequest_GetConnection(req);
 
-    if ((req == NULL) || (req->Message == NULL) || (req->Message->sub == NULL) || (req->Message->sub->conn == NULL))
+    if ((req == NULL) || (req->Message == NULL) || (nc == NULL))
     {
         s = NATS_INVALID_ARG;
     }
@@ -59,7 +62,7 @@ microRequest_RespondCustom(microRequest *req, microError *service_error, const c
     }
     if (s == NATS_OK)
     {
-        s = natsConnection_PublishMsg(req->Message->sub->conn, msg);
+        s = natsConnection_PublishMsg(nc, msg);
     }
 
     microError_Destroy(service_error);
@@ -175,9 +178,45 @@ microRequest_GetService(microRequest *req)
     return (req != NULL) ? req->Service : NULL;
 }
 
+// Frees the request and the message it owns.
 void micro_free_request(microRequest *req)
 {
+    if (req == NULL)
+        return;
+
+    natsMsg_Destroy(req->Message);
     NATS_FREE(req);
+}
+
+microError *
+microRequest_Detach(microRequest **new_request, microRequest *req)
+{
+    microError *err = NULL;
+
+    if ((new_request == NULL) || (req == NULL))
+        return micro_ErrorInvalidArg;
+
+    if ((err = micro_new_request(new_request, req->Service, req->Endpoint, req->Message)) != NULL)
+        return err;
+
+    // The detached request takes the message, so the handler's request no
+    // longer frees it.
+    (*new_request)->detached = true;
+    req->Message = NULL;
+
+    micro_retain_service(req->Service);
+    micro_retain_endpoint(req->Endpoint);
+    return NULL;
+}
+
+void microRequest_Destroy(microRequest *req)
+{
+    if ((req == NULL) || !req->detached)
+        return;
+
+    micro_release_endpoint(req->Endpoint);
+    micro_release_service(req->Service);
+    micro_free_request(req);
 }
 
 microError *

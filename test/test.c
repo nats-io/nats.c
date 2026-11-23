@@ -121,6 +121,7 @@ struct threadArg
     int             reconnects;
     bool            msgReceived;
     int             microRunningServiceCount;
+    microRequest    *microKept;
     bool            microAllDone;
     bool            done;
     int             results[10];
@@ -43140,6 +43141,148 @@ void test_MicroStartStop(void)
     testCond(NATS_OK == _waitForConnClosed(&arg));
 
     natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+static void
+_microRespondLater(void *closure)
+{
+    microRequest *req = (microRequest *)closure;
+
+    nats_Sleep(100);
+    microError_Ignore(microRequest_Respond(req, "late", 4));
+    microRequest_Destroy(req);
+}
+
+// Detaches the request, then either responds 100ms later from a thread
+// (arg->control == 0), hands it to the test in arg->microKept (1), or drops it
+// and returns an error (2).
+static microError *
+_microHandleDetach(microRequest *req)
+{
+    struct threadArg    *arg    = (struct threadArg *)microRequest_GetServiceState(req);
+    microRequest        *kept   = NULL;
+    microError          *err    = microRequest_Detach(&kept, req);
+
+    if (err != NULL)
+        return err;
+
+    natsMutex_Lock(arg->m);
+    if (arg->control == 0)
+    {
+        if (natsThread_Create(&arg->t, _microRespondLater, kept) != NATS_OK)
+            microRequest_Destroy(kept);
+    }
+    else if (arg->control == 1)
+        arg->microKept = kept;
+    else
+    {
+        // Give the request up and fail, as if it could not be queued.
+        microRequest_Destroy(kept);
+        err = micro_Errorf("queue full");
+    }
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+    return err;
+}
+
+void test_MicroDetachedRequest(void)
+{
+    natsStatus          s;
+    struct threadArg    arg;
+    natsConnection      *nc         = NULL;
+    natsSubscription    *sub        = NULL;
+    natsMsg             *reply      = NULL;
+    natsPid             serverPid   = NATS_INVALID_PID;
+    microService        *m          = NULL;
+    microRequest        *kept       = NULL;
+    microRequest        *nullReq    = NULL;
+    microServiceStats   *stats      = NULL;
+    microEndpointConfig ep_cfg = {
+        .Name = "create",
+        .Subject = "orders.create",
+        .Handler = _microHandleDetach,
+    };
+    microServiceConfig cfg = {
+        .Name = "ORDERS",
+        .Version = "1.0.0",
+        .Endpoint = &ep_cfg,
+    };
+
+    if (_createDefaultThreadArgsForCbTests(&arg) != NATS_OK)
+        FAIL("Unable to setup test");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to server: ");
+    testCond(NATS_OK == natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL));
+
+    test("Detach refuses bad args: ");
+    testCond((NULL != microRequest_Detach(NULL, NULL)) && (NULL != microRequest_Detach(&nullReq, NULL)) && (nullReq == NULL));
+
+    test("Destroy ignores NULL: ");
+    microRequest_Destroy(NULL);
+    testCond(true);
+
+    _startMicroserviceOK(&m, nc, &cfg, NULL, 0, &arg);
+
+    test("Response sent 100ms after the handler returned is delivered: ");
+    s = natsConnection_Request(&reply, nc, "orders.create", NULL, 0, 2000);
+    testCond((NATS_OK == s) && (reply != NULL) && (natsMsg_GetDataLength(reply) == 4)
+             && (strncmp(natsMsg_GetData(reply), "late", 4) == 0));
+    natsMsg_Destroy(reply);
+    reply = NULL;
+
+    natsMutex_Lock(arg.m);
+    arg.control = 1;
+    natsMutex_Unlock(arg.m);
+    natsThread_Join(arg.t);
+    natsThread_Destroy(arg.t);
+    arg.t = NULL;
+
+    test("Subscribe to reply inbox: ");
+    testCond(NATS_OK == natsConnection_SubscribeSync(&sub, nc, "detached.reply"));
+
+    test("Send request: ");
+    testCond(NATS_OK == natsConnection_PublishRequest(nc, "orders.create", "detached.reply", NULL, 0));
+
+    test("Handler detached the request: ");
+    s = NATS_OK;
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && (arg.microKept == NULL))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    kept = arg.microKept;
+    natsMutex_Unlock(arg.m);
+    testCond(kept != NULL);
+
+    natsMutex_Lock(arg.m);
+    arg.control = 2;
+    natsMutex_Unlock(arg.m);
+
+    test("No reply when the handler detaches and then fails: ");
+    s = natsConnection_Request(&reply, nc, "orders.create", NULL, 0, 500);
+    testCond((NATS_TIMEOUT == s) && (reply == NULL));
+
+    test("The handler's error is recorded as the last error: ");
+    testCond((NULL == microService_GetStats(&stats, m)) && (stats->EndpointsLen == 1)
+             && (strstr(stats->Endpoints[0].LastErrorString, "queue full") != NULL));
+    microServiceStats_Destroy(stats);
+
+    _destroyMicroservice(m);
+    _waitForMicroservicesAllDone(&arg);
+
+    test("Detached request can respond after the service is done: ");
+    testCond((NULL == microRequest_Respond(kept, "after", 5))
+             && (NATS_OK == natsSubscription_NextMsg(&reply, sub, 2000))
+             && (natsMsg_GetDataLength(reply) == 5)
+             && (strncmp(natsMsg_GetData(reply), "after", 5) == 0));
+    natsMsg_Destroy(reply);
+    microRequest_Destroy(kept);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
     _destroyDefaultThreadArgs(&arg);
     _stopServer(serverPid);
 }

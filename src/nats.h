@@ -11151,6 +11151,54 @@ microRequest_AddHeader(microRequest *req, const char *key, const char *value);
 NATS_EXTERN microError *
 microRequest_DeleteHeader(microRequest *req, const char *key);
 
+/** @brief Takes over a request so it can be responded to after the handler
+ * returns.
+ *
+ * A request passed to a #microRequestHandler is freed when the handler
+ * returns. A handler that wants to respond later, for instance from another
+ * thread, calls this function and keeps the request it returns in
+ * `new_request`. That request can be used with all the `microRequest_*`
+ * functions, from another thread, and must be freed with #microRequest_Destroy.
+ *
+ * After this call `req` no longer holds the message, so the handler must use
+ * `new_request` instead. An error the handler returns after detaching is
+ * recorded as the endpoint's last error, but no error response is sent.
+ *
+ * The service and endpoint are kept alive until the detached request is
+ * destroyed, even if the service is stopped or destroyed in the meantime; the
+ * connection is not, so respond before destroying the connection.
+ *
+ * \code{.c}
+ * static microError *handler(microRequest *req)
+ * {
+ *     microRequest *later = NULL;
+ *     microError   *err   = microRequest_Detach(&later, req);
+ *     if (err == NULL)
+ *         queue_for_worker(later); // the worker responds, then calls microRequest_Destroy(later)
+ *     return err;
+ * }
+ * \endcode
+ *
+ * @param new_request the location where to store the detached request.
+ * @param req the request passed to the handler.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microRequest_Destroy
+ */
+NATS_EXTERN microError *
+microRequest_Detach(microRequest **new_request, microRequest *req);
+
+/** @brief Destroys a request returned by #microRequest_Detach.
+ *
+ * It does nothing for the request passed to a handler, which the library frees
+ * itself.
+ *
+ * @param req the detached request.
+ */
+NATS_EXTERN void
+microRequest_Destroy(microRequest *req);
+
 /** @brief Returns the connection associated with the request.
  *
  * @param req the request.

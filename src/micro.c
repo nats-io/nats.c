@@ -337,13 +337,30 @@ _detach_service_from_connection(natsConnection *nc, microService *m)
     natsMutex_Unlock(nc->servicesMu);
 }
 
+// Drops a reference if release is set, then frees the service if no reference
+// and no endpoint is left.
+static void
+_release_service(microService *m, bool release)
+{
+    int refs;
+    int numEndpoints;
+
+    _lock_service(m);
+    if (release)
+        m->refs--;
+    refs = m->refs;
+    numEndpoints = m->numEndpoints;
+    _unlock_service(m);
+
+    if ((refs == 0) && (numEndpoints == 0))
+        _free_service(m);
+}
+
 static microError *
 _stop_service(microService *m, bool unsubscribe, bool release)
 {
     microError      *err            = NULL;
     microEndpoint   *ep             = NULL;
-    int             refs            = 0;
-    int             numEndpoints    = 0;
 
     if (m == NULL)
         return micro_ErrorInvalidArg;
@@ -367,17 +384,24 @@ _stop_service(microService *m, bool unsubscribe, bool release)
         }
     }
 
-    if (release)
-        m->refs--;
-
-    refs = m->refs;
-    numEndpoints = m->numEndpoints;
     _unlock_service(m);
 
-    if ((refs == 0) && (numEndpoints == 0))
-        _free_service(m);
-
+    _release_service(m, release);
     return NULL;
+}
+
+void micro_retain_service(microService *m)
+{
+    _lock_service(m);
+    m->refs++;
+    _unlock_service(m);
+}
+
+// Drops a reference without stopping the service, and frees it once no
+// reference or endpoint is left.
+void micro_release_service(microService *m)
+{
+    _release_service(m, true);
 }
 
 microError *

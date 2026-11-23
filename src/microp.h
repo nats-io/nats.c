@@ -1,4 +1,4 @@
-// Copyright 2023 The NATS Authors
+// Copyright 2023-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -137,6 +137,12 @@ struct micro_request_s
      * @brief A reference to the service that received the request.
      */
     microEndpoint *Endpoint;
+
+    /**
+     * @brief Set on a request returned by microRequest_Detach, which owns the
+     * message and holds a reference to the service and the endpoint.
+     */
+    bool detached;
 };
 
 microError *micro_add_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, microEndpointConfig *cfg, bool is_internal);
@@ -154,7 +160,9 @@ void micro_free_endpoint(microEndpoint *ep);
 void micro_free_request(microRequest *req);
 void micro_release_endpoint(microEndpoint *ep);
 void micro_release_endpoint_when_unsubscribed(void *closure);
+void micro_release_service(microService *m);
 void micro_retain_endpoint(microEndpoint *ep);
+void micro_retain_service(microService *m);
 void micro_update_last_error(microEndpoint *ep, microError *err);
 const char *micro_queue_group_for_endpoint(microEndpoint *ep);
 

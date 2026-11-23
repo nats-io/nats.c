@@ -126,7 +126,7 @@ _new_endpoint(microEndpoint **new_ep, microService *m, microGroup *g, microEndpo
 static bool
 _is_reserved_subject(const char *subject)
 {
-    const size_t n = sizeof(MICRO_API_PREFIX) - 1;
+    const size_t n = strlen(MICRO_API_PREFIX);
 
     return nats_HasPrefix(subject, MICRO_API_PREFIX) && ((subject[n] == '\0') || (subject[n] == '.'));
 }

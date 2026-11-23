@@ -266,8 +266,8 @@ marshal_info(natsBuffer **new_buf, microServiceInfo *info)
 
     IFOK_attr("description", info->Description, ",");
 
-    // "endpoints":{...}
-    if ((s == NATS_OK) && (info->EndpointsLen > 0))
+    // "endpoints"[:...], always present, even if empty.
+    if (s == NATS_OK)
     {
         IFOK(s, natsBuf_Append(buf, "\"endpoints\":[", -1));
         for (i = 0; ((s == NATS_OK) && (i < info->EndpointsLen)); i++)
@@ -312,7 +312,7 @@ marshal_stats(natsBuffer **new_buf, microServiceStats *stats)
     IFOK(s, nats_EncodeTimeUTC(timebuf, sizeof(timebuf), stats->Started));
     IFOK_attr("started", timebuf, ",");
 
-    if ((s == NATS_OK) && (stats->EndpointsLen > 0))
+    if (s == NATS_OK)
     {
         IFOK(s, natsBuf_Append(buf, "\"endpoints\":[", -1));
         for (i = 0; i < stats->EndpointsLen; i++)

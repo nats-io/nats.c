@@ -42191,6 +42191,8 @@ void test_MicroAddService(void)
                 && (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) && (strcmp(str, tc.cfg->Name) == 0)
                 && (NATS_OK == nats_JSONGetStrPtr(js, "type", &str)) && (strcmp(str, MICRO_INFO_RESPONSE_TYPE) == 0)
                 && (NATS_OK == nats_JSONGetArrayObject(js, "endpoints", &array, &array_len)) && (array_len == tc.expected_num_subjects)
+                // "endpoints" must be present even if empty.
+                && (strstr(natsMsg_GetData(reply), "\"endpoints\":[") != NULL)
             );
 
             NATS_FREE(array);
@@ -42198,6 +42200,27 @@ void test_MicroAddService(void)
             natsMsg_Destroy(reply);
             NATS_FREE(subject);
         }
+
+        err = micro_new_control_subject(&subject, MICRO_STATS_VERB, tc.cfg->Name, info->Id);
+        if (err != NULL)
+            FAIL("failed to generate STATS subject!");
+
+        snprintf(buf, sizeof(buf), "%s: Verify STATS has endpoints, even if empty: ", tc.name);
+        test(buf);
+        s = natsConnection_Request(&reply, nc, subject, NULL, 0, 1000);
+        array = NULL;
+        array_len = 0;
+        js = NULL;
+        testCond((NATS_OK == s)
+            && (NATS_OK == nats_JSONParse(&js, natsMsg_GetData(reply), natsMsg_GetDataLength(reply)))
+            && (NATS_OK == nats_JSONGetArrayObject(js, "endpoints", &array, &array_len)) && (array_len == tc.expected_num_subjects)
+            && (strstr(natsMsg_GetData(reply), "\"endpoints\":[") != NULL)
+        );
+
+        NATS_FREE(array);
+        nats_JSONDestroy(js);
+        natsMsg_Destroy(reply);
+        NATS_FREE(subject);
 
         microServiceInfo_Destroy(info);
         _destroyMicroservice(m);

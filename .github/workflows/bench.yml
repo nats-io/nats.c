@@ -62,13 +62,18 @@ jobs:
           do
               echo "Attempt $c to download binary for main"
               rm -f ./nats-server
-              curl -sf "https://binaries.nats.dev/nats-io/nats-server/v2@$rel" | PREFIX=. sh
-              # We are sometimes getting nats-server of size 0. Make sure we have a
-              # working nats-server by making sure we get a version number.
-              v="$(./nats-server -v)"
-              if [ "$v" != "" ]; then
-              break
+              # Test inside `if` so a failure retries instead of aborting the step.
+              # Requiring a version string also catches the occasional 0-byte download.
+              if curl -sf "https://binaries.nats.dev/nats-io/nats-server/v2@$rel" | PREFIX=. sh \
+                  && [ -n "$(./nats-server -v)" ]; then
+                  break
               fi
+              if [ "$c" = "5" ]; then
+                  echo "Failed to download nats-server $rel"
+                  exit 1
+              fi
+              # Jitter to keep parallel jobs from retrying in lockstep.
+              sleep $((c * 15 + RANDOM % 15))
           done
           mv ./nats-server ../deps/nats-server/nats-server
 

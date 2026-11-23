@@ -1,4 +1,4 @@
-// Copyright 2023 The NATS Authors
+// Copyright 2023-2026 The NATS Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -55,8 +55,7 @@ micro_start_endpoint(microEndpoint *ep)
         // nothing to do
         return NULL;
 
-    // reset the stats.
-    memset(&ep->stats, 0, sizeof(ep->stats));
+    micro_reset_endpoint_stats(ep);
 
     const char *queueGroup = micro_queue_group_for_endpoint(ep);
     if (ep->is_monitoring_endpoint || (queueGroup == NULL))
@@ -184,7 +183,13 @@ _handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *c
         // handle the request.
         start = nats_NowInNanoSeconds();
         service_err = handler(req);
-        if (service_err != NULL)
+        if ((service_err != NULL) && (req->Message == NULL))
+        {
+            // The handler detached the request, so there is no message to
+            // respond to; just record the error.
+            err = service_err;
+        }
+        else if (service_err != NULL)
         {
             // if the handler returned an error, we attempt to respond with it.
             // Note that if the handler chose to do its own RespondError which
@@ -208,8 +213,9 @@ _handle_request(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *c
     micro_unlock_endpoint(ep);
 
     microError_Destroy(err);
+    if (req == NULL)
+        natsMsg_Destroy(msg);
     micro_free_request(req);
-    natsMsg_Destroy(msg);
 }
 
 void micro_update_last_error(microEndpoint *ep, microError *err)

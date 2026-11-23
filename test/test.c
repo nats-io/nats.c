@@ -121,6 +121,7 @@ struct threadArg
     int             reconnects;
     bool            msgReceived;
     int             microRunningServiceCount;
+    microRequest    *microKept;
     bool            microAllDone;
     bool            done;
     int             results[10];
@@ -42200,6 +42201,8 @@ void test_MicroAddService(void)
                 && (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) && (strcmp(str, tc.cfg->Name) == 0)
                 && (NATS_OK == nats_JSONGetStrPtr(js, "type", &str)) && (strcmp(str, MICRO_INFO_RESPONSE_TYPE) == 0)
                 && (NATS_OK == nats_JSONGetArrayObject(js, "endpoints", &array, &array_len)) && (array_len == tc.expected_num_subjects)
+                // "endpoints" must be present even if empty.
+                && (strstr(natsMsg_GetData(reply), "\"endpoints\":[") != NULL)
             );
 
             NATS_FREE(array);
@@ -42207,6 +42210,27 @@ void test_MicroAddService(void)
             natsMsg_Destroy(reply);
             NATS_FREE(subject);
         }
+
+        err = micro_new_control_subject(&subject, MICRO_STATS_VERB, tc.cfg->Name, info->Id);
+        if (err != NULL)
+            FAIL("failed to generate STATS subject!");
+
+        snprintf(buf, sizeof(buf), "%s: Verify STATS has endpoints, even if empty: ", tc.name);
+        test(buf);
+        s = natsConnection_Request(&reply, nc, subject, NULL, 0, 1000);
+        array = NULL;
+        array_len = 0;
+        js = NULL;
+        testCond((NATS_OK == s)
+            && (NATS_OK == nats_JSONParse(&js, natsMsg_GetData(reply), natsMsg_GetDataLength(reply)))
+            && (NATS_OK == nats_JSONGetArrayObject(js, "endpoints", &array, &array_len)) && (array_len == tc.expected_num_subjects)
+            && (strstr(natsMsg_GetData(reply), "\"endpoints\":[") != NULL)
+        );
+
+        NATS_FREE(array);
+        nats_JSONDestroy(js);
+        natsMsg_Destroy(reply);
+        NATS_FREE(subject);
 
         microServiceInfo_Destroy(info);
         _destroyMicroservice(m);
@@ -42233,6 +42257,9 @@ void test_MicroGroups(void)
     microService *m = NULL;
     microGroup *g1 = NULL;
     microGroup *g2 = NULL;
+    microGroup *g3 = NULL;
+    microGroup *g4 = NULL;
+    microGroup *g5 = NULL;
     microServiceInfo *info = NULL;
     int i;
     char buf[1024];
@@ -42247,11 +42274,15 @@ void test_MicroGroups(void)
     };
 
     const char* expected_subjects[] = {
+        "g5.ep3",
+        "g1.ep3",
+        "ep3",
         "g1.ep2",
         "g1.g2.ep2",
         "g1.g2.ep1",
         "g1.ep1",
         "ep1",
+        "$SRVX.custom",
     };
     int expected_num_endpoints = sizeof(expected_subjects) / sizeof(expected_subjects[0]);
 
@@ -42280,6 +42311,35 @@ void test_MicroGroups(void)
     microError_Destroy(err);
     err = NULL;
 
+    {
+        const char *reserved[] = {"$SRV", "$SRV.custom", "$SRV.PING.with-groups"};
+        for (i = 0; i < (int)(sizeof(reserved) / sizeof(reserved[0])); i++)
+        {
+            testf("AddEndpoint with reserved subject '%s': ", reserved[i]);
+            microEndpointConfig reserved_ep_cfg = { .Name = "reserved", .Handler = _microHandleRequest42, .Subject = reserved[i] };
+            err = microService_AddEndpoint(m, &reserved_ep_cfg);
+            testCond((err != NULL) && (strstr(microError_String(err, buf, sizeof(buf)), "is reserved") != NULL));
+            microError_Destroy(err);
+            err = NULL;
+        }
+
+        test("AddEndpoint in a group named $SRV: ");
+        microGroup *srv_group = NULL;
+        microGroupConfig srv_group_cfg = { .Prefix = "$SRV" };
+        microEndpointConfig grouped_ep_cfg = { .Name = "grouped", .Handler = _microHandleRequest42 };
+        err = microService_AddGroup(&srv_group, m, &srv_group_cfg);
+        if (err == NULL)
+            err = microGroup_AddEndpoint(srv_group, &grouped_ep_cfg);
+        testCond((err != NULL) && (strstr(microError_String(err, buf, sizeof(buf)), "is reserved") != NULL));
+        microError_Destroy(err);
+        err = NULL;
+
+        test("AddEndpoint with a $SRV-like but unreserved subject: ");
+        microEndpointConfig srvx_ep_cfg = { .Name = "srvx", .Handler = _microHandleRequest42, .Subject = "$SRVX.custom" };
+        err = microService_AddEndpoint(m, &srvx_ep_cfg);
+        testCond(err == NULL);
+    }
+
     test("AddEndpoint 1 to service: ");
     microEndpointConfig ep1_cfg = { .Name = "ep1", .Handler = _microHandleRequest42 };
     testCond(NULL == microService_AddEndpoint(m, &ep1_cfg));
@@ -42304,6 +42364,29 @@ void test_MicroGroups(void)
     test("AddEndpoint 2 to g1: ");
     testCond(NULL == microGroup_AddEndpoint(g1, &ep2_cfg));
 
+    microEndpointConfig ep3_cfg = { .Name = "ep3", .Handler = _microHandleRequest42 };
+
+    test("AddGroup with empty prefix: ");
+    microGroupConfig empty_cfg = { .Prefix = "" };
+    testCond(NULL == microService_AddGroup(&g3, m, &empty_cfg));
+
+    test("AddEndpoint 3 to empty group: ");
+    testCond(NULL == microGroup_AddEndpoint(g3, &ep3_cfg));
+
+    test("Add sub-group with NULL prefix to g1: ");
+    microGroupConfig null_cfg = { .Prefix = NULL };
+    testCond(NULL == microGroup_AddGroup(&g4, g1, &null_cfg));
+
+    test("AddEndpoint 3 to NULL-prefix sub-group: ");
+    testCond(NULL == microGroup_AddEndpoint(g4, &ep3_cfg));
+
+    test("Add sub-group g5 to empty group: ");
+    microGroupConfig g5_cfg = { .Prefix = "g5" };
+    testCond(NULL == microGroup_AddGroup(&g5, g3, &g5_cfg));
+
+    test("AddEndpoint 3 to g5: ");
+    testCond(NULL == microGroup_AddEndpoint(g5, &ep3_cfg));
+
     err = microService_GetInfo(&info, m);
     if (err != NULL)
         FAIL("failed to get service info!")
@@ -42325,6 +42408,149 @@ void test_MicroGroups(void)
     microServiceInfo_Destroy(info);
 
     _destroyMicroservice(m);
+    _waitForMicroservicesAllDone(&arg);
+
+    test("Destroy the test connection: ");
+    natsConnection_Destroy(nc);
+    testCond(NATS_OK == _waitForConnClosed(&arg));
+
+    natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+static microError *
+_microEndpointStatsFor(char **data, microService *m, const microEndpointStats *ep)
+{
+    return (nats_asprintf(data, "{\"for\":\"%s\"}", ep->Name) < 0) ? micro_ErrorOutOfMemory : NULL;
+}
+
+static microError *
+_microEndpointStatsFail(char **data, microService *m, const microEndpointStats *ep)
+{
+    return micro_Errorf("no stats for %s", ep->Name);
+}
+
+void test_MicroEndpointStatsHandler(void)
+{
+    natsStatus s = NATS_OK;
+    microError *err = NULL;
+    struct threadArg arg;
+    natsOptions *opts = NULL;
+    natsConnection *nc = NULL;
+    natsPid serverPid = NATS_INVALID_PID;
+    microService *m = NULL;
+    microService *plain = NULL;
+    microServiceStats *stats = NULL;
+    natsMsg *reply = NULL;
+    nats_JSON *js = NULL;
+    nats_JSON **array = NULL;
+    int array_len = 0;
+    char *subject = NULL;
+    int i;
+    char buf[1024];
+
+    microEndpointConfig add_cfg = { .Name = "add", .Handler = _microHandleRequest42 };
+    microEndpointConfig remove_cfg = { .Name = "remove", .Handler = _microHandleRequest42 };
+    microEndpointConfig *eps[] = { &add_cfg, &remove_cfg };
+    microServiceConfig cfg = {
+        .Version = "1.0.0",
+        .Name = "with-stats-handler",
+        .EndpointStatsHandler = _microEndpointStatsFor,
+    };
+    microServiceConfig plain_cfg = {
+        .Version = "1.0.0",
+        .Name = "without-stats-handler",
+    };
+
+    s = _createDefaultThreadArgsForCbTests(&arg);
+    if (s == NATS_OK)
+        opts = _createReconnectOptions();
+    if ((opts == NULL)
+        || (natsOptions_SetClosedCB(opts, _closedCb, &arg) != NATS_OK)
+        || (natsOptions_SetURL(opts, NATS_DEFAULT_URL) != NATS_OK))
+    {
+        FAIL("Unable to setup test for MicroEndpointStatsHandler!");
+    }
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to server: ");
+    testCond(NATS_OK == natsConnection_Connect(&nc, opts));
+
+    _startMicroserviceOK(&m, nc, &cfg, eps, 2, &arg);
+    _startMicroserviceOK(&plain, nc, &plain_cfg, eps, 2, &arg);
+
+    test("GetStats sets each endpoint's data from the handler: ");
+    err = microService_GetStats(&stats, m);
+    s = ((err == NULL) && (stats->EndpointsLen == 2)) ? NATS_OK : NATS_ERR;
+    for (i = 0; (s == NATS_OK) && (i < stats->EndpointsLen); i++)
+    {
+        snprintf(buf, sizeof(buf), "{\"for\":\"%s\"}", stats->Endpoints[i].Name);
+        if ((stats->Endpoints[i].Data == NULL) || (strcmp(stats->Endpoints[i].Data, buf) != 0))
+            s = NATS_ERR;
+    }
+    testCond(s == NATS_OK);
+    microServiceStats_Destroy(stats);
+    stats = NULL;
+
+    test("GetStats without a handler leaves data NULL: ");
+    err = microService_GetStats(&stats, plain);
+    testCond((err == NULL) && (stats->EndpointsLen == 2) &&
+             (stats->Endpoints[0].Data == NULL) && (stats->Endpoints[1].Data == NULL));
+    microServiceStats_Destroy(stats);
+    stats = NULL;
+
+    test("Request and parse STATS: ");
+    micro_new_control_subject(&subject, MICRO_STATS_VERB, "with-stats-handler", NULL);
+    s = natsConnection_RequestString(&reply, nc, subject, "", 1000);
+    IFOK(s, nats_JSONParse(&js, reply->data, reply->dataLen));
+    IFOK(s, nats_JSONGetArrayObject(js, "endpoints", &array, &array_len));
+    testCond((s == NATS_OK) && (array_len == 2));
+    NATS_FREE(subject);
+
+    for (i = 0; i < array_len; i++)
+    {
+        const char *name = NULL;
+        const char *str = NULL;
+        nats_JSON *data = NULL;
+
+        snprintf(buf, sizeof(buf), "STATS endpoint #%d has data {\"for\": <its name>}: ", i);
+        test(buf);
+        testCond((NATS_OK == nats_JSONGetStrPtr(array[i], "name", &name)) && (name != NULL) &&
+                 (NATS_OK == nats_JSONGetObject(array[i], "data", &data)) && (data != NULL) &&
+                 (NATS_OK == nats_JSONGetStrPtr(data, "for", &str)) && (str != NULL) &&
+                 (strcmp(str, name) == 0));
+    }
+    NATS_FREE(array);
+    nats_JSONDestroy(js);
+    natsMsg_Destroy(reply);
+    reply = NULL;
+
+    test("STATS without a handler has no data: ");
+    micro_new_control_subject(&subject, MICRO_STATS_VERB, "without-stats-handler", NULL);
+    s = natsConnection_RequestString(&reply, nc, subject, "", 1000);
+    testCond((s == NATS_OK) && (strstr(natsMsg_GetData(reply), "\"data\"") == NULL));
+    NATS_FREE(subject);
+    natsMsg_Destroy(reply);
+
+    { _destroyMicroservice(m); }
+    { _destroyMicroservice(plain); }
+    _waitForMicroservicesAllDone(&arg);
+
+    m = NULL;
+    cfg.Name = "failing-stats-handler";
+    cfg.EndpointStatsHandler = _microEndpointStatsFail;
+    _startMicroserviceOK(&m, nc, &cfg, eps, 2, &arg);
+
+    test("GetStats fails when the handler fails: ");
+    err = microService_GetStats(&stats, m);
+    testCond((err != NULL) && (stats == NULL) &&
+             (strstr(microError_String(err, buf, sizeof(buf)), "no stats for ") != NULL));
+    microError_Destroy(err);
+
+    { _destroyMicroservice(m); }
     _waitForMicroservicesAllDone(&arg);
 
     test("Destroy the test connection: ");
@@ -42443,12 +42669,68 @@ void test_MicroQueueGroupForEndpoint(void)
         _destroyDefaultThreadArgs(&arg);
     }
 
+    {
+        // Queue groups must be ADR-6 terms: no whitespace, '.', '*' or '>'.
+        const char *invalid[] = {"work ers", "work.ers", "work*", "work>"};
+        microServiceConfig cfg = { .Name = "testService", .Version = "1.0.0" };
+        microGroupConfig gcfg = { .Prefix = "grp" };
+        microEndpointConfig ecfg = { .Name = "ep", .Handler = _microHandleRequest42 };
+        microService *service = NULL;
+        microService *badService = NULL;
+        microGroup *group = NULL;
+        char buf[256];
+
+#define _isInvalidQueueGroupErr(_err) \
+        (((_err) != NULL) && (strstr(microError_String((_err), buf, sizeof(buf)), "invalid queue group") != NULL))
+
+        test("Start a service with a valid queue group: ");
+        cfg.QueueGroup = "work-ers_1";
+        err = micro_AddService(&service, nc, &cfg);
+        testCond(err == NULL);
+
+        for (int i = 0; i < (int)(sizeof(invalid) / sizeof(invalid[0])); i++)
+        {
+            testf("Service queue group '%s' is refused: ", invalid[i]);
+            cfg.QueueGroup = invalid[i];
+            err = micro_AddService(&badService, nc, &cfg);
+            testCond(_isInvalidQueueGroupErr(err) && (badService == NULL));
+            microError_Destroy(err);
+
+            testf("Group queue group '%s' is refused: ", invalid[i]);
+            gcfg.QueueGroup = invalid[i];
+            err = microService_AddGroup(&group, service, &gcfg);
+            testCond(_isInvalidQueueGroupErr(err) && (group == NULL));
+            microError_Destroy(err);
+
+            testf("Endpoint queue group '%s' is refused: ", invalid[i]);
+            ecfg.QueueGroup = invalid[i];
+            err = microService_AddEndpoint(service, &ecfg);
+            testCond(_isInvalidQueueGroupErr(err));
+            microError_Destroy(err);
+        }
+#undef _isInvalidQueueGroupErr
+
+        microService_Destroy(service);
+    }
+
     natsConnection_Destroy(nc);
     natsOptions_Destroy(opts);
     _stopServer(serverPid);
 }
 
 #define NUM_MICRO_SERVICES 5
+
+// Checks the service metadata set by test_MicroBasics in a discovery response.
+static bool
+_microBasicsMetadataOK(nats_JSON *js)
+{
+    nats_JSON *md = NULL;
+    const char *str = NULL;
+
+    return (NATS_OK == nats_JSONGetObject(js, "metadata", &md))
+        && (NATS_OK == nats_JSONGetStrPtr(md, "skey1", &str)) && (strcmp(str, "svalue1") == 0)
+        && (NATS_OK == nats_JSONGetStrPtr(md, "skey2", &str)) && (strcmp(str, "svalue2") == 0);
+}
 
 void test_MicroBasics(void)
 {
@@ -42537,6 +42819,8 @@ void test_MicroBasics(void)
 
             for (j=0; (s == NATS_OK) && (j<stats->EndpointsLen); j++)
                 s = (stats->Endpoints[j].AverageProcessingTimeNanoseconds == 0 ? NATS_OK : NATS_ERR);
+            if ((s == NATS_OK) && (stats->Metadata.Count != 2))
+                s = NATS_ERR;
 
             microServiceStats_Destroy(stats);
         }
@@ -42612,12 +42896,7 @@ void test_MicroBasics(void)
 
         snprintf(buf, sizeof(buf), "Validate INFO service metadata#%d: ", i);
         test(buf);
-        md = NULL;
-        testCond(
-            (NATS_OK == nats_JSONGetObject(js, "metadata", &md))
-            && (NATS_OK == nats_JSONGetStrPtr(md, "skey1", &str)) && (strcmp(str, "svalue1") == 0)
-            && (NATS_OK == nats_JSONGetStrPtr(md, "skey2", &str)) && (strcmp(str, "svalue2") == 0)
-        );
+        testCond(_microBasicsMetadataOK(js));
         test("Validate INFO has 2 endpoints: ");
         array = NULL;
         array_len = 0;
@@ -42679,7 +42958,8 @@ void test_MicroBasics(void)
         js = NULL;
         testCond((NATS_OK == nats_JSONParse(&js, reply->data, reply->dataLen)) &&
                  (NATS_OK == nats_JSONGetStrPtr(js, "name", &str)) &&
-                 (strcmp(str, "ManyServicesSameName") == 0));
+                 (strcmp(str, "ManyServicesSameName") == 0) &&
+                 _microBasicsMetadataOK(js));
         nats_JSONDestroy(js);
         natsMsg_Destroy(reply);
     }
@@ -42715,6 +42995,9 @@ void test_MicroBasics(void)
         s = nats_JSONParse(&js, reply->data, reply->dataLen);
         testCond((NATS_OK == s) && (js != NULL));
 
+        test("Validate STATS service metadata: ");
+        testCond(_microBasicsMetadataOK(js));
+
         test("Ensure STATS has 2 endpoints: ");
         array = NULL;
         array_len = 0;
@@ -42746,6 +43029,11 @@ void test_MicroBasics(void)
         s = nats_JSONGetLong(array[1], "average_processing_time", &avg);
         testCond((s == NATS_OK) && (avg > 0));
 
+        test("Ensure second endpoint has processing_time of at least the average: ");
+        int64_t total = 0;
+        s = nats_JSONGetLong(array[1], "processing_time", &total);
+        testCond((s == NATS_OK) && (total >= avg));
+
         NATS_FREE(array);
         nats_JSONDestroy(js);
         natsMsg_Destroy(reply);
@@ -42758,6 +43046,49 @@ void test_MicroBasics(void)
     s = (arg.sum == num_errors ? NATS_OK : NATS_ERR);
     natsMutex_Unlock(arg.m);
     testCond(s == NATS_OK);
+
+    test("Reset stats keeps config and start time, zeroes counters: ");
+    for (i = 0; (s == NATS_OK) && (i < NUM_MICRO_SERVICES); i++)
+    {
+        microServiceStats *before = NULL;
+        microServiceStats *after = NULL;
+        int j;
+
+        err = microService_GetStats(&before, svcs[i]);
+        MICRO_CALL(err, microService_Reset(svcs[i]));
+        MICRO_CALL(err, microService_GetStats(&after, svcs[i]));
+        if (err != NULL)
+        {
+            s = NATS_ERR;
+            microError_Destroy(err);
+        }
+        else if ((after->Started != before->Started) || (after->EndpointsLen != 2))
+        {
+            s = NATS_ERR;
+        }
+        for (j = 0; (s == NATS_OK) && (j < after->EndpointsLen); j++)
+        {
+            microEndpointStats *ep = &after->Endpoints[j];
+
+            if ((ep->NumRequests != 0) || (ep->NumErrors != 0) ||
+                (ep->ProcessingTimeSeconds != 0) || (ep->ProcessingTimeNanoseconds != 0) ||
+                (ep->LastErrorString[0] != '\0') ||
+                (strcmp(ep->Name, before->Endpoints[j].Name) != 0) ||
+                (strcmp(ep->Subject, before->Endpoints[j].Subject) != 0) ||
+                (strcmp(ep->QueueGroup, before->Endpoints[j].QueueGroup) != 0))
+            {
+                s = NATS_ERR;
+            }
+        }
+        microServiceStats_Destroy(before);
+        microServiceStats_Destroy(after);
+    }
+    testCond(s == NATS_OK);
+
+    test("Reset with NULL service fails: ");
+    err = microService_Reset(NULL);
+    testCond(err != NULL);
+    microError_Destroy(err);
 
     natsSubscription_Destroy(sub);
     natsInbox_Destroy(inbox);
@@ -42843,6 +43174,158 @@ void test_MicroStartStop(void)
     testCond(NATS_OK == _waitForConnClosed(&arg));
 
     natsOptions_Destroy(opts);
+    _destroyDefaultThreadArgs(&arg);
+    _stopServer(serverPid);
+}
+
+static void
+_microRespondLater(void *closure)
+{
+    microRequest *req = (microRequest *)closure;
+
+    nats_Sleep(100);
+    microError_Ignore(microRequest_Respond(req, "late", 4));
+    microRequest_Destroy(req);
+}
+
+// Detaches the request, then either responds 100ms later from a thread
+// (arg->control == 0), hands it to the test in arg->microKept (1), or drops it
+// and returns an error (2).
+static microError *
+_microHandleDetach(microRequest *req)
+{
+    struct threadArg    *arg    = (struct threadArg *)microRequest_GetServiceState(req);
+    microRequest        *kept   = NULL;
+    microError          *err    = microRequest_Detach(&kept, req);
+
+    if (err != NULL)
+        return err;
+
+    natsMutex_Lock(arg->m);
+    if (arg->control == 0)
+    {
+        if (natsThread_Create(&arg->t, _microRespondLater, kept) != NATS_OK)
+            microRequest_Destroy(kept);
+    }
+    else if (arg->control == 1)
+        arg->microKept = kept;
+    else
+    {
+        // Give the request up and fail, as if it could not be queued.
+        microRequest_Destroy(kept);
+        err = micro_Errorf("queue full");
+    }
+    natsCondition_Broadcast(arg->c);
+    natsMutex_Unlock(arg->m);
+    return err;
+}
+
+void test_MicroDetachedRequest(void)
+{
+    natsStatus          s;
+    struct threadArg    arg;
+    natsConnection      *nc         = NULL;
+    natsSubscription    *sub        = NULL;
+    natsMsg             *reply      = NULL;
+    natsPid             serverPid   = NATS_INVALID_PID;
+    microService        *m          = NULL;
+    microRequest        *kept       = NULL;
+    microRequest        *nullReq    = NULL;
+    microServiceStats   *stats      = NULL;
+    const char          *errHdr     = NULL;
+    microEndpointConfig ep_cfg = {
+        .Name = "create",
+        .Subject = "orders.create",
+        .Handler = _microHandleDetach,
+    };
+    microServiceConfig cfg = {
+        .Name = "ORDERS",
+        .Version = "1.0.0",
+        .Endpoint = &ep_cfg,
+    };
+
+    if (_createDefaultThreadArgsForCbTests(&arg) != NATS_OK)
+        FAIL("Unable to setup test");
+
+    serverPid = _startServer("nats://127.0.0.1:4222", NULL, true);
+    CHECK_SERVER_STARTED(serverPid);
+
+    test("Connect to server: ");
+    testCond(NATS_OK == natsConnection_ConnectTo(&nc, NATS_DEFAULT_URL));
+
+    test("Detach refuses bad args: ");
+    testCond((NULL != microRequest_Detach(NULL, NULL)) && (NULL != microRequest_Detach(&nullReq, NULL)) && (nullReq == NULL));
+
+    test("Destroy ignores NULL: ");
+    microRequest_Destroy(NULL);
+    testCond(true);
+
+    _startMicroserviceOK(&m, nc, &cfg, NULL, 0, &arg);
+
+    test("Response sent 100ms after the handler returned is delivered: ");
+    s = natsConnection_Request(&reply, nc, "orders.create", NULL, 0, 2000);
+    testCond((NATS_OK == s) && (reply != NULL) && (natsMsg_GetDataLength(reply) == 4)
+             && (strncmp(natsMsg_GetData(reply), "late", 4) == 0));
+    natsMsg_Destroy(reply);
+    reply = NULL;
+
+    natsMutex_Lock(arg.m);
+    arg.control = 1;
+    natsMutex_Unlock(arg.m);
+    natsThread_Join(arg.t);
+    natsThread_Destroy(arg.t);
+    arg.t = NULL;
+
+    test("Subscribe to reply inbox: ");
+    testCond(NATS_OK == natsConnection_SubscribeSync(&sub, nc, "detached.reply"));
+
+    test("Send request: ");
+    testCond(NATS_OK == natsConnection_PublishRequest(nc, "orders.create", "detached.reply", NULL, 0));
+
+    test("Handler detached the request: ");
+    s = NATS_OK;
+    natsMutex_Lock(arg.m);
+    while ((s != NATS_TIMEOUT) && (arg.microKept == NULL))
+        s = natsCondition_TimedWait(arg.c, arg.m, 2000);
+    kept = arg.microKept;
+    natsMutex_Unlock(arg.m);
+    testCond(kept != NULL);
+
+    natsMutex_Lock(arg.m);
+    arg.control = 2;
+    natsMutex_Unlock(arg.m);
+
+    test("No reply when the handler detaches and then fails: ");
+    s = natsConnection_Request(&reply, nc, "orders.create", NULL, 0, 500);
+    testCond((NATS_TIMEOUT == s) && (reply == NULL));
+
+    test("Detached request can respond with an error: ");
+    testCond((NULL == microRequest_RespondError(kept, micro_Errorf("late failure")))
+             && (NATS_OK == natsSubscription_NextMsg(&reply, sub, 2000))
+             && (NATS_OK == natsMsgHeader_Get(reply, MICRO_ERROR_HDR, &errHdr))
+             && (strcmp(errHdr, "late failure") == 0));
+    natsMsg_Destroy(reply);
+    reply = NULL;
+
+    test("Only the handler's error is counted, as the last error: ");
+    testCond((NULL == microService_GetStats(&stats, m)) && (stats->EndpointsLen == 1)
+             && (stats->Endpoints[0].NumErrors == 1)
+             && (strstr(stats->Endpoints[0].LastErrorString, "queue full") != NULL));
+    microServiceStats_Destroy(stats);
+
+    _destroyMicroservice(m);
+    _waitForMicroservicesAllDone(&arg);
+
+    test("Detached request can respond after the service is done: ");
+    testCond((NULL == microRequest_Respond(kept, "after", 5))
+             && (NATS_OK == natsSubscription_NextMsg(&reply, sub, 2000))
+             && (natsMsg_GetDataLength(reply) == 5)
+             && (strncmp(natsMsg_GetData(reply), "after", 5) == 0));
+    natsMsg_Destroy(reply);
+    microRequest_Destroy(kept);
+
+    natsSubscription_Destroy(sub);
+    natsConnection_Destroy(nc);
     _destroyDefaultThreadArgs(&arg);
     _stopServer(serverPid);
 }

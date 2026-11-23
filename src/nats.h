@@ -10445,6 +10445,23 @@ typedef void (*microErrorHandler)(microService *m, microEndpoint *ep, natsStatus
  */
 typedef void (*microDoneHandler)(microService *m);
 
+/**
+ * @brief Callback type for adding custom data to an endpoint's stats.
+ *
+ * If specified in microServiceConfig, this callback is invoked by
+ * #microService_GetStats once for each endpoint. The JSON it returns in `data`
+ * becomes the endpoint's `data` field in the STATS response. Returning an error
+ * fails the stats request.
+ *
+ * @param data Set to a JSON value allocated with `malloc`, which the library
+ * frees, or left NULL to omit the field.
+ * @param m The microservice object.
+ * @param ep The endpoint's stats, valid only during the call.
+ *
+ * @see microServiceConfig, micro_service_config_s.
+ */
+typedef microError *(*microEndpointStatsHandler)(char **data, microService *m, const microEndpointStats *ep);
+
 /** @} */ // end of microCallbacks
 
 /** \defgroup microStructs Public structs
@@ -10474,11 +10491,15 @@ struct micro_endpoint_config_s
      *
      * For endpoints added to a group, the subject is automatically prefixed
      * with the group's prefix.
+     *
+     * The resulting subject may not be `$SRV` or start with `$SRV.`; that
+     * subject space is reserved for the service's discovery endpoints.
      */
     const char *Subject;
 
     /**
-     * @brief Overrides the default queue group for the service.
+     * @brief Overrides the default queue group for the service. Must not
+     * contain whitespace, `.`, `*` or `>`.
      *
      */
     const char *QueueGroup;
@@ -10579,6 +10600,11 @@ struct micro_endpoint_stats_s
      * @brief a copy of the last error message.
      */
     char LastErrorString[2048];
+
+    /**
+     * @brief custom JSON data from the EndpointStatsHandler, or NULL.
+     */
+    const char *Data;
 };
 
 /**
@@ -10586,10 +10612,12 @@ struct micro_endpoint_stats_s
  */
 struct micro_group_config_s
 {
-    /// @brief The subject prefix for the group.
+    /// @brief The subject prefix for the group. May be empty or NULL, in
+    /// which case endpoints use the parent prefix (if any) unchanged.
     const char *Prefix;
 
-    /// @brief Overrides the default queue group for the service.
+    /// @brief Overrides the default queue group for the service. Must not
+    /// contain whitespace, `.`, `*` or `>`.
     const char *QueueGroup;
 
     /// @brief Disables the use of a queue group for the service.
@@ -10622,7 +10650,8 @@ struct micro_service_config_s
     const char *Description;
 
     /**
-     * @brief Overrides the default queue group for the service ("q").
+     * @brief Overrides the default queue group for the service ("q"). Must
+     * not contain whitespace, `.`, `*` or `>`.
      *
      */
     const char *QueueGroup;
@@ -10684,6 +10713,14 @@ struct micro_service_config_s
      * consider thread-safe mechanisms of accessing the data.
      */
     void *State;
+
+    /**
+     * @brief A custom endpoint stats handler.
+     *
+     * It will be called for each endpoint to add custom `data` to its stats.
+     * Unlike StatsHandler, it does not replace the STATS response.
+     */
+    microEndpointStatsHandler EndpointStatsHandler;
 };
 
 /**
@@ -10773,6 +10810,11 @@ struct micro_service_stats_s
      * @brief The number of endpoints in the `endpoints` array.
      */
     int EndpointsLen;
+
+    /**
+     * @brief Metadata for the service.
+     */
+    natsMetadata Metadata;
 };
 
 /** @} */ // end of microStructs
@@ -10997,6 +11039,22 @@ microService_IsStopped(microService *m);
 NATS_EXTERN microError *
 microService_Run(microService *m);
 
+/** @brief Resets the run-time statistics of a microservice.
+ *
+ * Zeroes the request and error counts, the processing times and the last
+ * error of every endpoint of the service. The endpoints' configuration
+ * (name, subject, queue group, metadata) and the service's start time are
+ * kept.
+ *
+ * @param m the #microService.
+ *
+ * @return a #microError for invalid arguments, otherwise always succeeds.
+ *
+ * @see #microService_GetStats
+ */
+NATS_EXTERN microError *
+microService_Reset(microService *m);
+
 /** @brief Stops a running microservice.
  *
  * Drains and closes the all subscriptions (endpoints and monitoring), resets
@@ -11092,6 +11150,56 @@ microRequest_AddHeader(microRequest *req, const char *key, const char *value);
  */
 NATS_EXTERN microError *
 microRequest_DeleteHeader(microRequest *req, const char *key);
+
+/** @brief Takes over a request so it can be responded to after the handler
+ * returns.
+ *
+ * A request passed to a #microRequestHandler is freed when the handler
+ * returns. A handler that wants to respond later, for instance from another
+ * thread, calls this function and keeps the request it returns in
+ * `new_request`. That request can be used with all the `microRequest_*`
+ * functions, from another thread, and must be freed with #microRequest_Destroy.
+ *
+ * After this call `req` no longer holds the message, so the handler must use
+ * `new_request` instead. An error the handler returns after detaching is
+ * recorded as the endpoint's last error, but no error response is sent. An
+ * error response sent with `new_request` is not counted in the endpoint's
+ * stats, since the request was counted when the handler returned.
+ *
+ * The service and endpoint are kept alive until the detached request is
+ * destroyed, even if the service is stopped or destroyed in the meantime; the
+ * connection is not, so respond before destroying the connection.
+ *
+ * \code{.c}
+ * static microError *handler(microRequest *req)
+ * {
+ *     microRequest *later = NULL;
+ *     microError   *err   = microRequest_Detach(&later, req);
+ *     if (err == NULL)
+ *         queue_for_worker(later); // the worker responds, then calls microRequest_Destroy(later)
+ *     return err;
+ * }
+ * \endcode
+ *
+ * @param new_request the location where to store the detached request.
+ * @param req the request passed to the handler.
+ *
+ * @return a #microError if an error occurred.
+ *
+ * @see #microRequest_Destroy
+ */
+NATS_EXTERN microError *
+microRequest_Detach(microRequest **new_request, microRequest *req);
+
+/** @brief Destroys a request returned by #microRequest_Detach.
+ *
+ * It does nothing for the request passed to a handler, which the library frees
+ * itself.
+ *
+ * @param req the detached request.
+ */
+NATS_EXTERN void
+microRequest_Destroy(microRequest *req);
 
 /** @brief Returns the connection associated with the request.
  *

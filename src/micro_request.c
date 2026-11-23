@@ -45,7 +45,10 @@ microRequest_RespondCustom(microRequest *req, microError *service_error, const c
     }
     if ((s == NATS_OK) && (service_error != NULL))
     {
-        micro_update_last_error(req->Endpoint, service_error);
+        // A request is counted in the stats when its handler returns, so an
+        // error sent on a detached request is not.
+        if (!req->detached)
+            micro_update_last_error(req->Endpoint, service_error);
         if (service_error->status != NATS_OK)
         {
             s = natsMsgHeader_Set(msg, MICRO_STATUS_HDR, natsStatus_GetText(service_error->status));

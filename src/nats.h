@@ -11162,7 +11162,9 @@ microRequest_DeleteHeader(microRequest *req, const char *key);
  *
  * After this call `req` no longer holds the message, so the handler must use
  * `new_request` instead. An error the handler returns after detaching is
- * recorded as the endpoint's last error, but no error response is sent.
+ * recorded as the endpoint's last error, but no error response is sent. An
+ * error response sent with `new_request` is not counted in the endpoint's
+ * stats, since the request was counted when the handler returned.
  *
  * The service and endpoint are kept alive until the detached request is
  * destroyed, even if the service is stopped or destroyed in the meantime; the

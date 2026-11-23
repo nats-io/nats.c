@@ -43199,6 +43199,7 @@ void test_MicroDetachedRequest(void)
     microRequest        *kept       = NULL;
     microRequest        *nullReq    = NULL;
     microServiceStats   *stats      = NULL;
+    const char          *errHdr     = NULL;
     microEndpointConfig ep_cfg = {
         .Name = "create",
         .Subject = "orders.create",
@@ -43265,8 +43266,17 @@ void test_MicroDetachedRequest(void)
     s = natsConnection_Request(&reply, nc, "orders.create", NULL, 0, 500);
     testCond((NATS_TIMEOUT == s) && (reply == NULL));
 
-    test("The handler's error is recorded as the last error: ");
+    test("Detached request can respond with an error: ");
+    testCond((NULL == microRequest_RespondError(kept, micro_Errorf("late failure")))
+             && (NATS_OK == natsSubscription_NextMsg(&reply, sub, 2000))
+             && (NATS_OK == natsMsgHeader_Get(reply, MICRO_ERROR_HDR, &errHdr))
+             && (strcmp(errHdr, "late failure") == 0));
+    natsMsg_Destroy(reply);
+    reply = NULL;
+
+    test("Only the handler's error is counted, as the last error: ");
     testCond((NULL == microService_GetStats(&stats, m)) && (stats->EndpointsLen == 1)
+             && (stats->Endpoints[0].NumErrors == 1)
              && (strstr(stats->Endpoints[0].LastErrorString, "queue full") != NULL));
     microServiceStats_Destroy(stats);
 

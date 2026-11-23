@@ -71,15 +71,6 @@ extern bool failed;
 
 static const char *natsServerExe = "nats-server";
 
-// Passing NULL for a "%s" conversion is undefined behavior. glibc prints
-// "(null)", but QNX's libc (like several other libcs) dereferences it and
-// crashes. Use this helper wherever a possibly-NULL string is printed.
-static inline const char *
-_nn(const char *str)
-{
-    return (str != NULL ? str : "(null)");
-}
-
 static natsStatus
 _checkStreamingStart(const char *url, int maxAttempts)
 {

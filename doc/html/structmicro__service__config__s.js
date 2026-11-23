@@ -10,5 +10,6 @@ var structmicro__service__config__s =
     [ "StatsHandler", "structmicro__service__config__s.html#a8385ccdaef440f9406a876868663ec56", null ],
     [ "ErrHandler", "structmicro__service__config__s.html#a4069a6987c910fb4f045b233b6befc27", null ],
     [ "DoneHandler", "structmicro__service__config__s.html#ab349d30e0f637d449c0af865234a0985", null ],
-    [ "State", "structmicro__service__config__s.html#a0a0ae007824f6f53fbb0cb4b940c5ad2", null ]
+    [ "State", "structmicro__service__config__s.html#a0a0ae007824f6f53fbb0cb4b940c5ad2", null ],
+    [ "EndpointStatsHandler", "structmicro__service__config__s.html#a3f811f9444310bf8d18d497b94663bb6", null ]
 ];

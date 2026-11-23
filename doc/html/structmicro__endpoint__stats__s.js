@@ -8,5 +8,6 @@ var structmicro__endpoint__stats__s =
     [ "ProcessingTimeSeconds", "structmicro__endpoint__stats__s.html#a3e971e78657d71f28477476a560162dd", null ],
     [ "ProcessingTimeNanoseconds", "structmicro__endpoint__stats__s.html#a532060ae39ed420c3f84244163b4590b", null ],
     [ "AverageProcessingTimeNanoseconds", "structmicro__endpoint__stats__s.html#acc74c3df96d5f8595521a57dd0eb0cde", null ],
-    [ "LastErrorString", "structmicro__endpoint__stats__s.html#a2adef3bbd175d542387fe47b9a156e6c", null ]
+    [ "LastErrorString", "structmicro__endpoint__stats__s.html#a2adef3bbd175d542387fe47b9a156e6c", null ],
+    [ "Data", "structmicro__endpoint__stats__s.html#ac5a29b32463d5ede7b31d4d8019958a0", null ]
 ];

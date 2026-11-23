@@ -10,5 +10,6 @@ var group__micro_service_functions =
     [ "microService_GetStats", "group__micro_service_functions.html#ga19b3b7126a1e2472a4970fc16b2f9fb4", null ],
     [ "microService_IsStopped", "group__micro_service_functions.html#gac829b81893f09b1ed7c401147ed6b0c0", null ],
     [ "microService_Run", "group__micro_service_functions.html#gaecde4e29e2b963e73fe4a8ff2fce064a", null ],
+    [ "microService_Reset", "group__micro_service_functions.html#ga074308dae32eb8f64e9fe30077daa6c3", null ],
     [ "microService_Stop", "group__micro_service_functions.html#ga35de7172dac67472ac3890bc955b9b42", null ]
 ];

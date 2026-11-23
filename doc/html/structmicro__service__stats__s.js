@@ -6,5 +6,6 @@ var structmicro__service__stats__s =
     [ "Id", "structmicro__service__stats__s.html#afbc7f9586df0c4d8969736e76284bb20", null ],
     [ "Started", "structmicro__service__stats__s.html#a53e7ea532c4bc4f9a9c4322b28060a4e", null ],
     [ "Endpoints", "structmicro__service__stats__s.html#aa1ac7f9fd93c943ab8619e625976e567", null ],
-    [ "EndpointsLen", "structmicro__service__stats__s.html#a88ca92be3498c27f5519c8ddbd2dc9df", null ]
+    [ "EndpointsLen", "structmicro__service__stats__s.html#a88ca92be3498c27f5519c8ddbd2dc9df", null ],
+    [ "Metadata", "structmicro__service__stats__s.html#a888445601d7e2d4a41c431d61ef3e8ba", null ]
 ];

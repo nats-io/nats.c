@@ -28,6 +28,19 @@
 #include <openssl/evp.h>
 #define nats_hash           EVP_MD_CTX
 #define NATS_HASH_MAX_LEN   EVP_MAX_MD_SIZE
+
+// Like ERR_reason_error_string(ERR_get_error()) but never returns NULL
+// (used through NATS_SSL_ERR_REASON_STRING, see err.h).
+static inline const char*
+nats_sslErrReasonString(void)
+{
+    unsigned long   e = ERR_get_error();
+    const char      *r = ERR_reason_error_string(e);
+
+    if (r != NULL)
+        return r;
+    return ((e == 0) ? "unknown error" : "unknown OpenSSL error");
+}
 #else
 #define SSL                 void*
 #define SSL_free(c)         { (c) = NULL; }

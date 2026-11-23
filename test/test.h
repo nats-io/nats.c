@@ -13,7 +13,9 @@
 
 #ifndef _WIN32
 #include <dirent.h>
+#if !defined(__QNX__)
 #include <execinfo.h>
+#endif
 #endif
 
 #include "../src/natsp.h"

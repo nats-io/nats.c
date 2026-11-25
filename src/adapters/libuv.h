@@ -194,8 +194,11 @@ uvPollUpdate(natsLibuvEvents *nle, int eventType, bool add)
     }
     // Both read and write events have been removed, this signal that the socket
     // should be closed prior to a reconnect or during natsConnection_Close().
-    uv_close((uv_handle_t*) nle->handle, uvHandleClosedCb);
-    nle->handle = NULL;
+    if (nle->handle != NULL)
+    {
+        uv_close((uv_handle_t*) nle->handle, uvHandleClosedCb);
+        nle->handle = NULL;
+    }
     // We have stopped polling for events for this socket and are in the event
     // loop thread, so we invoke this so that the NATS C client library can
     // proceed with closing the socket.
@@ -437,7 +440,7 @@ natsLibuv_Read(void *userData, bool add)
     bool            sched;
 
     // If we remove, first stop polling immediately, then proceed as usual.
-    if (!add)
+    if (!add && nle->handle != NULL)
         uv_poll_stop(nle->handle);
 
     sched = ((uv_key_get(&uvLoopThreadKey) != nle->loop) ? true : false);
